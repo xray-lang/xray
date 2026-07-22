@@ -1082,7 +1082,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
         XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
         if (export_sym) {
-            xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+            xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
             links->module_name = module_name;
             links->import_member_name = member_name;
         }

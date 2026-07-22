@@ -30,6 +30,7 @@ struct XrCompilerSession {
     bool repl_mode;
     bool emit_aot;
     XrTargetDataLayout target_data_layout;
+    const struct XrNativePackagePlan *native_package_plan;
 
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
@@ -62,6 +63,7 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
         session->source_file = cfg->source_file;
         session->repl_mode = cfg->repl_mode;
         session->emit_aot = cfg->emit_aot;
+        session->native_package_plan = cfg->native_package_plan;
         if (cfg->target_data_layout &&
             !xr_compiler_session_set_target_data_layout(session, cfg->target_data_layout)) {
             xr_free(session);
@@ -115,6 +117,17 @@ bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
         return false;
     session->target_data_layout = *layout;
     return true;
+}
+
+void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,
+                                                 const struct XrNativePackagePlan *plan) {
+    if (session)
+        session->native_package_plan = plan;
+}
+
+const struct XrNativePackagePlan *
+xr_compiler_session_native_package_plan(const XrCompilerSession *session) {
+    return session ? session->native_package_plan : NULL;
 }
 
 XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate) {

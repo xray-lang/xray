@@ -2919,7 +2919,8 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
 
                     // Priority 1: resolve from graph exports (user modules)
                     if (export_sym) {
-                        xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+                        xa_symbol_links_copy_export_metadata(ctx->analyzer, links,
+                                                             &export_sym->links);
                         member_type = links->type;
                     }
 

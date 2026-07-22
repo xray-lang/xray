@@ -22,6 +22,7 @@ struct XrSourceCache;
 struct XrTypePool;
 struct XaAnalyzer;
 struct XrModuleGraph;
+struct XrNativePackagePlan;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
@@ -49,6 +50,7 @@ typedef struct XrCompilerSessionConfig {
     bool repl_mode;
     bool emit_aot;
     const XrTargetDataLayout *target_data_layout;
+    const struct XrNativePackagePlan *native_package_plan; /* borrowed */
 } XrCompilerSessionConfig;
 
 XR_FUNC XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg);
@@ -59,6 +61,10 @@ XR_FUNC const XrTargetDataLayout *
 xr_compiler_session_target_data_layout(const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
                                                         const XrTargetDataLayout *layout);
+XR_FUNC void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,
+                                                         const struct XrNativePackagePlan *plan);
+XR_FUNC const struct XrNativePackagePlan *
+xr_compiler_session_native_package_plan(const XrCompilerSession *session);
 XR_FUNC XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate);
 XR_FUNC XrCompilerSession *xr_compiler_session_attach_isolate(XrVMRuntime *isolate,
                                                               XrCompilerSession *session);

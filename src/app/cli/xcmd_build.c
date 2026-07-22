@@ -181,57 +181,6 @@ static bool build_join_project_path(const char *root, const char *path, char *ou
     return written >= 0 && (size_t) written < out_size;
 }
 
-static bool build_find_project_root(const char *input_path, char *out, size_t out_size) {
-    char cur[XR_PATH_MAX];
-    char candidate[XR_PATH_MAX];
-    char *dir;
-
-    if (!input_path || !out || out_size == 0)
-        return false;
-
-    if (xr_fs_is_dir(input_path)) {
-        if (!xr_fs_realpath(input_path, cur, sizeof(cur)))
-            snprintf(cur, sizeof(cur), "%s", input_path);
-    } else {
-        dir = xr_path_dirname(input_path);
-        if (!dir)
-            return false;
-        if (!xr_fs_realpath(dir, cur, sizeof(cur)))
-            snprintf(cur, sizeof(cur), "%s", dir);
-        xr_free(dir);
-    }
-
-    while (cur[0]) {
-        int written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
-        if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
-            written = snprintf(out, out_size, "%s", cur);
-            return written >= 0 && (size_t) written < out_size;
-        }
-
-        char *slash = strrchr(cur, '/');
-        char *backslash = strrchr(cur, '\\');
-        char *sep = slash;
-        if (backslash && (!sep || backslash > sep))
-            sep = backslash;
-        if (!sep)
-            break;
-        if (sep == cur) {
-            cur[1] = '\0';
-        } else {
-            *sep = '\0';
-        }
-        if ((sep == cur && cur[1] == '\0') || cur[0] == '\0') {
-            written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
-            if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
-                written = snprintf(out, out_size, "%s", cur);
-                return written >= 0 && (size_t) written < out_size;
-            }
-            break;
-        }
-    }
-    return false;
-}
-
 static const char *build_config_string(const XrCliOptionMap *opts, const char *opt_name,
                                        const char *configured, const char *fallback) {
     if (opts && xr_cli_opt_present(opts, opt_name))
@@ -1294,18 +1243,16 @@ static const char *default_shared_library_output(void) {
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, XaotSimdMode simd_mode,
-                            bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                            XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                            const char *sysroot, const char *linker_script, bool verbose,
-                            bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
-                            bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-                            bool dry_run_link, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
-                            const XrCliBuildTarget *target,
-                            const XrCliToolchainPlan *toolchain_plan,
-                            const XrTargetConfig *target_config, const char *objcopy_output);
+static int cmd_build_native(
+    const char *input, const char *output, const char *cc, const char *opt_flag, const char *cpu,
+    XaotSimdMode simd_mode, bool c_only, bool strip, bool debug_symbols, bool shared_library,
+    XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
+    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
+    bool lto, bool rc_guard, const XrCliBuildTarget *target,
+    const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config,
+    const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1375,8 +1322,15 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     project_root[0] = '\0';
     linker_script_from_config[0] = '\0';
     objcopy_output_from_config[0] = '\0';
-    if (native_mode && build_find_project_root(input_file, project_root, sizeof(project_root))) {
+    if (native_mode && xr_cli_find_project_root(input_file, project_root, sizeof(project_root))) {
         project = xr_project_load(NULL, project_root);
+        if (project && !project->initialized) {
+            fprintf(stderr, "Error: %s\n",
+                    project->native_plan && project->native_plan->error
+                        ? project->native_plan->error
+                        : "invalid xray.toml project configuration");
+            CMD_BUILD_RETURN(2);
+        }
         if (project)
             target_config = xr_project_find_target_config(project, target_arg);
     }
@@ -1589,7 +1543,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             debug_symbols, shared_library, profile, type_name_profile, sysroot, linker_script,
             verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence, dump_link_manifest,
             dump_residue, dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
-            effective_lto, rc_guard, &target, &toolchain_plan, target_config, objcopy_output);
+            effective_lto, rc_guard, &target, &toolchain_plan, target_config,
+            project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -2514,18 +2469,16 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
     return true;
 }
 
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, XaotSimdMode simd_mode,
-                            bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                            XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
-                            const char *sysroot, const char *linker_script, bool verbose,
-                            bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
-                            bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-                            bool dry_run_link, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
-                            const XrCliBuildTarget *target,
-                            const XrCliToolchainPlan *toolchain_plan,
-                            const XrTargetConfig *target_config, const char *objcopy_output) {
+static int cmd_build_native(
+    const char *input, const char *output, const char *cc, const char *opt_flag, const char *cpu,
+    XaotSimdMode simd_mode, bool c_only, bool strip, bool debug_symbols, bool shared_library,
+    XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
+    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
+    bool lto, bool rc_guard, const XrCliBuildTarget *target,
+    const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config,
+    const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
     XaotTargetCapabilityProvider capability_provider;
@@ -2569,6 +2522,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         }
     }
     build_options.target = &build_target;
+    build_options.native_package_plan = native_package_plan;
     build_options.capability_provider = has_capability_provider ? &capability_provider : NULL;
     build_options.profile = aot_profile;
     build_options.type_name_profile = type_name_profile;

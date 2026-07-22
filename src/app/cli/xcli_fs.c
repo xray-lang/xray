@@ -16,6 +16,7 @@
 #include "xcli_fs.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfileio.h"
 #include "../../os/os_dir.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -313,6 +314,53 @@ bool xr_cli_is_xr_file(const char *filename) {
     if (len < 4)
         return false;
     return strcmp(filename + len - 3, ".xr") == 0;
+}
+
+bool xr_cli_find_project_root(const char *input_path, char *out, size_t out_size) {
+    char cur[XR_CLI_PATH_MAX];
+    char candidate[XR_CLI_PATH_MAX];
+    char *dir;
+
+    if (!input_path || !out || out_size == 0)
+        return false;
+    if (xr_cli_is_directory(input_path)) {
+        if (!xr_fs_realpath(input_path, cur, sizeof(cur)))
+            snprintf(cur, sizeof(cur), "%s", input_path);
+    } else {
+        dir = xr_path_dirname(input_path);
+        if (!dir)
+            return false;
+        if (!xr_fs_realpath(dir, cur, sizeof(cur)))
+            snprintf(cur, sizeof(cur), "%s", dir);
+        xr_free(dir);
+    }
+    while (cur[0]) {
+        int written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
+        if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
+            written = snprintf(out, out_size, "%s", cur);
+            return written >= 0 && (size_t) written < out_size;
+        }
+        char *slash = strrchr(cur, '/');
+        char *backslash = strrchr(cur, '\\');
+        char *sep = slash;
+        if (backslash && (!sep || backslash > sep))
+            sep = backslash;
+        if (!sep)
+            break;
+        if (sep == cur)
+            cur[1] = '\0';
+        else
+            *sep = '\0';
+        if ((sep == cur && cur[1] == '\0') || cur[0] == '\0') {
+            written = snprintf(candidate, sizeof(candidate), "%s/xray.toml", cur);
+            if (written >= 0 && (size_t) written < sizeof(candidate) && xr_fs_is_file(candidate)) {
+                written = snprintf(out, out_size, "%s", cur);
+                return written >= 0 && (size_t) written < out_size;
+            }
+            break;
+        }
+    }
+    return false;
 }
 
 /* ========== Safe Parsing Helpers ========== */

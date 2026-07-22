@@ -22,6 +22,7 @@
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
+#include "../../module/xproject.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -149,6 +150,31 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_module_system_init_with_script(iso, file);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrProject *project = NULL;
+    char project_root[XR_CLI_PATH_MAX];
+    if (xr_cli_find_project_root(file, project_root, sizeof(project_root))) {
+        project = xr_project_load(NULL, project_root);
+        if (project && !project->initialized) {
+            fprintf(stderr, "Error: %s\n",
+                    project->native_plan && project->native_plan->error
+                        ? project->native_plan->error
+                        : "invalid xray.toml project configuration");
+            xr_project_free(project);
+            xray_vm_multicore_destroy(iso);
+            xray_vm_delete(iso);
+            return XR_CLI_EXIT_FAIL;
+        }
+        if (project && project->native_plan &&
+            project->native_plan->vm_policy == XR_NATIVE_VM_UNSUPPORTED) {
+            fprintf(stderr, "Error: native package '%s' does not support the VM backend\n",
+                    project->native_plan->name ? project->native_plan->name : "?");
+            xr_project_free(project);
+            xray_vm_multicore_destroy(iso);
+            xray_vm_delete(iso);
+            return XR_CLI_EXIT_FAIL;
+        }
+        xr_compiler_session_set_native_package_plan(session, project ? project->native_plan : NULL);
+    }
     // Graph export symbols point at analyzer-owned semantic symbols.
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
@@ -169,6 +195,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 graph->cycle_desc ? graph->cycle_desc
                                                   : "circular dependency detected");
                         xr_module_graph_free(graph);
+                        xr_project_free(project);
                         xray_vm_multicore_destroy(iso);
                         xray_vm_delete(iso);
                         return XR_CLI_EXIT_FAIL;
@@ -185,6 +212,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         if (!analyzer) {
                             fprintf(stderr, "Error: cannot create analyzer for module graph\n");
                             xr_module_graph_free(graph);
+                            xr_project_free(project);
                             xray_vm_multicore_destroy(iso);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
@@ -217,6 +245,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 xa_analyzer_set_graph(analyzer, NULL);
                                 xa_analyzer_free(analyzer);
                                 xr_module_graph_free(graph);
+                                xr_project_free(project);
                                 xray_vm_multicore_destroy(iso);
                                 xray_vm_delete(iso);
                                 return XR_CLI_EXIT_FAIL;
@@ -279,6 +308,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     if (active_graph)
         xr_module_graph_free(active_graph);
 
+    xr_compiler_session_set_native_package_plan(session, NULL);
+    xr_project_free(project);
     xray_vm_multicore_destroy(iso);
     xray_vm_delete(iso);
 

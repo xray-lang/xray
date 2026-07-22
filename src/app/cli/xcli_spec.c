@@ -155,6 +155,10 @@ static const XrCliOptionSpec pkg_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
+static const XrCliOptionSpec explain_options[] = {
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
+    XR_CLI_OPT_END};
+
 #ifdef XR_HAS_LSP
 static const XrCliOptionSpec lsp_options[] = {
     {"stdio", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Use stdio transport (default)"},
@@ -222,6 +226,8 @@ static XrCliCommandSpec cli_commands[] = {
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
     {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
      toolchain_subcommands, 2},
+    {"explain", "Explain compiler evidence and native provenance", NULL, explain_options, 1, 2,
+     false, false, NULL, NULL, 0},
 
     /* Package management (has subcommands) */
     {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},

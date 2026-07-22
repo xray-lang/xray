@@ -1362,7 +1362,7 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
             XaSymbol *export_sym =
                 exports ? (XaSymbol *) xr_hashmap_get(exports, links->import_member_name) : NULL;
             if (export_sym) {
-                xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+                xa_symbol_links_copy_export_metadata(analyzer, links, &export_sym->links);
                 type = links->type;
                 if (export_sym->kind == XA_SYM_CLASS || export_sym->kind == XA_SYM_ENUM ||
                     export_sym->kind == XA_SYM_TYPE_ALIAS)

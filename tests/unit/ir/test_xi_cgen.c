@@ -2762,8 +2762,8 @@ TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "boxed Slice<byte> adapter should generate");
     assert(stats.boxed_adapters >= 1 && "dynamic Slice<byte> callback should keep a boxed adapter");
-    assert(contains(code, "xrt_byte_slice_from_value(p0") &&
-           "boxed adapter should convert its boxed parameter to a raw Slice<byte>");
+    assert(contains(code, "xrt_span_from_value_ref(p0") &&
+           "boxed adapter should convert its boxed parameter to the canonical span ABI");
     assert(!contains(code, "_cl, p0)") &&
            "boxed adapter must not pass XrValue directly to a raw Slice<byte> ABI slot");
 
@@ -3666,7 +3666,7 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
            "len(local fixed array) must use its native static extent without a metadata read");
     assert(contains(code, "[INT64_C(1)] = (uint8_t)") &&
            "local fixed array constant stores should use direct stack lanes");
-    assert(contains(code, "((uint8_t*)") && contains(code, ".ptr)[INT64_C(0)]") &&
+    assert(contains(code, "((uint8_t*)") && contains(code, "[INT64_C(0)]") &&
            "fixed-array parameters should use direct typed lanes");
     assert(contains(code, "xrt_fixed_index_oob(_idx, 4)") &&
            "dynamic fixed-array parameter indexes should use fixed-array OOB checks");

@@ -1069,7 +1069,8 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
         "fn shrink(data: ref Array<int>) { data.pop() }\n"
         "fn rebind(data: ref Array<int>) { data = [1, 2] }\n"
         "fn dynamic(cb: (ref Array<int>) -> (), data: ref Array<int>) { cb(data) }\n"
-        "fn readOnly(data: ref Array<int>) -> int { return data.length }\n";
+        "fn readOnly(data: ref Array<int>) -> int { return data.length }\n"
+        "fn sliceLen(data: Slice<byte>) -> int { return len(data) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "memory_effect_summary.xr", program);
@@ -1081,7 +1082,8 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     const XaMemoryEffectSummary *rebind = analyzer_function_memory_effect_summary(a, "rebind");
     const XaMemoryEffectSummary *dynamic = analyzer_function_memory_effect_summary(a, "dynamic");
     const XaMemoryEffectSummary *read_only = analyzer_function_memory_effect_summary(a, "readOnly");
-    ASSERT(grow && via && shrink && rebind && dynamic && read_only);
+    const XaMemoryEffectSummary *slice_len = analyzer_function_memory_effect_summary(a, "sliceLen");
+    ASSERT(grow && via && shrink && rebind && dynamic && read_only && slice_len);
 
     const XaMemoryRootEffect *grow_root = memory_effect_root(grow, XA_MEMORY_ROOT_PARAM, 0);
     const XaMemoryRootEffect *via_root = memory_effect_root(via, XA_MEMORY_ROOT_PARAM, 0);
@@ -1096,8 +1098,62 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     ASSERT(xa_memory_effect_summary_is_complete(dynamic));
     ASSERT(dynamic_root && dynamic_root->invalidation == XA_MEMORY_INVALIDATES_VIEWS);
     ASSERT(read_only->root_count == 0);
+    ASSERT(xa_memory_effect_summary_is_complete(slice_len));
+    ASSERT(slice_len->root_count == 0);
 
     xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
+    XaAnalyzer *source = xa_analyzer_new(g_session);
+    XaAnalyzer *target = xa_analyzer_new(g_session);
+    ASSERT(source != NULL && target != NULL);
+    XaSymbol *source_symbol = xa_symbol_new("foreignRead", XA_SYM_FUNCTION);
+    XaSymbol *target_symbol = xa_symbol_new("foreignRead", XA_SYM_IMPORT);
+    ASSERT(source_symbol != NULL && target_symbol != NULL);
+    XaSymbolLinks *source_links = xa_analyzer_get_links(source, source_symbol);
+    XaSymbolLinks *target_links = xa_analyzer_get_links(target, target_symbol);
+
+    XaEffectSummary effect;
+    xa_effect_summary_init(&effect);
+    xa_effect_summary_add_semantic_effects(&effect, XA_SEM_EFFECT_FOREIGN | XA_SEM_EFFECT_IO);
+    source_links->effect_id = xa_effect_db_intern(source->effect_db, &effect);
+    xa_effect_summary_clear(&effect);
+    ASSERT(source_links->effect_id != XA_EFFECT_NONE);
+
+    XaMemoryEffectSummary source_memory;
+    xa_memory_effect_summary_init(&source_memory);
+    source_links->memory_effect_id =
+        xa_memory_effect_db_intern(source->memory_effect_db, &source_memory);
+    xa_memory_effect_summary_clear(&source_memory);
+    ASSERT(source_links->memory_effect_id != XA_MEMORY_EFFECT_NONE);
+
+    /* Occupy the same target-local numeric id with an incompatible summary.
+     * Import must re-intern the source semantics instead of copying that id. */
+    XaMemoryEffectSummary collision;
+    xa_memory_effect_summary_init(&collision);
+    ASSERT(xa_memory_effect_summary_mark_invalidation(
+        &collision, (XaMemoryRootRef) {.kind = XA_MEMORY_ROOT_PARAM, .index = 0}));
+    ASSERT(xa_memory_effect_db_intern(target->memory_effect_db, &collision) ==
+           source_links->memory_effect_id);
+    xa_memory_effect_summary_clear(&collision);
+
+    xa_symbol_links_copy_export_metadata(target, target_links, source_links);
+    const XaEffectSummary *imported_effect =
+        xa_effect_db_get(target->effect_db, target_links->effect_id);
+    const XaMemoryEffectSummary *imported_memory =
+        xa_memory_effect_db_get(target->memory_effect_db, target_links->memory_effect_id);
+    ASSERT(imported_effect != NULL);
+    ASSERT(xa_effect_summary_has_semantic_effect(imported_effect, XA_SEM_EFFECT_FOREIGN));
+    ASSERT(xa_effect_summary_has_semantic_effect(imported_effect, XA_SEM_EFFECT_IO));
+    ASSERT(imported_memory != NULL);
+    ASSERT(imported_memory->root_count == 0);
+
+    xa_symbol_free(target_symbol);
+    xa_symbol_free(source_symbol);
+    xa_analyzer_free(target);
+    xa_analyzer_free(source);
     setup_pool();
 }
 
@@ -6022,6 +6078,7 @@ int main(void) {
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
+    RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);

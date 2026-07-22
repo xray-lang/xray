@@ -21,10 +21,12 @@ Status: frozen by task 220.
    ForeignHandle roots. Writes, descriptor rebinding, relocation, shortening,
    and invalidation compose transitively after call-site root substitution.
    Missing or dynamic evidence invalidates live-view permission fail-closed.
-5. Analyzer database IDs are process-local. Stable effect and memory-effect
-   fingerprints are the cache and verifier identity. TypedProgram exposes both
-   immutable sidecars, and Xi carries their IDs, fingerprints, completeness,
-   and source-semantic product bits without re-inferring them from Xi op names.
+5. Analyzer database IDs are analyzer-local. Cross-analyzer publication must
+   re-intern semantic summaries into the destination databases; copying a
+   numeric ID is invalid. Stable effect and memory-effect fingerprints are the
+   cache and verifier identity. TypedProgram exposes both immutable sidecars,
+   and Xi carries their IDs, fingerprints, completeness, and source-semantic
+   product bits without re-inferring them from Xi op names.
 6. `contains_unsafe_op` is an audit fact and normally does not propagate as a
    caller requirement. `requires_unsafe_at_call` is a capability boundary that
    must be discharged at each call site; a safe wrapper may contain unsafe work
@@ -45,22 +47,22 @@ Status: frozen by task 220.
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_assertion_attr.def 82cf5e56e8fedd3bc9ea6f824ef6ccf86534dbfb5934291cae1a15bc75652f54
-anchor-sha256: src/frontend/analyzer/xa_effect_db.h 79039270e1063a7f5ed9f426fe91fa4e511ec76bf64709c8554bc323bdf0f672
-anchor-sha256: src/frontend/analyzer/xa_effect_db.c 538b1b1bdbb637b7f3675f56881c81d15fbaa84c9dd3f01f3b9281e2c03d7ce5
+anchor-sha256: src/frontend/analyzer/xa_effect_db.h 24f9175683e2d780e9a45f8f54e9349577845333d888e44a99815e953b6321e5
+anchor-sha256: src/frontend/analyzer/xa_effect_db.c 4c26c5da9762ceb45390900880c8590fb2ca712ccae3174f4b3673541b204111
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 54e07424fba7fb1121db7bd9f4e9b302b029bfb3b946829a06c72d2c6fa0136e
-anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 6e07fdbd22866e6ed7c02b8b70262c5f70b86acccb9bc618cf0668bca5028d5c
-anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c e0826a6b71f1c9d2f70211ac583132bc53e9f4f6cbbeb51d53b17e4478348cf0
-anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 417b3cf8e7a789cb38a6ec387f4c435c89809bdc6ec93bdf71d1b26952d7f3fe
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 8ae45cba84d910429ee54cc2761c22cc638f6547dc4bcbd70c496e04b1b0b9a2
+anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c a63af0da08dadee819eca8a9e093a2fcec04e87a36bb589ca1976d2383c0bbe1
+anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c ed488f80893471a0699c5faf842994d652154cc3321b062eecdbb9c04d9faf77
+anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c e6ae96486a5998c577f651bbfcbc19f3364e71ef137664591d33b8f55f2ffdd0
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c a0cdf15d4053af6bdcce2952cecd6b0e56dadb0ff88426272bf156b2160f6628
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 8af8ffd27ee5a6942da6f444203a8a758918aaa5c12f7003d6aea5900af99196
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c f06668c72d61170e72180c07e1e69a2a00b2018c8b916936bc78899190e7e633
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 532907454aab7a963d5940f12fa0b71d23982ce7d7fdf7e419b24e5d90c3d059
-anchor-sha256: src/runtime/value/xtype.h 92a93667068ff198b48b7b51e3641bf1e9e64d6c9fb10c96e55ddb977c4e0f8b
-anchor-sha256: src/ir/xi.h 1d3594142d00d14f9a8f07b57398031c17f2e1512f1a09be15bdcef21e3a653b
-anchor-sha256: src/ir/xi_lower.c f731e289e7866fe9fd0a1f90cd524eaa667ab2725f9aa31b97c95bfb86fc72ef
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 1c51acae26a462f485aba54b7e74ed28663bc35849f5496c0752dc76e74c9a6d
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 2c2612044cad3649278fc784dbe11e358e7d1a0e3e07cbcf8eab82f3d1287ee1
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 3ccebed22a06acab92dd57242a71aaaf756a418da128e7287c60a546eef185e7
+anchor-sha256: src/runtime/value/xtype.h b476be059c1cd1c0e4f77711e7d39e29c47fc9c7b03ab7fc73f96f903830bea0
+anchor-sha256: src/ir/xi.h a3035c4eceb29ebc6fb0517f4e563a3c62ab4efa44cebb54657e1ae4bff0ae05
+anchor-sha256: src/ir/xi_lower.c 0201a416be823e9c1cab4aae4ca6469e7f1531d6ffd92fdc71d67e2e50c7fc50
 anchor-sha256: tests/aot/run_no_throw_contract_tests.sh df115e95a79d8101345c574e025fcf629208c8a6e00ae4415b1333b622de0d4a
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 29be1548d2d946ae5dd38b288ff3dbc3f66e37231565bc74fcd2b2237675f58b
+anchor-sha256: tests/unit/analyzer/test_analyzer.c a36a9c3656a483192504841bf7fe9a52b1d7aca785633be7ab302657ba6502f3
 anchor-sha256: tests/unit/analyzer/test_effect_db.c d444b5476930dcda7f57fc331faea237abecba18021ea28091c032cde3d4d865
-anchor-sha256: tests/unit/ir/test_xi_lower.c e626a845aa0bde8ef286bada6be4da57d5c6ac93fb80cfb9b45d22b8f1e4c023
+anchor-sha256: tests/unit/ir/test_xi_lower.c ee11c1c61f6c47ceb941e6300fa56d0b16a01e08d3865c7c003e054957bba285

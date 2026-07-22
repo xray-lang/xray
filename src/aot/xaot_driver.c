@@ -1444,6 +1444,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         return 1;
     }
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    xr_compiler_session_set_native_package_plan(session, options->native_package_plan);
     if (!xr_compiler_session_set_target_data_layout(session, &options->target->data_layout)) {
         fprintf(stderr, "Error: failed to install target data layout in compiler session\n");
         xray_vm_delete(X);
@@ -1654,7 +1655,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         spec->export_symbols = exports;
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
-
     /* --- Compile all modules through Xi IR pipeline --- */
     XiPipelineConfig cfg = xi_pipeline_aot_config();
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));

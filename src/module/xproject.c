@@ -210,7 +210,12 @@ XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
         }
     }
 
-    project->initialized = true;
+    /* Native source, symbol, effect, layout, and capability facts are one
+     * project-level immutable plan.  Keep an invalid plan attached so every
+     * consumer can report the same fail-closed diagnostic. */
+    project->native_plan = xr_native_package_plan_parse(root, project_root);
+
+    project->initialized = !project->native_plan || project->native_plan->valid;
     xtoml_free(root);
     return project;
 }
@@ -287,6 +292,8 @@ void xr_project_free(XrProject *project) {
         }
         xr_hashmap_free(project->targets);
     }
+
+    xr_native_package_plan_free(project->native_plan);
 
     xr_free(project);
 }

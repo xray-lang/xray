@@ -905,6 +905,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     src/module/xlockfile.c
     src/module/xmodule.c
     src/module/xmodule_resolver.c
+    src/module/xnative_package.c
     src/module/xproject.c
     src/module/xsemver.c
     ${STDLIB_SRC}

@@ -138,6 +138,7 @@ typedef enum XaotBuildProfile {
 
 typedef struct XaotBuildOptions {
     const XaotTarget *target;
+    const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
     XiCgenTypeNameProfile type_name_profile;

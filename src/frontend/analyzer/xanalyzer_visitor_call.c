@@ -87,7 +87,7 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
     if (!export_sym || export_sym->links.intrinsic_id == XA_INTRINSIC_NONE)
         return links;
 
-    xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+    xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
     links->module_name = module_name;
     links->import_member_name = member_name;
     return links;

@@ -78,10 +78,10 @@ XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capt
         return XR_TRANSFER_SYNC_SHARE;
     if (capture->storage_domain == XR_STORAGE_MODULE_STATIC)
         return capture->is_mutable ? XR_TRANSFER_REJECT : XR_TRANSFER_MODULE_READ;
-    if (capture->storage_domain == XR_STORAGE_TRANSFERABLE)
-        return XR_TRANSFER_MOVE_UNIQUE;
     if (capture->capture_kind == XI_CAPTURE_SHARED)
         return XR_TRANSFER_SYNC_SHARE;
+    if (capture->storage_domain == XR_STORAGE_TRANSFERABLE)
+        return XR_TRANSFER_MOVE_UNIQUE;
     if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
         return capture->is_mutable ? XR_TRANSFER_REJECT : XR_TRANSFER_MODULE_READ;
     if (capture->is_mutable || capture->is_reassigned ||

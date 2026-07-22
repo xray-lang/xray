@@ -2263,7 +2263,7 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(share_ir);
 }
 
-TEST(hoisted_readonly_capture_without_const_proof_is_rejected) {
+TEST(hoisted_sync_handle_capture_is_shared) {
     XiFunc *f = lower_source("fn launch() {\n"
                              "  const gate = Atomic(0)\n"
                              "  fn worker() -> int { return gate.load() }\n"
@@ -2278,9 +2278,10 @@ TEST(hoisted_readonly_capture_without_const_proof_is_rejected) {
     assert(worker->captures[0].needs_cell && "hoisting must preserve the forward-initializer cell");
     assert(!worker->captures[0].is_mutable && !worker->captures[0].is_reassigned &&
            "initialization ordering is not source-level mutation");
-    assert(worker->captures[0].capture_kind == XI_CAPTURE_BY_COPY);
-    assert(xi_capture_cross_execution_action(&worker->captures[0]) == XR_TRANSFER_REJECT &&
-           "a forward cell without canonical const/sync evidence must fail closed");
+    assert(worker->captures[0].capture_kind == XI_CAPTURE_SHARED &&
+           "Atomic has stable synchronized identity even when hoisting needs a cell");
+    assert(xi_capture_cross_execution_action(&worker->captures[0]) == XR_TRANSFER_SYNC_SHARE &&
+           "a synchronized handle must share identity rather than move ownership");
     xi_func_free(f);
 }
 
@@ -2795,7 +2796,7 @@ int main(void) {
     run_direct_await_go_one_shot();
     run_unique_result_task_await_consumes_handle();
     run_go_arg_transfer_modes();
-    run_hoisted_readonly_capture_without_const_proof_is_rejected();
+    run_hoisted_sync_handle_capture_is_shared();
     run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();

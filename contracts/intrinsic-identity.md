@@ -14,4 +14,4 @@ Status: frozen by task 220.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b8153ae9cb8609c2c8d6bfeb4b65f3ee2f39f76d92f2a829030dbf30268a8b62
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def ab653349e345d3cb35eec57593683e65f2aaef9b3c4efe656262dbd623019e7c

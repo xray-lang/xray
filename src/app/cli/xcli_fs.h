@@ -88,6 +88,9 @@ XR_FUNC int xr_cli_write_file_atomic(const char *path, const char *content);
 XR_FUNC bool xr_cli_file_exists(const char *path);
 XR_FUNC bool xr_cli_is_directory(const char *path);
 XR_FUNC bool xr_cli_is_xr_file(const char *filename);
+/* Walk from an input file/directory toward the filesystem root and return the
+ * closest directory containing xray.toml. */
+XR_FUNC bool xr_cli_find_project_root(const char *input_path, char *out, size_t out_size);
 
 /* ========== Safe Parsing Helpers ========== */
 

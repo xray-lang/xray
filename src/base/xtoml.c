@@ -731,6 +731,13 @@ static XrTomlValue *parse_array_value(TomlCtx *p) {
         }
         if (PEEK(p) == ',') {
             ADV(p);
+            /* TOML permits a trailing comma in arrays.  Consume it here
+             * instead of attempting to parse the closing bracket as a value. */
+            skip_ws_nl(p);
+            if (!AT_END(p) && PEEK(p) == ']') {
+                ADV(p);
+                return arr;
+            }
             continue;
         }
         p->error = true;

@@ -312,8 +312,11 @@ XR_FUNC XrType *xa_analyzer_infer_expr_type(XaAnalyzer *analyzer, XrAstNode *exp
 
 // Symbol links are now embedded directly in XaSymbol; no intmap lookup required.
 static inline XaSymbolLinks *xa_analyzer_get_links(XaAnalyzer *analyzer, XaSymbol *symbol) {
-    (void) analyzer;
-    return symbol ? &symbol->links : NULL;
+    if (!symbol)
+        return NULL;
+    if (analyzer && !symbol->links.summary_owner)
+        symbol->links.summary_owner = analyzer;
+    return &symbol->links;
 }
 
 // API: Class lookup

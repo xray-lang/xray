@@ -51,6 +51,7 @@
 #include "../../runtime/value/xstruct_layout.h"
 #include <limits.h>
 #include "../../module/xmodule_graph.h"
+#include "../../module/xnative_package.h"
 #include "../../toolchain/xcompiler_session.h"
 
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
@@ -2552,6 +2553,21 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
+    if (links->is_extern) {
+        const XrNativePackagePlan *native_plan = xr_compiler_session_native_package_plan(
+            ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+        if (native_plan) {
+            char native_error[512];
+            XrLocation native_loc = {.file = ctx->file_path,
+                                     .line = node ? node->line : 0,
+                                     .column = node ? node->column : 0};
+            if (!xr_native_package_validate_symbol_arity(native_plan, fn->name,
+                                                         (uint32_t) fn->param_count, native_error,
+                                                         sizeof(native_error)))
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_ARG_TYPE, native_error, &native_loc);
+        }
+    }
     if (link_name_attr) {
         XrLocation link_name_loc = {.file = ctx->file_path,
                                     .line = node ? node->line : 0,

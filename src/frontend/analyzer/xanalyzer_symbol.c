@@ -9,6 +9,7 @@
  */
 
 #include "xanalyzer_symbol.h"
+#include "xanalyzer.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xintmap.h"
@@ -878,12 +879,15 @@ XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int in
     return links->type_param_constraints[index];
 }
 
-void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLinks *src) {
+void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLinks *dst,
+                                          const XaSymbolLinks *src) {
     if (!dst)
         return;
 
+    XaAnalyzer *src_analyzer = src ? src->summary_owner : NULL;
     links_release_dynamic(dst);
     memset(dst, 0, sizeof(*dst));
+    dst->summary_owner = dst_analyzer;
     if (!src)
         return;
 
@@ -918,10 +922,29 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->is_extern = src->is_extern;
     dst->is_c_export = src->is_c_export;
     dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
-    dst->effect_id = src->effect_id;
-    dst->memory_effect_id = src->memory_effect_id;
+    if (src_analyzer && dst_analyzer && src_analyzer != dst_analyzer) {
+        dst->effect_id =
+            xa_effect_db_import(dst_analyzer->effect_db, src_analyzer->effect_db, src->effect_id);
+        const XaMemoryEffectSummary *memory =
+            xa_memory_effect_db_get(src_analyzer->memory_effect_db, src->memory_effect_id);
+        dst->memory_effect_id =
+            memory ? xa_memory_effect_db_intern(dst_analyzer->memory_effect_db, memory)
+                   : XA_MEMORY_EFFECT_NONE;
+        const XaAllocationSummary *allocation =
+            xa_allocation_db_get(src_analyzer->allocation_db, src->alloc_effect_id);
+        if (allocation) {
+            XaAllocationSummary imported = *allocation;
+            imported.first_site_node_id = 0;
+            imported.first_callee_symbol_id = 0;
+            imported.callee_effect_id = XA_ALLOC_EFFECT_NONE;
+            dst->alloc_effect_id = xa_allocation_db_intern(dst_analyzer->allocation_db, &imported);
+        }
+    } else if (src_analyzer && src_analyzer == dst_analyzer) {
+        dst->effect_id = src->effect_id;
+        dst->memory_effect_id = src->memory_effect_id;
+        dst->alloc_effect_id = src->alloc_effect_id;
+    }
     dst->throw_effect = src->throw_effect;
-    dst->alloc_effect_id = src->alloc_effect_id;
     dst->intrinsic_id = src->intrinsic_id;
     dst->alloc_state = src->alloc_state;
     dst->alloc_reason_bits = src->alloc_reason_bits;
@@ -929,6 +952,10 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->alloc_effect_complete = src->alloc_effect_complete;
     dst->has_no_alloc_contract = src->has_no_alloc_contract;
     dst->has_no_throw_contract = src->has_no_throw_contract;
+    for (int i = 0; i < dst->param_effect_count; i++) {
+        dst->param_effects[i].callable_effects = dst->effect_id;
+        dst->param_effects[i].memory_effects = dst->memory_effect_id;
+    }
 
     if (src->type_param_count > 0) {
         xa_symbol_links_set_type_params(dst, src->type_param_names, src->type_param_constraints,

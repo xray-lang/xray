@@ -19,6 +19,8 @@
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xerror_codes.h"
+#include "../../module/xnative_package.h"
+#include "../../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -387,11 +389,14 @@ static bool memory_call_has_visible_root(XaMemoryFunctionRow *row, CallExprNode 
 static XrCallArgAccess memory_call_arg_access(const CallExprNode *call, int index);
 
 static bool memory_dynamic_arg_is_stable_slice_read(XaMemoryPass *pass, CallExprNode *call,
-                                                    int arg_index) {
+                                                    XaSymbol *callee_symbol, int arg_index) {
     if (!pass || !call || !call->callee || arg_index < 0 || arg_index >= call->arg_count ||
         !call->arguments)
         return false;
     XrType *function_type = memory_expr_type(pass, call->callee);
+    if ((!function_type || !XR_TYPE_IS_FUNCTION(function_type)) && callee_symbol)
+        function_type = callee_symbol->links.type ? callee_symbol->links.type
+                                                  : callee_symbol->links.declared_type;
     XrType *arg_type = memory_expr_type(pass, call->arguments[arg_index]);
     return function_type && XR_TYPE_IS_FUNCTION(function_type) && arg_type &&
            XR_TYPE_IS_SLICE(arg_type) &&
@@ -399,7 +404,8 @@ static bool memory_dynamic_arg_is_stable_slice_read(XaMemoryPass *pass, CallExpr
            memory_call_arg_access(call, arg_index) == XR_CALL_ARG_PLAIN;
 }
 
-static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, AstNode *receiver) {
+static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, AstNode *receiver,
+                                      XaSymbol *callee_symbol) {
     if (!scan || !call)
         return;
     XaMemoryRootRef root;
@@ -409,7 +415,7 @@ static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, As
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
         if (!arg || !memory_root_for_expr(scan->row, arg, &root) ||
-            memory_dynamic_arg_is_stable_slice_read(scan->pass, call, i))
+            memory_dynamic_arg_is_stable_slice_read(scan->pass, call, callee_symbol, i))
             continue;
         if (!xa_memory_effect_summary_mark_invalidation(scan->summary, root))
             memory_mark_failure(scan);
@@ -441,7 +447,9 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     XaSymbol *callee_symbol = memory_call_symbol(scan->pass, call->callee);
     const XaMemoryEffectSummary *callee = memory_callee_summary(scan->pass, callee_symbol);
     bool compiler_builtin_function =
-        callee_symbol && callee_symbol->is_builtin && callee_symbol->kind == XA_SYM_FUNCTION;
+        (callee_symbol && callee_symbol->is_builtin && callee_symbol->kind == XA_SYM_FUNCTION) ||
+        (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+         strcmp(call->callee->as.variable.name, "len") == 0);
     if (callee) {
         memory_instantiate_callee(scan, callee, call, receiver);
     } else if (!builtin && !named_contract && !compiler_builtin_function &&
@@ -450,7 +458,7 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
          * exception: the function type itself forbids descriptor/owner mutation, and safe Slice
          * values cannot be retained elsewhere.  Keeping this root-relative avoids poisoning an
          * unrelated borrowed owner merely because another receiver is dynamically dispatched. */
-        memory_apply_unknown_call(scan, call, receiver);
+        memory_apply_unknown_call(scan, call, receiver, callee_symbol);
     }
 }
 
@@ -494,6 +502,41 @@ static void memory_scan_post(AstNode *node, void *userdata) {
         scan->nested_function_depth--;
 }
 
+static bool memory_apply_native_contract(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
+    const XrNativePackagePlan *plan = xr_compiler_session_native_package_plan(
+        pass && pass->analyzer ? pass->analyzer->compiler_session : NULL);
+    const XrNativeSymbol *symbol =
+        xr_native_package_find_symbol(plan, row && row->symbol ? row->symbol->name : NULL);
+    if (!symbol || !symbol->contract.complete)
+        return false;
+    /* Arity is validated at declaration collection, where the AST signature
+     * is authoritative.  Do not key semantic completeness to the optional
+     * parameter-escape sidecar count: bootstrap/imported symbols can publish
+     * that sidecar after memory-effect inference without changing ABI. */
+    for (uint32_t i = 0; i < symbol->contract.param_count; i++) {
+        const XrNativeParamContract *param = &symbol->contract.params[i];
+        XaMemoryRootRef root = {.kind = XA_MEMORY_ROOT_PARAM, .index = i};
+        bool ok = true;
+        if (param->access == XR_NATIVE_ACCESS_WRITE || param->access == XR_NATIVE_ACCESS_READWRITE)
+            ok = xa_memory_effect_summary_add_write(&row->direct, root,
+                                                    XA_MEMORY_PLACE_PATH_WILDCARD) &&
+                 ok;
+        if (param->descriptor_rebind)
+            ok = xa_memory_effect_summary_mark_descriptor_rebind(&row->direct, root) && ok;
+        if (param->may_relocate)
+            ok = xa_memory_effect_summary_mark_relocation(&row->direct, root) && ok;
+        if (param->may_shorten)
+            ok = xa_memory_effect_summary_mark_shortening(&row->direct, root,
+                                                          XA_MEMORY_RANGE_EXPR_NONE) &&
+                 ok;
+        if (param->invalidates_views)
+            ok = xa_memory_effect_summary_mark_invalidation(&row->direct, root) && ok;
+        if (!ok)
+            pass->resource_failure = true;
+    }
+    return true;
+}
+
 static void memory_build_direct(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
     XaSymbolLinks *links = &row->symbol->links;
     for (int i = 0; i < links->param_effect_count; i++) {
@@ -508,7 +551,8 @@ static void memory_build_direct(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
         if (!xa_memory_effect_summary_add_write(&row->direct, root, XA_MEMORY_PLACE_PATH_WILDCARD))
             pass->resource_failure = true;
     }
-    if (!memory_function_body(row->node) && links->is_extern)
+    if (!memory_function_body(row->node) && links->is_extern &&
+        !memory_apply_native_contract(pass, row))
         xa_memory_effect_summary_mark_incomplete(&row->direct, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);
     if (!memory_summary_copy(&row->result, &row->direct))
         pass->resource_failure = true;

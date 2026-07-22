@@ -1304,6 +1304,62 @@ XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summ
     return db->summary_count;
 }
 
+XaEffectId xa_effect_db_import(XaEffectDatabase *dst, const XaEffectDatabase *src,
+                               XaEffectId src_id) {
+    const XaEffectSummary *source = xa_effect_db_get(src, src_id);
+    if (!dst || !src || !source)
+        return XA_EFFECT_NONE;
+    if (dst == src)
+        return src_id;
+
+    XaEffectSummary imported;
+    xa_effect_summary_init(&imported);
+    imported.semantic_effects = source->semantic_effects;
+    imported.unknown_semantic_effects = source->unknown_semantic_effects;
+    imported.error_set_completeness = source->error_set_completeness;
+    imported.error_unknown_reasons = source->error_unknown_reasons;
+    imported.completeness = source->completeness;
+    imported.unknown_reasons = source->unknown_reasons;
+    imported.contains_unsafe_op = source->contains_unsafe_op;
+    imported.requires_unsafe_at_call = source->requires_unsafe_at_call;
+
+    bool ok = true;
+    for (uint32_t i = 0; ok && i < source->escaping.count; i++) {
+        const XaErrorTypeSet *source_set = &source->escaping.types[i];
+        const XaErrorTypeInfo *source_type = db_type_info(src, source_set->type_id);
+        uint64_t type_key = source_set->stable_type_key;
+        if (!source_type || !type_key) {
+            ok = false;
+            break;
+        }
+        XaErrorTypeId type_id =
+            xa_effect_db_register_error_type(dst, type_key, source_type->type_handle);
+        if (type_id == XA_ERROR_TYPE_NONE) {
+            ok = false;
+            break;
+        }
+        xa_effect_db_set_error_type_name(dst, type_id, source_type->qualified_name);
+        for (uint32_t variant = 0; ok && variant < source_type->variant_count; variant++) {
+            XaErrorVariantId imported_variant = xa_effect_db_register_error_variant(
+                dst, type_id, source_type->variants[variant].stable_key);
+            if (imported_variant == XA_ERROR_VARIANT_INVALID) {
+                ok = false;
+                break;
+            }
+            xa_effect_db_set_error_variant_name(dst, type_id, imported_variant,
+                                                source_type->variants[variant].name);
+            if (!source_set->all_variants && xa_bitset_test(&source_set->variants, variant))
+                ok = xa_effect_summary_add_variant(dst, &imported, type_id, imported_variant);
+        }
+        if (ok && source_set->all_variants)
+            ok = xa_effect_summary_add_all_variants(dst, &imported, type_id);
+    }
+
+    XaEffectId result = ok ? xa_effect_db_intern(dst, &imported) : XA_EFFECT_NONE;
+    xa_effect_summary_clear(&imported);
+    return result;
+}
+
 const XaEffectSummary *xa_effect_db_get(const XaEffectDatabase *db, XaEffectId id) {
     if (!db || id == XA_EFFECT_NONE)
         return NULL;

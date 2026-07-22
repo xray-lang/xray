@@ -32,6 +32,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../api/xrepl.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../module/xnative_package.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -1672,6 +1673,17 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 l.func->has_zero_cost_contract = true;
                 l.func->zero_cost_allow_mask = a->derive_flags;
             }
+        }
+    }
+    if (l.func->is_extern) {
+        const XrNativePackagePlan *native_plan =
+            xr_compiler_session_native_package_plan(analyzer->compiler_session);
+        const XrNativeSymbol *native_symbol =
+            xr_native_package_find_symbol(native_plan, fdecl->name);
+        if (native_symbol) {
+            /* Xi owns every string crossing the analyzer/lowering boundary. */
+            l.func->extern_symbol = arena_strdup(l.func, native_symbol->native_name);
+            l.func->extern_dylib = arena_strdup(l.func, xr_native_symbol_library(native_symbol));
         }
     }
 

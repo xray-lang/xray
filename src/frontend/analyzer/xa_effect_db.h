@@ -219,6 +219,11 @@ XR_FUNC char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffe
                                         const char *symbol_qualified_name);
 
 XR_FUNC XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summary);
+/* Import a summary from another analyzer-owned database by stable error type
+ * and variant keys. Analyzer-local witness edge ids are deliberately not
+ * copied across the ownership boundary. */
+XR_FUNC XaEffectId xa_effect_db_import(XaEffectDatabase *dst, const XaEffectDatabase *src,
+                                       XaEffectId src_id);
 XR_FUNC const XaEffectSummary *xa_effect_db_get(const XaEffectDatabase *db, XaEffectId id);
 XR_FUNC uint32_t xa_effect_db_summary_count(const XaEffectDatabase *db);
 

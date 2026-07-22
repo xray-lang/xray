@@ -21,6 +21,7 @@
 
 #include "../base/xforward_decl.h"
 #include "../base/xdefs.h"
+#include "xnative_package.h"
 
 /* ========== Dependency Declaration ========== */
 
@@ -69,6 +70,7 @@ typedef struct XrProject {
     bool is_package;
     XrHashMap *dependencies;
     XrHashMap *targets;
+    XrNativePackagePlan *native_plan;
     bool initialized;
 } XrProject;
 

@@ -177,9 +177,10 @@ typedef struct XaRefLocation {
 // Symbol links - type information stored inline inside XaSymbol.
 // Access via sym->links (no intmap lookup required).
 struct XaSymbolLinks {
-    XrType *type;           // Computed type (NULL = not computed)
-    XrType *declared_type;  // Explicitly declared type (from annotation)
-    bool type_computed;     // Has type computation been attempted
+    struct XaAnalyzer *summary_owner; /* owns effect/memory/allocation ids */
+    XrType *type;                     // Computed type (NULL = not computed)
+    XrType *declared_type;            // Explicitly declared type (from annotation)
+    bool type_computed;               // Has type computation been attempted
 
     // Definite assignment tracking
     bool is_definitely_assigned;  // true if variable has been assigned a value
@@ -508,7 +509,8 @@ XR_FUNC int xa_symbol_links_get_type_param_count(XaSymbolLinks *links);
 XR_FUNC const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index);
 XR_FUNC XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
                                                             int *out_count);
-XR_FUNC void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLinks *src);
+XR_FUNC void xa_symbol_links_copy_export_metadata(struct XaAnalyzer *dst_analyzer,
+                                                  XaSymbolLinks *dst, const XaSymbolLinks *src);
 
 // Type alias helpers
 XR_FUNC XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type);
