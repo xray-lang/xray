@@ -347,13 +347,10 @@ XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCorou
 /* Blocking receive with waker-side delivery slots.
  * recv_slot: where the waker stores the received value.
  * ok_slot + deliver=true (untimed VM bytecode recv only) registers the
- * delivery capability: when the woken value needs no receive-side deep
- * copy, the waker also stores the ok flag and the coroutine resumes at
- * the NEXT instruction — no instruction replay (kotlinx resume-with-value
- * shape). Values that need a receive-side deep copy fall back to the
- * replay/resume protocol per wake. deliver=false keeps that protocol
- * contract for timeout variants, cfunc/AOT continuations and
- * method-call paths. */
+ * delivery capability: verified TRANSFER/shared payloads are stored with the
+ * ok flag and the coroutine resumes at the NEXT instruction — no instruction
+ * replay (kotlinx resume-with-value shape). deliver=false keeps the replay
+ * contract for timeout variants, cfunc/AOT continuations and method calls. */
 XR_FUNC XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, struct XrCoroutine *coro,
                                           int64_t timeout_ms, XrSlotRef recv_slot,
                                           XrSlotRef ok_slot, bool deliver);

@@ -450,7 +450,7 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     bool is_any = (flags & XI_AWAIT_AUX_ANY) != 0;
     bool is_all = (flags & XI_AWAIT_AUX_ALL) != 0;
     bool is_any_success = (flags & XI_AWAIT_AUX_ANY_SUCCESS) != 0;
-    bool one_shot_go = (flags & XI_AWAIT_AUX_ONE_SHOT_GO) != 0;
+    bool consume_task = (flags & XI_AWAIT_AUX_CONSUME_TASK) != 0;
     bool into_result = (flags & XI_AWAIT_AUX_INTO_RESULT) != 0;
     if (is_any_success) {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 1));
@@ -483,7 +483,7 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_TIMEOUT, dst, task, timeout));
     } else {
-        uint8_t await_c = one_shot_go ? 0x02 : 0;
+        uint8_t await_c = consume_task ? 0x02 : 0;
         emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, await_c));
     }
 }

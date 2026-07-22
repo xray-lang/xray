@@ -107,13 +107,10 @@ typedef struct XrCoroExt {
     XrSlotRef recv_slot_ref;
     /* Resume-with-value delivery (untimed VM channel recv):
      * chan_ok_slot_ref is the delivery capability registered at block time.
-     * When the waker hands over a value that needs no receive-side deep
-     * copy, it stores value+ok directly into the blocked coroutine's
-     * register slots and sets chan_resume_delivered; the resume fast path
-     * then skips the instruction replay and continues from the next
-     * instruction. Values that need a receive-side deep copy keep the
-     * replay/resume protocol (the copy must run on the receiver's own
-     * thread), so the waker leaves chan_resume_delivered false. */
+     * Every admitted heap value already has TRANSFER/shared storage, so the
+     * waker stores value+ok directly into the blocked coroutine's register
+     * slots and sets chan_resume_delivered. The resume fast path then skips
+     * instruction replay and continues at the next instruction. */
     XrSlotRef chan_ok_slot_ref;
     bool chan_resume_delivered;
 

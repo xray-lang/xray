@@ -1,0 +1,12 @@
+fn values() -> Array<int> {
+    return [1, 2, 3]
+}
+
+fn main() {
+    var task = go values()
+    var first = await task
+    print(len(first))
+    print(len(await task))
+}
+
+main()

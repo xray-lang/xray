@@ -17,6 +17,7 @@
 #include "../value/xvalue_hash.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../mem/xsystem_heap.h"
 #include "../core/xr_exec_context.h"
 #include "../mem/xcoro_heap.h"
 #include "../class/xclass.h"
@@ -78,7 +79,8 @@ XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity) {
 
 /* ========== Allocation ========== */
 
-XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
+XrTuple *xr_tuple_new_storage(struct XrCoroutine *coro, uint16_t element_count,
+                              uint8_t storage_mode) {
     XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
     XR_DCHECK(X != NULL, "xr_tuple_new: no execution owner");
 
@@ -92,11 +94,18 @@ XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
      * this returns. Pre-fill with null only so a half-built tuple
      * is still safe for the GC to traverse before xr_tuple_set runs. */
     size_t size = xr_instance_size(cls);
-    XrTuple *t = (XrTuple *) xr_alloc(coro, size, XR_TINSTANCE);
+    XrTuple *t = NULL;
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL && xr_isolate_get_sys_heap(X)) {
+        t = (XrTuple *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(X), size, XR_TINSTANCE,
+                                                 storage_mode);
+    } else {
+        t = (XrTuple *) xr_alloc(coro, size, XR_TINSTANCE);
+    }
     if (!t)
         return NULL;
 
-    xr_obj_header_init_type(&t->hdr, XR_TINSTANCE);
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL)
+        xr_obj_header_init_type(&t->hdr, XR_TINSTANCE);
     t->klass = cls;
 
     XrValue null_v = {0};
@@ -104,6 +113,10 @@ XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
         t->elements[i] = null_v;
     }
     return t;
+}
+
+XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
+    return xr_tuple_new_storage(coro, element_count, XR_OBJ_STORAGE_NORMAL);
 }
 
 XrTuple *xr_tuple_from_values(struct XrCoroutine *coro, const XrValue *values, uint16_t count) {

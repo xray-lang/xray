@@ -34,6 +34,8 @@ typedef struct XrScopeTransferOps {
     bool (*record_child_completion_locked)(struct XrCoroutine *coro, struct XrScopeContext *scope);
 } XrScopeTransferOps;
 
+typedef void (*XrAotNativeValueReleaseFn)(XrValue value);
+
 typedef struct XrRuntimeCoreConfig {
     struct XrVMRuntime *owner_isolate;
     void *userdata;
@@ -73,6 +75,11 @@ typedef struct XrRuntimeCore {
     XrObjDestroyFn ext_destroy_funcs[XR_OBJ_TYPE_MAX];
     void *ext_traverse_funcs[XR_OBJ_TYPE_MAX];
     const XrScopeTransferOps *scope_transfer_ops;
+    /* Standalone AOT containers share the canonical object header but keep
+     * backend-native bodies.  The core owns the one release capability that
+     * lets cross-execution holders destroy an abandoned native value without
+     * re-shelling or copying its graph. */
+    XrAotNativeValueReleaseFn aot_native_value_release;
 
     /* Guards isolate-level shared metadata writes that happen off the object
      * fast path: the hidden-class transition chains (xinstance.c). These are
@@ -97,6 +104,9 @@ XR_FUNC bool xr_runtime_core_type_needs_destroy(const XrRuntimeCore *core, uint8
 XR_FUNC void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core,
                                                     const XrScopeTransferOps *ops);
 XR_FUNC const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_set_aot_native_value_release(XrRuntimeCore *core,
+                                                          XrAotNativeValueReleaseFn release);
+XR_FUNC bool xr_runtime_core_release_aot_native_value(XrRuntimeCore *core, XrObjHeader *obj);
 XR_FUNC XrExecutionContext *xr_runtime_core_root_exec(XrRuntimeCore *core);
 XR_FUNC XrExecutionContext *xr_runtime_core_module_exec(XrRuntimeCore *core);
 

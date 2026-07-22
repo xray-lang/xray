@@ -136,6 +136,20 @@ const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore
     return core ? core->scope_transfer_ops : NULL;
 }
 
+void xr_runtime_core_set_aot_native_value_release(XrRuntimeCore *core,
+                                                  XrAotNativeValueReleaseFn release) {
+    if (core)
+        core->aot_native_value_release = release;
+}
+
+bool xr_runtime_core_release_aot_native_value(XrRuntimeCore *core, XrObjHeader *obj) {
+    if (!core || !obj || (obj->extra & XR_OBJ_AOT_NATIVE) == 0 || !core->aot_native_value_release) {
+        return false;
+    }
+    core->aot_native_value_release(xr_make_ptr_val(obj));
+    return true;
+}
+
 void xr_runtime_core_delete(XrRuntimeCore *core) {
     if (!core)
         return;

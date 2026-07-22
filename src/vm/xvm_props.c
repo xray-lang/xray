@@ -39,7 +39,6 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xworker.h"
 #include "../coro/xtask.h"
-#include "../coro/xdeep_copy.h"
 #include "../coro/xcountdown_latch.h"
 #include "../coro/xevent_count.h"
 #include "../coro/xresult_group.h"
@@ -337,9 +336,19 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                           ? xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), caller,
                                                        task, false)
                           : xr_null();
+            if (tstate == XR_TASK_COMPLETED && xr_task_result_was_already_taken(task, base[a])) {
+                if (frame)
+                    frame->pc = pc;
+                XrValue exc = xr_panic_info_new(isolate, XR_ERR_TASK_ALREADY_TAKEN,
+                                                "Task transferable result has already been taken");
+                xr_vm_unwind_with_trace(isolate, exc);
+                return XR_DISP_RAISE;
+            }
         } else if (prop_symbol == SYMBOL_ERROR) {
             if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {
-                XrValue err = task->error;
+                XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
+                XrValue err =
+                    xr_task_observe_error(xr_isolate_get_runtime_core(isolate), task, caller);
                 if (xr_value_is_panic_info(isolate, err)) {
                     const char *m = xr_panic_info_get_message(isolate, err);
                     if (m) {
@@ -349,33 +358,11 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                         base[a] = xr_null();
                     }
                 } else {
-                    XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
-                    if (caller && xr_value_needs_copy(err))
-                        err = xr_deep_copy_to_coro(isolate, err, caller);
                     base[a] = err;
                 }
             } else {
                 base[a] = xr_null();
             }
-        } else {
-            base[a] = xr_null();
-        }
-        return XR_DISP_NEXT;
-    }
-
-    // Legacy coroutine properties (fallback for old callers)
-    if (xr_value_is_coro(obj)) {
-        XrCoroutine *coro = xr_value_to_coro(obj);
-        if (prop_symbol == SYMBOL_DONE) {
-            base[a] = xr_bool(xr_coro_flags_has(coro, XR_CORO_FLG_DONE));
-        } else if (prop_symbol == SYMBOL_CANCELLED) {
-            base[a] = xr_bool(xr_coro_flags_has(coro, XR_CORO_FLG_CANCELLED));
-        } else if (prop_symbol == SYMBOL_RESULT) {
-            XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
-            base[a] = xr_deep_copy_to_coro(isolate, coro->result, caller);
-        } else if (prop_symbol == SYMBOL_ERROR) {
-            XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
-            base[a] = xr_deep_copy_to_coro(isolate, coro->error, caller);
         } else {
             base[a] = xr_null();
         }

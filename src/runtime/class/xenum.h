@@ -118,6 +118,9 @@ XR_FUNC struct XrEnumAggregateValue *xr_enum_adt_construct(struct XrVMRuntime *X
                                                            XrEnumType *enum_type,
                                                            uint32_t member_index, XrValue *args,
                                                            int nargs);
+XR_FUNC struct XrEnumAggregateValue *
+xr_enum_adt_construct_storage(struct XrVMRuntime *X, XrEnumType *enum_type, uint32_t member_index,
+                              XrValue *args, int nargs, uint8_t storage_mode);
 XR_FUNC bool xr_value_is_enum_aggregate(XrValue value);
 XR_FUNC XrEnumAggregateValue *xr_value_to_enum_aggregate(XrValue value);
 XR_FUNC XrEnumType *xr_enum_aggregate_type(const XrEnumAggregateValue *value);

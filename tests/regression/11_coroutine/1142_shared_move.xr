@@ -1,11 +1,11 @@
 /*
-** shared 变量与 var move 语义测试
+** const 共享值与 var move 语义测试
 ** 作者：xingleixu@gmail.com
 **
 ** 测试内容：
-**   - shared: 全局堆，引用计数共享，并发读取
-**   - shared: 全局堆，稳定共享身份，可直接跨协程传递
-**   - move owned: owned 根显式所有权转移（用于 go / ch.send）
+**   - const: 共享存储，引用计数共享，并发读取
+**   - const: 稳定共享身份，可直接跨协程传递
+**   - move: 唯一根显式所有权转移（用于 go / ch.send）
 **   - 普通变量: 通过 copy(...) 显式深拷贝后传递给协程
 */
 
@@ -58,7 +58,7 @@ fn test_move_go() {
     var data: Json = { count: 10 }
 
     // 'move data' transfers the owned root to child coroutine
-    var task = go fn(d: Json) -> int {
+    var task = go fn(d: move Json) -> int {
         print("child got:", d.count)
         return int(d.count) + 1
     }(move data)
@@ -96,7 +96,7 @@ fn test_normal_copy() {
     var arr = [1, 2, 3]
 
     // Explicit copy: coroutine gets a deep copy
-    var task = go fn(data: Array<int>) {
+    var task = go fn(data: move Array<int>) {
         data.push(4)  // does not affect original
         return len(data)
     }(copy(arr))
@@ -115,7 +115,7 @@ fn test_move_pipeline() {
     var msg: Json = { step: 0 }
 
     // Stage 1: modify and move-send
-    var t1 = go fn(c: Channel<Json>, d: Json) {
+    var t1 = go fn(c: Channel<Json>, d: move Json) {
         var next: Json = copy(d)
         next.step = int(next.step) + 1
         print("stage1:", next.step)

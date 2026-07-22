@@ -222,7 +222,7 @@ vmcase(OP_NEWTUPLE) {
     /* OP_NEWTUPLE: build a new tuple from B consecutive elements
     ** A = destination register
     ** B = arity (== element count)
-    ** C = unused
+    ** C = storage mode (0=normal, 1=shared, 2=transfer)
     **
     ** Elements are read from R[A+1..A+B] (same convention as the
     ** untyped path of OP_NEWARRAY).  Tuples are immutable from user
@@ -231,13 +231,15 @@ vmcase(OP_NEWTUPLE) {
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    XrTuple *tup = xr_tuple_new(VM_CURRENT_CORO, (uint16_t) b);
+    int storage_mode = GETARG_C(i) & 0x03;
+    XrTuple *tup = xr_tuple_new_storage(VM_CURRENT_CORO, (uint16_t) b, (uint8_t) storage_mode);
     if (tup) {
         for (int j = 0; j < b; j++)
             xr_tuple_set(tup, (uint16_t) j, R(a + 1 + j));
     }
     R(a) = xr_value_from_tuple(tup);
-    checkGC(base + a + 1);
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL)
+        checkGC(base + a + 1);
     vmbreak;
 }
 

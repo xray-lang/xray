@@ -14,17 +14,17 @@ class GenericQueue<T> {
         }
     }
 
-    push(value: T, shard: int) {
+    push(value: move T, shard: int) {
         var idx = shard % this.workers
-        this.shards[idx].send(value)
+        this.shards[idx].send(move value)
     }
 
     tryPop(worker_id: int) -> T? {
         for (var i = 0; i < this.workers; i++) {
             var idx = (worker_id + i) % this.workers
             match (this.shards[idx].tryRecv()) {
-                Recv.Value(value) -> {
-                    return value
+                Recv.Value(item) -> {
+                    return item
                 }
                 _ -> {}
             }

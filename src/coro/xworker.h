@@ -101,9 +101,9 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_recvq_dequeue_count;
     _Atomic uint64_t chan_ready_wake_count;
     _Atomic uint64_t chan_send_no_copy_count;
-    _Atomic uint64_t chan_send_deep_copy_count;
+    _Atomic uint64_t chan_send_transfer_count;
     _Atomic uint64_t chan_recv_no_copy_count;
-    _Atomic uint64_t chan_recv_deep_copy_count;
+    _Atomic uint64_t chan_recv_transfer_count;
     _Atomic uint64_t chan_close_ready_wake_count;
     _Atomic uint64_t chan_close_send_waiter_count;
     _Atomic uint64_t chan_close_recv_waiter_count;

@@ -97,12 +97,14 @@ static XaotCapturePlan derive_capture(const XiFunc *func, uint16_t index) {
     plan.evidence = XAOT_CAPTURE_EV_CLOSED_CAPTURE | XAOT_CAPTURE_EV_STORAGE_DOMAIN |
                     XAOT_CAPTURE_EV_TYPE_SHAPE | XAOT_CAPTURE_EV_MUTABILITY;
     plan.action = (uint8_t) xi_capture_cross_execution_action(capture);
-    if (capture->capture_kind == XI_CAPTURE_SHARED) {
-        plan.source_domain = XR_STORAGE_SYNC_SHARED;
-    } else if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE) {
-        plan.source_domain = XR_STORAGE_MODULE_STATIC;
-    } else {
-        plan.source_domain = XR_STORAGE_EXEC_LOCAL;
+    plan.source_domain = capture->storage_domain;
+    if (plan.source_domain == XR_STORAGE_DOMAIN_UNKNOWN) {
+        if (capture->capture_kind == XI_CAPTURE_SHARED)
+            plan.source_domain = XR_STORAGE_SYNC_SHARED;
+        else if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
+            plan.source_domain = XR_STORAGE_MODULE_STATIC;
+        else
+            plan.source_domain = XR_STORAGE_EXEC_LOCAL;
     }
     return plan;
 }

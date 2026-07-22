@@ -58,36 +58,8 @@ typedef struct XrClass XrClass;
 #define XR_OBJ_GET_TYPE(obj) ((XrObjType) ((obj)->type))
 #define XR_OBJ_SET_TYPE(obj, t) ((obj)->type = (uint16_t) (t))
 
-/* ========== Runtime Storage Mode ==========
- *
- * bit 0  = shared system heap
- * bit 15 = owned system heap
- * normal has neither bit set. The split avoids AOT bump/stack/native and mmap
- * flags while still exposing a compact 0/1/2 mode to bytecode and IR. */
-
-#define XR_OBJ_STORAGE_NORMAL 0
-#define XR_OBJ_STORAGE_SHARED 1
-#define XR_OBJ_STORAGE_TRANSFER 2
-
-#define XR_OBJ_STORAGE_SHARED_BIT 0x0001u
-#define XR_OBJ_STORAGE_TRANSFER_BIT 0x8000u
-#define XR_OBJ_STORAGE_MODE_MASK (XR_OBJ_STORAGE_SHARED_BIT | XR_OBJ_STORAGE_TRANSFER_BIT)
-
-#define XR_OBJ_GET_STORAGE(obj)                                                                    \
-    (((obj)->extra & XR_OBJ_STORAGE_TRANSFER_BIT)                                                  \
-         ? XR_OBJ_STORAGE_TRANSFER                                                                 \
-         : (((obj)->extra & XR_OBJ_STORAGE_SHARED_BIT) ? XR_OBJ_STORAGE_SHARED                     \
-                                                       : XR_OBJ_STORAGE_NORMAL))
-#define XR_OBJ_SET_STORAGE(obj, m)                                                                 \
-    do {                                                                                           \
-        (obj)->extra = (uint16_t) ((obj)->extra & ~(uint16_t) XR_OBJ_STORAGE_MODE_MASK);           \
-        if ((m) == XR_OBJ_STORAGE_SHARED)                                                          \
-            (obj)->extra |= XR_OBJ_STORAGE_SHARED_BIT;                                             \
-        else if ((m) == XR_OBJ_STORAGE_TRANSFER)                                                   \
-            (obj)->extra |= XR_OBJ_STORAGE_TRANSFER_BIT;                                           \
-    } while (0)
-#define XR_OBJ_IS_SHARED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_SHARED)
-#define XR_OBJ_IS_TRANSFER(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_TRANSFER)
+/* Cross-execution storage-mode bits and accessors live in the shared header so
+ * AOT-native objects publish the same canonical mode as VM objects. */
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*

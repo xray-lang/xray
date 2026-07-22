@@ -6826,6 +6826,12 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
     child_l.func->is_generic_template = parent->func && parent->func->is_generic_template;
+    XaScope *semantic_scope = xa_scope_find_by_node(parent->analyzer->global_scope, lambda_node);
+    if (semantic_scope && semantic_scope->return_storage_known &&
+        !semantic_scope->return_storage_mixed) {
+        child_l.func->return_storage_domain = semantic_scope->return_storage_domain;
+        child_l.func->return_storage_known = true;
+    }
     xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node),
                                    lambda_node->line > 0 ? (uint32_t) lambda_node->line : 0);
     child_l.func->nparams = abi_param_count;
@@ -8258,9 +8264,12 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     AwaitExprNode *aw = &node->as.await_expr;
-    bool direct_one_shot_go = aw->expr && aw->expr->type == AST_GO_EXPR &&
-                              aw->expr->as.go_expr.link_mode == 0 && !aw->timeout && !aw->is_any &&
-                              !aw->is_all && !aw->is_any_success && !aw->into;
+    XrType *task_type = xi_lower_node_type(l, aw->expr);
+    bool direct_temporary_task = aw->expr && aw->expr->type == AST_GO_EXPR &&
+                                 aw->expr->as.go_expr.link_mode == 0 && !aw->timeout &&
+                                 !aw->is_any && !aw->is_all && !aw->is_any_success && !aw->into;
+    bool consumes_unique_task = !aw->is_any && !aw->is_all && !aw->is_any_success && !aw->into &&
+                                xa_task_type_requires_consuming_await(task_type);
     XiValue *task = xi_lower_expr(l, aw->expr);
     if (!task)
         return NULL;
@@ -8285,7 +8294,7 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     /* Encode await variant flags. */
     v->aux_int = (aw->is_any ? XI_AWAIT_AUX_ANY : 0) | (aw->is_all ? XI_AWAIT_AUX_ALL : 0) |
                  (aw->is_any_success ? XI_AWAIT_AUX_ANY_SUCCESS : 0) |
-                 (direct_one_shot_go ? XI_AWAIT_AUX_ONE_SHOT_GO : 0) |
+                 ((direct_temporary_task || consumes_unique_task) ? XI_AWAIT_AUX_CONSUME_TASK : 0) |
                  (into ? XI_AWAIT_AUX_INTO_RESULT : 0);
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     if (into)

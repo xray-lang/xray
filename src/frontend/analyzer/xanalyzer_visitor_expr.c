@@ -1100,7 +1100,8 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     // bit. The exact operand of `move x` is checked by xa_visit_move_expr so
     // an invalid move can be diagnosed without poisoning later state.
     bool is_current_move_source =
-        ctx->current_move_source_node == node && ctx->current_move_source_symbol_id == sym->id;
+        ctx->current_move_source_node == node && (ctx->current_move_source_symbol_id == sym->id ||
+                                                  ctx->current_move_source_allows_stale_mark);
     XaBindingUseState binding_state =
         ctx->flow && ctx->flow->current_flow
             ? xa_flow_binding_use_state(ctx->flow, name, ctx->flow->current_flow)
@@ -4628,9 +4629,17 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         XrType **saved_return_types = ctx->return_types;
         int saved_return_count = ctx->return_type_count;
         int saved_return_cap = ctx->return_type_capacity;
+        uint8_t saved_return_storage_domain = ctx->return_storage_domain;
+        bool saved_return_storage_known = ctx->return_storage_known;
+        bool saved_return_storage_mixed = ctx->return_storage_mixed;
+        bool saved_return_storage_unknown = ctx->return_storage_unknown;
         ctx->return_types = NULL;
         ctx->return_type_count = 0;
         ctx->return_type_capacity = 0;
+        ctx->return_storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+        ctx->return_storage_known = false;
+        ctx->return_storage_mixed = false;
+        ctx->return_storage_unknown = false;
 
         // Isolate flow graph for lambda body (same reason as named functions)
         XaFlowNode *saved_flow = NULL;
@@ -4733,6 +4742,16 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             }
         }
 
+        XaScope *function_scope = ctx->analyzer->current_scope;
+        if (function_scope) {
+            function_scope->return_storage_domain = ctx->return_storage_domain;
+            function_scope->return_storage_known = ctx->return_storage_known &&
+                                                   !ctx->return_storage_mixed &&
+                                                   !ctx->return_storage_unknown;
+            function_scope->return_storage_mixed =
+                ctx->return_storage_mixed ||
+                (ctx->return_storage_known && ctx->return_storage_unknown);
+        }
         xa_analyzer_exit_scope(ctx->analyzer);
 
         ctx->pending_parallel_callback_name = saved_pending_parallel_callback_name;
@@ -4783,6 +4802,10 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         ctx->return_types = saved_return_types;
         ctx->return_type_count = saved_return_count;
         ctx->return_type_capacity = saved_return_cap;
+        ctx->return_storage_domain = saved_return_storage_domain;
+        ctx->return_storage_known = saved_return_storage_known;
+        ctx->return_storage_mixed = saved_return_storage_mixed;
+        ctx->return_storage_unknown = saved_return_storage_unknown;
     }
 
     // After full body analysis, report error if return type still unknown
@@ -4868,14 +4891,29 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
     if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_VARIABLE)
         return false;
     const char *name = arg_node->as.variable.name;
-    XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
+    XaSymbol *sym =
+        arg_node->as.variable.symbol_id
+            ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, arg_node->as.variable.symbol_id)
+            : (name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL);
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
-    return links &&
-           (links->value_capability == XA_CAP_CONST ||
-            links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) &&
-           (links->storage_domain == XR_STORAGE_CONST_SHARED ||
-            links->storage_domain == XR_STORAGE_SYNC_SHARED ||
-            links->storage_domain == XR_STORAGE_MODULE_STATIC);
+    if (!links || (links->value_capability != XA_CAP_CONST &&
+                   links->value_capability != XA_CAP_SYNC_INTERIOR_MUTABLE))
+        return false;
+    if (links->storage_domain == XR_STORAGE_CONST_SHARED ||
+        links->storage_domain == XR_STORAGE_SYNC_SHARED ||
+        links->storage_domain == XR_STORAGE_MODULE_STATIC)
+        return true;
+    /* A coroutine boundary is part of the allocation constraint. A proven
+     * const/synchronized binding can therefore be materialized directly in
+     * shared storage; this is not a runtime promotion or a hidden copy. */
+    links->storage_domain =
+        links->value_capability == XA_CAP_CONST ? XR_STORAGE_CONST_SHARED : XR_STORAGE_SYNC_SHARED;
+    links->allocation_plan.domain = links->storage_domain;
+    links->allocation_plan.materialization = XR_MATERIALIZE_SYSTEM_HEAP;
+    links->allocation_plan.capability = links->value_capability;
+    links->allocation_plan.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_CAPABILITY;
+    links->allocation_plan.complete = true;
+    return true;
 }
 
 XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {
@@ -4955,7 +4993,8 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
         xa_report_boundary_local_move(ctx, boundary_node, arg_node, boundary_label);
         return;
     }
-    if (xa_boundary_arg_is_explicit_copy(arg_node) || xa_boundary_arg_is_shared(ctx, arg_node))
+    if (xa_boundary_arg_is_explicit_copy(arg_node) || xa_boundary_arg_is_shared(ctx, arg_node) ||
+        (arg_type && xr_type_is_const(arg_type)))
         return;
 
     XrLocation loc = {.file = ctx->file_path,
@@ -5083,6 +5122,171 @@ static XrType *xa_await_array_result_element(XaInferContext *ctx, AstNode *node,
     return result_elem ? result_elem : xr_type_new_unknown(ctx->analyzer->isolate);
 }
 
+static XaSymbol *xa_await_task_binding(XaInferContext *ctx, AstNode *operand) {
+    if (!ctx || !ctx->analyzer || !operand || operand->type != AST_VARIABLE)
+        return NULL;
+    if (operand->as.variable.symbol_id != 0)
+        return xa_scope_lookup_by_id(ctx->analyzer->global_scope, operand->as.variable.symbol_id);
+    return operand->as.variable.name
+               ? xa_scope_lookup(ctx->analyzer->current_scope, operand->as.variable.name)
+               : NULL;
+}
+
+static bool xa_await_is_same_consume_revisit(const XaSymbolLinks *links,
+                                             const AstNode *await_node) {
+    return links && await_node && links->final_move.complete &&
+           links->final_move.consume_line == (uint32_t) await_node->line &&
+           links->final_move.consume_column == (uint32_t) await_node->column;
+}
+
+/* `await task` is a terminal use of a Task that owns a unique mutable result.
+ * Keep the surface syntax uniform while publishing the same binding/CFG proof
+ * as an explicit source move. Fresh Task expressions have no source binding to
+ * invalidate; lowering still receives the consume bit from their Task<T> type. */
+static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_node, AstNode *operand,
+                                         XrType *task_type, XaSymbol *task_sym,
+                                         XaBindingUseState prior_state,
+                                         int diagnostic_count_before) {
+    if (!ctx || !ctx->analyzer || !await_node ||
+        !xa_task_type_requires_consuming_await(task_type) || !task_sym)
+        return;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, task_sym);
+    bool same_revisit = xa_await_is_same_consume_revisit(links, await_node);
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = operand ? operand->line : await_node->line,
+                      .column = operand ? operand->column : await_node->column};
+    const char *name = task_sym->name ? task_sym->name : "task";
+
+    if (prior_state != XA_BINDING_LIVE && !same_revisit) {
+        const char *reason = prior_state == XA_BINDING_MOVED ? "was already consumed"
+                             : prior_state == XA_BINDING_MAYBE_MOVED
+                                 ? "may already be consumed on another path"
+                                 : "has unknown ownership state";
+        char msg[192];
+        snprintf(msg, sizeof(msg), "cannot await '%s': Task %s", name, reason);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+
+    if (task_sym->is_const) {
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "cannot await const binding '%s': its unique Task result must be consumed", name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (task_sym->kind != XA_SYM_VARIABLE && task_sym->kind != XA_SYM_PARAMETER) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "consuming await requires an owned Task binding", &loc);
+    }
+    if (task_sym->kind == XA_SYM_PARAMETER && task_sym->passing_mode != XR_PARAM_MOVE) {
+        char msg[192];
+        const char *mode = task_sym->passing_mode == XR_PARAM_REF ? "ref" : "read";
+        snprintf(msg, sizeof(msg),
+                 "cannot consume %s Task parameter '%s'; declare the parameter with move", mode,
+                 name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (links) {
+        if (links->root_id == 0) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot await unique Task: no ownership root exists", &loc);
+        } else if (links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "cannot await unique Task: ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
+        }
+        if (links->value_capability == XA_CAP_UNKNOWN) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot await unique Task: capability is unknown", &loc);
+        } else if (links->value_capability != XA_CAP_MUTABLE) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot consume a non-owner Task capability", &loc);
+        }
+        if (links->storage_domain == XR_STORAGE_MODULE_STATIC) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot consume a module-static Task binding", &loc);
+        }
+        if (!links->allocation_plan.complete) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "cannot await unique Task: storage/ownership plan is incomplete "
+                "(OWN-E-STORAGE-PLAN)",
+                &loc);
+        }
+        bool alias_analysis_failed = false;
+        XaSymbol *live_alias =
+            xa_find_live_strong_alias_after_current(ctx, task_sym, &alias_analysis_failed);
+        if (alias_analysis_failed) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                       "ownership alias analysis failed "
+                                       "(AnalysisResourceFailure)",
+                                       &loc);
+        } else if (live_alias) {
+            char msg[224];
+            snprintf(msg, sizeof(msg),
+                     "cannot await '%s': strong alias '%s' remains live "
+                     "(OWN-E-LIVE-ALIAS)",
+                     name, live_alias->name ? live_alias->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        } else if (links->root_alias == XA_ROOT_LOCAL_ALIASED) {
+            xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_UNIQUE);
+        }
+    }
+
+    if (ctx->loop_scope && ctx->loop_scope->entry_scope) {
+        bool declared_before_loop = false;
+        for (XaScope *scope = ctx->loop_scope->entry_scope; scope; scope = scope->parent) {
+            if (scope == task_sym->scope) {
+                declared_before_loop = true;
+                break;
+            }
+        }
+        if (declared_before_loop) {
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "cannot await unique Task '%s' in a repeated loop: the next iteration "
+                     "would consume it again",
+                     name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    }
+
+    if (ctx->analyzer->diagnostic_count != diagnostic_count_before || same_revisit)
+        return;
+
+    if (ctx->flow)
+        xa_flow_create_move(ctx->flow, name);
+    if (!links)
+        return;
+    links->binding_use = XA_BINDING_MOVED;
+    links->moved_line = (uint32_t) await_node->line;
+    links->moved_column = (uint32_t) await_node->column;
+    links->ownership_candidate.id = await_node->node_id + 1u;
+    links->ownership_candidate.root = links->root_id;
+    links->ownership_candidate.source_symbol_id = task_sym->id;
+    links->ownership_candidate.capability = links->value_capability;
+    links->ownership_candidate.evidence =
+        XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_ROOT_UNIQUE | XA_OWNERSHIP_EV_LOAN_FREE |
+        XA_OWNERSHIP_EV_ALIAS_FREE | XA_OWNERSHIP_EV_ESCAPE_FREE | XA_OWNERSHIP_EV_CAPABILITY |
+        XA_OWNERSHIP_EV_CFG_CONSISTENT;
+    links->ownership_candidate.complete = true;
+    links->final_move.id = links->ownership_candidate.id;
+    links->final_move.candidate_id = links->ownership_candidate.id;
+    links->final_move.storage_plan_id = links->allocation_plan.id;
+    links->final_move.root = links->root_id;
+    links->final_move.source_capability = links->value_capability;
+    links->final_move.target_capability = links->value_capability;
+    links->final_move.consume_line = (uint32_t) await_node->line;
+    links->final_move.consume_column = (uint32_t) await_node->column;
+    links->final_move.evidence = links->ownership_candidate.evidence | XA_OWNERSHIP_EV_STORAGE;
+    links->final_move.complete = links->allocation_plan.complete;
+}
+
 XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -5091,7 +5295,27 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
     // Infer the type of the awaited expression
     if (await->expr) {
+        XaSymbol *task_sym = xa_await_task_binding(ctx, await->expr);
+        XaSymbolLinks *task_links =
+            task_sym ? xa_analyzer_get_links(ctx->analyzer, task_sym) : NULL;
+        XaBindingUseState prior_state =
+            task_sym && ctx->flow && ctx->flow->current_flow
+                ? xa_flow_binding_use_state(ctx->flow, task_sym->name, ctx->flow->current_flow)
+                : (task_links ? task_links->binding_use : XA_BINDING_LIVE);
+        bool suppress_consuming_source_use =
+            task_sym && task_links &&
+            (xa_task_type_requires_consuming_await(task_links->type) ||
+             xa_await_is_same_consume_revisit(task_links, node));
+        int diagnostic_count_before = ctx->analyzer->diagnostic_count;
+        const AstNode *saved_move_source_node = ctx->current_move_source_node;
+        uint32_t saved_move_source_symbol_id = ctx->current_move_source_symbol_id;
+        if (suppress_consuming_source_use) {
+            ctx->current_move_source_node = await->expr;
+            ctx->current_move_source_symbol_id = task_sym->id;
+        }
         XrType *expr_type = xa_visit_infer_expr(ctx, await->expr);
+        ctx->current_move_source_node = saved_move_source_node;
+        ctx->current_move_source_symbol_id = saved_move_source_symbol_id;
 
         // await all/any/anySuccess operates on Array<Task<T>> → Array<T> / T
         if (await->is_all || await->is_any || await->is_any_success) {
@@ -5152,6 +5376,8 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
                 (expr_type->instance.type_arg_count > 0) ? expr_type->instance.type_args[0] : NULL;
             if (!result_type)
                 return xr_type_new_unknown(NULL);
+            xa_consume_unique_task_await(ctx, node, await->expr, expr_type, task_sym, prior_state,
+                                         diagnostic_count_before);
             return result_type;
         }
 
@@ -5271,7 +5497,6 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     XaSymbolLinks *move_links = move_sym ? xa_analyzer_get_links(ctx->analyzer, move_sym) : NULL;
     bool same_move_revisit = move_links && move_links->final_move.complete &&
-                             move_links->final_move.id == node->node_id + 1u &&
                              move_links->final_move.consume_line == (uint32_t) node->line &&
                              move_links->final_move.consume_column == (uint32_t) node->column;
 

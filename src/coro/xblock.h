@@ -59,12 +59,11 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrCoroutine *coro, XrChannel 
 XR_FUNC XrCoroBlockResult xr_coro_chan_send_transfer(struct XrCoroutine *coro, XrChannel *ch,
                                                      XrValue value, XrSlotRef result_slot,
                                                      int64_t timeout_ms, uint8_t transfer_mode);
-/* deliver=true registers value_slot+ok_slot for waker-side delivery: when
- * the woken value needs no receive-side deep copy, the waker stores value+ok
- * directly and the coroutine can resume without replaying the channel
- * operation. Values that need a receive-side deep copy, timeout variants,
- * method-call and cfunc continuations keep the replay/resume protocol
- * and must pass deliver=false. */
+/* deliver=true registers value_slot+ok_slot for waker-side delivery. Verified
+ * channel payloads are already TRANSFER/shared, so the waker stores value+ok
+ * directly and the coroutine resumes without replaying the operation. Timeout
+ * variants, method-call and cfunc continuations pass deliver=false and keep the
+ * replay/resume protocol. */
 XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrCoroutine *coro, XrChannel *ch,
                                             XrSlotRef value_slot, XrSlotRef ok_slot,
                                             int64_t timeout_ms, bool deliver);

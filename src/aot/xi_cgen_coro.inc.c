@@ -2705,7 +2705,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         bool await_all = (await_flags & XI_AWAIT_AUX_ALL) != 0;
         bool await_any_success = (await_flags & XI_AWAIT_AUX_ANY_SUCCESS) != 0;
         bool await_any = (await_flags & XI_AWAIT_AUX_ANY) != 0 || await_any_success;
-        bool one_shot_await = (await_flags & XI_AWAIT_AUX_ONE_SHOT_GO) != 0;
+        bool one_shot_await = (await_flags & XI_AWAIT_AUX_CONSUME_TASK) != 0;
         bool aggregate_one_shot = (await_flags & XI_AWAIT_AUX_AGGREGATE_ONE_SHOT) != 0;
         bool submit_deferred_batch = (await_flags & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0;
         bool await_into_result = (await_flags & XI_AWAIT_AUX_INTO_RESULT) != 0;

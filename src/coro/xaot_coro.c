@@ -2216,19 +2216,33 @@ static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
 }
 
+static XrValue aot_task_already_taken_value(const XrAotContext *ctx, XrTask *task) {
+    static const char message[] = "Task transferable result has already been taken";
+    XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
+    if (aot_vm_host_available(vm_host) && vm_host.ops->exception_new)
+        return vm_host.ops->exception_new(vm_host.host, XR_ERR_TASK_ALREADY_TAKEN, message);
+    XrString *msg =
+        xr_string_intern_core(aot_context_runtime_core(ctx), message, sizeof(message) - 1, 0);
+    return msg ? xr_string_value(msg) : xr_null();
+}
+
+static XrValue aot_task_result_already_taken(const XrAotContext *ctx, XrTask *task) {
+    XrValue error = aot_task_already_taken_value(ctx, task);
+    XrValue args[1] = {error};
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
+}
+
 static XrValue aot_task_failure_value(const XrAotContext *ctx, XrTask *task) {
     XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
     XrCoroutine *coro = aot_context_coro(ctx, vm_host, task);
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
-    XrValue error = task ? task->error : xr_null();
+    XrValue error = task ? xr_task_observe_error(core, task, coro) : xr_null();
     if (XR_IS_NULL(error) && aot_vm_host_available(vm_host) && vm_host.ops->exception_new)
         return vm_host.ops->exception_new(vm_host.host, XR_ERR_RUNTIME, "Task failed");
     if (XR_IS_NULL(error)) {
         XrString *msg = xr_string_intern_core(core, "Task failed", strlen("Task failed"), 0);
         return msg ? xr_string_value(msg) : xr_null();
     }
-    if (coro && xr_value_needs_copy(error))
-        error = xr_deep_copy_to_coro_core(core, error, coro);
     return error;
 }
 
@@ -2256,6 +2270,8 @@ static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *ta
         XrCoroutine *coro = aot_context_coro(ctx, vm_host, task);
         XrValue value =
             xr_coro_await_result_value(aot_context_runtime_core(ctx), coro, task, false);
+        if (xr_task_result_was_already_taken(task, value))
+            return aot_task_result_already_taken(ctx, task);
         return aot_task_result_success(ctx, value);
     }
     if (state == XR_TASK_FAILED)
@@ -2268,6 +2284,8 @@ static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *ta
 static XrValue aot_task_result_from_block(const XrAotContext *ctx, XrTask *task,
                                           XrCoroBlockResult block, XrValue raw_value,
                                           bool timeout_enabled) {
+    if (block.kind == XR_CORO_BLOCK_READY && xr_task_result_was_already_taken(task, raw_value))
+        return aot_task_result_already_taken(ctx, task);
     if (block.kind == XR_CORO_BLOCK_READY)
         return aot_task_result_success(ctx, raw_value);
     if (block.kind == XR_CORO_BLOCK_TIMEOUT)
@@ -2296,6 +2314,10 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
         }
     }
     return xr_aot_error(error, false);
+}
+
+static XrAotResult aot_task_already_taken_error(const XrAotContext *ctx, XrTask *task) {
+    return xr_aot_error(aot_task_already_taken_value(ctx, task), false);
 }
 
 static XrAotResult aot_channel_closed_error(const XrAotContext *ctx) {
@@ -2878,6 +2900,8 @@ static XrAotResult aot_await_task_common(const XrAotContext *ctx, XrTask *task, 
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
+        if (xr_task_result_was_already_taken(task, block.value))
+            return aot_task_already_taken_error(ctx, task);
         aot_finish_completed_executor(task, one_shot_await);
         aot_clear_one_shot_source_task_slot(ctx, source_tasks_value, source_task_index,
                                             one_shot_await);
@@ -2948,6 +2972,8 @@ static XrAotResult aot_await_task_resume_common(const XrAotContext *ctx, XrSlotR
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
+        if (xr_task_result_was_already_taken(task, block.value))
+            return aot_task_already_taken_error(ctx, task);
         aot_finish_completed_executor(task, one_shot_await);
         aot_clear_one_shot_source_task_slot(ctx, source_tasks_value, source_task_index,
                                             one_shot_await);

@@ -69,6 +69,12 @@ static inline uint16_t xr_tuple_arity(const XrTuple *t) {
  */
 XR_FUNC XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count);
 
+/* Allocate in the compiler-proven storage domain. `storage_mode` is one of
+ * XR_OBJ_STORAGE_NORMAL/SHARED/TRANSFER; shared and transfer tuples are born
+ * on the system heap and are publishable without a runtime copy fallback. */
+XR_FUNC XrTuple *xr_tuple_new_storage(struct XrCoroutine *coro, uint16_t element_count,
+                                      uint8_t storage_mode);
+
 /*
  * Convenience constructor that copies `count` values into a fresh
  * tuple. Equivalent to xr_tuple_new + a manual fill loop, but lets

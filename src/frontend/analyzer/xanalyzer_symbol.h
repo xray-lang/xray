@@ -360,6 +360,11 @@ struct XaScope {
 
     // For function scopes
     XaSymbol *function_symbol;  // The function this scope belongs to
+    /* Anonymous functions have no source binding, but their return storage
+     * proof is still semantic data consumed by Xi allocation planning. */
+    uint8_t return_storage_domain; /* XrSemanticStorageDomain */
+    bool return_storage_known;
+    bool return_storage_mixed;
 
     // For class scopes
     XaSymbol *class_symbol;  // The class this scope belongs to

@@ -620,7 +620,7 @@ XrValue xr_work_queue_try_pop_for_coro_core(XrRuntimeCore *core, XrWorkQueue *q,
 
     XrValue value = work_queue_try_pop_raw(q, worker_hint, ok);
     if (*ok)
-        return xr_chan_copy_recv_core(core, value, recv_coro);
+        return xr_chan_take_recv_core(core, value, recv_coro);
     return xr_null();
 }
 
@@ -683,7 +683,7 @@ XrWorkQueuePopStatus xr_work_queue_pop_for_coro_core(XrRuntimeCore *core, XrWork
     if (ok) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
-        *result = xr_chan_copy_recv_core(core, value, coro);
+        *result = xr_chan_take_recv_core(core, value, coro);
         return XR_WORK_QUEUE_POP_DONE;
     }
     if (xr_work_queue_is_closed(q)) {

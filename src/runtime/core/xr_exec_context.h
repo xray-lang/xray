@@ -40,10 +40,10 @@ typedef struct XrExecutionContext {
 
 XR_FUNC void xr_alloc_context_init(XrAllocationContext *ctx, struct XrRuntimeCore *core,
                                    XrSemanticStorageDomain domain);
-/* Allocate a runtime object from an explicit lifetime context.  Execution-local
- * contexts use their coroutine heap when present; root/module contexts use the
- * runtime fixed heap.  Shared-system objects require their typed system-heap
- * constructor and are deliberately rejected here. */
+/* Allocate a runtime object from an explicit lifetime context. Execution-local
+ * contexts use their coroutine heap when present; module contexts use fixed
+ * storage; transferable/const-shared/sync-shared contexts use the system heap
+ * with their canonical storage tag established at allocation time. */
 XR_FUNC void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t type);
 XR_FUNC void xr_exec_context_init(XrExecutionContext *ctx, struct XrRuntimeCore *core,
                                   XrAllocationContext *alloc);

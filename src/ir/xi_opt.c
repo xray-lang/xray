@@ -1623,8 +1623,8 @@ static bool xi_mark_task_array_deferred_batch_go_producers(XiFunc *f, XiValue *a
                     changed = true;
                 }
                 if (await && can_one_shot_consuming_loop && v == one_shot_index_get &&
-                    await == one_shot_await && (await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0) {
-                    await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+                    await == one_shot_await && (await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0) {
+                    await->aux_int |= XI_AWAIT_AUX_CONSUME_TASK;
                     changed = true;
                 }
             }
@@ -1660,8 +1660,8 @@ XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f) {
                 continue;
 
             bool changed = false;
-            if ((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0) {
-                await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+            if ((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0) {
+                await->aux_int |= XI_AWAIT_AUX_CONSUME_TASK;
                 changed = true;
             }
             if ((v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0) {

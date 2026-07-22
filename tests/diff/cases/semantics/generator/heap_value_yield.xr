@@ -1,0 +1,17 @@
+// anchor: generator-heap-value-yield
+// Heap-shaped yields are born in transfer storage and cross the producer /
+// consumer boundary without a runtime graph copy.
+
+fn arrays() -> Iterator<Array<int>> {
+    yield [1, 2]
+
+    var moved = [3, 4]
+    yield move moved
+
+    var source = [5, 6]
+    yield copy(source)
+}
+
+for (item in arrays()) {
+    print(string(item[0]) + ":" + string(item[1]))
+}

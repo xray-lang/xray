@@ -153,8 +153,10 @@ invoke_dispatch:;
                 }
                 R(a) = XR_FROM_PTR(value);
             } else if (payload_ct > 0) {
-                XrEnumAggregateValue *value = xr_enum_adt_construct(
-                    isolate, etype, (uint32_t) member_index, &R(a + 2), nargs);
+                uint8_t storage_mode = atomic_exchange_explicit(
+                    &isolate->current_storage_mode, XR_OBJ_STORAGE_NORMAL, memory_order_relaxed);
+                XrEnumAggregateValue *value = xr_enum_adt_construct_storage(
+                    isolate, etype, (uint32_t) member_index, &R(a + 2), nargs, storage_mode);
                 if (!value) {
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
                                      etype->name, member_name ? member_name : "?");

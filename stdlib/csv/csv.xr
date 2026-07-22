@@ -234,7 +234,7 @@ fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
 fn _explicitHeaders(header: CsvHeader) -> Array<string> {
     var empty: Array<string> = []
     return match (header) {
-        CsvHeader.Explicit(values) -> values,
+        CsvHeader.Explicit(values) -> copy(values),
         _                          -> empty
     }
 }

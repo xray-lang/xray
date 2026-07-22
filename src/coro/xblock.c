@@ -21,7 +21,6 @@
 #include "../runtime/xisolate_internal.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
-#include "xdeep_copy.h"
 #include "xtask.h"
 #include "xworker.h"
 #include "xyieldable.h"
@@ -36,9 +35,8 @@ static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
     return xr_sched_stats_enabled(runtime) ? runtime : NULL;
 }
 
-static inline bool channel_value_needs_deep_copy(XrValue value) {
-    return XR_IS_PTR(value) && xr_value_needs_copy(value) &&
-           !xr_chan_value_is_transfer_message(value);
+static inline bool channel_value_is_transfer(XrValue value) {
+    return xr_chan_value_is_transfer_message(value);
 }
 
 static XrRuntimeCore *channel_transfer_core(XrChannel *ch, XrCoroutine *coro) {
@@ -56,14 +54,14 @@ static XrRuntime *channel_transfer_stats_runtime(XrChannel *ch, XrCoroutine *cor
 static void record_channel_ownership_metric(XrRuntime *runtime, XrValue value, bool recv) {
     if (!runtime)
         return;
-    bool deep_copy = channel_value_needs_deep_copy(value);
+    bool transfer = channel_value_is_transfer(value);
     XrSchedGlobalStats *stats = &runtime->sched_stats;
     if (recv) {
-        xr_sched_metric_inc(runtime, deep_copy ? &stats->chan_recv_deep_copy_count
-                                               : &stats->chan_recv_no_copy_count);
+        xr_sched_metric_inc(runtime, transfer ? &stats->chan_recv_transfer_count
+                                              : &stats->chan_recv_no_copy_count);
     } else {
-        xr_sched_metric_inc(runtime, deep_copy ? &stats->chan_send_deep_copy_count
-                                               : &stats->chan_send_no_copy_count);
+        xr_sched_metric_inc(runtime, transfer ? &stats->chan_send_transfer_count
+                                              : &stats->chan_send_no_copy_count);
     }
 }
 
@@ -149,12 +147,9 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrCoroutine *coro, XrSlotRef value_sl
         XrValue value = xr_null();
         (void) xr_slot_load_value(value_slot, &value);
         record_channel_ownership_metric(coro_stats_runtime(coro), value, true);
-        bool needs_copy = channel_value_needs_deep_copy(value);
-        if (needs_copy)
-            value = xr_chan_copy_recv_core(coro ? coro->core : NULL, value, coro);
+        value = xr_chan_take_recv_core(coro ? coro->core : NULL, value, coro);
         coro_finish_resume(coro);
-        if (needs_copy)
-            xr_slot_store_value(value_slot, value);
+        xr_slot_store_value(value_slot, value);
         xr_slot_store_value(ok_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, value, true);
     }
@@ -280,7 +275,7 @@ XrCoroBlockResult xr_coro_chan_recv(XrCoroutine *coro, XrChannel *ch, XrSlotRef 
                 xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_chan_recv_fast_no_ext_count);
         }
         record_channel_ownership_metric(channel_transfer_stats_runtime(ch, coro), recv_val, true);
-        recv_val = xr_chan_copy_recv_core(core, recv_val, coro);
+        recv_val = xr_chan_take_recv_core(core, recv_val, coro);
         xr_slot_store_value(value_slot, recv_val);
         xr_slot_store_value(ok_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, recv_val, true);
@@ -382,16 +377,14 @@ XrValue xr_coro_await_result_value(XrRuntimeCore *core, XrCoroutine *dst_coro, X
         return xr_null();
 
     /* Unlocked read is fine for immediates (the completer published them
-     * before the COMPLETED state). Pointer results take the locked path: a
-     * concurrent awaiter may be caching its deep copy back into the task,
-     * and a torn read must not be consumed or dereferenced. The gate is a
-     * pure tag check — any torn old/new mix still has a pointer-kind tag,
-     * and the locked path re-reads a clean value. */
+     * before the COMPLETED state). Pointer results always take the locked
+     * ownership path: transfer roots are single-take and shared roots retain
+     * one observer reference. */
     XrValue result = task->result;
-    if (dst_coro && XR_IS_PTR(result)) {
+    if (XR_IS_PTR(result)) {
         if (!core)
-            core = dst_coro->core;
-        result = xr_task_consume_result_copy(core, task, dst_coro);
+            core = dst_coro ? dst_coro->core : task->core;
+        result = xr_task_consume_result(core, task, dst_coro);
     }
     return result;
 }

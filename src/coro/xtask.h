@@ -94,6 +94,7 @@ typedef enum {
 typedef enum {
     XR_TASK_PAYLOAD_NONE = 0,
     XR_TASK_PAYLOAD_TRANSFER = 1,
+    XR_TASK_PAYLOAD_SHARED = 2,
 } XrTaskPayloadOwner;
 
 /* ========== Scope Mode (scope prefix modifier) ========== */
@@ -172,6 +173,7 @@ typedef struct XrTask {
     _Atomic uint8_t completer_done;  //  1B
     uint8_t result_owner;            //  1B: XrTaskPayloadOwner
     uint8_t error_owner;             //  1B: XrTaskPayloadOwner
+    _Atomic uint8_t payload_taken;   //  1B: transferable terminal payload token consumed
     uint16_t child_count;            //  2B
 
     // Parent-Child hierarchy (only used with linked go / scope)
@@ -258,7 +260,7 @@ XR_FUNC void xr_task_isolate_adopt_deferred(struct XrVMRuntime *isolate, struct 
 XR_FUNC void xr_task_isolate_destroy_deferred(struct XrVMRuntime *isolate);
 
 // Simple state setters (called from xworker.c on executor completion)
-XR_FUNC XrValue xr_task_prepare_publish_value(struct XrTask *task, XrValue value);
+XR_FUNC XrValue xr_task_validate_publish_value(struct XrTask *task, XrValue value);
 XR_FUNC void xr_task_complete(struct XrTask *task, XrValue result);
 XR_FUNC void xr_task_fail(struct XrTask *task, XrValue error);
 XR_FUNC void xr_task_cancel(struct XrTask *task);
@@ -289,11 +291,18 @@ XR_FUNC void xr_task_fail_with_propagation(struct XrTask *task, XrValue error);
 // Fire all completion listeners
 XR_FUNC void xr_task_fire_completion(struct XrTask *task);
 
-/* Read the completed task's result, deep-copying it into dst_coro's heap
- * (and caching the copy) under the await lock. Serializes concurrent
- * awaiters of the same task against torn 16-byte result writes. */
-XR_FUNC XrValue xr_task_consume_result_copy(struct XrRuntimeCore *core, struct XrTask *task,
-                                            struct XrCoroutine *dst_coro);
+/* Consume a completed Task result under the await lock. Transfer roots are
+ * single-take; const/sync roots retain one observer reference; inline values
+ * copy by value. No result path performs an implicit payload copy. */
+XR_FUNC XrValue xr_task_consume_result(struct XrRuntimeCore *core, struct XrTask *task,
+                                       struct XrCoroutine *dst_coro);
+XR_FUNC XrValue xr_task_observe_error(struct XrRuntimeCore *core, struct XrTask *task,
+                                      struct XrCoroutine *dst_coro);
+
+static inline bool xr_task_result_was_already_taken(const struct XrTask *task, XrValue value) {
+    return task && XR_IS_NULL(value) &&
+           atomic_load_explicit(&task->payload_taken, memory_order_acquire) != 0;
+}
 
 // Bidirectional link: a fails → cancel b, b fails → cancel a
 XR_FUNC void xr_task_link(struct XrTask *a, struct XrTask *b);

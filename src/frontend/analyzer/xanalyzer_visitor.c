@@ -370,6 +370,19 @@ XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type) {
     return xa_concurrency_handle_label(type) != NULL;
 }
 
+XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type) {
+    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
+        return false;
+    const XrType *result = type->instance.type_args[0];
+    if (!result || XR_TYPE_IS_UNKNOWN(result) || XR_TYPE_IS_ERROR(result) ||
+        XR_TYPE_IS_TYPE_PARAM(result))
+        return true;
+    if (xr_type_is_const((XrType *) result) || result->is_value_type ||
+        xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
+        return false;
+    return true;
+}
+
 XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
     return xa_analyzer_is_freestanding(analyzer);
 }
@@ -5097,15 +5110,15 @@ static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType
     return xa_analyzer_is_iterator(analyzer, rt, out_elem);
 }
 
-static void xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_node, AstNode *value,
+static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_node, AstNode *value,
                                            XrType *value_type) {
     if (!ctx || !yield_node || !value || !xa_type_needs_borrow_escape_guard(value_type) ||
         xa_type_contains_span_view(value_type))
-        return;
+        return false;
 
     XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
     if (!root)
-        return;
+        return false;
 
     XrLocation loc = {.file = ctx->file_path,
                       .line = value->line ? value->line : yield_node->line,
@@ -5117,6 +5130,7 @@ static void xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_n
              root->name ? root->name : "?", root->name ? root->name : "?");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
+    return true;
 }
 
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
@@ -6601,9 +6615,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &yloc);
             } else if (ys->value && val_type) {
-                xa_check_borrowed_yield_escape(ctx, node, ys->value, val_type);
+                bool borrowed_escape =
+                    xa_check_borrowed_yield_escape(ctx, node, ys->value, val_type);
                 xa_check_span_value_escape(ctx, ys->value, val_type,
                                            "yield Slice view from generator");
+                if (!borrowed_escape && xa_boundary_transfer_type_needs_explicit(val_type) &&
+                    !xa_expr_creates_fresh_root(ctx, ys->value)) {
+                    xa_check_boundary_transfer_arg(ctx, node, ys->value, val_type,
+                                                   "generator yield");
+                }
             }
             break;
         }

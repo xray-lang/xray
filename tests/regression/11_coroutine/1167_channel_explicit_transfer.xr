@@ -12,7 +12,7 @@ fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
     }
 }
 
-fn forward_array(ch: Channel<Array<int>>, data: Array<int>) {
+fn forward_array(ch: Channel<Array<int>>, data: move Array<int>) {
     ch.send(move data)
 }
 

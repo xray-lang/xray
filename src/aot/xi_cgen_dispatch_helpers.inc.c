@@ -4917,12 +4917,17 @@ static void xicgen_emit_json_computed_key_guard_set(XiCgenCtx *ctx, FILE *out,
 
 static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
     int64_t field_count = xi_json_field_count(v);
+    uint8_t storage_mode = xi_json_storage_mode(v);
     const char **field_names = (const char **) v->aux;
     const bool is_record = v && v->type && v->type->kind == XR_KIND_RECORD;
     const char *ctor = is_record ? "xrt_record_new" : "xrt_json_new";
     const char *ctor_named = is_record ? "xrt_record_new_named" : "xrt_json_new_named";
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "xrt_json_set_storage(");
     if (field_count <= 0 || !field_names) {
         fprintf(out, "%s(%" PRId64 ")", ctor, field_count);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         return;
     }
     fprintf(out, "%s(%" PRId64 ", (const char*[]){", ctor_named, field_count);
@@ -4932,6 +4937,8 @@ static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
         xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
     }
     fprintf(out, "})");
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, ", %u)", (unsigned) storage_mode);
 }
 
 static void xicgen_json_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -4981,7 +4988,12 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     (void) prefix;
     int64_t length = xicgen_capacity_arg_or_default(v, 0);
-    if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
+    XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
+                                               : "xrt_array_set_storage(");
+    if (storage_rep == XR_REP_PTR) {
         if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, length)) {
             fprintf(out, "(xrt_array_t*)xrt_array_new(");
             if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST)
@@ -4998,6 +5010,8 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             fprintf(out, "%" PRId64, length);
         fprintf(out, ")");
     }
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, ", %u)", (unsigned) storage_mode);
 }
 
 static const XaotMapShapePlan *xicgen_static_map_shape_plan(XiCgenCtx *ctx, const XiValue *v) {
@@ -5140,7 +5154,10 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
+    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x04);
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "xrt_map_set_storage(");
     if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap)) {
         /* Untyped storage (e.g. string keys) with a scalar declared value
          * type: record the value elem so values() returns lanes matching
@@ -5155,6 +5172,8 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     } else if (flags) {
         fprintf(out, "xrt_map_new_flags(%" PRId64 ", XR_MAP_FLAG_WEAK)", cap);
     }
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, ", %u)", (unsigned) storage_mode);
 }
 
 static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -5171,11 +5190,16 @@ static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
+    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x04);
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "xrt_set_set_storage(");
     if (!flags && !emit_typed_set_new_expr(ctx, out, v, cap))
         fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
     else if (flags)
         fprintf(out, "xrt_set_new_flags(%" PRId64 ", XR_SET_FLAG_WEAK)", cap);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, ", %u)", (unsigned) storage_mode);
 }
 
 static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -5810,10 +5834,15 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             return;
         }
         bool is_json = v->args[0] && XR_TYPE_HAS_OBJECT_SHAPE(v->args[0]->type);
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
         const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, "xrt_value_set_storage(");
         fprintf(out, "%s(", is_json ? "xrt_json_clone_for_coro" : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         emit_conversion_suffix(out, conv_suffix);
     } else if (strcmp(bn, "chr") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin chr: need arg");

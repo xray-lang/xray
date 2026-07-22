@@ -23,7 +23,6 @@
 
 #include "../base/xmalloc.h"
 #include "../os/os_thread.h"
-#include "../coro/xdeep_copy.h"
 #include "../coro/xcountdown_latch.h"
 #include "../coro/xparallel_executor.h"
 #include "../coro/xworker.h"
@@ -31,6 +30,7 @@
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_header.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/value/xvalue.h"
@@ -166,12 +166,45 @@ static void vm_par_latch_release(XrVmParBatch *batch) {
     batch->latch = NULL;
 }
 
+static void vm_par_release_terminal_value(XrRuntimeCore *core, XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || !xr_obj_drop_is_last(obj))
+        return;
+    if (XR_OBJ_IS_TRANSFER(obj))
+        xr_transfer_destroy_core(core, obj);
+    else if (XR_OBJ_IS_SHARED(obj))
+        xr_shared_destroy_core(core, obj);
+    else
+        XR_CHECK(false, "parallel payload bypassed verified storage publication");
+}
+
+static XrValue vm_par_validate_terminal_value(XrValue value, const char *label) {
+    if (!XR_IS_PTR(value))
+        return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "parallel payload cannot use legacy TRANSIT storage");
+    XR_CHECK(XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj),
+             label ? label : "parallel payload bypassed verified storage publication");
+    return value;
+}
+
 static void vm_par_batch_free(XrVmParBatch *batch) {
     if (!batch)
         return;
     if (!XR_IS_NULL(batch->first_error)) {
-        xr_chan_transit_release_core(batch->core, batch->first_error);
+        vm_par_release_terminal_value(batch->core, batch->first_error);
         batch->first_error = xr_null();
+    }
+    if (batch->lanes) {
+        for (int i = 0; i < batch->lane_count; i++) {
+            vm_par_release_terminal_value(batch->core, batch->lanes[i].partial);
+            vm_par_release_terminal_value(batch->core, batch->lanes[i].pending_value);
+            batch->lanes[i].partial = xr_null();
+            batch->lanes[i].pending_value = xr_null();
+        }
     }
     vm_par_latch_release(batch);
     xr_free(batch->coros);
@@ -207,7 +240,8 @@ static void vm_par_batch_record_failure(XrVMRuntime *isolate, XrVmParBatch *batc
         }
         batch->first_error_is_value = is_value_error;
         if (!XR_IS_NULL(exc))
-            batch->first_error = xr_deep_copy_to_transit_core(batch->core, exc);
+            batch->first_error = vm_par_validate_terminal_value(
+                exc, "parallel error bypassed verified storage publication");
     }
 
     atomic_store_explicit(&batch->failed, true, memory_order_release);
@@ -238,8 +272,11 @@ static bool vm_par_lane_store_partial(XrVmParLane *lane) {
         return false;
     XrArrayElemType elem_type = (XrArrayElemType) output->elem_type;
     if (elem_type == XR_ELEM_ANY) {
-        ((XrValue *) output->data)[lane->lane_id] =
-            xr_deep_copy_to_transit_core(lane->batch->core, lane->partial);
+        XrValue partial = vm_par_validate_terminal_value(
+            lane->partial, "parallel partial bypassed verified storage publication");
+        ((XrValue *) output->data)[lane->lane_id] = partial;
+        lane->partial = xr_null();
+        lane->partial_init = false;
         return true;
     }
     if (!vm_par_value_fits_elem_type(lane->partial, elem_type))
@@ -278,6 +315,8 @@ static XrCFuncResult vm_par_lane_continue(XrVMRuntime *isolate, int status, XrVa
     }
     if (batch->reduce_body) {
         if (lane->phase == XR_VM_PAR_LANE_COMBINE) {
+            vm_par_release_terminal_value(batch->core, lane->partial);
+            vm_par_release_terminal_value(batch->core, lane->pending_value);
             lane->partial = resume_value;
             lane->partial_init = true;
             lane->pending_value = xr_null();
@@ -456,6 +495,7 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
             vm_par_batch_free(batch);
             return NULL;
         }
+        batch->coros[lane]->exec_ctx.executor = batch;
     }
     return batch;
 }
@@ -493,8 +533,7 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
     bool failed_with_value_error = failed && batch->first_error_is_value;
     XrValue lane_error = xr_null();
     if (failed && !XR_IS_NULL(batch->first_error)) {
-        lane_error = xr_deep_copy_to_coro(isolate, batch->first_error, current);
-        xr_chan_transit_release_core(batch->core, batch->first_error);
+        lane_error = batch->first_error;
         batch->first_error = xr_null();
     }
     XrArray *mutated_output =
@@ -514,10 +553,12 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
             memset(private_partials->data, 0, (size_t) private_partials->length * sizeof(XrValue));
         }
         for (int32_t idx = 0; idx < shared_partials->length; idx++) {
-            XrValue transit = xr_array_get_element(shared_partials, idx);
-            XrValue private_value = xr_deep_copy_to_coro(isolate, transit, current);
-            ((XrValue *) private_partials->data)[idx] = private_value;
-            XR_ARRAY_MARK_REFS(private_partials, private_value);
+            XrValue partial = xr_array_get_element(shared_partials, idx);
+            partial = vm_par_validate_terminal_value(
+                partial, "parallel partial bypassed verified storage publication");
+            ((XrValue *) private_partials->data)[idx] = partial;
+            ((XrValue *) shared_partials->data)[idx] = xr_null();
+            XR_ARRAY_MARK_REFS(private_partials, partial);
         }
         *materialized_output_slot = xr_value_from_array(private_partials);
         mutated_output = private_partials;

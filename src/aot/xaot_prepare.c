@@ -2968,7 +2968,7 @@ static bool prepare_transfer_type_is_inline(const XrType *type) {
 
 static uint8_t prepare_transfer_action(const XiValue *value, uint8_t mode) {
     const XiValue *origin = unwrap_identity_value(value);
-    const XrType *type = origin ? origin->type : (value ? value->type : NULL);
+    const XrType *type = value && value->type ? value->type : (origin ? origin->type : NULL);
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
             if (type && prepare_transfer_type_is_sync_handle(type))

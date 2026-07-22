@@ -28,7 +28,6 @@
 
 #include "xtask.h"
 #include "xcoroutine.h"
-#include "xdeep_copy.h"
 #include "xworker.h"
 #include "xchannel.h"
 #include "../runtime/xshared.h"
@@ -37,7 +36,6 @@
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/object/xarray.h"
-#include "../runtime/object/xstring.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -150,6 +148,7 @@ static XrTask *task_create_common(XrRuntime *runtime, XrCoroutine *parent_coro,
     atomic_store_explicit(&task->completer_done, 0, memory_order_relaxed);
     task->result_owner = XR_TASK_PAYLOAD_NONE;
     task->error_owner = XR_TASK_PAYLOAD_NONE;
+    atomic_store_explicit(&task->payload_taken, 0, memory_order_relaxed);
     atomic_init(&task->child_lock, false);
     task->parent = NULL;
     task->first_child = NULL;
@@ -419,41 +418,56 @@ static XrRuntimeCore *task_payload_core(XrTask *task) {
 }
 
 static uint8_t task_payload_owner_for_value(XrValue value) {
-    return xr_task_value_is_transfer_payload(value) ? XR_TASK_PAYLOAD_TRANSFER
-                                                    : XR_TASK_PAYLOAD_NONE;
+    if (!XR_IS_PTR(value))
+        return XR_TASK_PAYLOAD_NONE;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return XR_TASK_PAYLOAD_NONE;
+    if (XR_OBJ_IS_TRANSFER(obj))
+        return XR_TASK_PAYLOAD_TRANSFER;
+    if (XR_OBJ_IS_SHARED(obj))
+        return XR_TASK_PAYLOAD_SHARED;
+    return XR_TASK_PAYLOAD_NONE;
 }
 
-static void task_release_transfer_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *owner_slot) {
-    if (!slot || !owner_slot || *owner_slot != XR_TASK_PAYLOAD_TRANSFER)
+static void task_release_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *owner_slot) {
+    if (!slot || !owner_slot || *owner_slot == XR_TASK_PAYLOAD_NONE)
         return;
     XrValue value = *slot;
+    uint8_t owner = *owner_slot;
     *owner_slot = XR_TASK_PAYLOAD_NONE;
     *slot = xr_null();
-    if (!xr_task_value_is_transfer_payload(value))
+    if (!XR_IS_PTR(value))
         return;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
-    if (obj && xr_obj_drop_is_last(obj))
+    if (!obj || !xr_obj_drop_is_last(obj))
+        return;
+    if (owner == XR_TASK_PAYLOAD_TRANSFER)
         xr_transfer_destroy_core(core, obj);
+    else if (owner == XR_TASK_PAYLOAD_SHARED)
+        xr_shared_destroy_core(core, obj);
 }
 
 static void task_store_result_payload(XrTask *task, XrValue value) {
     uint8_t owner = task_payload_owner_for_value(value);
-    if (task->result_owner == XR_TASK_PAYLOAD_TRANSFER &&
+    if (task->result_owner != XR_TASK_PAYLOAD_NONE &&
         (!XR_IS_PTR(value) || XR_VALUE_GCPTR(task->result) != XR_VALUE_GCPTR(value))) {
-        task_release_transfer_payload(task_payload_core(task), &task->result, &task->result_owner);
+        task_release_payload(task_payload_core(task), &task->result, &task->result_owner);
     }
     task->result = value;
     task->result_owner = owner;
+    atomic_store_explicit(&task->payload_taken, 0, memory_order_relaxed);
 }
 
 static void task_store_error_payload(XrTask *task, XrValue value) {
     uint8_t owner = task_payload_owner_for_value(value);
-    if (task->error_owner == XR_TASK_PAYLOAD_TRANSFER &&
+    if (task->error_owner != XR_TASK_PAYLOAD_NONE &&
         (!XR_IS_PTR(value) || XR_VALUE_GCPTR(task->error) != XR_VALUE_GCPTR(value))) {
-        task_release_transfer_payload(task_payload_core(task), &task->error, &task->error_owner);
+        task_release_payload(task_payload_core(task), &task->error, &task->error_owner);
     }
     task->error = value;
     task->error_owner = owner;
+    atomic_store_explicit(&task->payload_taken, 0, memory_order_relaxed);
 }
 
 /* CAS state from any value in `from_mask` to `to`. Returns true if this call
@@ -469,33 +483,26 @@ static bool task_cas_state(XrTask *task, uint32_t from_mask, uint8_t to) {
     return true;
 }
 
-XrValue xr_task_prepare_publish_value(XrTask *task, XrValue value) {
+XrValue xr_task_validate_publish_value(XrTask *task, XrValue value) {
     if (!task || !XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
-    if (XR_OBJ_IS_SHARED(obj) || xr_task_value_is_transfer_payload(value))
+    XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "task publish: TRANSIT payload is not a valid Task result");
+    if (XR_OBJ_IS_SHARED(obj) || XR_OBJ_IS_TRANSFER(obj))
         return value;
-
-    XrRuntimeCore *core = task_payload_core(task);
-    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING) {
-        XrString *shared = xr_string_clone_shared_core(core, XR_TO_STRING(value));
-        return shared ? XR_FROM_STR(shared) : value;
-    }
-    if (!xr_value_needs_copy(value))
-        return value;
-    if (!core)
-        return value;
-
-    XrValue owned = xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_TRANSFER);
-    return xr_task_value_is_transfer_payload(owned) ? owned : value;
+    XR_CHECK(false,
+             "task result requires compiler-planned TRANSFER or CONST_SHARED/SYNC_SHARED storage; "
+             "implicit copy removed");
+    return xr_null();
 }
 
 void xr_task_complete(XrTask *task, XrValue result) {
     if (!task)
         return;
-    result = xr_task_prepare_publish_value(task, result);
+    result = xr_task_validate_publish_value(task, result);
     task_store_result_payload(task, result);
     /* ACTIVE/COMPLETING -> COMPLETED. Reject CANCELLING/final: a concurrent
      * cancel from a linked peer already won. */
@@ -508,7 +515,7 @@ void xr_task_complete(XrTask *task, XrValue result) {
 void xr_task_fail(XrTask *task, XrValue error) {
     if (!task)
         return;
-    error = xr_task_prepare_publish_value(task, error);
+    error = xr_task_validate_publish_value(task, error);
     task_store_error_payload(task, error);
     if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING), XR_TASK_FAILED))
         return;
@@ -575,7 +582,7 @@ void xr_task_detach_child(XrTask *parent, XrTask *child) {
 void xr_task_try_complete(XrTask *task, XrValue result) {
     if (!task)
         return;
-    result = xr_task_prepare_publish_value(task, result);
+    result = xr_task_validate_publish_value(task, result);
     task_store_result_payload(task, result);
 
     child_lock_acquire(&task->child_lock);
@@ -707,7 +714,7 @@ void xr_task_cancel_tree(XrTask *task) {
 void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
     if (!task)
         return;
-    error = xr_task_prepare_publish_value(task, error);
+    error = xr_task_validate_publish_value(task, error);
     task_store_error_payload(task, error);
 
     child_lock_acquire(&task->child_lock);
@@ -1054,8 +1061,8 @@ void xr_obj_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     XrTask *task = (XrTask *) obj;
 
-    task_release_transfer_payload(task_payload_core(task), &task->result, &task->result_owner);
-    task_release_transfer_payload(task_payload_core(task), &task->error, &task->error_owner);
+    task_release_payload(task_payload_core(task), &task->result, &task->result_owner);
+    task_release_payload(task_payload_core(task), &task->error, &task->error_owner);
 
     // Free xr_calloc'd bidirectional link entries
     XrTaskLink *lk = task->links;

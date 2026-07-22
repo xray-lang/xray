@@ -12,9 +12,9 @@
 
 #include "xcoro_tuning.h"
 #include "xcoroutine.h"
-#include "xdeep_copy.h"
 #include "xmachine.h"
 #include "xworker_internal.h"
+#include "../base/xchecks.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xnative_type.h"
@@ -186,6 +186,97 @@ static void thread_runtime_leave(XrVMRuntime *isolate) {
         atomic_fetch_sub_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
 }
 
+static uint8_t thread_payload_owner_for_value(XrValue value) {
+    if (!XR_IS_PTR(value))
+        return XR_THREAD_PAYLOAD_NONE;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return XR_THREAD_PAYLOAD_NONE;
+    if (XR_OBJ_IS_TRANSFER(obj))
+        return XR_THREAD_PAYLOAD_TRANSFER;
+    if (XR_OBJ_IS_SHARED(obj))
+        return XR_THREAD_PAYLOAD_SHARED;
+    return XR_THREAD_PAYLOAD_NONE;
+}
+
+static XrValue thread_validate_publish_value(XrValue value) {
+    if (!XR_IS_PTR(value))
+        return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "Thread publish: TRANSIT payload is not a terminal result");
+    XR_CHECK(XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj),
+             "Thread publish: pointer payload bypassed verified storage publication");
+    return value;
+}
+
+static void thread_release_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *owner_slot) {
+    if (!slot || !owner_slot || *owner_slot == XR_THREAD_PAYLOAD_NONE)
+        return;
+    XrValue value = *slot;
+    uint8_t owner = *owner_slot;
+    *slot = xr_null();
+    *owner_slot = XR_THREAD_PAYLOAD_NONE;
+    if (!XR_IS_PTR(value))
+        return;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || !xr_obj_drop_is_last(obj))
+        return;
+    if (owner == XR_THREAD_PAYLOAD_TRANSFER)
+        xr_transfer_destroy_core(core, obj);
+    else if (owner == XR_THREAD_PAYLOAD_SHARED)
+        xr_shared_destroy_core(core, obj);
+}
+
+static void thread_store_terminal_payload(XrThread *thread, bool failed, XrValue value) {
+    value = thread_validate_publish_value(value);
+    uint8_t owner = thread_payload_owner_for_value(value);
+    if (failed) {
+        thread->error = value;
+        thread->error_owner = owner;
+    } else {
+        thread->retval = value;
+        thread->retval_owner = owner;
+    }
+    atomic_store_explicit(&thread->payload_taken, 0, memory_order_relaxed);
+}
+
+static void thread_payload_lock_acquire(XrThread *thread) {
+    while (atomic_exchange_explicit(&thread->payload_lock, true, memory_order_acquire)) {
+    }
+}
+
+static void thread_payload_lock_release(XrThread *thread) {
+    atomic_store_explicit(&thread->payload_lock, false, memory_order_release);
+}
+
+static XrValue thread_observe_terminal_payload(XrThread *thread, bool failed) {
+    thread_payload_lock_acquire(thread);
+    XrValue *slot = failed ? &thread->error : &thread->retval;
+    uint8_t *owner_slot = failed ? &thread->error_owner : &thread->retval_owner;
+    XrValue value = *slot;
+    if (*owner_slot == XR_THREAD_PAYLOAD_TRANSFER && XR_IS_PTR(value)) {
+        XR_CHECK(atomic_load_explicit(&thread->payload_taken, memory_order_relaxed) == 0,
+                 "Thread transferable payload has already been taken");
+        atomic_store_explicit(&thread->payload_taken, 1, memory_order_relaxed);
+        *slot = xr_null();
+        *owner_slot = XR_THREAD_PAYLOAD_NONE;
+    } else if (atomic_load_explicit(&thread->payload_taken, memory_order_relaxed) != 0) {
+        XR_CHECK(false, "Thread transferable payload has already been taken");
+        value = xr_null();
+    } else if (*owner_slot == XR_THREAD_PAYLOAD_SHARED && XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        XR_CHECK(obj && XR_OBJ_IS_SHARED(obj), "Thread shared payload owner mismatch");
+        xr_obj_dup(obj);
+    } else if (XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        XR_CHECK(obj && (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj)),
+                 "Thread payload bypassed verified storage publication");
+    }
+    thread_payload_lock_release(thread);
+    return value;
+}
+
 void xr_thread_obj_drain_isolate(struct XrVMRuntime *isolate) {
     if (!isolate)
         return;
@@ -257,11 +348,15 @@ static void *thread_entry_vm(void *arg) {
     XrCoroRunKind kind =
         bound_vm_tls ? xr_vm_coro_run_to_completion(thread->coro, &out) : XR_CORO_RUN_ERROR;
     if (kind == XR_CORO_RUN_DONE) {
-        thread->retval = out;
+        thread_store_terminal_payload(thread, false, out);
+        if (thread->coro)
+            thread->coro->result = xr_null();
         atomic_store_explicit(&thread->failed, false, memory_order_release);
     } else {
         thread->retval = xr_null();
-        thread->error = out;
+        thread_store_terminal_payload(thread, true, out);
+        if (thread->coro)
+            thread->coro->error = xr_null();
         thread->error_is_value = thread->coro ? thread->coro->error_is_value : false;
         atomic_store_explicit(&thread->failed, true, memory_order_release);
     }
@@ -311,10 +406,18 @@ XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine
     }
     thread->retval = xr_null();
     thread->error = xr_null();
+    thread->retval_owner = XR_THREAD_PAYLOAD_NONE;
+    thread->error_owner = XR_THREAD_PAYLOAD_NONE;
     thread->error_is_value = false;
     atomic_store_explicit(&thread->state, XR_THREAD_CREATED, memory_order_relaxed);
     atomic_store_explicit(&thread->finished, false, memory_order_relaxed);
     atomic_store_explicit(&thread->failed, false, memory_order_relaxed);
+    atomic_store_explicit(&thread->payload_lock, false, memory_order_relaxed);
+    atomic_store_explicit(&thread->payload_taken, 0, memory_order_relaxed);
+
+    /* Marks runtime-created exceptions in this execution as terminal values
+     * that must be born directly in shared storage. */
+    coro->exec_ctx.executor = thread;
 
     /* The OS thread drives the full VM interpreter to completion. run()'s
      * native C-stack frame is very large — enormously so under ASan, which
@@ -374,11 +477,9 @@ XrValue xr_thread_obj_join(XrThread *thread) {
 }
 
 static XrValue thread_join_result_value(XrVMRuntime *isolate, XrThread *thread, XrValue result) {
-    XrCoroutine *caller = xr_current_coro(isolate);
+    (void) result;
     if (atomic_load_explicit(&thread->failed, memory_order_acquire)) {
-        XrValue err = thread->error;
-        if (XR_IS_PTR(err))
-            err = xr_deep_copy_to_coro(isolate, err, caller);
+        XrValue err = thread_observe_terminal_payload(thread, true);
         if (XR_IS_NULL(err)) {
             thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread body failed");
         } else if (thread->error_is_value) {
@@ -388,9 +489,7 @@ static XrValue thread_join_result_value(XrVMRuntime *isolate, XrThread *thread, 
         }
         return xr_null();
     }
-    if (XR_IS_PTR(result))
-        result = xr_deep_copy_to_coro(isolate, result, caller);
-    return result;
+    return thread_observe_terminal_payload(thread, false);
 }
 
 static XrValue thread_join_blocking_value(XrVMRuntime *isolate, XrThread *thread) {
@@ -482,6 +581,8 @@ void xr_obj_destroy_thread(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
         return;
     XrThread *thread = (XrThread *) obj;
     thread_detach_orphan_on_destroy(thread);
+    thread_release_payload(thread->core, &thread->retval, &thread->retval_owner);
+    thread_release_payload(thread->core, &thread->error, &thread->error_owner);
     if (thread->coro) {
         xr_coro_destroy(thread->coro);
         thread->coro = NULL;

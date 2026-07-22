@@ -1,0 +1,20 @@
+fn values() -> Array<int> {
+    return [1, 2, 3]
+}
+
+fn main() {
+    var task = go values()
+    var first = task.awaitResult()
+    match (first) {
+        TaskResult.Success(values) -> print(len(values))
+        _ -> print("unexpected-first")
+    }
+
+    var second = task.awaitResult()
+    match (second) {
+        TaskResult.Failed(_) -> print("AlreadyTaken")
+        _ -> print("unexpected-second")
+    }
+}
+
+main()

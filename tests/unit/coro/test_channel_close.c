@@ -18,9 +18,11 @@
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "coro/xyieldable.h"
+#include "runtime/object/xstring.h"
 #include "runtime/object/xarray.h"
 #include "runtime/mem/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
+#include "runtime/xshared.h"
 #include "base/xmalloc.h"
 #include <stddef.h>
 #include <stdatomic.h>
@@ -996,10 +998,9 @@ TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots) {
     close_fixture_cleanup(&f);
 }
 
-// deliver=true + value that needs a receive-side deep copy: the waker only
-// stores the value and leaves the wake on the replay protocol (the copy
-// must run on the receiver's own thread), so the ok slot stays untouched.
-TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
+// A verified transfer root can be delivered by the waker without replay or
+// receive-side materialization. Ownership moves with the same root identity.
+TEST(coro_channel_recv_delivers_transfer_root_without_replay) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
@@ -1021,26 +1022,29 @@ TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
     ASSERT_NOT_NULL(receiver.ext);
     ASSERT_FALSE(receiver.ext->chan_resume_delivered);
 
-    // Stack-fabricated array: XR_COPY_DEEP kind, no isolate GC involved
-    // (raw xr_channel_send performs no send-side deep copy).
-    XrArray payload;
-    ASSERT_TRUE(init_task_array(&payload, 2));
-    XrValue payload_value = xr_value_from_array(&payload);
-    ASSERT_TRUE(xr_value_needs_copy(payload_value));
+    XrArray *payload =
+        (XrArray *) xr_sysheap_alloc_transfer(f.core.sys_heap, sizeof(XrArray), XR_TARRAY);
+    ASSERT_NOT_NULL(payload);
+    xr_array_init_inplace(payload, 2, XR_ELEM_ANY);
+    XR_OBJ_SET_STORAGE(&payload->hdr, XR_OBJ_STORAGE_TRANSFER);
+    xr_array_push(payload, xr_int(39));
+    XrValue payload_value = xr_value_from_array(payload);
 
     ASSERT_EQ_INT((int) xr_channel_send(ch, payload_value, NULL, -1), (int) XR_CHAN_OK);
     ASSERT_TRUE(XR_IS_ARRAY(regs[0]));
-    ASSERT_EQ_INT((int) XR_TO_INT(regs[1]), -1);
-    ASSERT_FALSE(receiver.ext->chan_resume_delivered);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(regs[0]), &payload->hdr);
+    ASSERT_TRUE(XR_IS_BOOL(regs[1]));
+    ASSERT_TRUE(XR_TO_BOOL(regs[1]));
+    ASSERT_TRUE(receiver.ext->chan_resume_delivered);
     ASSERT_EQ_INT(xr_coro_resume_load(&receiver), XR_RESUME_CHANNEL);
 
-    destroy_task_array(&payload);
+    xr_chan_abandon_send_core(&f.core, regs[0]);
     xr_channel_destroy(ch);
     xr_sysheap_free_shared(ch, sizeof(XrChannel));
     close_fixture_cleanup(&f);
 }
 
-TEST(coro_channel_copy_payload_materializes_owned_message) {
+TEST(coro_channel_explicit_copy_materializes_transfer_message) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
@@ -1063,7 +1067,7 @@ TEST(coro_channel_copy_payload_materializes_owned_message) {
     ASSERT_TRUE(XR_OBJ_IS_TRANSFER(queued_obj));
     ASSERT_FALSE(XR_OBJ_GET_FLAG(queued_obj, XR_OBJ_TRANSIT));
 
-    XrValue received = xr_chan_copy_recv_core(&f.core, queued, NULL);
+    XrValue received = xr_chan_take_recv_core(&f.core, queued, NULL);
     ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), queued_obj);
     XrArray *arr = XR_TO_ARRAY(received);
     ASSERT_EQ_INT(xr_array_size(arr), 2);
@@ -1102,7 +1106,7 @@ TEST(coro_channel_move_payload_preserves_transfer_identity) {
     ASSERT_TRUE(XR_OBJ_IS_TRANSFER(queued_obj));
     ASSERT_FALSE(XR_OBJ_GET_FLAG(queued_obj, XR_OBJ_TRANSIT));
 
-    XrValue received = xr_chan_copy_recv_core(&f.core, queued, NULL);
+    XrValue received = xr_chan_take_recv_core(&f.core, queued, NULL);
     ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), queued_obj);
     XrArray *arr = XR_TO_ARRAY(received);
     ASSERT_EQ_INT(xr_array_size(arr), 2);
@@ -1141,7 +1145,7 @@ TEST(coro_channel_move_owned_payload_preserves_root) {
     ASSERT_EQ_PTR(XR_VALUE_GCPTR(queued), owned_obj);
     ASSERT_FALSE(XR_OBJ_GET_FLAG(owned_obj, XR_OBJ_TRANSIT));
 
-    XrValue received = xr_chan_copy_recv_core(&f.core, queued, NULL);
+    XrValue received = xr_chan_take_recv_core(&f.core, queued, NULL);
     ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), owned_obj);
     XrArray *arr = XR_TO_ARRAY(received);
     ASSERT_EQ_INT(xr_array_size(arr), 2);
@@ -1155,20 +1159,23 @@ TEST(coro_channel_move_owned_payload_preserves_root) {
     close_fixture_cleanup(&f);
 }
 
-TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter) {
+TEST(coro_task_transfer_result_preserves_root_and_is_single_take) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrArray payload;
-    ASSERT_TRUE(init_task_array(&payload, 2));
-    xr_array_push(&payload, xr_int(61));
-    xr_array_push(&payload, xr_int(62));
+    XrArray *payload =
+        (XrArray *) xr_sysheap_alloc_transfer(f.core.sys_heap, sizeof(XrArray), XR_TARRAY);
+    ASSERT_NOT_NULL(payload);
+    xr_array_init_inplace(payload, 2, XR_ELEM_ANY);
+    XR_OBJ_SET_STORAGE(&payload->hdr, XR_OBJ_STORAGE_TRANSFER);
+    xr_array_push(payload, xr_int(61));
+    xr_array_push(payload, xr_int(62));
 
     XrTask task;
     init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
     task.core = &f.core;
 
-    xr_task_complete(&task, xr_value_from_array(&payload));
+    xr_task_complete(&task, xr_value_from_array(payload));
 
     ASSERT_EQ_INT(atomic_load(&task.state), XR_TASK_COMPLETED);
     ASSERT_TRUE(XR_IS_ARRAY(task.result));
@@ -1186,6 +1193,7 @@ TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter) {
     ASSERT_EQ_PTR(XR_VALUE_GCPTR(delivered), result_obj);
     ASSERT_TRUE(XR_IS_NULL(task.result));
     ASSERT_EQ_INT(task.result_owner, XR_TASK_PAYLOAD_NONE);
+    ASSERT_EQ_INT(atomic_load(&task.payload_taken), 1);
 
     XrArray *arr = XR_TO_ARRAY(delivered);
     ASSERT_EQ_INT(xr_array_size(arr), 2);
@@ -1193,7 +1201,40 @@ TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter) {
     ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 1)), 62);
 
     xr_chan_abandon_send_core(&f.core, delivered);
-    destroy_task_array(&payload);
+    close_fixture_cleanup(&f);
+}
+
+TEST(coro_task_shared_result_supports_multiple_observers) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    static const char text[] = "shared task result";
+    size_t bytes = sizeof(XrString) + sizeof(text);
+    XrString *shared = (XrString *) xr_sysheap_alloc_shared(f.core.sys_heap, bytes, XR_TSTRING);
+    ASSERT_NOT_NULL(shared);
+    shared->length = (uint32_t) (sizeof(text) - 1);
+    shared->rune_length = shared->length;
+    memcpy(shared->data, text, sizeof(text));
+
+    XrTask task;
+    init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
+    task.core = &f.core;
+    xr_task_complete(&task, xr_string_value(shared));
+
+    ASSERT_EQ_INT(task.result_owner, XR_TASK_PAYLOAD_SHARED);
+    ASSERT_EQ_INT(xr_shared_get_refc(&shared->hdr), 1);
+
+    XrValue first = xr_task_consume_result(&f.core, &task, NULL);
+    XrValue second = xr_task_consume_result(&f.core, &task, NULL);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(first), &shared->hdr);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(second), &shared->hdr);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(task.result), &shared->hdr);
+    ASSERT_EQ_INT(xr_shared_get_refc(&shared->hdr), 3);
+    ASSERT_EQ_INT(atomic_load(&task.payload_taken), 0);
+
+    ASSERT_EQ_INT(xr_shared_decref(&shared->hdr), 2);
+    ASSERT_EQ_INT(xr_shared_decref(&shared->hdr), 1);
+    xr_obj_destroy_task(&task.hdr, NULL);
     close_fixture_cleanup(&f);
 }
 
@@ -2271,11 +2312,12 @@ RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext);
 RUN_TEST(coro_channel_recv_sets_recv_slot_only_when_blocking);
 RUN_TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots);
-RUN_TEST(coro_channel_recv_delivery_gated_for_deep_copy_values);
-RUN_TEST(coro_channel_copy_payload_materializes_owned_message);
+RUN_TEST(coro_channel_recv_delivers_transfer_root_without_replay);
+RUN_TEST(coro_channel_explicit_copy_materializes_transfer_message);
 RUN_TEST(coro_channel_move_payload_preserves_transfer_identity);
 RUN_TEST(coro_channel_move_owned_payload_preserves_root);
-RUN_TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter);
+RUN_TEST(coro_task_transfer_result_preserves_root_and_is_single_take);
+RUN_TEST(coro_task_shared_result_supports_multiple_observers);
 RUN_TEST(coro_channel_recv_close_wake_stays_on_replay_protocol);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);

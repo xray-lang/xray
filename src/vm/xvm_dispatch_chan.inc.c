@@ -143,7 +143,7 @@ vmcase(OP_CHAN_SEND) {
             XrObjHeader *_obj = XR_VALUE_GCPTR(_v);
             XR_CHECK(!_obj || !XR_OBJ_GET_FLAG(_obj, XR_OBJ_TRANSIT),
                      "OP_CHAN_SEND fast path: TRANSIT payload is not a valid channel transport");
-            if (xr_value_needs_copy(_v))
+            if (_obj && !XR_OBJ_IS_TRANSFER(_obj) && !XR_OBJ_IS_SHARED(_obj))
                 break;
         }
         if (!xr_amutex_trylock(&_ch->lock))
@@ -198,7 +198,7 @@ vmcase(OP_CHAN_RECV) {
         _ch->recv_idx = _ch->recv_idx + 1 >= _ch->buf_size ? 0 : _ch->recv_idx + 1;
         _ch->buf_count--;
         xr_amutex_unlock(&_ch->lock);
-        _v = xr_chan_copy_recv(isolate, _v, _cur);
+        _v = xr_chan_take_recv(isolate, _v, _cur);
         base[GETARG_A(i)] = _v;
         base[GETARG_A(i) + 1] = xr_bool(true);
         if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_VM_CHAN_READY_REDUCTION_COST) <= 0) && _rt) {

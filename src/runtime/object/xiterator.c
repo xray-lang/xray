@@ -25,12 +25,13 @@
 #include "../xerror_codes.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xobj_header.h"
+#include "../mem/xsystem_heap.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
 #include "../core/xr_exec_context.h"
 #include "../mem/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
-#include "../../coro/xdeep_copy.h"
+#include "../xshared.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
@@ -165,8 +166,9 @@ XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrJson *json,
 
 // Create iterator over a generator coroutine (created but not scheduled). The
 // iterator owns `gen` and drives it synchronously: hasNext() prefetches the next
-// `yield`ed value (buffered in gen->result), next() promotes it to the owner's
-// heap. scan_index doubles as the pull phase: 0=idle, 1=buffered, 2=exhausted.
+// `yield`ed value (buffered in gen->result), next() takes its transfer token or
+// retains its shared root. scan_index doubles as the pull phase:
+// 0=idle, 1=buffered, 2=exhausted.
 XrIterator *xr_iterator_new_from_generator(struct XrCoroutine *owner, struct XrCoroutine *gen) {
     XR_DCHECK(owner != NULL, "iterator_new_from_generator: NULL owner");
     XR_DCHECK(gen != NULL, "iterator_new_from_generator: NULL gen");
@@ -408,12 +410,23 @@ XrValue xr_iterator_next(XrIterator *iter) {
                 return xr_null();
             }
         }
-        // Consume the buffered yielded value (held in gen->result) and promote it
-        // to the consuming coroutine's heap so it outlives the producer. Driven
-        // through the VM-neutral runtime core so the same path serves VM and AOT
-        // generators; scalars promote as identity.
+        // Consume the buffered yielded value. The compiler planned any fresh
+        // heap root for transfer storage at its source allocation; the runtime
+        // never promotes or clones across this boundary.
         iter->scan_index = 0;  // consumed; the next pull must drive again
-        return xr_deep_copy_to_coro_core(iter->coro->core, gen->result, iter->coro);
+        XrValue value = gen->result;
+        gen->result = xr_null();
+        if (!XR_IS_PTR(value))
+            return value;
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+                 "generator yield: TRANSIT payload is not a terminal value");
+        if (XR_OBJ_IS_TRANSFER(obj))
+            return value;
+        XR_CHECK(XR_OBJ_IS_SHARED(obj),
+                 "generator yield: pointer payload bypassed verified storage publication");
+        xr_obj_dup(obj);
+        return value;
     }
 
     return xr_null();
@@ -465,6 +478,13 @@ static void iterator_body_destroy(void *body) {
         case XR_ITERATOR_GENERATOR:
             // The producer coroutine is owned (not RC-shared); tear it down.
             if (iter->source.gen) {
+                XrValue pending = iter->source.gen->result;
+                iter->source.gen->result = xr_null();
+                if (XR_IS_PTR(pending)) {
+                    XrObjHeader *obj = XR_VALUE_GCPTR(pending);
+                    if (obj && XR_OBJ_IS_TRANSFER(obj) && xr_obj_drop_is_last(obj))
+                        xr_transfer_destroy_core(iter->source.gen->core, obj);
+                }
                 xr_coro_destroy(iter->source.gen);
                 iter->source.gen = NULL;
             }

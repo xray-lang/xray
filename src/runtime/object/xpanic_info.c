@@ -25,6 +25,8 @@
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
 #include "../class/xinstance.h"
+#include "../core/xr_exec_context.h"
+#include "../mem/xsystem_heap.h"
 #include "../value/xtype_names.h"
 #include "../../coro/xcoroutine.h"
 #include <stdio.h>
@@ -48,6 +50,31 @@ static XrClass *exception_class(XrVMRuntime *X) {
     return core->panicInfoClass;
 }
 
+static bool exception_requires_shared_publication(XrVMRuntime *X) {
+    XrCoroutine *coro = X ? xr_current_coro(X) : NULL;
+    return coro && (coro->task || coro->exec_ctx.executor);
+}
+
+static XrInstance *exception_new_instance(XrVMRuntime *X, XrClass *cls, bool shared) {
+    if (!shared)
+        return xr_instance_new(X, cls);
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    XrInstance *inst =
+        heap ? (XrInstance *) xr_sysheap_alloc_shared(heap, xr_instance_size(cls), XR_TINSTANCE)
+             : NULL;
+    if (inst)
+        xr_instance_init_inplace(inst, cls);
+    return inst;
+}
+
+static XrArray *exception_new_stack(XrVMRuntime *X, bool shared) {
+    if (!shared)
+        return xr_array_new(NULL);
+    XrAllocationContext alloc;
+    xr_alloc_context_init(&alloc, xr_isolate_get_runtime_core(X), XR_STORAGE_SYNC_SHARED);
+    return xr_array_with_capacity_in(&alloc, 4, XR_ELEM_ANY);
+}
+
 /* ========== Type Check ========== */
 
 bool xr_value_is_panic_info(XrVMRuntime *X, XrValue v) {
@@ -66,7 +93,8 @@ bool xr_value_is_panic_info(XrVMRuntime *X, XrValue v) {
 XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message) {
     XR_DCHECK(X != NULL, "exception_new: NULL isolate");
     XrClass *cls = exception_class(X);
-    XrInstance *inst = xr_instance_new(X, cls);
+    bool shared = exception_requires_shared_publication(X);
+    XrInstance *inst = exception_new_instance(X, cls, shared);
     if (!inst)
         return xr_null();
 
@@ -76,7 +104,7 @@ XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message)
     }
     inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
 
-    XrArray *stack = xr_array_new(NULL);
+    XrArray *stack = exception_new_stack(X, shared);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
@@ -104,14 +132,15 @@ XrValue xr_panic_info_from_error(XrVMRuntime *X, XrError *error) {
     }
 
     XrClass *cls = exception_class(X);
-    XrInstance *inst = xr_instance_new(X, cls);
+    bool shared = exception_requires_shared_publication(X);
+    XrInstance *inst = exception_new_instance(X, cls, shared);
     if (!inst)
         return xr_null();
 
     inst->fields[PANIC_INFO_FIELD_MESSAGE] =
         error->message ? XR_FROM_PTR(error->message) : xr_null();
 
-    XrArray *stack = xr_array_new(NULL);
+    XrArray *stack = exception_new_stack(X, shared);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();

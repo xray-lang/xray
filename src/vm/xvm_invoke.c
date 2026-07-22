@@ -135,11 +135,18 @@ static XrValue vm_task_result_success(XrVMRuntime *isolate, XrValue value) {
 }
 
 static XrValue vm_task_result_failed(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro) {
-    XrValue error = task ? task->error : xr_null();
+    XrValue error =
+        task ? xr_task_observe_error(xr_isolate_get_runtime_core(isolate), task, dst_coro)
+             : xr_null();
     if (XR_IS_NULL(error))
         error = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
-    if (dst_coro && xr_value_needs_copy(error))
-        error = xr_deep_copy_to_coro(isolate, error, dst_coro);
+    XrValue args[1] = {error};
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
+}
+
+static XrValue vm_task_result_already_taken(XrVMRuntime *isolate) {
+    XrValue error = xr_panic_info_new(isolate, XR_ERR_TASK_ALREADY_TAKEN,
+                                      "Task transferable result has already been taken");
     XrValue args[1] = {error};
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
@@ -191,6 +198,8 @@ static XrValue vm_task_result_from_terminal(XrVMRuntime *isolate, XrTask *task,
     if (state == XR_TASK_COMPLETED) {
         XrValue value =
             xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), dst_coro, task, false);
+        if (xr_task_result_was_already_taken(task, value))
+            return vm_task_result_already_taken(isolate);
         return vm_task_result_success(isolate, value);
     }
     if (state == XR_TASK_FAILED)
@@ -223,6 +232,8 @@ static XrDispatchAction vm_task_raise_terminal(XrVMRuntime *isolate, XrTask *tas
 static XrValue vm_task_result_from_block(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro,
                                          XrCoroBlockResult block, XrValue raw_value,
                                          bool timeout_enabled) {
+    if (block.kind == XR_CORO_BLOCK_READY && xr_task_result_was_already_taken(task, raw_value))
+        return vm_task_result_already_taken(isolate);
     if (block.kind == XR_CORO_BLOCK_READY)
         return vm_task_result_success(isolate, raw_value);
     if (block.kind == XR_CORO_BLOCK_TIMEOUT)
@@ -720,8 +731,10 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
                 return XR_DISP_NEXT;
             }
             if (expected_pc > 0) {
-                XrEnumAggregateValue *value =
-                    xr_enum_adt_construct(isolate, enum_type, (uint32_t) midx, &base[a + 2], nargs);
+                uint8_t storage_mode = atomic_exchange_explicit(
+                    &isolate->current_storage_mode, XR_OBJ_STORAGE_NORMAL, memory_order_relaxed);
+                XrEnumAggregateValue *value = xr_enum_adt_construct_storage(
+                    isolate, enum_type, (uint32_t) midx, &base[a + 2], nargs, storage_mode);
                 if (!value) {
                     VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
                              "failed to construct ADT variant '%s.%s'", enum_type->name,

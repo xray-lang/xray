@@ -10,6 +10,7 @@
 #include "xr_runtime_core.h"
 #include "../mem/xcoro_heap.h"
 #include "../mem/xfixed_heap.h"
+#include "../mem/xsystem_heap.h"
 #include <string.h>
 
 static _Thread_local XrExecutionContext *xr_tls_exec_context;
@@ -27,7 +28,11 @@ void xr_alloc_context_init(XrAllocationContext *ctx, XrRuntimeCore *core,
 void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t type) {
     if (!ctx || !ctx->core || size < sizeof(XrObjHeader) || type >= XR_OBJ_TYPE_MAX)
         return NULL;
+    if (ctx->domain == XR_STORAGE_TRANSFERABLE)
+        return ctx->shared_heap ? xr_sysheap_alloc_transfer(ctx->shared_heap, size, type) : NULL;
     if (ctx->domain == XR_STORAGE_SYNC_SHARED || ctx->domain == XR_STORAGE_CONST_SHARED)
+        return ctx->shared_heap ? xr_sysheap_alloc_shared(ctx->shared_heap, size, type) : NULL;
+    if (ctx->domain != XR_STORAGE_EXEC_LOCAL && ctx->domain != XR_STORAGE_MODULE_STATIC)
         return NULL;
     if (ctx->local_heap)
         return xr_coro_heap_new_obj(ctx->local_heap, type, size);

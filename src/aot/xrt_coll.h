@@ -103,6 +103,16 @@ static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
     atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
 }
 
+static inline void xrt_coll_set_storage_header(XrObjHeader *h, uint8_t storage_mode) {
+    if (!h)
+        return;
+    XR_OBJ_SET_STORAGE(h, storage_mode);
+    if (storage_mode == XR_OBJ_STORAGE_SHARED)
+        atomic_store_explicit(&h->refcount, -1, memory_order_relaxed);
+    else if (!(h->extra & XR_OBJ_STORAGE_BUMP))
+        atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
+}
+
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
     xrt_bump_header_init(&a->hdr, XR_TARRAY);
@@ -354,6 +364,18 @@ static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t len, uint8_t etype) {
 
 static inline XrValue xrt_array_new_typed(int64_t len, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_ptr(len, etype), XR_TAG_ARRAY);
+}
+
+static inline xrt_array_t *xrt_array_set_storage_ptr(xrt_array_t *array, uint8_t storage_mode) {
+    if (array)
+        xrt_coll_set_storage_header(&array->hdr, storage_mode);
+    return array;
+}
+
+static inline XrValue xrt_array_set_storage(XrValue value, uint8_t storage_mode) {
+    if (XR_IS_ARRAY(value) && value.ptr)
+        xrt_coll_set_storage_header(&((xrt_array_t *) value.ptr)->hdr, storage_mode);
+    return value;
 }
 
 static inline XrValue xrt_array_with_capacity_typed(int64_t cap, uint8_t etype) {
@@ -1903,6 +1925,12 @@ static inline XrValue xrt_map_new(int64_t cap) {
     return xrt_map_new_flags(cap, 0);
 }
 
+static inline XrValue xrt_map_set_storage(XrValue value, uint8_t storage_mode) {
+    if (XR_IS_MAP(value) && value.ptr)
+        xrt_coll_set_storage_header(&((xrt_map_t *) value.ptr)->hdr, storage_mode);
+    return value;
+}
+
 static inline XrValue xrt_map_set_class_name(XrValue map_value, const char *class_name) {
     if (XR_IS_MAP(map_value))
         ((xrt_map_t *) map_value.ptr)->class_name = class_name;
@@ -2751,6 +2779,12 @@ static inline XrValue xrt_set_new_flags(int64_t cap, uint8_t flags) {
     return v;
 }
 
+static inline XrValue xrt_set_set_storage(XrValue value, uint8_t storage_mode) {
+    if (XR_IS_SET(value) && value.ptr)
+        xrt_coll_set_storage_header(&((xrt_set_t *) value.ptr)->hdr, storage_mode);
+    return value;
+}
+
 static inline int xrt_set_is_typed(const xrt_set_t *s);
 
 /* Drop one reference to a storage-backed array's buffer (AOT). Releases ANY
@@ -2834,35 +2868,6 @@ static inline void xrt_set_destroy(xrt_set_t *s) {
     XRT_FREE(s->items);
     XRT_FREE(s->order);
     XRT_FREE(s);
-}
-
-static inline void xrt_coll_retain(XrValue v) {
-    XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
-        return;
-    atomic_fetch_add_explicit(&h->refcount, 1, memory_order_relaxed);
-}
-
-static inline void xrt_coll_release(XrValue v) {
-    XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!xrt_rc_claim_release_last(h))
-        return;
-    switch (h->type) {
-        case XR_TARRAY:
-            xrt_array_destroy((xrt_array_t *) v.ptr);
-            break;
-        case XR_TMAP:
-            xrt_map_destroy((xrt_map_t *) v.ptr);
-            break;
-        case XR_TBOOLMAP:
-            xrt_boolmap_destroy((xrt_boolmap_t *) v.ptr);
-            break;
-        case XR_TSET:
-            xrt_set_destroy((xrt_set_t *) v.ptr);
-            break;
-        default:
-            break;
-    }
 }
 
 static inline XrValue xrt_set_new(int64_t cap) {
@@ -3345,6 +3350,7 @@ enum {
 };
 
 typedef struct {
+    XrObjHeader hdr;
     int64_t field_count;
     uint8_t object_kind;
     const char **field_names;
@@ -3651,13 +3657,37 @@ static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_ki
         fprintf(stderr, "xrt_object_new: out of memory\n");
         abort();
     }
+    xrt_bump_header_init(&j->hdr, XR_TINSTANCE);
+    xrt_coll_make_deterministic(&j->hdr);
+    j->hdr.extra |= XR_OBJ_HAS_DTOR;
+    j->hdr._rsv = XRT_ARC_KIND_JSON;
     j->field_count = field_count;
     j->object_kind = object_kind;
     j->field_names = NULL;
     j->dynamic_fields = NULL;
     for (int64_t i = 0; i < field_count; i++)
         j->fields[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
-    return xr_mkptr(j, XR_TAG_PTR);
+    XrValue value = xr_mkptr(j, XR_TAG_PTR);
+    value.flags |= XRT_VALUE_FLAG_EMBEDDED_HEADER;
+    return value;
+}
+
+static inline XrValue xrt_json_set_storage(XrValue value, uint8_t storage_mode) {
+    if (xrt_is_json_object_value(value))
+        xrt_coll_set_storage_header(&((xrt_json_t *) value.ptr)->hdr, storage_mode);
+    return value;
+}
+
+static inline XrValue xrt_value_set_storage(XrValue value, uint8_t storage_mode) {
+    if (XR_IS_ARRAY(value))
+        return xrt_array_set_storage(value, storage_mode);
+    if (XR_IS_MAP(value))
+        return xrt_map_set_storage(value, storage_mode);
+    if (XR_IS_SET(value))
+        return xrt_set_set_storage(value, storage_mode);
+    if (xrt_is_json_object_value(value))
+        return xrt_json_set_storage(value, storage_mode);
+    return value;
 }
 
 static inline XrValue xrt_object_new_named_kind(int64_t field_count, const char *const *field_names,
@@ -4843,6 +4873,62 @@ static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
     }
 }
 
+static inline void xrt_json_destroy(xrt_json_t *j) {
+    if (!j)
+        return;
+    for (int64_t i = 0; i < j->field_count; i++)
+        xrt_release(j->fields[i]);
+    if (j->dynamic_fields)
+        xrt_release(xr_mkptr(j->dynamic_fields, XR_TAG_MAP));
+    XRT_FREE(j->field_names);
+    j->field_names = NULL;
+    j->dynamic_fields = NULL;
+}
+
+static inline void xrt_coll_retain(XrValue v) {
+    XrObjHeader *h = (XrObjHeader *) v.ptr;
+    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+        return;
+    if (XR_OBJ_IS_SHARED(h))
+        atomic_fetch_sub_explicit(&h->refcount, 1, memory_order_relaxed);
+    else
+        atomic_fetch_add_explicit(&h->refcount, 1, memory_order_relaxed);
+}
+
+static inline void xrt_coll_release(XrValue v) {
+    XrObjHeader *h = (XrObjHeader *) v.ptr;
+    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+        return;
+    if (XR_OBJ_IS_SHARED(h)) {
+        int32_t old = atomic_fetch_add_explicit(&h->refcount, 1, memory_order_acq_rel);
+        if (old != -1)
+            return;
+    } else if (!xrt_rc_claim_release_last(h)) {
+        return;
+    }
+    if ((v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        xrt_json_destroy((xrt_json_t *) v.ptr);
+        XRT_FREE(v.ptr);
+        return;
+    }
+    switch (h->type) {
+        case XR_TARRAY:
+            xrt_array_destroy((xrt_array_t *) v.ptr);
+            break;
+        case XR_TMAP:
+            xrt_map_destroy((xrt_map_t *) v.ptr);
+            break;
+        case XR_TBOOLMAP:
+            xrt_boolmap_destroy((xrt_boolmap_t *) v.ptr);
+            break;
+        case XR_TSET:
+            xrt_set_destroy((xrt_set_t *) v.ptr);
+            break;
+        default:
+            break;
+    }
+}
+
 #include "xrt_index_helpers.inc.c"
 
 /* =========================================================================
@@ -4960,6 +5046,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         }
         case XRT_ARC_KIND_CELL:
             xrt_release(((xrt_cell_t *) obj)->value);
+            break;
+        case XRT_ARC_KIND_JSON:
+            xrt_json_destroy((xrt_json_t *) ((char *) obj - sizeof(XrObjHeader)));
             break;
 #ifdef XRT_ENABLE_REGEX
         case XRT_ARC_KIND_REGEX:

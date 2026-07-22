@@ -1,0 +1,14 @@
+// Each VM lane publishes a compiler-planned transfer root. Batch slots and the
+// parent reduction move that root without cloning its object graph.
+
+import parallel
+
+var total = parallel.reduce(
+    0..100,
+    [0],
+    (i) -> [i + 1],
+    (a, b) -> [a[0] + b[0]],
+    parallel.Options(4)
+)
+
+print(total[0])

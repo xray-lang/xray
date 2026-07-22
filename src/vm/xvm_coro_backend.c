@@ -462,12 +462,15 @@ static bool vm_entry_transfer_arg(XrCoroutine *coro, XrVMRuntime *X, XrValue val
         *out = (X && XR_IS_PTR(value)) ? xr_deep_copy_explicit_to_coro(X, value, coro) : value;
         return !(XR_IS_NULL(*out) && XR_IS_PTR(value));
     }
-    if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value) && xr_value_needs_copy(value))
-        return false; /* the compiler must emit COPY or MOVE; runtime never guesses */
     if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value)) {
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
-        if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+        if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
             xr_shared_retain(obj);
+            *out = value;
+            return true;
+        }
+        if (xr_value_needs_copy(value))
+            return false; /* the compiler must emit COPY or MOVE; runtime never guesses */
     }
     *out = value;
     return true;

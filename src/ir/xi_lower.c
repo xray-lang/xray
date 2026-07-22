@@ -39,6 +39,22 @@
 /* Forward declarations */
 static void finalize_capture_metadata(XiFunc *f);
 
+static void xi_lower_capture_publish_semantics(XiLower *owner, uint32_t symbol_id,
+                                               XiCapture *capture) {
+    if (!capture)
+        return;
+    capture->storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+    capture->value_capability = XA_CAP_UNKNOWN;
+    if (!owner || !owner->analyzer || symbol_id == 0)
+        return;
+    XaSymbol *symbol = xa_scope_lookup_by_id(owner->analyzer->global_scope, symbol_id);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(owner->analyzer, symbol) : NULL;
+    if (!links)
+        return;
+    capture->storage_domain = (uint8_t) links->storage_domain;
+    capture->value_capability = (uint8_t) links->value_capability;
+}
+
 static XaSymbol *xi_lower_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
     if (!analyzer || !node || !analyzer->global_scope)
         return NULL;
@@ -92,6 +108,10 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         func->allocation_effect_complete = true;
     }
     func->has_no_alloc_contract = links && links->has_no_alloc_contract;
+    if (links && links->return_storage_known && !links->return_storage_mixed) {
+        func->return_storage_domain = links->return_storage_domain;
+        func->return_storage_known = true;
+    }
 }
 
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
@@ -395,6 +415,8 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].env_offset = -1;
         l->func->captures[idx].is_mutable = false;
         l->func->captures[idx].is_reassigned = false;
+        xi_lower_capture_publish_semantics(parent, parent->vars[var_id].symbol_id,
+                                           &l->func->captures[idx]);
         /* Cell indirection is needed when the capture cannot see the final
          * value at closure creation time:
          *  - Hoisted function variables: initially null, replaced by the
@@ -433,6 +455,9 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].env_offset = -1;
         l->func->captures[idx].is_mutable = parent->func->captures[parent_upval].is_mutable;
         l->func->captures[idx].is_reassigned = parent->func->captures[parent_upval].is_reassigned;
+        l->func->captures[idx].storage_domain = parent->func->captures[parent_upval].storage_domain;
+        l->func->captures[idx].value_capability =
+            parent->func->captures[parent_upval].value_capability;
         /* Inherit needs_cell from the parent capture so CELL_GET is emitted
          * at every level in the transitive capture chain. */
         if (parent_upval < (int) parent->func->ncaptures)
@@ -1592,6 +1617,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
     xi_lower_publish_effect_sidecars(l.func, analyzer,
                                      xi_lower_function_symbol(analyzer, func_node));
+    if (!l.func->return_storage_known && func_node->type == AST_FUNCTION_EXPR) {
+        XaScope *semantic_scope = xa_scope_find_by_node(analyzer->global_scope, func_node);
+        if (semantic_scope && semantic_scope->return_storage_known &&
+            !semantic_scope->return_storage_mixed) {
+            l.func->return_storage_domain = semantic_scope->return_storage_domain;
+            l.func->return_storage_known = true;
+        }
+    }
     xi_lower_bind_function_body_id(&l,
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
                                    func_node->line > 0 ? (uint32_t) func_node->line : 0);
@@ -2485,7 +2518,10 @@ static void finalize_capture_metadata(XiFunc *f) {
 
     for (uint16_t i = 0; i < f->ncaptures; i++) {
         XiCapture *cap = &f->captures[i];
-        if (cap->capture_kind == XI_CAPTURE_SHARED) {
+        if (cap->capture_kind == XI_CAPTURE_SHARED ||
+            cap->storage_domain == XR_STORAGE_CONST_SHARED ||
+            cap->storage_domain == XR_STORAGE_SYNC_SHARED ||
+            xa_type_is_concurrency_handle(cap->type)) {
             cap->capture_kind = (uint8_t) XI_CAPTURE_SHARED;
         } else if (cap->is_mutable || cap->is_reassigned) {
             cap->capture_kind = (uint8_t) XI_CAPTURE_BY_MUT_CELL;

@@ -104,7 +104,7 @@ typedef struct XrCopyContext {
     struct XrFixedHeap *dst_fixed_heap;  // fixed heap fallback
     struct XrCoroHeap *dst_heap;         // Region heap (preferred when non-NULL)
     bool to_transit;                     // runtime temporary copy: sysheap + XR_OBJ_TRANSIT
-    uint8_t dst_storage_mode;            // 0=normal, 1=shared system, 2=owned system
+    uint8_t dst_storage_mode;            // 0=normal, 1=shared system, 2=transfer system
     bool share_existing_shared;          // boundary transfer may retain non-TRANSIT shared objs
     XrSeenEntry **buckets;
     int bucket_count;

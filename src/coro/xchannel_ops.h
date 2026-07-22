@@ -10,7 +10,7 @@
  * All non-blocking channel operations (tryRecv, trySend) are defined
  * here exactly once, then called from VM instruction dispatch, VM cold
  * call dispatch, and runtime helpers.  This eliminates the class of
- * bugs where one path diverges from another (missing deep copy, missing
+ * bugs where one path diverges from another (missing ownership take, missing
  * ok flag, missing unbuffered rendezvous, etc.).
  *
  * Blocking send/recv use the backend-neutral helpers in xblock.h.
@@ -47,9 +47,8 @@ static inline bool xr_chan_value_is_transfer_message(XrValue value) {
  *   - scalars: the value itself, no RC involved.
  *   - shared refs (channel, atomic, ...): the caller's +1 transfers to
  *     the buffer and is handed to the receiver on delivery.
- *   - deep values (array, map, instance, ...): a coroutine-independent owned
- *     message root replaces the original; the caller's reference is
- *     released HERE — the single send-side consumption point.
+ *   - mutable values (array, map, instance, ...): a compiler-planned TRANSFER
+ *     root moves through the channel unchanged.
  *
  * Channel transport never accepts TRANSIT roots. A TRANSIT value reaching this
  * helper means a caller bypassed the fixed inline/owned/shared transport
@@ -87,7 +86,7 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
     if (mode == XR_TRANSFER_COPY)
         return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_TRANSFER);
     if (XR_OBJ_IS_SHARED(obj)) {
-        xr_shared_retain(obj);
+        xr_obj_dup(obj);
         return value;
     }
     XR_CHECK(false,
@@ -133,13 +132,16 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
     }
 }
 
-/* ========== Recv-side deep copy ========== */
+/* ========== Receive-side ownership take ========== */
 
-/* Deliver a channel value to the receiver. Owned message roots move through
- * unchanged. Scalars and immutable/shared handles are returned unchanged.
- * Channel queues must not contain TRANSIT roots. */
-static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
+/* Deliver a channel value to the receiver without changing payload identity.
+ * Transfer roots move their owner token; const/sync roots retain their shared
+ * domain semantics. A local deep graph here means the producer bypassed the
+ * verified transfer plan, so fail closed instead of copying at receive time. */
+static inline XrValue xr_chan_take_recv_core(XrRuntimeCore *core, XrValue value,
                                              struct XrCoroutine *recv_coro) {
+    (void) core;
+    (void) recv_coro;
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
@@ -147,27 +149,27 @@ static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
         return value;
     XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "channel recv: TRANSIT payload reached channel transport");
-    if (xr_chan_value_is_transfer_message(value))
+    if (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj))
         return value;
-    if (!xr_value_needs_copy(value))
-        return value;
-    return xr_deep_copy_to_coro_core(core, value, recv_coro);
+    XR_CHECK(false,
+             "channel recv requires TRANSFER or CONST_SHARED/SYNC_SHARED storage; implicit copy "
+             "removed");
+    return xr_null();
 }
 
-static inline XrValue xr_chan_copy_recv(struct XrVMRuntime *isolate, XrValue value,
+static inline XrValue xr_chan_take_recv(struct XrVMRuntime *isolate, XrValue value,
                                         struct XrCoroutine *recv_coro) {
-    return xr_chan_copy_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value,
+    return xr_chan_take_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value,
                                   recv_coro);
 }
 
 /* ========== tryRecv — non-blocking receive ========== */
 
 /* Unified tryRecv: try buffer pop, then unbuffered rendezvous,
- * deep-copy on success, wake senders.
+ * take ownership/capability on success and wake senders.
  *
  * out_value: receives the value on success (xr_null on failure)
- * recv_coro: target coroutine for deep copy (may be NULL for
- *            isolate-level GC fallback inside xr_deep_copy_to_coro)
+ * recv_coro: receiving execution, used for plan assertions/diagnostics
  *
  * Returns true if a value was received, false otherwise. */
 static inline bool xr_chan_try_recv_core(XrRuntimeCore *core, XrChannel *ch, XrValue *out_value,
@@ -179,7 +181,7 @@ static inline bool xr_chan_try_recv_core(XrRuntimeCore *core, XrChannel *ch, XrV
     XrValue value = xr_channel_try_recv(ch, &ok);
 
     if (ok) {
-        *out_value = xr_chan_copy_recv_core(core, value, recv_coro);
+        *out_value = xr_chan_take_recv_core(core, value, recv_coro);
         return true;
     }
 

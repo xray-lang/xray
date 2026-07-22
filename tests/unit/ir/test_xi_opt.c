@@ -560,7 +560,7 @@ TEST(mark_one_shot_await_unique_go) {
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(chg.values_changed && "unique go->await should be marked");
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
     xi_func_free(f);
@@ -583,7 +583,7 @@ TEST(mark_one_shot_await_through_copy) {
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(chg.values_changed && "unique copied go->await should be marked");
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     xi_func_free(f);
 }
@@ -598,13 +598,13 @@ TEST(mark_one_shot_await_completes_direct_lowering_pair) {
     go->flags |= XI_FLAG_SIDE_EFFECT;
     XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
     await->args[0] = go;
-    await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+    await->aux_int |= XI_AWAIT_AUX_CONSUME_TASK;
     await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
 
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(chg.values_changed && "pre-marked await should still mark its go producer");
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     xi_func_free(f);
 }
@@ -627,7 +627,7 @@ TEST(mark_one_shot_await_keeps_visible_task) {
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(!chg.values_changed && "observable Task use must not be one-shot");
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
     xi_func_free(f);
 }
@@ -648,7 +648,7 @@ TEST(mark_one_shot_await_skips_linked_go) {
     XiPassChange chg = xi_opt_mark_one_shot_await(f);
 
     assert(!chg.values_changed && "linked go has observable propagation state");
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
     xi_func_free(f);
 }
@@ -768,7 +768,7 @@ TEST(mark_one_shot_sequential_await_fresh_cleared_task_array) {
     assert(chg.values_changed && "cleared task array with sequential awaits should be batched");
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
     xi_func_free(f);
 }
@@ -831,7 +831,7 @@ TEST(mark_one_shot_sequential_await_counted_task_array_loop) {
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
     assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0);
     xi_func_free(f);
 }
 
@@ -893,7 +893,7 @@ TEST(mark_one_shot_sequential_await_rejects_repeated_constant_index_loop) {
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) != 0);
     assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) != 0);
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     xi_func_free(f);
 }
 
@@ -930,7 +930,7 @@ TEST(mark_one_shot_sequential_await_skips_persistent_task_array) {
     assert(!chg.values_changed && "persistent task arrays must not be deferred blindly");
     assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
     assert((go->aux_int & XI_GO_AUX_DEFER_BATCH) == 0);
-    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0);
     assert((await->aux_int & XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH) == 0);
     xi_func_free(f);
 }

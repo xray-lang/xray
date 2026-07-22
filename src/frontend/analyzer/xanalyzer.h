@@ -44,6 +44,12 @@ typedef struct XrVMRuntime XrVMRuntime;
  * queries must never infer ABI facts from the machine running the compiler. */
 XR_FUNC const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyzer *analyzer);
 
+/* A Task whose result carries a unique mutable root is a single-owner handle.
+ * Await lowering consumes that handle even though the source language keeps
+ * the uniform `await task` spelling. */
+XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type);
+XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
+
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)
 typedef enum XrDiagSeverity {
     XR_DIAG_SEV_ERROR = 1,

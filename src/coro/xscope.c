@@ -13,6 +13,8 @@
 #include "xworker.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/xshared.h"
+#include "../base/xchecks.h"
 
 XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro) {
     return (coro && coro->ext) ? coro->ext->parent_scope : NULL;
@@ -149,6 +151,15 @@ static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScop
         return false;
 
     if (scope->mode == XR_SCOPE_LINKED && XR_IS_NULL(scope->first_error)) {
+        if (XR_IS_PTR(err)) {
+            XrObjHeader *obj = XR_VALUE_GCPTR(err);
+            int32_t rc = obj ? atomic_load_explicit(&obj->refcount, memory_order_relaxed) : 0;
+            bool module_static = obj && (obj->extra & XR_OBJ_MANAGED) != 0 && xr_rc_is_sticky(rc);
+            XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || module_static),
+                     "linked scope error requires compiler-planned shared publication");
+            if (XR_OBJ_IS_SHARED(obj))
+                xr_shared_retain(obj);
+        }
         scope->first_error = err;
         scope->first_error_is_value = coro->error_is_value;
     }

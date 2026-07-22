@@ -157,13 +157,18 @@ vmcase(OP_YIELD) {
 }
 
 vmcase(OP_GEN_YIELD) {
-    /* generator `yield expr`: hand R[A] to the driving iterator and suspend.
-     * Generator coroutines are pull-driven synchronously (never scheduled), so
-     * the value lives in coro->result until xr_vm_gen_drive reads it. */
+    /* generator `yield expr`: publish R[A] to the driving iterator and suspend.
+     * Transfer storage carries the sole owner token, so consume the producer
+     * register. Shared storage remains a producer-owned observation source. */
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current != NULL) {
         int a = GETARG_A(i);
         current->result = R(a);
+        if (XR_IS_PTR(R(a))) {
+            XrObjHeader *obj = XR_VALUE_GCPTR(R(a));
+            if (obj && XR_OBJ_IS_TRANSFER(obj))
+                R(a) = xr_null();
+        }
         frame->pc = pc;
         return XR_VM_YIELD;
     }

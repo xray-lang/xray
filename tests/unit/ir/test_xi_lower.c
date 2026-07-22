@@ -2173,7 +2173,7 @@ TEST(go_await) {
             found_go = 1;
         if (f->entry->values[i]->op == XI_AWAIT) {
             found_await = 1;
-            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0 &&
+            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0 &&
                    "visible task await must not be one-shot");
         }
     }
@@ -2191,11 +2191,32 @@ TEST(direct_await_go_one_shot) {
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
         if (f->entry->values[i]->op == XI_AWAIT) {
             found_await = 1;
-            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0 &&
+            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0 &&
                    "direct await-go should be one-shot");
         }
     }
     assert(found_await && "should have AWAIT op");
+    xi_func_free(f);
+}
+
+TEST(unique_result_task_await_consumes_handle) {
+    XiFunc *f = lower_source("fn values() -> Array<int> { return [1, 2, 3] }\n"
+                             "fn run() {\n"
+                             "  var task = go values()\n"
+                             "  var result = await task\n"
+                             "  print(len(result))\n"
+                             "}\n"
+                             "run()\n");
+    assert(f != NULL);
+    XiValue *await = func_tree_find_op(f, XI_AWAIT);
+    assert(await != NULL);
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0 &&
+           "unique-result Task await must consume its handle");
+    XiFunc *values = func_tree_find_func_name(f, "values");
+    XiValue *array = values ? func_tree_find_op(values, XI_ARRAY_NEW) : NULL;
+    assert(array != NULL);
+    assert(xi_value_allocation_storage_mode(array) == XR_OBJ_STORAGE_TRANSFER &&
+           "a unique local returned by owner-forward must be allocated transferable");
     xi_func_free(f);
 }
 
@@ -2747,6 +2768,7 @@ int main(void) {
     run_template_string();
     run_go_await();
     run_direct_await_go_one_shot();
+    run_unique_result_task_await_consumes_handle();
     run_go_arg_transfer_modes();
     run_hoisted_readonly_capture_without_const_proof_is_rejected();
     run_channel_send_transfer_modes();

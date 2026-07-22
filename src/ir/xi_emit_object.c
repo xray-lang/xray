@@ -472,7 +472,8 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * aux_int (e.g. new Array<T>()).  OP_NEWARRAY creates an array whose
      * initial length is B; lower_array_literal then overwrites each slot
      * through OP_INDEX_SET. */
-    uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
+    uint8_t c_field = (uint8_t) (((uint64_t) v->aux_int & ~(uint64_t) 0x03u) |
+                                 xi_value_allocation_storage_mode(v));
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST && v->args[0]->aux_int >= 0 &&
         (uint64_t) v->args[0]->aux_int <= MAXARG_B) {
         emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, (uint16_t) v->args[0]->aux_int, c_field));
@@ -543,7 +544,7 @@ XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (src != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
     }
-    emit_inst(ctx, CREATE_ABC(OP_NEWTUPLE, base, (uint8_t) n, 0));
+    emit_inst(ctx, CREATE_ABC(OP_NEWTUPLE, base, (uint8_t) n, xi_tuple_storage_mode(v) & 0x03));
     if (dst != base)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
@@ -569,14 +570,16 @@ XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
     }
     /* C field pre-encoded by lowerer: (key_kind<<8)|(value_tid<<3)|flags */
-    uint16_t c_field = (uint16_t) (v->aux_int & 0xFFFF);
+    uint16_t c_field = (uint16_t) (((uint64_t) v->aux_int & ~(uint64_t) 0x03u) |
+                                   xi_value_allocation_storage_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, c_field));
 }
 
 /* Set creation */
 XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* B field pre-encoded by lowerer: (elem_tid<<3)|flags */
-    uint16_t b_field = (uint16_t) (v->aux_int & 0xFFFF);
+    uint16_t b_field = (uint16_t) (((uint64_t) v->aux_int & ~(uint64_t) 0x03u) |
+                                   xi_value_allocation_storage_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 

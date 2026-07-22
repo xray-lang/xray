@@ -247,9 +247,9 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrVMRuntime *isolate, XrVMContext *vm_ctx,
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    // Replay-capable registration with delivery capability: copy-free wakes
-    // are delivered by the waker and resume at the next instruction; values
-    // needing a receive-side deep copy replay through the resume protocol.
+    // Replay-capable registration with delivery capability: verified
+    // TRANSFER/shared payloads are delivered by the waker and resume at the
+    // next instruction without receiver-side materialization.
     vm_suspend_replay_yielded(frame, pc);
     XrCoroBlockResult result = xr_coro_chan_recv(current, ch, xr_slot_xvalue_ptr(&base[a]),
                                                  xr_slot_xvalue_ptr(&base[a + 1]), -1, true);

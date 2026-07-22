@@ -1371,12 +1371,12 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_close_send_waiter_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_recv_waiter_count));
     fprintf(stderr,
-            "Channel ownership: send_no_copy=%llu send_deep_copy=%llu recv_no_copy=%llu "
-            "recv_deep_copy=%llu\n",
+            "Channel ownership: send_shared_or_inline=%llu send_transfer=%llu "
+            "recv_shared_or_inline=%llu recv_transfer=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_send_no_copy_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_send_deep_copy_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_transfer_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_recv_no_copy_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_recv_deep_copy_count));
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_transfer_count));
     fprintf(stderr,
             "Channel close fanout: deferred_send=%llu deferred_recv=%llu local_workers=%llu "
             "remote_workers=%llu\n",

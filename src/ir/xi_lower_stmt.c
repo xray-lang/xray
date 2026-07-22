@@ -2751,6 +2751,8 @@ XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
 
 /* ========== Defer / Yield (from xi_lower_expr.c) ========== */
 
+static void stmt_mark_storage_allocs_in_range(XiBlock *block, uint32_t begin, uint8_t storage_mode);
+
 static void lower_defer(XiLower *l, AstNode *node) {
     DeferStmtNode *d = &node->as.defer_stmt;
     AstNode *expr = d->expr;
@@ -2775,9 +2777,14 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
      * generator (suspendable coroutine); XI_GEN_YIELD suspends and hands the
      * value to the driving iterator. (Cooperative scheduling is Coro.yield().) */
     AstNode *value_node = node ? node->as.yield_stmt.value : NULL;
+    XiBlock *allocation_block = l->cur_block;
+    uint32_t allocation_begin = allocation_block ? allocation_block->nvalues : 0;
     XiValue *value = value_node ? xi_lower_expr(l, value_node) : NULL;
     if (!value)
         value = xi_const_null(l->func, l->cur_block, l->type_null);
+    if (allocation_block == l->cur_block)
+        stmt_mark_storage_allocs_in_range(allocation_block, allocation_begin,
+                                          XR_OBJ_STORAGE_TRANSFER);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GEN_YIELD, l->type_unit, 1);
     if (v) {
         v->args[0] = value;
@@ -2972,20 +2979,29 @@ static bool stmt_mark_value_storage_alloc(XiValue *v, uint8_t storage_mode) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
         case XI_SET_NEW:
-            v->aux_int = (v->aux_int & ~(int64_t) 0x03) | (int64_t) (storage_mode & 0x03);
+            xi_value_set_allocation_storage_mode(v, storage_mode);
             return true;
         case XI_JSON_NEW:
             xi_json_set_storage_mode(v, storage_mode);
             return true;
+        case XI_TUPLE_NEW:
+            xi_tuple_set_storage_mode(v, storage_mode);
+            return true;
+        case XI_CALL_METHOD:
+            if (v->aux && strcmp((const char *) v->aux, "constructor") == 0) {
+                xi_value_set_allocation_storage_mode(v, storage_mode);
+                return true;
+            }
+            return false;
         case XI_CHAN_NEW:
             return true;
         case XI_CALL_BUILTIN:
-            if (v->aux && strcmp((const char *) v->aux, "array_with_capacity") == 0) {
-                v->aux_int = (v->aux_int & ~(int64_t) 0x03) | (int64_t) (storage_mode & 0x03);
-                return true;
-            }
-            if (v->aux && strcmp((const char *) v->aux, "StringBuilder") == 0) {
-                v->aux_int = storage_mode & 0x03;
+            if (v->aux && (strcmp((const char *) v->aux, "array_with_capacity") == 0 ||
+                           strcmp((const char *) v->aux, "array_filled_new") == 0 ||
+                           strcmp((const char *) v->aux, "array_copy_new") == 0 ||
+                           strcmp((const char *) v->aux, "StringBuilder") == 0 ||
+                           strcmp((const char *) v->aux, "copy") == 0)) {
+                xi_value_set_allocation_storage_mode(v, storage_mode);
                 return true;
             }
             return false;
@@ -3134,6 +3150,20 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     }
     stmt_set_missing_line(init_val, node->line);
 
+    /* A const declaration seals the initializer's capability at the binding
+     * boundary. Preserve that fact in SSA instead of leaving variable reads
+     * typed as the mutable initializer expression. */
+    if (node->type == AST_CONST_DECL && type && xr_type_is_const(type) &&
+        (!init_val->type || !xr_type_is_const(init_val->type))) {
+        XiValue *sealed = xi_value_new(l->func, l->cur_block, XI_COPY, type, 1);
+        if (!sealed)
+            return;
+        sealed->args[0] = init_val;
+        sealed->aux_int = XI_COPY_KIND_IDENTITY;
+        sealed->line = (uint32_t) node->line;
+        init_val = sealed;
+    }
+
     /* Propagate reified generic elem_tid when there is an explicit type
      * annotation on a container literal (e.g. var a: Array<int> = [1,2]).
      * Only the annotation distinguishes typed from untyped containers. */
@@ -3145,17 +3175,17 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->type = type;
-            init_val->aux_int = (int64_t) ((tid << 2) | ((uint8_t) init_val->aux_int & 0x03));
+            init_val->aux_int = (int64_t) (tid << 2);
         } else if (init_val->op == XI_SET_NEW && type->kind == XR_KIND_SET &&
                    type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
-            uint8_t flags = (uint8_t) (init_val->aux_int & 0x07);
+            uint8_t flags = (uint8_t) (init_val->aux_int & 0x04);
             init_val->aux_int = (int64_t) (((tid & 0x1F) << 3) | flags);
         } else if (init_val->op == XI_CHAN_NEW && type->kind == XR_KIND_CHANNEL &&
                    type->container.element_type) {
             init_val->aux_int = xr_type_to_tid(type->container.element_type);
         } else if (init_val->op == XI_MAP_NEW && XR_TYPE_IS_MAP(type)) {
-            uint8_t flags = (uint8_t) (init_val->aux_int & 0x07);
+            uint8_t flags = (uint8_t) (init_val->aux_int & 0x04);
             uint8_t value_tid = 0, key_kind = 0;
             if (type->map.value_type)
                 value_tid = xr_type_to_tid(type->map.value_type);
@@ -3255,11 +3285,35 @@ static void lower_print(XiLower *l, AstNode *node) {
     }
 }
 
+static bool stmt_throw_is_direct_enum_constructor(XiLower *l, AstNode *expr) {
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_AS_EXPR))
+        expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.as_expr.expr;
+    if (!l || !l->analyzer || !expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
+        expr->as.call_expr.callee->type != AST_MEMBER_ACCESS)
+        return false;
+    AstNode *object = expr->as.call_expr.callee->as.member_access.object;
+    if (!object || object->type != AST_VARIABLE)
+        return false;
+    XaSymbol *symbol =
+        object->as.variable.symbol_id
+            ? xa_scope_lookup_by_id(l->analyzer->global_scope, object->as.variable.symbol_id)
+            : NULL;
+    return symbol && symbol->kind == XA_SYM_ENUM;
+}
+
 static void lower_throw(XiLower *l, AstNode *node) {
     ThrowStmtNode *t = &node->as.throw_stmt;
+    XiBlock *allocation_block = l->cur_block;
+    uint32_t allocation_begin = allocation_block ? allocation_block->nvalues : 0;
     XiValue *val = xi_lower_expr(l, t->expression);
     if (!val)
         return;
+    if (allocation_block == l->cur_block) {
+        stmt_mark_storage_allocs_in_range(allocation_block, allocation_begin,
+                                          XR_OBJ_STORAGE_SHARED);
+        if (stmt_throw_is_direct_enum_constructor(l, t->expression))
+            xi_value_set_allocation_storage_mode(val, XR_OBJ_STORAGE_SHARED);
+    }
 
     /* `throw <enum>` is the value-return error channel: write the error
      * and either branch to the enclosing error-catch (try_depth > 0) or
@@ -3272,7 +3326,18 @@ static void lower_return(XiLower *l, AstNode *node) {
     XiValue *val = NULL;
 
     if (ret->value_count == 1 && ret->values[0]) {
+        XiBlock *allocation_block = l->cur_block;
+        uint32_t allocation_begin = allocation_block ? allocation_block->nvalues : 0;
         val = xi_lower_expr(l, ret->values[0]);
+        if (l->func && l->func->return_storage_known && allocation_block == l->cur_block) {
+            if (l->func->return_storage_domain == XR_STORAGE_TRANSFERABLE)
+                stmt_mark_storage_allocs_in_range(allocation_block, allocation_begin,
+                                                  XR_OBJ_STORAGE_TRANSFER);
+            else if (l->func->return_storage_domain == XR_STORAGE_CONST_SHARED ||
+                     l->func->return_storage_domain == XR_STORAGE_SYNC_SHARED)
+                stmt_mark_storage_allocs_in_range(allocation_block, allocation_begin,
+                                                  XR_OBJ_STORAGE_SHARED);
+        }
         stmt_set_missing_line(val, node->line);
         /* Tail-call detection: mark calls in return position so the emitter
          * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).

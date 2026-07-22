@@ -56,6 +56,12 @@ typedef enum XrThreadState {
     XR_THREAD_DETACHED,    /* detached; must not be joined */
 } XrThreadState;
 
+typedef enum XrThreadPayloadOwner {
+    XR_THREAD_PAYLOAD_NONE = 0,
+    XR_THREAD_PAYLOAD_TRANSFER = 1,
+    XR_THREAD_PAYLOAD_SHARED = 2,
+} XrThreadPayloadOwner;
+
 typedef struct XrThread {
     XrObjHeader hdr;
     xr_thread_t handle; /* OS thread handle */
@@ -68,8 +74,12 @@ typedef struct XrThread {
     _Atomic(int) state;     /* XrThreadState */
     _Atomic(bool) finished; /* entry set the return slot */
     _Atomic(bool) failed;
+    _Atomic(bool) payload_lock;
+    _Atomic(uint8_t) payload_taken;
+    uint8_t retval_owner; /* XrThreadPayloadOwner */
+    uint8_t error_owner;  /* XrThreadPayloadOwner */
     bool error_is_value;
-    XrValue retval; /* closure result; join deep-copies pointer payloads to caller */
+    XrValue retval; /* closure result; transfer is single-take, shared is retained */
     XrValue error;
 } XrThread;
 
@@ -80,8 +90,9 @@ XR_FUNC XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrC
                                          const char *name, size_t stack_size,
                                          const uint32_t *affinity_cpus, uint16_t affinity_count);
 
-/* Block until the thread finishes; returns the closure's return value. Idempotent
- * after the first successful join (subsequent calls return the cached retval). */
+/* Block until the thread finishes; returns the closure's return value. Scalar
+ * and shared results may be observed repeatedly. A transferable result carries
+ * one ownership token and can therefore be taken by exactly one join(). */
 XR_FUNC XrValue xr_thread_obj_join(XrThread *thread);
 
 /* Detach: the OS thread's resources are reclaimed on exit; must not be joined. */

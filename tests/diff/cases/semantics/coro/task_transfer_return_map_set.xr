@@ -1,0 +1,17 @@
+fn buildMap() -> Map<int, int> {
+    var values: Map<int, int> = #{}
+    values[7] = 11
+    return values
+}
+
+fn buildSet() -> Set<int> {
+    var values: Set<int> = #[3, 5]
+    return values
+}
+
+var mapTask = go buildMap()
+var setTask = go buildSet()
+var mapResult = await mapTask
+var setResult = await setTask
+print(mapResult[7])
+print(setResult.contains(5))

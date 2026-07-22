@@ -116,6 +116,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_BUFFER 10u
 #define XRT_ARC_KIND_NET_CONN 11u
 #define XRT_ARC_KIND_NET_LISTENER 12u
+#define XRT_ARC_KIND_JSON 13u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -313,6 +314,8 @@ static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
+    if ((v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
+        return 1;
     if (XR_IS_ARRAY_REF(v))
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
@@ -322,6 +325,11 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
            v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
            v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN || v.tag == XR_TAG_NET_LISTENER;
+}
+
+static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
+    return (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0 ? (XrObjHeader *) v.ptr
+                                                           : XRT_ARC_HDR(v.ptr);
 }
 
 /* ========== --rc-guard debug codegen (task 219 P4) ==========
@@ -346,7 +354,7 @@ static inline void xrt_rc_guard_poison(XrObjHeader *hdr) {
 static inline int xrt_rc_guard_is_poisoned(XrValue v) {
     if (!xrt_arc_value_has_header(v))
         return 0;
-    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    XrObjHeader *hdr = xrt_arc_value_header(v);
     return hdr && hdr->_rsv == XRT_RC_GUARD_POISON;
 }
 
@@ -374,13 +382,14 @@ static inline void xrt_rc_guard_check(XrValue v, const char *site) {
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrObjHeader. */
 static inline void xrt_retain(XrValue v) {
-    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
+    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
+        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
         xrt_coll_retain(v);
         return;
     }
     if (!xrt_arc_value_has_header(v))
         return;
-    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    XrObjHeader *hdr = xrt_arc_value_header(v);
 #ifdef XR_RC_GUARD
     if (hdr->_rsv == XRT_RC_GUARD_POISON)
         xrt_rc_guard_fail("xrt_retain", v.ptr); /* retain of a released object */
@@ -448,7 +457,8 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
 }
 
 static inline void xrt_release(XrValue v) {
-    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
+    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
+        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
         xrt_coll_release(v);
         return;
     }
@@ -458,7 +468,7 @@ static inline void xrt_release(XrValue v) {
     }
     if (!xrt_arc_value_has_header(v))
         return;
-    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    XrObjHeader *hdr = xrt_arc_value_header(v);
 #ifdef XR_RC_GUARD
     if (hdr->_rsv == XRT_RC_GUARD_POISON)
         xrt_rc_guard_fail("xrt_release", v.ptr); /* double release of a freed object */

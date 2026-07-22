@@ -11,9 +11,10 @@
 #include "xscope_transfer.h"
 
 #include "xcoroutine.h"
-#include "xdeep_copy.h"
 #include "xtask.h"
 #include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/xshared.h"
+#include "../base/xchecks.h"
 
 static XrValue scope_child_error(const XrCoroutine *coro) {
     if (!coro)
@@ -24,11 +25,18 @@ static XrValue scope_child_error(const XrCoroutine *coro) {
     return err;
 }
 
-static XrValue scope_copy_to_owner(XrCoroutine *coro, XrScopeContext *scope, XrValue value) {
+static XrValue scope_observe_for_owner(XrCoroutine *coro, XrScopeContext *scope, XrValue value) {
     if (!coro || !scope || !scope->owner || XR_IS_NULL(value))
         return value;
-    if (xr_value_needs_copy(value))
-        return xr_deep_copy_to_coro_core(coro->core, value, scope->owner);
+    if (XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        int32_t rc = obj ? atomic_load_explicit(&obj->refcount, memory_order_relaxed) : 0;
+        bool module_static = obj && (obj->extra & XR_OBJ_MANAGED) != 0 && xr_rc_is_sticky(rc);
+        XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || module_static),
+                 "linked scope error requires compiler-planned shared publication");
+        if (XR_OBJ_IS_SHARED(obj))
+            xr_shared_retain(obj);
+    }
     return value;
 }
 
@@ -42,7 +50,7 @@ static bool scope_transfer_record_child_completion_locked(XrCoroutine *coro,
 
     if (scope->mode == XR_SCOPE_LINKED) {
         if (child_failed && XR_IS_NULL(scope->first_error)) {
-            scope->first_error = scope_copy_to_owner(coro, scope, err);
+            scope->first_error = scope_observe_for_owner(coro, scope, err);
             scope->first_error_is_value = coro->error_is_value;
         }
     }

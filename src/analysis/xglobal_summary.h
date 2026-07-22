@@ -62,7 +62,7 @@ enum {
     /* 33: combines the sequence/native-class evidence carried by schema 32
      * with enum static-domain and descriptor metadata evidence from task 210.
      * Use a fresh version so caches from either parent lineage are invalidated. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 33,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 34,
 };
 
 typedef enum XgBuildProfile {

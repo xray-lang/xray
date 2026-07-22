@@ -72,6 +72,14 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
 XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture) {
     if (!capture)
         return XR_TRANSFER_REJECT;
+    if (capture->storage_domain == XR_STORAGE_CONST_SHARED)
+        return XR_TRANSFER_CONST_SHARE;
+    if (capture->storage_domain == XR_STORAGE_SYNC_SHARED)
+        return XR_TRANSFER_SYNC_SHARE;
+    if (capture->storage_domain == XR_STORAGE_MODULE_STATIC)
+        return capture->is_mutable ? XR_TRANSFER_REJECT : XR_TRANSFER_MODULE_READ;
+    if (capture->storage_domain == XR_STORAGE_TRANSFERABLE)
+        return XR_TRANSFER_MOVE_UNIQUE;
     if (capture->capture_kind == XI_CAPTURE_SHARED)
         return XR_TRANSFER_SYNC_SHARE;
     if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
@@ -278,6 +286,8 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx) {
     if (!user)
         return true;
+    if ((user->op == XI_GO || user->op == XI_THREAD_SPAWN) && arg_idx > 0)
+        return xi_go_arg_transfer_mode(user, (uint16_t) (arg_idx - 1)) == XR_TRANSFER_MOVE;
     if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
         user->call_plan && arg_idx > 0 && arg_idx <= user->call_plan->nargs &&
         user->call_plan->args[arg_idx - 1].param_mode == XR_PARAM_REF)

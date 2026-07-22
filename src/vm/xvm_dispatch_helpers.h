@@ -270,18 +270,9 @@ static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *cl
     return new_frame;
 }
 
-/* ========== Channel Deep Copy Helpers ========== */
+/* ========== Channel ownership helpers ========== */
 #include "../coro/xblock.h"
 #include "../coro/xchannel_ops.h"
-
-static inline XrValue vm_chan_copy_send(XrVMRuntime *isolate, XrValue value) {
-    return xr_chan_prepare_send(isolate, value);
-}
-
-static inline XrValue vm_chan_copy_recv(XrVMRuntime *isolate, XrValue value, XrVMContext *vm_ctx) {
-    XrCoroutine *coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
-    return xr_chan_copy_recv(isolate, value, coro);
-}
 
 /* ========== Shared Types ========== */
 

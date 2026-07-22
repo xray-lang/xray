@@ -423,6 +423,8 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
 void xr_transfer_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     if (!obj)
         return;
+    if (xr_runtime_core_release_aot_native_value(core, obj))
+        return;
     if (obj->extra & XR_OBJ_DEAD)
         return;
     obj->extra |= XR_OBJ_DEAD;
@@ -440,6 +442,8 @@ void xr_transfer_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
 
 void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     if (!obj)
+        return;
+    if (xr_runtime_core_release_aot_native_value(core, obj))
         return;
 
     /* Global pool strings are owned by XrGlobalStringPool, not by coroutine GC.

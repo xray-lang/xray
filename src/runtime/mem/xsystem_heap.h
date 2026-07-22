@@ -146,7 +146,7 @@ XR_FUNC void *xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size);
 
 /* ========== Shared Object Allocation ========== */
 
-// Allocate owned system object with non-atomic refcount (freed when unique owner drops)
+// Allocate transferable system object with non-atomic refcount (freed when its owner drops)
 XR_FUNC void *xr_sysheap_alloc_transfer(XrSystemHeap *heap, size_t size, uint8_t type);
 
 // Allocate according to bytecode/object storage mode.
@@ -160,7 +160,7 @@ XR_FUNC void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t t
 // Free shared object (handles both malloc and mmap)
 XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 
-// Destroy owned system object: destructor then system free.
+// Destroy transferable system object: destructor then system free.
 XR_FUNC void xr_transfer_destroy_core(struct XrRuntimeCore *core, XrObjHeader *obj);
 
 /* ========== XrCoroHeap Struct Pool (L2) ==========

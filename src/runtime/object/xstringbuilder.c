@@ -64,6 +64,7 @@ void xr_stringbuilder_init_inplace(XrStringBuilder *sb) {
         sb->buffer->data = (char *) xr_malloc(64);
         sb->buffer->capacity = 64;
         sb->buffer->length = 0;
+        sb->buffer->X = xr_exec_context_vm_owner();
         if (sb->buffer->data) {
             sb->buffer->data[0] = '\0';
         }

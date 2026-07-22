@@ -414,6 +414,21 @@ XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct(XrVMRuntime *X, XrEnumType *
                : NULL;
 }
 
+XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct_storage(XrVMRuntime *X, XrEnumType *enum_type,
+                                                            uint32_t member_index, XrValue *args,
+                                                            int nargs, uint8_t storage_mode) {
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL)
+        return xr_enum_adt_construct(X, enum_type, member_index, args, nargs);
+    XrRuntimeCore *core = X ? xr_isolate_get_runtime_core(X) : NULL;
+    if (!core)
+        return NULL;
+    XrAllocationContext alloc;
+    xr_alloc_context_init(&alloc, core,
+                          storage_mode == XR_OBJ_STORAGE_TRANSFER ? XR_STORAGE_TRANSFERABLE
+                                                                  : XR_STORAGE_SYNC_SHARED);
+    return xr_enum_adt_construct_in(&alloc, enum_type, member_index, args, nargs);
+}
+
 bool xr_value_is_enum_aggregate(XrValue value) {
     if (!XR_IS_PTR(value) || !value.ptr || value.heap_type != XR_TINSTANCE)
         return false;

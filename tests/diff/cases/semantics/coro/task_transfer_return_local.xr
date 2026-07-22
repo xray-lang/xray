@@ -1,0 +1,15 @@
+// A function return is a terminal ownership edge: returning a unique local
+// automatically forwards its root. Await keeps one uniform spelling and
+// consumes the unique-result Task handle without a source-level `move`.
+fn values() -> Array<int> {
+    var result = [1, 2, 3]
+    return result
+}
+
+fn main() {
+    var task = go values()
+    var result = await task
+    print(len(result))
+}
+
+main()

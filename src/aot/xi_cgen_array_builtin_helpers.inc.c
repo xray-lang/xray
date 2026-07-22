@@ -63,42 +63,65 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     if (!name)
         return false;
     if (strcmp(name, "array_with_capacity") == 0) {
+        XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
         CgArrayElemInfo info;
         const char *elem_name =
             cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
-        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
+                                                   : "xrt_array_set_storage(");
+        if (storage_rep == XR_REP_PTR) {
             fprintf(out, "((xrt_array_t*)xrt_array_with_capacity_value(");
             emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", %s).ptr)", elem_name);
-            return true;
+        } else {
+            fprintf(out, "xrt_array_with_capacity_value(");
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", %s)", elem_name);
         }
-        fprintf(out, "xrt_array_with_capacity_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", %s)", elem_name);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         return true;
     }
     if (strcmp(name, "array_filled_new") == 0) {
+        XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
         CgArrayElemInfo info;
         const char *elem_name =
             cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
+                                                   : "xrt_array_set_storage(");
         fprintf(out, "xrt_array_new_filled_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
+        if (storage_rep == XR_REP_PTR)
+            fprintf(out, ".ptr");
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         return true;
     }
     if (strcmp(name, "array_copy_new") == 0) {
+        XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
         CgArrayElemInfo info;
         const char *elem_name =
             cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
-        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, storage_rep == XR_REP_PTR ? "xrt_array_set_storage_ptr("
+                                                   : "xrt_array_set_storage(");
+        if (storage_rep == XR_REP_PTR)
             fprintf(out, "((xrt_array_t*)");
         fprintf(out, "xrt_array_new_copy_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
-        if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
+        if (storage_rep == XR_REP_PTR)
             fprintf(out, ".ptr)");
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         return true;
     }
     if (strcmp(name, "array_clear") == 0) {

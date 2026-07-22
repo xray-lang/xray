@@ -69,8 +69,10 @@ op_call_entry:;
             XrEnumType *etype = eval->parent_type;
             if (etype && xr_enum_type_has_payloads(etype) &&
                 xr_enum_type_payload_count(etype, eval->member_index) > 0) {
-                XrEnumAggregateValue *value =
-                    xr_enum_adt_construct(isolate, etype, eval->member_index, &R(a + 1), nargs);
+                uint8_t storage_mode = atomic_exchange_explicit(
+                    &isolate->current_storage_mode, XR_OBJ_STORAGE_NORMAL, memory_order_relaxed);
+                XrEnumAggregateValue *value = xr_enum_adt_construct_storage(
+                    isolate, etype, eval->member_index, &R(a + 1), nargs, storage_mode);
                 if (!value) {
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
                                      etype->name, eval->member_name);

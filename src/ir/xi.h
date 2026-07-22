@@ -741,12 +741,15 @@ typedef enum {
 
 /* Compiler-internal facts emitted by lowering for backend-only decisions. */
 #define XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE (1u << 0)
+#define XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT 1
+#define XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK (3u << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT)
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
 #define XI_AWAIT_AUX_ALL (1 << 1)
 #define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
-#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3) /* await operand is a non-escaping XI_GO */
+#define XI_AWAIT_AUX_CONSUME_TASK                                                                  \
+    (1 << 3) /* await consumes a direct temporary or unique-result Task handle */
 #define XI_AWAIT_AUX_AGGREGATE_ONE_SHOT                                                            \
     (1 << 4) /* await all consumes a fresh task array literal                                      \
               */
@@ -794,17 +797,19 @@ typedef enum XiCaptureKind {
 } XiCaptureKind;
 
 typedef struct XiCapture {
-    uint8_t source;        /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
-    uint16_t index;        /* SRC_UPVAL: parent upvalue index */
-    uint8_t capture_kind;  /* XiCaptureKind */
-    bool needs_cell;       /* true if the captured variable is mutated in the child */
-    bool is_mutable;       /* true if the variable is ever reassigned after capture */
-    bool is_reassigned;    /* true if variable is reassigned after capture point */
-    int16_t cell_index;    /* cell table index (-1 = not assigned) */
-    int16_t env_offset;    /* offset in closure env object (-1 = not assigned) */
-    const char *name;      /* variable name (debug; not owned) */
-    struct XrType *type;   /* variable type */
-    struct XiValue *value; /* SRC_REG: parent SSA value (register resolved at emit) */
+    uint8_t source;           /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
+    uint16_t index;           /* SRC_UPVAL: parent upvalue index */
+    uint8_t capture_kind;     /* XiCaptureKind */
+    bool needs_cell;          /* true if the captured variable is mutated in the child */
+    bool is_mutable;          /* true if the variable is ever reassigned after capture */
+    bool is_reassigned;       /* true if variable is reassigned after capture point */
+    int16_t cell_index;       /* cell table index (-1 = not assigned) */
+    int16_t env_offset;       /* offset in closure env object (-1 = not assigned) */
+    const char *name;         /* variable name (debug; not owned) */
+    struct XrType *type;      /* variable type */
+    struct XiValue *value;    /* SRC_REG: parent SSA value (register resolved at emit) */
+    uint8_t storage_domain;   /* XrSemanticStorageDomain published by analyzer */
+    uint8_t value_capability; /* XaValueCapability published by analyzer */
 } XiCapture;
 
 /* Closure metadata: env layout and capture table for a single closure.
@@ -893,6 +898,20 @@ typedef struct XiValue {
     uint8_t enum_metadata_kind; /* XrEnumMetadataKind for descriptor/view values. */
     struct XiBlock *block;      /* containing block */
 } XiValue;
+
+static inline void xi_value_set_allocation_storage_mode(XiValue *value, uint8_t storage_mode) {
+    if (!value)
+        return;
+    value->lowering_flags =
+        (uint8_t) ((value->lowering_flags & ~XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) |
+                   ((storage_mode & 0x03u) << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT));
+}
+
+static inline uint8_t xi_value_allocation_storage_mode(const XiValue *value) {
+    return value ? (uint8_t) ((value->lowering_flags & XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) >>
+                              XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT)
+                 : 0;
+}
 
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     if (!dst || !src)
@@ -1037,6 +1056,23 @@ static inline int64_t xi_json_pack_aux(int32_t field_count, uint8_t storage_mode
 static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
     if (v && v->op == XI_JSON_NEW)
         v->aux_int = xi_json_pack_aux(xi_json_field_count(v), storage_mode);
+}
+
+#define XI_TUPLE_AUX_STORAGE_SHIFT 32
+#define XI_TUPLE_AUX_ARITY_MASK INT64_C(0xffffffff)
+
+static inline uint8_t xi_tuple_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_TUPLE_AUX_STORAGE_SHIFT) : 0;
+}
+
+static inline int64_t xi_tuple_pack_aux(uint32_t arity, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_TUPLE_AUX_STORAGE_SHIFT) |
+           ((int64_t) arity & XI_TUPLE_AUX_ARITY_MASK);
+}
+
+static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_TUPLE_NEW)
+        v->aux_int = xi_tuple_pack_aux(v->nargs, storage_mode);
 }
 
 #define XI_COPY_KIND_IDENTITY 0
@@ -1412,6 +1448,13 @@ typedef struct XiFunc {
     uint64_t allocation_fingerprint;
     bool allocation_effect_complete;
     bool has_no_alloc_contract;
+
+    /* Canonical analyzer-owned return storage contract.  A known transferable
+     * or shared return lets lowering materialize fresh aggregates directly in
+     * the required domain; runtimes must not repair a local result by copying
+     * it at Task/Thread publication time. */
+    uint8_t return_storage_domain; /* XrSemanticStorageDomain */
+    bool return_storage_known;
 
     /* Canonical analyzer effect sidecars.  IDs are scoped to `analyzer`; the
      * stable fingerprints are the cache/verifier identity that survives

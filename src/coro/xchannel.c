@@ -9,12 +9,13 @@
  *
  * KEY CONCEPT:
  *   Unbuffered channels use synchronous handshake semantics.
- *   Buffered channels use FIFO queue. Deep copy ensures lock-free GC.
+ *   Buffered channels use FIFO queue. Verified storage domains make payload
+ *   ownership independent of the sender's coroutine heap.
  *
  * WHY THIS DESIGN:
  *   - Lock-free fast path for common cases
  *   - Direct transfer optimization when receiver waiting
- *   - Deep copy on cross-coroutine transfer (xray specific)
+ *   - O(1) owner-token transfer for mutable payloads
  */
 
 #include "xchannel.h"
@@ -27,7 +28,6 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
-#include "xdeep_copy.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/xshared.h"
 
@@ -42,16 +42,13 @@ static void channel_wake_coro_kind(XrCoroutine *coro, XrChannelKind kind, bool w
 // Waker-side delivery for resume-with-value waiters (untimed VM recv).
 // Caller already stored the value via xr_coro_store_recv_value; this adds
 // the ok flag and marks the wake as delivered so the resume fast path can
-// skip the instruction replay. Gated per value: heap values that need a
-// receive-side deep copy keep the replay protocol (the copy must run on
-// the receiver's own thread). Waiters without the registered capability
-// (timeout variants, cfunc, method-call paths) re-execute the
-// channel instruction and derive ok from resume_status.
-static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
+// skip the instruction replay. Every pointer admitted to channel transport is
+// already TRANSFER or shared, so delivery never materializes a receiver-local
+// graph. Waiters without the registered capability (timeout variants, cfunc,
+// method-call paths) re-execute the instruction and derive ok from status.
+static inline void chan_try_deliver_recv(XrCoroutine *receiver) {
     XrCoroExt *ext = receiver->ext;
     if (!ext || ext->chan_ok_slot_ref.kind == XR_SLOT_NONE)
-        return;
-    if (XR_IS_PTR(v) && xr_value_needs_copy(v) && !xr_chan_value_is_transfer_message(v))
         return;
     (void) xr_slot_store_value(ext->chan_ok_slot_ref, xr_bool(true));
     ext->chan_resume_delivered = true;
@@ -786,7 +783,7 @@ static void timer_channel_deliver(XrChannel *ch) {
         receiver = xr_waitq_dequeue(&ch->recvq);
         if (receiver) {
             (void) xr_coro_store_recv_value(receiver, xr_int(now));
-            chan_try_deliver_recv(receiver, xr_int(now));
+            chan_try_deliver_recv(receiver);
         } else {
             // No receiver waiting: leave value in buffer for later recv
             ch->buffer[0] = xr_int(now);
@@ -1108,7 +1105,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *produ
     channel_note_participant_locked(ch, producer, true);
     XrChannelKind wake_kind = channel_wake_kind_for_stats(ch);
     (void) xr_coro_store_recv_value(receiver, v);
-    chan_try_deliver_recv(receiver, v);
+    chan_try_deliver_recv(receiver);
     xr_amutex_unlock(&ch->lock);
     channel_finish_claimed_wake(receiver, false, wake_kind, false);
     return true;

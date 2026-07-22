@@ -118,9 +118,10 @@
 #define XR_ERR_WRONG_ARG_COUNT 450
 #define XR_ERR_INVALID_ARG_TYPE 451
 
-/* ---- Runtime coroutine errors (E04xx, 460-461) ---- */
+/* ---- Runtime coroutine errors (E04xx, 460-462) ---- */
 #define XR_ERR_CORO_DEAD 460
 #define XR_ERR_CORO_CANCELLED 461
+#define XR_ERR_TASK_ALREADY_TAKEN 462
 
 /* ---- Runtime stdlib errors (E04xx, 470-489) ---- */
 #define XR_ERR_JSON_PARSE 470
