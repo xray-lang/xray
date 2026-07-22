@@ -74,6 +74,37 @@ static XaSymbol *memory_symbol_by_id(XaAnalyzer *analyzer, uint32_t id) {
     return analyzer && id ? xa_scope_lookup_by_id(analyzer->global_scope, id) : NULL;
 }
 
+static XrType *memory_expr_type(XaMemoryPass *pass, AstNode *expr) {
+    if (!pass || !pass->analyzer || !expr)
+        return NULL;
+    XrType *type = xa_analyzer_get_node_type(pass->analyzer, expr);
+    if (type)
+        return type;
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                continue;
+            case AST_FORCE_UNWRAP:
+            case AST_MOVE_EXPR:
+                expr = expr->as.unary.operand;
+                continue;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                continue;
+            case AST_VARIABLE: {
+                XaSymbol *symbol = memory_symbol_by_id(pass->analyzer, expr->as.variable.symbol_id);
+                return symbol
+                           ? (symbol->links.type ? symbol->links.type : symbol->links.declared_type)
+                           : NULL;
+            }
+            default:
+                return NULL;
+        }
+    }
+    return NULL;
+}
+
 static XaSymbol *memory_resolve_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
     if (!analyzer || !node)
         return NULL;
@@ -360,8 +391,8 @@ static bool memory_dynamic_arg_is_stable_slice_read(XaMemoryPass *pass, CallExpr
     if (!pass || !call || !call->callee || arg_index < 0 || arg_index >= call->arg_count ||
         !call->arguments)
         return false;
-    XrType *function_type = xa_analyzer_get_node_type(pass->analyzer, call->callee);
-    XrType *arg_type = xa_analyzer_get_node_type(pass->analyzer, call->arguments[arg_index]);
+    XrType *function_type = memory_expr_type(pass, call->callee);
+    XrType *arg_type = memory_expr_type(pass, call->arguments[arg_index]);
     return function_type && XR_TYPE_IS_FUNCTION(function_type) && arg_type &&
            XR_TYPE_IS_SLICE(arg_type) &&
            xr_type_function_param_mode(function_type, arg_index) == XR_PARAM_READ &&
@@ -392,7 +423,7 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     bool named_contract = false;
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         receiver = call->callee->as.member_access.object;
-        XrType *receiver_type = xa_analyzer_get_node_type(scan->pass->analyzer, receiver);
+        XrType *receiver_type = memory_expr_type(scan->pass, receiver);
         builtin = memory_builtin_method(receiver_type, call->callee->as.member_access.name);
         XaMemoryRootRef root;
         if (builtin && memory_root_for_expr(scan->row, receiver, &root))
@@ -409,9 +440,11 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
 
     XaSymbol *callee_symbol = memory_call_symbol(scan->pass, call->callee);
     const XaMemoryEffectSummary *callee = memory_callee_summary(scan->pass, callee_symbol);
+    bool compiler_builtin_function =
+        callee_symbol && callee_symbol->is_builtin && callee_symbol->kind == XA_SYM_FUNCTION;
     if (callee) {
         memory_instantiate_callee(scan, callee, call, receiver);
-    } else if (!builtin && !named_contract &&
+    } else if (!builtin && !named_contract && !compiler_builtin_function &&
                memory_call_has_visible_root(scan->row, call, receiver)) {
         /* Unknown dispatch is fail-closed per visible root.  A read Slice argument is the one
          * exception: the function type itself forbids descriptor/owner mutation, and safe Slice

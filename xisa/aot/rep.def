@@ -190,7 +190,7 @@
 
 (define-aot-rep slice
   :c-type "xr_span_t"
-  :size 32
+  :size 16
   :align 8
   :signed no
   :integer no

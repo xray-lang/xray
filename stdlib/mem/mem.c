@@ -295,18 +295,11 @@ static XrValue mem_buffer_borrow_ptr(XrVMRuntime *isolate, XrValue self, XrValue
 static XrValue mem_buffer_bytes_view(XrVMRuntime *isolate, XrValue self, bool readonly) {
     XrMemBufferBody *buf = mem_buffer_body(isolate, self);
     if (!buf)
-        return xr_span_ref(NULL);
+        return xr_span_ref_typed(NULL, XR_ELEM_U8, 1, 0, 0, readonly ? XR_SLICE_VIEW_READONLY : 0);
     XrSliceView *span = readonly ? &buf->readonly_span_cache : &buf->mutable_span_cache;
     span->data = buf->data;
     span->length = buf->length;
-    span->elem_type = XR_ELEM_U8;
-    span->elem_size = 1;
-    span->elem_tid = 0;
-    span->contains_refs = 0;
-    span->layout_id = 0;
-    span->reserved = readonly ? XR_SLICE_VIEW_READONLY : 0;
-    span->guard = XR_TO_PTR(self);
-    return xr_span_ref(span);
+    return xr_span_ref_typed(span, XR_ELEM_U8, 1, 0, 0, readonly ? XR_SLICE_VIEW_READONLY : 0);
 }
 
 static XrValue mem_buffer_as_bytes(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {

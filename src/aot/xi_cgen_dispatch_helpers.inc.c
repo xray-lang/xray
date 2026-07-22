@@ -5359,13 +5359,7 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
      * optimization and introduce a spurious runtime boundary. */
     fprintf(out, "((xr_span_t){.data = (void *)(");
     emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
-    fprintf(out,
-            "), .length = INT64_C(%u), .guard = NULL, "
-            ".elem_type = xr_native_type_to_elem_type(%u), "
-            ".elem_size = (uint16_t)sizeof(%s), .layout_id = 0, .elem_tid = 0, "
-            ".contains_refs = %u, .flags = 0})",
-            (unsigned) fixed.count, (unsigned) fixed.native_type, fixed.ctype,
-            fixed.native_type == XR_NATIVE_VALUE ? 1u : 0u);
+    fprintf(out, "), .length = INT64_C(%u)})", (unsigned) fixed.count);
     return true;
 }
 
@@ -5385,8 +5379,19 @@ static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                      "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
                      "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG); ");
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            CgArrayElemInfo elem;
+            if (!cg_span_elem_info_from_value(ctx, v->args[0], &elem) || !elem.ctype) {
+                cg_ctx_set_error(ctx);
+                emit_codegen_abort_expr(out);
+                return;
+            }
             fprintf(out, "xrt_span_from_span_slice(");
             emit_vref(out, v->args[0]);
+            fprintf(out,
+                    ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end), "
+                    "(uint16_t)sizeof(%s)); })",
+                    elem.ctype);
+            return;
         } else {
             fprintf(out, "xrt_span_from_array_slice(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -5408,12 +5413,8 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) f;
     (void) prefix;
     XR_DCHECK(v && v->nargs == 3, "xicgen_slice_from_ptr: need pointer, count, owner");
-    uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
     uint16_t elem_size = (uint16_t) ((v->aux_int >> 8) & 0xffff);
-    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 24) & 0xff);
     uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
-    uint16_t layout_marker = v->aux ? 1u : 0u;
-    bool writable = (v->aux_int & XI_SLICE_FROM_PTR_AUX_MUTABLE) != 0;
     fprintf(out, "({ void *_p = ");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, "; int64_t _n = ");
@@ -5429,13 +5430,8 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             "if (XR_UNLIKELY(_n > 0 && (uint64_t)_n > UINTPTR_MAX / UINT16_C(%u))) "
             "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
             "\"mem.slice<T>() byte range overflows address space\"); "
-            "(xr_span_t){.data = _p, .length = _n, .guard = NULL, .elem_type = (uint8_t)%u, "
-            ".elem_size = (uint16_t)%u, .layout_id = (uint16_t)%u, .elem_tid = (uint8_t)%u, "
-            ".contains_refs = 0, "
-            ".flags = %s}; })",
-            (unsigned) alignment, (unsigned) elem_size, (unsigned) elem_type, (unsigned) elem_size,
-            (unsigned) layout_marker, (unsigned) elem_tid,
-            writable ? "0" : "XRT_SLICE_FLAG_READONLY");
+            "(xr_span_t){.data = _p, .length = _n}; })",
+            (unsigned) alignment, (unsigned) elem_size);
 }
 
 static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -5828,17 +5824,26 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         /* copy(x): the sole explicit deep-copy operation. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            CgArrayElemInfo copy_info;
+            if (!cg_span_elem_info_from_value(ctx, v->args[0], &copy_info) || !copy_info.ctype ||
+                !copy_info.elem_name) {
+                cg_ctx_set_error(ctx);
+                emit_codegen_abort_expr(out);
+                return;
+            }
             if (cg_value_plan_is_span_aggregate(ctx, v)) {
-                fprintf(out, "xrt_span_to_owned_span(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ")");
+                /* Slice is always a borrowed data+length view.  copy(Slice) materializes
+                 * Array<T>; an owned Slice result would hide an untracked owner root. */
+                cg_ctx_set_error(ctx);
+                emit_codegen_abort_expr(out);
                 return;
             }
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
                                                              cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "xrt_span_to_owned_array(");
             emit_vref(out, v->args[0]);
-            fprintf(out, ")");
+            fprintf(out, ", (uint8_t)%s, (uint16_t)sizeof(%s), UINT8_C(0), UINT8_C(%u))",
+                    copy_info.elem_name, copy_info.ctype, copy_info.rep == XR_REP_TAGGED ? 1u : 0u);
             emit_conversion_suffix(out, conv_suffix);
             return;
         }
@@ -11480,10 +11485,6 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
-        }
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
@@ -11519,10 +11520,6 @@ static bool xicgen_emit_byte_slice_float_store(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
-        }
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_F64);
@@ -11766,10 +11763,6 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_FILL, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
-        }
         fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || (_s.length > 0 && !_s.data))) "
                      "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
                      "XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG); if (_s.length > 0) ");
@@ -11813,7 +11806,7 @@ static bool xicgen_emit_byte_slice_expr(XiCgenCtx *ctx, FILE *out, const XiValue
                      "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
                      "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG); xrt_span_from_span_slice(");
         emit_span_ref_expr(out, slice->args[0]);
-        fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end)); })");
+        fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end), UINT16_C(1)); })");
         return true;
     }
     if (cg_span_value_u8_info(ctx, arg, NULL)) {
@@ -11862,10 +11855,6 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             emit_codegen_abort_expr(out);
         }
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (xrt_span_is_readonly(_dst)) xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
-                         "XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
-        }
         fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
                      "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
                      "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
@@ -12053,10 +12042,6 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         fprintf(out, "; int64_t _count = ");
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_REPEAT, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (xrt_span_is_readonly(_span)) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); ");
-        }
         fprintf(out, "if (XR_UNLIKELY(_span.length < 0 || _dst_offset < 0 || _distance <= 0 || "
                      "_count < 0 || _distance > _dst_offset || _dst_offset > _span.length || "
                      "_count > _span.length - _dst_offset || (_count > 0 && !_span.data))) "
@@ -12089,6 +12074,11 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                            fixed_count >= 0;
     CgArrayElemInfo elem;
     bool has_static_elem = cg_span_elem_info_from_value(ctx, v->args[0], &elem) && elem.ctype;
+    if (!has_static_elem) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out, "({ xr_span_t _src = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _start = ");
@@ -12109,10 +12099,7 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
             fprintf(out,
                     "XR_ASSUME(_src.data != NULL); _out.data = (void *)((uint8_t *)_src.data + "
                     "(size_t)_start * ");
-            if (has_static_elem)
-                fprintf(out, "sizeof(%s)", elem.ctype);
-            else
-                fprintf(out, "(size_t)_src.elem_size");
+            fprintf(out, "sizeof(%s)", elem.ctype);
             fprintf(out, "); ");
         }
         fprintf(out, "_out.length = INT64_C(%" PRId64 "); _out; })", fixed_count);
@@ -12130,10 +12117,7 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                  "_start <= _src.length && _count <= _src.length - _start); "
                  "xr_span_t _out = _src; _out.data = (_src.data && _count > 0) ? "
                  "(void *)((uint8_t *)_src.data + (size_t)_start * ");
-    if (has_static_elem)
-        fprintf(out, "sizeof(%s)", elem.ctype);
-    else
-        fprintf(out, "(size_t)_src.elem_size");
+    fprintf(out, "sizeof(%s)", elem.ctype);
     fprintf(out, ") : _src.data; _out.length = _count; _out; })");
 }
 
@@ -12142,6 +12126,12 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     (void) f;
     (void) prefix;
     const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, v, XAOT_SLICE_ACCESS_SLICE_AS_BYTES);
+    CgArrayElemInfo info;
+    if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (plan && (plan->eliminated_checks & XAOT_SLICE_DROP_HELPER) == XAOT_SLICE_DROP_HELPER) {
         bool overflow_check_dropped =
             (plan->eliminated_checks & XAOT_SLICE_DROP_OVERFLOW) == XAOT_SLICE_DROP_OVERFLOW;
@@ -12149,19 +12139,18 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; if (XR_UNLIKELY(_s.length < 0");
         if (!overflow_check_dropped)
-            fprintf(out, " || (_s.elem_size > 0 && _s.length > INT64_MAX / (int64_t)_s.elem_size)");
-        fprintf(out, ")) xrt_throw_error("
-                     "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.asArray<byte>() byte length overflow\"); "
-                     "xr_span_t _out = _s; _out.length = _s.length * (int64_t)_s.elem_size; "
-                     "_out.elem_type = XR_ELEM_U8; _out.elem_size = 1; _out.layout_id = 0; "
-                     "_out.elem_tid = 0; "
-                     "_out.contains_refs = 0; _out.flags = _s.flags & XRT_SLICE_FLAG_READONLY; "
-                     "_out; })");
+            fprintf(out, " || _s.length > INT64_MAX / (int64_t)sizeof(%s)", info.ctype);
+        fprintf(out,
+                ")) xrt_throw_error("
+                "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.asArray<byte>() byte length overflow\"); "
+                "xr_span_t _out = _s; _out.length = _s.length * (int64_t)sizeof(%s); "
+                "_out; })",
+                info.ctype);
         return;
     }
     fprintf(out, "xrt_span_as_bytes_checked_raw(");
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, ")");
+    fprintf(out, ", (uint16_t)sizeof(%s), true)", info.ctype);
 }
 
 static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -12195,23 +12184,11 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; ");
-    if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_FILL, XAOT_SLICE_DROP_READONLY)) {
-        fprintf(
-            out,
-            "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) "
-            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Slice\"); ");
-    }
-    if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_FILL,
-                            XAOT_SLICE_DROP_TYPE | XAOT_SLICE_DROP_POD)) {
-        fprintf(out,
-                "if (XR_UNLIKELY(_s.elem_type != %s || _s.elem_size != "
-                "(uint8_t)sizeof(%s))) xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                "\"Slice.fill(value) element type mismatch\"); ",
-                info.elem_name, info.ctype);
-    }
-    fprintf(out, "if (XR_UNLIKELY(_s.length < 0 || _s.length > INT64_MAX / "
-                 "(int64_t)_s.elem_size)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                 "\"Slice.fill(value) byte length overflow\"); ");
+    fprintf(out,
+            "if (XR_UNLIKELY(_s.length < 0 || _s.length > INT64_MAX / "
+            "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+            "\"Slice.fill(value) byte length overflow\"); ",
+            info.ctype);
     fprintf(out, "if (XR_UNLIKELY(_s.length > 0 && !_s.data)) "
                  "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
                  "\"Slice.fill(value) range out of bounds\"); ");
@@ -12241,11 +12218,17 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     }
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+        CgArrayElemInfo helper_info;
+        if (!cg_span_elem_info_from_value(ctx, v->args[0], &helper_info) || !helper_info.ctype) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return;
+        }
         fprintf(out, "xrt_span_copy_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_span_ref_expr(out, v->args[1]);
-        fprintf(out, ")");
+        fprintf(out, ", (uint16_t)sizeof(%s))", helper_info.ctype);
         return;
     }
     CgArrayElemInfo info;
@@ -12261,20 +12244,6 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         fprintf(out, "; xr_span_t _src = ");
         emit_span_ref_expr(out, v->args[1]);
         fprintf(out, "; ");
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_READONLY)) {
-            fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_dst))) xrt_throw_error("
-                         "XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Slice\"); ");
-        }
-        if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY,
-                                XAOT_SLICE_DROP_TYPE | XAOT_SLICE_DROP_POD)) {
-            fprintf(out,
-                    "if (XR_UNLIKELY(_dst.elem_type != %s || _src.elem_type != %s || "
-                    "_dst.elem_size != (uint8_t)sizeof(%s) || "
-                    "_src.elem_size != (uint8_t)sizeof(%s))) "
-                    "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                    "\"Slice.copyFrom(src) element type mismatch\"); ",
-                    info.elem_name, info.elem_name, info.ctype, info.ctype);
-        }
         fprintf(out,
                 "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
                 "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
@@ -12309,7 +12278,13 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_span_ref_expr(out, v->args[1]);
-    fprintf(out, ")");
+    CgArrayElemInfo fallback_info;
+    if (!cg_span_elem_info_from_value(ctx, v->args[0], &fallback_info) || !fallback_info.ctype) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, ", (uint16_t)sizeof(%s))", fallback_info.ctype);
 }
 
 static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -12324,11 +12299,17 @@ static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
     CgArrayElemInfo info;
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+        if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
         fprintf(out, "xrt_span_compare_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_span_ref_expr(out, v->args[1]);
-        fprintf(out, ")");
+        fprintf(out, ", (uint16_t)sizeof(%s))", info.ctype);
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
@@ -12368,7 +12349,13 @@ static void xicgen_span_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_span_ref_expr(out, v->args[1]);
-    fprintf(out, ")");
+    if (!cg_span_elem_info_from_value(ctx, v->args[0], &info) || !info.ctype) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    fprintf(out, ", (uint16_t)sizeof(%s))", info.ctype);
     emit_conversion_suffix(out, conv_suffix);
 }
 
@@ -12409,12 +12396,8 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
                     "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG); ",
                     (unsigned) alignment);
         }
-        fprintf(out,
-                "xr_span_t _out = _s; _out.length = _s.length / (int64_t)%u; _out.elem_type = "
-                "(uint8_t)%u; _out.elem_size = (uint16_t)%u; _out.layout_id = (uint16_t)%u; "
-                "_out.elem_tid = (uint8_t)%u; _out.contains_refs = 0; _out; })",
-                (unsigned) elem_size, (unsigned) elem_type, (unsigned) elem_size,
-                (unsigned) layout_marker, (unsigned) elem_tid);
+        fprintf(out, "xr_span_t _out = _s; _out.length = _s.length / (int64_t)%u; _out; })",
+                (unsigned) elem_size);
         return;
     }
     fprintf(out, "xrt_span_reinterpret_checked_raw(");

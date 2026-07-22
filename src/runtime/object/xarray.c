@@ -1117,15 +1117,19 @@ bool xr_byte_array_append_from_span(XrArray *dst, const void *src_data, int64_t 
 
     bool aliases_dst = false;
     int64_t src_offset = 0;
-    if (src_length > 0 && src_guard == dst && dst->data) {
+    if (src_length > 0 && dst->data) {
         const uint8_t *base = (const uint8_t *) dst->data;
         const uint8_t *src = (const uint8_t *) src_data;
-        if (src < base || src > base + dst->length || src_length > dst->length)
+        if (src >= base && src <= base + dst->length) {
+            if (src_length > dst->length)
+                return false;
+            src_offset = (int64_t) (src - base);
+            if (src_offset > dst->length - src_length)
+                return false;
+            aliases_dst = true;
+        } else if (src_guard == dst) {
             return false;
-        src_offset = (int64_t) (src - base);
-        if (src_offset > dst->length - src_length)
-            return false;
-        aliases_dst = true;
+        }
     }
 
     int64_t old_length = dst->length;

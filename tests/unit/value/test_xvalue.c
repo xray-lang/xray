@@ -315,6 +315,26 @@ TEST(value_sizeof) {
     ASSERT_EQ_INT((int) sizeof(XrValue), 16);
 }
 
+TEST(value_slice_body_is_two_words_and_metadata_stays_in_descriptor) {
+    XrSliceView slice = {
+        .data = (void *) (uintptr_t) UINT64_C(0x1000),
+        .length = 7,
+    };
+    XrValue value = xr_span_ref_typed(&slice, 4, 8, 9, 23,
+                                      XR_SLICE_VIEW_READONLY | XR_SLICE_VIEW_CONTAINS_REFS);
+
+    ASSERT_EQ_INT((int) sizeof(XrSliceView), 16);
+    ASSERT_TRUE(XR_IS_SLICE_REF(value));
+    ASSERT_FALSE(XR_IS_ARRAY_REF(value));
+    ASSERT_EQ_PTR(XR_TO_SLICE_REF(value), &slice);
+    ASSERT_EQ_INT((int) XR_SLICE_REF_ELEM_TYPE(value), 4);
+    ASSERT_EQ_INT((int) XR_SLICE_REF_ELEM_SIZE(value), 8);
+    ASSERT_EQ_INT((int) XR_SLICE_REF_ELEM_TID(value), 9);
+    ASSERT_EQ_INT((int) XR_SLICE_REF_LAYOUT_ID(value), 23);
+    ASSERT_TRUE(XR_SLICE_REF_IS_READONLY(value));
+    ASSERT_TRUE(XR_SLICE_REF_CONTAINS_REFS(value));
+}
+
 TEST(value_memset_zero_is_null) {
     // memset to zero should produce null (tag=0 = XR_TAG_NULL)
     XrValue v;
@@ -407,6 +427,7 @@ static void run_all_tests(void) {
     RUN_TEST(value_tagged_union_integrity);
     RUN_TEST(value_float_precision);
     RUN_TEST(value_sizeof);
+    RUN_TEST(value_slice_body_is_two_words_and_metadata_stays_in_descriptor);
     RUN_TEST(value_memset_zero_is_null);
 
     RUN_TEST_SUITE("Numeric Type Checks");

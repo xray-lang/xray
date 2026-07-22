@@ -251,8 +251,8 @@ static bool string_bytes_arg(XrValue *args, int argc, const uint8_t **data, size
         XrSliceView *span = XR_TO_SLICE_REF(args[0]);
         if (!span)
             return false;
-        return string_materialize_bytes(span->data, span->length, span->elem_type, data, len,
-                                        owned);
+        return string_materialize_bytes(span->data, span->length, XR_SLICE_REF_ELEM_TYPE(args[0]),
+                                        data, len, owned);
     }
     if (!XR_IS_ARRAY(args[0]))
         return false;

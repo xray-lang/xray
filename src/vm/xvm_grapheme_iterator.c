@@ -40,14 +40,6 @@ bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *o
 
     out_span->data = (void *) ((uint8_t *) source->data + range.start);
     out_span->length = (int64_t) (range.end - range.start);
-    out_span->elem_type = XR_ELEM_U8;
-    out_span->elem_size = 1;
-    out_span->elem_tid = 0;
-    out_span->contains_refs = 0;
-    out_span->layout_id = 0;
-    out_span->reserved = XR_SLICE_VIEW_READONLY;
-    /* The iterator, not the Slice value, owns the source root. */
-    out_span->guard = NULL;
     if (out_range)
         *out_range = range;
     return true;

@@ -1101,6 +1101,41 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     setup_pool();
 }
 
+TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "fn keepResult(dst: ref Slice<uint32>) -> int {\n"
+                         "  var filled: Slice<uint32> = dst.fill(7)\n"
+                         "  return len(filled)\n"
+                         "}\n"
+                         "fn discardResult(dst: ref Slice<uint32>) -> int {\n"
+                         "  dst.fill(0)\n"
+                         "  return len(dst)\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "slice_mutator_memory_effect.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    const XaMemoryEffectSummary *keep = analyzer_function_memory_effect_summary(a, "keepResult");
+    const XaMemoryEffectSummary *discard =
+        analyzer_function_memory_effect_summary(a, "discardResult");
+    ASSERT(keep && discard);
+    ASSERT(xa_memory_effect_summary_is_complete(keep));
+    ASSERT(xa_memory_effect_summary_is_complete(discard));
+    const XaMemoryRootEffect *keep_root = memory_effect_root(keep, XA_MEMORY_ROOT_PARAM, 0);
+    const XaMemoryRootEffect *discard_root = memory_effect_root(discard, XA_MEMORY_ROOT_PARAM, 0);
+    ASSERT(keep_root && keep_root->write_count == 1);
+    ASSERT(discard_root && discard_root->write_count == 1);
+    ASSERT(keep_root->invalidation == XA_MEMORY_NEVER_INVALIDATES);
+    ASSERT(discard_root->invalidation == XA_MEMORY_NEVER_INVALIDATES);
+    ASSERT(!keep_root->descriptor_rebind && !discard_root->descriptor_rebind);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -5979,6 +6014,7 @@ int main(void) {
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
+    RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);

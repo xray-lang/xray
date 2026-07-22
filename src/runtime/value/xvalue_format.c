@@ -89,14 +89,16 @@ static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int d
     xr_strbuf_append_cstr(sb, "]", 1);
 }
 
-static void format_span(XrVMRuntime *isolate, XrStrBuf *sb, XrSliceView *span, int depth) {
+static void format_span(XrVMRuntime *isolate, XrStrBuf *sb, XrValue value, int depth) {
+    XrSliceView *span = XR_TO_SLICE_REF(value);
     xr_strbuf_append_cstr(sb, "[", 1);
     int64_t len = span ? span->length : 0;
     int64_t limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;
     for (int64_t i = 0; i < limit; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
-        xr_value_to_strbuf(isolate, sb, xr_typed_get(span->data, (int32_t) i, span->elem_type),
+        xr_value_to_strbuf(isolate, sb,
+                           xr_typed_get(span->data, (int32_t) i, XR_SLICE_REF_ELEM_TYPE(value)),
                            depth + 1);
     }
     if (len > limit) {
@@ -267,7 +269,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
         return;
     }
     if (XR_IS_SLICE_REF(val)) {
-        format_span(isolate, sb, XR_TO_SLICE_REF(val), depth);
+        format_span(isolate, sb, val, depth);
         return;
     }
 

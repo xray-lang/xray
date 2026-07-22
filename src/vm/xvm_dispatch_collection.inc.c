@@ -48,10 +48,11 @@
         }                                                                                          \
     } while (0)
 
-#define VM_SLICE_CHECK_STORABLE(span, val)                                                         \
+#define VM_SLICE_CHECK_STORABLE(span_value, val)                                                   \
     do {                                                                                           \
-        if (!xr_typed_value_is_storable((val), (span)->elem_type)) {                               \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (span)->elem_type == XR_ELEM_RUNE               \
+        uint8_t _slice_elem_type = XR_SLICE_REF_ELEM_TYPE(span_value);                             \
+        if (!xr_typed_value_is_storable((val), _slice_elem_type)) {                                \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, _slice_elem_type == XR_ELEM_RUNE                \
                                                        ? "Slice<char> element must be char"        \
                                                        : "typed span element must be numeric");    \
         }                                                                                          \
@@ -61,22 +62,20 @@
     ((XrSliceView *) (vm_ctx->struct_areas[VM_FRAME_COUNT - 1] +                                   \
                       (uint16_t) (XR_TO_INT(slot_value)) * 16u))
 
-#define VM_SLICE_GET_ELEMENT(span, idx)                                                            \
-    ((span)->layout_id != 0                                                                        \
-         ? xr_aggregate_ref((uint8_t *) (span)->data + (size_t) (idx) * (span)->elem_size,         \
-                            (span)->layout_id)                                                     \
-         : xr_typed_get((span)->data, (int32_t) (idx), (span)->elem_type))
+#define VM_SLICE_GET_ELEMENT(span_value, span, idx)                                                \
+    (XR_SLICE_REF_LAYOUT_ID(span_value) != 0                                                       \
+         ? xr_aggregate_ref((uint8_t *) (span)->data +                                             \
+                                (size_t) (idx) * XR_SLICE_REF_ELEM_SIZE(span_value),               \
+                            XR_SLICE_REF_LAYOUT_ID(span_value))                                    \
+         : xr_typed_get((span)->data, (int32_t) (idx), XR_SLICE_REF_ELEM_TYPE(span_value)))
 
-#define VM_SLICE_SET_ELEMENT(span, idx, val)                                                       \
+#define VM_SLICE_SET_ELEMENT(span_value, span, idx, val)                                           \
     do {                                                                                           \
-        if (((span)->reserved & XR_SLICE_VIEW_READONLY) != 0) {                                    \
+        if (XR_SLICE_REF_IS_READONLY(span_value)) {                                                \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");      \
         }                                                                                          \
-        if (xr_typed_set((span)->data, (int32_t) (idx), (val), (span)->elem_type) &&               \
-            (span)->contains_refs && (span)->guard) {                                              \
-            XrArray *_span_owner = (XrArray *) (span)->guard;                                      \
-            XR_ARRAY_MARK_REFS(_span_owner, (val));                                                \
-        }                                                                                          \
+        (void) xr_typed_set((span)->data, (int32_t) (idx), (val),                                  \
+                            XR_SLICE_REF_ELEM_TYPE(span_value));                                   \
     } while (0)
 
 vmcase(OP_NEWARRAY) {
@@ -1080,14 +1079,7 @@ vmcase(OP_STRING_BYTES_SLICE) {
     XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = str ? (void *) str->data : NULL;
     span->length = str ? str->length : 0;
-    span->elem_type = XR_ELEM_U8;
-    span->elem_size = 1;
-    span->elem_tid = 0;
-    span->contains_refs = 0;
-    span->layout_id = 0;
-    span->reserved = XR_SLICE_VIEW_READONLY;
-    span->guard = str;
-    R(a) = xr_span_ref(span);
+    R(a) = xr_span_ref_typed(span, XR_ELEM_U8, 1, 0, 0, XR_SLICE_VIEW_READONLY);
     vmbreak;
 }
 
@@ -1102,12 +1094,12 @@ vmcase(OP_STRING_BYTES_SLICE) {
             }                                                                                      \
             (out_data) = _span->data;                                                              \
             (out_length) = _span->length;                                                          \
-            (out_elem_type) = _span->elem_type;                                                    \
-            (out_elem_size) = _span->elem_size;                                                    \
-            (out_elem_tid) = _span->elem_tid;                                                      \
-            (out_contains_refs) = _span->contains_refs;                                            \
-            (out_reserved) = _span->reserved;                                                      \
-            (out_guard) = _span->guard;                                                            \
+            (out_elem_type) = XR_SLICE_REF_ELEM_TYPE(_span_value);                                 \
+            (out_elem_size) = XR_SLICE_REF_ELEM_SIZE(_span_value);                                 \
+            (out_elem_tid) = XR_SLICE_REF_ELEM_TID(_span_value);                                   \
+            (out_contains_refs) = XR_SLICE_REF_CONTAINS_REFS(_span_value);                         \
+            (out_reserved) = XR_SLICE_REF_IS_READONLY(_span_value) ? XR_SLICE_VIEW_READONLY : 0;   \
+            (out_guard) = NULL;                                                                    \
         } else if (XR_IS_ARRAY(_span_value)) {                                                     \
             XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
             if (!_arr) {                                                                           \
@@ -1145,8 +1137,7 @@ vmcase(OP_SLICE_AS_BYTES) {
                   guard, "Slice.asArray<byte>() expects Slice");
     (void) elem_tid;
     (void) contains_refs;
-    uint16_t layout_id =
-        XR_IS_SLICE_REF(R(b)) && XR_TO_SLICE_REF(R(b)) ? XR_TO_SLICE_REF(R(b))->layout_id : 0;
+    uint16_t layout_id = XR_IS_SLICE_REF(R(b)) ? XR_SLICE_REF_LAYOUT_ID(R(b)) : 0;
     if ((elem_type == XR_ELEM_ANY && layout_id == 0) || elem_type >= XR_ELEM_COUNT ||
         elem_size == 0) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
@@ -1158,14 +1149,8 @@ vmcase(OP_SLICE_AS_BYTES) {
     XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = data;
     span->length = length * (int64_t) elem_size;
-    span->elem_type = XR_ELEM_U8;
-    span->elem_size = 1;
-    span->elem_tid = 0;
-    span->contains_refs = 0;
-    span->layout_id = 0;
-    span->reserved = reserved & XR_SLICE_VIEW_READONLY;
-    span->guard = guard;
-    R(a) = xr_span_ref(span);
+    R(a) =
+        xr_span_ref_typed(span, XR_ELEM_U8, 1, 0, 0, (uint8_t) (reserved & XR_SLICE_VIEW_READONLY));
     vmbreak;
 }
 
@@ -1388,14 +1373,9 @@ vmcase(OP_SLICE_REINTERPRET) {
     XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = data;
     span->length = length / (int64_t) target_elem_size;
-    span->elem_type = target_elem_type;
-    span->elem_size = target_elem_size;
-    span->elem_tid = target_elem_tid;
-    span->contains_refs = 0;
-    span->layout_id = target_layout ? target_layout->layout_id : 0;
-    span->reserved = reserved & XR_SLICE_VIEW_READONLY;
-    span->guard = guard;
-    R(a) = xr_span_ref(span);
+    R(a) = xr_span_ref_typed(span, target_elem_type, target_elem_size, target_elem_tid,
+                             target_layout ? target_layout->layout_id : 0,
+                             (uint8_t) (reserved & XR_SLICE_VIEW_READONLY));
     vmbreak;
 }
 
@@ -1500,13 +1480,13 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _span_value = (value);                                                             \
         if (XR_IS_SLICE_REF(_span_value)) {                                                        \
             XrSliceView *_span = XR_TO_SLICE_REF(_span_value);                                     \
-            if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
+            if (!_span || XR_SLICE_REF_ELEM_TYPE(_span_value) != XR_ELEM_U8) {                     \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
             }                                                                                      \
             (out_data) = _span->data;                                                              \
             (out_length) = _span->length;                                                          \
-            (out_readonly) = ((_span->reserved & XR_SLICE_VIEW_READONLY) != 0);                    \
-            (out_elem_type) = _span->elem_type;                                                    \
+            (out_readonly) = XR_SLICE_REF_IS_READONLY(_span_value);                                \
+            (out_elem_type) = XR_SLICE_REF_ELEM_TYPE(_span_value);                                 \
         } else if (XR_IS_ARRAY(_span_value)) {                                                     \
             XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
             if (!_arr || _arr->elem_type != XR_ELEM_U8) {                                          \
@@ -2193,7 +2173,7 @@ vmcase(OP_INDEX_GET) {
         XrSliceView *span = XR_TO_SLICE_REF(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         if (span && (uint64_t) idx < (uint64_t) span->length) {
-            R(a) = VM_SLICE_GET_ELEMENT(span, idx);
+            R(a) = VM_SLICE_GET_ELEMENT(obj_val, span, idx);
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                              "span index out of range: %lld (length %d)", (long long) idx,
@@ -2372,8 +2352,8 @@ vmcase(OP_INDEX_SET) {
                              "span index out of range: %lld (length %d)", (long long) idx,
                              (int) (span ? span->length : 0));
         }
-        VM_SLICE_CHECK_STORABLE(span, val);
-        VM_SLICE_SET_ELEMENT(span, idx, val);
+        VM_SLICE_CHECK_STORABLE(obj_val, val);
+        VM_SLICE_SET_ELEMENT(obj_val, span, idx, val);
         vmbreak;
     }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
@@ -2473,14 +2453,8 @@ vmcase(OP_SLICE) {
                          ? (uint8_t *) arr->data + (size_t) start * arr->elem_size
                          : (uint8_t *) arr->data;
         span->length = end - start;
-        span->elem_type = arr->elem_type;
-        span->elem_size = arr->elem_size;
-        span->elem_tid = arr->elem_tid;
-        span->contains_refs = arr->contains_refs;
-        span->layout_id = 0;
-        span->reserved = 0;
-        span->guard = arr;
-        R(a) = xr_span_ref(span);
+        R(a) = xr_span_ref_typed(span, arr->elem_type, arr->elem_size, arr->elem_tid, 0,
+                                 arr->contains_refs ? XR_SLICE_VIEW_CONTAINS_REFS : 0);
         vmbreak;
     }
 
@@ -2499,14 +2473,10 @@ vmcase(OP_SLICE) {
                          ? (uint8_t *) source.ptr + (size_t) start * (size_t) elem_size
                          : (uint8_t *) source.ptr;
         span->length = end - start;
-        span->elem_type = xr_native_type_to_elem_type(native_type);
-        span->elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
-        span->elem_tid = 0;
-        span->contains_refs = span->elem_type == XR_ELEM_ANY;
-        span->layout_id = 0;
-        span->reserved = 0;
-        span->guard = NULL;
-        R(a) = xr_span_ref(span);
+        uint8_t slice_elem_type = xr_native_type_to_elem_type(native_type);
+        R(a) = xr_span_ref_typed(span, slice_elem_type,
+                                 elem_size ? elem_size : (uint8_t) sizeof(XrValue), 0, 0,
+                                 slice_elem_type == XR_ELEM_ANY ? XR_SLICE_VIEW_CONTAINS_REFS : 0);
         vmbreak;
     }
 
@@ -2517,19 +2487,16 @@ vmcase(OP_SLICE) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "slice-of-slice missing Slice frame slot");
         }
         xr_array_normalize_slice(src_span->length, &start, &end);
+        uint16_t elem_size = XR_SLICE_REF_ELEM_SIZE(source);
         XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
         span->data = (src_span->data && end > start)
-                         ? (uint8_t *) src_span->data + (size_t) start * src_span->elem_size
+                         ? (uint8_t *) src_span->data + (size_t) start * elem_size
                          : (uint8_t *) src_span->data;
         span->length = end - start;
-        span->elem_type = src_span->elem_type;
-        span->elem_size = src_span->elem_size;
-        span->elem_tid = src_span->elem_tid;
-        span->contains_refs = src_span->contains_refs;
-        span->layout_id = src_span->layout_id;
-        span->reserved = src_span->reserved;
-        span->guard = src_span->guard;
-        R(a) = xr_span_ref(span);
+        R(a) = xr_span_ref_typed(
+            span, XR_SLICE_REF_ELEM_TYPE(source), elem_size, XR_SLICE_REF_ELEM_TID(source),
+            XR_SLICE_REF_LAYOUT_ID(source),
+            (uint8_t) (source.flags & (XR_SLICE_VIEW_READONLY | XR_SLICE_VIEW_CONTAINS_REFS)));
         vmbreak;
     }
 
@@ -2565,10 +2532,14 @@ vmcase(OP_SLICE_WINDOW) {
     }
     XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
     *span = *src;
-    span->data = (src->data && count > 0) ? (uint8_t *) src->data + (size_t) start * src->elem_size
-                                          : (uint8_t *) src->data;
+    uint16_t elem_size = XR_SLICE_REF_ELEM_SIZE(R(b));
     span->length = count;
-    R(a) = xr_span_ref(span);
+    span->data = (src->data && count > 0) ? (uint8_t *) src->data + (size_t) start * elem_size
+                                          : (uint8_t *) src->data;
+    R(a) = xr_span_ref_typed(
+        span, XR_SLICE_REF_ELEM_TYPE(R(b)), elem_size, XR_SLICE_REF_ELEM_TID(R(b)),
+        XR_SLICE_REF_LAYOUT_ID(R(b)),
+        (uint8_t) (R(b).flags & (XR_SLICE_VIEW_READONLY | XR_SLICE_VIEW_CONTAINS_REFS)));
     vmbreak;
 }
 
@@ -2608,16 +2579,11 @@ vmcase(OP_SLICE_FROM_PTR) {
     XrSliceView *slice = VM_SLICE_SLOT(R(c + 1));
     slice->data = (void *) address;
     slice->length = count;
-    slice->elem_type = elem_type;
-    slice->elem_size = elem_size;
-    slice->elem_tid = elem_tid;
-    slice->contains_refs = 0;
-    slice->layout_id = layout ? layout->layout_id : 0;
-    if (layout_key != 0 && slice->layout_id == 0)
+    uint16_t layout_id = layout ? layout->layout_id : 0;
+    if (layout_key != 0 && layout_id == 0)
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
                          "mem.slice<T>() could not resolve canonical aggregate layout");
-    slice->reserved = writable ? 0 : XR_SLICE_VIEW_READONLY;
-    slice->guard = NULL;
-    R(a) = xr_span_ref(slice);
+    R(a) = xr_span_ref_typed(slice, elem_type, elem_size, elem_tid, layout_id,
+                             writable ? 0 : XR_SLICE_VIEW_READONLY);
     vmbreak;
 }

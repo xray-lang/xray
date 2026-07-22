@@ -107,18 +107,13 @@ static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
 }
 
 static inline xr_span_t xrt_buffer_bytes_view(XrValue value, int readonly) {
+    (void) readonly;
     xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     if (!buf)
         return xrt_span_empty();
     xr_span_t out = {0};
     out.data = buf->data;
     out.length = buf->length;
-    out.guard = buf;
-    out.elem_type = XR_ELEM_U8;
-    out.elem_size = 1;
-    out.elem_tid = 0;
-    out.contains_refs = 0;
-    out.flags = readonly ? XRT_SLICE_FLAG_READONLY : 0;
     return out;
 }
 

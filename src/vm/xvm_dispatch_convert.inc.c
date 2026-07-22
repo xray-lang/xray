@@ -331,8 +331,10 @@ vmcase(OP_COPY) {
     XrValue _src = R(b);
     if (XR_IS_SLICE_REF(_src)) {
         XrSliceView *span = XR_TO_SLICE_REF(_src);
-        if (!span || span->length < 0 || span->length > INT32_MAX ||
-            span->elem_type >= XR_ELEM_COUNT || (span->length > 0 && !span->data)) {
+        uint8_t elem_type = XR_SLICE_REF_ELEM_TYPE(_src);
+        uint16_t elem_size = XR_SLICE_REF_ELEM_SIZE(_src);
+        if (!span || span->length < 0 || span->length > INT32_MAX || elem_type >= XR_ELEM_COUNT ||
+            elem_size == 0 || (span->length > 0 && !span->data)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy length exceeds VM array limit");
         }
         XrArray *arr = NULL;
@@ -341,30 +343,29 @@ vmcase(OP_COPY) {
                                                        sizeof(XrArray), XR_TARRAY,
                                                        (uint8_t) storage_mode);
             if (arr) {
-                xr_array_init_inplace(arr, span->length > 0 ? (int) span->length : 0,
-                                      span->elem_type);
+                xr_array_init_inplace(arr, span->length > 0 ? (int) span->length : 0, elem_type);
                 XR_OBJ_SET_STORAGE(&arr->hdr, storage_mode);
                 if (storage_mode == XR_OBJ_STORAGE_SHARED)
                     xr_shared_set_refc(&arr->hdr, 1);
             }
         } else {
             arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, (int32_t) span->length,
-                                               (XrArrayElemType) span->elem_type);
+                                               (XrArrayElemType) elem_type);
         }
         if (!arr)
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy failed");
-        arr->elem_tid = span->elem_tid;
+        arr->elem_tid = XR_SLICE_REF_ELEM_TID(_src);
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *items = (XrValue *) span->data;
             for (int64_t idx = 0; idx < span->length; idx++)
                 xr_array_push(arr,
                               xr_deep_copy_explicit_to_coro(isolate, items[idx], VM_CURRENT_CORO));
-            arr->contains_refs = span->contains_refs;
+            arr->contains_refs = XR_SLICE_REF_CONTAINS_REFS(_src);
         } else {
             if (span->length > 0) {
                 if (!arr->data)
                     VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy failed");
-                memcpy(arr->data, span->data, (size_t) span->length * span->elem_size);
+                memcpy(arr->data, span->data, (size_t) span->length * elem_size);
             }
             arr->length = span->length;
         }

@@ -3710,8 +3710,14 @@ static void xa_check_call_memory_effect_actual(XaInferContext *ctx, AstNode *cal
         return;
     const XaMemoryRootEffect *effect = xa_call_memory_root_effect(summary, kind, index);
     bool incomplete = !xa_memory_effect_summary_is_complete(summary);
+    AstNode *typed_actual = xa_call_unwrap_grouping(actual);
+    if (typed_actual && typed_actual->type == AST_MOVE_EXPR)
+        typed_actual = xa_call_unwrap_grouping(typed_actual->as.move_expr.expr);
+    XrType *actual_type =
+        typed_actual ? xa_analyzer_get_node_type(ctx->analyzer, typed_actual) : NULL;
+    bool writes_through_slice = actual_type && actual_type->kind == XR_KIND_SLICE;
     bool conflicts =
-        incomplete || (effect && (effect->write_count > 0 || effect->descriptor_rebind ||
+        incomplete || (effect && ((!writes_through_slice && effect->descriptor_rebind) ||
                                   effect->relocation == XA_MEMORY_MAY_RELOCATE ||
                                   effect->shortening == XA_MEMORY_MAY_SHORTEN ||
                                   effect->invalidation == XA_MEMORY_INVALIDATES_VIEWS));

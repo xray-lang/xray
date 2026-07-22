@@ -201,40 +201,44 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 
 /* ========== Struct Ref / Frame-Local Slice Ref ========== */
 
-/* Reserved aggregate layout id for frame-local Slice values.
- * Real aggregate layout ids are allocated by the VM layout registry. Slice is
- * not a user aggregate: it reuses the aggregate-ref tag only to point at frame-owned
- * bytes without adding another XrValue tag. */
-#define XR_AGG_REF_SLICE_LAYOUT_ID UINT16_MAX
-
 typedef struct XrSliceView {
     void *data;
     int64_t length;
-    void *guard;
-    uint16_t elem_size;
-    uint16_t layout_id;
-    uint8_t elem_type;
-    uint8_t elem_tid;
-    uint8_t contains_refs;
-    uint8_t reserved;
 } XrSliceView;
 
-#define XR_SLICE_VIEW_READONLY (1u << 0)
+_Static_assert(sizeof(XrSliceView) == 16, "VM Slice value must be data + length");
+
+/* Aggregate-reference subkinds and VM-only Slice type evidence live in the
+ * existing XrValue descriptor, never in the public Slice value body. */
+#define XR_AGG_REF_FLAG_ARRAY UINT8_C(0x80)
+#define XR_AGG_REF_FLAG_SLICE UINT8_C(0x40)
+#define XR_SLICE_VIEW_READONLY UINT8_C(0x20)
+#define XR_SLICE_VIEW_CONTAINS_REFS UINT8_C(0x10)
 
 static inline bool xr_value_is_span_ref(XrValue v) {
-    return v.tag == XR_TAG_AGG_REF && v.ext == 0 && v.heap_type == XR_AGG_REF_SLICE_LAYOUT_ID;
+    return v.tag == XR_TAG_AGG_REF && (v.flags & XR_AGG_REF_FLAG_SLICE) != 0;
 }
 
-static inline XrValue xr_span_ref(XrSliceView *span) {
+static inline XrValue xr_span_ref_typed(XrSliceView *span, uint8_t elem_type, uint16_t elem_size,
+                                        uint8_t elem_tid, uint16_t layout_id, uint8_t slice_flags) {
     XrValue v = {0};
     v.tag = XR_TAG_AGG_REF;
-    v.heap_type = XR_AGG_REF_SLICE_LAYOUT_ID;
+    v.flags = (uint8_t) (XR_AGG_REF_FLAG_SLICE |
+                         (slice_flags & (XR_SLICE_VIEW_READONLY | XR_SLICE_VIEW_CONTAINS_REFS)));
+    v.heap_type = layout_id;
+    v.ext = (uint32_t) elem_size | ((uint32_t) elem_type << 16) | ((uint32_t) elem_tid << 24);
     v.ptr = span;
     return v;
 }
 
 #define XR_IS_SLICE_REF(v) xr_value_is_span_ref(v)
 #define XR_TO_SLICE_REF(v) ((XrSliceView *) ((v).ptr))
+#define XR_SLICE_REF_ELEM_SIZE(v) ((uint16_t) ((v).ext & UINT32_C(0xFFFF)))
+#define XR_SLICE_REF_ELEM_TYPE(v) ((uint8_t) (((v).ext >> 16) & UINT32_C(0xFF)))
+#define XR_SLICE_REF_ELEM_TID(v) ((uint8_t) (((v).ext >> 24) & UINT32_C(0xFF)))
+#define XR_SLICE_REF_LAYOUT_ID(v) ((v).heap_type)
+#define XR_SLICE_REF_IS_READONLY(v) (((v).flags & XR_SLICE_VIEW_READONLY) != 0)
+#define XR_SLICE_REF_CONTAINS_REFS(v) (((v).flags & XR_SLICE_VIEW_CONTAINS_REFS) != 0)
 
 /* Construct an aggregate ref: ptr points into frame struct_area,
  * heap_type is repurposed as layout_id. */
@@ -256,12 +260,13 @@ static inline void *xr_to_struct_ptr(XrValue v) {
 static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t elem_count) {
     XrValue v = {0};
     v.tag = XR_TAG_AGG_REF;
+    v.flags = XR_AGG_REF_FLAG_ARRAY;
     v.heap_type = 0;
     v.ext = ((uint32_t) elem_count << 8) | elem_native_type;
     v.ptr = ptr;
     return v;
 }
-#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
+#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && ((v).flags & XR_AGG_REF_FLAG_ARRAY) != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint32_t) ((v).ext >> 8))
 

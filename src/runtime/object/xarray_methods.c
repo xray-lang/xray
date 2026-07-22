@@ -214,14 +214,14 @@ static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
 static bool byte_slice_arg(XrValue value, const void **data, int64_t *length, const void **guard) {
     if (XR_IS_SLICE_REF(value)) {
         XrSliceView *span = XR_TO_SLICE_REF(value);
-        if (!span || span->elem_type != XR_ELEM_U8)
+        if (!span || XR_SLICE_REF_ELEM_TYPE(value) != XR_ELEM_U8)
             return false;
         if (data)
             *data = span->data;
         if (length)
             *length = span->length;
         if (guard)
-            *guard = span->guard;
+            *guard = NULL;
         return true;
     }
     if (XR_IS_ARRAY(value)) {

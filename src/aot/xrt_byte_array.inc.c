@@ -212,7 +212,7 @@ static inline int64_t xrt_byte_array_load_u64_le_checked_raw(xrt_array_t *a, int
 }
 
 static inline int xrt_byte_slice_range_ok(xr_span_t span, int64_t off, int64_t count) {
-    return span.data && xr_array_core_bytes_range_ok(span.length, span.elem_type, off, count);
+    return span.data && xr_array_core_bytes_range_ok(span.length, XR_ELEM_U8, off, count);
 }
 
 static inline int64_t xrt_endian_arg(XrValue value) {
@@ -233,11 +233,9 @@ static inline int64_t xrt_endian_arg(XrValue value) {
 
 static inline int64_t xrt_byte_slice_load_u16_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG);
     bool ok = false;
     uint16_t value =
-        xr_array_core_bytes_load_u16(span.data, span.length, span.elem_type, off, endian, &ok);
+        xr_array_core_bytes_load_u16(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG);
     return (int64_t) value;
@@ -245,11 +243,9 @@ static inline int64_t xrt_byte_slice_load_u16_checked_raw(xr_span_t span, int64_
 
 static inline int64_t xrt_byte_slice_load_u32_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG);
     bool ok = false;
     uint32_t value =
-        xr_array_core_bytes_load_u32(span.data, span.length, span.elem_type, off, endian, &ok);
+        xr_array_core_bytes_load_u32(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG);
     return (int64_t) value;
@@ -257,11 +253,9 @@ static inline int64_t xrt_byte_slice_load_u32_checked_raw(xr_span_t span, int64_
 
 static inline int64_t xrt_byte_slice_load_u64_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG);
     bool ok = false;
     uint64_t value =
-        xr_array_core_bytes_load_u64(span.data, span.length, span.elem_type, off, endian, &ok);
+        xr_array_core_bytes_load_u64(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG);
     return (int64_t) value;
@@ -269,11 +263,9 @@ static inline int64_t xrt_byte_slice_load_u64_checked_raw(xr_span_t span, int64_
 
 static inline double xrt_byte_slice_load_f32_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_RECEIVER_MSG);
     bool ok = false;
     float value =
-        xr_array_core_bytes_load_f32(span.data, span.length, span.elem_type, off, endian, &ok);
+        xr_array_core_bytes_load_f32(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_OOB_MSG);
     return (double) value;
@@ -281,11 +273,9 @@ static inline double xrt_byte_slice_load_f32_checked_raw(xr_span_t span, int64_t
 
 static inline double xrt_byte_slice_load_f64_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_RECEIVER_MSG);
     bool ok = false;
     double value =
-        xr_array_core_bytes_load_f64(span.data, span.length, span.elem_type, off, endian, &ok);
+        xr_array_core_bytes_load_f64(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_OOB_MSG);
     return value;
@@ -293,63 +283,39 @@ static inline double xrt_byte_slice_load_f64_checked_raw(xr_span_t span, int64_t
 
 static inline void xrt_byte_slice_store_u16_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_STORE_U16_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_store_u16(span.data, span.length, span.elem_type, off,
-                                       (uint16_t) value, endian))
+    if (!xr_array_core_bytes_store_u16(span.data, span.length, XR_ELEM_U8, off, (uint16_t) value,
+                                       endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_u32_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_STORE_U32_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_store_u32(span.data, span.length, span.elem_type, off,
-                                       (uint32_t) value, endian))
+    if (!xr_array_core_bytes_store_u32(span.data, span.length, XR_ELEM_U8, off, (uint32_t) value,
+                                       endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_u64_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_STORE_U64_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_store_u64(span.data, span.length, span.elem_type, off,
-                                       (uint64_t) value, endian))
+    if (!xr_array_core_bytes_store_u64(span.data, span.length, XR_ELEM_U8, off, (uint64_t) value,
+                                       endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_f32_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_STORE_F32_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_store_f32(span.data, span.length, span.elem_type, off, (float) value,
+    if (!xr_array_core_bytes_store_f32(span.data, span.length, XR_ELEM_U8, off, (float) value,
                                        endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_F32_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_f64_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_STORE_F64_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_store_f64(span.data, span.length, span.elem_type, off, value, endian))
+    if (!xr_array_core_bytes_store_f64(span.data, span.length, XR_ELEM_U8, off, value, endian))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_F64_OOB_MSG);
 }
 
 static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_FILL_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     if (span.length > 0 && !span.data)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
     if (span.length > 0)
@@ -358,23 +324,13 @@ static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t 
 }
 
 static inline xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t src) {
-    if (dst.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COPY_RECEIVER_MSG);
-    if (src.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COPY_SOURCE_MSG);
-    if (xrt_span_is_readonly(dst))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_copy_from(dst.data, dst.length, dst.elem_type, src.data, src.length,
-                                       src.elem_type, 0, 0, src.length, false))
+    if (!xr_array_core_bytes_copy_from(dst.data, dst.length, XR_ELEM_U8, src.data, src.length,
+                                       XR_ELEM_U8, 0, 0, src.length, false))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
     return dst;
 }
 
 static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t right) {
-    if (left.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_RECEIVER_MSG);
-    if (right.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_OPERAND_MSG);
     int64_t n = left.length < right.length ? left.length : right.length;
     int cmp = 0;
     if (n > 0) {
@@ -394,13 +350,9 @@ static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span
 }
 
 static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
-    if (left.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_RECEIVER_MSG);
-    if (right.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_OPERAND_MSG);
     bool ok = false;
-    int64_t prefix = xr_array_core_bytes_common_prefix(
-        left.data, left.length, left.elem_type, right.data, right.length, right.elem_type, &ok);
+    int64_t prefix = xr_array_core_bytes_common_prefix(left.data, left.length, XR_ELEM_U8,
+                                                       right.data, right.length, XR_ELEM_U8, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
     return prefix;
@@ -408,12 +360,8 @@ static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, x
 
 static inline xr_span_t xrt_byte_slice_repeat_from_checked_raw(xr_span_t span, int64_t dst_offset,
                                                                int64_t distance, int64_t count) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REPEAT_RECEIVER_MSG);
-    if (xrt_span_is_readonly(span))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
-    if (!xr_array_core_bytes_repeat_from(span.data, span.length, span.elem_type, dst_offset,
-                                         distance, count))
+    if (!xr_array_core_bytes_repeat_from(span.data, span.length, XR_ELEM_U8, dst_offset, distance,
+                                         count))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG);
     return span;
 }
@@ -426,10 +374,7 @@ static inline xr_span_t xrt_byte_slice_from_value(XrValue recv, const char *mess
         return xrt_span_from_array_slice(recv, 0, arr->length);
     }
     if (recv.tag == XR_TAG_AGG_REF && recv.ptr && !XR_IS_ARRAY_REF(recv)) {
-        xr_span_t span = *(const xr_span_t *) recv.ptr;
-        if (span.elem_type != XR_ELEM_U8)
-            xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
-        return span;
+        return *(const xr_span_t *) recv.ptr;
     }
     xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
     return xrt_span_empty();
@@ -548,8 +493,6 @@ static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, i
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_checked_raw(xr_span_t span, int64_t off) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG);
     if (!xrt_byte_slice_range_ok(span, off, 2))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG);
     return xrt_byte_slice_load_u16_le_unchecked_raw(span, off);
@@ -561,8 +504,6 @@ static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, i
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_checked_raw(xr_span_t span, int64_t off) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG);
     if (!xrt_byte_slice_range_ok(span, off, 4))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG);
     return xrt_byte_slice_load_u32_le_unchecked_raw(span, off);
@@ -574,8 +515,6 @@ static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, i
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_checked_raw(xr_span_t span, int64_t off) {
-    if (span.elem_type != XR_ELEM_U8)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG);
     if (!xrt_byte_slice_range_ok(span, off, 8))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG);
     return xrt_byte_slice_load_u64_le_unchecked_raw(span, off);
@@ -632,7 +571,7 @@ static inline xrt_array_t *xrt_byte_array_repeat_from_raw(xrt_array_t *a, int64_
 
 static inline xrt_array_t *xrt_byte_array_append_from_span_slow_raw(xrt_array_t *dst,
                                                                     xr_span_t src) {
-    if (!dst || dst->elem_type != XR_ELEM_U8 || src.elem_type != XR_ELEM_U8)
+    if (!dst || dst->elem_type != XR_ELEM_U8)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
     if (dst->data_storage == XR_ARRAY_DATA_BORROWED || src.length < 0 ||
         (src.length > 0 && !src.data) || src.length > INT64_MAX - dst->length)
@@ -640,17 +579,16 @@ static inline xrt_array_t *xrt_byte_array_append_from_span_slow_raw(xrt_array_t 
 
     bool aliases_dst = false;
     int64_t src_offset = 0;
-    if (src.length > 0 && src.guard == dst && dst->data) {
+    if (src.length > 0 && dst->data) {
         const uint8_t *base = (const uint8_t *) dst->data;
         const uint8_t *sp = (const uint8_t *) src.data;
-        if (sp < base || sp > base + dst->length || src.length > dst->length)
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                            XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
-        src_offset = (int64_t) (sp - base);
-        if (src_offset > dst->length - src.length)
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                            XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
-        aliases_dst = true;
+        if (sp >= base && sp <= base + dst->length) {
+            src_offset = (int64_t) (sp - base);
+            if (src.length > dst->length || src_offset > dst->length - src.length)
+                xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                                XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
+            aliases_dst = true;
+        }
     }
 
     int64_t old_length = dst->length;
@@ -670,13 +608,13 @@ static inline xrt_array_t *xrt_byte_array_append_from_span_slow_raw(xrt_array_t 
 }
 
 static inline xrt_array_t *xrt_byte_array_append_from_span_raw(xrt_array_t *dst, xr_span_t src) {
-    if (XR_LIKELY(dst && dst->elem_type == XR_ELEM_U8 && src.elem_type == XR_ELEM_U8 &&
+    if (XR_LIKELY(dst && dst->elem_type == XR_ELEM_U8 &&
                   dst->data_storage != XR_ARRAY_DATA_BORROWED && src.length >= 0 &&
                   src.length <= INT64_MAX - dst->length)) {
         int64_t old_length = dst->length;
         int64_t new_length = old_length + src.length;
-        if (XR_LIKELY(new_length <= dst->capacity && src.guard != dst &&
-                      (new_length == 0 || dst->data) && (src.length == 0 || src.data))) {
+        if (XR_LIKELY(new_length <= dst->capacity && (new_length == 0 || dst->data) &&
+                      (src.length == 0 || src.data))) {
             if (src.length > 0) {
                 uint8_t *dp = (uint8_t *) dst->data + old_length;
                 xr_array_core_copy_or_move_bytes(dp, src.data, src.length);

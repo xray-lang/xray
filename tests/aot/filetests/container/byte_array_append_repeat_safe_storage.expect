@@ -1,4 +1,4 @@
-c_contains=_src.guard != _dst
+c_not_contains=_src.guard
 c_contains=xr_array_core_copy_nonoverlap_bytes(
 c_contains=xrt_byte_array_repeat_from_tail_raw
 c_not_contains=xrt_method_

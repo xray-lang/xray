@@ -57,9 +57,6 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     ASSERT_EQ_UINT(range.end, 3);
     ASSERT_EQ_PTR(span.data, source->data);
     ASSERT_EQ_INT(span.length, 3);
-    ASSERT_EQ_INT(span.elem_type, XR_ELEM_U8);
-    ASSERT_TRUE((span.reserved & XR_SLICE_VIEW_READONLY) != 0);
-    ASSERT_EQ_PTR(span.guard, NULL);
     ASSERT_TRUE(memcmp(span.data, text, 3) == 0);
     ASSERT_EQ_UINT(heap->object_count, object_count);
 

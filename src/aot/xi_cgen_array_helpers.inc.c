@@ -4307,19 +4307,11 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return false;
 
     bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_SET);
-    bool skip_readonly =
-        cg_span_index_plan_drops(ctx, v, XAOT_SLICE_ACCESS_INDEX_SET, XAOT_SLICE_DROP_READONLY);
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, "; ");
-    if (!skip_readonly) {
-        fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) ");
-        fprintf(
-            out,
-            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Slice\"); ");
-    }
     if (!unchecked)
         fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _s.length)) { ");
     fprintf(out, "((%s*)_s.data)[_idx] = ", info.ctype);
@@ -4591,8 +4583,6 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
             "<= INT64_MAX - _dst->length)) { int64_t _old_length = _dst->length; int64_t "
             "_new_length = _old_length + _src.length; if (XR_LIKELY(_new_length <= "
             "_dst->capacity");
-    if (!bulk || bulk->action == XAOT_BULK_INLINE_MEMCPY)
-        fprintf(out, " && _src.guard != _dst");
     fprintf(out, " && (_new_length == 0 || _dst->data) && (_src.length == 0 || _src.data))) { "
                  "if (_src.length > 0) { uint8_t *_dp = (uint8_t*)_dst->data + _old_length; ");
     if (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE)

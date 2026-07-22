@@ -72,7 +72,7 @@ typedef struct {
     X(TAGGED, "tagged", "XrValue", 16, 8, false, false, true, XAOT_DYNAMIC_TAGGED, true, XR_NATIVE_VALUE, XR_REP_TAGGED) \
     X(PTR, "ptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, false, 0, XR_REP_PTR) \
     X(RAWPTR, "rawptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, true, XR_NATIVE_POINTER, XR_REP_RAWPTR) \
-    X(SLICE, "slice", "xr_span_t", 32, 8, false, false, false, XAOT_DYNAMIC_AGGREGATE, false, 0, XR_REP_TAGGED) \
+    X(SLICE, "slice", "xr_span_t", 16, 8, false, false, false, XAOT_DYNAMIC_AGGREGATE, false, 0, XR_REP_TAGGED) \
     X(VOID, "void", "void", 0, 1, false, false, false, XAOT_DYNAMIC_VOID, false, 0, XR_REP_VOID)
 
 
@@ -198,7 +198,7 @@ static inline const XaotRepInfo *xaot_rep_info(XaotRep rep) {
                                       true, XR_NATIVE_POINTER,
                                       XR_REP_RAWPTR},
         [XAOT_REP_SLICE] = {"slice", "xr_span_t",
-                                      32, 8,
+                                      16, 8,
                                       false, false,
                                       false,
                                       XAOT_DYNAMIC_AGGREGATE,

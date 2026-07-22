@@ -718,21 +718,12 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
     }
 }
 
-enum {
-    XRT_SLICE_FLAG_READONLY = 1u << 0,
-};
-
 typedef struct {
     void *data;
     int64_t length;
-    void *guard;
-    uint16_t elem_size;
-    uint16_t layout_id;
-    uint8_t elem_type;
-    uint8_t elem_tid;
-    uint8_t contains_refs;
-    uint8_t flags;
 } xr_span_t;
+
+_Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
 
 static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
     XrValue out = {0};
@@ -751,15 +742,7 @@ static inline XrValue xrt_span_box_value(xr_span_t span) {
 }
 
 static inline xr_span_t xrt_span_empty(void) {
-    return (xr_span_t) {.data = NULL,
-                        .length = 0,
-                        .guard = NULL,
-                        .elem_size = (uint16_t) sizeof(XrValue),
-                        .layout_id = 0,
-                        .elem_type = XR_ELEM_ANY,
-                        .elem_tid = 0,
-                        .contains_refs = 0,
-                        .flags = 0};
+    return (xr_span_t) {.data = NULL, .length = 0};
 }
 
 static inline xr_span_t xrt_span_from_value_ref(XrValue value) {
@@ -801,30 +784,21 @@ static inline xr_span_t xrt_span_from_array_slice(XrValue arr, int64_t start, in
                    ? (void *) ((uint8_t *) arr.ptr + (size_t) start * (size_t) elem_size)
                    : arr.ptr;
     out.length = count;
-    out.guard = NULL;
-    out.elem_type = xr_native_type_to_elem_type(native_type);
-    out.elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
-    out.elem_tid = 0;
-    out.contains_refs = out.elem_type == XR_ELEM_ANY;
-    out.flags = 0;
     return out;
 }
 
-static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, int64_t end) {
+static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, int64_t end,
+                                                 uint16_t elem_size) {
     xrt_array_normalize_slice(src.length, &start, &end);
     int64_t count = end - start;
     if (count < 0)
         count = 0;
     xr_span_t out = src;
     out.data = (count > 0 && src.data)
-                   ? (void *) ((uint8_t *) src.data + (size_t) start * (size_t) src.elem_size)
+                   ? (void *) ((uint8_t *) src.data + (size_t) start * (size_t) elem_size)
                    : src.data;
     out.length = count;
     return out;
-}
-
-static inline bool xrt_span_is_readonly(xr_span_t span) {
-    return (span.flags & XRT_SLICE_FLAG_READONLY) != 0;
 }
 
 typedef struct XrArrayCoreRange {
@@ -1717,18 +1691,13 @@ static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
 }
 
 static inline xr_span_t xrt_buffer_bytes_view(XrValue value, int readonly) {
+    (void) readonly;
     xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     if (!buf)
         return xrt_span_empty();
     xr_span_t out = {0};
     out.data = buf->data;
     out.length = buf->length;
-    out.guard = buf;
-    out.elem_type = XR_ELEM_U8;
-    out.elem_size = 1;
-    out.elem_tid = 0;
-    out.contains_refs = 0;
-    out.flags = readonly ? XRT_SLICE_FLAG_READONLY : 0;
     return out;
 }
 

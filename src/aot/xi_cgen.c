@@ -7504,8 +7504,6 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_span_len",
         "xrt_span_length",
         "xrt_span_data",
-        "xrt_span_is_readonly",
-        "xrt_span_elem_size",
         "xrt_value_native_type_size",
         /* accounted in dedicated categories (kept out of R1 double-counting) */
         "xrt_has_pending_error",

@@ -140,12 +140,6 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
                          msg " message");                                                          \
     } while (0)
 
-#define EXPECT_READONLY_BYTE_SLICE_THROW(stmt, msg)                                                \
-    do {                                                                                           \
-        EXPECT_XRT_ERROR_THROW(stmt, XR_ERR_CMP_CONST_ASSIGN,                                      \
-                               XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG, msg);                        \
-    } while (0)
-
 static void reset_alloc_counts(void) {
     g_malloc_count = 0;
     g_free_count = 0;
@@ -163,6 +157,15 @@ static void free_test_array(xrt_array_t *a) {
     if (xrt_array_data_is_heap(a))
         XRT_FREE_ALIGNED(a->data);
     XRT_FREE(a);
+}
+
+static void test_release_slice_abi_is_data_and_length(void) {
+    uint8_t bytes[4] = {1, 2, 3, 4};
+    xr_span_t span = {.data = bytes, .length = 4};
+
+    ASSERT_EQ_INT(sizeof(xr_span_t), 16, "release Slice ABI is exactly two words");
+    ASSERT_TRUE(span.data == bytes, "release Slice ABI carries the data pointer");
+    ASSERT_EQ_INT(span.length, 4, "release Slice ABI carries the element count");
 }
 
 static void test_small_array_uses_inline_storage(void) {
@@ -576,33 +579,6 @@ static void test_byte_runtime_u8_guards_are_defensive(void) {
     free_test_array(ints);
 }
 
-static void test_byte_slice_readonly_mutators_throw_before_write(void) {
-    reset_alloc_counts();
-    XrValue value = xrt_array_new_typed_exact(8, XR_ELEM_U8);
-    xrt_array_t *a = (xrt_array_t *) value.ptr;
-    for (int64_t i = 0; i < 8; i++)
-        xrt_array_push(value, XR_FROM_INT(10 + i));
-
-    xr_span_t readonly = xrt_span_from_array_slice(value, 0, 8);
-    readonly.flags |= XRT_SLICE_FLAG_READONLY;
-    xr_span_t src = xrt_span_from_array_slice(value, 0, 4);
-
-    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_fill_checked_raw(readonly, 0xff),
-                                     "readonly Slice<byte>.fill throws");
-    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_copy_checked_raw(readonly, src),
-                                     "readonly Slice<byte>.copyFrom throws");
-    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_repeat_from_checked_raw(readonly, 4, 4, 4),
-                                     "readonly Slice<byte>.repeatFrom throws");
-    EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_store_u16_checked_raw(readonly, 0, 0xffff, 1),
-                                     "readonly Slice<byte>.store throws");
-
-    for (int64_t i = 0; i < 8; i++)
-        ASSERT_EQ_INT(((uint8_t *) a->data)[i], 10 + i,
-                      "readonly mutator guards leave byte storage unchanged");
-
-    free_test_array(a);
-}
-
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -639,6 +615,7 @@ static void test_stack_closure_borrows_cell_upval(void) {
 }
 
 int main(void) {
+    test_release_slice_abi_is_data_and_length();
     test_small_array_uses_inline_storage();
     test_typed_exact_zero_uses_header_only();
     test_growth_spills_inline_to_heap_and_preserves_values();
@@ -652,7 +629,6 @@ int main(void) {
     test_indexof_typed_fast_path_shared_rules();
     test_byte_array_raw_helpers_share_core_rules();
     test_byte_runtime_u8_guards_are_defensive();
-    test_byte_slice_readonly_mutators_throw_before_write();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
