@@ -1,0 +1,35 @@
+// anchor: task-235-with-slice-mut-exception-loan
+// The exclusive loan exists only for the callback scope.  Unwinding the
+// callback must end it so a later callback can borrow the same guard again.
+import mem
+
+enum LoanError {
+    Stop
+}
+
+fn main() {
+    var storage = Array<byte>(1)
+    var raw = unsafe { storage.mutPtr() }
+    var guard = raw
+
+    try {
+        unsafe {
+            mem.withSliceMut<byte>(raw, 1, ref guard, fn(view: ref Slice<byte>) {
+                view[0] = 7
+                throw LoanError.Stop
+            })
+        }
+    } catch (error) {
+        print("caught")
+    }
+
+    var result = unsafe {
+        mem.withSliceMut<byte>(raw, 1, ref guard, fn(view: ref Slice<byte>) -> byte {
+            view[0] = 9
+            return view[0]
+        })
+    }
+    print(result)
+}
+
+main()
