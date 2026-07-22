@@ -1,4 +1,4 @@
-fn read(value: in int) -> int {
+fn read(value: int) -> int {
     return value
 }
 

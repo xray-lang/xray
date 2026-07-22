@@ -3,13 +3,21 @@
 @native
 class Atomic<T> {
     load(ordering?: Ordering) -> T @no_alloc
+    // @receiver_write
     store(value: T, ordering?: Ordering) @no_alloc
+    // @receiver_write
     add(delta: T, ordering?: Ordering) @no_alloc
+    // @receiver_write
     sub(delta: T, ordering?: Ordering) @no_alloc
+    // @receiver_write
     fetchAdd(delta: T, ordering?: Ordering) -> T @no_alloc
+    // @receiver_write
     fetchSub(delta: T, ordering?: Ordering) -> T @no_alloc
+    // @receiver_write
     swap(value: T, ordering?: Ordering) -> T @no_alloc
+    // @receiver_write
     compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool) @no_alloc
+    // @receiver_write
     toggle(ordering?: Ordering) -> bool @no_alloc
     toString() -> string @may_alloc
 }

@@ -1,5 +1,5 @@
 // Demo: Parameter Modes, Borrowing, Slice, and Ownership Actions
-// Short examples for value/in/ref/out, copy/move, Slice views, and managed Buffer.
+// Short examples for READ/ref/move, copy/move, Slice views, and managed Buffer.
 //
 // Run: xray demos/07-advanced/borrow_span_examples.xr
 
@@ -11,7 +11,7 @@ fn plusOne(value: int) -> int {
 }
 
 // === 2. in: readonly borrowed parameter ===
-fn sumBorrowed(data: in Array<int>) -> int {
+fn sumBorrowed(data: Array<int>) -> int {
     var total = 0
     for (x in data) {
         total = total + x
@@ -27,12 +27,12 @@ fn fillZero(buf: ref Array<byte>) {
 }
 
 // === 4. out: caller-visible initialization ===
-fn initializeAnswer(slot: out int) {
+fn initializeAnswer(slot: ref int) {
     slot = 42
 }
 
 // === 5. borrowed values cannot escape ===
-fn copyForStorage(data: in Array<int>) -> Array<int> {
+fn copyForStorage(data: Array<int>) -> Array<int> {
     // Returning `data` directly would be a compile error because `data` is
     // borrowed for this call only. Return an owned snapshot instead.
     return copy(data)
@@ -46,7 +46,7 @@ class Holder {
     }
 }
 
-fn storeCopy(data: in Array<int>, holder: ref Holder) {
+fn storeCopy(data: Array<int>, holder: ref Holder) {
     // Storing `data` directly would let a borrowed value escape. Store an
     // owned snapshot instead.
     holder.items = copy(data)
@@ -105,7 +105,7 @@ fillZero(ref bytes)
 print("bytes after fillZero: ${bytes[0]}, ${bytes[1]}")
 
 var answer = 0
-initializeAnswer(out answer)
+initializeAnswer(ref answer)
 print("answer after initializeAnswer: ${answer}")
 
 var copied = copyForStorage(nums)

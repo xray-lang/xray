@@ -3,34 +3,39 @@
 static const char xr_native_def_array[] =
     "// Built-in Array<T> type — implementation in "
     "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    static "
-    "withCapacity(capacity: int) -> Array<T> @may_alloc\n    capacity: int\n    push(value: T)\n   "
-    " // @lowered\n    get(index: int) -> T\n    // @lowered\n    set(index: int, value: T)\n    "
-    "// @lowered\n    ptr() -> Ptr<T>\n    // @lowered\n    mutPtr() -> MutPtr<T>\n    pop() -> "
-    "T?\n    shift() -> T?\n    unshift(value: T)\n    clear()\n    reserve(capacity: int) -> "
-    "Array<T>\n    resize(length: int, fill: T) -> Array<T>\n    concat(...arrays: Array<T>) -> "
-    "Array<T>\n    indexOf(value: T) -> int\n    contains(value: T) -> bool\n    join(separator?: "
-    "string) -> string\n    reverse() -> Array<T>\n    sort(compareFn?: (a: T, b: T) -> int) -> "
-    "Array<T>\n    map(fn: (item: T, index: int) -> U) -> Array<U>\n    filter(fn: (item: T, "
-    "index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n   "
-    " forEach(fn: (item: T, index: int) -> ()) -> ()\n    find(fn: (item: T) -> bool) -> T?\n    "
-    "findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: T) -> bool) -> bool\n    "
-    "some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, end?: int) -> Array<T>\n "
-    "   // All arrays, including Array<byte>, render the \"[a, b]\" container form.\n    // Decode "
-    "UTF-8 byte arrays explicitly with string.fromUtf8().\n    toString() -> string\n    // "
-    "Iteration protocol — used by for-in lowering. Users can also\n    // call them directly; "
+    "withCapacity(capacity: int) -> Array<T> @may_alloc\n    capacity: int\n    // "
+    "@receiver_write\n    push(value: T)\n    // @lowered\n    get(index: int) -> T\n    // "
+    "@lowered\n    // @receiver_write\n    set(index: int, value: T)\n    // @lowered\n    ptr() "
+    "-> Ptr<T>\n    // @lowered\n    mutPtr() -> MutPtr<T>\n    // @receiver_write\n    pop() -> "
+    "T?\n    // @receiver_write\n    shift() -> T?\n    // @receiver_write\n    unshift(value: "
+    "T)\n    // @receiver_write\n    clear()\n    // @receiver_write\n    reserve(capacity: int) "
+    "-> Array<T>\n    // @receiver_write\n    resize(length: int, fill: T) -> Array<T>\n    "
+    "concat(...arrays: Array<T>) -> Array<T>\n    indexOf(value: T) -> int\n    contains(value: T) "
+    "-> bool\n    join(separator?: string) -> string\n    // @receiver_write\n    reverse() -> "
+    "Array<T>\n    // @receiver_write\n    sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    "
+    "map(fn: (item: T, index: int) -> U) -> Array<U>\n    filter(fn: (item: T, index: int) -> "
+    "bool) -> Array<T>\n    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n    forEach(fn: "
+    "(item: T, index: int) -> ()) -> ()\n    find(fn: (item: T) -> bool) -> T?\n    findIndex(fn: "
+    "(item: T) -> bool) -> int\n    every(fn: (item: T) -> bool) -> bool\n    some(fn: (item: T) "
+    "-> bool) -> bool\n    // @receiver_write\n    fill(value: T, start?: int, end?: int) -> "
+    "Array<T>\n    // All arrays, including Array<byte>, render the \"[a, b]\" container form.\n   "
+    " // Decode UTF-8 byte arrays explicitly with string.fromUtf8().\n    toString() -> string\n   "
+    " // Iteration protocol — used by for-in lowering. Users can also\n    // call them directly; "
     "iterator()/next() yields elements, while\n    // entriesIterator()/next() yields (index, "
     "element) tuples.\n    iterator() -> Iterator<T>\n    entriesIterator() -> Iterator<(int, "
     "T)>\n    entries() -> Array<(int, T)>\n}\n";
 
 static const char xr_native_def_atomic[] =
     "// Built-in Atomic<T> type; implemented by the runtime.\n\n@native\nclass Atomic<T> {\n    "
-    "load(ordering?: Ordering) -> T @no_alloc\n    store(value: T, ordering?: Ordering) "
-    "@no_alloc\n    add(delta: T, ordering?: Ordering) @no_alloc\n    sub(delta: T, ordering?: "
-    "Ordering) @no_alloc\n    fetchAdd(delta: T, ordering?: Ordering) -> T @no_alloc\n    "
-    "fetchSub(delta: T, ordering?: Ordering) -> T @no_alloc\n    swap(value: T, ordering?: "
-    "Ordering) -> T @no_alloc\n    compareExchange(expected: T, desired: T, ordering?: Ordering) "
-    "-> (T, bool) @no_alloc\n    toggle(ordering?: Ordering) -> bool @no_alloc\n    toString() -> "
-    "string @may_alloc\n}\n";
+    "load(ordering?: Ordering) -> T @no_alloc\n    // @receiver_write\n    store(value: T, "
+    "ordering?: Ordering) @no_alloc\n    // @receiver_write\n    add(delta: T, ordering?: "
+    "Ordering) @no_alloc\n    // @receiver_write\n    sub(delta: T, ordering?: Ordering) "
+    "@no_alloc\n    // @receiver_write\n    fetchAdd(delta: T, ordering?: Ordering) -> T "
+    "@no_alloc\n    // @receiver_write\n    fetchSub(delta: T, ordering?: Ordering) -> T "
+    "@no_alloc\n    // @receiver_write\n    swap(value: T, ordering?: Ordering) -> T @no_alloc\n   "
+    " // @receiver_write\n    compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, "
+    "bool) @no_alloc\n    // @receiver_write\n    toggle(ordering?: Ordering) -> bool @no_alloc\n  "
+    "  toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_bigint[] =
     "// Built-in BigInt type — implementation in "
@@ -47,28 +52,34 @@ static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
     "Recv<T> {\n    Value(T)\n    Empty\n    Timeout\n    Closed\n}\n\nenum SendResult {\n    "
     "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    capacity: "
-    "int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    recvOr(default: T) "
-    "-> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    "
-    "sendTimeout(value: T, timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> "
-    "Recv<T>\n\n    close()\n}\n";
+    "int\n    isClosed: bool\n\n    // @receiver_write\n    send(value: T)\n    // "
+    "@receiver_write\n    recv() -> Recv<T>\n    // @receiver_write\n    recvOr(default: T) -> "
+    "T\n\n    // @receiver_write\n    trySend(value: T) -> SendResult\n    // @receiver_write\n    "
+    "tryRecv() -> Recv<T>\n\n    // @receiver_write\n    sendTimeout(value: T, timeout: int) -> "
+    "SendResult\n    // @receiver_write\n    recvTimeout(timeout: int) -> Recv<T>\n\n    // "
+    "@receiver_write\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
     "TaskResult<T> {\n    Success(T)\n    Failed(unknown)\n    Cancelled\n    Timeout\n    "
     "Pending\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
-    "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
-    "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
+    "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    // "
+    "@receiver_write\n    cancel()\n    // @receiver_write\n    poll() -> TaskResult<T>\n    // "
+    "@receiver_write\n    awaitResult() -> TaskResult<T>\n    // @receiver_write\n    "
     "awaitTimeout(timeout: int) -> TaskResult<T>\n}\n";
 
 static const char xr_native_def_countdownlatch[] =
     "// Built-in CountdownLatch type; implemented by the runtime.\n\n@native\nclass CountdownLatch "
-    "{\n    remaining: int\n    isClosed: bool\n    reset(count: int) -> bool\n    done(count?: "
-    "int) -> int\n    tryWait() -> bool\n    wait() -> bool\n    close()\n}\n";
+    "{\n    remaining: int\n    isClosed: bool\n    // @receiver_write\n    reset(count: int) -> "
+    "bool\n    // @receiver_write\n    done(count?: int) -> int\n    // @receiver_write\n    "
+    "tryWait() -> bool\n    // @receiver_write\n    wait() -> bool\n    // @receiver_write\n    "
+    "close()\n}\n";
 
 static const char xr_native_def_eventcount[] =
     "// Built-in EventCount type; implemented by the runtime.\n\n@native\nclass EventCount {\n    "
-    "epoch: int\n    isClosed: bool\n    advance(step?: int) -> int\n    wait(lastEpoch: int, "
-    "workerHint?: int) -> int\n    close()\n}\n";
+    "epoch: int\n    isClosed: bool\n    // @receiver_write\n    advance(step?: int) -> int\n    "
+    "// @receiver_write\n    wait(lastEpoch: int, workerHint?: int) -> int\n    // "
+    "@receiver_write\n    close()\n}\n";
 
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
@@ -114,12 +125,13 @@ static const char xr_native_def_json[] =
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
     "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    get(key: K) -> "
-    "V? @no_alloc\n    set(key: K, value: V) @may_alloc\n    containsKey(key: K) -> bool "
-    "@no_alloc\n    containsValue(value: V) -> bool @no_alloc\n    delete(key: K) -> bool "
-    "@no_alloc\n    clear() @no_alloc\n    keys() -> Array<K> @may_alloc\n    values() -> Array<V> "
-    "@may_alloc\n    entries() -> Array<(K, V)> @may_alloc\n    forEach(fn: (key: K, value: V) -> "
-    "()) -> () @no_alloc\n    // Iteration protocol — iterator() yields each key K (used by\n    "
-    "// single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple "
+    "V? @no_alloc\n    // @receiver_write\n    set(key: K, value: V) @may_alloc\n    "
+    "containsKey(key: K) -> bool @no_alloc\n    containsValue(value: V) -> bool @no_alloc\n    // "
+    "@receiver_write\n    delete(key: K) -> bool @no_alloc\n    // @receiver_write\n    clear() "
+    "@no_alloc\n    keys() -> Array<K> @may_alloc\n    values() -> Array<V> @may_alloc\n    "
+    "entries() -> Array<(K, V)> @may_alloc\n    forEach(fn: (key: K, value: V) -> ()) -> () "
+    "@no_alloc\n    // Iteration protocol — iterator() yields each key K (used by\n    // "
+    "single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple "
     "(used by `for (k, v in m)`).\n    iterator() -> Iterator<K> @may_alloc\n    entriesIterator() "
     "-> Iterator<(K, V)> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
@@ -149,9 +161,10 @@ static const char xr_native_def_regex[] =
 static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
     "integer associative reduction.\n\n@native\nclass ResultGroup {\n    readyCount: int\n    "
-    "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    add(value: int) -> bool\n    "
-    "flush()\n    reset(count: int) -> bool\n    recv(): int?\n    tryRecv(): (int?, bool)\n    "
-    "close()\n}\n";
+    "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    // @receiver_write\n    "
+    "add(value: int) -> bool\n    // @receiver_write\n    flush()\n    // @receiver_write\n    "
+    "reset(count: int) -> bool\n    // @receiver_write\n    recv(): int?\n    // @receiver_write\n "
+    "   tryRecv(): (int?, bool)\n    // @receiver_write\n    close()\n}\n";
 
 static const char xr_native_def_rune[] =
     "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar "
@@ -162,19 +175,21 @@ static const char xr_native_def_rune[] =
 
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
-    "available: int\n    isClosed: bool\n    release(count?: int) -> int\n    tryAcquire() -> "
-    "bool\n    acquire() -> bool\n    close()\n}\n";
+    "available: int\n    isClosed: bool\n    // @receiver_write\n    release(count?: int) -> int\n "
+    "   // @receiver_write\n    tryAcquire() -> bool\n    // @receiver_write\n    acquire() -> "
+    "bool\n    // @receiver_write\n    close()\n}\n";
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
-    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    add(value: T) "
-    "@may_alloc\n    contains(value: T) -> bool @no_alloc\n    delete(value: T) -> bool "
-    "@no_alloc\n    clear() @no_alloc\n    values() -> Array<T> @may_alloc\n    forEach(fn: "
-    "(value: T) -> ()) -> () @no_alloc\n    union(other: Set<T>) -> Set<T> @may_alloc\n    "
-    "intersection(other: Set<T>) -> Set<T> @may_alloc\n    difference(other: Set<T>) -> Set<T> "
-    "@may_alloc\n    symmetricDifference(other: Set<T>) -> Set<T> @may_alloc\n    isSubset(other: "
-    "Set<T>) -> bool @no_alloc\n    isSuperset(other: Set<T>) -> bool @no_alloc\n    toArray() -> "
-    "Array<T> @may_alloc\n    // Iteration protocol — yields each element T (used by for-in).\n    "
+    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    // "
+    "@receiver_write\n    add(value: T) @may_alloc\n    contains(value: T) -> bool @no_alloc\n    "
+    "// @receiver_write\n    delete(value: T) -> bool @no_alloc\n    // @receiver_write\n    "
+    "clear() @no_alloc\n    values() -> Array<T> @may_alloc\n    forEach(fn: (value: T) -> ()) -> "
+    "() @no_alloc\n    union(other: Set<T>) -> Set<T> @may_alloc\n    intersection(other: Set<T>) "
+    "-> Set<T> @may_alloc\n    difference(other: Set<T>) -> Set<T> @may_alloc\n    "
+    "symmetricDifference(other: Set<T>) -> Set<T> @may_alloc\n    isSubset(other: Set<T>) -> bool "
+    "@no_alloc\n    isSuperset(other: Set<T>) -> bool @no_alloc\n    toArray() -> Array<T> "
+    "@may_alloc\n    // Iteration protocol — yields each element T (used by for-in).\n    "
     "iterator() -> Iterator<T> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_string[] =
@@ -205,9 +220,10 @@ static const char xr_native_def_string[] =
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
-    "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    "
-    "append(value: string | rune | int | float | bool | null) -> StringBuilder @may_alloc\n    "
-    "toString() -> string @may_alloc\n    clear() -> StringBuilder @no_alloc\n}\n";
+    "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    // "
+    "@receiver_write\n    append(value: string | rune | int | float | bool | null) -> "
+    "StringBuilder @may_alloc\n    toString() -> string @may_alloc\n    // @receiver_write\n    "
+    "clear() -> StringBuilder @no_alloc\n}\n";
 
 static const char xr_native_def_thread[] =
     "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 "
@@ -220,10 +236,12 @@ static const char xr_native_def_thread[] =
 
 static const char xr_native_def_workqueue[] =
     "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n "
-    "   shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> bool\n    // "
-    "WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.\n  "
-    "  pushRange(start: int, count: int, shardStart?: int) -> int\n    pop(workerId?: int): T?\n   "
-    " tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
+    "   shardCount: int\n    isClosed: bool\n    // @receiver_write\n    push(value: T, shard?: "
+    "int) -> bool\n    // WorkQueue<int> only: enqueue count consecutive integer jobs and return "
+    "the accepted count.\n    // @receiver_write\n    pushRange(start: int, count: int, "
+    "shardStart?: int) -> int\n    // @receiver_write\n    pop(workerId?: int): T?\n    // "
+    "@receiver_write\n    tryPop(workerId?: int): (T?, bool)\n    // @receiver_write\n    "
+    "close()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X)                                                                     \
     X("array", xr_native_def_array)                                                                \

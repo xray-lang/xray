@@ -4,7 +4,7 @@ fn mutateWindow(values: Slice<uint64>, start: int) -> uint64 {
     var window = values.window(start, 2)
     var loaded = U64x2.load(window, 0)
     var next = loaded.add(U64x2.splat(7))
-    next.store(window, 0)
+    next.store(ref window, 0)
     return next.reduceAdd()
 }
 

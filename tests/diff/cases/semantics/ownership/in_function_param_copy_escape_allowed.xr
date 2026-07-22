@@ -2,7 +2,7 @@ fn sink(value: Array<int>, out: ref Array<Array<int>>) {
     out.push(value)
 }
 
-fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
+fn stash(data: Array<int>, out: ref Array<Array<int>>) {
     sink(copy(data), ref out)
 }
 

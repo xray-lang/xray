@@ -214,9 +214,9 @@ fn test_escape_sequences() {
 @test
 fn test_stringify_value() {
     var config = yaml.newMapping()
-    yaml.mappingSet(config, "name", yaml.stringValue("xray"))
-    yaml.mappingSet(config, "version", yaml.intValue(1))
-    yaml.mappingSet(config, "debug", yaml.boolValue(false))
+    yaml.mappingSet(ref config, "name", yaml.stringValue("xray"))
+    yaml.mappingSet(ref config, "version", yaml.intValue(1))
+    yaml.mappingSet(ref config, "debug", yaml.boolValue(false))
     var result = yaml.stringify(yaml.mappingValue(config))
     assert(len(result) > 0)
     // Roundtrip: parse the stringified result
@@ -229,14 +229,14 @@ fn test_stringify_value() {
 @test
 fn test_stringify_nested_value() {
     var server = yaml.newMapping()
-    yaml.mappingSet(server, "host", yaml.stringValue("localhost"))
-    yaml.mappingSet(server, "port", yaml.intValue(8080))
+    yaml.mappingSet(ref server, "host", yaml.stringValue("localhost"))
+    yaml.mappingSet(ref server, "port", yaml.intValue(8080))
     var features: Array<YamlValue> = []
     features.push(yaml.stringValue("auth"))
     features.push(yaml.stringValue("logging"))
     var root = yaml.newMapping()
-    yaml.mappingSet(root, "server", yaml.mappingValue(server))
-    yaml.mappingSet(root, "features", yaml.sequenceValue(features))
+    yaml.mappingSet(ref root, "server", yaml.mappingValue(server))
+    yaml.mappingSet(ref root, "features", yaml.sequenceValue(features))
     var result = yaml.stringify(yaml.mappingValue(root))
     assert(len(result) > 0)
 }
@@ -244,10 +244,10 @@ fn test_stringify_nested_value() {
 @test
 fn test_stringify_value_roundtrip() {
     var original = yaml.newMapping()
-    yaml.mappingSet(original, "a", yaml.intValue(1))
-    yaml.mappingSet(original, "b", yaml.stringValue("hello"))
-    yaml.mappingSet(original, "c", yaml.boolValue(true))
-    yaml.mappingSet(original, "d", yaml.nullValue())
+    yaml.mappingSet(ref original, "a", yaml.intValue(1))
+    yaml.mappingSet(ref original, "b", yaml.stringValue("hello"))
+    yaml.mappingSet(ref original, "c", yaml.boolValue(true))
+    yaml.mappingSet(ref original, "d", yaml.nullValue())
     var yaml_str = yaml.stringify(yaml.mappingValue(original))
     var parsed = yaml.parse(yaml_str)
     assert_eq(getInt(parsed, "a"), 1)
@@ -261,8 +261,8 @@ fn test_stringify_value_roundtrip() {
 @test
 fn test_stringify_mapping() {
     var m = yaml.newMapping()
-    yaml.mappingSet(m, "key1", yaml.stringValue("val1"))
-    yaml.mappingSet(m, "key2", yaml.intValue(42))
+    yaml.mappingSet(ref m, "key1", yaml.stringValue("val1"))
+    yaml.mappingSet(ref m, "key2", yaml.intValue(42))
     var result = yaml.stringify(yaml.mappingValue(m))
     assert(len(result) > 0)
 }

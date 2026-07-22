@@ -1,0 +1,7 @@
+fn stash(data: Array<int>, slots: ref Array<Array<int>>) {
+    slots[0] = data
+}
+
+var values: Array<int> = [1, 2]
+var slots: Array<Array<int>> = [[0]]
+stash(values, ref slots)

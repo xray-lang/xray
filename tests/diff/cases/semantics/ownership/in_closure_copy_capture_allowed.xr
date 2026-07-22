@@ -1,4 +1,4 @@
-fn make(data: in Array<int>) -> () -> int {
+fn make(data: Array<int>) -> () -> int {
     var snapshot = copy(data)
     return fn() -> int {
         return len(snapshot)

@@ -1,4 +1,4 @@
-fn lenOf(data: in Array<int>) -> int {
+fn lenOf(data: Array<int>) -> int {
     return len(data)
 }
 

@@ -841,12 +841,12 @@ typedef struct XiValue {
                                * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
     uint8_t lowering_flags;   /* XI_LOWERING_FLAG_* */
     uint8_t param_mode;       /* XrParamMode for XI_PARAM values (the single param
-                               * contract source; default XR_PARAM_VALUE). Occupies
+                               * contract source; default XR_PARAM_READ). Occupies
                                * struct padding, so it costs no extra memory. */
     struct XrType *type;      /* authoritative compile-time type (never NULL) */
     int64_t aux_int;          /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;                /* auxiliary pointer: proto, string literal, etc. */
-    XiCallPlan *call_plan;    /* verified ref/out call-bound place contract */
+    XiCallPlan *call_plan;    /* verified read/ref/move call contract */
     struct XiValue **args;    /* operand values (SSA uses) */
     uint16_t nargs;           /* number of args */
     int16_t uses;             /* use count (for DCE; -1 = not computed) */
@@ -1414,6 +1414,10 @@ typedef struct XiFunc {
 
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
+
+    /* True when params[0] is represented as a call-bound place rather than a
+     * direct SSA value (currently value-aggregate method receivers). */
+    bool receiver_call_place;
 
     /* True when every operator-overload parameter is borrowed. */
     bool operator_borrowed;

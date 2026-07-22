@@ -633,7 +633,7 @@ export fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
     return ClosePayload(code, _bytesToString(payload, 2, len(payload)))
 }
 
-fn _copyInto(dst: Array<byte>, off: int, src: Array<byte>) {
+fn _copyInto(dst: ref Array<byte>, off: int, src: Array<byte>) {
     for (var i = 0; i < len(src); i++) {
         dst[off + i] = src[i]
     }
@@ -749,10 +749,10 @@ export fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true)
     var body = payload
     if (mask) {
         var key = _randomBytes(4)
-        _copyInto(out, 2 + ext, key)
+        _copyInto(ref out, 2 + ext, key)
         body = maskPayload(payload, key)
     }
-    _copyInto(out, headerLen, body)
+    _copyInto(ref out, headerLen, body)
     return out
 }
 
@@ -769,7 +769,7 @@ export fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -
     var payload = Array<byte>(2 + len(reasonBytes))
     payload[0] = (code >> 8) & 255
     payload[1] = code & 255
-    _copyInto(payload, 2, reasonBytes)
+    _copyInto(ref payload, 2, reasonBytes)
     return frame(payload, _OP_CLOSE, mask)
 }
 

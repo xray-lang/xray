@@ -1,4 +1,4 @@
-fn mutate(data: in Array<int>) {
+fn mutate(data: Array<int>) {
     data[0] = 9
 }
 

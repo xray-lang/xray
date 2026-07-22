@@ -1,0 +1,15 @@
+class Holder {
+    items: Array<int>
+
+    constructor() {
+        this.items = [1, 2]
+    }
+}
+
+fn leak(holder: Holder) -> Array<int> {
+    return holder.items
+}
+
+var holder = Holder()
+var leaked = leak(holder)
+print(len(leaked))

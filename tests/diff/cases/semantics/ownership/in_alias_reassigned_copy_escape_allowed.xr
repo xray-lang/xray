@@ -1,4 +1,4 @@
-fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
+fn stash(data: Array<int>, out: ref Array<Array<int>>) {
     var alias = data
     alias = copy(data)
     out.push(alias)

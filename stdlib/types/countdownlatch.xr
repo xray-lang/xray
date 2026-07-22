@@ -4,9 +4,14 @@
 class CountdownLatch {
     remaining: int
     isClosed: bool
+    // @receiver_write
     reset(count: int) -> bool
+    // @receiver_write
     done(count?: int) -> int
+    // @receiver_write
     tryWait() -> bool
+    // @receiver_write
     wait() -> bool
+    // @receiver_write
     close()
 }

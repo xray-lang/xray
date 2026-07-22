@@ -156,7 +156,7 @@ static XrParamMode xi_lower_param_mode(XiLower *l, XrParamNode *param) {
         if (sym && sym->kind == XA_SYM_PARAMETER)
             return sym->passing_mode;
     }
-    return param ? param->passing_mode : XR_PARAM_VALUE;
+    return param ? param->passing_mode : XR_PARAM_READ;
 }
 
 /* ========== Dynamic capacity growth (vars / blocks) ========== */
@@ -1705,7 +1705,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         XrParamMode pmode = xi_lower_param_mode(&l, p);
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
         l.func->params[i] = param_val;
-        if (i < l.func->nparams && p && pmode != XR_PARAM_VALUE &&
+        if (i < l.func->nparams && p && pmode != XR_PARAM_READ &&
             !xi_func_set_param_passing_mode(l.func, (uint16_t) i, pmode)) {
             xi_func_free(l.func);
             xi_lower_cleanup(&l);
@@ -1714,7 +1714,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
         /* Register parameter in Braun SSA using analyzer-assigned symbol_id */
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
-        if (i < l.func->nparams && p && pmode != XR_PARAM_VALUE) {
+        if (i < l.func->nparams && p && pmode == XR_PARAM_REF) {
             l.vars[var_id].call_place = param_val;
             l.vars[var_id].place_mode = pmode;
         } else {

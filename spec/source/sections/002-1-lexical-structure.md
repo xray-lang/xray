@@ -140,7 +140,6 @@ xray 共 **66 个保留关键字**，按用途分组如下：
 | `default` | 保留，当前未启用 |
 | `cancelled` | `cancelled()` 协程取消检查（实际上是 builtin 函数）|
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
-| `out` | 输出参数模式与调用授权 (`fn f(p: out T)` / `f(out p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `supervisor` | `supervisor scope` 修饰符 |
@@ -585,7 +584,6 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `default` | reserved, currently disabled |
 | `cancelled` | `cancelled()` cancellation check (actually a builtin function) |
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
-| `out` | output parameter mode and call-site authorization (`fn f(p: out T)` / `f(out p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |

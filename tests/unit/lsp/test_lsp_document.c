@@ -793,26 +793,25 @@ TEST(param_mode_user_function_lsp_display) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
-                          "    filled = view\n"
-                          "    slot = slot + filled\n"
+    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+                          "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
                           "\n"
                           "fn main() {\n"
                           "    var value = 1\n"
                           "    var slot = 2\n"
-                          "    var filled: int\n"
-                          "    adjust(value, ref slot, out filled)\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref slot, move payload)\n"
                           "    adj\n"
                           "}\n";
-    const char *expected = "fn adjust(view: in int, slot: ref int, filled: out int): int";
+    const char *expected = "fn adjust(view: int, slot: ref int, payload: move Array<int>): int";
 
     XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_lsp.xr", content, 1);
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
-    XrLspPosition completion_pos = {11, 7};
+    XrLspPosition completion_pos = {10, 7};
     XrJsonValue *items = xlsp_analyze_completion(server, doc, completion_pos);
     ASSERT(items != NULL);
     XrJsonValue *adjust_item = json_array_find_label(items, "adjust");
@@ -822,7 +821,7 @@ TEST(param_mode_user_function_lsp_display) {
     ASSERT_STR_EQ(detail, expected);
     xjson_free(items);
 
-    XrLspPosition hover_pos = {10, 6};
+    XrLspPosition hover_pos = {9, 6};
     XrJsonValue *hover = xlsp_analyze_hover(server, doc, hover_pos);
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
@@ -830,7 +829,7 @@ TEST(param_mode_user_function_lsp_display) {
     ASSERT(strstr(hover_text, expected) != NULL);
     xjson_free(hover);
 
-    XrLspPosition sig_pos = {10, 12};
+    XrLspPosition sig_pos = {9, 12};
     XrJsonValue *help = xlsp_analyze_signature_help(doc, sig_pos);
     ASSERT(help != NULL);
     XrJsonValue *signatures = xjson_get_array(help, "signatures");
@@ -844,9 +843,10 @@ TEST(param_mode_user_function_lsp_display) {
     XrJsonValue *params = xjson_get_array(sig0, "parameters");
     ASSERT(params != NULL);
     ASSERT(xjson_array_len(params) == 3);
-    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: in int");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: int");
     ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 1), "label"), "slot: ref int");
-    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 2), "label"), "filled: out int");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 2), "label"),
+                  "payload: move Array<int>");
 
     xjson_free(help);
     xlsp_server_free(server);
@@ -856,17 +856,16 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
-                          "    filled = view\n"
-                          "    slot = slot + filled\n"
+    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+                          "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
                           "\n"
                           "fn main() {\n"
                           "    var value = 1\n"
                           "    var slot = 2\n"
-                          "    var filled: int\n"
-                          "    adjust(value, ref slot, out filled)\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref slot, move payload)\n"
                           "}\n";
 
     XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_tokens.xr", content, 1);
@@ -878,16 +877,14 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
 
     int line = -1;
     int col = -1;
-    ASSERT(content_position_of_nth(content, "in", 1, &line, &col));
-    ASSERT(semantic_token_exists(tokens, line, col, "in", XLSP_TOKEN_MODIFIER));
     ASSERT(content_position_of_nth(content, "ref", 1, &line, &col));
     ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
-    ASSERT(content_position_of_nth(content, "out", 1, &line, &col));
-    ASSERT(semantic_token_exists(tokens, line, col, "out", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "move", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "move", XLSP_TOKEN_MODIFIER));
     ASSERT(content_position_of_nth(content, "ref", 2, &line, &col));
     ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
-    ASSERT(content_position_of_nth(content, "out", 2, &line, &col));
-    ASSERT(semantic_token_exists(tokens, line, col, "out", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "move", 2, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "move", XLSP_TOKEN_MODIFIER));
 
     xlsp_semantic_tokens_free(tokens);
     xlsp_server_free(server);
@@ -934,17 +931,16 @@ TEST(param_mode_inlay_hints_describe_modes) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
-                          "    filled = view\n"
-                          "    slot = slot + filled\n"
+    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+                          "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
                           "\n"
                           "fn main() {\n"
                           "    var value = 1\n"
                           "    var target = 2\n"
-                          "    var result: int\n"
-                          "    adjust(value, ref target, out result)\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref target, move payload)\n"
                           "}\n";
 
     XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_inlay.xr", content, 1);
@@ -954,9 +950,9 @@ TEST(param_mode_inlay_hints_describe_modes) {
     XrLspRange range = {{0, 0}, {20, 0}};
     XrJsonValue *hints = xlsp_analyze_inlay_hints(server, doc, range);
     ASSERT(hints != NULL);
-    ASSERT(json_array_find_label_tooltip(hints, "view:", "parameter mode: in") != NULL);
+    ASSERT(json_array_find_label(hints, "view:") != NULL);
     ASSERT(json_array_find_label_tooltip(hints, "slot:", "parameter mode: ref") != NULL);
-    ASSERT(json_array_find_label_tooltip(hints, "filled:", "parameter mode: out") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "payload:", "parameter mode: move") != NULL);
 
     xjson_free(hints);
     xlsp_server_free(server);

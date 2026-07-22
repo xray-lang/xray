@@ -2402,7 +2402,11 @@ static bool sr_param_is_call_bound_place(const XiValue *v) {
         v->aux_int > UINT16_MAX)
         return false;
     XrParamMode mode = xi_func_param_passing_mode(v->block->func, (uint16_t) v->aux_int);
-    return mode == XR_PARAM_IN || mode == XR_PARAM_REF || mode == XR_PARAM_OUT;
+    if (mode == XR_PARAM_REF)
+        return true;
+    const XiFunc *func = v->block->func;
+    return mode == XR_PARAM_READ && v->aux_int == 0 && func->receiver_call_place && func->params &&
+           func->params[0] == v;
 }
 
 static bool sr_value_is_null_const(const XiValue *v) {

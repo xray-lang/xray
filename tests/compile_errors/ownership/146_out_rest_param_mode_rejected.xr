@@ -1,2 +1,0 @@
-fn bad(...xs: out int) {
-}

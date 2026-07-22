@@ -17,7 +17,7 @@ import gen_mcp_knowledge as mcp_knowledge  # noqa: E402
 import gen_stdlib_types as stdlib_types  # noqa: E402
 
 
-PARAM_MODE_SIGNATURE = "(view: in Slice<byte>, sink: ref Array<byte>, outLen: out int): int"
+PARAM_MODE_SIGNATURE = "(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer): int"
 
 
 class ParamModeToolingDisplayTest(unittest.TestCase):
@@ -35,7 +35,7 @@ class ParamModeToolingDisplayTest(unittest.TestCase):
                     {
                         "name": "borrow",
                         "signature": PARAM_MODE_SIGNATURE,
-                        "doc": "Borrow and fill output.",
+                        "doc": "Read, mutate, and transfer values.",
                     }
                 ],
             }
@@ -55,7 +55,7 @@ class ParamModeToolingDisplayTest(unittest.TestCase):
                 {
                     "name": "borrow",
                     "signature": PARAM_MODE_SIGNATURE,
-                    "doc": "Borrow and fill output.",
+                    "doc": "Read, mutate, and transfer values.",
                 }
             ],
             "handle_methods": {
@@ -63,7 +63,7 @@ class ParamModeToolingDisplayTest(unittest.TestCase):
                     {
                         "name": "fill",
                         "signature": PARAM_MODE_SIGNATURE,
-                        "doc": "Fill through a handle.",
+                        "doc": "Use all three parameter contracts.",
                     }
                 ],
             },
@@ -93,7 +93,7 @@ class ParamModeToolingDisplayTest(unittest.TestCase):
                                 "qualified": "modes.borrow",
                                 "kind": "function",
                                 "signature": PARAM_MODE_SIGNATURE,
-                                "summary": "Borrow and fill output.",
+                                "summary": "Read, mutate, and transfer values.",
                                 "source": "stdlib/modes/modes.xr",
                                 "line": 1,
                                 "doc_surface": "stdlib",
@@ -115,7 +115,7 @@ class ParamModeToolingDisplayTest(unittest.TestCase):
         )
 
         self.assertIn(
-            f"| `modes.borrow` | `{PARAM_MODE_SIGNATURE}` | Borrow and fill output. |",
+            f"| `modes.borrow` | `{PARAM_MODE_SIGNATURE}` | Read, mutate, and transfer values. |",
             body,
         )
 

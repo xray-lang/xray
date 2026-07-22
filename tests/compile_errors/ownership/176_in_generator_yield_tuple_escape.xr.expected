@@ -1,1 +1,1 @@
-cannot yield borrowed 'in' parameter 'data'; yield an owned value or copy(data)
+cannot yield borrowed 'read' parameter 'data'; yield an owned value or copy(data)

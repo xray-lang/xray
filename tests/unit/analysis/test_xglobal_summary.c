@@ -937,48 +937,35 @@ TEST(global_evidence_cache_payload_preserves_source_node_identity) {
 
 TEST(global_evidence_param_modes_participate_in_signature_keys) {
     const char *function_sources[] = {
-        "fn gate(value: int) -> int { return value }\n",
-        "fn gate(value: in int) -> int { return value }\n",
-        "fn gate(value: ref int) -> int { return value }\n",
-        "fn gate(value: out int) -> int {\n"
-        "    value = 1\n"
-        "    return value\n"
-        "}\n",
+        "fn gate(value: Array<int>) -> int { return value.length }\n",
+        "fn gate(value: ref Array<int>) -> int { return value.length }\n",
+        "fn gate(value: move Array<int>) -> int { return value.length }\n",
     };
     const char *method_sources[] = {
         "class Box {\n"
-        "    touch(value: int) -> int { return value }\n"
+        "    touch(value: Array<int>) -> int { return value.length }\n"
         "}\n",
         "class Box {\n"
-        "    touch(value: in int) -> int { return value }\n"
+        "    touch(value: ref Array<int>) -> int { return value.length }\n"
         "}\n",
         "class Box {\n"
-        "    touch(value: ref int) -> int { return value }\n"
-        "}\n",
-        "class Box {\n"
-        "    touch(value: out int) -> int {\n"
-        "        value = 1\n"
-        "        return value\n"
-        "    }\n"
+        "    touch(value: move Array<int>) -> int { return value.length }\n"
         "}\n",
     };
     const char *interface_sources[] = {
         "interface Sink {\n"
-        "    touch(value: int) -> int\n"
+        "    touch(value: Array<int>) -> int\n"
         "}\n",
         "interface Sink {\n"
-        "    touch(value: in int) -> int\n"
+        "    touch(value: ref Array<int>) -> int\n"
         "}\n",
         "interface Sink {\n"
-        "    touch(value: ref int) -> int\n"
-        "}\n",
-        "interface Sink {\n"
-        "    touch(value: out int) -> int\n"
+        "    touch(value: move Array<int>) -> int\n"
         "}\n",
     };
-    uint32_t function_keys[4] = {0};
-    uint32_t method_keys[4] = {0};
-    uint32_t interface_keys[4] = {0};
+    uint32_t function_keys[3] = {0};
+    uint32_t method_keys[3] = {0};
+    uint32_t interface_keys[3] = {0};
     XgGlobalEvidence ref_ev;
     XgGlobalEvidence materialized = {0};
     const XgDeclSummary *ref_decl;
@@ -989,27 +976,27 @@ TEST(global_evidence_param_modes_participate_in_signature_keys) {
     char needle[64];
 
     setup_parser_session();
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 3; i++) {
         ASSERT_TRUE(function_signature_key_from_source(function_sources[i], &function_keys[i]));
         ASSERT_TRUE(method_signature_key_from_source(method_sources[i], &method_keys[i]));
         ASSERT_TRUE(
             interface_method_signature_key_from_source(interface_sources[i], &interface_keys[i]));
     }
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 3; i++) {
         ASSERT_NE(function_keys[i], 0);
         ASSERT_NE(method_keys[i], 0);
         ASSERT_NE(interface_keys[i], 0);
-        for (size_t j = i + 1; j < 4; j++) {
+        for (size_t j = i + 1; j < 3; j++) {
             ASSERT_NE(function_keys[i], function_keys[j]);
             ASSERT_NE(method_keys[i], method_keys[j]);
             ASSERT_NE(interface_keys[i], interface_keys[j]);
         }
     }
 
-    ASSERT_TRUE(build_global_evidence_from_source(function_sources[2], &ref_ev));
+    ASSERT_TRUE(build_global_evidence_from_source(function_sources[1], &ref_ev));
     ref_decl = evidence_find_decl_by_name_kind(&ref_ev, "gate", XG_DECL_FUNC);
     ASSERT_NOT_NULL(ref_decl);
-    ASSERT_EQ_UINT(ref_decl->signature_key, function_keys[2]);
+    ASSERT_EQ_UINT(ref_decl->signature_key, function_keys[1]);
     expected_key = xg_global_evidence_cache_key(&ref_ev, XG_EVIDENCE_CACHE_DECLARATIONS);
     payload = xg_global_evidence_cache_payload_dump(&ref_ev, XG_EVIDENCE_CACHE_DECLARATIONS);
     ASSERT_NOT_NULL(payload);

@@ -2,7 +2,7 @@ fn bump(value: ref int) -> int {
     return value + 1
 }
 
-fn fill(value: out int) -> int {
+fn fill(value: ref int) -> int {
     value = 7
     return value
 }
@@ -12,14 +12,14 @@ fn observe(values: ref Array<int>) -> int {
 }
 
 @test
-fn test_var_and_owned_places_accept_ref_out() {
+fn test_writable_places_accept_ref() {
     var value = 1
     assert_eq(bump(ref value), 2)
 
     var slot = 0
-    assert_eq(fill(out slot), 7)
+    assert_eq(fill(ref slot), 7)
     assert_eq(slot, 7)
 
-    owned values = Array<int>(0)
+    var values = Array<int>(0)
     assert_eq(observe(ref values), 0)
 }

@@ -266,6 +266,13 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
     return m ? m->is_method : false;
 }
 
+bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name) {
+    if (!type || !member_name)
+        return false;
+    const XaBuiltinMember *member = xa_builtin_find_instance_member(type, member_name);
+    return member && member->is_method && member->mutates_receiver;
+}
+
 /* R2-2 stopgap: see xanalyzer_builtins.h. The runtime bindings for the
  * checked/saturating/overflows families evaluate at int64 width (VM native
  * cfuncs and AOT xrt_method dispatch both see a widened i64 value), so on a
@@ -1601,6 +1608,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
 
     // Parse parameter list between (open, close).
     XrType *param_types[16];
+    XrParamMode param_modes[16];
     int param_count = 0;
     bool is_variadic = false;
     int min_params = 0;
@@ -1650,6 +1658,15 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
             while (ts < close && s[ts] == ' ')
                 ts++;
 
+            XrParamMode mode = XR_PARAM_READ;
+            if (ts + 4 <= close && strncmp(s + ts, "ref ", 4) == 0) {
+                mode = XR_PARAM_REF;
+                ts += 4;
+            } else if (ts + 5 <= close && strncmp(s + ts, "move ", 5) == 0) {
+                mode = XR_PARAM_MOVE;
+                ts += 5;
+            }
+
             size_t te = ts;
             d = 0;
             while (te < close) {
@@ -1668,6 +1685,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
             }
 
             param_types[param_count] = parse_type_str(X, s + ts, te - ts);
+            param_modes[param_count] = mode;
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;
@@ -1676,6 +1694,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
             while (p < close && s[p] != ',')
                 p++;
             param_types[param_count] = xr_type_new_error(X);
+            param_modes[param_count] = XR_PARAM_READ;
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;
@@ -1704,8 +1723,11 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
             params[k] = param_types[k];
     }
     XrType *fn_type = xr_type_new_function(X, params, param_count, ret_type, is_variadic);
-    if (fn_type)
+    if (fn_type) {
         fn_type->function.min_params = min_params;
+        for (int k = 0; k < param_count; k++)
+            xr_type_function_set_param_mode(fn_type, k, param_modes[k]);
+    }
     if (params)
         xr_free(params);
     return fn_type;
@@ -1746,6 +1768,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
 
     // Parse parameters: "param: type, param2: type"
     XrType *param_types[16];
+    XrParamMode param_modes[16];
     bool param_optional[16];
     int param_count = 0;
     int min_params = 0;
@@ -1800,6 +1823,15 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
             while (type_start < close && *type_start == ' ')
                 type_start++;
 
+            XrParamMode mode = XR_PARAM_READ;
+            if ((size_t) (close - type_start) >= 4 && strncmp(type_start, "ref ", 4) == 0) {
+                mode = XR_PARAM_REF;
+                type_start += 4;
+            } else if ((size_t) (close - type_start) >= 5 && strncmp(type_start, "move ", 5) == 0) {
+                mode = XR_PARAM_MOVE;
+                type_start += 5;
+            }
+
             // Find end of type (next comma at depth 0 or close paren).
             // The `->` arrow token must not be misread as `>` closing a
             // generic — it would underflow depth and let inner commas
@@ -1823,6 +1855,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
             }
 
             param_types[param_count] = parse_type_str(X, type_start, type_end - type_start);
+            param_modes[param_count] = mode;
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;
@@ -1833,6 +1866,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
                 p++;
             param_optional[param_count] = false;
             param_types[param_count] = xr_type_new_error(X);
+            param_modes[param_count] = XR_PARAM_READ;
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;
@@ -1854,8 +1888,11 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
     }
 
     XrType *fn_type = xr_type_new_function(X, params, param_count, ret_type, is_variadic);
-    if (fn_type)
+    if (fn_type) {
         fn_type->function.min_params = min_params;
+        for (int i = 0; i < param_count; i++)
+            xr_type_function_set_param_mode(fn_type, i, param_modes[i]);
+    }
     if (params)
         xr_free(params);
     return fn_type;

@@ -71,6 +71,8 @@ static const char *mono_type_display_name(XrTypeRef *t) {
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "object";
+        case XR_TREF_CONST:
+            return "const";
         case XR_TREF_FUNCTION:
             return "function";
         case XR_TREF_OPTIONAL:
@@ -107,6 +109,8 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "obj";
+        case XR_TREF_CONST:
+            return "const";
         case XR_TREF_FUNCTION:
             return "fn";
         case XR_TREF_OPTIONAL:
@@ -118,15 +122,60 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
     }
 }
 
+static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
+    if (!buf || cap == 0)
+        return;
+    buf[0] = '\0';
+    if (!t) {
+        snprintf(buf, cap, "unknown");
+        return;
+    }
+    if (t->kind == XR_TREF_CONST) {
+        char inner[192];
+        mono_qualified_type_tag(t->children && t->nchildren > 0 ? t->children[0] : NULL, inner,
+                                sizeof(inner));
+        snprintf(buf, cap, "const_%s", inner);
+        return;
+    }
+    if (t->kind == XR_TREF_GENERIC) {
+        size_t used = (size_t) snprintf(buf, cap, "%s", t->name ? t->name : "obj");
+        for (uint8_t i = 0; i < t->nchildren && used < cap; i++) {
+            char child[128];
+            mono_qualified_type_tag(t->children ? t->children[i] : NULL, child, sizeof(child));
+            int written = snprintf(buf + used, cap - used, "_%s", child);
+            if (written < 0)
+                return;
+            used += (size_t) written;
+        }
+        return;
+    }
+    snprintf(buf, cap, "%s", xr_mono_type_tag(t));
+}
+
 char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     if (!name || count <= 0 || !type_args)
         return xr_strdup(name ? name : "");
 
+    /* A bare "const" tag would collapse const Array<int> and const Map<K,V>
+     * into one instance. Qualified arguments therefore use a recursive,
+     * identifier-safe tag while legacy unqualified tags remain unchanged. */
+    char type_bufs[XR_MONO_MAX_PER_GENERIC][256];
+    const char *tags[XR_MONO_MAX_PER_GENERIC];
+    if (count > XR_MONO_MAX_PER_GENERIC)
+        return xr_strdup(name);
+    for (int i = 0; i < count; i++) {
+        if (type_args[i] && type_args[i]->kind == XR_TREF_CONST) {
+            mono_qualified_type_tag(type_args[i], type_bufs[i], sizeof(type_bufs[i]));
+            tags[i] = type_bufs[i];
+        } else {
+            tags[i] = xr_mono_type_tag(type_args[i]);
+        }
+    }
+
     // Calculate buffer size: name + '$' + tags joined by '_'
     size_t len = strlen(name) + 1;  // name + '$'
     for (int i = 0; i < count; i++) {
-        const char *tag = xr_mono_type_tag(type_args[i]);
-        len += strlen(tag) + 1;  // tag + '_' separator
+        len += strlen(tags[i]) + 1;  // tag + '_' separator
     }
     len += 1;  // null terminator
 
@@ -141,7 +190,7 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     remaining -= written;
 
     for (int i = 0; i < count; i++) {
-        const char *tag = xr_mono_type_tag(type_args[i]);
+        const char *tag = tags[i];
         if (i > 0) {
             *p++ = '_';
             remaining--;
@@ -232,7 +281,7 @@ static XrCallArgAccess *clone_call_arg_accesses(XrCallArgAccess *arr, int count)
     XrCallArgAccess *result =
         (XrCallArgAccess *) xr_calloc((size_t) count, sizeof(XrCallArgAccess));
     for (int i = 0; i < count; i++)
-        result[i] = xr_call_arg_access_is_valid(arr[i]) ? arr[i] : XR_CALL_ARG_VALUE;
+        result[i] = xr_call_arg_access_is_valid(arr[i]) ? arr[i] : XR_CALL_ARG_PLAIN;
     return result;
 }
 

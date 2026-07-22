@@ -3610,7 +3610,7 @@ xicgen_direct_call_arg_can_borrow_stack_slice_view(XiCgenCtx *ctx, const XiFunc 
                                                    uint16_t arg_index, const XiValue *arg) {
     return xicgen_direct_call_arg_can_stack_slice_view(ctx, current, call, target, arg_index,
                                                        arg) &&
-           xi_func_param_passing_mode(target, arg_index) == XR_PARAM_IN;
+           xi_func_param_passing_mode(target, arg_index) == XR_PARAM_READ;
 }
 
 static void xicgen_emit_stack_slice_arg_name(FILE *out, const XiValue *call, uint16_t arg_index) {

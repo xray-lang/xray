@@ -1,7 +1,0 @@
-fn read_and_fill(snapshot: in int, target: out int) {
-    target = snapshot + 1
-}
-
-var values = [1, 2]
-var i = 0
-read_and_fill(values[i], out values[1])

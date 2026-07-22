@@ -69,8 +69,8 @@ fn test_parse_quoted_strings() {
 @test
 fn test_stringify() {
     var config = yaml.newMapping()
-    yaml.mappingSet(config, "name", yaml.stringValue("xray"))
-    yaml.mappingSet(config, "version", yaml.intValue(1))
+    yaml.mappingSet(ref config, "name", yaml.stringValue("xray"))
+    yaml.mappingSet(ref config, "version", yaml.intValue(1))
     var result = yaml.stringify(yaml.mappingValue(config))
     assert(len(result) > 0)
 }

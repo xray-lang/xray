@@ -1050,11 +1050,11 @@ export fn newArray() -> TomlArray {
     return TomlArray()
 }
 
-export fn tableSet(table: TomlTable, key: string, value: TomlValue) {
+export fn tableSet(table: ref TomlTable, key: string, value: TomlValue) {
     table.set(key, value)
 }
 
-export fn arrayPush(array: TomlArray, value: TomlValue) {
+export fn arrayPush(array: ref TomlArray, value: TomlValue) {
     array.push(value)
 }
 

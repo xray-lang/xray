@@ -14,7 +14,7 @@ class PureCounter {
     }
 }
 
-fn view(counter: in PureCounter) -> int {
+fn view(counter: PureCounter) -> int {
     return counter.push() + counter.callPush()
 }
 

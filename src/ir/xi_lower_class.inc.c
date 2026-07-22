@@ -424,7 +424,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         int this_var = xi_lower_var_create(&ml, 0, "this", this_type);
         if (value_receiver) {
             XrParamMode receiver_mode =
-                method_sym && method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_IN;
+                method_sym && method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ;
             if (!xi_func_set_param_passing_mode(ml.func, 0, receiver_mode)) {
                 xi_func_free(ml.func);
                 xi_lower_cleanup(&ml);
@@ -457,8 +457,8 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
-        XrParamMode mode = param ? param->passing_mode : XR_PARAM_VALUE;
-        if ((base + i) < fixed_params && mode != XR_PARAM_VALUE &&
+        XrParamMode mode = param ? param->passing_mode : XR_PARAM_READ;
+        if ((base + i) < fixed_params && mode != XR_PARAM_READ &&
             !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
             xi_func_free(ml.func);
             xi_lower_cleanup(&ml);
@@ -466,7 +466,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
         XR_DCHECK(param != NULL && param->name != NULL, "method param name must not be NULL");
         int param_var = xi_lower_var_create(&ml, param->symbol_id, param->name, pt);
-        if ((base + i) < fixed_params && mode != XR_PARAM_VALUE) {
+        if ((base + i) < fixed_params && mode == XR_PARAM_REF) {
             ml.vars[param_var].call_place = p;
             ml.vars[param_var].place_mode = mode;
         } else {
@@ -483,6 +483,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
      * drop param 0 here. Constructors own their freshly-allocated `this` and
      * move it out via the auto-return below, so they are NOT borrowed. */
     ml.func->receiver_borrowed = (is_inst && !is_ctor);
+    ml.func->receiver_call_place = value_receiver;
 
     /* Operator-overload methods receive ALL operands borrowed: the VM
      * operator dispatch (OP_ADD/OP_EQ/OP_INDEX/...) leaves the operands live

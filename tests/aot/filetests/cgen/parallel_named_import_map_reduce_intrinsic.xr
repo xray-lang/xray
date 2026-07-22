@@ -3,10 +3,10 @@ import { map, mapInto, reduce, Options } from parallel
 var mapped = map(0..4, (i) -> i + 1, Options(2))
 
 var out: Array<int> = []
-var same = mapInto(0..4, out, (i) -> i * 2, Options(2))
+mapInto(0..4, ref out, (i) -> i * 2, Options(2))
 
 var total = reduce(0..4, 0, (i) -> i + 1, (a, b) -> a + b, Options(2))
 
 print(mapped[3])
-print(same[2])
+print(out[2])
 print(total)

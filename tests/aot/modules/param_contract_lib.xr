@@ -4,7 +4,7 @@ export fn bumpRef(value: ref int) -> int {
     return value
 }
 
-export fn fillOut(value: out int) -> int {
+export fn fillOut(value: ref int) -> int {
     value = 9
     return value
 }
@@ -14,7 +14,7 @@ export const bumpRefValue = fn(value: ref int) -> int {
     return value
 }
 
-export const fillOutValue = fn(value: out int) -> int {
+export const fillOutValue = fn(value: ref int) -> int {
     value = 11
     return value
 }

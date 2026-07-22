@@ -121,11 +121,6 @@ typedef struct XaInferContext {
     uint32_t current_move_source_symbol_id;
     bool current_move_source_allows_stale_mark;
 
-    // Narrow suppression for reading an already-initialized field of an
-    // otherwise unassigned out parameter.
-    uint32_t out_field_da_read_symbol_id;
-    const char *out_field_da_read_path;
-
     // Generic type inference context (for callback parameters)
     // e.g., arr.map(x => x+1) - element_type is int, so x: int
     XrType *callback_element_type;      // Element type for callback first param

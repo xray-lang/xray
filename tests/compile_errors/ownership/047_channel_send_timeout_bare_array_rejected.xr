@@ -1,3 +1,0 @@
-shared ch: Channel<Array<int>> = Channel(1)
-var xs = [1, 2, 3]
-print(ch.sendTimeout(xs, 0))

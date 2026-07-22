@@ -15,14 +15,14 @@ fn move_value(v: Vec2) -> Vec2 {
     v.y = v.y + 20.0
     return v
 }
-fn length_sq(v: in Vec2) -> float {
+fn length_sq(v: Vec2) -> float {
     return v.x * v.x + v.y * v.y
 }
 fn translate(v: ref Vec2, dx: float, dy: float) {
     v.x = v.x + dx
     v.y = v.y + dy
 }
-fn add_to(target: ref Vec2, src: in Vec2) {
+fn add_to(target: ref Vec2, src: Vec2) {
     target.x = target.x + src.x
     target.y = target.y + src.y
 }
@@ -30,7 +30,7 @@ fn scale(v: ref Vec2, factor: float) {
     v.x = v.x * factor
     v.y = v.y * factor
 }
-fn dot(a: in Vec2, b: in Vec2) -> float {
+fn dot(a: Vec2, b: Vec2) -> float {
     return a.x * b.x + a.y * b.y
 }
 fn normalize(v: ref Vec2) {
@@ -54,7 +54,7 @@ fn test_basic_modes() {
     assert(b.x == 11.0)
     assert(b.y == 22.0)
 
-    // === in passing: readonly reference, no copy ===
+// === default READ passing: readonly reference, no copy ===
 
     var c = Vec2{x: 3.0, y: 4.0}
     assert(length_sq(c) == 25.0)

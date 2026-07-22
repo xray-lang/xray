@@ -931,6 +931,8 @@ static bool alloc_publish_canonical_effect(XaAllocPass *pass, XaAllocFunctionRow
     xa_effect_summary_clear(&summary);
     if (effect_id != XA_EFFECT_NONE) {
         row->symbol->links.effect_id = effect_id;
+        for (int i = 0; i < row->symbol->links.param_effect_count; i++)
+            row->symbol->links.param_effects[i].callable_effects = effect_id;
         return true;
     }
 

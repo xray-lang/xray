@@ -81,8 +81,8 @@ fn test_parse_number_formats() {
 @test
 fn test_stringify() {
     var config = toml.newTable()
-    toml.tableSet(config, "name", toml.stringValue("xray"))
-    toml.tableSet(config, "version", toml.intValue(1))
+    toml.tableSet(ref config, "name", toml.stringValue("xray"))
+    toml.tableSet(ref config, "version", toml.intValue(1))
     var result = toml.stringify(toml.tableValue(config))
     assert(len(result) > 0)
 }

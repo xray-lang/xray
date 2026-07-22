@@ -1,6 +1,0 @@
-fn fill(x: out int) {
-    x = 1
-}
-
-var y = 0
-fill(y)

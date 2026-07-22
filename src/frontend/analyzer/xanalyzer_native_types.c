@@ -111,6 +111,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
     const char *p = source;
     bool next_member_lowered_only = false;
+    bool next_member_mutates_receiver = false;
 
     /* Find "class <Name>" line */
     while (*p) {
@@ -126,6 +127,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         if (line[0] == '/' && line[1] == '/') {
             if (strstr(line, "@lowered"))
                 next_member_lowered_only = true;
+            if (strstr(line, "@receiver_write"))
+                next_member_mutates_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -165,6 +168,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         if (line[0] == '/' && line[1] == '/') {
             if (strstr(line, "@lowered"))
                 next_member_lowered_only = true;
+            if (strstr(line, "@receiver_write"))
+                next_member_mutates_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -250,10 +255,12 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_static = is_static;
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
+        members[count].mutates_receiver = next_member_mutates_receiver;
         members[count].is_yieldable = false;
         members[count].effect_contract = effect_contract;
         members[count].allocation_contract = allocation_contract;
         next_member_lowered_only = false;
+        next_member_mutates_receiver = false;
         count++;
 
         p = next_line(p);

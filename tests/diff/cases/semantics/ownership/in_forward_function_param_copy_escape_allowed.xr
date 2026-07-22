@@ -1,4 +1,4 @@
-fn wrap(data: in Array<int>, out: ref Array<Array<int>>) {
+fn wrap(data: Array<int>, out: ref Array<Array<int>>) {
     stash(copy(data), ref out)
 }
 

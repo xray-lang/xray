@@ -1122,7 +1122,7 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XrCallArgAccess access = XR_CALL_ARG_VALUE;
+            XrCallArgAccess access = XR_CALL_ARG_PLAIN;
             AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
             XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
             XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);

@@ -37,9 +37,9 @@ fn isTable(value: TomlValue) -> bool {
 
 fn configSample() -> TomlValue {
     var table = toml.newTable()
-    toml.tableSet(table, "name", toml.stringValue("xray"))
-    toml.tableSet(table, "version", toml.intValue(2))
-    toml.tableSet(table, "enabled", toml.boolValue(true))
+    toml.tableSet(ref table, "name", toml.stringValue("xray"))
+    toml.tableSet(ref table, "version", toml.intValue(2))
+    toml.tableSet(ref table, "enabled", toml.boolValue(true))
     return toml.tableValue(table)
 }
 
@@ -100,7 +100,7 @@ fn test_special_floats_and_negative_numbers() {
 @test
 fn test_float_decimal_point() {
     var table = toml.newTable()
-    toml.tableSet(table, "value", toml.floatValue(1.0))
+    toml.tableSet(ref table, "value", toml.floatValue(1.0))
     var result = toml.stringify(toml.tableValue(table))
     assert(result.contains("value = 1.0"))
     var reparsed = toml.parse(result)

@@ -369,7 +369,7 @@ static bool cg_cfn_xray_func_signature_supported(const XiFunc *f) {
     if (!cg_cfn_value_type_supported(f->return_type, true))
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (xi_func_param_passing_mode(f, i) != XR_PARAM_VALUE)
+        if (xi_func_param_passing_mode(f, i) != XR_PARAM_READ)
             return false;
         const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (!cg_cfn_value_type_supported(pt, false))
@@ -386,7 +386,7 @@ static bool cg_cfn_xray_func_matches_expected(const XiFunc *f, const XrType *exp
     if (!xr_type_equals(f->return_type, expected->function.return_type))
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (xi_func_param_passing_mode(f, i) != XR_PARAM_VALUE)
+        if (xi_func_param_passing_mode(f, i) != XR_PARAM_READ)
             return false;
         const XrType *actual = f->params && f->params[i] ? f->params[i]->type : NULL;
         const XrType *want = xr_type_function_param_type(expected, i);

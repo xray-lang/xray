@@ -15,7 +15,7 @@ fn replaceArray(values: ref Array<int>) {
     values = [7, 8, 9]
 }
 
-fn fillArray(values: out Array<int>) {
+fn fillArray(values: ref Array<int>) {
     values = [4, 5]
 }
 
@@ -23,7 +23,7 @@ fn replacePair(pair: ref Pair) {
     pair = Pair{left: pair.left + 10, right: pair.right + 20}
 }
 
-fn fillPair(pair: out Pair) {
+fn fillPair(pair: ref Pair) {
     pair = Pair{left: 30, right: 40}
 }
 
@@ -31,7 +31,7 @@ fn replaceBox(box: ref Box) {
     box = Box(box.value + 5)
 }
 
-fn fillBox(box: out Box) {
+fn fillBox(box: ref Box) {
     box = Box(50)
 }
 
@@ -41,7 +41,7 @@ print(values[0])
 print(len(values))
 
 var outputValues: Array<int> = []
-fillArray(out outputValues)
+fillArray(ref outputValues)
 print(outputValues[1])
 print(len(outputValues))
 
@@ -51,7 +51,7 @@ print(pair.left)
 print(pair.right)
 
 var outputPair: Pair
-fillPair(out outputPair)
+fillPair(ref outputPair)
 print(outputPair.left)
 print(outputPair.right)
 
@@ -60,7 +60,7 @@ replaceBox(ref box)
 print(box.value)
 
 var outputBox = Box(0)
-fillBox(out outputBox)
+fillBox(ref outputBox)
 print(outputBox.value)
 
 const arrayAction = replaceArray
@@ -70,7 +70,7 @@ print(indirectValues[2])
 
 const pairAction = fillPair
 var indirectPair = Pair{left: 0, right: 0}
-pairAction(out indirectPair)
+pairAction(ref indirectPair)
 print(indirectPair.right)
 
 const boxAction = replaceBox

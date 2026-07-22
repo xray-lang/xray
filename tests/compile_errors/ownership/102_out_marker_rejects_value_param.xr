@@ -1,6 +1,0 @@
-fn keep(x: int) -> int {
-    return x
-}
-
-var y = 0
-print(keep(out y))

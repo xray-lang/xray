@@ -1,8 +1,0 @@
-fn f(a: int) {}
-
-fn bad(x: out int) {
-    f(1, out x)
-}
-
-var value = 0
-bad(out value)

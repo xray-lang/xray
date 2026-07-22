@@ -1,7 +1,0 @@
-fn leak(data: in Array<int>) -> Array<int> {
-    return data
-}
-
-var values: Array<int> = [1, 2]
-var leaked = leak(values)
-print(len(leaked))

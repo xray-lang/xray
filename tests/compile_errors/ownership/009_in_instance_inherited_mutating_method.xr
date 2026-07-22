@@ -20,7 +20,7 @@ class CounterChild extends CounterBase {
     }
 }
 
-fn view(counter: in CounterChild) {
+fn view(counter: CounterChild) {
     counter.callBaseBump()
 }
 

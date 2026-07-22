@@ -1,8 +1,0 @@
-import "../../fixtures/param_mode_import_lib" as param_mode
-
-fn main() {
-    var slot = 0
-    param_mode.fillOut(slot)
-}
-
-main()

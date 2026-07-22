@@ -4,8 +4,12 @@
 class Semaphore {
     available: int
     isClosed: bool
+    // @receiver_write
     release(count?: int) -> int
+    // @receiver_write
     tryAcquire() -> bool
+    // @receiver_write
     acquire() -> bool
+    // @receiver_write
     close()
 }

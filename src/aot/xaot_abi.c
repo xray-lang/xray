@@ -145,7 +145,9 @@ static bool param_uses_place_abi(const XiFunc *func, const XiValue *value, bool 
         return false;
     uint16_t index = (uint16_t) value->aux_int;
     XrParamMode mode = xi_func_param_passing_mode(func, index);
-    if (mode == XR_PARAM_VALUE)
+    bool receiver_read_place = mode == XR_PARAM_READ && index == 0 && func->receiver_call_place &&
+                               func->params && func->params[0] == value;
+    if (mode != XR_PARAM_REF && !receiver_read_place)
         return false;
     if (mode_out)
         *mode_out = mode;
@@ -429,7 +431,7 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
 
 static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
                                              const XrType *type, const XiValue *value) {
-    XrParamMode mode = XR_PARAM_VALUE;
+    XrParamMode mode = XR_PARAM_READ;
     (void) param_uses_place_abi(func, value, false, &mode);
 
     /* Read-only aggregate borrows have concrete storage at both boundaries:
@@ -447,8 +449,9 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
                 return native_value_slot_for_type(bundle, func, type, value, false);
             default: {
                 bool native_aggregate_borrow =
-                    mode == XR_PARAM_IN || (func && func->receiver_borrowed && func->nparams > 0 &&
-                                            func->params && func->params[0] == value);
+                    mode == XR_PARAM_READ ||
+                    (func && func->receiver_borrowed && func->nparams > 0 && func->params &&
+                     func->params[0] == value);
                 if (native_aggregate_borrow &&
                     struct_layout_for_slot(bundle, func, type, value, false))
                     return native_value_slot_for_type(bundle, func, type, value, false);

@@ -60,16 +60,16 @@ class ApiInventoryDiffTest(unittest.TestCase):
             report["changes"][0],
         )
 
-    def test_out_param_mode_signature_change_is_breaking(self) -> None:
+    def test_move_param_mode_signature_change_is_breaking(self) -> None:
         old_inventory = inventory_with_signature("(slot: ref int): ()")
-        new_inventory = inventory_with_signature("(slot: out int): ()")
+        new_inventory = inventory_with_signature("(slot: move Buffer): ()")
 
         report = api_inventory.compare_api_inventories(old_inventory, new_inventory)
 
         self.assertEqual(1, report["counts"]["breaking"])
         self.assertEqual("signature_changed", report["changes"][0]["change"])
         self.assertEqual("(slot: ref int): ()", report["changes"][0]["old_signature"])
-        self.assertEqual("(slot: out int): ()", report["changes"][0]["new_signature"])
+        self.assertEqual("(slot: move Buffer): ()", report["changes"][0]["new_signature"])
 
 
 if __name__ == "__main__":

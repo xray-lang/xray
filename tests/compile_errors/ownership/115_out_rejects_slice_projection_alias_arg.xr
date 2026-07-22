@@ -1,6 +1,0 @@
-fn read_view_and_fill(view: in Slice<int>, target: out int) {
-    target = 0
-}
-
-var values = [1, 2]
-read_view_and_fill(values[:], out values[0])

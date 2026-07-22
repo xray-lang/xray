@@ -78,12 +78,13 @@ struct XrClassInfo {
     int constructor_param_count;
 
     // Virtual method table (built in Pass 1.5 for static devirtualization)
-    XaMethodSlot *vtable;   // Virtual method slots (NULL if not built)
-    int vtable_size;        // Number of vtable entries
-    bool explicit_final;    // explicit final class: cannot be extended
-    bool has_subclass;      // true if any class extends this one
-    uint32_t derive_flags;  // XR_DERIVE_* declaration metadata flags
-    bool is_extern_layout;  // native C layout declared by an extern "C" block
+    XaMethodSlot *vtable;       // Virtual method slots (NULL if not built)
+    int vtable_size;            // Number of vtable entries
+    bool explicit_final;        // explicit final class: cannot be extended
+    bool has_subclass;          // true if any class extends this one
+    uint32_t derive_flags;      // XR_DERIVE_* declaration metadata flags
+    uint32_t capability_flags;  // compiler-owned XaTypeCapability proof bits
+    bool is_extern_layout;      // native C layout declared by an extern "C" block
 
     // Struct layout (VALUE_TYPE only, computed by analyzer)
     struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct

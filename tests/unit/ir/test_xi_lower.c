@@ -1054,13 +1054,13 @@ TEST(class_field_access_lowers_with_global_evidence_id) {
                                           "    }\n"
                                           "}\n"
                                           "\n"
-                                          "fn touch(c: Child) -> int {\n"
+                                          "fn touch(c: ref Child) -> int {\n"
                                           "    c.flag = false\n"
                                           "    return c.wide\n"
                                           "}\n"
                                           "\n"
                                           "var child = Child(7, true)\n"
-                                          "print(touch(child))\n",
+                                          "print(touch(ref child))\n",
                                           &ev);
     REQUIRE_CLASS_FIELD_EVIDENCE(main_func != NULL, "source should lower");
     REQUIRE_CLASS_FIELD_EVIDENCE(ev.nclass_fields == 2, "producer should record class fields");
@@ -2545,7 +2545,7 @@ TEST(struct_method_receivers_use_call_bound_places) {
            bump->call_plan->receiver.place == bump->args[0] && bump->args[0]->op == XI_LOCAL_ADDR &&
            "mutating struct receiver should use a ref call-bound local place");
     assert(read->call_plan && read->call_plan->verified && read->call_plan->has_receiver &&
-           read->call_plan->receiver.param_mode == XR_PARAM_IN &&
+           read->call_plan->receiver.param_mode == XR_PARAM_READ &&
            read->call_plan->receiver.place == read->args[0] && read->args[0]->op == XI_LOCAL_ADDR &&
            "readonly struct receiver should use an in call-bound local place");
 

@@ -4,7 +4,7 @@ fn bump(acc: ref [uint32; 4], x: uint32) {
     }
 }
 
-fn read_pair(acc: in [uint32; 4]) -> uint32 {
+fn read_pair(acc: [uint32; 4]) -> uint32 {
     var out: uint32 = 0
     for (var i = 0; i < 1; i++) {
         out = acc[0] + acc[1]

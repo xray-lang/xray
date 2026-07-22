@@ -1,9 +1,0 @@
-fn bad(x: out int) {
-    try {
-    } catch panic (e) {
-        x = 1
-    }
-}
-
-var y = 0
-bad(out y)

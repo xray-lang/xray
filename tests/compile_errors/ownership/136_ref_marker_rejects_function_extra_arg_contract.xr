@@ -1,8 +1,8 @@
 fn f() {}
 
-fn bad(x: out int) {
+fn bad(x: ref int) {
     f(ref x)
 }
 
 var value = 0
-bad(out value)
+bad(ref value)

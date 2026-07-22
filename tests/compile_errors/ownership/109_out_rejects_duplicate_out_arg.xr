@@ -1,7 +1,0 @@
-fn fill_pair(left: out int, right: out int) {
-    left = 1
-    right = 2
-}
-
-var value = 0
-fill_pair(out value, out value)

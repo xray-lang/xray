@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Inventory task-206 parameter-mode convergence residue.
+"""Fail-closed convergence gate for the READ / REF / MOVE parameter model.
 
-This is a P0 inventory gate, not a final residue blocker. By default it prints
-classified hits and exits successfully. Later 206 phases can add stricter
-category-specific failure modes as legacy representation and syntax are removed.
+The public Xray parameter surface is intentionally small:
+
+    value: T          # READ (default)
+    value: ref T      # exclusive write loan
+    value: move T     # unique-owner transfer
+
+The historical ``in`` and ``out`` declaration/call spellings and their enum
+members are deleted.  This check rejects their return in active source while
+allowing only the compact parser-negative corpus listed below.  It also keeps
+the declaration AST on one XrParamNode representation.
 """
 
 from __future__ import annotations
@@ -12,7 +19,6 @@ import argparse
 import json
 import re
 import sys
-from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -46,88 +52,51 @@ SKIP_DIR_NAMES = {
     "node_modules",
 }
 
-IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
-PARAM_BOUNDARY = r"(?:^|[(,\[{|])"
-MODE_WORDS = r"(?:in|ref|out)"
-MODE_STOPWORDS = r"(?:of|or|and|the|then|memory|range|max|min|force|turn|use|case|cases)\b"
-
-DECL_MODE_RE = re.compile(rf"{PARAM_BOUNDARY}\s*{MODE_WORDS}\s+{IDENT}\s*:")
-CANON_DECL_MODE_RE = re.compile(
-    rf"{PARAM_BOUNDARY}\s*{IDENT}\s*:\s*{MODE_WORDS}\s+(?!{MODE_STOPWORDS}){IDENT}"
-)
-CALL_MARKER_RE = re.compile(
-    rf"[(,]\s*(?P<mode>ref|out)\s+(?!{MODE_STOPWORDS})(?P<ident>{IDENT})(?:\b|[.[])"
-)
-CALL_IN_MARKER_REMOVED_RE = re.compile(rf"[(,]\s*in\s+(?!{MODE_STOPWORDS})(?:{IDENT}|this)(?:\b|[.[])")
-FUNCTION_TYPE_PARAM_MODE_RE = re.compile(r"\([^)]*\b(?:in|ref|out)\s+[^)]*\)\s*->")
-TYPE_LIKE_WORDS = {
-    "int",
-    "float",
-    "string",
-    "bool",
-    "rune",
-    "char",
-    "byte",
-    "int8",
-    "int16",
-    "int32",
-    "int64",
-    "uint8",
-    "uint16",
-    "uint32",
-    "uint64",
-    "float32",
-    "float64",
-    "intsize",
-    "uintsize",
+# One fixture per rejected grammar shape.  These are parser proofs, not a
+# compatibility layer and not an item-by-item archive of the old semantics.
+REMOVED_SYNTAX_FIXTURES = {
+    "tests/compile_errors/syntax/032_param_in_mode_removed.xr",
+    "tests/compile_errors/syntax/033_param_out_mode_removed.xr",
+    "tests/compile_errors/syntax/034_in_call_marker_removed.xr",
+    "tests/compile_errors/syntax/035_out_call_marker_removed.xr",
 }
-MOVE_PARAM_RE = re.compile(
-    rf"{PARAM_BOUNDARY}\s*(?:move\s+{IDENT}\s*:|{IDENT}\s*:\s*move\b)"
+
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+TYPE_HEAD = (
+    r"(?:[A-Z][A-Za-z0-9_]*|int(?:8|16|32|64|size)?|uint(?:8|16|32|64|size)?|"
+    r"float(?:32|64)?|bool|byte|rune|char|string|void|never|\[|\()"
 )
-POSTFIX_DECL_MODE_RE = re.compile(
-    rf"{PARAM_BOUNDARY}\s*{IDENT}\s*:\s*(?:{IDENT}(?:<[^,)]*>)?|\[[^\]]+\]|\([^)]*\))\s+{MODE_WORDS}\b"
+REMOVED_ENUM_RE = re.compile(
+    r"\b(?:XR_PARAM_(?:VALUE|IN|OUT)|XR_CALL_ARG_(?:VALUE|OUT))\b"
 )
-COMBINED_DECL_MODE_RE = re.compile(rf"{PARAM_BOUNDARY}\s*{IDENT}\s*:\s*{MODE_WORDS}\s+(?:{MODE_WORDS}|move)\b")
-STALE_EBNF_RE = re.compile(r"\b(?:Param\s*::=.*Modifier|Modifier\s*::=.*(?:'in'|'ref'|\bin\b|\bref\b))")
-XR_PARAM_RE = re.compile(r"\bXR_PARAM_(?:VALUE|IN|REF|OUT)\b")
-PASSING_MODE_RE = re.compile(r"\b(?:param_passing_modes|passing_mode)\b")
-FUNCTION_TYPE_RE = re.compile(r"\b(?:xr_type_new_function|XR_TYPE_IS_FUNCTION|function\.param_)")
-BACKEND_ABI_RE = re.compile(r"\b(?:xi_func_param_passing_mode|param_passing_mode|XrAotAbi)\b")
-ESCAPE_SUSPEND_RE = re.compile(
-    r"\b(?:borrowed_root|borrow|escape|suspend|await|yield|noescape|lifetime)\b", re.IGNORECASE
+REMOVED_NAMED_FORMAL_RE = re.compile(
+    rf"(?:^|[(,])\s*{IDENT}\s*:\s*(?:in|out)\s+{TYPE_HEAD}"
 )
+REMOVED_PREFIX_FORMAL_RE = re.compile(
+    rf"(?:^|[(,])\s*(?:in|out)\s+{IDENT}\s*:"
+)
+REMOVED_FUNCTION_TYPE_RE = re.compile(
+    rf"(?:^|[(,=])\s*(?:in|out)\s+(?:const\s+)?(?:{TYPE_HEAD}|\[[^\]]+\])\s*\)\s*->"
+)
+REMOVED_CALL_MARKER_RE = re.compile(
+    rf"(?:^|[(,])\s*(?:in|out)\s+(?:{IDENT}|this)(?:\b|[.[])"
+)
+REMOVED_PUBLIC_SURFACE_RE = re.compile(
+    rf"(?:{IDENT}\s*:\s*(?:in|out)\s+{TYPE_HEAD}"
+    rf"|(?:^|[(,=])\s*(?:in|out)\s+(?:const\s+)?(?:{TYPE_HEAD}|\[[^\]]+\])\s*\)\s*->)"
+)
+OUT_KEYWORD_ROW_RE = re.compile(r"^\s*\|\s*`out`\s*\|")
 DECL_AST_LEGACY_FIELD_RE = re.compile(
     r"\b(?:char\s*\*\*parameters|XrTypeRef\s*\*\*param_types|"
     r"XrParamMode\s*\*param_passing_modes|AstNode\s*\*\*default_values)\b"
 )
 
-ACTIVE_SPEC_PREFIXES = ("LANGUAGE_SPEC", "spec/", "demos/", "stdlib/")
-REMOVED_SYNTAX_NEGATIVE_FIXTURES = {
-    "tests/compile_errors/syntax/028_param_mode_prefix_removed.xr",
-    "tests/compile_errors/syntax/029_param_move_mode_removed.xr",
-    "tests/compile_errors/syntax/030_param_move_prefix_removed.xr",
-    "tests/compile_errors/syntax/031_param_mode_postfix_removed.xr",
-    "tests/compile_errors/syntax/032_param_mode_combined_removed.xr",
-    "tests/compile_errors/syntax/033_param_move_combined_removed.xr",
-}
-CALL_IN_MARKER_REMOVED_FIXTURES = {
-    "tests/compile_errors/syntax/034_in_call_marker_removed.xr",
-}
-CATEGORIES = (
-    "MOVE_AS_PARAM_MODE_RESIDUE",
-    "PREFIX_DECL_MODE_SPELLING",
-    "POSTFIX_DECL_MODE_SPELLING",
-    "COMBINED_DECL_MODE_SPELLING",
-    "REMOVED_SYNTAX_NEGATIVE_FIXTURE",
-    "CANON_DECL_MODE_SPELLING",
-    "CALL_SITE_REF_OUT_MARKER",
-    "STALE_MODIFIER_EBNF",
-    "XR_PARAM_MACRO_RESIDUE",
-    "PASSING_MODE_FIELD_OR_ARRAY",
-    "FUNCTION_TYPE_MODE_CONSUMER",
-    "BACKEND_ABI_MODE_CONSUMER",
-    "BORROW_ESCAPE_SUSPEND_CONSUMER",
-    "ACTIVE_PUBLIC_SURFACE_PARAM_MODE_HIT",
+PUBLIC_PATH_PREFIXES = (
+    "LANGUAGE_SPEC",
+    "spec/",
+    "demos/",
+    "stdlib/",
+    "src/app/mcp/xmcp_knowledge_generated.c",
 )
 
 
@@ -139,11 +108,8 @@ class Hit:
     text: str
 
 
-def rel(root: Path, path: Path) -> Path:
-    try:
-        return path.relative_to(root)
-    except ValueError:
-        return path.resolve().relative_to(root)
+def rel(root: Path, path: Path) -> str:
+    return str(path.resolve().relative_to(root.resolve()))
 
 
 def iter_text_files(root: Path):
@@ -153,8 +119,8 @@ def iter_text_files(root: Path):
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
-            rel_path = rel(root, path)
-            if any(part in SKIP_DIR_NAMES for part in rel_path.parts):
+            relative = Path(rel(root, path))
+            if any(part in SKIP_DIR_NAMES for part in relative.parts):
                 continue
             if path.is_file() and any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
                 seen.add(path)
@@ -165,124 +131,53 @@ def iter_text_files(root: Path):
             yield path
 
 
-def active_public_path(rel_path: str) -> bool:
-    return rel_path.startswith(ACTIVE_SPEC_PREFIXES)
+def is_public_path(path: str) -> bool:
+    return path.startswith(PUBLIC_PATH_PREFIXES)
 
 
-def has_call_site_marker(line: str) -> bool:
-    if not CALL_MARKER_RE.search(line):
-        return False
-    if FUNCTION_TYPE_PARAM_MODE_RE.search(line):
-        return False
-
-    for match in CALL_MARKER_RE.finditer(line):
-        ident = match.group("ident")
-        tail = line[match.end() :].lstrip()
-        type_like = ident in TYPE_LIKE_WORDS or ident[:1].isupper()
-        if type_like and (
-            tail.startswith("<")
-            or tail.startswith("?")
-            or tail.startswith(")")
-            or "->" in tail
-        ):
-            continue
-        return True
-    return False
-
-
-def classify_line(rel_path: str, line: str) -> list[str]:
+def classify_line(path: str, line: str) -> list[str]:
     categories: list[str] = []
-    if not line.strip():
-        return categories
+    if REMOVED_ENUM_RE.search(line):
+        categories.append("REMOVED_ENUM_MEMBER")
 
-    removed_syntax_fixture = rel_path in REMOVED_SYNTAX_NEGATIVE_FIXTURES
-    call_in_removed_fixture = rel_path in CALL_IN_MARKER_REMOVED_FIXTURES
-    if MOVE_PARAM_RE.search(line):
-        categories.append(
-            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
-            if removed_syntax_fixture
-            else "MOVE_AS_PARAM_MODE_RESIDUE"
+    is_xray_source = path.endswith(".xr")
+    if is_xray_source and not line.lstrip().startswith("//"):
+        removed_syntax = (
+            REMOVED_NAMED_FORMAL_RE.search(line)
+            or REMOVED_PREFIX_FORMAL_RE.search(line)
+            or REMOVED_FUNCTION_TYPE_RE.search(line)
+            or REMOVED_CALL_MARKER_RE.search(line)
         )
-    if DECL_MODE_RE.search(line):
-        categories.append(
-            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
-            if removed_syntax_fixture
-            else "PREFIX_DECL_MODE_SPELLING"
-        )
-    combined_mode = COMBINED_DECL_MODE_RE.search(line)
-    if combined_mode:
-        categories.append(
-            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
-            if removed_syntax_fixture
-            else "COMBINED_DECL_MODE_SPELLING"
-        )
-    postfix_mode = POSTFIX_DECL_MODE_RE.search(line) and not combined_mode
-    if postfix_mode:
-        categories.append(
-            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
-            if removed_syntax_fixture
-            else "POSTFIX_DECL_MODE_SPELLING"
-        )
-    if CANON_DECL_MODE_RE.search(line) and not combined_mode:
-        categories.append(
-            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
-            if removed_syntax_fixture
-            else "CANON_DECL_MODE_SPELLING"
-        )
-    if has_call_site_marker(line):
-        categories.append("CALL_SITE_REF_OUT_MARKER")
-    if call_in_removed_fixture and CALL_IN_MARKER_REMOVED_RE.search(line):
-        categories.append("REMOVED_SYNTAX_NEGATIVE_FIXTURE")
-    if STALE_EBNF_RE.search(line):
-        categories.append("STALE_MODIFIER_EBNF")
-    if XR_PARAM_RE.search(line):
-        categories.append("XR_PARAM_MACRO_RESIDUE")
-    if PASSING_MODE_RE.search(line):
-        categories.append("PASSING_MODE_FIELD_OR_ARRAY")
-    if FUNCTION_TYPE_RE.search(line):
-        categories.append("FUNCTION_TYPE_MODE_CONSUMER")
-    if BACKEND_ABI_RE.search(line):
-        categories.append("BACKEND_ABI_MODE_CONSUMER")
-    if ESCAPE_SUSPEND_RE.search(line) and ("param" in line or "passing_mode" in line):
-        categories.append("BORROW_ESCAPE_SUSPEND_CONSUMER")
+        if removed_syntax:
+            categories.append(
+                "ALLOWED_REMOVED_SYNTAX_FIXTURE"
+                if path in REMOVED_SYNTAX_FIXTURES
+                else "REMOVED_SOURCE_SYNTAX"
+            )
 
-    if categories and active_public_path(rel_path):
-        categories.append("ACTIVE_PUBLIC_SURFACE_PARAM_MODE_HIT")
+    if is_public_path(path):
+        if REMOVED_PUBLIC_SURFACE_RE.search(line) or OUT_KEYWORD_ROW_RE.search(line):
+            categories.append("REMOVED_PUBLIC_SURFACE")
     return categories
 
 
-def scan_file(root: Path, path: Path) -> list[Hit]:
-    hits: list[Hit] = []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except UnicodeDecodeError:
-        return hits
-    rel_path = str(rel(root, path))
-    for lineno, line in enumerate(lines, 1):
-        for category in classify_line(rel_path, line):
-            hits.append(Hit(category, rel_path, lineno, line.strip()))
-    return hits
-
-
 def build_inventory(root: Path) -> dict[str, list[Hit]]:
-    by_category: dict[str, list[Hit]] = defaultdict(list)
-    for category in CATEGORIES:
-        by_category[category]
+    inventory = {
+        "REMOVED_ENUM_MEMBER": [],
+        "REMOVED_SOURCE_SYNTAX": [],
+        "REMOVED_PUBLIC_SURFACE": [],
+        "ALLOWED_REMOVED_SYNTAX_FIXTURE": [],
+    }
     for path in iter_text_files(root):
-        for hit in scan_file(root, path):
-            by_category[hit.category].append(hit)
-    return {category: by_category[category] for category in CATEGORIES}
-
-
-def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
-    print("Task 206 parameter mode convergence inventory")
-    for category, hits in inventory.items():
-        print(f"{category}: {len(hits)}")
-        shown = hits if max_per_category <= 0 else hits[:max_per_category]
-        for hit in shown:
-            print(f"  {hit.path}:{hit.line}: {hit.text}")
-        if max_per_category > 0 and len(hits) > max_per_category:
-            print(f"  ... {len(hits) - max_per_category} more")
+        relative = rel(root, path)
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        for lineno, line in enumerate(lines, 1):
+            for category in classify_line(relative, line):
+                inventory[category].append(Hit(category, relative, lineno, line.strip()))
+    return inventory
 
 
 def declaration_ast_contract_residue(root: Path) -> list[str]:
@@ -293,58 +188,58 @@ def declaration_ast_contract_residue(root: Path) -> list[str]:
     header_text = ast_header.read_text(encoding="utf-8")
     if header_text.count("XrParamNode **params;") < 3:
         failures.append(
-            f"{ast_header.relative_to(root)}: function, method, and interface declarations "
-            "must all store XrParamNode **params"
+            "src/frontend/parser/xast_nodes_decl.h: function, method, and interface "
+            "declarations must all store XrParamNode **params"
         )
     for lineno, line in enumerate(header_text.splitlines(), 1):
         if DECL_AST_LEGACY_FIELD_RE.search(line):
-            failures.append(f"{ast_header.relative_to(root)}:{lineno}: {line.strip()}")
+            failures.append(f"src/frontend/parser/xast_nodes_decl.h:{lineno}: {line.strip()}")
 
     parser_text = oop_parser.read_text(encoding="utf-8")
     for lineno, line in enumerate(parser_text.splitlines(), 1):
         if re.search(r"\b(?:param_passing_modes|default_values)\b", line):
-            failures.append(f"{oop_parser.relative_to(root)}:{lineno}: {line.strip()}")
+            failures.append(f"src/frontend/parser/xparse_oop.c:{lineno}: {line.strip()}")
     return failures
+
+
+def print_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
+    print("READ / REF / MOVE parameter convergence")
+    for category, hits in inventory.items():
+        print(f"{category}: {len(hits)}")
+        shown = hits if max_per_category <= 0 else hits[:max_per_category]
+        for hit in shown:
+            print(f"  {hit.path}:{hit.line}: {hit.text}")
+        if max_per_category > 0 and len(hits) > max_per_category:
+            print(f"  ... {len(hits) - max_per_category} more")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument(
-        "--max-per-category",
-        type=int,
-        default=20,
-        help="text output limit per category; 0 prints all hits",
-    )
-    parser.add_argument(
-        "--fail-on-decl-ast-contract",
-        action="store_true",
-        help="fail if declaration AST methods/interfaces reintroduce parallel parameter arrays",
-    )
+    parser.add_argument("--max-per-category", type=int, default=20)
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
     inventory = build_inventory(root)
+    ast_failures = declaration_ast_contract_residue(root)
 
     if args.json:
-        print(
-            json.dumps(
-                {category: [asdict(hit) for hit in hits] for category, hits in inventory.items()},
-                indent=2,
-                sort_keys=True,
-            )
-        )
+        payload = {category: [asdict(hit) for hit in hits] for category, hits in inventory.items()}
+        payload["DECL_AST_CONTRACT_RESIDUE"] = ast_failures
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        print_text_inventory(inventory, args.max_per_category)
-    if args.fail_on_decl_ast_contract:
-        failures = declaration_ast_contract_residue(root)
-        if failures:
-            print("declaration AST ParamContract residue:", file=sys.stderr)
-            for failure in failures:
+        print_inventory(inventory, args.max_per_category)
+        if ast_failures:
+            print("DECL_AST_CONTRACT_RESIDUE:", file=sys.stderr)
+            for failure in ast_failures:
                 print(f"  {failure}", file=sys.stderr)
-            return 1
-    return 0
+
+    blockers = sum(
+        len(inventory[name])
+        for name in ("REMOVED_ENUM_MEMBER", "REMOVED_SOURCE_SYNTAX", "REMOVED_PUBLIC_SURFACE")
+    )
+    return 1 if blockers or ast_failures else 0
 
 
 if __name__ == "__main__":

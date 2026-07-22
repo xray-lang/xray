@@ -35,7 +35,7 @@
     },
     {
       "heading": "Parameter modes",
-      "markdown": "- Declaration spelling is `name: T`, `name: in T`, `name: ref T`, or `name: out T`\n- Calls to `ref` / `out` parameters must write `ref place` / `out place`; `in` calls use plain arguments\n- `move` and `copy` are source actions, not parameter modes",
+      "markdown": "- `name: T` is the default READ contract; `name: ref T` is an exclusive writable place loan; `name: move T` consumes a unique owner\n- Calls to `ref` parameters must write `ref place`; existing owners passed to `move` parameters must write `move value`\n- `copy(value)` creates a fresh owner and ordinary outputs use returns, tuples, structs, or Result",
       "fences": [
         "decl-fn-param-modes"
       ]

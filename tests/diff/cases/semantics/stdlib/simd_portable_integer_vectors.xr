@@ -55,7 +55,7 @@ fn run() {
     }
     var out = Array<uint64>(4)
     var outView: Slice<uint64> = out[:]
-    a64.store(outView, 1)
+    a64.store(ref outView, 1)
     assert_eq(out[1], lanes64[0])
     assert_eq(out[2], lanes64[1])
     var wideWords: [uint32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -67,13 +67,13 @@ fn run() {
     assert_eq(combined.reduceAdd(), 300)
     var wideOut = Array<uint64>(4)
     var wideOutView: Slice<uint64> = wideOut[:]
-    combined.store(wideOutView)
+    combined.store(ref wideOutView)
     assert_eq(wideOut[0], 32)
     assert_eq(wideOut[1], 42)
     assert_eq(wideOut[2], 100)
     assert_eq(wideOut[3], 126)
     var xbytes = U8x32.load(byteView).bitXor(U8x32.load(byteView))
-    xbytes.reinterpretU64().store(wideOutView)
+    xbytes.reinterpretU64().store(ref wideOutView)
     assert_eq(wideOut[0], 0)
     assert(Capabilities.nativeBytes() >= 16)
     print("OK simd portable integer vectors")

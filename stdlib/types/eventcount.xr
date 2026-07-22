@@ -4,7 +4,10 @@
 class EventCount {
     epoch: int
     isClosed: bool
+    // @receiver_write
     advance(step?: int) -> int
+    // @receiver_write
     wait(lastEpoch: int, workerHint?: int) -> int
+    // @receiver_write
     close()
 }

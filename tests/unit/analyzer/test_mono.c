@@ -48,6 +48,32 @@ TEST(mono_mangle_multi) {
     free(result);
 }
 
+TEST(mono_mangle_preserves_const_capability_identity) {
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *array_children[] = {&int_t};
+    XrTypeRef array_t = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = array_children};
+    XrTypeRef *map_children[] = {&str_t, &int_t};
+    XrTypeRef map_t = {
+        .kind = XR_TREF_GENERIC, .name = "Map", .nchildren = 2, .children = map_children};
+    XrTypeRef *const_array_children[] = {&array_t};
+    XrTypeRef const_array = {
+        .kind = XR_TREF_CONST, .nchildren = 1, .children = const_array_children};
+    XrTypeRef *const_map_children[] = {&map_t};
+    XrTypeRef const_map = {.kind = XR_TREF_CONST, .nchildren = 1, .children = const_map_children};
+
+    XrTypeRef *array_args[] = {&const_array};
+    XrTypeRef *map_args[] = {&const_map};
+    char *array_name = xr_mono_mangle("hold", array_args, 1);
+    char *map_name = xr_mono_mangle("hold", map_args, 1);
+    ASSERT_STR_EQ(array_name, "hold$const_Array_i64");
+    ASSERT_STR_EQ(map_name, "hold$const_Map_str_i64");
+    ASSERT(strcmp(array_name, map_name) != 0);
+    free(array_name);
+    free(map_name);
+}
+
 TEST(mono_mangle_null_name) {
     char *result = xr_mono_mangle(NULL, NULL, 0);
     ASSERT(result != NULL);
@@ -99,7 +125,7 @@ TEST(type_substitute_non_param) {
 }
 
 TEST(type_substitute_array_element) {
-    // Array<T> where T=int â†?Array<int>
+    // Array<T> where T=int ?Array<int>
     XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "T";
 
@@ -249,19 +275,19 @@ TEST(mono_collector_dedup) {
     XrTypeRef *args1[] = {&int_t};
     xa_mono_collector_add(&c, "identity", args1, 1, false);
 
-    // bool has different slot type from int (BOOL=11 vs I64=7) â†?separate instance
+    // bool has different slot type from int (BOOL=11 vs I64=7) ?separate instance
     XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
     XrTypeRef *args2[] = {&bool_t};
     xa_mono_collector_add(&c, "identity", args2, 1, false);
     ASSERT_EQ(c.count, 2);
 
-    // Same int type again â†?should deduplicate
+    // Same int type again ?should deduplicate
     XrTypeRef int_t2 = {.kind = XR_TREF_INT};
     XrTypeRef *args2b[] = {&int_t2};
     xa_mono_collector_add(&c, "identity", args2b, 1, false);
     ASSERT_EQ(c.count, 2);
 
-    // float has different rep â†?separate instance
+    // float has different rep ?separate instance
     XrTypeRef float_t = {.kind = XR_TREF_FLOAT};
     XrTypeRef *args3[] = {&float_t};
     xa_mono_collector_add(&c, "identity", args3, 1, false);
@@ -278,6 +304,7 @@ int main(void) {
     RUN_TEST(mono_type_tag_basic);
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
+    RUN_TEST(mono_mangle_preserves_const_capability_identity);
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);
 

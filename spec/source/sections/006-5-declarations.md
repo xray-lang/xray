@@ -173,11 +173,12 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 
 #### 5.2.4 参数模式
 
-参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。
+普通参数默认提供只读 capability；只有写借用和所有权交接需要显式模式：
+`name: ref T`、`name: move T`。
 
 ```xray @id=decl-fn-param-modes
-fn length_sq(v: in Vec2) -> float {
-    // v 是只读引用（不拷贝，不可修改）
+fn length_sq(v: Vec2) -> float {
+    // v 默认只读；具体 ABI 可按值或按只读地址传递
     return v.x * v.x + v.y * v.y
 }
 
@@ -186,14 +187,24 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
     v.x += dx
     v.y += dy
 }
+
+fn submit(job: move Job) -> () {
+    queue.store(move job)
+}
+
+translate(ref point, 1.0, 2.0)
+submit(move pending)
+submit(makeJob())
 ```
 
 | 参数模式 | 语义 |
 |--|--|
-| 无 | 按值传递（struct 拷贝） |
-| `in` | 按只读引用传递（不拷贝、不可写） |
-| `ref` | 按可变引用传递（不拷贝、可写、修改可见）；调用点必须写 `ref place` |
-| `out` | 按输出位置传递；调用点必须写 `out place`，callee 必须在正常返回前写入 |
+| 无（READ） | 只读 capability；callee 不得修改 caller 的 mutable graph |
+| `ref` | 独占可写 place 借用；调用点必须写 `ref place` |
+| `move` | 取得唯一 owner；既有 lvalue 调用点必须写 `move value`，fresh value 与 `copy(value)` 可直接传入 |
+
+普通输出使用返回值、tuple、struct 或 `Result`。C ABI 输出位置使用 `MutPtr<T>`，
+不把输出参数模式引入普通 Xray 函数。
 
 #### 5.2.5 rest 参数
 
@@ -1282,11 +1293,12 @@ var result = divmod(10, 3)        // result has type (int, int)
 
 #### 5.2.4 Parameter modes
 
-Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`.
+Ordinary parameters provide a read-only capability by default. Only writable borrowing and
+ownership transfer have explicit modes: `name: ref T` and `name: move T`.
 
 ```xray @id=decl-fn-param-modes
-fn length_sq(v: in Vec2) -> float {
-    // v is a read-only reference (no copy, not writable)
+fn length_sq(v: Vec2) -> float {
+    // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
@@ -1295,14 +1307,24 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
     v.x += dx
     v.y += dy
 }
+
+fn submit(job: move Job) -> () {
+    queue.store(move job)
+}
+
+translate(ref point, 1.0, 2.0)
+submit(move pending)
+submit(makeJob())
 ```
 
 | Parameter mode | Semantics |
 |--|--|
-| (none) | Pass by value (struct copy) |
-| `in` | Pass by read-only reference (no copy, not writable) |
-| `ref` | Pass by mutable reference (no copy, writable, observable to caller); the call site must write `ref place` |
-| `out` | Pass an output place; the call site must write `out place`, and the callee must write before normal return |
+| none (READ) | Read-only capability; the callee cannot mutate the caller's mutable graph |
+| `ref` | Exclusive writable place loan; the call site must write `ref place` |
+| `move` | Transfer of the unique owner; an existing lvalue requires `move value`, while a fresh value or `copy(value)` can be passed directly |
+
+Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output locations use
+`MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
 

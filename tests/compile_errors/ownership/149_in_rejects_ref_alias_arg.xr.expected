@@ -1,1 +1,1 @@
-Cannot pass 'value' to both in parameter 1 and ref parameter 2
+Cannot pass 'value' to both read parameter 1 and ref parameter 2

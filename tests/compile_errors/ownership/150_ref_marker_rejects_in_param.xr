@@ -1,4 +1,4 @@
-fn view(x: in int) {
+fn view(x: int) {
 }
 
 var value = 1

@@ -170,7 +170,7 @@ enum _ThreadLocalError {
     RecursiveInit
 }
 
-fn _threadLocalPruneDeadSlots<T>(values: Map<int, T>) {
+fn _threadLocalPruneDeadSlots<T>(values: ref Map<int, T>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -179,7 +179,7 @@ fn _threadLocalPruneDeadSlots<T>(values: Map<int, T>) {
     }
 }
 
-fn _threadLocalPruneDeadFlags(values: Map<int, bool>) {
+fn _threadLocalPruneDeadFlags(values: ref Map<int, bool>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -206,11 +206,11 @@ export class ThreadLocal<T> {
         {
             this._lock.lock()
             defer { this._lock.unlock() }
-            _threadLocalPruneDeadSlots(this._values)
+            _threadLocalPruneDeadSlots(ref this._values)
             if (this._values.containsKey(key)) {
                 return this._values[key]
             }
-            _threadLocalPruneDeadFlags(this._initializing)
+            _threadLocalPruneDeadFlags(ref this._initializing)
             if (this._initializing.containsKey(key)) {
                 throw _ThreadLocalError.RecursiveInit
             }
@@ -224,8 +224,8 @@ export class ThreadLocal<T> {
             {
                 this._lock.lock()
                 defer { this._lock.unlock() }
-                _threadLocalPruneDeadSlots(this._values)
-                _threadLocalPruneDeadFlags(this._initializing)
+                _threadLocalPruneDeadSlots(ref this._values)
+                _threadLocalPruneDeadFlags(ref this._initializing)
                 this._initializing.delete(key)
                 if (!this._values.containsKey(key)) {
                     this._values.set(key, value)
@@ -247,7 +247,7 @@ export class ThreadLocal<T> {
         var key = __threadLocalId()
         this._lock.lock()
         defer { this._lock.unlock() }
-        _threadLocalPruneDeadSlots(this._values)
+        _threadLocalPruneDeadSlots(ref this._values)
         if (this._values.containsKey(key)) {
             this._values[key] = value
         } else {

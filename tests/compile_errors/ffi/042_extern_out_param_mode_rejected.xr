@@ -1,6 +1,0 @@
-extern "C" {
-    fn fill_i32(value: out int32) -> int32
-}
-
-var x: int32 = 0
-print(unsafe { fill_i32(out x) })

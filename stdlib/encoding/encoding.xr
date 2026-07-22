@@ -157,7 +157,7 @@ fn _utf16DecodeOptions(options: Utf16DecodeOptions?) -> Utf16DecodeOptions {
 }
 
 // Write a 16-bit code unit into Array<byte> in the requested endianness.
-fn putU16(out: Array<byte>, oi: int, unit: int, order: Endian) {
+fn putU16(out: ref Array<byte>, oi: int, unit: int, order: Endian) {
     if (order == Endian.BE) {
         out[oi] = (unit >> 8) & 255
         out[oi + 1] = unit & 255
@@ -195,11 +195,11 @@ export fn utf16Encode(data: string, options: Utf16EncodeOptions? = null) -> Arra
         var cp = data.runes().nth(i).toUInt32()
         if (cp >= 0x10000) {
             var v = cp - 0x10000
-            putU16(out, oi, 0xD800 + (v >> 10), order)
-            putU16(out, oi + 2, 0xDC00 + (v & 0x3FF), order)
+            putU16(ref out, oi, 0xD800 + (v >> 10), order)
+            putU16(ref out, oi + 2, 0xDC00 + (v & 0x3FF), order)
             oi = oi + 4
         } else {
-            putU16(out, oi, cp, order)
+            putU16(ref out, oi, cp, order)
             oi = oi + 2
         }
     }
@@ -215,7 +215,7 @@ fn utf8Len(cp: int) -> int {
 }
 
 // Encode a code point as UTF-8 into Array<byte>; returns the next write offset.
-fn putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
+fn putUtf8(out: ref Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
         out[oi] = cp
         return oi + 1
@@ -285,6 +285,6 @@ export fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions? = null) ->
     for (var k = 0; k < len(cps); k++) { outLen = outLen + utf8Len(cps[k]) }
     var out = Array<byte>(outLen)
     var oi = 0
-    for (var k = 0; k < len(cps); k++) { oi = putUtf8(out, oi, cps[k]) }
+    for (var k = 0; k < len(cps); k++) { oi = putUtf8(ref out, oi, cps[k]) }
     return string.fromUtf8(out[:])!
 }

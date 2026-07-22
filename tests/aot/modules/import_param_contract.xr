@@ -12,7 +12,7 @@ print(bumpRef(ref selective))
 print(selective)
 
 var selective_out = 0
-print(fillOut(out selective_out))
+print(fillOut(ref selective_out))
 print(selective_out)
 
 var namespaced = 3
@@ -20,7 +20,7 @@ print(param_contract.bumpRef(ref namespaced))
 print(namespaced)
 
 var namespaced_out = 0
-print(param_contract.fillOut(out namespaced_out))
+print(param_contract.fillOut(ref namespaced_out))
 print(namespaced_out)
 
 var valued = 5
@@ -28,7 +28,7 @@ print(bumpRefValue(ref valued))
 print(valued)
 
 var valued_out = 0
-print(param_contract.fillOutValue(out valued_out))
+print(param_contract.fillOutValue(ref valued_out))
 print(valued_out)
 
 const bump = bumpRefValue
@@ -36,5 +36,5 @@ print(bump(ref valued))
 print(valued)
 
 const fill = fillOutValue
-print(fill(out valued_out))
+print(fill(ref valued_out))
 print(valued_out)

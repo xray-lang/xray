@@ -770,7 +770,7 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
             return NULL;
         for (int i = 0; i < param_count; i++) {
             type->function.params[i].type = param_types[i];
-            type->function.params[i].mode = XR_PARAM_VALUE;
+            type->function.params[i].mode = XR_PARAM_READ;
         }
     }
     type->function.param_count = param_count;
@@ -1859,6 +1859,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (a->kind != b->kind)
         return false;
     if (a->is_nullable != b->is_nullable)
+        return false;
+    if (a->is_const != b->is_const)
         return false;
     if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->native_width != b->native_width)
         return false;

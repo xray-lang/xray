@@ -30,6 +30,17 @@ const char *xr_type_to_string(XrType *type) {
     if (!type)
         return "<error>";
 
+    if (type->is_const) {
+        XrType base = *type;
+        base.is_const = false;
+        const char *base_name = xr_type_to_string(&base);
+        XrTypePool *pool = xr_type_get_current_pool();
+        XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
+        char qualified[TYPE_STR_BUF_SIZE];
+        snprintf(qualified, sizeof(qualified), "const %s", base_name);
+        return xr_pool_strdup(pool, qualified);
+    }
+
     // Simple types: return static constants (no allocation)
     if (XR_TYPE_IS_UNKNOWN(type))
         return "<error>";
@@ -361,7 +372,7 @@ const char *xr_type_to_string(XrType *type) {
             }
             XrType *param_type = xr_type_function_param_type(type, i);
             XrParamMode mode = xr_type_function_param_mode(type, i);
-            if (mode != XR_PARAM_VALUE) {
+            if (mode != XR_PARAM_READ) {
                 n = snprintf(ptr, remaining, "%s ", xr_param_mode_label(mode));
                 ptr += n;
                 remaining -= n;
@@ -424,6 +435,7 @@ bool xr_type_is_inherently_immutable(XrType *type) {
         case XR_KIND_NULL:
         case XR_KIND_STRING:
         case XR_KIND_UNIT:
+        case XR_KIND_ENUM:
             return true;
         case XR_KIND_TUPLE:
             /* Tuples expose no mutation API at the user level, so the
@@ -434,6 +446,12 @@ bool xr_type_is_inherently_immutable(XrType *type) {
                     return false;
             }
             return true;
+        case XR_KIND_UNION:
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (!xr_type_is_inherently_immutable(type->union_type.members[i]))
+                    return false;
+            }
+            return type->union_type.member_count > 0;
         default:
             return false;
     }

@@ -1,4 +1,4 @@
-fn leak(data: in Array<int>) -> Iterator<Array<int>> {
+fn leak(data: Array<int>) -> Iterator<Array<int>> {
     yield data
 }
 

@@ -1,13 +1,12 @@
-// Contextually-inferred closure parameters must inherit the ParamMode from the
-// expected function type all the way through IR lowering, so `in`/`ref`/`out`
-// closures observe the same caller/callee contract as explicitly-typed ones.
+// Contextually-inferred closure parameters must inherit READ/REF/MOVE from the
+// expected function type all the way through IR lowering.
 // Regression: an untyped `fn(x)` assigned to a `(ref int) -> ...` type used to
 // lower its parameter as a value slot, so the callee received a place
 // descriptor instead of the int and `x + 1` failed at runtime.
 
 @test
-fn test_contextual_in_closure_reads_value() {
-    var reader: (in int) -> int = fn(x) -> int {
+fn test_contextual_read_closure_reads_value() {
+    var reader: (int) -> int = fn(x) -> int {
         return x + 100
     }
     var v = 5
@@ -27,12 +26,10 @@ fn test_contextual_ref_closure_writes_back() {
 }
 
 @test
-fn test_contextual_out_closure_writes_back() {
-    var fill: (out int) -> int = fn(x) -> int {
-        x = 42
-        return 7
+fn test_contextual_move_closure_consumes_owner() {
+    var take: (move Array<int>) -> int = fn(x) -> int {
+        return len(x)
     }
-    var v = 0
-    assert_eq(fill(out v), 7)
-    assert_eq(v, 42)
+    var values = [1, 2, 3]
+    assert_eq(take(move values), 3)
 }

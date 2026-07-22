@@ -1,5 +1,0 @@
-fn view(x: in int) {
-}
-
-var value = 1
-view(out value)

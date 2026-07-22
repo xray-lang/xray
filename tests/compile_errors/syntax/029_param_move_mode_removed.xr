@@ -1,3 +1,0 @@
-fn bad(x: move int) -> int {
-    return x
-}

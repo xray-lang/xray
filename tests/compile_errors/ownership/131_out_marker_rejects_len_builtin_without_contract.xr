@@ -1,6 +1,0 @@
-fn bad(x: out int) {
-    len(out x)
-}
-
-var value = 0
-bad(out value)

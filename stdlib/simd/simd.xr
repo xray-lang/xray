@@ -7,7 +7,7 @@ export struct U8x16 align(16) {
     private _lanes: [byte; 16]
 
     @no_alloc
-    static fromLanes(lanes: in [byte; 16]) -> U8x16 {
+    static fromLanes(lanes: [byte; 16]) -> U8x16 {
         return U8x16{_lanes: copy(lanes)}
     }
 
@@ -19,7 +19,7 @@ export struct U8x16 align(16) {
 
     @intrinsic("simd.U8x16.load")
     @no_alloc
-    static load(data: in Slice<byte>, offset: int = 0) -> U8x16 {
+    static load(data: Slice<byte>, offset: int = 0) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
         while (i < 16) {
@@ -31,7 +31,7 @@ export struct U8x16 align(16) {
 
     @intrinsic("simd.U8x16.store")
     @no_alloc
-    store(output: Slice<byte>, offset: int = 0) {
+    store(output: ref Slice<byte>, offset: int = 0) {
         var i = 0
         while (i < 16) {
             output[offset + i] = this._lanes[i]
@@ -55,7 +55,7 @@ export struct U8x16 align(16) {
 
     @intrinsic("simd.U8x16.bitAnd")
     @no_alloc
-    bitAnd(other: in U8x16) -> U8x16 {
+    bitAnd(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
         while (i < 16) {
@@ -67,7 +67,7 @@ export struct U8x16 align(16) {
 
     @intrinsic("simd.U8x16.bitOr")
     @no_alloc
-    bitOr(other: in U8x16) -> U8x16 {
+    bitOr(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
         while (i < 16) {
@@ -79,7 +79,7 @@ export struct U8x16 align(16) {
 
     @intrinsic("simd.U8x16.bitXor")
     @no_alloc
-    bitXor(other: in U8x16) -> U8x16 {
+    bitXor(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
         while (i < 16) {
@@ -132,7 +132,7 @@ export struct U32x4 align(16) {
     private _lanes: [uint32; 4]
 
     @no_alloc
-    static fromLanes(lanes: in [uint32; 4]) -> U32x4 {
+    static fromLanes(lanes: [uint32; 4]) -> U32x4 {
         return U32x4{_lanes: copy(lanes)}
     }
 
@@ -144,7 +144,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.load")
     @no_alloc
-    static load(data: in Slice<uint32>, offset: int = 0) -> U32x4 {
+    static load(data: Slice<uint32>, offset: int = 0) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -156,7 +156,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.store")
     @no_alloc
-    store(output: Slice<uint32>, offset: int = 0) {
+    store(output: ref Slice<uint32>, offset: int = 0) {
         var i = 0
         while (i < 4) {
             output[offset + i] = this._lanes[i]
@@ -180,7 +180,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.add")
     @no_alloc
-    add(other: in U32x4) -> U32x4 {
+    add(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -192,7 +192,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.sub")
     @no_alloc
-    sub(other: in U32x4) -> U32x4 {
+    sub(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -204,7 +204,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.mul")
     @no_alloc
-    mul(other: in U32x4) -> U32x4 {
+    mul(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -216,7 +216,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.bitAnd")
     @no_alloc
-    bitAnd(other: in U32x4) -> U32x4 {
+    bitAnd(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -228,7 +228,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.bitOr")
     @no_alloc
-    bitOr(other: in U32x4) -> U32x4 {
+    bitOr(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -240,7 +240,7 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.bitXor")
     @no_alloc
-    bitXor(other: in U32x4) -> U32x4 {
+    bitXor(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -300,37 +300,37 @@ export struct U32x4 align(16) {
 
     @intrinsic("simd.U32x4.widenMulEven")
     @no_alloc
-    widenMulEven(other: in U32x4) -> U64x2 {
+    widenMulEven(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64)])
     }
 
     @intrinsic("simd.U32x4.widenMulOdd")
     @no_alloc
-    widenMulOdd(other: in U32x4) -> U64x2 {
+    widenMulOdd(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[1] as uint64) * (other._lanes[1] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
     }
 
     @intrinsic("simd.U32x4.unzipEven")
     @no_alloc
-    unzipEven(other: in U32x4) -> U32x4 {
+    unzipEven(other: U32x4) -> U32x4 {
         return U32x4{_lanes: [this._lanes[0], this._lanes[2], other._lanes[0], other._lanes[2]]}
     }
 
     @intrinsic("simd.U32x4.unzipOdd")
     @no_alloc
-    unzipOdd(other: in U32x4) -> U32x4 {
+    unzipOdd(other: U32x4) -> U32x4 {
         return U32x4{_lanes: [this._lanes[1], this._lanes[3], other._lanes[1], other._lanes[3]]}
     }
 
     @intrinsic("simd.U32x4.widenMulLow")
     @no_alloc
-    widenMulLow(other: in U32x4) -> U64x2 {
+    widenMulLow(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[1] as uint64) * (other._lanes[1] as uint64)])
     }
 
     @intrinsic("simd.U32x4.widenMulHigh")
     @no_alloc
-    widenMulHigh(other: in U32x4) -> U64x2 {
+    widenMulHigh(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
     }
 
@@ -362,7 +362,7 @@ export struct U64x2 align(16) {
     private _lanes: [uint64; 2]
 
     @no_alloc
-    static fromLanes(lanes: in [uint64; 2]) -> U64x2 {
+    static fromLanes(lanes: [uint64; 2]) -> U64x2 {
         return U64x2{_lanes: copy(lanes)}
     }
 
@@ -374,13 +374,13 @@ export struct U64x2 align(16) {
 
     @intrinsic("simd.U64x2.load")
     @no_alloc
-    static load(data: in Slice<uint64>, offset: int = 0) -> U64x2 {
+    static load(data: Slice<uint64>, offset: int = 0) -> U64x2 {
         return U64x2{_lanes: [data[offset], data[offset + 1]]}
     }
 
     @intrinsic("simd.U64x2.store")
     @no_alloc
-    store(output: Slice<uint64>, offset: int = 0) {
+    store(output: ref Slice<uint64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
     }
@@ -401,37 +401,37 @@ export struct U64x2 align(16) {
 
     @intrinsic("simd.U64x2.add")
     @no_alloc
-    add(other: in U64x2) -> U64x2 {
+    add(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1]]}
     }
 
     @intrinsic("simd.U64x2.sub")
     @no_alloc
-    sub(other: in U64x2) -> U64x2 {
+    sub(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] - other._lanes[0], this._lanes[1] - other._lanes[1]]}
     }
 
     @intrinsic("simd.U64x2.mul")
     @no_alloc
-    mul(other: in U64x2) -> U64x2 {
+    mul(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] * other._lanes[0], this._lanes[1] * other._lanes[1]]}
     }
 
     @intrinsic("simd.U64x2.bitAnd")
     @no_alloc
-    bitAnd(other: in U64x2) -> U64x2 {
+    bitAnd(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] & other._lanes[0], this._lanes[1] & other._lanes[1]]}
     }
 
     @intrinsic("simd.U64x2.bitOr")
     @no_alloc
-    bitOr(other: in U64x2) -> U64x2 {
+    bitOr(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] | other._lanes[0], this._lanes[1] | other._lanes[1]]}
     }
 
     @intrinsic("simd.U64x2.bitXor")
     @no_alloc
-    bitXor(other: in U64x2) -> U64x2 {
+    bitXor(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] ^ other._lanes[0], this._lanes[1] ^ other._lanes[1]]}
     }
 
@@ -516,13 +516,13 @@ export struct U8x32 align(32) {
     private _lanes: [byte; 32]
 
     @no_alloc
-    static fromLanes(lanes: in [byte; 32]) -> U8x32 {
+    static fromLanes(lanes: [byte; 32]) -> U8x32 {
         return U8x32{_lanes: copy(lanes)}
     }
 
     @intrinsic("simd.U8x32.load")
     @no_alloc
-    static load(data: in Slice<byte>, offset: int = 0) -> U8x32 {
+    static load(data: Slice<byte>, offset: int = 0) -> U8x32 {
         var lanes: [byte; 32] = [0; 32]
         var i = 0
         while (i < 32) {
@@ -534,7 +534,7 @@ export struct U8x32 align(32) {
 
     @intrinsic("simd.U8x32.store")
     @no_alloc
-    store(output: Slice<byte>, offset: int = 0) {
+    store(output: ref Slice<byte>, offset: int = 0) {
         var i = 0
         while (i < 32) {
             output[offset + i] = this._lanes[i]
@@ -544,7 +544,7 @@ export struct U8x32 align(32) {
 
     @intrinsic("simd.U8x32.bitXor")
     @no_alloc
-    bitXor(other: in U8x32) -> U8x32 {
+    bitXor(other: U8x32) -> U8x32 {
         var lanes: [byte; 32] = [0; 32]
         var i = 0
         while (i < 32) {
@@ -585,7 +585,7 @@ export struct U32x8 align(32) {
     private _lanes: [uint32; 8]
 
     @no_alloc
-    static fromLanes(lanes: in [uint32; 8]) -> U32x8 {
+    static fromLanes(lanes: [uint32; 8]) -> U32x8 {
         return U32x8{_lanes: copy(lanes)}
     }
 
@@ -597,7 +597,7 @@ export struct U32x8 align(32) {
 
     @intrinsic("simd.U32x8.widenMulEven")
     @no_alloc
-    widenMulEven(other: in U32x8) -> U64x4 {
+    widenMulEven(other: U32x8) -> U64x4 {
         return U64x4.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[4] as uint64) * (other._lanes[4] as uint64), (this._lanes[6] as uint64) * (other._lanes[6] as uint64)])
     }
 }
@@ -606,19 +606,19 @@ export struct U64x4 align(32) {
     private _lanes: [uint64; 4]
 
     @no_alloc
-    static fromLanes(lanes: in [uint64; 4]) -> U64x4 {
+    static fromLanes(lanes: [uint64; 4]) -> U64x4 {
         return U64x4{_lanes: copy(lanes)}
     }
 
     @intrinsic("simd.U64x4.load")
     @no_alloc
-    static load(data: in Slice<uint64>, offset: int = 0) -> U64x4 {
+    static load(data: Slice<uint64>, offset: int = 0) -> U64x4 {
         return U64x4{_lanes: [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]}
     }
 
     @intrinsic("simd.U64x4.store")
     @no_alloc
-    store(output: Slice<uint64>, offset: int = 0) {
+    store(output: ref Slice<uint64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
         output[offset + 2] = this._lanes[2]
@@ -627,7 +627,7 @@ export struct U64x4 align(32) {
 
     @intrinsic("simd.U64x4.add")
     @no_alloc
-    add(other: in U64x4) -> U64x4 {
+    add(other: U64x4) -> U64x4 {
         return U64x4{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1], this._lanes[2] + other._lanes[2], this._lanes[3] + other._lanes[3]]}
     }
 

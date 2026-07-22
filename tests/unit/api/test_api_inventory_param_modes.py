@@ -18,9 +18,9 @@ import gen_api_inventory as api_inventory  # noqa: E402
 class ApiInventoryParamModeTest(unittest.TestCase):
     def test_normalized_signatures_keep_param_modes(self) -> None:
         self.assertEqual(
-            "(a: in int, b: ref string, c: out bool): ()",
+            "(a: int, b: ref string, c: move Buffer): ()",
             api_inventory.normalize_signature(
-                " a: in int,\n    b: ref string,\n    c: out bool ", None
+                " a: int,\n    b: ref string,\n    c: move Buffer ", None
             ),
         )
 
@@ -32,12 +32,12 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             (module_dir / "modes.xr").write_text(
                 "\n".join(
                     [
-                        "export fn borrow(view: in Slice<byte>, sink: ref Array<byte>, outLen: out int) -> int {",
-                        "    outLen = 0",
-                        "    return outLen",
+                        "export fn transfer(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer) -> int {",
+                        "    sink.push(len(view))",
+                        "    return len(view)",
                         "}",
                         "export class Box {",
-                        "    touch(value: in int, place: ref int, filled: out int) -> ()",
+                        "    touch(value: int, place: ref int, job: move Buffer) -> ()",
                         "}",
                         "",
                     ]
@@ -52,11 +52,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             }
 
         self.assertEqual(
-            "(view: in Slice<byte>, sink: ref Array<byte>, outLen: out int): int",
-            signatures[("modes", "borrow", "function")],
+            "(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer): int",
+            signatures[("modes", "transfer", "function")],
         )
         self.assertEqual(
-            "(value: in int, place: ref int, filled: out int): ()",
+            "(value: int, place: ref int, job: move Buffer): ()",
             signatures[("Box", "touch", "method")],
         )
 

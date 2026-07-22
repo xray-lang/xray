@@ -613,15 +613,15 @@ static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
     if (!out_modes || mode_count <= 0)
         return;
     for (int i = 0; i < mode_count; i++) {
-        out_modes[i] = (explicit_modes && i < explicit_count) ? explicit_modes[i] : XR_PARAM_VALUE;
+        out_modes[i] = (explicit_modes && i < explicit_count) ? explicit_modes[i] : XR_PARAM_READ;
     }
     if (!l || !callee || callee->nparams == 0)
         return;
 
     int n = callee->nparams < (uint16_t) mode_count ? (int) callee->nparams : mode_count;
     for (int i = 0; i < n; i++) {
-        if (out_modes[i] == XR_PARAM_VALUE && lower_value_param_is_readonly(callee, (uint16_t) i))
-            out_modes[i] = XR_PARAM_IN;
+        if (out_modes[i] == XR_PARAM_READ && lower_value_param_is_readonly(callee, (uint16_t) i))
+            out_modes[i] = XR_PARAM_READ;
     }
 }
 
@@ -4210,7 +4210,7 @@ static XiValue *lower_coro_pool_submit(XiLower *l, AstNode *node, CallExprNode *
 /* Lower the argument list of a call, expanding any AST_SPREAD_EXPR
  * `...t` into one TUPLE_GET per static element of the source tuple.
  * Returns the effective argument count written into `args`. The
- * caller-supplied `pmodes`/`pcount` apply XR_PARAM_VALUE deep-copy
+ * caller-supplied `pmodes`/`pcount` apply XR_PARAM_READ deep-copy
  * semantics to value-type slots; spread-expanded slots are not copied
  * (the source tuple already owns the element). */
 static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowerArgList *args,
@@ -4243,9 +4243,9 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
         XiValue *a = xi_lower_expr(l, child);
         if (!a)
             return false;
-        XrParamMode mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_VALUE;
+        XrParamMode mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_READ;
         if (xi_lower_value_needs_value_clone(l, a) && !xi_lower_value_is_fresh_value_struct(a) &&
-            mode == XR_PARAM_VALUE) {
+            mode == XR_PARAM_READ) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
             if (cpy) {
                 cpy->args[0] = a;
@@ -4275,9 +4275,9 @@ static AstNode *lower_call_unwrap_place(AstNode *node) {
 
 static XrCallArgAccess lower_call_arg_access(const CallExprNode *call, int index) {
     if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
-        return XR_CALL_ARG_VALUE;
+        return XR_CALL_ARG_PLAIN;
     XrCallArgAccess access = call->arg_accesses[index];
-    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
 }
 
 static XiValue *lower_call_projection_base(XiValue *value) {
@@ -4363,7 +4363,7 @@ static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *up
             break;
     }
     if (!store) {
-        fprintf(stderr, "[LOWER] unsupported ref/out projection writeback at line %d\n", line);
+        fprintf(stderr, "[LOWER] unsupported ref projection writeback at line %d\n", line);
         l->had_error = true;
         return false;
     }
@@ -4379,7 +4379,7 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
         *out_writebacks = NULL;
     bool needs_plan = false;
     for (int i = 0; i < n && i < pcount; i++) {
-        if (pmodes && pmodes[i] != XR_PARAM_VALUE) {
+        if (pmodes && pmodes[i] != XR_PARAM_READ) {
             needs_plan = true;
             break;
         }
@@ -4408,18 +4408,19 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
     plan->nargs = (uint16_t) n;
 
     for (int i = 0; i < n; i++) {
-        XrParamMode mode = (pmodes && i < pcount) ? pmodes[i] : XR_PARAM_VALUE;
+        XrParamMode mode = (pmodes && i < pcount) ? pmodes[i] : XR_PARAM_READ;
         XrCallArgAccess access = lower_call_arg_access(call, i);
         XiCallArgPlan *arg_plan = &plans[i];
         arg_plan->param_mode = mode;
         arg_plan->access = access;
         arg_plan->origin_var_id = XI_NO_VAR_ID;
-        if (mode == XR_PARAM_VALUE)
+        if (mode == XR_PARAM_READ)
             continue;
 
-        bool access_ok = (mode == XR_PARAM_IN && access == XR_CALL_ARG_VALUE) ||
-                         (mode == XR_PARAM_REF && access == XR_CALL_ARG_REF) ||
-                         (mode == XR_PARAM_OUT && access == XR_CALL_ARG_OUT);
+        bool access_ok =
+            (mode == XR_PARAM_READ && access == XR_CALL_ARG_PLAIN) ||
+            (mode == XR_PARAM_REF && access == XR_CALL_ARG_REF) ||
+            (mode == XR_PARAM_MOVE && (access == XR_CALL_ARG_MOVE || access == XR_CALL_ARG_PLAIN));
         if (!access_ok) {
             fprintf(stderr,
                     "[LOWER] call contract drift at line %d: slot %d is %s but access is %s\n",
@@ -4427,6 +4428,12 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
             l->had_error = true;
             return NULL;
         }
+
+        /* A consuming parameter receives an owned value, never an addressable
+         * copy-out slot.  `move source` is already represented by XI_MOVE;
+         * fresh values and copy(...) arrive as ordinary value expressions. */
+        if (mode == XR_PARAM_MOVE)
+            continue;
 
         AstNode *place_node = lower_call_unwrap_place(call->arguments[i]);
         int var_id = -1;
@@ -4467,13 +4474,11 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                 var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
                 arg_plan->origin_var_id = (XiVarId) var_id;
-            if (mode == XR_PARAM_REF || mode == XR_PARAM_OUT) {
-                writebacks[i].source = source;
-                writebacks[i].place = place;
-                writebacks[i].top_binding = top_binding;
-                writebacks[i].var_id = var_id;
-                writebacks[i].projection = var_id < 0 && !xi_top_binding_valid(top_binding);
-            }
+            writebacks[i].source = source;
+            writebacks[i].place = place;
+            writebacks[i].top_binding = top_binding;
+            writebacks[i].var_id = var_id;
+            writebacks[i].projection = var_id < 0 && !xi_top_binding_valid(top_binding);
         }
         arg_vals[i] = place;
         arg_plan->place = place;
@@ -4505,7 +4510,7 @@ static bool lower_method_receiver_mode(XiLower *l, const XaSelection *selection,
         value_receiver = true;
     if (!value_receiver)
         return false;
-    *out_mode = selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_IN;
+    *out_mode = selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ;
     return true;
 }
 
@@ -4514,7 +4519,8 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
                                                   int explicit_arg_count, XrParamMode mode,
                                                   XiCallPlan **plan_io, XiCallWriteback *writeback,
                                                   int line) {
-    if (!l || !receiver || !plan_io || !writeback || (mode != XR_PARAM_IN && mode != XR_PARAM_REF))
+    if (!l || !receiver || !plan_io || !writeback ||
+        (mode != XR_PARAM_READ && mode != XR_PARAM_REF))
         return NULL;
     memset(writeback, 0, sizeof(*writeback));
     writeback->var_id = -1;
@@ -4578,7 +4584,7 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
                 return NULL;
             memset(plan->args, 0, (size_t) explicit_arg_count * sizeof(*plan->args));
             for (int i = 0; i < explicit_arg_count; i++) {
-                plan->args[i].param_mode = XR_PARAM_VALUE;
+                plan->args[i].param_mode = XR_PARAM_READ;
                 plan->args[i].access = lower_call_arg_access(call, i);
                 plan->args[i].origin_var_id = XI_NO_VAR_ID;
             }
@@ -4588,7 +4594,7 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
     }
     plan->has_receiver = true;
     plan->receiver.param_mode = mode;
-    plan->receiver.access = XR_CALL_ARG_VALUE;
+    plan->receiver.access = XR_CALL_ARG_PLAIN;
     plan->receiver.origin = (uint8_t) origin;
     plan->receiver.lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
     plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
@@ -6226,7 +6232,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         XiCallWriteback receiver_writeback;
         memset(&receiver_writeback, 0, sizeof(receiver_writeback));
-        XrParamMode receiver_mode = XR_PARAM_VALUE;
+        XrParamMode receiver_mode = XR_PARAM_READ;
         const XaSelection *method_selection = xa_analyzer_get_selection(l->analyzer, call->callee);
         if (lower_method_receiver_mode(l, method_selection, recv, &receiver_mode)) {
             XiValue *receiver_place = lower_build_method_receiver_place(
@@ -7071,13 +7077,7 @@ static XiValue *parallel_call_make_map(XiLower *l, AstNode *node, AstNode *range
 
     if (!into_array)
         return par;
-
-    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
-    if (!copy)
-        return into_array;
-    copy->args[0] = into_array;
-    copy->line = (uint32_t) node->line;
-    return copy;
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *range,
@@ -7591,13 +7591,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
 
     if (!into_array)
         return par;
-
-    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
-    if (!copy)
-        return into_array;
-    copy->args[0] = into_array;
-    copy->line = (uint32_t) node->line;
-    return copy;
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValue *plan,

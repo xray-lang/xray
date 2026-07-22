@@ -49,16 +49,6 @@ fn _alphabet(options: Base64Alphabet) -> string {
     return STD
 }
 
-fn _encodeOptions(options: Base64EncodeOptions?) -> Base64EncodeOptions {
-    if (options == null) { return Base64EncodeOptions() }
-    return options!
-}
-
-fn _decodeOptions(options: Base64DecodeOptions?) -> Base64DecodeOptions {
-    if (options == null) { return Base64DecodeOptions() }
-    return options!
-}
-
 fn _decodeChar(c: int, alphabet: Base64Alphabet) -> int {
     if (c >= 65 && c <= 90) { return c - 65 }    // A-Z -> 0..25
     if (c >= 97 && c <= 122) { return c - 71 }   // a-z -> 26..51
@@ -206,14 +196,16 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
 }
 
 export fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
-    var resolved = _encodeOptions(options)
+    var resolved = options == null ? Base64EncodeOptions() : options!
     return _encodeAlpha(data, _alphabet(resolved.alphabet), resolved.padding)
 }
 
 export fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {
-    return _decodeImpl(text, _decodeOptions(options))
+    var resolved = options == null ? Base64DecodeOptions() : options!
+    return _decodeImpl(text, resolved)
 }
 
 export fn isValid(text: string, options: Base64DecodeOptions? = null) -> bool {
-    return _scan(text, _decodeOptions(options)).0 == 0
+    var resolved = options == null ? Base64DecodeOptions() : options!
+    return _scan(text, resolved).0 == 0
 }

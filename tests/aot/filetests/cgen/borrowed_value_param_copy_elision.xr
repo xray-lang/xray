@@ -1,6 +1,6 @@
 struct Pair { a: int; b: int }
 
-export fn sum(p: in Pair) -> int {
+export fn sum(p: Pair) -> int {
     return p.a + p.b
 }
 

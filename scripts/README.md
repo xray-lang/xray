@@ -24,7 +24,7 @@
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
-| `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
+| `scripts/check_param_mode_convergence.py` | 232：READ/REF/MOVE 参数表面与单一 `XrParamNode` AST 的 fail-closed 收敛门禁 | `--root <repo>`；可选 `--json` | 旧 `in/out` 声明/调用、旧 enum 或并行声明 AST 回流时失败 | < 2s |
 | `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | CTest `meta_ownership_inventory` 对三类均固定 `--max-category NAME=0`，发现回流即失败；standalone inventory 仍可用于审计 | < 2s |
 | `scripts/check_contract_freeze.py` | 220：八份语义契约的 anchor digest 与 `CONTRACT-CHANGE` trailer 门禁 | `--root <repo>`；注入验证用 `--self-test` | digest 漂移、契约锚点缺失或干净提交缺 trailer=1；dirty tree 只检查 digest，trailer 延迟到 post-commit/CI | < 2s |
 | `scripts/run_asan_focused.sh` | 218 防线 2：ASan+UBSan 聚焦门禁——C 单测 + 快速 backend-diff 子集（task190）+ xxhash 端口与已提交 bili-analysis-server fixture 的全量 AOT C 发射。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过；普通非 sanitizer 构建的 CTest 常驻 `asan_focused` | 增量测试面 <10min（全量 ASan 自举另计） |
@@ -194,13 +194,11 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 
 ### `check_param_mode_convergence.py`
 
-扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/` 与 active language spec，
-把 206 参数模式收敛前的事实分成 `CANON_DECL_MODE_SPELLING`、`PREFIX_DECL_MODE_SPELLING`、
-`REMOVED_SYNTAX_NEGATIVE_FIXTURE`、`CALL_SITE_REF_OUT_MARKER`、`MOVE_AS_PARAM_MODE_RESIDUE`、
-`STALE_MODIFIER_EBNF`、`XR_PARAM_MACRO_RESIDUE`、`PASSING_MODE_FIELD_OR_ARRAY`、
-`FUNCTION_TYPE_MODE_CONSUMER`、`BACKEND_ABI_MODE_CONSUMER`、`BORROW_ESCAPE_SUSPEND_CONSUMER` 和
-`ACTIVE_PUBLIC_SURFACE_PARAM_MODE_HIT`。默认模式只打印 inventory 并返回 0，便于 P0 固定
-基线；后续 206 P1/P2/P3 可按类别逐步增加 fail gate。
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/` 与 active language spec。
+公开参数表面只允许默认 READ（`value: T`）、REF（`value: ref T`）和 MOVE
+（`value: move T`）。旧 `in/out` formal、调用 marker、`XR_PARAM_VALUE/IN/OUT`、
+`XR_CALL_ARG_VALUE/OUT` 或并行 declaration AST 字段一旦回流即失败。只豁免四个整体 parser
+负例，分别覆盖删除的 `in/out` formal 与调用 marker；它们是拒绝证明，不是兼容入口。
 
 ### `check_string_surface_residue.py`
 

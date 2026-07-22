@@ -129,7 +129,7 @@ static const char *doc_line_span(XrLspDocument *doc, int line, int *out_len) {
 }
 
 static int find_param_mode_col(SemanticTokenContext *ctx, XrParamNode *param) {
-    if (!ctx || !param || !param->name || param->passing_mode == XR_PARAM_VALUE ||
+    if (!ctx || !param || !param->name || param->passing_mode == XR_PARAM_READ ||
         !xr_param_mode_is_valid(param->passing_mode))
         return -1;
 
@@ -162,7 +162,7 @@ static int find_param_mode_col(SemanticTokenContext *ctx, XrParamNode *param) {
 }
 
 static void add_param_mode_token(SemanticTokenContext *ctx, XrParamNode *param, int fallback_line) {
-    if (!ctx || !param || param->passing_mode == XR_PARAM_VALUE ||
+    if (!ctx || !param || param->passing_mode == XR_PARAM_READ ||
         !xr_param_mode_is_valid(param->passing_mode))
         return;
 
@@ -177,21 +177,38 @@ static void add_param_mode_token(SemanticTokenContext *ctx, XrParamNode *param, 
 
 static XrCallArgAccess call_arg_access(const CallExprNode *call, int index) {
     if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
-        return XR_CALL_ARG_VALUE;
+        return XR_CALL_ARG_PLAIN;
     XrCallArgAccess access = call->arg_accesses[index];
-    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
 }
 
 static int find_call_access_marker_col(SemanticTokenContext *ctx, AstNode *arg,
                                        XrCallArgAccess access) {
-    if (!ctx || !arg || access == XR_CALL_ARG_VALUE || !xr_call_arg_access_is_valid(access))
+    if (!ctx || !arg || access == XR_CALL_ARG_PLAIN || !xr_call_arg_access_is_valid(access))
         return -1;
 
     int line = arg->line > 0 ? arg->line - 1 : -1;
     int line_len = 0;
     const char *line_text = doc_line_span(ctx->doc, line, &line_len);
     int arg_col = arg->column > 0 ? arg->column - 1 : -1;
-    if (!line_text || arg_col <= 0 || arg_col > line_len)
+    if (!line_text || arg_col < 0 || arg_col > line_len)
+        return -1;
+
+    /* `move value` remains an AST_MOVE_EXPR, whose source column points at
+     * the marker itself. `ref value` stores the marker separately and the
+     * argument column points at `value`, so it uses the backward scan below. */
+    if (access == XR_CALL_ARG_MOVE && arg->type == AST_MOVE_EXPR) {
+        const char *label = xr_call_arg_access_label(access);
+        int label_len = (int) strlen(label);
+        if (arg_col + label_len <= line_len &&
+            strncmp(line_text + arg_col, label, (size_t) label_len) == 0 &&
+            (arg_col + label_len == line_len || !is_ident_char(line_text[arg_col + label_len]))) {
+            return arg_col;
+        }
+        return -1;
+    }
+
+    if (arg_col == 0)
         return -1;
 
     int end = arg_col;
@@ -750,7 +767,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             for (int i = 0; i < node->as.new_expr.arg_count; i++) {
                 XrCallArgAccess access = node->as.new_expr.arg_accesses
                                              ? node->as.new_expr.arg_accesses[i]
-                                             : XR_CALL_ARG_VALUE;
+                                             : XR_CALL_ARG_PLAIN;
                 add_call_access_marker_token(ctx, node->as.new_expr.arguments[i], access);
                 collect_tokens_ast(ctx, node->as.new_expr.arguments[i]);
             }

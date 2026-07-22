@@ -32,6 +32,7 @@ typedef struct XaBuiltinMember {
     bool is_yieldable;                 // true = VM binding may suspend/resume the current coroutine
     XaEffectContract effect_contract;  // bodyless error contract; zero means missing/incomplete
     XaAllocationContractKind allocation_contract;  // explicit bodyless allocation contract
+    bool mutates_receiver;  // native declaration manifest proof; never inferred from spelling
 } XaBuiltinMember;
 
 // Built-in type info
@@ -150,6 +151,7 @@ XR_FUNC bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const 
 
 // Check if member is a method
 XR_FUNC bool xa_builtin_is_method(XrType *type, const char *member_name);
+XR_FUNC bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name);
 
 // ============================================================================
 // Generic API (used by both compiler and LSP)

@@ -1,9 +1,0 @@
-fn bad(values: Array<int>, x: out int) {
-    for (item in values) {
-        x = item
-    }
-}
-
-var values: Array<int> = []
-var y = 0
-bad(values, out y)

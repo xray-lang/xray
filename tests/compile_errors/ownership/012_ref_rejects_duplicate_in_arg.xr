@@ -1,4 +1,4 @@
-fn mutate_and_read(target: ref Array<int>, snapshot: in Array<int>) {
+fn mutate_and_read(target: ref Array<int>, snapshot: Array<int>) {
     target.push(1)
     print(snapshot[0])
 }

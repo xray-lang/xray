@@ -14,7 +14,7 @@ class Counter {
     }
 }
 
-fn view(counter: in Counter) {
+fn view(counter: Counter) {
     counter.callBump()
 }
 

@@ -7,10 +7,16 @@ class ResultGroup {
     pendingCount: int
     batchSize: int
     isClosed: bool
+    // @receiver_write
     add(value: int) -> bool
+    // @receiver_write
     flush()
+    // @receiver_write
     reset(count: int) -> bool
+    // @receiver_write
     recv(): int?
+    // @receiver_write
     tryRecv(): (int?, bool)
+    // @receiver_write
     close()
 }

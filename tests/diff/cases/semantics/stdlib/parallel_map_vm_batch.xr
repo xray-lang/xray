@@ -7,8 +7,7 @@ print(values[127])
 print(values[255])
 
 var out: Array<int> = [99, 98]
-var same = parallel.mapInto(3..9, out, (i) -> i * 2, parallel.Options(4))
-print(len(same))
+parallel.mapInto(3..9, ref out, (i) -> i * 2, parallel.Options(4))
 print(len(out))
 print(out[0])
 print(out[5])

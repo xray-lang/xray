@@ -14,7 +14,7 @@ class Box {
     }
 }
 
-fn sum(data: in Array<int>) -> int {
+fn sum(data: Array<int>) -> int {
     var total = 0
     for (item in data) {
         total = total + item
@@ -26,7 +26,7 @@ fn put(table: ref Map<string, int>, key: string, value: int) {
     table.set(key, value)
 }
 
-fn hasKey(table: in Map<string, int>, key: string) -> bool {
+fn hasKey(table: Map<string, int>, key: string) -> bool {
     return table.containsKey(key)
 }
 
@@ -34,7 +34,7 @@ fn setBox(box: ref Box, value: int) {
     box.set(value)
 }
 
-fn readBox(box: in Box) -> int {
+fn readBox(box: Box) -> int {
     return box.get()
 }
 

@@ -6,9 +6,9 @@ and mem.load/mem.store.  Removed RawPtr/RawMut names, mem.fromAddress /
 mem.addressOf, raw-pointer loadLE/storeLE methods, and Buffer.ptrUnchecked must
 only survive as compile-error negative fixtures.
 
-The task-190/task-206 extern out/ref bridge is intentionally not implemented
-yet. Until a verified wrapper/call-plan contract lands, extern parameter modes
-must stay fail-closed and covered by focused compile-error fixtures.
+Ordinary Xray parameter modes are not C ABI descriptors. Extern declarations
+use ABI values plus Ptr<T>/MutPtr<T>; ref/move remain fail-closed until an
+explicit verified wrapper contract exists.
 """
 
 from __future__ import annotations
@@ -170,21 +170,14 @@ MEM_GATE_REQUIRED_MANIFEST_ENTRIES = {
     "tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr",
 }
 
-EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS = {
+EXTERN_PARAM_WRAPPER_REQUIRED_SNIPPETS = {
     Path("src/frontend/analyzer/xanalyzer_visitor_decl.c"): (
         "xa_validate_extern_function_abi",
         "Fail closed until task-190/task-206 define verified extern ParamMode ABI wrappers.",
-        "mode != XR_PARAM_VALUE",
+        "mode != XR_PARAM_READ",
         "verified extern ABI contract",
         "extern callback ABI wrapper contract",
         "extern CFn return uses unsupported callback parameter mode",
-    ),
-    Path("tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr"): (
-        'extern "C"',
-        "value: in int32",
-    ),
-    Path("tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr.expected"): (
-        "extern function parameter 'value' uses unsupported parameter mode 'in' before verified extern ABI contract",
     ),
     Path("tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr"): (
         'extern "C"',
@@ -194,34 +187,12 @@ EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS = {
     Path("tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr.expected"): (
         "extern function parameter 'value' uses unsupported parameter mode 'ref' before verified extern ABI contract",
     ),
-    Path("tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr"): (
-        'extern "C"',
-        "value: out int32",
-        "unsafe { fill_i32(out x) }",
-    ),
-    Path("tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr.expected"): (
-        "extern function parameter 'value' uses unsupported parameter mode 'out' before verified extern ABI contract",
-    ),
-    Path("tests/compile_errors/ffi/043_cfn_callback_in_param_mode_rejected.xr"): (
-        'extern "C"',
-        "CFn<(in int32) -> int32>",
-    ),
-    Path("tests/compile_errors/ffi/043_cfn_callback_in_param_mode_rejected.xr.expected"): (
-        "extern CFn parameter 'cb' uses unsupported callback parameter mode 'in' at callback parameter 1 before verified extern callback ABI wrapper contract",
-    ),
     Path("tests/compile_errors/ffi/044_cfn_callback_ref_param_mode_rejected.xr"): (
         'extern "C"',
         "CFn<(ref int32) -> int32>",
     ),
     Path("tests/compile_errors/ffi/044_cfn_callback_ref_param_mode_rejected.xr.expected"): (
         "extern CFn parameter 'cb' uses unsupported callback parameter mode 'ref' at callback parameter 1 before verified extern callback ABI wrapper contract",
-    ),
-    Path("tests/compile_errors/ffi/045_cfn_callback_out_param_mode_rejected.xr"): (
-        'extern "C"',
-        "CFn<(out int32) -> int32>",
-    ),
-    Path("tests/compile_errors/ffi/045_cfn_callback_out_param_mode_rejected.xr.expected"): (
-        "extern CFn parameter 'cb' uses unsupported callback parameter mode 'out' at callback parameter 1 before verified extern callback ABI wrapper contract",
     ),
     Path("tests/compile_errors/ffi/046_cfn_return_ref_param_mode_rejected.xr"): (
         'extern "C"',
@@ -389,8 +360,8 @@ def check_file_snippets(root: Path, required_snippets: dict[Path, tuple[str, ...
 
 
 def check_extern_out_ref_wrapper_gate(root: Path) -> list[str]:
-    """Validate the fail-closed extern in/ref/out wrapper readiness fixtures."""
-    return check_file_snippets(root, EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS)
+    """Validate fail-closed extern ref/move wrapper readiness fixtures."""
+    return check_file_snippets(root, EXTERN_PARAM_WRAPPER_REQUIRED_SNIPPETS)
 
 
 def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:

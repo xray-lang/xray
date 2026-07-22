@@ -197,9 +197,9 @@ fn test_yaml_fuzz_nested_flow() {
 @test
 fn test_yaml_roundtrip_basic() {
     var original = yaml.newMapping()
-    yaml.mappingSet(original, "name", yaml.stringValue("test"))
-    yaml.mappingSet(original, "version", yaml.intValue(1))
-    yaml.mappingSet(original, "debug", yaml.boolValue(false))
+    yaml.mappingSet(ref original, "name", yaml.stringValue("test"))
+    yaml.mappingSet(ref original, "version", yaml.intValue(1))
+    yaml.mappingSet(ref original, "debug", yaml.boolValue(false))
     var s = yaml.stringify(yaml.mappingValue(original))
     var parsed = yaml.parse(s)
     assert_eq(getStr(parsed, "name"), "test")

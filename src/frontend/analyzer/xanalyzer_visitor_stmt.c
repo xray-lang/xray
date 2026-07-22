@@ -5777,13 +5777,13 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
                     return NULL;
                 XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
                 if (sym && sym->kind == XA_SYM_PARAMETER &&
-                    (sym->passing_mode == XR_PARAM_IN || sym->passing_mode == XR_PARAM_REF))
+                    (sym->passing_mode == XR_PARAM_READ || sym->passing_mode == XR_PARAM_REF))
                     return sym;
                 if (sym && sym->borrowed_root_symbol_id != 0) {
                     XaSymbol *root = xa_scope_lookup_by_id(ctx->analyzer->current_scope,
                                                            sym->borrowed_root_symbol_id);
                     if (root && root->kind == XA_SYM_PARAMETER &&
-                        (root->passing_mode == XR_PARAM_IN || root->passing_mode == XR_PARAM_REF))
+                        (root->passing_mode == XR_PARAM_READ || root->passing_mode == XR_PARAM_REF))
                         return root;
                 }
                 return NULL;
@@ -7034,13 +7034,15 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
     if (!root)
         return;
 
+    if (root->passing_mode != XR_PARAM_REF)
+        return;
+
     XrLocation loc = {.file = ctx->file_path,
                       .line = value->line ? value->line : return_node->line,
                       .column = value->column ? value->column : return_node->column};
-    const char *mode = root->passing_mode == XR_PARAM_REF ? "ref" : "in";
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "cannot return borrowed '%s' parameter '%s'; return an owned value or copy(%s)", mode,
+             "cannot return borrowed '%s' parameter '%s'; return an owned value or copy(%s)", "ref",
              root->name ? root->name : "?", root->name ? root->name : "?");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
@@ -7168,8 +7170,8 @@ static bool xa_links_return_function_effect_is_ready(XaSymbolLinks *links) {
     int param_count = return_type->function.param_count;
     if (param_count <= 0)
         return true;
-    return links && links->return_fn_param_mutations &&
-           links->return_fn_param_mutation_count >= param_count;
+    return links && links->return_fn_param_effects &&
+           links->return_fn_param_effect_count >= param_count;
 }
 
 static bool xa_param_effect_summary_is_ready(XaSymbolLinks *links) {
@@ -7180,46 +7182,36 @@ static bool xa_param_effect_summary_is_ready(XaSymbolLinks *links) {
         param_count = links->type->function.param_count;
     if (param_count <= 0)
         return true;
-    return links->param_mutations && links->param_mutation_count >= param_count;
+    return links->param_effects && links->param_effect_count >= param_count;
 }
 
-static bool xa_u8_summary_equal(const uint8_t *a, int a_count, const uint8_t *b, int b_count) {
+static bool xa_param_effect_summary_equal(const XaParamEffectSummary *a, int a_count,
+                                          const XaParamEffectSummary *b, int b_count) {
     if (a_count != b_count)
         return false;
     if (a_count <= 0)
         return true;
     if (!a || !b)
         return false;
-    return memcmp(a, b, (size_t) a_count * sizeof(uint8_t)) == 0;
+    return memcmp(a, b, (size_t) a_count * sizeof(XaParamEffectSummary)) == 0;
 }
 
 static bool xa_return_function_effect_matches_param_summary(XaSymbolLinks *dst,
                                                             XaSymbolLinks *src) {
     if (!dst || !src)
         return false;
-    return xa_u8_summary_equal(dst->return_fn_param_escapes, dst->return_fn_param_escape_count,
-                               src->param_escapes, src->param_escape_count) &&
-           xa_u8_summary_equal(dst->return_fn_param_mutations, dst->return_fn_param_mutation_count,
-                               src->param_mutations, src->param_mutation_count) &&
-           xa_u8_summary_equal(dst->return_fn_param_storage_requirements,
-                               dst->return_fn_param_storage_requirement_count,
-                               src->param_storage_requirements,
-                               src->param_storage_requirement_count);
+    return xa_param_effect_summary_equal(dst->return_fn_param_effects,
+                                         dst->return_fn_param_effect_count, src->param_effects,
+                                         src->param_effect_count);
 }
 
 static bool xa_return_function_effect_matches_return_summary(XaSymbolLinks *dst,
                                                              XaSymbolLinks *src) {
     if (!dst || !src)
         return false;
-    return xa_u8_summary_equal(dst->return_fn_param_escapes, dst->return_fn_param_escape_count,
-                               src->return_fn_param_escapes, src->return_fn_param_escape_count) &&
-           xa_u8_summary_equal(dst->return_fn_param_mutations, dst->return_fn_param_mutation_count,
-                               src->return_fn_param_mutations,
-                               src->return_fn_param_mutation_count) &&
-           xa_u8_summary_equal(dst->return_fn_param_storage_requirements,
-                               dst->return_fn_param_storage_requirement_count,
-                               src->return_fn_param_storage_requirements,
-                               src->return_fn_param_storage_requirement_count);
+    return xa_param_effect_summary_equal(
+        dst->return_fn_param_effects, dst->return_fn_param_effect_count,
+        src->return_fn_param_effects, src->return_fn_param_effect_count);
 }
 
 static XaSymbolLinks *xa_call_return_function_effect_links(XaInferContext *ctx, AstNode *node,
@@ -8666,11 +8658,11 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         return;
     }
 
-    // Check in-parameter immutability: cannot reassign an 'in' parameter
-    if (sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_IN) {
+    // READ parameters expose a readonly call-bound capability.
+    if (sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_READ) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
-        snprintf(msg, sizeof(msg), "Cannot assign to 'in' parameter '%s' (readonly reference)",
+        snprintf(msg, sizeof(msg), "Cannot assign to read parameter '%s' (readonly capability)",
                  assign->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
                                    msg, &loc);
@@ -8729,182 +8721,6 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-struct XaOutParamDaState {
-    XaSymbolLinks *links;
-    bool before_assigned;
-    bool then_assigned;
-    bool else_assigned;
-    bool path_merge_has_fallthrough;
-    bool path_merge_assigned;
-    bool path_merge_fields_initialized;
-    XaOutFieldDaPath *before_fields;
-    XaOutFieldDaPath *then_fields;
-    XaOutFieldDaPath *else_fields;
-    XaOutFieldDaPath *path_merge_fields;
-};
-
-XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
-    if (out_count)
-        *out_count = 0;
-    XaScope *function_scope = xa_find_enclosing_function_scope(ctx);
-    if (!ctx || !ctx->analyzer || !function_scope || !out_count)
-        return NULL;
-
-    int symbol_count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(function_scope, &symbol_count);
-    if (!symbols || symbol_count <= 0) {
-        xr_free(symbols);
-        return NULL;
-    }
-
-    XaOutParamDaState *states = xr_calloc((size_t) symbol_count + 1u, sizeof(XaOutParamDaState));
-    if (!states) {
-        xr_free(symbols);
-        return NULL;
-    }
-
-    int count = 0;
-    for (int i = 0; i < symbol_count; i++) {
-        XaSymbol *sym = symbols[i];
-        if (!sym || sym->kind != XA_SYM_PARAMETER || sym->passing_mode != XR_PARAM_OUT)
-            continue;
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-        if (!links)
-            continue;
-        states[count].links = links;
-        states[count].before_assigned = links->is_definitely_assigned;
-        states[count].then_assigned = links->is_definitely_assigned;
-        states[count].else_assigned = links->is_definitely_assigned;
-        states[count].path_merge_has_fallthrough = false;
-        states[count].path_merge_assigned = true;
-        states[count].path_merge_fields_initialized = false;
-        states[count].before_fields = xa_symbol_links_clone_out_field_da_paths(links);
-        states[count].then_fields = xa_symbol_links_clone_out_field_da_paths(links);
-        states[count].else_fields = xa_symbol_links_clone_out_field_da_paths(links);
-        states[count].path_merge_fields = NULL;
-        count++;
-    }
-    xr_free(symbols);
-
-    if (count <= 0) {
-        xr_free(states);
-        return NULL;
-    }
-    *out_count = count;
-    return states;
-}
-
-XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++) {
-        if (states[i].links) {
-            states[i].links->is_definitely_assigned = states[i].before_assigned;
-            xa_symbol_links_restore_out_field_da_paths(states[i].links, states[i].before_fields);
-        }
-    }
-}
-
-XR_FUNC void xa_out_param_da_begin_path_merge(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++) {
-        states[i].path_merge_has_fallthrough = false;
-        states[i].path_merge_assigned = true;
-        states[i].path_merge_fields_initialized = false;
-        xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
-        states[i].path_merge_fields = NULL;
-    }
-}
-
-XR_FUNC void xa_out_param_da_record_path(XaOutParamDaState *states, int count, bool falls_through) {
-    if (!falls_through)
-        return;
-    for (int i = 0; states && i < count; i++) {
-        states[i].path_merge_has_fallthrough = true;
-        states[i].path_merge_assigned =
-            states[i].path_merge_assigned &&
-            (states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned);
-        XaOutFieldDaPath *path_fields =
-            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
-        if (!states[i].path_merge_fields_initialized) {
-            states[i].path_merge_fields = path_fields;
-            states[i].path_merge_fields_initialized = true;
-        } else {
-            XaOutFieldDaPath *merged = xa_symbol_links_intersect_out_field_da_paths(
-                states[i].path_merge_fields, path_fields);
-            xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
-            xa_symbol_links_free_out_field_da_paths(path_fields);
-            states[i].path_merge_fields = merged;
-        }
-    }
-}
-
-XR_FUNC void xa_out_param_da_apply_path_merge(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++) {
-        if (states[i].links && states[i].path_merge_has_fallthrough) {
-            states[i].links->is_definitely_assigned = states[i].path_merge_assigned;
-            xa_symbol_links_restore_out_field_da_paths(states[i].links,
-                                                       states[i].path_merge_fields);
-        }
-    }
-}
-
-XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states) {
-    for (int i = 0; states && states[i].links; i++) {
-        xa_symbol_links_free_out_field_da_paths(states[i].before_fields);
-        xa_symbol_links_free_out_field_da_paths(states[i].then_fields);
-        xa_symbol_links_free_out_field_da_paths(states[i].else_fields);
-        xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
-    }
-    xr_free(states);
-}
-
-static void xa_out_param_da_record_then(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++) {
-        states[i].then_assigned =
-            states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
-        xa_symbol_links_free_out_field_da_paths(states[i].then_fields);
-        states[i].then_fields =
-            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
-    }
-}
-
-static void xa_out_param_da_record_else(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++) {
-        states[i].else_assigned =
-            states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
-        xa_symbol_links_free_out_field_da_paths(states[i].else_fields);
-        states[i].else_fields =
-            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
-    }
-}
-
-static void xa_out_param_da_apply_if_merge(XaOutParamDaState *states, int count,
-                                           bool then_falls_through, bool else_falls_through) {
-    for (int i = 0; states && i < count; i++) {
-        if (!states[i].links)
-            continue;
-        bool merged = states[i].before_assigned;
-        if (then_falls_through && else_falls_through) {
-            merged = states[i].then_assigned && states[i].else_assigned;
-        } else if (then_falls_through) {
-            merged = states[i].then_assigned;
-        } else if (else_falls_through) {
-            merged = states[i].else_assigned;
-        }
-        states[i].links->is_definitely_assigned = merged;
-        XaOutFieldDaPath *merged_fields = NULL;
-        if (then_falls_through && else_falls_through) {
-            merged_fields = xa_symbol_links_intersect_out_field_da_paths(states[i].then_fields,
-                                                                         states[i].else_fields);
-        } else if (then_falls_through) {
-            merged_fields = states[i].then_fields;
-        } else if (else_falls_through) {
-            merged_fields = states[i].else_fields;
-        } else {
-            merged_fields = states[i].before_fields;
-        }
-        xa_symbol_links_restore_out_field_da_paths(states[i].links, merged_fields);
-    }
-}
-
 void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -8922,12 +8738,6 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     // its flow becomes unreachable → merge label only has the false-condition
     // path → opposite narrowing applies to subsequent code.
 
-    int out_da_count = 0;
-    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
-    bool then_falls_through = xa_statement_can_fall_through(if_stmt->then_branch);
-    bool else_falls_through =
-        if_stmt->else_branch ? xa_statement_can_fall_through(if_stmt->else_branch) : true;
-
     XaFlowNode *saved = ctx->flow ? ctx->flow->current_flow : NULL;
 
     // Then branch: flow enters TRUE_CONDITION
@@ -8935,13 +8745,11 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
         ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, if_stmt->condition, true);
     }
     xa_visit_infer_stmt(ctx, if_stmt->then_branch);
-    xa_out_param_da_record_then(out_da, out_da_count);
     XaFlowNode *then_end = ctx->flow ? ctx->flow->current_flow : NULL;
 
     // Else branch: flow enters FALSE_CONDITION
     if (ctx->flow)
         ctx->flow->current_flow = saved;
-    xa_out_param_da_restore_before(out_da, out_da_count);
 
     XaFlowNode *else_end = NULL;
     if (if_stmt->else_branch) {
@@ -8952,9 +8760,6 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, if_stmt->else_branch);
         else_end = ctx->flow ? ctx->flow->current_flow : NULL;
     }
-    xa_out_param_da_record_else(out_da, out_da_count);
-    xa_out_param_da_apply_if_merge(out_da, out_da_count, then_falls_through, else_falls_through);
-    xa_out_param_da_free(out_da);
 
     // Merge branches
     if (ctx->flow) {
@@ -8993,9 +8798,6 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
     }
 
-    int out_da_count = 0;
-    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
-
     /* Analyze body. A block body goes through xa_visit_block_stmt so it
      * gets its own scope keyed on the body node, matching Pass 1. */
     XaLoopScope loop_scope;
@@ -9008,9 +8810,6 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
     if (ctx->flow && loop_start) {
         xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
     }
-    xa_out_param_da_restore_before(out_da, out_da_count);
-    xa_out_param_da_free(out_da);
-
     // Exit condition
     if (ctx->flow) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, false);
@@ -9042,9 +8841,6 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         xa_check_condition_type(ctx, for_stmt->condition, cond_type);
     }
 
-    int out_da_count = 0;
-    XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
-
     // Analyze body - inline block to match Pass 1 scope structure
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
@@ -9056,9 +8852,6 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     if (for_stmt->increment) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
     }
-    xa_out_param_da_restore_before(out_da, out_da_count);
-    xa_out_param_da_free(out_da);
-
     xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
 }
@@ -9118,47 +8911,6 @@ XR_FUNC bool xa_statement_can_fall_through(AstNode *node) {
         default:
             return true;
     }
-}
-
-static void xa_report_unassigned_out_params(XaInferContext *ctx, XaScope *function_scope,
-                                            AstNode *loc_node, const char *exit_label) {
-    if (!ctx || !ctx->analyzer || !function_scope || !loc_node)
-        return;
-
-    int symbol_count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(function_scope, &symbol_count);
-    for (int i = 0; i < symbol_count; i++) {
-        XaSymbol *sym = symbols ? symbols[i] : NULL;
-        if (!sym || sym->kind != XA_SYM_PARAMETER || sym->passing_mode != XR_PARAM_OUT)
-            continue;
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-        if (!links || links->is_definitely_assigned)
-            continue;
-
-        XrLocation loc = {
-            .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
-        char msg[256];
-        snprintf(msg, sizeof(msg), "out parameter '%s' must be assigned before %s",
-                 sym->name ? sym->name : "?", exit_label ? exit_label : "function exits");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                   XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
-    }
-    xr_free(symbols);
-}
-
-static void xa_check_out_params_assigned_before_return(XaInferContext *ctx, XaScope *function_scope,
-                                                       AstNode *return_node) {
-    xa_report_unassigned_out_params(ctx, function_scope, return_node, "returning");
-}
-
-XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
-                                                           XaScope *function_scope,
-                                                           AstNode *body_node) {
-    if (!ctx || !ctx->analyzer || !function_scope || !body_node)
-        return;
-    if (!xa_statement_can_fall_through(body_node))
-        return;
-    xa_report_unassigned_out_params(ctx, function_scope, body_node, "function exits");
 }
 
 void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
@@ -9308,8 +9060,6 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             }
         }
     }
-
-    xa_check_out_params_assigned_before_return(ctx, function_scope, node);
 
     // Mark flow as unreachable after return
     if (ctx->flow) {

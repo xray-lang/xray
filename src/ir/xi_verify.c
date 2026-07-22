@@ -1002,7 +1002,7 @@ static void verify_call_method_direct_contract(VerifyCtx *ctx, const XiFunc *f) 
     }
 }
 
-/* ========== Check 13: Ref/out call-bound place plans ========== */
+/* ========== Check 13: ref/move call plans ========== */
 
 static bool verify_is_call_bound_place(const XiValue *v) {
     if (!v)
@@ -1013,28 +1013,51 @@ static bool verify_is_call_bound_place(const XiValue *v) {
         v->aux_int > UINT16_MAX)
         return false;
     XrParamMode mode = xi_func_param_passing_mode(v->block->func, (uint16_t) v->aux_int);
-    return mode == XR_PARAM_IN || mode == XR_PARAM_REF || mode == XR_PARAM_OUT;
+    if (mode == XR_PARAM_REF)
+        return true;
+    const XiFunc *func = v->block->func;
+    return mode == XR_PARAM_READ && v->aux_int == 0 && func->receiver_call_place && func->params &&
+           func->params[0] == v;
 }
 
-static XrCallArgAccess verify_expected_arg_access(XrParamMode mode) {
-    switch (mode) {
-        case XR_PARAM_REF:
-            return XR_CALL_ARG_REF;
-        case XR_PARAM_OUT:
-            return XR_CALL_ARG_OUT;
-        case XR_PARAM_VALUE:
-        case XR_PARAM_IN:
-        default:
-            return XR_CALL_ARG_VALUE;
+static bool verify_arg_access_matches_mode(XrParamMode mode, XrCallArgAccess access) {
+    if (mode == XR_PARAM_READ)
+        return access == XR_CALL_ARG_PLAIN;
+    if (mode == XR_PARAM_REF)
+        return access == XR_CALL_ARG_REF;
+    return mode == XR_PARAM_MOVE && (access == XR_CALL_ARG_MOVE || access == XR_CALL_ARG_PLAIN);
+}
+
+/* Representation selection may insert a BOX/UNBOX bridge between the
+ * source-level ownership edge and a tagged call boundary.  The move proof is
+ * semantic, so follow only those representation wrappers; do not accept a
+ * general COPY as a substitute for an explicit source move. */
+static bool verify_call_arg_has_source_move(const XiValue *value) {
+    for (uint8_t depth = 0; value && depth < 8; depth++) {
+        if (value->op == XI_MOVE)
+            return true;
+        if (value->nargs != 1 || !value->args[0])
+            return false;
+        switch ((XiOp) value->op) {
+            case XI_BOX:
+            case XI_UNBOX:
+            case XI_ENUM_DESCRIPTOR_BOX:
+            case XI_ENUM_DESCRIPTOR_UNBOX:
+                value = value->args[0];
+                break;
+            default:
+                return false;
+        }
     }
+    return false;
 }
 
 static bool verify_call_plan_receiver(VerifyCtx *ctx, const XiFunc *f, const XiValue *call,
                                       const XiCallArgPlan *receiver) {
     XiValue *place = receiver->place;
     bool receiver_mode =
-        receiver->param_mode == XR_PARAM_IN || receiver->param_mode == XR_PARAM_REF;
-    if (!receiver_mode || receiver->access != XR_CALL_ARG_VALUE || !receiver->addressable ||
+        receiver->param_mode == XR_PARAM_READ || receiver->param_mode == XR_PARAM_REF;
+    if (!receiver_mode || receiver->access != XR_CALL_ARG_PLAIN || !receiver->addressable ||
         receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
         receiver->escape != XI_PLACE_ESCAPE_NONE || !place || place != call->args[0] ||
         !verify_is_call_bound_place(place)) {
@@ -1112,12 +1135,12 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            bool saw_place = false;
+            bool saw_contract = false;
             if (plan->has_receiver) {
                 const XiCallArgPlan *receiver = &plan->receiver;
                 if (!verify_call_plan_receiver(ctx, f, v, receiver))
                     return;
-                saw_place = true;
+                saw_contract = true;
             }
             for (uint16_t a = 0; a < plan->nargs; a++) {
                 const XiCallArgPlan *arg_plan = &plan->args[a];
@@ -1127,17 +1150,15 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                          v->id, (unsigned) a + 1);
                     return;
                 }
-                XrCallArgAccess expected = verify_expected_arg_access(arg_plan->param_mode);
-                if (arg_plan->access != expected) {
-                    verr(ctx, "func '%s': call v%u plan arg %u mode=%s has access=%s (expected %s)",
+                if (!verify_arg_access_matches_mode(arg_plan->param_mode, arg_plan->access)) {
+                    verr(ctx, "func '%s': call v%u plan arg %u mode=%s has incompatible access=%s",
                          f->name, v->id, (unsigned) a + 1,
                          xr_param_mode_label(arg_plan->param_mode),
-                         xr_call_arg_access_label(arg_plan->access),
-                         xr_call_arg_access_label(expected));
+                         xr_call_arg_access_label(arg_plan->access));
                     return;
                 }
 
-                if (arg_plan->param_mode == XR_PARAM_VALUE) {
+                if (arg_plan->param_mode == XR_PARAM_READ) {
                     if (arg_plan->place || arg_plan->addressable ||
                         arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
                         arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
@@ -1150,7 +1171,26 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                     continue;
                 }
 
-                saw_place = true;
+                saw_contract = true;
+                if (arg_plan->param_mode == XR_PARAM_MOVE) {
+                    if (arg_plan->place || arg_plan->addressable ||
+                        arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
+                        arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
+                        arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
+                        arg_plan->origin_var_id != XI_NO_VAR_ID) {
+                        verr(ctx, "func '%s': call v%u move arg %u carries ref-place metadata",
+                             f->name, v->id, (unsigned) a + 1);
+                        return;
+                    }
+                    if (arg_plan->access == XR_CALL_ARG_MOVE &&
+                        !verify_call_arg_has_source_move(v->args[a + 1])) {
+                        verr(ctx, "func '%s': call v%u move arg %u lacks source-move IR", f->name,
+                             v->id, (unsigned) a + 1);
+                        return;
+                    }
+                    continue;
+                }
+
                 XiValue *place = arg_plan->place;
                 if (!arg_plan->addressable || arg_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
                     arg_plan->escape != XI_PLACE_ESCAPE_NONE || !place || place != v->args[a + 1] ||
@@ -1186,8 +1226,8 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                     return;
                 }
             }
-            if (!saw_place) {
-                verr(ctx, "func '%s': call v%u in b%u has a call plan with no place arguments",
+            if (!saw_contract) {
+                verr(ctx, "func '%s': call v%u in b%u has a call plan with no non-read contract",
                      f->name, v->id, blk->id);
                 return;
             }
@@ -1201,12 +1241,12 @@ static bool verify_call_plan_accepts_place_at(const XiValue *user, uint16_t arg_
         return false;
     if (arg_index == 0)
         return user->call_plan->has_receiver &&
-               user->call_plan->receiver.param_mode != XR_PARAM_VALUE &&
+               user->call_plan->receiver.param_mode != XR_PARAM_READ &&
                user->call_plan->receiver.place == place;
     if (arg_index > user->call_plan->nargs)
         return false;
     const XiCallArgPlan *arg_plan = &user->call_plan->args[arg_index - 1];
-    return arg_plan->param_mode != XR_PARAM_VALUE && arg_plan->place == place;
+    return arg_plan->param_mode == XR_PARAM_REF && arg_plan->place == place;
 }
 
 static void verify_place_uses(VerifyCtx *ctx, const XiFunc *f) {

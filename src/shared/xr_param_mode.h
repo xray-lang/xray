@@ -14,54 +14,50 @@
 #include <stdbool.h>
 
 typedef enum XrParamMode {
-    XR_PARAM_VALUE = 0, /* ordinary value parameter */
-    XR_PARAM_IN = 1,    /* readonly borrow parameter */
-    XR_PARAM_REF = 2,   /* read/write borrow parameter */
-    XR_PARAM_OUT = 3,   /* definite-write output parameter */
+    XR_PARAM_READ = 0, /* call-bound readonly use */
+    XR_PARAM_REF = 1,  /* exclusive read/write place loan */
+    XR_PARAM_MOVE = 2, /* unique owner transfer */
 } XrParamMode;
 
 typedef enum XrCallArgAccess {
-    XR_CALL_ARG_VALUE = 0, /* ordinary argument */
+    XR_CALL_ARG_PLAIN = 0, /* ordinary expression */
     XR_CALL_ARG_REF = 1,   /* caller-authorized read/write place */
-    XR_CALL_ARG_OUT = 2,   /* caller-authorized definite-write place */
+    XR_CALL_ARG_MOVE = 2,  /* caller-authorized owner transfer */
 } XrCallArgAccess;
 
 static inline bool xr_param_mode_is_valid(XrParamMode mode) {
-    return mode == XR_PARAM_VALUE || mode == XR_PARAM_IN || mode == XR_PARAM_REF ||
-           mode == XR_PARAM_OUT;
+    return mode == XR_PARAM_READ || mode == XR_PARAM_REF || mode == XR_PARAM_MOVE;
 }
 
 static inline bool xr_param_mode_is_borrow(XrParamMode mode) {
-    return mode == XR_PARAM_IN || mode == XR_PARAM_REF;
+    return mode == XR_PARAM_REF;
 }
 
 static inline const char *xr_param_mode_label(XrParamMode mode) {
     switch (mode) {
-        case XR_PARAM_VALUE:
-            return "value";
-        case XR_PARAM_IN:
-            return "in";
+        case XR_PARAM_READ:
+            return "read";
         case XR_PARAM_REF:
             return "ref";
-        case XR_PARAM_OUT:
-            return "out";
+        case XR_PARAM_MOVE:
+            return "move";
         default:
             return "invalid";
     }
 }
 
 static inline bool xr_call_arg_access_is_valid(XrCallArgAccess access) {
-    return access == XR_CALL_ARG_VALUE || access == XR_CALL_ARG_REF || access == XR_CALL_ARG_OUT;
+    return access == XR_CALL_ARG_PLAIN || access == XR_CALL_ARG_REF || access == XR_CALL_ARG_MOVE;
 }
 
 static inline const char *xr_call_arg_access_label(XrCallArgAccess access) {
     switch (access) {
-        case XR_CALL_ARG_VALUE:
+        case XR_CALL_ARG_PLAIN:
             return "plain";
         case XR_CALL_ARG_REF:
             return "ref";
-        case XR_CALL_ARG_OUT:
-            return "out";
+        case XR_CALL_ARG_MOVE:
+            return "move";
         default:
             return "invalid";
     }

@@ -209,18 +209,10 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         }
         xr_free(links->param_names);
     }
-    if (links->param_escapes)
-        xr_free(links->param_escapes);
-    if (links->param_mutations)
-        xr_free(links->param_mutations);
-    if (links->param_storage_requirements)
-        xr_free(links->param_storage_requirements);
-    if (links->return_fn_param_escapes)
-        xr_free(links->return_fn_param_escapes);
-    if (links->return_fn_param_mutations)
-        xr_free(links->return_fn_param_mutations);
-    if (links->return_fn_param_storage_requirements)
-        xr_free(links->return_fn_param_storage_requirements);
+    if (links->param_effects)
+        xr_free(links->param_effects);
+    if (links->return_fn_param_effects)
+        xr_free(links->return_fn_param_effects);
     if (links->c_export_symbol)
         xr_free((void *) links->c_export_symbol);
     if (links->type_param_names) {
@@ -248,13 +240,6 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         XaRefLocation *next = ref->next;
         xr_free(ref);
         ref = next;
-    }
-    XaOutFieldDaPath *path = links->out_field_da_paths;
-    while (path) {
-        XaOutFieldDaPath *next = path->next;
-        xr_free(path->path);
-        xr_free(path);
-        path = next;
     }
 }
 
@@ -297,208 +282,6 @@ XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count) {
     if (count)
         *count = links->ref_count;
     return links->references;
-}
-
-void xa_symbol_links_mark_out_field_assigned(XaSymbolLinks *links, const char *path) {
-    if (!links || !path || path[0] == '\0')
-        return;
-    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
-        if (it->path && strcmp(it->path, path) == 0)
-            return;
-    }
-    XaOutFieldDaPath *entry = (XaOutFieldDaPath *) xr_calloc(1, sizeof(*entry));
-    if (!entry)
-        return;
-    entry->path = xr_strdup(path);
-    if (!entry->path) {
-        xr_free(entry);
-        return;
-    }
-    entry->next = links->out_field_da_paths;
-    links->out_field_da_paths = entry;
-}
-
-bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path) {
-    if (!links || !path || path[0] == '\0')
-        return false;
-    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
-        if (it->path && strcmp(it->path, path) == 0)
-            return true;
-    }
-    return false;
-}
-
-static bool out_field_da_path_assigned_recursive(XaSymbolLinks *links, const char *path,
-                                                 XrType *type, int depth);
-
-static bool out_field_da_all_direct_fields_assigned(XaSymbolLinks *links, const char *path_prefix,
-                                                    XrClassInfo *info, int depth) {
-    if (!links || !path_prefix || path_prefix[0] == '\0')
-        return false;
-    if (!info)
-        return false;
-    if (info->field_count <= 0 || !info->fields)
-        return false;
-
-    for (int i = 0; i < info->field_count; i++) {
-        XaSymbol *field = info->fields[i];
-        if (!field || !field->name)
-            return false;
-        char path[256];
-        int n = snprintf(path, sizeof(path), "%s.%s", path_prefix, field->name);
-        XaSymbolLinks *field_links = &field->links;
-        XrType *field_type =
-            field_links ? (field_links->type ? field_links->type : field_links->declared_type)
-                        : NULL;
-        if (n <= 0 || (size_t) n >= sizeof(path) ||
-            !out_field_da_path_assigned_recursive(links, path, field_type, depth + 1))
-            return false;
-    }
-    return true;
-}
-
-static bool out_field_da_path_assigned_recursive(XaSymbolLinks *links, const char *path,
-                                                 XrType *type, int depth) {
-    if (xa_symbol_links_out_field_assigned(links, path))
-        return true;
-    if (depth > 8 || !type)
-        return false;
-    if (type->kind == XR_KIND_FIXED_ARRAY) {
-        if (type->fixed_array.length <= 0 || !type->fixed_array.element_type)
-            return false;
-        for (int i = 0; i < type->fixed_array.length; i++) {
-            char child[256];
-            int n = snprintf(child, sizeof(child), "%s[%d]", path, i);
-            if (n <= 0 || (size_t) n >= sizeof(child) ||
-                !out_field_da_path_assigned_recursive(links, child, type->fixed_array.element_type,
-                                                      depth + 1))
-                return false;
-        }
-        xa_symbol_links_mark_out_field_assigned(links, path);
-        return true;
-    }
-    if (!type->is_value_type)
-        return false;
-    if ((!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) || !type->instance.class_ref)
-        return false;
-    XrClassInfo *info = type->instance.class_ref;
-    if (!info || info->field_count <= 0 || !info->fields)
-        return false;
-    for (int i = 0; i < info->field_count; i++) {
-        XaSymbol *field = info->fields[i];
-        if (!field || !field->name)
-            return false;
-        char child[256];
-        int n = snprintf(child, sizeof(child), "%s.%s", path, field->name);
-        XaSymbolLinks *field_links = &field->links;
-        XrType *field_type =
-            field_links ? (field_links->type ? field_links->type : field_links->declared_type)
-                        : NULL;
-        if (n <= 0 || (size_t) n >= sizeof(child) ||
-            !out_field_da_path_assigned_recursive(links, child, field_type, depth + 1))
-            return false;
-    }
-    xa_symbol_links_mark_out_field_assigned(links, path);
-    return true;
-}
-
-bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-    XaSymbolLinks *links, const char *root_name, XrClassInfo *info) {
-    if (!links || links->is_definitely_assigned)
-        return false;
-    if (!out_field_da_all_direct_fields_assigned(links, root_name, info, 0))
-        return false;
-    links->is_definitely_assigned = true;
-    return true;
-}
-
-bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
-    XaSymbolLinks *links, const char *root_name, XrType *type) {
-    if (!type || !type->is_value_type || (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) ||
-        !type->instance.class_ref)
-        return false;
-    return xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-        links, root_name, type->instance.class_ref);
-}
-
-bool xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
-    XaSymbolLinks *links, const char *path_prefix, XrClassInfo *info) {
-    if (!links || !path_prefix || path_prefix[0] == '\0')
-        return false;
-    if (!out_field_da_all_direct_fields_assigned(links, path_prefix, info, 0))
-        return false;
-    xa_symbol_links_mark_out_field_assigned(links, path_prefix);
-    return true;
-}
-
-void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths) {
-    while (paths) {
-        XaOutFieldDaPath *next = paths->next;
-        xr_free(paths->path);
-        xr_free(paths);
-        paths = next;
-    }
-}
-
-static bool out_field_path_list_contains(XaOutFieldDaPath *paths, const char *path) {
-    if (!path || path[0] == '\0')
-        return false;
-    for (XaOutFieldDaPath *it = paths; it; it = it->next) {
-        if (it->path && strcmp(it->path, path) == 0)
-            return true;
-    }
-    return false;
-}
-
-static bool out_field_path_list_prepend(XaOutFieldDaPath **paths, const char *path) {
-    if (!paths || !path || path[0] == '\0' || out_field_path_list_contains(*paths, path))
-        return true;
-    XaOutFieldDaPath *entry = (XaOutFieldDaPath *) xr_calloc(1, sizeof(*entry));
-    if (!entry)
-        return false;
-    entry->path = xr_strdup(path);
-    if (!entry->path) {
-        xr_free(entry);
-        return false;
-    }
-    entry->next = *paths;
-    *paths = entry;
-    return true;
-}
-
-XaOutFieldDaPath *xa_symbol_links_clone_out_field_da_paths(XaSymbolLinks *links) {
-    if (!links)
-        return NULL;
-    XaOutFieldDaPath *copy = NULL;
-    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
-        if (!out_field_path_list_prepend(&copy, it->path)) {
-            xa_symbol_links_free_out_field_da_paths(copy);
-            return NULL;
-        }
-    }
-    return copy;
-}
-
-void xa_symbol_links_restore_out_field_da_paths(XaSymbolLinks *links, XaOutFieldDaPath *paths) {
-    if (!links)
-        return;
-    xa_symbol_links_free_out_field_da_paths(links->out_field_da_paths);
-    links->out_field_da_paths = NULL;
-    for (XaOutFieldDaPath *it = paths; it; it = it->next)
-        (void) out_field_path_list_prepend(&links->out_field_da_paths, it->path);
-}
-
-XaOutFieldDaPath *xa_symbol_links_intersect_out_field_da_paths(XaOutFieldDaPath *left,
-                                                               XaOutFieldDaPath *right) {
-    XaOutFieldDaPath *intersection = NULL;
-    for (XaOutFieldDaPath *it = left; it; it = it->next) {
-        if (out_field_path_list_contains(right, it->path) &&
-            !out_field_path_list_prepend(&intersection, it->path)) {
-            xa_symbol_links_free_out_field_da_paths(intersection);
-            return NULL;
-        }
-    }
-    return intersection;
 }
 
 // Create a new scope
@@ -835,20 +618,10 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         xr_free(links->param_names);
         links->param_names = NULL;
     }
-    if (links->param_escapes) {
-        xr_free(links->param_escapes);
-        links->param_escapes = NULL;
-        links->param_escape_count = 0;
-    }
-    if (links->param_mutations) {
-        xr_free(links->param_mutations);
-        links->param_mutations = NULL;
-        links->param_mutation_count = 0;
-    }
-    if (links->param_storage_requirements) {
-        xr_free(links->param_storage_requirements);
-        links->param_storage_requirements = NULL;
-        links->param_storage_requirement_count = 0;
+    if (links->param_effects) {
+        xr_free(links->param_effects);
+        links->param_effects = NULL;
+        links->param_effect_count = 0;
     }
     xa_symbol_links_clear_return_function_effect_summary(links);
     links->return_fn_effect_scanned = false;
@@ -941,7 +714,8 @@ bool xa_symbol_is_function(XaSymbol *symbol) {
     return symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD;
 }
 
-static void xa_copy_u8_summary(uint8_t **dst, int *dst_count, const uint8_t *src, int src_count) {
+static void xa_copy_param_effect_summary(XaParamEffectSummary **dst, int *dst_count,
+                                         const XaParamEffectSummary *src, int src_count) {
     if (!dst || !dst_count)
         return;
     if (*dst) {
@@ -951,10 +725,10 @@ static void xa_copy_u8_summary(uint8_t **dst, int *dst_count, const uint8_t *src
     *dst_count = 0;
     if (!src || src_count <= 0)
         return;
-    uint8_t *copy = xr_malloc((size_t) src_count * sizeof(uint8_t));
+    XaParamEffectSummary *copy = xr_malloc((size_t) src_count * sizeof(XaParamEffectSummary));
     if (!copy)
         return;
-    memcpy(copy, src, (size_t) src_count * sizeof(uint8_t));
+    memcpy(copy, src, (size_t) src_count * sizeof(XaParamEffectSummary));
     *dst = copy;
     *dst_count = src_count;
 }
@@ -962,24 +736,16 @@ static void xa_copy_u8_summary(uint8_t **dst, int *dst_count, const uint8_t *src
 void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst, const XaSymbolLinks *src) {
     if (!dst)
         return;
-    xa_copy_u8_summary(&dst->param_escapes, &dst->param_escape_count,
-                       src ? src->param_escapes : NULL, src ? src->param_escape_count : 0);
-    xa_copy_u8_summary(&dst->param_mutations, &dst->param_mutation_count,
-                       src ? src->param_mutations : NULL, src ? src->param_mutation_count : 0);
-    xa_copy_u8_summary(&dst->param_storage_requirements, &dst->param_storage_requirement_count,
-                       src ? src->param_storage_requirements : NULL,
-                       src ? src->param_storage_requirement_count : 0);
+    xa_copy_param_effect_summary(&dst->param_effects, &dst->param_effect_count,
+                                 src ? src->param_effects : NULL,
+                                 src ? src->param_effect_count : 0);
 }
 
 void xa_symbol_links_clear_return_function_effect_summary(XaSymbolLinks *links) {
     if (!links)
         return;
-    xa_copy_u8_summary(&links->return_fn_param_escapes, &links->return_fn_param_escape_count, NULL,
-                       0);
-    xa_copy_u8_summary(&links->return_fn_param_mutations, &links->return_fn_param_mutation_count,
-                       NULL, 0);
-    xa_copy_u8_summary(&links->return_fn_param_storage_requirements,
-                       &links->return_fn_param_storage_requirement_count, NULL, 0);
+    xa_copy_param_effect_summary(&links->return_fn_param_effects,
+                                 &links->return_fn_param_effect_count, NULL, 0);
     links->return_fn_effect_mixed = false;
 }
 
@@ -987,14 +753,9 @@ void xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
                                                         const XaSymbolLinks *src) {
     if (!dst)
         return;
-    xa_copy_u8_summary(&dst->return_fn_param_escapes, &dst->return_fn_param_escape_count,
-                       src ? src->param_escapes : NULL, src ? src->param_escape_count : 0);
-    xa_copy_u8_summary(&dst->return_fn_param_mutations, &dst->return_fn_param_mutation_count,
-                       src ? src->param_mutations : NULL, src ? src->param_mutation_count : 0);
-    xa_copy_u8_summary(&dst->return_fn_param_storage_requirements,
-                       &dst->return_fn_param_storage_requirement_count,
-                       src ? src->param_storage_requirements : NULL,
-                       src ? src->param_storage_requirement_count : 0);
+    xa_copy_param_effect_summary(&dst->return_fn_param_effects, &dst->return_fn_param_effect_count,
+                                 src ? src->param_effects : NULL,
+                                 src ? src->param_effect_count : 0);
     dst->return_fn_effect_mixed = false;
 }
 
@@ -1002,16 +763,9 @@ void xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
                                                          const XaSymbolLinks *src) {
     if (!dst)
         return;
-    xa_copy_u8_summary(&dst->return_fn_param_escapes, &dst->return_fn_param_escape_count,
-                       src ? src->return_fn_param_escapes : NULL,
-                       src ? src->return_fn_param_escape_count : 0);
-    xa_copy_u8_summary(&dst->return_fn_param_mutations, &dst->return_fn_param_mutation_count,
-                       src ? src->return_fn_param_mutations : NULL,
-                       src ? src->return_fn_param_mutation_count : 0);
-    xa_copy_u8_summary(&dst->return_fn_param_storage_requirements,
-                       &dst->return_fn_param_storage_requirement_count,
-                       src ? src->return_fn_param_storage_requirements : NULL,
-                       src ? src->return_fn_param_storage_requirement_count : 0);
+    xa_copy_param_effect_summary(&dst->return_fn_param_effects, &dst->return_fn_param_effect_count,
+                                 src ? src->return_fn_param_effects : NULL,
+                                 src ? src->return_fn_param_effect_count : 0);
     dst->return_fn_effect_mixed = src ? src->return_fn_effect_mixed : false;
     dst->return_fn_effect_scanned = src ? src->return_fn_effect_scanned : false;
     dst->return_fn_effect_scan_in_progress = false;
@@ -1021,15 +775,9 @@ void xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLink
                                                                     const XaSymbolLinks *src) {
     if (!dst)
         return;
-    xa_copy_u8_summary(&dst->param_escapes, &dst->param_escape_count,
-                       src ? src->return_fn_param_escapes : NULL,
-                       src ? src->return_fn_param_escape_count : 0);
-    xa_copy_u8_summary(&dst->param_mutations, &dst->param_mutation_count,
-                       src ? src->return_fn_param_mutations : NULL,
-                       src ? src->return_fn_param_mutation_count : 0);
-    xa_copy_u8_summary(&dst->param_storage_requirements, &dst->param_storage_requirement_count,
-                       src ? src->return_fn_param_storage_requirements : NULL,
-                       src ? src->return_fn_param_storage_requirement_count : 0);
+    xa_copy_param_effect_summary(&dst->param_effects, &dst->param_effect_count,
+                                 src ? src->return_fn_param_effects : NULL,
+                                 src ? src->return_fn_param_effect_count : 0);
 }
 
 // Set generic type parameters for a function/class.  Each parameter may

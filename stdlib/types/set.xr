@@ -2,9 +2,12 @@
 
 @native
 class Set<T: Hashable> {
+    // @receiver_write
     add(value: T) @may_alloc
     contains(value: T) -> bool @no_alloc
+    // @receiver_write
     delete(value: T) -> bool @no_alloc
+    // @receiver_write
     clear() @no_alloc
     values() -> Array<T> @may_alloc
     forEach(fn: (value: T) -> ()) -> () @no_alloc

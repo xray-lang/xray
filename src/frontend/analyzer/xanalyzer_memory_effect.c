@@ -413,8 +413,8 @@ static void memory_scan_post(AstNode *node, void *userdata) {
 
 static void memory_build_direct(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
     XaSymbolLinks *links = &row->symbol->links;
-    for (int i = 0; i < links->param_mutation_count; i++) {
-        if (!links->param_mutations || !links->param_mutations[i])
+    for (int i = 0; i < links->param_effect_count; i++) {
+        if (!xa_param_effect_mutates(&links->param_effects[i]))
             continue;
         XaMemoryRootRef root = {.kind = XA_MEMORY_ROOT_PARAM, .index = (uint32_t) i};
         if (!xa_memory_effect_summary_add_write(&row->direct, root, XA_MEMORY_PLACE_PATH_WILDCARD))
@@ -492,6 +492,8 @@ void xa_infer_memory_effects(XaAnalyzer *analyzer, AstNode *ast) {
             memory_report_resource_failure(&pass, row);
         } else {
             row->symbol->links.memory_effect_id = id;
+            for (int slot = 0; slot < row->symbol->links.param_effect_count; slot++)
+                row->symbol->links.param_effects[slot].memory_effects = id;
         }
         xa_memory_effect_summary_clear(&row->direct);
         xa_memory_effect_summary_clear(&row->result);

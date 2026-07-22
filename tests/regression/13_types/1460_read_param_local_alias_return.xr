@@ -1,0 +1,7 @@
+fn leak(data: Array<int>) -> Array<int> {
+    var alias = data
+    return alias
+}
+
+var values: Array<int> = [1, 2]
+print(len(leak(values)))

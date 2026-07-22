@@ -993,7 +993,7 @@ static inline XrType *xr_type_function_param_type(const XrType *t, int index) {
 static inline XrParamMode xr_type_function_param_mode(const XrType *t, int index) {
     if (!t || t->kind != XR_KIND_FUNCTION || index < 0 || index >= t->function.param_count ||
         !t->function.params)
-        return XR_PARAM_VALUE;
+        return XR_PARAM_READ;
     return t->function.params[index].mode;
 }
 

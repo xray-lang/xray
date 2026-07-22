@@ -133,6 +133,18 @@ XR_FUNC XrTypeRef *xr_tref_generic(struct XrCompilerSession *session, const char
     return t;
 }
 
+XR_FUNC XrTypeRef *xr_tref_const(struct XrCompilerSession *session, XrTypeRef *inner) {
+    XR_DCHECK(inner != NULL, "xr_tref_const: NULL inner");
+    if (inner->kind == XR_TREF_CONST)
+        return inner;
+    XrTypeRef *t = tref_alloc(session);
+    t->kind = XR_TREF_CONST;
+    t->nchildren = 1;
+    t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
+    t->children[0] = inner;
+    return t;
+}
+
 XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef *inner) {
     XR_DCHECK(inner != NULL, "xr_tref_optional: NULL inner");
     XrTypeRef *t = tref_alloc(session);
@@ -168,8 +180,8 @@ XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session
     }
     for (int i = 0; i < nparam; i++) {
         t->children[i] = params[i];
-        XrParamMode mode = param_modes ? param_modes[i] : XR_PARAM_VALUE;
-        t->function_param_modes[i] = xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE;
+        XrParamMode mode = param_modes ? param_modes[i] : XR_PARAM_READ;
+        t->function_param_modes[i] = xr_param_mode_is_valid(mode) ? mode : XR_PARAM_READ;
     }
     t->children[nparam] = ret;
     return t;
@@ -265,6 +277,10 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
         return;
     }
     switch ((XrTypeRefKind) t->kind) {
+        case XR_TREF_CONST:
+            tref_append(buf, pos, cap, "const ");
+            tref_to_str_impl(t->nchildren > 0 ? t->children[0] : NULL, buf, pos, cap);
+            break;
         case XR_TREF_INT:
             tref_append(buf, pos, cap, "int");
             break;
@@ -348,8 +364,8 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
                 if (i > 0)
                     tref_append(buf, pos, cap, ", ");
                 XrParamMode mode =
-                    t->function_param_modes ? t->function_param_modes[i] : XR_PARAM_VALUE;
-                if (mode != XR_PARAM_VALUE) {
+                    t->function_param_modes ? t->function_param_modes[i] : XR_PARAM_READ;
+                if (mode != XR_PARAM_READ) {
                     tref_append(buf, pos, cap, xr_param_mode_label(mode));
                     tref_append(buf, pos, cap, " ");
                 }

@@ -6,7 +6,7 @@ class Counter {
     }
 }
 
-fn stashLength(data: in Array<int>, counter: ref Counter) {
+fn stashLength(data: Array<int>, counter: ref Counter) {
     counter.value = len(data)
 }
 

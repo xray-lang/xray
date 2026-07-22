@@ -349,7 +349,7 @@ static XiValue *make_place_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode 
     call->aux = (void *) "valueMethod";
     memset(plan, 0, sizeof(*plan));
     plan->receiver.param_mode = mode;
-    plan->receiver.access = XR_CALL_ARG_VALUE;
+    plan->receiver.access = XR_CALL_ARG_PLAIN;
     plan->receiver.origin = XI_PLACE_ORIGIN_STACK_LOCAL;
     plan->receiver.lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
     plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
@@ -506,7 +506,7 @@ TEST(call_plan_rejects_method_receiver_place_mismatch) {
     XiFunc *f = make_func("call_plan_method_receiver_mismatch");
     ASSERT(f != NULL);
     XiValue *place = NULL;
-    XiValue *call = make_place_receiver_call(f, f->entry, XR_PARAM_IN, &place);
+    XiValue *call = make_place_receiver_call(f, f->entry, XR_PARAM_READ, &place);
     ASSERT(call != NULL && place != NULL && call->call_plan != NULL);
     call->call_plan->receiver.place = place->args[0];
     xi_block_set_return(f->entry, call);

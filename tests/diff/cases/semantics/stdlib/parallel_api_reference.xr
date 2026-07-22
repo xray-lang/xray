@@ -13,9 +13,9 @@ print(mapped[0])
 print(mapped[3])
 
 var out: Array<int> = [99]
-var same = parallel.mapInto(1..4, out, (i) -> i + 10)
-print(len(same))
-print(same[0])
+parallel.mapInto(1..4, ref out, (i) -> i + 10)
+print(len(out))
+print(out[0])
 print(out[2])
 
 var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(1))

@@ -1,4 +1,4 @@
-fn read_and_bump(snapshot: in int, target: ref int) {
+fn read_and_bump(snapshot: int, target: ref int) {
     target = snapshot + 1
 }
 

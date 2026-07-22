@@ -89,22 +89,23 @@ TEST(aot_type_fingerprint_includes_param_modes) {
     XrType *param_types[] = {xr_type_new_int(NULL)};
     XrType *ret = xr_type_new_bool(NULL);
 
-    XrType *value_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
-    XrType *in_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
+    XrType *read_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
     XrType *ref_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
-    TEST_REQUIRE(value_fn && in_fn && ref_fn, "function types created");
+    XrType *move_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
+    TEST_REQUIRE(read_fn && ref_fn && move_fn, "function types created");
 
-    TEST_REQUIRE(xr_type_function_set_param_mode(in_fn, 0, XR_PARAM_IN), "in param mode assigned");
     TEST_REQUIRE(xr_type_function_set_param_mode(ref_fn, 0, XR_PARAM_REF),
                  "ref param mode assigned");
+    TEST_REQUIRE(xr_type_function_set_param_mode(move_fn, 0, XR_PARAM_MOVE),
+                 "move param mode assigned");
 
-    uint64_t value_hash = xaot_type_fingerprint(value_fn);
-    uint64_t in_hash = xaot_type_fingerprint(in_fn);
+    uint64_t read_hash = xaot_type_fingerprint(read_fn);
     uint64_t ref_hash = xaot_type_fingerprint(ref_fn);
+    uint64_t move_hash = xaot_type_fingerprint(move_fn);
 
-    TEST_REQUIRE(value_hash != in_hash, "value and in param modes must hash differently");
-    TEST_REQUIRE(value_hash != ref_hash, "value and ref param modes must hash differently");
-    TEST_REQUIRE(in_hash != ref_hash, "in and ref param modes must hash differently");
+    TEST_REQUIRE(read_hash != ref_hash, "read and ref param modes must hash differently");
+    TEST_REQUIRE(read_hash != move_hash, "read and move param modes must hash differently");
+    TEST_REQUIRE(ref_hash != move_hash, "ref and move param modes must hash differently");
 }
 
 TEST(aot_type_fingerprint_separates_error_recovery) {
@@ -2077,16 +2078,16 @@ TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
                       "const bias = 2\n"
                       "var floats: Array<float> = []\n"
                       "floats.reserve(8)\n"
-                      "parallel.mapInto(0..4, floats, (i) -> float(i + bias) + 0.5, "
+                      "parallel.mapInto(0..4, ref floats, (i) -> float(i + bias) + 0.5, "
                       "parallel.Options(2))\n"
                       "var flags: Array<bool> = []\n"
                       "flags.reserve(8)\n"
-                      "parallel.mapInto(0..4, flags, (i) -> ((i + bias) % 2) == 0, "
+                      "parallel.mapInto(0..4, ref flags, (i) -> ((i + bias) % 2) == 0, "
                       "parallel.Options(2))\n"
                       "fn byteValue() -> uint8 { return 2 }\n"
                       "var bytes: Array<uint8> = []\n"
                       "bytes.reserve(8)\n"
-                      "parallel.mapInto(0..4, bytes, (i) -> byteValue(), parallel.Options(2))\n"
+                      "parallel.mapInto(0..4, ref bytes, (i) -> byteValue(), parallel.Options(2))\n"
                       "print(len(floats))\n"
                       "print(len(flags))\n"
                       "print(len(bytes))\n";
@@ -2259,7 +2260,7 @@ TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
                       "var mapped = plan.map(0..2, (state, i) -> state + i)\n"
                       "var out: Array<int> = []\n"
                       "out.reserve(2)\n"
-                      "plan.mapInto(0..2, out, (state, i) -> state + i)\n"
+                      "plan.mapInto(0..2, ref out, (state, i) -> state + i)\n"
                       "var sum = plan.reduce(0..2, 0, (state, i) -> state + i, "
                       "(a, b) -> a + b)\n"
                       "print(len(mapped), len(out), sum)\n";
@@ -2701,7 +2702,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
 }
 
 TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
-    const char *src = "fn sum(src: in Slice<byte>) -> int {\n"
+    const char *src = "fn sum(src: Slice<byte>) -> int {\n"
                       "    var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
                       "    return int(v)\n"
                       "}\n"
@@ -2881,7 +2882,7 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
 }
 
 TEST(cgen_span_index_get_elides_dead_err_check) {
-    const char *src = "fn sum(src: in Slice<byte>, n: int) -> int {\n"
+    const char *src = "fn sum(src: Slice<byte>, n: int) -> int {\n"
                       "    var total = 0\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
@@ -2927,7 +2928,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
 }
 
 TEST(cgen_span_slice_elides_dead_err_check) {
-    const char *src = "fn windowLen(src: in Slice<byte>, start: int, n: int) -> int {\n"
+    const char *src = "fn windowLen(src: Slice<byte>, start: int, n: int) -> int {\n"
                       "    const part: Slice<byte> = src[start:start + n]\n"
                       "    return len(part)\n"
                       "}\n"
@@ -2964,18 +2965,17 @@ TEST(cgen_span_slice_elides_dead_err_check) {
 }
 
 TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
-    const char *src =
-        "fn appendRange(out: Array<byte>, src: in Slice<byte>, start: int, n: int) {\n"
-        "    out.appendFrom(src[start:start + n])\n"
-        "}\n"
-        "fn run() -> int {\n"
-        "    var out = Array<byte>()\n"
-        "    var src = Array<byte>(8)\n"
-        "    const view: Slice<byte> = src[:]\n"
-        "    appendRange(out, view, 2, 4)\n"
-        "    return len(out)\n"
-        "}\n"
-        "print(run())\n";
+    const char *src = "fn appendRange(out: Array<byte>, src: Slice<byte>, start: int, n: int) {\n"
+                      "    out.appendFrom(src[start:start + n])\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var out = Array<byte>()\n"
+                      "    var src = Array<byte>(8)\n"
+                      "    const view: Slice<byte> = src[:]\n"
+                      "    appendRange(out, view, 2, 4)\n"
+                      "    return len(out)\n"
+                      "}\n"
+                      "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3044,7 +3044,7 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
 }
 
 TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
-    const char *src = "fn hot(dst: Slice<byte>, src: in Slice<byte>) -> int {\n"
+    const char *src = "fn hot(dst: Slice<byte>, src: Slice<byte>) -> int {\n"
                       "    var copied: Slice<byte> = dst.copyFrom(src)\n"
                       "    var word: uint16 = dst.load<uint16>(0, Endian.LE)\n"
                       "    dst.store<uint16>(0, word + 1, Endian.LE)\n"
@@ -3206,7 +3206,7 @@ TEST(cgen_mem_store_uses_pointer_helper) {
 }
 
 TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
-    const char *src = "fn readByteAt(src: in Slice<byte>, pos: int) -> int {\n"
+    const char *src = "fn readByteAt(src: Slice<byte>, pos: int) -> int {\n"
                       "    unsafe {\n"
                       "        return int(src.ptr().offset(pos)[0])\n"
                       "    }\n"
@@ -3230,9 +3230,9 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "local Ptr read chain should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
-           "in Slice<byte> call should pass a native span slice view");
+           "read Slice<byte> call should pass a native span slice view");
     assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
-           "borrowed in Slice<byte> stack slice must not release storage");
+           "borrowed read Slice<byte> stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
            "local Ptr read chain must not force a heap slice view");
 
@@ -3243,7 +3243,7 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
 }
 
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
-    const char *src = "fn leakPtr(src: in Slice<byte>) -> Ptr<uint8> {\n"
+    const char *src = "fn leakPtr(src: Slice<byte>) -> Ptr<uint8> {\n"
                       "    unsafe {\n"
                       "        return src.ptr()\n"
                       "    }\n"

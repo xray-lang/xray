@@ -139,14 +139,14 @@ static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *dec
 }
 
 static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
-    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_VALUE);
+    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_READ);
 }
 
 // Register a variable that is bound to a function-expression literal, so a
 // later `go var()` can enforce the same capture rules as an inline closure.
 static void ea_register_var_with_fn(EaContext *ctx, const char *name, AstNode *decl,
                                     AstNode *bound_fn) {
-    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_VALUE);
+    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_READ);
     if (bound_fn) {
         EaScope *scope = &ctx->scopes[ctx->depth];
         if (scope->count > 0)
@@ -215,7 +215,7 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                 EaVarEntry *entry = &scope->vars[i];
                 if (entry->is_param) {
                     XrParamMode mode = entry->param_passing_mode;
-                    if (mode == XR_PARAM_IN || mode == XR_PARAM_REF) {
+                    if (mode == XR_PARAM_READ || mode == XR_PARAM_REF) {
                         ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                                       "go closure cannot capture borrowed parameter '%s'\n"
                                       "hint: pass an owned value or copy(%s) through an explicit "
@@ -267,8 +267,10 @@ static void ea_mark_borrowed_capture_for_closure(EaContext *ctx, AstNode *ref_no
             EaVarEntry *entry = &scope->vars[i];
             if (!entry->name || strcmp(entry->name, name) != 0)
                 continue;
-            if (entry->is_param && (entry->param_passing_mode == XR_PARAM_IN ||
-                                    entry->param_passing_mode == XR_PARAM_REF)) {
+            /* READ may be captured as a same-execution local alias; its
+             * canonical parameter summary records that retain. REF remains a
+             * non-escaping exclusive loan. */
+            if (entry->is_param && entry->param_passing_mode == XR_PARAM_REF) {
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "closure cannot capture borrowed parameter '%s'\n"
                               "hint: capture an owned value or copy(%s) instead",

@@ -50,7 +50,7 @@ static XrJsonValue *make_hint(int line, int character, const char *label, XlspIn
 }
 
 static const char *param_mode_tooltip(XrParamMode mode, char *buf, size_t cap) {
-    if (!buf || cap == 0 || mode == XR_PARAM_VALUE || !xr_param_mode_is_valid(mode))
+    if (!buf || cap == 0 || mode == XR_PARAM_READ || !xr_param_mode_is_valid(mode))
         return NULL;
     snprintf(buf, cap, "parameter mode: %s", xr_param_mode_label(mode));
     return buf;
@@ -232,11 +232,11 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                                              : param_count;
                         for (int i = 0; i < hint_count; i++) {
                             const char *param_name = NULL;
-                            XrParamMode mode = XR_PARAM_VALUE;
+                            XrParamMode mode = XR_PARAM_READ;
                             if (current_fn) {
                                 XrParamNode *param = current_fn->params[i];
                                 param_name = param ? param->name : NULL;
-                                mode = param ? param->passing_mode : XR_PARAM_VALUE;
+                                mode = param ? param->passing_mode : XR_PARAM_READ;
                             } else {
                                 param_name = param_names[i];
                                 mode = xlsp_function_param_mode(param_contract, i);

@@ -245,7 +245,6 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `default` | reserved, currently disabled |
 | `cancelled` | `cancelled()` cancellation check (actually a builtin function) |
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
-| `out` | output parameter mode and call-site authorization (`fn f(p: out T)` / `f(out p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
@@ -2292,11 +2291,12 @@ var result = divmod(10, 3)        // result has type (int, int)
 
 #### 5.2.4 Parameter modes
 
-Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`.
+Ordinary parameters provide a read-only capability by default. Only writable borrowing and
+ownership transfer have explicit modes: `name: ref T` and `name: move T`.
 
 ```xray
-fn length_sq(v: in Vec2) -> float {
-    // v is a read-only reference (no copy, not writable)
+fn length_sq(v: Vec2) -> float {
+    // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
@@ -2305,14 +2305,24 @@ fn translate(v: ref Vec2, dx: float, dy: float) -> () {
     v.x += dx
     v.y += dy
 }
+
+fn submit(job: move Job) -> () {
+    queue.store(move job)
+}
+
+translate(ref point, 1.0, 2.0)
+submit(move pending)
+submit(makeJob())
 ```
 
 | Parameter mode | Semantics |
 |--|--|
-| (none) | Pass by value (struct copy) |
-| `in` | Pass by read-only reference (no copy, not writable) |
-| `ref` | Pass by mutable reference (no copy, writable, observable to caller); the call site must write `ref place` |
-| `out` | Pass an output place; the call site must write `out place`, and the callee must write before normal return |
+| none (READ) | Read-only capability; the callee cannot mutate the caller's mutable graph |
+| `ref` | Exclusive writable place loan; the call site must write `ref place` |
+| `move` | Transfer of the unique owner; an existing lvalue requires `move value`, while a fresh value or `copy(value)` can be passed directly |
+
+Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output locations use
+`MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
 

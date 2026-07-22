@@ -51,6 +51,7 @@ typedef enum {
     XR_TREF_NAMED,       /* user class / enum / interface /
                             prelude name (Array, Json, ...)   */
     XR_TREF_GENERIC,     /* Name<T1, T2, ...>                */
+    XR_TREF_CONST,       /* const T -- children[0] = inner   */
     XR_TREF_OPTIONAL,    /* T?  — children[0] = inner        */
     XR_TREF_UNION,       /* T | U — children[0..n-1]         */
     XR_TREF_FUNCTION,    /* (P1,..) -> R — children[0..n-2] = params,
@@ -129,6 +130,9 @@ XR_FUNC XrTypeRef *xr_tref_named(struct XrCompilerSession *session, const char *
 /* Generic instance: Name<T1, T2, ...> */
 XR_FUNC XrTypeRef *xr_tref_generic(struct XrCompilerSession *session, const char *name,
                                    XrTypeRef **args, int nargs);
+
+/* Deep-readonly capability qualifier: const T. Reapplying it is idempotent. */
+XR_FUNC XrTypeRef *xr_tref_const(struct XrCompilerSession *session, XrTypeRef *inner);
 
 /* Optional: T? */
 XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef *inner);

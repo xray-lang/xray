@@ -112,7 +112,7 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
         memcpy(plan->args, src->call_plan->args, (size_t) plan->nargs * sizeof(*plan->args));
         for (uint16_t i = 0; i < plan->nargs; i++) {
             plan->args[i].place =
-                plan->args[i].param_mode == XR_PARAM_VALUE ? NULL : dst->args[i + 1];
+                plan->args[i].param_mode == XR_PARAM_REF ? dst->args[i + 1] : NULL;
         }
     }
     dst->call_plan = plan;
@@ -130,7 +130,7 @@ XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMo
 
 XR_FUNC XrParamMode xi_func_param_passing_mode(const XiFunc *f, uint16_t index) {
     if (!f || index >= f->nparams || !f->params || !f->params[index])
-        return XR_PARAM_VALUE;
+        return XR_PARAM_READ;
     return (XrParamMode) f->params[index]->param_mode;
 }
 
@@ -366,7 +366,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->escape = 0;
     v->mem_group = 0;
     v->lowering_flags = 0;
-    v->param_mode = XR_PARAM_VALUE;
+    v->param_mode = XR_PARAM_READ;
     v->type = type;
     v->aux_int = 0;
     v->aux = NULL;

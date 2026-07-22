@@ -1,4 +1,4 @@
-fn launch(data: in Array<int>) {
+fn launch(data: Array<int>) {
     var task = go {
         return len(data)
     }

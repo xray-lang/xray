@@ -10,7 +10,7 @@ fn mutate(data: ref Array<int>) {
     data.push(1)
 }
 
-fn view(holder: in Holder) {
+fn view(holder: Holder) {
     mutate(ref holder.items)
 }
 

@@ -1,8 +1,0 @@
-fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
-    var alias = data
-    out.push(alias)
-}
-
-var values: Array<int> = [1, 2]
-var out: Array<Array<int>> = []
-stash(values, ref out)

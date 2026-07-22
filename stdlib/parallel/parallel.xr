@@ -51,13 +51,12 @@ export fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -
 }
 
 @intrinsic("parallel.mapInto")
-export fn mapInto<T>(range: Range, output: Array<T>, body: (int) -> T, options: Options = Options()) -> Array<T> {
+export fn mapInto<T>(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()) {
     _checkOptions(options)
     output.clear()
     for (offset in 0..range.count()) {
         output.push(body(range[offset]))
     }
-    return output
 }
 
 @intrinsic("parallel.reduce")
@@ -139,7 +138,7 @@ export class Plan<S> {
     }
 
     @intrinsic("parallel.Plan.mapInto")
-    mapInto<T>(range: Range, output: Array<T>, body: (S, int) -> T) -> Array<T> {
+    mapInto<T>(range: Range, output: ref Array<T>, body: (S, int) -> T) {
         this._begin()
         defer fn() {
             this._end()
@@ -148,7 +147,6 @@ export class Plan<S> {
         for (offset in 0..len(range)) {
             output.push(body(this._stateFor(offset), range[offset]))
         }
-        return output
     }
 
     @intrinsic("parallel.Plan.reduce")

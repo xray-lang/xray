@@ -144,11 +144,11 @@ static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAccess *accesses,
                               int index) {
-    XrCallArgAccess access = accesses ? accesses[index] : XR_CALL_ARG_VALUE;
+    XrCallArgAccess access = accesses ? accesses[index] : XR_CALL_ARG_PLAIN;
     if (access == XR_CALL_ARG_REF) {
         xfmt_write_str(ctx, "ref ");
-    } else if (access == XR_CALL_ARG_OUT) {
-        xfmt_write_str(ctx, "out ");
+    } else if (access == XR_CALL_ARG_MOVE && (!argument || argument->type != AST_MOVE_EXPR)) {
+        xfmt_write_str(ctx, "move ");
     }
     xfmt_emit_expression(ctx, argument);
 }

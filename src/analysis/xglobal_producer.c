@@ -214,11 +214,11 @@ static uint32_t hash_name32(const char *name) {
 static uint32_t hash_param_storage_requirements32(const XaSymbolLinks *links) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     bool has_requirement = false;
-    if (!links || !links->param_storage_requirements || links->param_storage_requirement_count <= 0)
+    if (!links || !links->param_effects || links->param_effect_count <= 0)
         return 0;
-    h = fold_u64(h, (uint64_t) links->param_storage_requirement_count);
-    for (int i = 0; i < links->param_storage_requirement_count; i++) {
-        uint8_t owner = links->param_storage_requirements[i];
+    h = fold_u64(h, (uint64_t) links->param_effect_count);
+    for (int i = 0; i < links->param_effect_count; i++) {
+        uint8_t owner = links->param_effects[i].storage;
         if (owner != XR_STORAGE_NONE)
             has_requirement = true;
         h = fold_u64(h, (uint64_t) (uint32_t) i);
@@ -239,10 +239,10 @@ static bool add_param_storage_summaries(XgProducer *producer, const XaSymbolLink
         *out_count = 0;
     if (!producer || !producer->evidence || owner_func_id == XG_NO_ID)
         return false;
-    if (!links || !links->param_storage_requirements || links->param_storage_requirement_count <= 0)
+    if (!links || !links->param_effects || links->param_effect_count <= 0)
         return true;
-    for (int i = 0; i < links->param_storage_requirement_count; i++) {
-        if (links->param_storage_requirements[i] != XR_STORAGE_NONE) {
+    for (int i = 0; i < links->param_effect_count; i++) {
+        if (links->param_effects[i].storage != XR_STORAGE_NONE) {
             has_requirement = true;
             break;
         }
@@ -250,14 +250,14 @@ static bool add_param_storage_summaries(XgProducer *producer, const XaSymbolLink
     if (!has_requirement)
         return true;
     start = producer->evidence->nparam_storages + 1;
-    count = (uint32_t) links->param_storage_requirement_count;
+    count = (uint32_t) links->param_effect_count;
     for (uint32_t i = 0; i < count; i++) {
         XgParamStorageSummary row;
         memset(&row, 0, sizeof(row));
         row.requirement_id = start + i;
         row.owner_func_id = owner_func_id;
         row.param_index = i;
-        row.storage_owner = links->param_storage_requirements[i];
+        row.storage_owner = links->param_effects[i].storage;
         if (!xg_global_evidence_add_param_storage(producer->evidence, &row))
             return false;
     }
@@ -585,6 +585,26 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
                 h = fold_bytes(h, field, strlen(field));
         }
     }
+    if (t->field_readonly) {
+        bool has_readonly_field = false;
+        for (uint8_t i = 0; i < t->nchildren; i++)
+            has_readonly_field = has_readonly_field || t->field_readonly[i];
+        if (has_readonly_field) {
+            h = fold_u64(h, UINT64_C(0x726561646f6e6c79)); /* "readonly" */
+            for (uint8_t i = 0; i < t->nchildren; i++)
+                h = fold_u64(h, t->field_readonly[i] ? 1 : 0);
+        }
+    }
+    if (t->kind == XR_TREF_FUNCTION && t->function_param_modes && t->nchildren > 0) {
+        bool has_explicit_mode = false;
+        for (uint8_t i = 0; i + 1 < t->nchildren; i++)
+            has_explicit_mode = has_explicit_mode || t->function_param_modes[i] != XR_PARAM_READ;
+        if (has_explicit_mode) {
+            h = fold_u64(h, UINT64_C(0x706172616d6d6f64)); /* "parammod" */
+            for (uint8_t i = 0; i + 1 < t->nchildren; i++)
+                h = fold_u64(h, t->function_param_modes[i]);
+        }
+    }
     return h;
 }
 
@@ -731,6 +751,11 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         return true;
     if (tref_contains_error(type, 0))
         return false;
+    if (type->kind == XR_TREF_CONST) {
+        bool ok = class_field_fill_type_facts(row, type->nchildren > 0 ? type->children[0] : NULL);
+        row->flags |= XG_CLASS_FIELD_CONST;
+        return ok;
+    }
     row->native_width = type->native_width;
     target = class_field_target_type(type);
     if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
@@ -903,8 +928,8 @@ static uint32_t hash_method_signature_parts(XrParamNode **params, int param_coun
     h = fold_u64(h, is_constructor ? 1 : 0);
     for (int i = 0; i < param_count; i++) {
         XrParamNode *param = params ? params[i] : NULL;
-        XrParamMode mode = param ? param->passing_mode : XR_PARAM_VALUE;
-        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE);
+        XrParamMode mode = param ? param->passing_mode : XR_PARAM_READ;
+        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_READ);
         h = hash_tref(h, param ? param->type : NULL);
     }
     h = hash_tref(h, return_type);
@@ -931,8 +956,8 @@ static uint32_t hash_function_signature(const FunctionDeclNode *f) {
     h = fold_u64(h, (uint64_t) f->param_count);
     for (int i = 0; i < f->param_count; i++) {
         XrParamNode *p = f->params ? f->params[i] : NULL;
-        XrParamMode mode = p ? p->passing_mode : XR_PARAM_VALUE;
-        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE);
+        XrParamMode mode = p ? p->passing_mode : XR_PARAM_READ;
+        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_READ);
         if (p && p->name)
             h = fold_bytes(h, p->name, strlen(p->name));
         h = hash_tref(h, p ? p->type : NULL);

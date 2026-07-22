@@ -114,7 +114,7 @@ void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *
     if (!tref)
         return;
     xfmt_write_str(ctx, ": ");
-    if (mode != XR_PARAM_VALUE && xr_param_mode_is_valid(mode)) {
+    if (mode != XR_PARAM_READ && xr_param_mode_is_valid(mode)) {
         xfmt_write_str(ctx, xr_param_mode_label(mode));
         xfmt_write_char(ctx, ' ');
     }

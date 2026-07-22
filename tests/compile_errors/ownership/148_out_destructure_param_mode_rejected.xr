@@ -1,2 +1,0 @@
-fn bad([x]: out [int; 1]) {
-}

@@ -2,7 +2,9 @@
 
 @native
 class StringBuilder {
+    // @receiver_write
     append(value: string | rune | int | float | bool | null) -> StringBuilder @may_alloc
     toString() -> string @may_alloc
+    // @receiver_write
     clear() -> StringBuilder @no_alloc
 }

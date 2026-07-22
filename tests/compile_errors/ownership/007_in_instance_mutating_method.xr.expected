@@ -1,1 +1,1 @@
-Cannot call mutating method 'bump' on 'in' parameter 'counter'
+Cannot call mutating method 'bump' on read parameter 'counter' (readonly capability)

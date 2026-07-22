@@ -4289,6 +4289,8 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
     XaEffectId previous_id = func_sym->links.effect_id;
     func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
+    for (int i = 0; i < func_sym->links.param_effect_count; i++)
+        func_sym->links.param_effects[i].callable_effects = func_sym->links.effect_id;
     if (func_sym->links.effect_id != previous_id)
         ctx->changed = true;
     store_function_return_target(ctx, func_sym);

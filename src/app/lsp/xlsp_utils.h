@@ -34,7 +34,7 @@ static inline const char *xlsp_uri_to_path(const char *uri) {
 
 static inline XrParamMode xlsp_function_param_mode(XrType *function_type, int index) {
     if (!function_type || function_type->kind != XR_KIND_FUNCTION)
-        return XR_PARAM_VALUE;
+        return XR_PARAM_READ;
     return xr_type_function_param_mode(function_type, index);
 }
 
@@ -49,7 +49,7 @@ static inline int xlsp_append_param_display(char *buf, size_t cap, int len, cons
 
     const char *pname = name ? name : "_";
     const char *ptype = type ? xr_type_to_string(type) : "<error>";
-    if (mode != XR_PARAM_VALUE && xr_param_mode_is_valid(mode)) {
+    if (mode != XR_PARAM_READ && xr_param_mode_is_valid(mode)) {
         return len + snprintf(buf + len, cap - (size_t) len, "%s: %s %s", pname,
                               xr_param_mode_label(mode), ptype);
     }

@@ -13,6 +13,7 @@
 
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_capability.h"
 #include "xanalyzer_incremental.h"
 #include "../parser/xa_assertion_attr.h"
 #include "../../base/xstorage.h"
@@ -87,16 +88,6 @@ XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNod
 XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, XaSymbol *sym,
                                        bool is_write);
 XR_FUNC void xa_parallel_callback_effect_check(XaInferContext *ctx, AstNode *body);
-XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
-                                                           XaScope *function_scope,
-                                                           AstNode *body_node);
-typedef struct XaOutParamDaState XaOutParamDaState;
-XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count);
-XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count);
-XR_FUNC void xa_out_param_da_begin_path_merge(XaOutParamDaState *states, int count);
-XR_FUNC void xa_out_param_da_record_path(XaOutParamDaState *states, int count, bool falls_through);
-XR_FUNC void xa_out_param_da_apply_path_merge(XaOutParamDaState *states, int count);
-XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states);
 XR_FUNC bool xa_statement_can_fall_through(AstNode *node);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type);
@@ -239,7 +230,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
                                   XrType *value_type, const char *target_name,
                                   const char *target_kind);
 XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
-XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
+XR_FUNC XaSymbol *xa_read_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_contains_span_view(XrType *type);
@@ -278,7 +269,6 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
                                         const char *escape_context);
 XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *loc_node,
                                                 AstNode *source, const char *operation);
-XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
 XR_FUNC bool xa_type_contains_float(XrType *type);
 XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
                                           XrType *right);

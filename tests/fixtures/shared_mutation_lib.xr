@@ -1,4 +1,4 @@
-export fn overwrite(view: Slice<byte>) {
+export fn overwrite(view: ref Slice<byte>) {
     view[0] = 1
 }
 

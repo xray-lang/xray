@@ -3223,7 +3223,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.mapInto",
-        .signature = "(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>",
+        .signature = "(range: Range, output: ref Array<T>, body: (S, int): T)",
         .summary = "",
     },
     {
@@ -3248,7 +3248,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: Array<T>, body: (int): T, options: Options = Options()) -> Array<T>",
+        .signature = "(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())",
         .summary = "",
     },
     {
@@ -3600,12 +3600,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.add",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.bitAnd",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
@@ -3615,12 +3615,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.bitOr",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.bitXor",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
@@ -3630,17 +3630,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.fromLanes",
-        .signature = "(lanes: in [uint32; 4]): U32x4",
+        .signature = "(lanes: [uint32; 4]): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.load",
-        .signature = "(data: in Slice<uint32>, offset: int = 0): U32x4",
+        .signature = "(data: Slice<uint32>, offset: int = 0): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.mul",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
@@ -3680,12 +3680,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.store",
-        .signature = "(output: Slice<uint32>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<uint32>, offset: int = 0): ()",
         .summary = "",
     },
     {
         .name = "U32x4.sub",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
@@ -3695,32 +3695,32 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.unzipEven",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.unzipOdd",
-        .signature = "(other: in U32x4): U32x4",
+        .signature = "(other: U32x4): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.widenMulEven",
-        .signature = "(other: in U32x4): U64x2",
+        .signature = "(other: U32x4): U64x2",
         .summary = "",
     },
     {
         .name = "U32x4.widenMulHigh",
-        .signature = "(other: in U32x4): U64x2",
+        .signature = "(other: U32x4): U64x2",
         .summary = "",
     },
     {
         .name = "U32x4.widenMulLow",
-        .signature = "(other: in U32x4): U64x2",
+        .signature = "(other: U32x4): U64x2",
         .summary = "",
     },
     {
         .name = "U32x4.widenMulOdd",
-        .signature = "(other: in U32x4): U64x2",
+        .signature = "(other: U32x4): U64x2",
         .summary = "",
     },
     {
@@ -3730,7 +3730,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x8.fromLanes",
-        .signature = "(lanes: in [uint32; 8]): U32x8",
+        .signature = "(lanes: [uint32; 8]): U32x8",
         .summary = "",
     },
     {
@@ -3740,7 +3740,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x8.widenMulEven",
-        .signature = "(other: in U32x8): U64x4",
+        .signature = "(other: U32x8): U64x4",
         .summary = "",
     },
     {
@@ -3750,12 +3750,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.add",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.bitAnd",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
@@ -3765,12 +3765,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.bitOr",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.bitXor",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
@@ -3780,17 +3780,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.fromLanes",
-        .signature = "(lanes: in [uint64; 2]): U64x2",
+        .signature = "(lanes: [uint64; 2]): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.load",
-        .signature = "(data: in Slice<uint64>, offset: int = 0): U64x2",
+        .signature = "(data: Slice<uint64>, offset: int = 0): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.mul",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
@@ -3835,12 +3835,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.store",
-        .signature = "(output: Slice<uint64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<uint64>, offset: int = 0): ()",
         .summary = "",
     },
     {
         .name = "U64x2.sub",
-        .signature = "(other: in U64x2): U64x2",
+        .signature = "(other: U64x2): U64x2",
         .summary = "",
     },
     {
@@ -3855,17 +3855,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x4.add",
-        .signature = "(other: in U64x4): U64x4",
+        .signature = "(other: U64x4): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.fromLanes",
-        .signature = "(lanes: in [uint64; 4]): U64x4",
+        .signature = "(lanes: [uint64; 4]): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.load",
-        .signature = "(data: in Slice<uint64>, offset: int = 0): U64x4",
+        .signature = "(data: Slice<uint64>, offset: int = 0): U64x4",
         .summary = "",
     },
     {
@@ -3875,7 +3875,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x4.store",
-        .signature = "(output: Slice<uint64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<uint64>, offset: int = 0): ()",
         .summary = "",
     },
     {
@@ -3890,7 +3890,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.bitAnd",
-        .signature = "(other: in U8x16): U8x16",
+        .signature = "(other: U8x16): U8x16",
         .summary = "",
     },
     {
@@ -3900,12 +3900,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.bitOr",
-        .signature = "(other: in U8x16): U8x16",
+        .signature = "(other: U8x16): U8x16",
         .summary = "",
     },
     {
         .name = "U8x16.bitXor",
-        .signature = "(other: in U8x16): U8x16",
+        .signature = "(other: U8x16): U8x16",
         .summary = "",
     },
     {
@@ -3915,12 +3915,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.fromLanes",
-        .signature = "(lanes: in [byte; 16]): U8x16",
+        .signature = "(lanes: [byte; 16]): U8x16",
         .summary = "",
     },
     {
         .name = "U8x16.load",
-        .signature = "(data: in Slice<byte>, offset: int = 0): U8x16",
+        .signature = "(data: Slice<byte>, offset: int = 0): U8x16",
         .summary = "",
     },
     {
@@ -3945,7 +3945,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.store",
-        .signature = "(output: Slice<byte>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
         .summary = "",
     },
     {
@@ -3955,17 +3955,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x32.bitXor",
-        .signature = "(other: in U8x32): U8x32",
+        .signature = "(other: U8x32): U8x32",
         .summary = "",
     },
     {
         .name = "U8x32.fromLanes",
-        .signature = "(lanes: in [byte; 32]): U8x32",
+        .signature = "(lanes: [byte; 32]): U8x32",
         .summary = "",
     },
     {
         .name = "U8x32.load",
-        .signature = "(data: in Slice<byte>, offset: int = 0): U8x32",
+        .signature = "(data: Slice<byte>, offset: int = 0): U8x32",
         .summary = "",
     },
     {
@@ -3980,7 +3980,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x32.store",
-        .signature = "(output: Slice<byte>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
         .summary = "",
     },
 };
@@ -4773,7 +4773,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "arrayPush",
-        .signature = "(array: TomlArray, value: TomlValue): ()",
+        .signature = "(array: ref TomlArray, value: TomlValue): ()",
         .summary = "",
     },
     {
@@ -4883,7 +4883,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "tableSet",
-        .signature = "(table: TomlTable, key: string, value: TomlValue): ()",
+        .signature = "(table: ref TomlTable, key: string, value: TomlValue): ()",
         .summary = "",
     },
     {
@@ -5795,7 +5795,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "mappingSet",
-        .signature = "(mapping: YamlMapping, key: string, value: YamlValue): ()",
+        .signature = "(mapping: ref YamlMapping, key: string, value: YamlValue): ()",
         .summary = "",
     },
     {
@@ -6619,12 +6619,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Parameter modes\n"
-            "- Declaration spelling is `name: T`, `name: in T`, `name: ref T`, or `name: out T`\n"
-            "- Calls to `ref` / `out` parameters must write `ref place` / `out place`; `in` calls use plain arguments\n"
-            "- `move` and `copy` are source actions, not parameter modes\n"
+            "- `name: T` is the default READ contract; `name: ref T` is an exclusive writable place loan; `name: move T` consumes a unique owner\n"
+            "- Calls to `ref` parameters must write `ref place`; existing owners passed to `move` parameters must write `move value`\n"
+            "- `copy(value)` creates a fresh owner and ordinary outputs use returns, tuples, structs, or Result\n"
             "```xray\n"
-            "fn length_sq(v: in Vec2) -> float {\n"
-            "    // v is a read-only reference (no copy, not writable)\n"
+            "fn length_sq(v: Vec2) -> float {\n"
+            "    // v is read-only; the ABI may pass a small value or a read-only address\n"
             "    return v.x * v.x + v.y * v.y\n"
             "}\n"
             "\n"
@@ -6633,6 +6633,14 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    v.x += dx\n"
             "    v.y += dy\n"
             "}\n"
+            "\n"
+            "fn submit(job: move Job) -> () {\n"
+            "    queue.store(move job)\n"
+            "}\n"
+            "\n"
+            "translate(ref point, 1.0, 2.0)\n"
+            "submit(move pending)\n"
+            "submit(makeJob())\n"
             "```\n"
             "\n"
             "### Rest parameters\n"
@@ -8324,12 +8332,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Plan.constructor` | `(options: Options, init: (int): S)` |  |\n"
             "| `Plan.forEach` | `(range: Range, body: (S, int): ())` |  |\n"
             "| `Plan.map` | `(range: Range, body: (S, int): T) -> Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: Array<T>, body: (S, int): T) -> Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: (S, int): T)` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
             "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
             "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
             "| `parallel.map` | `(range: Range, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: Array<T>, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())` |  |\n"
             "| `parallel.reduce` | `(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A` |  |\n"
             "",
         .symbols = _symbols_parallel,
@@ -8496,15 +8504,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Capabilities` | `Capabilities` |  |\n"
             "| `Capabilities.nativeBytes` | `(): int` |  |\n"
             "| `U32x4` | `U32x4` |  |\n"
-            "| `U32x4.add` | `(other: in U32x4): U32x4` |  |\n"
-            "| `U32x4.bitAnd` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n"
+            "| `U32x4.bitAnd` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.bitNot` | `(): U32x4` |  |\n"
-            "| `U32x4.bitOr` | `(other: in U32x4): U32x4` |  |\n"
-            "| `U32x4.bitXor` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.bitOr` | `(other: U32x4): U32x4` |  |\n"
+            "| `U32x4.bitXor` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.extract` | `(lane: int): uint32` |  |\n"
-            "| `U32x4.fromLanes` | `(lanes: in [uint32; 4]): U32x4` |  |\n"
-            "| `U32x4.load` | `(data: in Slice<uint32>, offset: int = 0): U32x4` |  |\n"
-            "| `U32x4.mul` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.fromLanes` | `(lanes: [uint32; 4]): U32x4` |  |\n"
+            "| `U32x4.load` | `(data: Slice<uint32>, offset: int = 0): U32x4` |  |\n"
+            "| `U32x4.mul` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n"
             "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n"
             "| `U32x4.replace` | `(lane: int, value: uint32): U32x4` |  |\n"
@@ -8512,29 +8520,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.shiftRight` | `(bits: int): U32x4` |  |\n"
             "| `U32x4.shuffle` | `(i0: int, i1: int, i2: int, i3: int): U32x4` |  |\n"
             "| `U32x4.splat` | `(value: uint32): U32x4` |  |\n"
-            "| `U32x4.store` | `(output: Slice<uint32>, offset: int = 0): ()` |  |\n"
-            "| `U32x4.sub` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.store` | `(output: ref Slice<uint32>, offset: int = 0): ()` |  |\n"
+            "| `U32x4.sub` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
-            "| `U32x4.unzipEven` | `(other: in U32x4): U32x4` |  |\n"
-            "| `U32x4.unzipOdd` | `(other: in U32x4): U32x4` |  |\n"
-            "| `U32x4.widenMulEven` | `(other: in U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulHigh` | `(other: in U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulLow` | `(other: in U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulOdd` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.unzipEven` | `(other: U32x4): U32x4` |  |\n"
+            "| `U32x4.unzipOdd` | `(other: U32x4): U32x4` |  |\n"
+            "| `U32x4.widenMulEven` | `(other: U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulHigh` | `(other: U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulLow` | `(other: U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulOdd` | `(other: U32x4): U64x2` |  |\n"
             "| `U32x8` | `U32x8` |  |\n"
-            "| `U32x8.fromLanes` | `(lanes: in [uint32; 8]): U32x8` |  |\n"
+            "| `U32x8.fromLanes` | `(lanes: [uint32; 8]): U32x8` |  |\n"
             "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
-            "| `U32x8.widenMulEven` | `(other: in U32x8): U64x4` |  |\n"
+            "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
             "| `U64x2` | `U64x2` |  |\n"
-            "| `U64x2.add` | `(other: in U64x2): U64x2` |  |\n"
-            "| `U64x2.bitAnd` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.add` | `(other: U64x2): U64x2` |  |\n"
+            "| `U64x2.bitAnd` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.bitNot` | `(): U64x2` |  |\n"
-            "| `U64x2.bitOr` | `(other: in U64x2): U64x2` |  |\n"
-            "| `U64x2.bitXor` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.bitOr` | `(other: U64x2): U64x2` |  |\n"
+            "| `U64x2.bitXor` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.extract` | `(lane: int): uint64` |  |\n"
-            "| `U64x2.fromLanes` | `(lanes: in [uint64; 2]): U64x2` |  |\n"
-            "| `U64x2.load` | `(data: in Slice<uint64>, offset: int = 0): U64x2` |  |\n"
-            "| `U64x2.mul` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.fromLanes` | `(lanes: [uint64; 2]): U64x2` |  |\n"
+            "| `U64x2.load` | `(data: Slice<uint64>, offset: int = 0): U64x2` |  |\n"
+            "| `U64x2.mul` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.reduceAdd` | `(): uint64` |  |\n"
             "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n"
             "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n"
@@ -8543,36 +8551,36 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x2.shiftRight` | `(bits: int): U64x2` |  |\n"
             "| `U64x2.shuffle` | `(i0: int, i1: int): U64x2` |  |\n"
             "| `U64x2.splat` | `(value: uint64): U64x2` |  |\n"
-            "| `U64x2.store` | `(output: Slice<uint64>, offset: int = 0): ()` |  |\n"
-            "| `U64x2.sub` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.store` | `(output: ref Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x2.sub` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
             "| `U64x4` | `U64x4` |  |\n"
-            "| `U64x4.add` | `(other: in U64x4): U64x4` |  |\n"
-            "| `U64x4.fromLanes` | `(lanes: in [uint64; 4]): U64x4` |  |\n"
-            "| `U64x4.load` | `(data: in Slice<uint64>, offset: int = 0): U64x4` |  |\n"
+            "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n"
+            "| `U64x4.fromLanes` | `(lanes: [uint64; 4]): U64x4` |  |\n"
+            "| `U64x4.load` | `(data: Slice<uint64>, offset: int = 0): U64x4` |  |\n"
             "| `U64x4.reduceAdd` | `(): uint64` |  |\n"
-            "| `U64x4.store` | `(output: Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x4.store` | `(output: ref Slice<uint64>, offset: int = 0): ()` |  |\n"
             "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
             "| `U8x16` | `U8x16` |  |\n"
-            "| `U8x16.bitAnd` | `(other: in U8x16): U8x16` |  |\n"
+            "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.bitNot` | `(): U8x16` |  |\n"
-            "| `U8x16.bitOr` | `(other: in U8x16): U8x16` |  |\n"
-            "| `U8x16.bitXor` | `(other: in U8x16): U8x16` |  |\n"
+            "| `U8x16.bitOr` | `(other: U8x16): U8x16` |  |\n"
+            "| `U8x16.bitXor` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.extract` | `(lane: int): byte` |  |\n"
-            "| `U8x16.fromLanes` | `(lanes: in [byte; 16]): U8x16` |  |\n"
-            "| `U8x16.load` | `(data: in Slice<byte>, offset: int = 0): U8x16` |  |\n"
+            "| `U8x16.fromLanes` | `(lanes: [byte; 16]): U8x16` |  |\n"
+            "| `U8x16.load` | `(data: Slice<byte>, offset: int = 0): U8x16` |  |\n"
             "| `U8x16.reinterpretU32` | `(): U32x4` |  |\n"
             "| `U8x16.reinterpretU64` | `(): U64x2` |  |\n"
             "| `U8x16.replace` | `(lane: int, value: byte): U8x16` |  |\n"
             "| `U8x16.splat` | `(value: byte): U8x16` |  |\n"
-            "| `U8x16.store` | `(output: Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x16.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
             "| `U8x32` | `U8x32` |  |\n"
-            "| `U8x32.bitXor` | `(other: in U8x32): U8x32` |  |\n"
-            "| `U8x32.fromLanes` | `(lanes: in [byte; 32]): U8x32` |  |\n"
-            "| `U8x32.load` | `(data: in Slice<byte>, offset: int = 0): U8x32` |  |\n"
+            "| `U8x32.bitXor` | `(other: U8x32): U8x32` |  |\n"
+            "| `U8x32.fromLanes` | `(lanes: [byte; 32]): U8x32` |  |\n"
+            "| `U8x32.load` | `(data: Slice<byte>, offset: int = 0): U8x32` |  |\n"
             "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n"
             "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n"
-            "| `U8x32.store` | `(output: Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x32.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
             "",
         .symbols = _symbols_simd,
         .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),
@@ -8846,7 +8854,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlValue.len` | `(): int` |  |\n"
             "| `TomlValue.stringValue` | `: string` |  |\n"
             "| `TomlValue.tableValue` | `: TomlTable?` |  |\n"
-            "| `toml.arrayPush` | `(array: TomlArray, value: TomlValue): ()` |  |\n"
+            "| `toml.arrayPush` | `(array: ref TomlArray, value: TomlValue): ()` |  |\n"
             "| `toml.arrayValue` | `(value: TomlArray): TomlValue` |  |\n"
             "| `toml.asBool` | `(value: TomlValue): bool?` |  |\n"
             "| `toml.asDateTime` | `(value: TomlValue): TomlDateTime?` |  |\n"
@@ -8868,7 +8876,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `toml.parseReport` | `(data: string): TomlParseReport` |  |\n"
             "| `toml.stringValue` | `(value: string): TomlValue` |  |\n"
             "| `toml.stringify` | `(value: TomlValue): string` |  |\n"
-            "| `toml.tableSet` | `(table: TomlTable, key: string, value: TomlValue): ()` |  |\n"
+            "| `toml.tableSet` | `(table: ref TomlTable, key: string, value: TomlValue): ()` |  |\n"
             "| `toml.tableValue` | `(value: TomlTable): TomlValue` |  |\n"
             "| `toml.writeFile` | `(path: Path, value: TomlValue): bool` |  |\n"
             "",
@@ -9120,7 +9128,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n"
             "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n"
             "| `yaml.length` | `(value: YamlValue): int` |  |\n"
-            "| `yaml.mappingSet` | `(mapping: YamlMapping, key: string, value: YamlValue): ()` |  |\n"
+            "| `yaml.mappingSet` | `(mapping: ref YamlMapping, key: string, value: YamlValue): ()` |  |\n"
             "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n"
             "| `yaml.newMapping` | `(): YamlMapping` |  |\n"
             "| `yaml.nullValue` | `(): YamlValue` |  |\n"

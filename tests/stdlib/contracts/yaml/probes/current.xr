@@ -12,7 +12,7 @@ var rejected = false
 try { yaml.parseStrict("not-a-mapping") } catch (e: YamlError) { rejected = true }
 emit("typed-parse-errors", rejected)
 var mapping = yaml.newMapping()
-yaml.mappingSet(mapping, "name", yaml.stringValue("xray"))
-yaml.mappingSet(mapping, "version", yaml.intValue(2))
+yaml.mappingSet(ref mapping, "name", yaml.stringValue("xray"))
+yaml.mappingSet(ref mapping, "version", yaml.intValue(2))
 var round = yaml.parse(yaml.stringify(yaml.mappingValue(mapping)))
 emit("stringify-roundtrip", yaml.asString(yaml.get(round, "name")!)! == "xray" && yaml.asInt(yaml.get(round, "version")!)! == 2)

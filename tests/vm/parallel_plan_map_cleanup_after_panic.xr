@@ -21,14 +21,13 @@ plan.forEach(0..4, (state, i) -> {
 print(afterMap.load(Ordering.Relaxed) == 4)
 var out: Array<int> = []
 try {
-    var returned = plan.mapInto(0..20000, out, (state, i) -> {
+    plan.mapInto(0..20000, ref out, (state, i) -> {
         if (i == 10000) {
             var zero = i - 10000
             return 10 / zero
         }
         return state + i
     })
-    print(len(returned))
     print("mapinto-miss")
 } catch panic (p) {
     print(p.code == 420)

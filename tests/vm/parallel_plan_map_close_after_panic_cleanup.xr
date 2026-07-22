@@ -48,7 +48,7 @@ fn closeIntoPlan() {
 
 var out: Array<int> = []
 try {
-    var returned = intoPlan.mapInto(0..20000, out, (state, i) -> {
+    intoPlan.mapInto(0..20000, ref out, (state, i) -> {
         intoTouched.add(1, Ordering.Relaxed)
         if (i == 10000) {
             closeIntoPlan()
@@ -57,7 +57,6 @@ try {
         }
         return state + i
     })
-    print(len(returned))
     print("mapinto-miss")
 } catch panic (p) {
     print(p.code == 420)

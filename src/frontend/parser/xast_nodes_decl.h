@@ -32,7 +32,7 @@ typedef struct XrParamNode {
     char *name;                     // Parameter name
     int line;                       // Line number (1-indexed)
     int column;                     // Column number (1-indexed, for LSP)
-    XrParamMode passing_mode;       // value / in / ref / out parameter contract
+    XrParamMode passing_mode;       // read / ref / move parameter contract
     XrTypeRef *type;                // Type annotation (can be NULL)
     AstNode *default_value;         // Default value expression (can be NULL)
     XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)

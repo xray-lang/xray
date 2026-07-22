@@ -4,12 +4,12 @@ fn bump(value: ref int) -> int {
     return value
 }
 
-fn fill(value: out int) -> int {
+fn fill(value: ref int) -> int {
     value = 9
     return value
 }
 
-fn initialize(value: out int) {
+fn initialize(value: ref int) {
     value = 42
 }
 
@@ -19,11 +19,11 @@ fn runLocal() {
     print(value)
 
     var slot = 0
-    print(fill(out slot))
+    print(fill(ref slot))
     print(slot)
 
     var initialized = 0
-    initialize(out initialized)
+    initialize(ref initialized)
     print(initialized)
 }
 

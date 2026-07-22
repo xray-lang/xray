@@ -895,11 +895,11 @@ fn _serverResponseHead(response: HttpResponse, keepAlive: bool) -> string? {
             return null
         }
         if (_headerKeyEquals(name, "Content-Type")) { hasContentType = true }
-        _appendHeader(out, name, pairs[i].1)
+        _appendHeader(ref out, name, pairs[i].1)
     }
-    if (!hasContentType) { _appendHeader(out, "Content-Type", "application/octet-stream") }
-    _appendHeader(out, "Content-Length", string(len(response.body)))
-    _appendHeader(out, "Connection", keepAlive ? "keep-alive" : "close")
+    if (!hasContentType) { _appendHeader(ref out, "Content-Type", "application/octet-stream") }
+    _appendHeader(ref out, "Content-Length", string(len(response.body)))
+    _appendHeader(ref out, "Connection", keepAlive ? "keep-alive" : "close")
     out.append("\r\n")
     return out.toString()
 }
@@ -1354,7 +1354,7 @@ fn _reservedResponseHeader(name: string) -> bool {
            n == "trailer"
 }
 
-fn _appendHeader(out: StringBuilder, name: string, value: string) {
+fn _appendHeader(out: ref StringBuilder, name: string, value: string) {
     out.append(name)
     out.append(": ")
     out.append(value)
@@ -2615,20 +2615,20 @@ export fn requestText(
     out.append(" HTTP/1.1\r\n")
 
     for (var i = 0; i < len(custom); i++) {
-        _appendHeader(out, custom[i].0, custom[i].1)
+        _appendHeader(ref out, custom[i].0, custom[i].1)
     }
 
     if (!hasHost) {
         var h = _hostHeaderValue(host)
         if (h == null) { return null }
-        _appendHeader(out, "Host", h!)
+        _appendHeader(ref out, "Host", h!)
     }
-    if (!hasUserAgent) { _appendHeader(out, "User-Agent", "xray-http/1.0") }
-    if (!hasAccept) { _appendHeader(out, "Accept", "*/*") }
-    if (!hasConnection) { _appendHeader(out, "Connection", "keep-alive") }
-    if (!hasAcceptEncoding) { _appendHeader(out, "Accept-Encoding", "gzip, deflate") }
+    if (!hasUserAgent) { _appendHeader(ref out, "User-Agent", "xray-http/1.0") }
+    if (!hasAccept) { _appendHeader(ref out, "Accept", "*/*") }
+    if (!hasConnection) { _appendHeader(ref out, "Connection", "keep-alive") }
+    if (!hasAcceptEncoding) { _appendHeader(ref out, "Accept-Encoding", "gzip, deflate") }
     if (len(body.bytes()) > 0 && !hasContentLength) {
-        _appendHeader(out, "Content-Length", string(len(body.bytes())))
+        _appendHeader(ref out, "Content-Length", string(len(body.bytes())))
     }
     out.append("\r\n")
     out.append(body)
@@ -2740,12 +2740,12 @@ export fn responseText(
     out.append(" ")
     out.append(_statusReason(status))
     out.append("\r\n")
-    _appendHeader(out, "Content-Type", ct)
-    _appendHeader(out, "Content-Length", string(len(body.bytes())))
+    _appendHeader(ref out, "Content-Type", ct)
+    _appendHeader(ref out, "Content-Length", string(len(body.bytes())))
     for (var i = 0; i < len(custom); i++) {
-        _appendHeader(out, custom[i].0, custom[i].1)
+        _appendHeader(ref out, custom[i].0, custom[i].1)
     }
-    _appendHeader(out, "Connection", keepAlive ? "keep-alive" : "close")
+    _appendHeader(ref out, "Connection", keepAlive ? "keep-alive" : "close")
     out.append("\r\n")
     out.append(body)
     return out.toString()

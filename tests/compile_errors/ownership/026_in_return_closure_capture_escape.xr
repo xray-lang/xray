@@ -1,9 +1,0 @@
-fn make(data: in Array<int>) -> () -> int {
-    return fn() -> int {
-        return len(data)
-    }
-}
-
-var values: Array<int> = [1, 2, 3]
-var f = make(values)
-print(f())

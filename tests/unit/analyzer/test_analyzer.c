@@ -121,6 +121,20 @@ TEST(type_primitives) {
     ASSERT(!XR_TYPE_IS_PRIMITIVE(t_null));
 }
 
+TEST(type_const_capability_is_part_of_identity_and_format) {
+    setup_pool();
+    XrType *mutable_array = xr_type_new_array(g_isolate, xr_type_new_int(NULL));
+    XrType *const_array = xr_type_make_const(g_isolate, mutable_array);
+    ASSERT(mutable_array != const_array);
+    ASSERT(!xr_type_equals(mutable_array, const_array));
+    ASSERT(xr_type_equals(const_array, xr_type_make_const(g_isolate, const_array)));
+    ASSERT(strcmp(xr_type_to_string(const_array), "const Array<int>") == 0);
+
+    XrType *scalar = xr_type_new_int(NULL);
+    ASSERT(xr_type_make_const(g_isolate, scalar) == scalar);
+    ASSERT(xr_type_equals(scalar, xr_type_make_const(g_isolate, scalar)));
+}
+
 TEST(type_containers) {
     XrType *elem = xr_type_new_int(NULL);
     XrType *arr = xr_type_new_array(g_isolate, elem);
@@ -270,9 +284,9 @@ TEST(type_to_string) {
     XrType *mode_fn_params[] = {t_int, xr_type_new_string(NULL), xr_type_new_bool(NULL)};
     XrType *t_mode_fn =
         xr_type_new_function(g_isolate, mode_fn_params, 3, xr_type_new_unit(NULL), false);
-    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(t_mode_fn, 1, XR_PARAM_REF));
-    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 2, XR_PARAM_OUT));
+    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 2, XR_PARAM_MOVE));
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_u8), "byte") == 0);
@@ -282,7 +296,7 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int32): int32>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte): byte") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(in int, ref string, out bool): ()") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(int, ref string, move bool): ()") == 0);
 }
 
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
@@ -711,7 +725,7 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(fn != NULL);
 
     fn->function.min_params = 1;
-    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
     fn->function.is_c_abi = true;
 
@@ -723,7 +737,7 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(copy->function.params != fn->function.params);
     ASSERT(xr_type_function_param_type(copy, 0) == xr_type_function_param_type(fn, 0));
     ASSERT(xr_type_function_param_type(copy, 1) == xr_type_function_param_type(fn, 1));
-    ASSERT(xr_type_function_param_mode(copy, 0) == XR_PARAM_IN);
+    ASSERT(xr_type_function_param_mode(copy, 0) == XR_PARAM_READ);
     ASSERT(xr_type_function_param_mode(copy, 1) == XR_PARAM_REF);
     ASSERT(copy->function.is_c_abi);
 
@@ -735,7 +749,7 @@ TEST(type_function_copy_preserves_metadata) {
     XrType *mode_only =
         xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(mode_only != NULL);
-    ASSERT(xr_type_function_set_param_mode(mode_only, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(mode_only, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(mode_only, 1, XR_PARAM_REF));
     ASSERT(!xr_type_equals(mode_only, normal));
     ASSERT(!xr_type_assignable(mode_only, normal));
@@ -853,7 +867,8 @@ TEST(compile_type_function) {
 }
 
 TEST(compile_type_ref_function_modes) {
-    AstNode *program = xr_parse(g_session, "type Handler = (in int, ref string, out bool) -> int");
+    AstNode *program =
+        xr_parse(g_session, "type Handler = (int, ref string, move Array<bool>) -> int");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -868,10 +883,11 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(fn->function.param_count == 3);
     ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(fn, 0)));
     ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(fn, 1)));
-    ASSERT(XR_TYPE_IS_BOOL(xr_type_function_param_type(fn, 2)));
-    ASSERT(xr_type_function_param_mode(fn, 0) == XR_PARAM_IN);
+    ASSERT(XR_TYPE_IS_ARRAY(xr_type_function_param_type(fn, 2)));
+    ASSERT(XR_TYPE_IS_BOOL(xr_type_function_param_type(fn, 2)->container.element_type));
+    ASSERT(xr_type_function_param_mode(fn, 0) == XR_PARAM_READ);
     ASSERT(xr_type_function_param_mode(fn, 1) == XR_PARAM_REF);
-    ASSERT(xr_type_function_param_mode(fn, 2) == XR_PARAM_OUT);
+    ASSERT(xr_type_function_param_mode(fn, 2) == XR_PARAM_MOVE);
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
@@ -930,6 +946,49 @@ static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary 
             return &summary->roots[i];
     }
     return NULL;
+}
+
+TEST(analyzer_parameter_effect_is_canonical_product) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "fn summarize(input: Array<int>, target: ref Array<int>, job: move Array<int>) "
+        "-> Array<int> {\n"
+        "  target.push(1)\n"
+        "  var alias = input\n"
+        "  return alias\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "param_effect_product.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    XaSymbol *symbol = xa_analyzer_lookup_deep(a, "summarize");
+    ASSERT(symbol != NULL);
+    ASSERT(symbol->links.param_effects != NULL);
+    ASSERT(symbol->links.param_effect_count == 3);
+
+    const XaParamEffectSummary *read = &symbol->links.param_effects[0];
+    const XaParamEffectSummary *ref = &symbol->links.param_effects[1];
+    const XaParamEffectSummary *move = &symbol->links.param_effects[2];
+    ASSERT(read->formal_mode == XR_PARAM_READ);
+    ASSERT(read->capability == XA_CAPABILITY_READONLY);
+    ASSERT(read->retain == XA_RETAIN_LOCAL_ALIAS);
+    ASSERT((read->returns & XA_RETURN_PROVENANCE_ALIAS) != 0);
+    ASSERT(ref->formal_mode == XR_PARAM_REF);
+    ASSERT(ref->capability == XA_CAPABILITY_EXCLUSIVE_WRITE);
+    ASSERT((ref->access & XA_PARAM_ACCESS_WRITE) != 0);
+    ASSERT((ref->mutation_paths & XA_MUTATION_PATH_WILDCARD) != 0);
+    ASSERT(move->formal_mode == XR_PARAM_MOVE);
+    ASSERT(move->capability == XA_CAPABILITY_UNIQUE_OWNER);
+    for (int i = 0; i < symbol->links.param_effect_count; i++) {
+        ASSERT(symbol->links.param_effects[i].complete);
+        ASSERT(symbol->links.param_effects[i].callable_effects == symbol->links.effect_id);
+        ASSERT(symbol->links.param_effects[i].memory_effects == symbol->links.memory_effect_id);
+    }
+
+    xa_analyzer_free(a);
+    setup_pool();
 }
 
 TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
@@ -1059,7 +1118,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "}\n"
                          "enum ValueError { Bad(actual: int, minimum: int) }\n"
                          "@no_alloc\n"
-                         "fn fixedValueCopy(data: in [byte; 4]) -> [byte; 4] {\n"
+                         "fn fixedValueCopy(data: [byte; 4]) -> [byte; 4] {\n"
                          "  return copy(data)\n"
                          "}\n"
                          "@no_alloc\n"
@@ -5668,9 +5727,9 @@ TEST(type_substitute_preserves_function_param_modes) {
                         xr_type_new_type_param(g_isolate, "V", 2)};
     XrType *fn = xr_type_new_function(g_isolate, params, 3, xr_type_new_unit(NULL), false);
     ASSERT(fn != NULL);
-    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
-    ASSERT(xr_type_function_set_param_mode(fn, 2, XR_PARAM_OUT));
+    ASSERT(xr_type_function_set_param_mode(fn, 2, XR_PARAM_MOVE));
 
     const char *names[] = {"T", "U", "V"};
     XrType *actuals[] = {xr_type_new_int(NULL), xr_type_new_string(NULL), xr_type_new_bool(NULL)};
@@ -5682,9 +5741,9 @@ TEST(type_substitute_preserves_function_param_modes) {
     ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(subst, 0)));
     ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(subst, 1)));
     ASSERT(XR_TYPE_IS_BOOL(xr_type_function_param_type(subst, 2)));
-    ASSERT(xr_type_function_param_mode(subst, 0) == XR_PARAM_IN);
+    ASSERT(xr_type_function_param_mode(subst, 0) == XR_PARAM_READ);
     ASSERT(xr_type_function_param_mode(subst, 1) == XR_PARAM_REF);
-    ASSERT(xr_type_function_param_mode(subst, 2) == XR_PARAM_OUT);
+    ASSERT(xr_type_function_param_mode(subst, 2) == XR_PARAM_MOVE);
 }
 
 // ============================================================================
@@ -5825,6 +5884,7 @@ int main(void) {
 
     printf("Type tests:\n");
     RUN_TEST(type_primitives);
+    RUN_TEST(type_const_capability_is_part_of_identity_and_format);
     RUN_TEST(type_containers);
     RUN_TEST(type_union);
     RUN_TEST(type_error_recovery);
@@ -5846,6 +5906,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);

@@ -29,7 +29,7 @@ var mapped = plan.map(0..20000, (state, i) -> {
 })
 
 var out: Array<int> = []
-var same = plan.mapInto(0..20000, out, (state, i) -> {
+plan.mapInto(0..20000, ref out, (state, i) -> {
     var token = tls.get()
     if (token >= 0) {
         touched.add(1, Ordering.Relaxed)
@@ -53,7 +53,7 @@ var lanesSeen = lane0.load(Ordering.Relaxed) + lane1.load(Ordering.Relaxed) +
 print(len(mapped) == 20000)
 print(mapped[0] == 0)
 print(mapped[19999] == 39998)
-print(len(same) == 20000)
+print(len(out) == 20000)
 print(out[19999] == 20000)
 print(touched.load(Ordering.Relaxed) == 40000)
 print(lanesSeen == 4)

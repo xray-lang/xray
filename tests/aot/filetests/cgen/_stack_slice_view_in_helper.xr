@@ -1,4 +1,4 @@
-export fn sumWindowIn(view: in Slice<byte>) -> int {
+export fn sumWindowIn(view: Slice<byte>) -> int {
     var total = 0
     var i = 0
     while (i < len(view)) {

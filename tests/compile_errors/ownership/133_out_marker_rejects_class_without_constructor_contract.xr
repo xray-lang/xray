@@ -1,8 +1,0 @@
-class Box {}
-
-fn bad(x: out int) {
-    Box(out x)
-}
-
-var value = 0
-bad(out value)

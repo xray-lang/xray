@@ -35,14 +35,13 @@ fn closeIntoPlan() {
 }
 
 var out: Array<int> = []
-var returned = intoPlan.mapInto(0..20000, out, (state, i) -> {
+intoPlan.mapInto(0..20000, ref out, (state, i) -> {
     if (i == 10000) {
         closeIntoPlan()
     }
     return state + i
 })
 
-print(len(returned) == 20000)
 print(len(out) == 20000)
 
 try {

@@ -1,4 +1,4 @@
-fn stashLength(data: in Array<int>, out: ref Array<int>) {
+fn stashLength(data: Array<int>, out: ref Array<int>) {
     out.push(len(data))
 }
 

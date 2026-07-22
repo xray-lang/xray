@@ -14,26 +14,26 @@ class RefCtorChild extends RefCtorBase {
 }
 
 class OutMethodBase {
-    fill(value: out int) {
+    fill(value: ref int) {
         value = 42
     }
 }
 
 class OutMethodChild extends OutMethodBase {
-    forward(value: out int) {
-        super.fill(out value)
+    forward(value: ref int) {
+        super.fill(ref value)
     }
 }
 
 class OutCtorBase {
-    constructor(value: out int) {
+    constructor(value: ref int) {
         value = 7
     }
 }
 
 class OutCtorChild extends OutCtorBase {
-    constructor(value: out int) {
-        super(out value)
+    constructor(value: ref int) {
+        super(ref value)
     }
 }
 
@@ -48,9 +48,9 @@ print(forwarded)
 print(child.value)
 
 var methodOut = 0
-OutMethodChild().forward(out methodOut)
+OutMethodChild().forward(ref methodOut)
 print(methodOut)
 
 var ctorOut = 0
-OutCtorChild(out ctorOut)
+OutCtorChild(ref ctorOut)
 print(ctorOut)

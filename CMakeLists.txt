@@ -43,8 +43,12 @@ configure_file(
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
+set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
 file(GLOB XRAY_STDLIB_DEF_FILES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/stdlib/defs/*.def"
+)
+file(GLOB XRAY_NATIVE_TYPE_SOURCE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/stdlib/types/*.xr"
 )
 
 set(XRAY_GEN_XI_OPS_DEPS
@@ -158,6 +162,16 @@ add_custom_command(
     COMMENT "stdlibgen: generating stdlib metadata from stdlib/defs/*.def"
 )
 
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
+    COMMAND ${XRAY_PYTHON} ${NATIVE_TYPE_EMBEDDER}
+            ${CMAKE_SOURCE_DIR}/stdlib/types
+            --output ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
+    DEPENDS ${NATIVE_TYPE_EMBEDDER}
+            ${XRAY_NATIVE_TYPE_SOURCE_FILES}
+    COMMENT "embedding stdlib native type declarations"
+)
+
 add_custom_target(gen-xi-ops DEPENDS
     ${XRAY_GEN_XI_OPS_DEPS}
 )
@@ -176,6 +190,10 @@ add_custom_target(gen-aot-metadata DEPENDS
 
 add_custom_target(gen-stdlib-metadata DEPENDS
     ${XRAY_GEN_STDLIB_METADATA_DEPS}
+)
+
+add_custom_target(gen-native-type-defs DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -805,11 +823,12 @@ set(CORE_ALL_SOURCES
 add_library(xray_stdlib_bootstrap_core OBJECT ${CORE_ALL_SOURCES})
 add_dependencies(xray_stdlib_bootstrap_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-stdlib-embedded-sources)
+    gen-native-type-defs gen-stdlib-embedded-sources)
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
 add_dependencies(xray_core
-    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata)
+    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
+    gen-native-type-defs)
 
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
@@ -1513,6 +1532,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_native_type_defs_sync
+        COMMAND ${XRAY_PYTHON} ${NATIVE_TYPE_EMBEDDER}
+                ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/types
+                --check ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_native_type_defs_sync PROPERTIES
+        LABELS "stdlib;metadata;generated;analyzer"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_lsp_stdlib_sync
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_stdlib_types.py
                 --check
@@ -1849,25 +1881,12 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME param_mode_convergence_inventory
+        NAME param_mode_convergence
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_param_mode_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(param_mode_convergence_inventory PROPERTIES
-        LABELS "frontend;syntax;metadata"
-        PROCESSORS 1
-        TIMEOUT 90
-    )
-
-    add_test(
-        NAME param_contract_decl_ast_single_representation
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_param_mode_convergence.py
-                --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --fail-on-decl-ast-contract
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(param_contract_decl_ast_single_representation PROPERTIES
+    set_tests_properties(param_mode_convergence PROPERTIES
         LABELS "frontend;syntax;metadata"
         PROCESSORS 1
         TIMEOUT 90

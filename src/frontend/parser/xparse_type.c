@@ -213,6 +213,12 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                 args[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
             return expand_generic_or_clone(parser, src->name ? src->name : "?", args, count);
         }
+        case XR_TREF_CONST: {
+            XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
+                                                                         subst_alias, type_args)
+                                                  : xr_tref_error(parser->compiler_session);
+            return xr_tref_const(parser->compiler_session, inner);
+        }
         case XR_TREF_OPTIONAL: {
             XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                          subst_alias, type_args)
@@ -236,8 +242,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             int nparam = total - 1;
             for (int i = 0; i < nparam; i++) {
                 params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
-                modes[i] =
-                    src->function_param_modes ? src->function_param_modes[i] : XR_PARAM_VALUE;
+                modes[i] = src->function_param_modes ? src->function_param_modes[i] : XR_PARAM_READ;
             }
             XrTypeRef *ret =
                 clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
@@ -357,6 +362,13 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
         xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
         return xr_tref_error(parser->compiler_session);
     }
+    /* `const` is a contextual qualifier in every type position. */
+    if (xr_parser_match(parser, TK_CONST)) {
+        XrTypeRef *inner = xr_parse_type_annotation(parser);
+        parser->recursion_depth--;
+        return xr_tref_const(parser->compiler_session, inner);
+    }
+
     /* Optional assertion-attribute prefix on a function type, e.g.
      * `@no_throw @no_suspend (int) -> int`. Only registry attributes
      * marked usable-in-function-type are accepted here. */
@@ -400,99 +412,32 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
 
 static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrParamMode *out_mode) {
     if (out_mode)
-        *out_mode = XR_PARAM_VALUE;
+        *out_mode = XR_PARAM_READ;
     if (!allow_mode)
         return false;
 
-    const char *mode = NULL;
-    if (xr_parser_check(parser, TK_IN)) {
-        mode = "in";
-        if (out_mode)
-            *out_mode = XR_PARAM_IN;
-    } else if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
-        mode = "ref";
+    if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
         if (out_mode)
             *out_mode = XR_PARAM_REF;
-    } else if (xr_parser_check_name(parser, "out")) {
-        mode = "out";
-        if (out_mode)
-            *out_mode = XR_PARAM_OUT;
-    }
-
-    if (mode) {
         xr_parser_advance(parser);
-        if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
-            Token move_token = parser->current;
-            xr_parser_advance(parser);
-            xr_parser_emit_removed_syntax(
-                parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
-                "`move` is not a parameter mode",
-                "Use a value parameter and write `move value` at the call site when transferring "
-                "ownership.");
-        } else {
-            const char *next_mode = NULL;
-            if (xr_parser_check(parser, TK_IN)) {
-                next_mode = "in";
-            } else if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
-                next_mode = "ref";
-            } else if (xr_parser_check_name(parser, "out")) {
-                next_mode = "out";
-            }
-            if (next_mode) {
-                Token mode_token = parser->current;
-                xr_parser_advance(parser);
-                (void) next_mode;
-                xr_parser_emit_removed_syntax(
-                    parser, &mode_token, XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED,
-                    "parameter modes cannot be combined",
-                    "Use exactly one parameter mode after the colon, for example `name: ref T`.");
-            }
-        }
         return true;
     }
-
     if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
-        Token move_token = parser->current;
+        if (out_mode)
+            *out_mode = XR_PARAM_MOVE;
         xr_parser_advance(parser);
-        xr_parser_emit_removed_syntax(
-            parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
-            "`move` is not a parameter mode",
-            "Use a value parameter and write `move value` at the call site when transferring "
-            "ownership.");
+        return true;
     }
     return false;
 }
 
 static void xr_parse_reject_postfix_param_mode(Parser *parser) {
-    const char *mode = NULL;
-    if (xr_parser_check(parser, TK_IN)) {
-        mode = "in";
-    } else if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
-        mode = "ref";
-    } else if (xr_parser_check_name(parser, "out")) {
-        mode = "out";
-    }
-
-    if (mode) {
+    if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref") ||
+        xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
         Token mode_token = parser->current;
         xr_parser_advance(parser);
-        char title[128];
-        snprintf(title, sizeof(title), "parameter mode '%s' after parameter type was removed",
-                 mode);
-        xr_parser_emit_removed_syntax(
-            parser, &mode_token, XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED, title,
-            "Write parameter modes immediately after the colon, for example `name: ref T`.");
-        return;
-    }
-
-    if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
-        Token move_token = parser->current;
-        xr_parser_advance(parser);
-        xr_parser_emit_removed_syntax(
-            parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
-            "`move` is not a parameter mode",
-            "Use a value parameter and write `move value` at the call site when transferring "
-            "ownership.");
+        (void) mode_token;
+        xr_parser_error_at_previous(parser, "parameter mode must appear immediately after ':'");
     }
 }
 
@@ -500,19 +445,19 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
                                                      XrParamMode *out_mode, XrTypeRef **out_type) {
     XR_DCHECK(parser != NULL, "xr_parse_optional_param_type_annotation: NULL parser");
     if (out_mode)
-        *out_mode = XR_PARAM_VALUE;
+        *out_mode = XR_PARAM_READ;
     if (out_type)
         *out_type = NULL;
     if (!xr_parser_match(parser, TK_COLON))
         return false;
 
-    XrParamMode mode = XR_PARAM_VALUE;
+    XrParamMode mode = XR_PARAM_READ;
     if (allow_mode) {
         xr_parse_optional_param_mode(parser, true, &mode);
     } else {
-        XrParamMode rejected_mode = XR_PARAM_VALUE;
+        XrParamMode rejected_mode = XR_PARAM_READ;
         if (xr_parse_optional_param_mode(parser, true, &rejected_mode) &&
-            rejected_mode != XR_PARAM_VALUE) {
+            rejected_mode != XR_PARAM_READ) {
             char message[128];
             snprintf(message, sizeof(message),
                      "parameter mode '%s' is not allowed in this parameter position",
@@ -532,12 +477,10 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
 
 static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **out_mode) {
     const char *mode = NULL;
-    if (xr_parser_check(parser, TK_IN)) {
-        mode = "in";
-    } else if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
+    if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref")) {
         mode = "ref";
-    } else if (xr_parser_check_name(parser, "out")) {
-        mode = "out";
+    } else if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
+        mode = "move";
     } else {
         return false;
     }
@@ -557,26 +500,11 @@ static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **o
     return true;
 }
 
-static bool xr_parse_current_is_move_param_prefix(Parser *parser) {
-    if (!xr_parser_check(parser, TK_MOVE) && !xr_parser_check_name(parser, "move"))
-        return false;
-
-    Scanner saved_scan = parser->scanner;
-    Token saved_cur = parser->current;
-    Token saved_prev = parser->previous;
-    xr_parser_advance(parser);
-    bool is_prefix = xr_parser_check(parser, TK_NAME);
-    parser->scanner = saved_scan;
-    parser->current = saved_cur;
-    parser->previous = saved_prev;
-    return is_prefix;
-}
-
 XR_FUNC void xr_parse_reject_ref_out_default_param(Parser *parser, const XrParamNode *param) {
-    if (!param || (param->passing_mode != XR_PARAM_REF && param->passing_mode != XR_PARAM_OUT))
+    if (!param || (param->passing_mode != XR_PARAM_REF && param->passing_mode != XR_PARAM_MOVE))
         return;
 
-    const char *mode = param->passing_mode == XR_PARAM_REF ? "ref" : "out";
+    const char *mode = param->passing_mode == XR_PARAM_REF ? "ref" : "move";
     const char *name = param->name ? param->name : "<anonymous>";
     char message[192];
     snprintf(message, sizeof(message),
@@ -597,26 +525,14 @@ XR_FUNC XrParamNode *xr_parse_parameter_at(Parser *parser, uint32_t flags, int p
     if (flags & XR_PARSE_PARAMETER_ALLOW_REST)
         is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
 
-    if (!is_rest && xr_parse_current_is_move_param_prefix(parser)) {
-        Token move_token = parser->current;
-        xr_parser_advance(parser);
-        xr_parser_emit_removed_syntax(
-            parser, &move_token, XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED,
-            "`move` is not a parameter mode",
-            "Use a value parameter and write `move value` at the call site when transferring "
-            "ownership.");
-    }
-
     const char *prefix_mode = NULL;
     if (!is_rest && xr_parse_current_is_param_mode_prefix(parser, &prefix_mode)) {
         Token mode_token = parser->current;
         xr_parser_advance(parser);
-        char title[128];
-        snprintf(title, sizeof(title), "parameter mode '%s' before parameter name was removed",
-                 prefix_mode ? prefix_mode : "?");
-        xr_parser_emit_removed_syntax(
-            parser, &mode_token, XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED, title,
-            "Write parameter modes after the colon, for example `name: ref T`.");
+        (void) prefix_mode;
+        (void) mode_token;
+        xr_parser_error_at_previous(parser,
+                                    "parameter mode must appear after the parameter name and ':'");
     }
 
     if (!is_rest && (flags & XR_PARSE_PARAMETER_ALLOW_DESTRUCTURE) &&
@@ -867,7 +783,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 param_modes = resized_modes;
                 cap = new_cap;
             }
-            param_modes[count] = XR_PARAM_VALUE;
+            param_modes[count] = XR_PARAM_READ;
             if (xr_parse_optional_param_mode(parser, true, &param_modes[count]))
                 saw_param_mode = true;
             elems[count++] = xr_parse_type_annotation(parser);

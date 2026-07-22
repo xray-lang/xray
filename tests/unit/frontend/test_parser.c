@@ -436,11 +436,34 @@ TEST(parser_function_decl) {
     teardown();
 }
 
+TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
+    setup();
+    AstNode *decl =
+        parse_first("fn inspect(value: const Array<const string>) -> const Array<int> {\n"
+                    "  return value\n"
+                    "}");
+    ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
+    XrTypeRef *param = decl->as.function_decl.params[0]->type;
+    ASSERT_EQ_INT(param->kind, XR_TREF_CONST);
+    ASSERT_EQ_INT(param->children[0]->kind, XR_TREF_GENERIC);
+    ASSERT_EQ_INT(param->children[0]->children[0]->kind, XR_TREF_CONST);
+    ASSERT_EQ_INT(decl->as.function_decl.return_type->kind, XR_TREF_CONST);
+
+    char text[128];
+    xr_tref_to_string_buf(param, text, (int) sizeof(text));
+    ASSERT_STR_EQ(text, "const Array<const string>");
+
+    AstNode *idempotent = parse_first("var x: const const Array<int>");
+    ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->kind, XR_TREF_CONST);
+    ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->children[0]->kind, XR_TREF_GENERIC);
+    teardown();
+}
+
 TEST(parser_extern_block_flattens_typed_descriptors) {
     setup();
     AstNode *program = parse_ok("extern \"C\" dylib(\"m\") {\n"
                                 "  export fn cos(x: float64) -> float64\n"
-                                "  fn clear(value: out int32)\n"
+                                "  fn clear(value: int32)\n"
                                 "}");
     ASSERT_EQ_INT(program->as.program.count, 2);
     for (int i = 0; i < program->as.program.count; i++) {
@@ -456,7 +479,7 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
     ASSERT_TRUE(program->as.program.statements[0]->is_exported);
     ASSERT_FALSE(program->as.program.statements[1]->is_exported);
     ASSERT_EQ_INT(program->as.program.statements[1]->as.function_decl.params[0]->passing_mode,
-                  XR_PARAM_OUT);
+                  XR_PARAM_READ);
     teardown();
 }
 
@@ -495,36 +518,36 @@ static void assert_ast_param_modes(XrParamNode **params, int actual_count,
 TEST(parser_parameter_modes_share_annotation_parser) {
     setup();
 
-    const XrParamMode modes[] = {XR_PARAM_VALUE, XR_PARAM_IN, XR_PARAM_REF, XR_PARAM_OUT};
+    const XrParamMode modes[] = {XR_PARAM_READ, XR_PARAM_READ, XR_PARAM_REF, XR_PARAM_MOVE};
     const int mode_count = (int) (sizeof(modes) / sizeof(modes[0]));
 
-    AstNode *decl = parse_first("fn touch(a: int, b: in int, c: ref int, d: out int) {\n}");
+    AstNode *decl = parse_first("fn touch(a: int, b: int, c: ref int, d: move int) {\n}");
     ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
     assert_ast_param_modes(decl->as.function_decl.params, decl->as.function_decl.param_count, modes,
                            mode_count);
 
     AstNode *stmt =
-        parse_first("var f = fn(a: int, b: in int, c: ref int, d: out int) {\n  return a\n}");
+        parse_first("var f = fn(a: int, b: int, c: ref int, d: move int) {\n  return a\n}");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     assert_ast_param_modes(init->as.function_expr.params, init->as.function_expr.param_count, modes,
                            mode_count);
 
-    AstNode *arrow_stmt = parse_first("var g = (a: int, b: in int, c: ref int, d: out int) -> a");
+    AstNode *arrow_stmt = parse_first("var g = (a: int, b: int, c: ref int, d: move int) -> a");
     AstNode *arrow = arrow_stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(arrow->type, AST_FUNCTION_EXPR);
     assert_ast_param_modes(arrow->as.function_expr.params, arrow->as.function_expr.param_count,
                            modes, mode_count);
 
     AstNode *method_stmt =
-        parse_first("class Box {\n  touch(a: int, b: in int, c: ref int, d: out int) {}\n}");
+        parse_first("class Box {\n  touch(a: int, b: int, c: ref int, d: move int) {}\n}");
     AstNode *method = method_stmt->as.class_decl.methods[0];
     ASSERT_EQ_INT(method->type, AST_METHOD_DECL);
     assert_ast_param_modes(method->as.method_decl.params, method->as.method_decl.param_count, modes,
                            mode_count);
 
-    AstNode *iface = parse_first(
-        "interface Sink {\n  write(a: int, b: in int, c: ref int, d: out int) -> ()\n}");
+    AstNode *iface =
+        parse_first("interface Sink {\n  write(a: int, b: int, c: ref int, d: move int) -> ()\n}");
     AstNode *iface_method = iface->as.interface_decl.methods[0];
     ASSERT_EQ_INT(iface_method->type, AST_INTERFACE_METHOD);
     assert_ast_param_modes(iface_method->as.interface_method.params,
@@ -546,14 +569,14 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(ctor->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 
     AstNode *operator_class = parse_first("class Matrix {\n"
-                                          "  operator[]=(index: in int, value: out int) {}\n"
+                                          "  operator[]=(index: int, value: move int) {}\n"
                                           "}");
     AstNode *op = operator_class->as.class_decl.methods[0];
     ASSERT_EQ_INT(op->type, AST_METHOD_DECL);
     ASSERT(op->as.method_decl.is_operator);
     ASSERT_EQ_INT(op->as.method_decl.param_count, 2);
-    ASSERT_EQ_INT(op->as.method_decl.params[0]->passing_mode, XR_PARAM_IN);
-    ASSERT_EQ_INT(op->as.method_decl.params[1]->passing_mode, XR_PARAM_OUT);
+    ASSERT_EQ_INT(op->as.method_decl.params[0]->passing_mode, XR_PARAM_READ);
+    ASSERT_EQ_INT(op->as.method_decl.params[1]->passing_mode, XR_PARAM_MOVE);
 
     AstNode *setter_class = parse_first("class Meter {\n"
                                         "  value: int {\n"
@@ -567,13 +590,13 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(setter->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 
     AstNode *contract_class = parse_first("class ContractBox {\n"
-                                          "  configure(limit: in int = 4) {}\n"
+                                          "  configure(limit: int = 4) {}\n"
                                           "  collect(...values: int) {}\n"
                                           "}");
     MethodDeclNode *configure = &contract_class->as.class_decl.methods[0]->as.method_decl;
     ASSERT_EQ_INT(configure->param_count, 1);
     ASSERT_STR_EQ(configure->params[0]->name, "limit");
-    ASSERT_EQ_INT(configure->params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_EQ_INT(configure->params[0]->passing_mode, XR_PARAM_READ);
     ASSERT_NOT_NULL(configure->params[0]->type);
     ASSERT_NOT_NULL(configure->params[0]->default_value);
     ASSERT_FALSE(configure->params[0]->is_rest);
@@ -581,7 +604,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     MethodDeclNode *collect = &contract_class->as.class_decl.methods[1]->as.method_decl;
     ASSERT_EQ_INT(collect->param_count, 1);
     ASSERT_STR_EQ(collect->params[0]->name, "values");
-    ASSERT_EQ_INT(collect->params[0]->passing_mode, XR_PARAM_VALUE);
+    ASSERT_EQ_INT(collect->params[0]->passing_mode, XR_PARAM_READ);
     ASSERT_NOT_NULL(collect->params[0]->type);
     ASSERT_NULL(collect->params[0]->default_value);
     ASSERT(collect->params[0]->is_rest);
@@ -592,34 +615,34 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
 TEST(parser_function_type_param_modes) {
     setup();
 
-    AstNode *alias = parse_first("type Handler = (in int, ref string, out bool) -> int");
+    AstNode *alias = parse_first("type Handler = (int, ref string, move bool) -> int");
     ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
     XrTypeRef *tref = alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(tref);
     ASSERT_EQ_INT(tref->kind, XR_TREF_FUNCTION);
     ASSERT_EQ_INT(tref->nchildren, 4);
     ASSERT_NOT_NULL(tref->function_param_modes);
-    ASSERT_EQ_INT(tref->function_param_modes[0], XR_PARAM_IN);
+    ASSERT_EQ_INT(tref->function_param_modes[0], XR_PARAM_READ);
     ASSERT_EQ_INT(tref->function_param_modes[1], XR_PARAM_REF);
-    ASSERT_EQ_INT(tref->function_param_modes[2], XR_PARAM_OUT);
+    ASSERT_EQ_INT(tref->function_param_modes[2], XR_PARAM_MOVE);
 
     char buf[128];
     xr_tref_to_string_buf(tref, buf, sizeof(buf));
-    ASSERT_STR_EQ(buf, "(in int, ref string, out bool) -> int");
+    ASSERT_STR_EQ(buf, "(int, ref string, move bool) -> int");
 
     AstNode *complex_alias =
-        parse_first("type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
-                    "out [uint8; 16], (int, string), in (ref int) -> bool,) -> Array<string>");
+        parse_first("type ComplexHandler = (Array<int>, ref Slice<uint8>?, "
+                    "move [uint8; 16], (int, string), (ref int) -> bool,) -> Array<string>");
     XrTypeRef *complex = complex_alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(complex);
     ASSERT_EQ_INT(complex->kind, XR_TREF_FUNCTION);
     ASSERT_EQ_INT(complex->nchildren, 6);
     ASSERT_NOT_NULL(complex->function_param_modes);
-    ASSERT_EQ_INT(complex->function_param_modes[0], XR_PARAM_IN);
+    ASSERT_EQ_INT(complex->function_param_modes[0], XR_PARAM_READ);
     ASSERT_EQ_INT(complex->function_param_modes[1], XR_PARAM_REF);
-    ASSERT_EQ_INT(complex->function_param_modes[2], XR_PARAM_OUT);
-    ASSERT_EQ_INT(complex->function_param_modes[3], XR_PARAM_VALUE);
-    ASSERT_EQ_INT(complex->function_param_modes[4], XR_PARAM_IN);
+    ASSERT_EQ_INT(complex->function_param_modes[2], XR_PARAM_MOVE);
+    ASSERT_EQ_INT(complex->function_param_modes[3], XR_PARAM_READ);
+    ASSERT_EQ_INT(complex->function_param_modes[4], XR_PARAM_READ);
     ASSERT_EQ_INT(complex->children[0]->kind, XR_TREF_GENERIC);
     ASSERT_STR_EQ(complex->children[0]->name, "Array");
     ASSERT_EQ_INT(complex->children[1]->kind, XR_TREF_OPTIONAL);
@@ -636,8 +659,8 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
     xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
-    ASSERT_STR_EQ(complex_buf, "(in Array<int>, ref Slice<byte>?, out [byte; 16], (int, string), "
-                               "in (ref int) -> bool) -> Array<string>");
+    ASSERT_STR_EQ(complex_buf, "(Array<int>, ref Slice<byte>?, move [byte; 16], (int, string), "
+                               "(ref int) -> bool) -> Array<string>");
 
     teardown();
 }
@@ -859,30 +882,29 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
 
     AstNode *stmt = parse_first("foo("
                                 "ref x, "
-                                "out y, "
+                                "move y, "
                                 "ref this.value, "
-                                "out this.value)");
+                                "move z)");
     AstNode *call = stmt->as.expr_stmt;
     ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(call->as.call_expr.arg_count, 4);
     ASSERT_NOT_NULL(call->as.call_expr.arg_accesses);
     ASSERT_EQ_INT(call->as.call_expr.arg_accesses[0], XR_CALL_ARG_REF);
-    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[1], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[1], XR_CALL_ARG_MOVE);
     ASSERT_EQ_INT(call->as.call_expr.arg_accesses[2], XR_CALL_ARG_REF);
-    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[3], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[3], XR_CALL_ARG_MOVE);
     ASSERT_EQ_INT(call->as.call_expr.arguments[0]->type, AST_VARIABLE);
     ASSERT_STR_EQ(call->as.call_expr.arguments[0]->as.variable.name, "x");
-    ASSERT_EQ_INT(call->as.call_expr.arguments[1]->type, AST_VARIABLE);
-    ASSERT_STR_EQ(call->as.call_expr.arguments[1]->as.variable.name, "y");
+    ASSERT_EQ_INT(call->as.call_expr.arguments[1]->type, AST_MOVE_EXPR);
     ASSERT_EQ_INT(call->as.call_expr.arguments[2]->type, AST_MEMBER_ACCESS);
-    ASSERT_EQ_INT(call->as.call_expr.arguments[3]->type, AST_MEMBER_ACCESS);
+    ASSERT_EQ_INT(call->as.call_expr.arguments[3]->type, AST_MOVE_EXPR);
 
     AstNode *plain_stmt = parse_first("foo(out, out + 1, ref + 1, ref.value, out.value)");
     AstNode *plain = plain_stmt->as.expr_stmt;
     ASSERT_EQ_INT(plain->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(plain->as.call_expr.arg_count, 5);
     for (int i = 0; i < plain->as.call_expr.arg_count; i++)
-        ASSERT_EQ_INT(plain->as.call_expr.arg_accesses[i], XR_CALL_ARG_VALUE);
+        ASSERT_EQ_INT(plain->as.call_expr.arg_accesses[i], XR_CALL_ARG_PLAIN);
     ASSERT_EQ_INT(plain->as.call_expr.arguments[0]->type, AST_VARIABLE);
     ASSERT_STR_EQ(plain->as.call_expr.arguments[0]->as.variable.name, "out");
     ASSERT_EQ_INT(plain->as.call_expr.arguments[1]->type, AST_BINARY_ADD);
@@ -892,27 +914,27 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
 
     AstNode *generic_stmt = parse_first("foo<int>("
                                         "ref x, "
-                                        "out y)");
+                                        "move y)");
     AstNode *generic = generic_stmt->as.expr_stmt;
     ASSERT_EQ_INT(generic->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(generic->as.call_expr.type_arg_count, 1);
     ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[0], XR_CALL_ARG_REF);
-    ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[1], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[1], XR_CALL_ARG_MOVE);
 
     AstNode *new_stmt = parse_first("Array<int>("
-                                    "out y)");
+                                    "move y)");
     AstNode *new_expr = new_stmt->as.expr_stmt;
     ASSERT_EQ_INT(new_expr->type, AST_NEW_EXPR);
     ASSERT_EQ_INT(new_expr->as.new_expr.arg_count, 1);
-    ASSERT_EQ_INT(new_expr->as.new_expr.arg_accesses[0], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(new_expr->as.new_expr.arg_accesses[0], XR_CALL_ARG_MOVE);
 
     AstNode *class_stmt = parse_first("class Child extends Base {\n"
                                       "  constructor(value: "
                                       "ref int, result: "
-                                      "out int) {\n"
+                                      "move int) {\n"
                                       "    super("
                                       "ref value, "
-                                      "out result)\n"
+                                      "move result)\n"
                                       "  }\n"
                                       "}");
     AstNode *ctor = class_stmt->as.class_decl.methods[0];
@@ -924,7 +946,7 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
     ASSERT_EQ_INT(super_call->type, AST_SUPER_CALL);
     ASSERT_EQ_INT(super_call->as.super_call.arg_count, 2);
     ASSERT_EQ_INT(super_call->as.super_call.arg_accesses[0], XR_CALL_ARG_REF);
-    ASSERT_EQ_INT(super_call->as.super_call.arg_accesses[1], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(super_call->as.super_call.arg_accesses[1], XR_CALL_ARG_MOVE);
 
     teardown();
 }
@@ -1252,6 +1274,7 @@ int main(void) {
 
     // Functions
     RUN_TEST(parser_function_decl);
+    RUN_TEST(parser_const_type_qualifier_is_canonical_in_every_position);
     RUN_TEST(parser_extern_block_flattens_typed_descriptors);
     RUN_TEST(parser_extern_block_flattens_layout_declarations);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);

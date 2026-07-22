@@ -38,14 +38,6 @@
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links);
-static bool member_set_out_field_path_append(char *dst, size_t dst_size, const char *suffix);
-static XaSymbol *member_set_out_field_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
-                                                  size_t path_size);
-static XrType *member_set_out_field_type_from_object(XaInferContext *ctx, XrType *obj_type,
-                                                     const char *member_name);
-static XrType *member_set_out_field_object_type_without_receiver_read(XaInferContext *ctx,
-                                                                      AstNode *object,
-                                                                      const char *target_path);
 
 static const char *object_shape_type_label_local(XrType *type) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.type_name)
@@ -367,33 +359,11 @@ static bool xa_view_target_matches_source(XrType *target, XrType *src) {
 }
 
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type) {
-    if (!type)
+    const uint32_t required = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
+    if (!xa_type_has_capabilities(type, required))
         return NULL;
-    if (type->kind == XR_KIND_CHANNEL)
-        return "Channel";
-    if (xr_type_is_named_class(type, "Atomic"))
-        return "Atomic";
-    if (xr_type_is_named_class(type, "WorkQueue"))
-        return "WorkQueue";
-    if (xr_type_is_named_class(type, "ResultGroup"))
-        return "ResultGroup";
-    if (xr_type_is_named_class(type, "CountdownLatch"))
-        return "CountdownLatch";
-    if (xr_type_is_named_class(type, "Semaphore"))
-        return "Semaphore";
-    if (xr_type_is_named_class(type, "EventCount"))
-        return "EventCount";
-    if (xr_type_is_named_class(type, "OsMutex"))
-        return "OsMutex";
-    if (xr_type_is_named_class(type, "OsRwLock"))
-        return "OsRwLock";
-    if (xr_type_is_named_class(type, "OsCondvar"))
-        return "OsCondvar";
-    if (xr_type_is_named_class(type, "OsBarrier"))
-        return "OsBarrier";
-    if (xr_type_is_named_class(type, "OsOnce"))
-        return "OsOnce";
-    return NULL;
+    const char *name = xr_type_get_class_name((XrType *) type);
+    return name ? name : type->kind == XR_KIND_CHANNEL ? "Channel" : "sync handle";
 }
 
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type) {
@@ -651,301 +621,6 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
         return NULL;
     XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     return xa_parallel_import_target_symbol(ctx, member);
-}
-
-static bool xa_out_da_stmt_may_throw(XaInferContext *ctx, AstNode *node, int depth);
-static bool xa_out_da_expr_may_throw(XaInferContext *ctx, AstNode *node, int depth);
-
-static bool xa_out_da_expr_list_may_throw(XaInferContext *ctx, AstNode **nodes, int count,
-                                          int depth) {
-    for (int i = 0; i < count; i++) {
-        if (xa_out_da_expr_may_throw(ctx, nodes ? nodes[i] : NULL, depth))
-            return true;
-    }
-    return false;
-}
-
-static AstNode *xa_out_da_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
-    if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION)
-        return NULL;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    AstNode *fn_node = links ? links->function_decl_node : NULL;
-    if (!fn_node)
-        return xa_parallel_symbol_function_body(ctx, sym);
-    if (fn_node->type == AST_FUNCTION_DECL)
-        return fn_node->as.function_decl.body;
-    if (fn_node->type == AST_FUNCTION_EXPR)
-        return fn_node->as.function_expr.body;
-    return NULL;
-}
-
-static bool xa_out_da_symbol_may_throw(XaInferContext *ctx, XaSymbol *sym, int depth) {
-    if (!ctx || !ctx->analyzer || !sym || depth > 8)
-        return true;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (!links || sym->kind != XA_SYM_FUNCTION || sym->is_imported || links->is_extern)
-        return true;
-    if (links->effect_id != XA_EFFECT_NONE) {
-        const XaEffectSummary *summary =
-            xa_effect_db_get(ctx->analyzer->effect_db, links->effect_id);
-        return !summary || !xa_effect_summary_is_nothrow(summary);
-    }
-    AstNode *body = xa_out_da_symbol_function_body(ctx, sym);
-    if (!body)
-        return true;
-    return xa_out_da_stmt_may_throw(ctx, body, depth + 1);
-}
-
-static bool xa_out_da_call_may_throw(XaInferContext *ctx, AstNode *callee, int depth) {
-    if (!callee || depth > 8)
-        return true;
-    if (callee->type == AST_FUNCTION_DECL)
-        return xa_out_da_stmt_may_throw(ctx, callee->as.function_decl.body, depth + 1);
-    if (callee->type == AST_FUNCTION_EXPR)
-        return xa_out_da_stmt_may_throw(ctx, callee->as.function_expr.body, depth + 1);
-    if (callee->type != AST_VARIABLE)
-        return true;
-    return xa_out_da_symbol_may_throw(ctx, xa_parallel_symbol_from_variable_node(ctx, callee),
-                                      depth + 1);
-}
-
-static bool xa_out_da_match_arms_may_throw(XaInferContext *ctx, MatchExprNode *match, int depth) {
-    if (!match)
-        return false;
-    for (int i = 0; i < match->arm_count; i++) {
-        AstNode *arm = match->arms ? match->arms[i] : NULL;
-        if (!arm || arm->type != AST_MATCH_ARM)
-            return true;
-        if (xa_out_da_expr_may_throw(ctx, arm->as.match_arm.guard, depth) ||
-            xa_out_da_stmt_may_throw(ctx, arm->as.match_arm.body, depth))
-            return true;
-    }
-    return false;
-}
-
-static bool xa_out_da_expr_may_throw(XaInferContext *ctx, AstNode *node, int depth) {
-    if (!node)
-        return false;
-    if (depth > 8)
-        return true;
-
-    switch (node->type) {
-        case AST_LITERAL_INT:
-        case AST_LITERAL_FLOAT:
-        case AST_LITERAL_BIGINT:
-        case AST_LITERAL_STRING:
-        case AST_FIXED_BYTES_LITERAL:
-        case AST_LITERAL_RUNE:
-        case AST_LITERAL_REGEX:
-        case AST_LITERAL_NULL:
-        case AST_LITERAL_TRUE:
-        case AST_LITERAL_FALSE:
-        case AST_VARIABLE:
-        case AST_THIS_EXPR:
-        case AST_FUNCTION_DECL:
-        case AST_FUNCTION_EXPR:
-            return false;
-        case AST_CALL_EXPR: {
-            CallExprNode *call = &node->as.call_expr;
-            return xa_out_da_expr_may_throw(ctx, call->callee, depth + 1) ||
-                   xa_out_da_expr_list_may_throw(ctx, call->arguments, call->arg_count,
-                                                 depth + 1) ||
-                   xa_out_da_call_may_throw(ctx, call->callee, depth + 1);
-        }
-        case AST_GROUPING:
-            return xa_out_da_expr_may_throw(ctx, node->as.grouping, depth + 1);
-        case AST_UNARY_NEG:
-        case AST_UNARY_NOT:
-        case AST_UNARY_BNOT:
-        case AST_FORCE_UNWRAP:
-        case AST_MOVE_EXPR:
-        case AST_COMPTIME_EXPR:
-        case AST_UNSAFE_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node->as.unary.operand, depth + 1);
-        case AST_BINARY_ADD:
-        case AST_BINARY_SUB:
-        case AST_BINARY_MUL:
-        case AST_BINARY_DIV:
-        case AST_BINARY_MOD:
-        case AST_BINARY_BAND:
-        case AST_BINARY_BOR:
-        case AST_BINARY_BXOR:
-        case AST_BINARY_LSHIFT:
-        case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ:
-        case AST_BINARY_NE:
-        case AST_BINARY_LT:
-        case AST_BINARY_LE:
-        case AST_BINARY_GT:
-        case AST_BINARY_GE:
-        case AST_BINARY_AND:
-        case AST_BINARY_OR:
-        case AST_NULLISH_COALESCE:
-            return xa_out_da_expr_may_throw(ctx, node->as.binary.left, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.binary.right, depth + 1);
-        case AST_TERNARY:
-            return xa_out_da_expr_may_throw(ctx, node->as.ternary.condition, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.ternary.true_expr, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.ternary.false_expr, depth + 1);
-        case AST_ASSIGNMENT:
-            return xa_out_da_expr_may_throw(ctx, node->as.assignment.value, depth + 1);
-        case AST_COMPOUND_ASSIGNMENT:
-            return xa_out_da_expr_may_throw(ctx, node->as.compound_assignment.object, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.compound_assignment.value, depth + 1);
-        case AST_DESTRUCTURE_ASSIGN:
-            return xa_out_da_expr_may_throw(ctx, node->as.destructure_assign.value, depth + 1);
-        case AST_MEMBER_ACCESS:
-            return xa_out_da_expr_may_throw(ctx, node->as.member_access.object, depth + 1);
-        case AST_MEMBER_SET:
-            return xa_out_da_expr_may_throw(ctx, node->as.member_set.object, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.member_set.value, depth + 1);
-        case AST_INDEX_GET:
-            return xa_out_da_expr_may_throw(ctx, node->as.index_get.array, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.index_get.index, depth + 1);
-        case AST_INDEX_SET:
-            return xa_out_da_expr_may_throw(ctx, node->as.index_set.array, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.index_set.index, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.index_set.value, depth + 1);
-        case AST_SLICE_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node->as.slice_expr.source, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.slice_expr.start, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.slice_expr.end, depth + 1);
-        case AST_ARRAY_LITERAL:
-            if (node->as.array_literal.is_repeat)
-                return xa_out_da_expr_may_throw(ctx, node->as.array_literal.repeat_value,
-                                                depth + 1) ||
-                       xa_out_da_expr_may_throw(ctx, node->as.array_literal.repeat_count,
-                                                depth + 1);
-            return xa_out_da_expr_list_may_throw(ctx, node->as.array_literal.elements,
-                                                 node->as.array_literal.count, depth + 1);
-        case AST_TUPLE_LITERAL:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.tuple_literal.elements,
-                                                 node->as.tuple_literal.count, depth + 1);
-        case AST_OBJECT_LITERAL:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.object_literal.keys,
-                                                 node->as.object_literal.count, depth + 1) ||
-                   xa_out_da_expr_list_may_throw(ctx, node->as.object_literal.values,
-                                                 node->as.object_literal.count, depth + 1);
-        case AST_MAP_LITERAL:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.map_literal.keys,
-                                                 node->as.map_literal.count, depth + 1) ||
-                   xa_out_da_expr_list_may_throw(ctx, node->as.map_literal.values,
-                                                 node->as.map_literal.count, depth + 1);
-        case AST_SET_LITERAL:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.set_literal.elements,
-                                                 node->as.set_literal.count, depth + 1);
-        case AST_STRUCT_LITERAL:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.struct_literal.field_values,
-                                                 node->as.struct_literal.field_count, depth + 1);
-        case AST_TEMPLATE_STRING:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.template_str.parts,
-                                                 node->as.template_str.part_count, depth + 1);
-        case AST_MATCH_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node->as.match_expr.expr, depth + 1) ||
-                   xa_out_da_match_arms_may_throw(ctx, &node->as.match_expr, depth + 1);
-        case AST_SCOPE_BLOCK:
-            return xa_out_da_stmt_may_throw(ctx, node->as.scope_block.body, depth + 1);
-        case AST_AS_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node->as.as_expr.expr, depth + 1);
-        case AST_IS_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node->as.is_expr.expr, depth + 1);
-        case AST_AWAIT_EXPR:
-        case AST_GO_EXPR:
-        case AST_NEW_EXPR:
-            return true;
-        default:
-            return true;
-    }
-}
-
-static bool xa_out_da_stmt_may_throw(XaInferContext *ctx, AstNode *node, int depth) {
-    if (!node)
-        return false;
-    if (depth > 8)
-        return true;
-
-    switch (node->type) {
-        case AST_BLOCK:
-            for (int i = 0; i < node->as.block.count; i++) {
-                if (xa_out_da_stmt_may_throw(ctx, node->as.block.statements[i], depth + 1))
-                    return true;
-            }
-            return false;
-        case AST_PROGRAM:
-            for (int i = 0; i < node->as.program.count; i++) {
-                if (xa_out_da_stmt_may_throw(ctx, node->as.program.statements[i], depth + 1))
-                    return true;
-            }
-            return false;
-        case AST_EXPR_STMT:
-            return xa_out_da_expr_may_throw(ctx, node->as.expr_stmt, depth + 1);
-        case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
-            return xa_out_da_expr_may_throw(ctx, node->as.var_decl.initializer, depth + 1);
-        case AST_DESTRUCTURE_DECL:
-            return xa_out_da_expr_may_throw(ctx, node->as.destructure_decl.initializer, depth + 1);
-        case AST_ASSIGNMENT:
-        case AST_COMPOUND_ASSIGNMENT:
-        case AST_DESTRUCTURE_ASSIGN:
-        case AST_MEMBER_SET:
-        case AST_INDEX_SET:
-        case AST_MATCH_EXPR:
-            return xa_out_da_expr_may_throw(ctx, node, depth + 1);
-        case AST_RETURN_STMT:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.return_stmt.values,
-                                                 node->as.return_stmt.value_count, depth + 1);
-        case AST_THROW_STMT:
-            return true;
-        case AST_IF_STMT:
-            return xa_out_da_expr_may_throw(ctx, node->as.if_stmt.condition, depth + 1) ||
-                   xa_out_da_stmt_may_throw(ctx, node->as.if_stmt.then_branch, depth + 1) ||
-                   xa_out_da_stmt_may_throw(ctx, node->as.if_stmt.else_branch, depth + 1);
-        case AST_WHILE_STMT:
-            return xa_out_da_expr_may_throw(ctx, node->as.while_stmt.condition, depth + 1) ||
-                   xa_out_da_stmt_may_throw(ctx, node->as.while_stmt.body, depth + 1);
-        case AST_FOR_STMT:
-            return xa_out_da_stmt_may_throw(ctx, node->as.for_stmt.initializer, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.for_stmt.condition, depth + 1) ||
-                   xa_out_da_expr_may_throw(ctx, node->as.for_stmt.increment, depth + 1) ||
-                   xa_out_da_stmt_may_throw(ctx, node->as.for_stmt.body, depth + 1);
-        case AST_FOR_IN_STMT:
-            return xa_out_da_expr_may_throw(ctx, node->as.for_in_stmt.collection, depth + 1) ||
-                   xa_out_da_stmt_may_throw(ctx, node->as.for_in_stmt.body, depth + 1);
-        case AST_TRY_CATCH:
-            if (xa_out_da_stmt_may_throw(ctx, node->as.try_catch.try_body, depth + 1))
-                return true;
-            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
-                XrCatchClause *cc =
-                    node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
-                if (cc && cc->is_panic)
-                    return true;
-                if (xa_out_da_stmt_may_throw(ctx, cc ? cc->body : NULL, depth + 1))
-                    return true;
-            }
-            return false;
-        case AST_PRINT_STMT:
-            return xa_out_da_expr_list_may_throw(ctx, node->as.print_stmt.exprs,
-                                                 node->as.print_stmt.expr_count, depth + 1);
-        case AST_DEFER_STMT:
-            return xa_out_da_expr_may_throw(ctx, node->as.defer_stmt.expr, depth + 1);
-        case AST_SCOPE_BLOCK:
-            return xa_out_da_stmt_may_throw(ctx, node->as.scope_block.body, depth + 1);
-        default:
-            return true;
-    }
-}
-
-static bool xa_out_da_try_catch_may_enter_catch(XaInferContext *ctx, TryCatchNode *tc) {
-    if (!tc)
-        return true;
-    for (int ci = 0; ci < tc->catch_count; ci++) {
-        XrCatchClause *cc = tc->catch_clauses ? tc->catch_clauses[ci] : NULL;
-        if (!cc || cc->is_panic)
-            return true;
-    }
-    return xa_out_da_stmt_may_throw(ctx, tc->try_body, 0);
 }
 
 static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *call) {
@@ -1580,133 +1255,15 @@ static AstNode *unwrap_grouping(AstNode *node) {
 
 static XrCallArgAccess xa_super_call_arg_access(const SuperCallNode *call, int index) {
     if (!call || index < 0 || !call->arg_accesses)
-        return XR_CALL_ARG_VALUE;
+        return XR_CALL_ARG_PLAIN;
     return call->arg_accesses[index];
-}
-
-static XaSymbol *xa_super_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
-    expr = unwrap_grouping(expr);
-    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
-        return NULL;
-    return xa_lookup_visible_symbol(ctx, expr->as.variable.name);
-}
-
-static XrType *xa_super_out_direct_variable_type_without_read(XaInferContext *ctx,
-                                                              AstNode *arg_node) {
-    AstNode *place = unwrap_grouping(arg_node);
-    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
-        return NULL;
-    XaSymbol *sym = xa_super_call_variable_symbol(ctx, place);
-    if (!sym)
-        return NULL;
-    place->as.variable.symbol_id = sym->id;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    XrType *type = xa_analyzer_get_type(ctx->analyzer, sym);
-    if (!type && links)
-        type = links->type ? links->type : links->declared_type;
-    if (!type)
-        return NULL;
-    xa_analyzer_set_node_type(ctx->analyzer, place, type);
-    return type;
-}
-
-static XrType *xa_super_out_member_access_type_without_root_read(XaInferContext *ctx,
-                                                                 AstNode *arg_node) {
-    AstNode *place = unwrap_grouping(arg_node);
-    if (!ctx || !ctx->analyzer || !place || place->type != AST_MEMBER_ACCESS)
-        return NULL;
-
-    char path[256];
-    XaSymbol *root = member_set_out_field_path_symbol(ctx, place, path, sizeof(path));
-    if (!root || path[0] == '\0' || root->kind != XA_SYM_PARAMETER ||
-        root->passing_mode != XR_PARAM_OUT)
-        return NULL;
-
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
-    if (!links || links->is_definitely_assigned)
-        return NULL;
-
-    XrType *obj_type = member_set_out_field_object_type_without_receiver_read(
-        ctx, place->as.member_access.object, path);
-    if (!obj_type)
-        return NULL;
-
-    XrType *type =
-        member_set_out_field_type_from_object(ctx, obj_type, place->as.member_access.name);
-    if (type)
-        xa_analyzer_set_node_type(ctx->analyzer, place, type);
-    return type;
 }
 
 static XrType *xa_visit_super_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
                                                  XrCallArgAccess access, XrParamMode param_mode) {
-    if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT) {
-        XrType *type = xa_super_out_direct_variable_type_without_read(ctx, arg_node);
-        if (type)
-            return type;
-        type = xa_super_out_member_access_type_without_root_read(ctx, arg_node);
-        if (type)
-            return type;
-    }
+    (void) access;
+    (void) param_mode;
     return xa_visit_infer_expr(ctx, arg_node);
-}
-
-static void xa_mark_super_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node,
-                                                XrCallArgAccess access, XrParamMode param_mode) {
-    if (access != XR_CALL_ARG_OUT || param_mode != XR_PARAM_OUT)
-        return;
-    AstNode *place = unwrap_grouping(arg_node);
-    if (!ctx || !ctx->analyzer || !place)
-        return;
-    if (place->type == AST_MEMBER_ACCESS) {
-        char path[256];
-        XaSymbol *root = member_set_out_field_path_symbol(ctx, place, path, sizeof(path));
-        if (!root || path[0] == '\0' || root->kind != XA_SYM_PARAMETER ||
-            root->passing_mode != XR_PARAM_OUT)
-            return;
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
-        if (!links || links->is_definitely_assigned)
-            return;
-
-        xa_symbol_links_mark_out_field_assigned(links, path);
-        if (place->as.member_access.object &&
-            place->as.member_access.object->type == AST_MEMBER_ACCESS) {
-            char object_path[256];
-            XaSymbol *object_root = member_set_out_field_path_symbol(
-                ctx, place->as.member_access.object, object_path, sizeof(object_path));
-            XrType *object_type =
-                xa_analyzer_get_node_type(ctx->analyzer, place->as.member_access.object);
-            if (!object_type && object_root == root && object_path[0] != '\0') {
-                object_type = member_set_out_field_object_type_without_receiver_read(
-                    ctx, place->as.member_access.object, path);
-            }
-            if (object_root == root && object_path[0] != '\0' && object_type) {
-                XaSymbolLinks *class_links = NULL;
-                XrClassInfo *object_info = member_set_class_info(ctx, object_type, &class_links);
-                (void) class_links;
-                xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
-                    links, object_path, object_info);
-            }
-        }
-        XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
-        if (!root_type)
-            root_type = links->type ? links->type : links->declared_type;
-        xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
-            links, root->name, root_type);
-        return;
-    }
-    if (place->type != AST_VARIABLE)
-        return;
-    XaSymbol *sym = xa_super_call_variable_symbol(ctx, place);
-    if (!sym)
-        return;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (!links)
-        return;
-    uint32_t end_col =
-        place->column + (place->as.variable.name ? strlen(place->as.variable.name) : 0);
-    xa_symbol_add_ref(links, place->line, place->column, end_col, true);
-    links->is_definitely_assigned = true;
 }
 
 static void xa_visit_super_args_without_contract(XaInferContext *ctx, const SuperCallNode *call) {
@@ -1730,12 +1287,11 @@ static void xa_visit_super_args_for_function(XaInferContext *ctx, AstNode *node,
         if (!arg)
             continue;
         XrParamMode param_mode =
-            si < pc ? xr_type_function_param_mode(function_type, si) : XR_PARAM_VALUE;
+            si < pc ? xr_type_function_param_mode(function_type, si) : XR_PARAM_READ;
         XrCallArgAccess access = xa_super_call_arg_access(call, si);
         xa_visit_super_arg_for_param_mode(ctx, arg, access, param_mode);
         if (si < pc) {
             xa_check_arg_access_authorization(ctx, node, arg, access, si, param_mode);
-            xa_mark_super_out_call_arg_assigned(ctx, arg, access, param_mode);
         }
     }
 }
@@ -2450,153 +2006,13 @@ static int member_set_layout_field_index(const XrAggregateLayout *layout, const 
     return -1;
 }
 
-static bool member_set_out_field_path_copy(char *dst, size_t dst_size, const char *src) {
-    if (!dst || dst_size == 0 || !src)
-        return false;
-    int n = snprintf(dst, dst_size, "%s", src);
-    return n >= 0 && (size_t) n < dst_size;
-}
-
-static bool member_set_out_field_path_append(char *dst, size_t dst_size, const char *suffix) {
-    if (!dst || dst_size == 0 || !suffix)
-        return false;
-    size_t len = strlen(dst);
-    if (len >= dst_size)
-        return false;
-    int n = snprintf(dst + len, dst_size - len, "%s", suffix);
-    return n >= 0 && (size_t) n < dst_size - len;
-}
-
-static XaSymbol *member_set_out_field_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
-                                                  size_t path_size) {
-    if (!ctx || !ctx->analyzer || !expr || !path || path_size == 0)
-        return NULL;
-    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP ||
-                    expr->type == AST_AS_EXPR)) {
-        if (expr->type == AST_GROUPING)
-            expr = expr->as.grouping;
-        else if (expr->type == AST_FORCE_UNWRAP)
-            expr = expr->as.unary.operand;
-        else
-            expr = expr->as.as_expr.expr;
-    }
-    if (!expr)
-        return NULL;
-    if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_lookup_visible_symbol(ctx, expr->as.variable.name);
-        if (!sym || !sym->name || !member_set_out_field_path_copy(path, path_size, sym->name))
-            return NULL;
-        return sym;
-    }
-    if (expr->type != AST_MEMBER_ACCESS)
-        return NULL;
-    XaSymbol *root =
-        member_set_out_field_path_symbol(ctx, expr->as.member_access.object, path, path_size);
-    if (!root || !expr->as.member_access.name)
-        return NULL;
-    if (!member_set_out_field_path_append(path, path_size, ".") ||
-        !member_set_out_field_path_append(path, path_size, expr->as.member_access.name))
-        return NULL;
-    return root;
-}
-
-static bool member_set_out_field_path_is_same_or_nested(const char *path, const char *prefix) {
-    if (!path || !prefix || prefix[0] == '\0')
-        return false;
-    size_t n = strlen(prefix);
-    return strncmp(path, prefix, n) == 0 && (path[n] == '\0' || path[n] == '.');
-}
-
-static XrType *member_set_out_field_type_from_object(XaInferContext *ctx, XrType *obj_type,
-                                                     const char *member_name) {
-    if (!ctx || !obj_type || !member_name)
-        return NULL;
-    XaSymbolLinks *class_links = NULL;
-    XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
-    (void) class_links;
-    if (class_info) {
-        XaSymbol *field = xa_class_info_lookup_member(class_info, member_name);
-        XaSymbolLinks *links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
-        XrType *field_type = field ? xa_analyzer_get_type(ctx->analyzer, field) : NULL;
-        if (!field_type && links)
-            field_type = links->type ? links->type : links->declared_type;
-        if (field_type)
-            return field_type;
-    }
-    if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0) {
-        int field_idx = object_shape_field_index_local(obj_type, member_name);
-        if (field_idx >= 0 && obj_type->object.field_types)
-            return obj_type->object.field_types[field_idx];
-    }
-    return NULL;
-}
-
-static XrType *member_set_out_field_object_type_without_receiver_read(XaInferContext *ctx,
-                                                                      AstNode *object,
-                                                                      const char *target_path) {
-    if (!ctx || !object)
-        return NULL;
-    if (object->type == AST_VARIABLE) {
-        char object_path[256];
-        XaSymbol *root =
-            member_set_out_field_path_symbol(ctx, object, object_path, sizeof(object_path));
-        XaSymbolLinks *links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
-        if (!root || !links || links->is_definitely_assigned ||
-            !member_set_out_field_path_is_same_or_nested(target_path, object_path))
-            return NULL;
-        object->as.variable.symbol_id = root->id;
-        XrType *type = xa_analyzer_get_type(ctx->analyzer, root);
-        if (!type)
-            type = links->type ? links->type : links->declared_type;
-        if (type)
-            xa_analyzer_set_node_type(ctx->analyzer, object, type);
-        return type;
-    }
-    if (object->type == AST_MEMBER_ACCESS) {
-        char object_path[256];
-        XaSymbol *root =
-            member_set_out_field_path_symbol(ctx, object, object_path, sizeof(object_path));
-        XaSymbolLinks *links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
-        if (!root || !links || links->is_definitely_assigned ||
-            !member_set_out_field_path_is_same_or_nested(target_path, object_path))
-            return NULL;
-        XrType *parent_type = member_set_out_field_object_type_without_receiver_read(
-            ctx, object->as.member_access.object, target_path);
-        if (!parent_type)
-            return NULL;
-        XrType *type =
-            member_set_out_field_type_from_object(ctx, parent_type, object->as.member_access.name);
-        if (type)
-            xa_analyzer_set_node_type(ctx->analyzer, object, type);
-        return type;
-    }
-    return NULL;
-}
-
-XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+XR_FUNC XaSymbol *xa_read_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
     XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
-    if (sym && sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_IN)
+    if (sym && sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_READ)
         return sym;
     return NULL;
-}
-
-XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
-    if (!name)
-        return false;
-    static const char *const mutators[] = {
-        "push",       "set",    "appendFrom", "pop",         "shift",        "unshift",
-        "reserve",    "resize", "reverse",    "sort",        "store",        "copyFrom",
-        "repeatFrom", "fill",   "delete",     "clear",       "add",          "send",
-        "recv",       "recvOr", "trySend",    "tryRecv",     "sendTimeout",  "recvTimeout",
-        "close",      "cancel", "poll",       "awaitResult", "awaitTimeout", "append",
-        "flush",      "tryPop", NULL};
-    for (const char *const *p = mutators; *p; p++) {
-        if (strcmp(name, *p) == 0)
-            return true;
-    }
-    return false;
 }
 
 static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *type,
@@ -2680,6 +2096,8 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
         if (changed) {
             XrType *ft = xr_type_new_function(X, np, pc, ret, type->function.is_variadic);
             ft->function.min_params = type->function.min_params;
+            for (int i = 0; i < pc; i++)
+                xr_type_function_set_param_mode(ft, i, xr_type_function_param_mode(type, i));
             xr_free(np);
             return ft;
         }
@@ -3140,10 +2558,8 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
 
     symbol->passing_mode = param->passing_mode;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
-    if (links) {
-        links->is_definitely_assigned = param->passing_mode != XR_PARAM_OUT;
-        xa_symbol_links_restore_out_field_da_paths(links, NULL);
-    }
+    if (links)
+        links->is_definitely_assigned = true;
     return symbol;
 }
 
@@ -3631,7 +3047,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         for (int i = 0; i < md->param_count; i++) {
             XrParamNode *param = md->params[i];
             xr_type_function_set_param_mode(method_type, i,
-                                            param ? param->passing_mode : XR_PARAM_VALUE);
+                                            param ? param->passing_mode : XR_PARAM_READ);
         }
     }
 
@@ -3684,7 +3100,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                 if (md->is_variadic && i == md->param_count - 1)
                     param_type = xr_type_new_array(ctx->analyzer->isolate, param_type);
                 plinks->type = param_type;
-                plinks->is_definitely_assigned = param->passing_mode != XR_PARAM_OUT;
+                plinks->is_definitely_assigned = true;
             }
         }
 
@@ -5572,6 +4988,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             } else {
                 result = xa_report_invalid_slice_source(ctx, node, src);
             }
+            if (result && src && xr_type_is_const(src))
+                result = xr_type_make_const(ctx->analyzer->isolate, result);
             break;
         }
         case AST_ENUM_ACCESS:
@@ -5679,7 +5097,7 @@ static void xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_n
     XrLocation loc = {.file = ctx->file_path,
                       .line = value->line ? value->line : yield_node->line,
                       .column = value->column ? value->column : yield_node->column};
-    const char *mode = root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+    const char *mode = xr_param_mode_label(root->passing_mode);
     char msg[256];
     snprintf(msg, sizeof(msg),
              "cannot yield borrowed '%s' parameter '%s'; yield an owned value or copy(%s)", mode,
@@ -5824,26 +5242,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_MEMBER_SET: {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
-            XrType *obj_type = NULL;
-            if (ms->object && ms->member) {
-                char target_path[256];
-                XaSymbol *root = member_set_out_field_path_symbol(ctx, ms->object, target_path,
-                                                                  sizeof(target_path));
-                if (root && target_path[0] != '\0' &&
-                    member_set_out_field_path_append(target_path, sizeof(target_path), ".") &&
-                    member_set_out_field_path_append(target_path, sizeof(target_path),
-                                                     ms->member)) {
-                    XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
-                    if (root && root->kind == XA_SYM_PARAMETER &&
-                        root->passing_mode == XR_PARAM_OUT && root_links &&
-                        !root_links->is_definitely_assigned) {
-                        obj_type = member_set_out_field_object_type_without_receiver_read(
-                            ctx, ms->object, target_path);
-                    }
-                }
-            }
-            if (!obj_type)
-                obj_type = xa_visit_infer_expr(ctx, ms->object);
+            XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
             bool is_c_view = obj_type && XR_TYPE_IS_POINTER(obj_type) && obj_type->ptr_is_c_view;
             if (is_c_view && !obj_type->ptr_is_mut) {
                 XrLocation loc = {
@@ -5978,16 +5377,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "store raw pointer borrow into a member");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
-                if (borrowed_root) {
+                if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
-                    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
                     const char *name = borrowed_root->name ? borrowed_root->name : "?";
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "cannot store borrowed '%s' parameter '%s' into member '%s'; "
                              "store an owned value or copy(%s)",
-                             mode, name, ms->member ? ms->member : "?", name);
+                             "ref", name, ms->member ? ms->member : "?", name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
@@ -6022,72 +5420,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
-            // Check in-parameter immutability: v.x = ... where v is 'in' param
+            // Check read-parameter immutability before a member write.
             if (ms->object && ms->object->type == AST_VARIABLE) {
                 const char *obj_name = ms->object->as.variable.name;
                 XaSymbol *obj_sym = xa_scope_lookup(ctx->analyzer->current_scope, obj_name);
                 if (obj_sym && obj_sym->kind == XA_SYM_PARAMETER &&
-                    obj_sym->passing_mode == XR_PARAM_IN) {
+                    obj_sym->passing_mode == XR_PARAM_READ) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[256];
-                    snprintf(msg, sizeof(msg),
-                             "Cannot modify field '%s' of 'in' parameter '%s' (readonly reference)",
-                             ms->member, obj_name);
+                    snprintf(
+                        msg, sizeof(msg),
+                        "Cannot modify field '%s' of read parameter '%s' (readonly capability)",
+                        ms->member, obj_name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
-                }
-            }
-            {
-                char path[256];
-                path[0] = '\0';
-                XaSymbol *root = NULL;
-                if (ms->object && ms->member) {
-                    root = member_set_out_field_path_symbol(ctx, ms->object, path, sizeof(path));
-                    if (root && path[0] != '\0' &&
-                        (!member_set_out_field_path_append(path, sizeof(path), ".") ||
-                         !member_set_out_field_path_append(path, sizeof(path), ms->member))) {
-                        root = NULL;
-                        path[0] = '\0';
-                    }
-                }
-                if (root && path[0] != '\0') {
-                    XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
-                    if (root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
-                        root_links && !root_links->is_definitely_assigned) {
-                        xa_symbol_links_mark_out_field_assigned(root_links, path);
-                        if (ms->object && ms->object->type == AST_MEMBER_ACCESS && obj_type) {
-                            char object_path[256];
-                            XaSymbol *object_root = member_set_out_field_path_symbol(
-                                ctx, ms->object, object_path, sizeof(object_path));
-                            if (object_root == root && object_path[0] != '\0') {
-                                XaSymbolLinks *class_links = NULL;
-                                XrClassInfo *object_info =
-                                    member_set_class_info(ctx, obj_type, &class_links);
-                                (void) class_links;
-                                xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
-                                    root_links, object_path, object_info);
-                            }
-                        }
-                        XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
-                        if (!root_type)
-                            root_type =
-                                root_links->type ? root_links->type : root_links->declared_type;
-                        bool marked_whole =
-                            root_type
-                                ? xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
-                                      root_links, root->name, root_type)
-                                : false;
-                        if (!marked_whole && ms->object && ms->object->type == AST_VARIABLE &&
-                            ms->object->as.variable.symbol_id == root->id) {
-                            XaSymbolLinks *class_links = NULL;
-                            XrClassInfo *root_info =
-                                member_set_class_info(ctx, obj_type, &class_links);
-                            (void) class_links;
-                            xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-                                root_links, root->name, root_info);
-                        }
-                    }
                 }
             }
             break;
@@ -6110,16 +5457,16 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_comptime_block_stmt(ctx, inner);
                 break;
             }
-            // Check in-parameter immutability before normal inference
+            // Check read-parameter immutability before normal inference.
             if (inner && inner->type == AST_ASSIGNMENT) {
                 AssignmentNode *a = &inner->as.assignment;
                 XaSymbol *s = xa_scope_lookup(ctx->analyzer->current_scope, a->name);
-                if (s && s->kind == XA_SYM_PARAMETER && s->passing_mode == XR_PARAM_IN) {
+                if (s && s->kind == XA_SYM_PARAMETER && s->passing_mode == XR_PARAM_READ) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = inner->line, .column = inner->column};
                     char msg[128];
                     snprintf(msg, sizeof(msg),
-                             "Cannot assign to 'in' parameter '%s' (readonly reference)", a->name);
+                             "Cannot assign to read parameter '%s' (readonly capability)", a->name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                 }
@@ -6128,13 +5475,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (ms->object && ms->object->type == AST_VARIABLE) {
                     const char *obj_name = ms->object->as.variable.name;
                     XaSymbol *s = xa_scope_lookup(ctx->analyzer->current_scope, obj_name);
-                    if (s && s->kind == XA_SYM_PARAMETER && s->passing_mode == XR_PARAM_IN) {
+                    if (s && s->kind == XA_SYM_PARAMETER && s->passing_mode == XR_PARAM_READ) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = inner->line, .column = inner->column};
                         char msg[256];
                         snprintf(
                             msg, sizeof(msg),
-                            "Cannot modify field '%s' of 'in' parameter '%s' (readonly reference)",
+                            "Cannot modify field '%s' of read parameter '%s' (readonly capability)",
                             ms->member, obj_name);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
@@ -6243,8 +5590,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             // Unified body visitor: idempotent collect + direct traversal
             xa_visit_function_body_unified(ctx, fn_decl->body);
-            xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
-                                                          fn_decl->body);
 
             if (ctx->current_fn_has_yield) {
                 /* `yield expr` in the body makes this a generator. The required
@@ -6408,8 +5753,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         ctx->expected_return_type = NULL;
                     }
                     xa_visit_function_body_unified(ctx, md->body);
-                    xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
-                                                                  md->body);
                     ctx->expected_return_type = saved_ret;
                     ctx->current_method_is_constructor = saved_is_ctor;
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -6422,24 +5765,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
-            int out_da_count = 0;
-            XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
-            xa_out_param_da_begin_path_merge(out_da, out_da_count);
-
             if (tc->try_body)
                 xa_visit_infer_stmt(ctx, tc->try_body);
-            xa_out_param_da_record_path(out_da, out_da_count,
-                                        xa_statement_can_fall_through(tc->try_body));
-
-            bool catch_paths_reachable = xa_out_da_try_catch_may_enter_catch(ctx, tc);
             for (int ci = 0; ci < tc->catch_count; ci++) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
-                xa_out_param_da_restore_before(out_da, out_da_count);
-                if (!cc || !cc->body) {
-                    if (catch_paths_reachable)
-                        xa_out_param_da_record_path(out_da, out_da_count, true);
+                if (!cc || !cc->body)
                     continue;
-                }
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
                 if (cc->var_name) {
                     XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
@@ -6458,12 +5789,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
                 xa_visit_inline_statement_sequence_with_cursor(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
-                if (catch_paths_reachable)
-                    xa_out_param_da_record_path(out_da, out_da_count,
-                                                xa_statement_can_fall_through(cc->body));
             }
-            xa_out_param_da_apply_path_merge(out_da, out_da_count);
-            xa_out_param_da_free(out_da);
             break;
         }
         case AST_THROW_STMT:
@@ -6766,9 +6092,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            int out_da_count = 0;
-            XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
-
             // Infer body - process block statements inline (without xa_visit_block_stmt)
             // to match Pass 1 scope structure: Pass 1 processes for-in body block
             // statements in the for-in scope, so Pass 2 must do the same.
@@ -6777,8 +6100,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (fi->body)
                 xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
-            xa_out_param_da_restore_before(out_da, out_da_count);
-            xa_out_param_da_free(out_da);
 
             xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
             xa_analyzer_exit_scope(ctx->analyzer);
@@ -6964,29 +6285,28 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "store raw pointer borrow into an index target");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
-                if (borrowed_root) {
+                if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
-                    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
                     const char *name = borrowed_root->name ? borrowed_root->name : "?";
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "cannot store borrowed '%s' parameter '%s' into index target; "
                              "store an owned value or copy(%s)",
-                             mode, name, name);
+                             "ref", name, name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
             xa_check_owned_second_root_store(ctx, is->value, node, "an index target");
-            XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, is->array);
-            if (in_param) {
+            XaSymbol *read_param = xa_read_param_symbol_for_expr(ctx, is->array);
+            if (read_param) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[160];
                 snprintf(msg, sizeof(msg),
-                         "Cannot assign through 'in' parameter '%s' (readonly reference)",
-                         in_param->name ? in_param->name : "?");
+                         "Cannot assign through read parameter '%s' (readonly capability)",
+                         read_param->name ? read_param->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
@@ -7246,8 +6566,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
                                     : NULL;
                 xa_visit_function_body_unified(ctx, md->body);
-                xa_check_out_params_assigned_at_function_exit(ctx, ctx->analyzer->current_scope,
-                                                              md->body);
                 ctx->expected_return_type = saved_ret;
                 xa_analyzer_exit_scope(ctx->analyzer);
             }

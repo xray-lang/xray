@@ -1,1 +1,0 @@
-cannot return borrowed 'in' parameter 'data'; return an owned value or copy(data)

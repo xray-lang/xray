@@ -3,10 +3,13 @@
 @native
 class Map<K: Hashable, V> {
     get(key: K) -> V? @no_alloc
+    // @receiver_write
     set(key: K, value: V) @may_alloc
     containsKey(key: K) -> bool @no_alloc
     containsValue(value: V) -> bool @no_alloc
+    // @receiver_write
     delete(key: K) -> bool @no_alloc
+    // @receiver_write
     clear() @no_alloc
     keys() -> Array<K> @may_alloc
     values() -> Array<V> @may_alloc

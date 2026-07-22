@@ -1,4 +1,4 @@
-fn sum_twice(left: in int, right: in int) -> int {
+fn sum_twice(left: int, right: int) -> int {
     return left + right
 }
 

@@ -307,7 +307,7 @@ fn _utf8Len(cp: int) -> int {
     return 4
 }
 
-fn _putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
+fn _putUtf8(out: ref Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
         out[oi] = cp
         return oi + 1
@@ -331,7 +331,7 @@ fn _putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
 fn _codepointString(cp: int) -> string? {
     if (cp <= 0 || cp > 0x10FFFF) { return null }
     var out = Array<byte>(_utf8Len(cp))
-    _putUtf8(out, 0, cp)
+    _putUtf8(ref out, 0, cp)
     return string.fromUtf8(out[:])
 }
 

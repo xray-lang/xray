@@ -1,6 +1,6 @@
 interface Mutator {
     bump(value: ref int) -> int
-    fill(value: out int) -> int
+    fill(value: ref int) -> int
 }
 
 class Stepper implements Mutator {
@@ -15,7 +15,7 @@ class Stepper implements Mutator {
         return value
     }
 
-    fill(value: out int) -> int {
+    fill(value: ref int) -> int {
         value = this.step * 10
         return value
     }
@@ -29,29 +29,29 @@ class Doubler implements Mutator {
         return value
     }
 
-    fill(value: out int) -> int {
+    fill(value: ref int) -> int {
         value = 40
         return value
     }
 }
 
-fn applyBump(mutator: Mutator, value: ref int) -> int {
+fn applyBump(mutator: ref Mutator, value: ref int) -> int {
     return mutator.bump(ref value)
 }
 
-fn applyFill(mutator: Mutator, value: out int) -> int {
-    return mutator.fill(out value)
+fn applyFill(mutator: ref Mutator, value: ref int) -> int {
+    return mutator.fill(ref value)
 }
 
 var selected: Mutator = Stepper(3)
 var value = 4
-print(applyBump(selected, ref value))
+print(applyBump(ref selected, ref value))
 print(value)
 
 selected = Doubler()
-print(applyBump(selected, ref value))
+print(applyBump(ref selected, ref value))
 print(value)
 
 var output: int
-print(applyFill(selected, out output))
+print(applyFill(ref selected, ref output))
 print(output)

@@ -1222,6 +1222,12 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         case XR_TREF_GENERIC:
             return resolve_generic(X, t);
 
+        case XR_TREF_CONST: {
+            XrType *inner =
+                t->nchildren > 0 ? resolve_impl(X, t->children[0]) : xr_type_new_error(NULL);
+            return xr_type_make_const(X, inner);
+        }
+
         case XR_TREF_OPTIONAL: {
             XrType *inner = resolve_impl(X, t->children[0]);
             return xr_type_new_optional(X, inner);
@@ -1704,6 +1710,13 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         return xr_type_new_error(NULL);
     if (!analyzer)
         return resolve_impl(NULL, tref);
+
+    if (tref->kind == XR_TREF_CONST) {
+        XrType *inner = tref->nchildren > 0
+                            ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
+                            : xr_type_new_error(NULL);
+        return xr_type_make_const(analyzer->isolate, inner);
+    }
 
     /* Named class lookup preserves the inheritance chain that
      * xr_type_new_class() would otherwise drop. */

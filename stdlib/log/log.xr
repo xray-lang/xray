@@ -97,7 +97,7 @@ fn _message(args: Array<Json>) -> string {
     return string(args[0])
 }
 
-fn _appendTextAttrs(out: StringBuilder, args: Array<Json>, start: int) {
+fn _appendTextAttrs(out: ref StringBuilder, args: Array<Json>, start: int) {
     var i = start
     while (i + 1 < len(args)) {
         var key = string(args[i])
@@ -116,7 +116,7 @@ fn _appendTextAttrs(out: StringBuilder, args: Array<Json>, start: int) {
     }
 }
 
-fn _appendJsonAttrs(out: StringBuilder, args: Array<Json>, start: int) {
+fn _appendJsonAttrs(out: ref StringBuilder, args: Array<Json>, start: int) {
     var i = start
     while (i + 1 < len(args)) {
         out.append(",")
@@ -140,7 +140,7 @@ fn _formatLine(logger: Logger, level: LogLevel, args: Array<Json>) -> string {
             out.append(",")
             out.append(logger.jsonContext)
         }
-        _appendJsonAttrs(out, args, 1)
+        _appendJsonAttrs(ref out, args, 1)
         out.append("}")
         return out.toString()
     }
@@ -156,7 +156,7 @@ fn _formatLine(logger: Logger, level: LogLevel, args: Array<Json>) -> string {
         out.append(" ")
         out.append(logger.textContext)
     }
-    _appendTextAttrs(out, args, 1)
+    _appendTextAttrs(ref out, args, 1)
     return out.toString()
 }
 
@@ -195,7 +195,7 @@ fn _rootLogger() -> Logger {
 
 fn _contextText(args: Array<Json>) -> string {
     var out = StringBuilder()
-    _appendTextAttrs(out, args, 0)
+    _appendTextAttrs(ref out, args, 0)
     var s = out.toString()
     if (len(s) > 0 && s.runes().nth(0) == ' ') { return s.slice(1) }
     return s
@@ -203,7 +203,7 @@ fn _contextText(args: Array<Json>) -> string {
 
 fn _contextJson(args: Array<Json>) -> string {
     var out = StringBuilder()
-    _appendJsonAttrs(out, args, 0)
+    _appendJsonAttrs(ref out, args, 0)
     var s = out.toString()
     if (len(s) > 0 && s.runes().nth(0) == ',') { return s.slice(1) }
     return s

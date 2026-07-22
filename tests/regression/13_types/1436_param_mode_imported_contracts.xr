@@ -13,7 +13,7 @@ fn test_selective_import_ref_out_contracts() {
     assert_eq(value, 2)
 
     var slot = 0
-    assert_eq(fillOut(out slot), 9)
+    assert_eq(fillOut(ref slot), 9)
     assert_eq(slot, 9)
 }
 
@@ -24,7 +24,7 @@ fn test_namespace_import_ref_out_contracts() {
     assert_eq(value, 4)
 
     var slot = 0
-    assert_eq(param_mode.fillOut(out slot), 9)
+    assert_eq(param_mode.fillOut(ref slot), 9)
     assert_eq(slot, 9)
 }
 
@@ -35,7 +35,7 @@ fn test_exported_const_function_value_ref_out_contracts() {
     assert_eq(value, 6)
 
     var slot = 0
-    assert_eq(param_mode.fillOutValue(out slot), 11)
+    assert_eq(param_mode.fillOutValue(ref slot), 11)
     assert_eq(slot, 11)
 
     const bump = bumpRefValue
@@ -43,6 +43,6 @@ fn test_exported_const_function_value_ref_out_contracts() {
     assert_eq(value, 7)
 
     const fill = fillOutValue
-    assert_eq(fill(out slot), 11)
+    assert_eq(fill(ref slot), 11)
     assert_eq(slot, 11)
 }

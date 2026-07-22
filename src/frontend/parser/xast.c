@@ -546,7 +546,7 @@ XrParamNode *xr_param_node_new(XrCompilerSession *session, const char *name, int
     param->name = ast_strdup(session, name);
     param->line = line;
     param->column = column;
-    param->passing_mode = XR_PARAM_VALUE;
+    param->passing_mode = XR_PARAM_READ;
     param->type = NULL;
     param->default_value = NULL;
     param->pattern = NULL;
@@ -635,9 +635,9 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
         node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
-            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.call_expr.arg_accesses[i] =
-                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
     } else {
         node->as.call_expr.arg_accesses = NULL;
@@ -677,9 +677,9 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
         node->as.call_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
-            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.call_expr.arg_accesses[i] =
-                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
     } else {
         node->as.call_expr.arg_accesses = NULL;
@@ -1178,9 +1178,9 @@ AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
         node->as.new_expr.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
-            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.new_expr.arg_accesses[i] =
-                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
     } else {
         node->as.new_expr.arg_accesses = NULL;
@@ -1218,9 +1218,9 @@ AstNode *xr_ast_super_call(XrCompilerSession *session, const char *method_name, 
         node->as.super_call.arg_accesses = (XrCallArgAccess *) ast_alloc_array(
             session, sizeof(XrCallArgAccess), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
-            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_VALUE;
+            XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
             node->as.super_call.arg_accesses[i] =
-                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+                xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
     } else {
         node->as.super_call.arg_accesses = NULL;

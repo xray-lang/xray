@@ -19,15 +19,23 @@ class Channel<T> {
     capacity: int
     isClosed: bool
 
+    // @receiver_write
     send(value: T)
+    // @receiver_write
     recv() -> Recv<T>
+    // @receiver_write
     recvOr(default: T) -> T
 
+    // @receiver_write
     trySend(value: T) -> SendResult
+    // @receiver_write
     tryRecv() -> Recv<T>
 
+    // @receiver_write
     sendTimeout(value: T, timeout: int) -> SendResult
+    // @receiver_write
     recvTimeout(timeout: int) -> Recv<T>
 
+    // @receiver_write
     close()
 }

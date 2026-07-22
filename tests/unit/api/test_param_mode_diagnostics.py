@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ParamMode removed-syntax diagnostics and repair hints."""
+"""Canonical read/ref/move syntax rejection diagnostics."""
 
 from __future__ import annotations
 
@@ -45,69 +45,38 @@ class ParamModeDiagnosticsTest(unittest.TestCase):
         for needle in needles:
             self.assertNotIn(needle, output)
 
-    def test_prefix_param_mode_suggests_colon_position(self) -> None:
-        output = self.run_case("tests/compile_errors/syntax/028_param_mode_prefix_removed.xr")
-        self.assert_contains_all(
-            output,
-            [
-                "error[E0805]",
-                "parameter mode 'ref' before parameter name was removed",
-                "note: Write parameter modes after the colon, for example `name: ref T`.",
-            ],
-        )
-        self.assert_contains_none(output, ["write x: ref T", "use `ref x: T`"])
-
-    def test_move_param_mode_suggests_call_site_move(self) -> None:
+    def test_prefix_param_modes_are_rejected(self) -> None:
         for rel in (
-            "tests/compile_errors/syntax/029_param_move_mode_removed.xr",
+            "tests/compile_errors/syntax/028_param_mode_prefix_removed.xr",
             "tests/compile_errors/syntax/030_param_move_prefix_removed.xr",
         ):
             with self.subTest(rel=rel):
                 output = self.run_case(rel)
                 self.assert_contains_all(
-                    output,
-                    [
-                        "error[E0806]",
-                        "`move` is not a parameter mode",
-                        "note: Use a value parameter and write `move value` at the call site "
-                        "when transferring ownership.",
-                    ],
+                    output, ["parameter mode must appear after the parameter name and ':'"]
                 )
-                self.assert_contains_none(output, ["name: move T", "move name: T"])
 
-    def test_postfix_or_combined_modes_suggest_single_colon_mode(self) -> None:
-        cases = (
-            (
-                "tests/compile_errors/syntax/031_param_mode_postfix_removed.xr",
-                "error[E0808]",
-                "parameter mode 'ref' after parameter type was removed",
-                "note: Write parameter modes immediately after the colon, for example `name: ref T`.",
-            ),
-            (
-                "tests/compile_errors/syntax/032_param_mode_combined_removed.xr",
-                "error[E0807]",
-                "parameter modes cannot be combined",
-                "note: Use exactly one parameter mode after the colon, for example `name: ref T`.",
-            ),
-        )
-        for rel, code, title, note in cases:
+    def test_postfix_param_mode_is_rejected(self) -> None:
+        output = self.run_case("tests/compile_errors/syntax/031_param_mode_postfix_removed.xr")
+        self.assert_contains_all(output, ["parameter mode must appear immediately after ':'"])
+
+    def test_removed_in_out_forms_have_no_compatibility_path(self) -> None:
+        cases = {
+            "tests/compile_errors/syntax/032_param_in_mode_removed.xr":
+                "'in' is a keyword and cannot be used as an identifier",
+            "tests/compile_errors/syntax/033_param_out_mode_removed.xr":
+                "expected ')' after parameter list",
+            "tests/compile_errors/syntax/034_in_call_marker_removed.xr": "expected expression",
+            "tests/compile_errors/syntax/035_out_call_marker_removed.xr":
+                "expected ')' after argument list",
+        }
+        all_output = ""
+        for rel, expected in cases.items():
             with self.subTest(rel=rel):
                 output = self.run_case(rel)
-                self.assert_contains_all(output, [code, title, note])
-                self.assert_contains_none(output, ["int ref T", "ref out T"])
-
-    def test_call_site_in_marker_suggests_plain_argument(self) -> None:
-        output = self.run_case("tests/compile_errors/syntax/034_in_call_marker_removed.xr")
-        self.assert_contains_all(
-            output,
-            [
-                "error[E0809]",
-                "call-site `in` marker was removed",
-                "note: Pass the argument directly, for example `f(value)`; `in` is a "
-                "declaration-side parameter mode only.",
-            ],
-        )
-        self.assert_contains_none(output, ["for example `f(in value)`", "XR_CALL_ARG_IN"])
+                self.assert_contains_all(output, [expected])
+                all_output += output
+        self.assert_contains_none(all_output, ["deprecated", "compatibility alias"])
 
 
 def main() -> None:

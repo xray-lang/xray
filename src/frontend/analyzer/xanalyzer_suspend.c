@@ -605,6 +605,8 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
         xa_effect_summary_clear(&summary);
         if (effect_id != XA_EFFECT_NONE) {
             row->symbol->links.effect_id = effect_id;
+            for (int slot = 0; slot < row->symbol->links.param_effect_count; slot++)
+                row->symbol->links.param_effects[slot].callable_effects = effect_id;
             continue;
         }
         char message[256];

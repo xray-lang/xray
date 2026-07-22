@@ -1,8 +1,0 @@
-type User = { name: string }
-
-fn bad(x: out Json) {
-    Json.decode<User>(out x)
-}
-
-var data = Json.parse("{\"name\":\"Ada\"}")
-bad(out data)

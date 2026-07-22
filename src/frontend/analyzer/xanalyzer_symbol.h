@@ -55,6 +55,66 @@ typedef enum XaMoveState {
     XA_MOVE_MAYBE_MOVED,  // Variable may have been moved (conditional branch)
 } XaMoveState;
 
+/* Canonical per-parameter semantic product.  These axes intentionally coexist:
+ * a parameter may be read, retained as an execution-local alias, returned from
+ * one branch, and mutated through a path on another branch. */
+typedef enum XaCapabilityRequirement {
+    XA_CAPABILITY_READONLY = 0,
+    XA_CAPABILITY_EXCLUSIVE_WRITE,
+    XA_CAPABILITY_UNIQUE_OWNER,
+} XaCapabilityRequirement;
+
+typedef enum XaParamAccess {
+    XA_PARAM_ACCESS_NONE = 0,
+    XA_PARAM_ACCESS_READ = 1u << 0,
+    XA_PARAM_ACCESS_WRITE = 1u << 1,
+} XaParamAccess;
+typedef uint8_t XaParamAccessBits;
+
+typedef enum XaRetainKind {
+    XA_RETAIN_NONE = 0,
+    XA_RETAIN_LOCAL_ALIAS,
+    XA_RETAIN_CONST_OR_SYNC,
+} XaRetainKind;
+
+typedef enum XaEscapeDestination {
+    XA_ESCAPE_NONE = 0,
+    XA_ESCAPE_LOCAL_STORAGE = 1u << 0,
+    XA_ESCAPE_CLOSURE = 1u << 1,
+    XA_ESCAPE_GLOBAL = 1u << 2,
+    XA_ESCAPE_FOREIGN = 1u << 3,
+    XA_ESCAPE_CROSS_EXECUTION = 1u << 4,
+} XaEscapeDestination;
+typedef uint16_t XaEscapeDestinationSet;
+
+typedef enum XaReturnProvenance {
+    XA_RETURN_PROVENANCE_NONE = 0,
+    XA_RETURN_PROVENANCE_ALIAS = 1u << 0,
+    XA_RETURN_PROVENANCE_BORROWED_PROJECTION = 1u << 1,
+} XaReturnProvenance;
+typedef uint8_t XaReturnProvenanceSet;
+
+typedef enum XaMutationPath {
+    XA_MUTATION_PATH_NONE = 0,
+    XA_MUTATION_PATH_WILDCARD = 1u << 0,
+} XaMutationPath;
+typedef uint32_t XaMutationPathSet;
+
+typedef struct XaParamEffectSummary {
+    XrParamMode formal_mode;
+    XaCapabilityRequirement capability;
+    XaParamAccessBits access;
+    XaRetainKind retain;
+    XaEscapeDestinationSet escapes;
+    XaReturnProvenanceSet returns;
+    XaMutationPathSet mutation_paths;
+    XrStorageOwner storage;
+    XaEffectId callable_effects;
+    XaMemoryEffectId memory_effects;
+    bool complete;
+    XaUnknownReasonSet incomplete_reason;
+} XaParamEffectSummary;
+
 // Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
@@ -88,11 +148,6 @@ typedef struct XaRefLocation {
     struct XaRefLocation *next;
 } XaRefLocation;
 
-typedef struct XaOutFieldDaPath {
-    char *path;
-    struct XaOutFieldDaPath *next;
-} XaOutFieldDaPath;
-
 // Symbol links - type information stored inline inside XaSymbol.
 // Access via sym->links (no intmap lookup required).
 struct XaSymbolLinks {
@@ -102,7 +157,6 @@ struct XaSymbolLinks {
 
     // Definite assignment tracking
     bool is_definitely_assigned;  // true if variable has been assigned a value
-    XaOutFieldDaPath *out_field_da_paths;
 
     // Analyzer-side provenance for Ptr<T>/MutPtr<T> values. This is the
     // source-level lifetime proof consumed by escape checks before either VM
@@ -126,12 +180,8 @@ struct XaSymbolLinks {
     // session-cloned copy of this expression (evaluated in the caller).
     struct AstNode **param_defaults;
     int param_count;
-    uint8_t *param_escapes;  // Per-parameter summary: value may be stored/returned/captured
-    int param_escape_count;
-    uint8_t *param_mutations;  // Per-parameter summary: callee may write through the value graph
-    int param_mutation_count;
-    uint8_t *param_storage_requirements;  // XrStorageOwner required by callee body per parameter
-    int param_storage_requirement_count;
+    XaParamEffectSummary *param_effects;
+    int param_effect_count;
     XrType *return_type;
     bool return_type_inferred;
     uint8_t return_storage_owner;  // XrStorageOwner for known owned/shared returns
@@ -139,12 +189,8 @@ struct XaSymbolLinks {
     bool return_storage_mixed;
     bool return_storage_scanned;
     bool return_storage_scan_in_progress;
-    uint8_t *return_fn_param_escapes;  // Summary for a function value returned by this function
-    int return_fn_param_escape_count;
-    uint8_t *return_fn_param_mutations;
-    int return_fn_param_mutation_count;
-    uint8_t *return_fn_param_storage_requirements;
-    int return_fn_param_storage_requirement_count;
+    XaParamEffectSummary *return_fn_param_effects;
+    int return_fn_param_effect_count;
     bool return_fn_effect_mixed;
     bool return_fn_effect_scanned;
     bool return_fn_effect_scan_in_progress;
@@ -217,6 +263,22 @@ struct XaSymbolLinks {
     int ref_count;
 };
 
+static inline const XaParamEffectSummary *xa_symbol_param_effect(const XaSymbolLinks *links,
+                                                                 int slot) {
+    if (!links || !links->param_effects || slot < 0 || slot >= links->param_effect_count)
+        return NULL;
+    return &links->param_effects[slot];
+}
+
+static inline bool xa_param_effect_retains_or_escapes(const XaParamEffectSummary *effect) {
+    return effect && (effect->retain != XA_RETAIN_NONE || effect->escapes != XA_ESCAPE_NONE ||
+                      effect->returns != XA_RETURN_PROVENANCE_NONE);
+}
+
+static inline bool xa_param_effect_mutates(const XaParamEffectSummary *effect) {
+    return effect && (effect->access & XA_PARAM_ACCESS_WRITE) != 0;
+}
+
 // Symbol structure
 struct XaSymbol {
     const char *name;     // Symbol name
@@ -239,8 +301,8 @@ struct XaSymbol {
     bool is_imported;           // selective import binding; kind remains the exported semantic kind
     bool is_builtin;            // built-in type member (Array.push, etc.)
     bool mutates_receiver;      // method body writes through `this`
-    XrParamMode passing_mode;   // value / in / ref / out parameter contract
-    uint32_t borrowed_root_symbol_id;  // local alias root for in/ref parameter borrowing
+    XrParamMode passing_mode;   // read / ref / move parameter contract
+    uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing
 
     // Parent references
     XaScope *scope;    // Containing scope
@@ -331,20 +393,6 @@ XR_FUNC XaScope *xa_scope_find_by_node(XaScope *root, void *ast_node);
 XR_FUNC void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col,
                                bool is_write);
 XR_FUNC XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count);
-XR_FUNC void xa_symbol_links_mark_out_field_assigned(XaSymbolLinks *links, const char *path);
-XR_FUNC bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path);
-XR_FUNC bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-    XaSymbolLinks *links, const char *root_name, XrClassInfo *info);
-XR_FUNC bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
-    XaSymbolLinks *links, const char *root_name, XrType *type);
-XR_FUNC bool xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
-    XaSymbolLinks *links, const char *path_prefix, XrClassInfo *info);
-XR_FUNC XaOutFieldDaPath *xa_symbol_links_clone_out_field_da_paths(XaSymbolLinks *links);
-XR_FUNC void xa_symbol_links_restore_out_field_da_paths(XaSymbolLinks *links,
-                                                        XaOutFieldDaPath *paths);
-XR_FUNC XaOutFieldDaPath *xa_symbol_links_intersect_out_field_da_paths(XaOutFieldDaPath *left,
-                                                                       XaOutFieldDaPath *right);
-XR_FUNC void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths);
 
 // API: Class info
 XR_FUNC XrClassInfo *xa_class_info_new(const char *name);

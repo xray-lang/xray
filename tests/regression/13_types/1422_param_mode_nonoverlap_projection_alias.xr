@@ -8,23 +8,23 @@ class Pair {
     }
 }
 
-fn fill_pair(left: out int, right: out int) {
+fn fill_pair(left: ref int, right: ref int) {
     left = 3
     right = 7
 }
 
-fn read_and_fill(snapshot: in int, target: out int) {
+fn read_and_fill(snapshot: int, target: ref int) {
     target = snapshot + 5
 }
 
 @test
 fn test_member_nonoverlap_compile_surface() {
     var pair = Pair()
-    fill_pair(out pair.left, out pair.right)
+    fill_pair(ref pair.left, ref pair.right)
 }
 
 @test
 fn test_index_nonoverlap_compile_surface() {
     var values = [2, 0]
-    read_and_fill(values[0], out values[1])
+    read_and_fill(values[0], ref values[1])
 }

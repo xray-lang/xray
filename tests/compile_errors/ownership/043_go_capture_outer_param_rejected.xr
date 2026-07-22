@@ -1,9 +1,0 @@
-fn launch(data: Array<int>) -> int {
-    var task = go {
-        return len(data)
-    }
-    return await task
-}
-
-var values = [1, 2, 3]
-print(launch(values))
