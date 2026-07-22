@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstorage.h - Canonical storage provenance shared by analysis and runtimes.
+ * xstorage.h - Canonical storage-domain provenance shared by all backends.
  */
 
 #ifndef XR_STORAGE_H
@@ -13,14 +13,17 @@
 
 #include <stdint.h>
 
-typedef enum XrStorageOwner {
-    XR_STORAGE_NONE = 0,
+/* Semantic ownership/lifetime domain. This axis never encodes whether a
+ * backend chose stack, static data, or a particular heap implementation. */
+typedef enum XrSemanticStorageDomain {
+    XR_STORAGE_DOMAIN_UNKNOWN = 0,
     XR_STORAGE_EXEC_LOCAL,
-    XR_STORAGE_MODULE,
-    XR_STORAGE_OWNED_SYSTEM,
-    XR_STORAGE_SHARED_SYSTEM,
+    XR_STORAGE_TRANSFERABLE,
+    XR_STORAGE_CONST_SHARED,
+    XR_STORAGE_SYNC_SHARED,
+    XR_STORAGE_MODULE_STATIC,
     XR_STORAGE_FOREIGN,
-} XrStorageOwner;
+} XrSemanticStorageDomain;
 
 typedef enum XrStorageMutability {
     XR_STORAGE_READONLY = 0,
@@ -32,28 +35,36 @@ typedef enum XrAddressIdentity {
     XR_ADDRESS_NONE = 0,
     XR_ADDRESS_LEXICAL,
     XR_ADDRESS_MODULE_STABLE,
-    XR_ADDRESS_SHARED_STABLE,
+    XR_ADDRESS_SYSTEM_STABLE,
     XR_ADDRESS_FOREIGN,
 } XrAddressIdentity;
 
-typedef enum XrStorageMaterialization {
-    XR_MATERIALIZE_INLINE = 0,
-    XR_MATERIALIZE_EXEC_LOCAL,
-    XR_MATERIALIZE_MODULE_READONLY,
-    XR_MATERIALIZE_MODULE_RUNTIME,
-    XR_MATERIALIZE_OWNED_SYSTEM,
-    XR_MATERIALIZE_SHARED_SYSTEM,
-    XR_MATERIALIZE_REJECT,
-} XrStorageMaterialization;
+/* Backend representation. Changing this axis must not grant a stronger
+ * semantic domain or transfer capability. */
+typedef enum XrBackendMaterialization {
+    XR_MATERIALIZE_INVALID = 0,
+    XR_MATERIALIZE_INLINE,
+    XR_MATERIALIZE_STACK,
+    XR_MATERIALIZE_STATIC_DATA,
+    XR_MATERIALIZE_EXEC_HEAP,
+    XR_MATERIALIZE_SYSTEM_HEAP,
+    XR_MATERIALIZE_SROA,
+    XR_MATERIALIZE_EXTERNAL,
+} XrBackendMaterialization;
 
-typedef enum XrCaptureAction {
-    XR_CAPTURE_INLINE_VALUE = 0,
-    XR_CAPTURE_DEEP_COPY,
-    XR_CAPTURE_MOVE,
-    XR_CAPTURE_MODULE_READONLY,
-    XR_CAPTURE_SHARED_REF,
-    XR_CAPTURE_REJECT,
-} XrCaptureAction;
+/* Canonical action for closure capture and every cross-execution boundary.
+ * EXPLICIT_COPY is emitted only for source `copy(...)`; there is no implicit
+ * deep-copy fallback. */
+typedef enum XrTransferAction {
+    XR_TRANSFER_ACTION_INVALID = 0,
+    XR_TRANSFER_INLINE_COPY,
+    XR_TRANSFER_CONST_SHARE,
+    XR_TRANSFER_SYNC_SHARE,
+    XR_TRANSFER_MOVE_UNIQUE,
+    XR_TRANSFER_EXPLICIT_COPY,
+    XR_TRANSFER_MODULE_READ,
+    XR_TRANSFER_REJECT,
+} XrTransferAction;
 
 typedef enum XrPointerOrigin {
     XR_POINTER_ORIGIN_NONE = 0,
@@ -77,7 +88,7 @@ typedef enum XrPointerEscape {
 typedef struct XrAddressProvenance {
     uint32_t storage_id;
     uint32_t lifetime_id;
-    uint8_t owner;
+    uint8_t domain;
     uint8_t mutability;
     uint8_t address_identity;
     uint8_t origin;

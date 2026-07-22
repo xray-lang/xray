@@ -410,7 +410,7 @@ static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
     XrAggregateLayout *layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
     if (layout)
         return layout;
-    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1)
         v = v->args[0];
     layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
     if (layout)
@@ -1272,8 +1272,8 @@ static const char *lower_static_string_key(AstNode *node) {
 
 static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
     while (v &&
-           (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX || v->op == XI_UNBOX ||
-            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
+            v->op == XI_UNBOX || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -4284,7 +4284,8 @@ static XiValue *lower_call_projection_base(XiValue *value) {
     while (value && value->nargs >= 1) {
         switch (value->op) {
             case XI_COPY:
-            case XI_MOVE:
+            case XI_SOURCE_MOVE:
+            case XI_OWNER_FORWARD:
             case XI_NARROW_I8:
             case XI_NARROW_U8:
             case XI_NARROW_I16:
@@ -4430,7 +4431,7 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
         }
 
         /* A consuming parameter receives an owned value, never an addressable
-         * copy-out slot.  `move source` is already represented by XI_MOVE;
+         * copy-out slot.  `move source` is already represented by XI_OWNER_FORWARD;
          * fresh values and copy(...) arrive as ordinary value expressions. */
         if (mode == XR_PARAM_MOVE)
             continue;

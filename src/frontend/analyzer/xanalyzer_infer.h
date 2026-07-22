@@ -24,10 +24,12 @@
 typedef struct XaLoopScope {
     const char *label;
     int line;
+    struct XaScope *entry_scope;
     struct XaLoopScope *prev;
 } XaLoopScope;
 
 typedef struct XaActiveSpanBorrow {
+    XaLoan loan;
     struct XaSymbol *owner_symbol;
     char *owner_path;
     struct XaSymbol *view_symbol;
@@ -80,7 +82,7 @@ typedef struct XaInferContext {
     XrType **return_types;
     int return_type_count;
     int return_type_capacity;
-    uint8_t return_storage_owner;
+    uint8_t return_storage_domain;
     bool return_storage_known;
     bool return_storage_mixed;
     bool return_storage_unknown;

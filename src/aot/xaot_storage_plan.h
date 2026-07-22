@@ -26,7 +26,7 @@ typedef struct XaotStoragePlan {
     uint32_t module_index;
     uint32_t slot;
     uint32_t flags;
-    uint8_t owner;
+    uint8_t domain;
     uint8_t mutability;
     uint8_t address_identity;
     uint8_t materialization_kind;
@@ -34,7 +34,7 @@ typedef struct XaotStoragePlan {
 
 enum {
     XAOT_MODULE_INIT_EV_ENTRY_FUNC = 1u << 0,
-    XAOT_MODULE_INIT_EV_STORAGE_OWNER = 1u << 1,
+    XAOT_MODULE_INIT_EV_STORAGE_DOMAIN = 1u << 1,
     XAOT_MODULE_INIT_EV_NONSUSPEND = 1u << 2,
 };
 
@@ -43,13 +43,13 @@ typedef struct XaotModuleInitPlan {
     XgFuncId body_func_id;
     uint32_t module_index;
     uint32_t evidence;
-    uint8_t allocation_owner;
+    uint8_t allocation_domain;
     bool may_suspend;
 } XaotModuleInitPlan;
 
 enum {
     XAOT_CAPTURE_EV_CLOSED_CAPTURE = 1u << 0,
-    XAOT_CAPTURE_EV_STORAGE_OWNER = 1u << 1,
+    XAOT_CAPTURE_EV_STORAGE_DOMAIN = 1u << 1,
     XAOT_CAPTURE_EV_TYPE_SHAPE = 1u << 2,
     XAOT_CAPTURE_EV_MUTABILITY = 1u << 3,
 };
@@ -57,7 +57,7 @@ enum {
 typedef struct XaotCapturePlan {
     const struct XiFunc *func;
     uint16_t capture_index;
-    uint8_t source_owner;
+    uint8_t source_domain;
     uint8_t action;
     uint32_t evidence;
 } XaotCapturePlan;
@@ -87,7 +87,7 @@ XR_FUNC const XaotCapturePlan *xaot_capture_plan_find(const struct XaotBundle *b
 XR_FUNC const XaotAddressPlan *xaot_address_plan_find(const struct XaotBundle *bundle,
                                                       const struct XiValue *value);
 XR_FUNC const char *xaot_materialization_kind_name(uint8_t value);
-XR_FUNC const char *xaot_capture_action_name(uint8_t value);
+XR_FUNC const char *xaot_transfer_action_name(uint8_t value);
 XR_FUNC const char *xaot_pointer_origin_name(uint8_t value);
 XR_FUNC const char *xaot_pointer_escape_name(uint8_t value);
 

@@ -101,10 +101,10 @@ static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModu
         decl.kind = XG_DECL_FUNC;
         decl.name_id = xg_name_id(name);
         decl.source_span_id = decl.decl_id;
-        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
         decl.storage_mutability = XR_STORAGE_READONLY;
         decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
         if (!xg_global_evidence_add_decl(package, &decl)) {
             xr_free(source);
             return false;
@@ -157,10 +157,10 @@ static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModu
         decl.kind = XG_DECL_GLOBAL;
         decl.name_id = xg_name_id(name);
         decl.source_span_id = decl.decl_id;
-        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
         decl.storage_mutability = XR_STORAGE_READONLY;
         decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-        decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+        decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
         if (!xg_global_evidence_add_decl(package, &decl)) {
             xr_free(source);
             return false;

@@ -883,8 +883,9 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(
-        xr_vm_proto_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG, XR_CAPTURE_DEEP_COPY, NULL), 0);
+    ASSERT_EQ_INT(xr_vm_proto_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG,
+                                          XR_TRANSFER_EXPLICIT_COPY, NULL),
+                  0);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
@@ -901,7 +902,7 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     ASSERT_EQ_UINT(info.index, 300);
     ASSERT_EQ_UINT(info.source, UPVAL_SRC_REG);
     ASSERT_EQ_UINT(info.is_const, 1);
-    ASSERT_EQ_UINT(info.capture_action, XR_CAPTURE_DEEP_COPY);
+    ASSERT_EQ_UINT(info.capture_action, XR_TRANSFER_EXPLICIT_COPY);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);

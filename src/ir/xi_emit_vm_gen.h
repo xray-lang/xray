@@ -16,7 +16,8 @@
     X(TARGET_ALIGNOF, xi_emit_target_alignof) \
     X(TARGET_SIMD_BYTES, xi_emit_semantic_intrinsic_call) \
     X(COPY, emit_copy) \
-    X(MOVE, xi_emit_move) \
+    X(SOURCE_MOVE, xi_emit_move) \
+    X(OWNER_FORWARD, xi_emit_move) \
     X(ADD, xi_emit_arith) \
     X(SUB, xi_emit_arith) \
     X(MUL, xi_emit_arith) \

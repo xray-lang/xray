@@ -336,7 +336,7 @@ vmcase(OP_COPY) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy length exceeds VM array limit");
         }
         XrArray *arr = NULL;
-        if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_OWNED) {
+        if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_TRANSFER) {
             arr = (XrArray *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
                                                        sizeof(XrArray), XR_TARRAY,
                                                        (uint8_t) storage_mode);
@@ -385,7 +385,7 @@ vmcase(OP_COPY) {
             }
         }
     }
-    if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_OWNED)
+    if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_TRANSFER)
         R(a) = xr_deep_copy_explicit_to_storage(isolate, _src, (uint8_t) storage_mode);
     else
         R(a) = xr_deep_copy_explicit_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);

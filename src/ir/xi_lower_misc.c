@@ -372,11 +372,28 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
     if (!val)
         return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_MOVE, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_SOURCE_MOVE, result_type, 1);
     if (!v)
-        return val;
+        return NULL;
     v->args[0] = val;
     v->line = (uint32_t) node->line;
+    if (me->expr && me->expr->type == AST_VARIABLE && me->expr->as.variable.symbol_id != 0 &&
+        l->analyzer) {
+        XaSymbol *symbol =
+            xa_scope_lookup_by_id(l->analyzer->global_scope, me->expr->as.variable.symbol_id);
+        XaSymbolLinks *links = symbol ? xa_analyzer_get_links(l->analyzer, symbol) : NULL;
+        if (links && links->ownership_candidate.complete) {
+            v->move_evidence_id = links->ownership_candidate.id;
+            v->move_source_root_id = links->ownership_candidate.root;
+            v->move_source_symbol_id = links->ownership_candidate.source_symbol_id;
+            v->move_storage_plan_id = links->allocation_plan.id;
+            v->move_evidence_bits = links->ownership_candidate.evidence | XA_OWNERSHIP_EV_STORAGE;
+            v->move_source_capability = (uint8_t) links->value_capability;
+            v->move_target_capability = (uint8_t) links->value_capability;
+            v->move_source_domain = (uint8_t) links->allocation_plan.domain;
+            v->move_target_domain = (uint8_t) links->allocation_plan.domain;
+        }
+    }
     return v;
 }
 

@@ -93,7 +93,7 @@ typedef enum {
 
 typedef enum {
     XR_TASK_PAYLOAD_NONE = 0,
-    XR_TASK_PAYLOAD_OWNED = 1,
+    XR_TASK_PAYLOAD_TRANSFER = 1,
 } XrTaskPayloadOwner;
 
 /* ========== Scope Mode (scope prefix modifier) ========== */
@@ -230,8 +230,8 @@ static inline struct XrCoroutine *xr_task_claim_executor(XrTask *task) {
     return atomic_exchange_explicit(&task->coro, (struct XrCoroutine *) NULL, memory_order_acq_rel);
 }
 
-static inline bool xr_task_value_is_owned_payload(XrValue value) {
-    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value)) &&
+static inline bool xr_task_value_is_transfer_payload(XrValue value) {
+    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(value)) &&
            !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
 }
 

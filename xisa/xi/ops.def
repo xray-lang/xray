@@ -2133,7 +2133,17 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.move
+(define-xi-op xi.source.move
+  :class ownership
+  :arity 1
+  :result-ownership owned
+  :own-use consume
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.owner.forward
   :class pure
   :arity 1
   :result-ownership none

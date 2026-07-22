@@ -192,6 +192,12 @@ XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
     sym->kind = kind;
     sym->id = next_symbol_id();
     sym->is_rebindable = kind == XA_SYM_VARIABLE || kind == XA_SYM_PARAMETER;
+    sym->links.binding_use = XA_BINDING_UNINITIALIZED;
+    sym->links.root_id = sym->id;
+    sym->links.root_alias = XA_ROOT_UNIQUE;
+    sym->links.binding_mutability = sym->is_rebindable ? XA_BINDING_REBINDABLE : XA_BINDING_STABLE;
+    sym->links.value_capability = XA_CAP_UNKNOWN;
+    sym->links.storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
 
     return sym;
 }
@@ -885,7 +891,13 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->declared_type = src->declared_type;
     dst->type_computed = src->type_computed;
     dst->is_definitely_assigned = src->is_definitely_assigned;
-    dst->move_state = XA_MOVE_NOT_MOVED;
+    dst->binding_use = XA_BINDING_LIVE;
+    dst->root_id = 0;
+    dst->root_alias = XA_ROOT_ALIAS_UNKNOWN;
+    dst->binding_mutability = XA_BINDING_STABLE;
+    dst->value_capability = src->value_capability;
+    dst->storage_domain = src->storage_domain;
+    dst->allocation_plan = src->allocation_plan;
     dst->moved_line = 0;
     dst->moved_column = 0;
 
@@ -895,7 +907,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
         xa_symbol_links_set_param_defaults(dst, src->param_defaults, src->param_count);
     xa_symbol_links_copy_param_effect_summaries(dst, src);
     dst->return_type_inferred = src->return_type_inferred;
-    dst->return_storage_owner = src->return_storage_owner;
+    dst->return_storage_domain = src->return_storage_domain;
     dst->return_storage_known = src->return_storage_known;
     dst->return_storage_mixed = src->return_storage_mixed;
     dst->return_storage_scanned = src->return_storage_scanned;

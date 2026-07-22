@@ -25,6 +25,7 @@
 #include "xa_memory_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_intrinsic_registry.h"
+#include "xa_ownership.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
@@ -47,13 +48,6 @@ typedef enum XaSymbolKind {
     XA_SYM_ENUM,        // Enum declaration
     XA_SYM_TYPE_ALIAS,  // Type alias (type Point = {x: int, y: int})
 } XaSymbolKind;
-
-// Move state for explicit ownership transfer of local variables.
-typedef enum XaMoveState {
-    XA_MOVE_NOT_MOVED,    // Variable is owned, can be used
-    XA_MOVE_MOVED,        // Variable has been moved, cannot be used
-    XA_MOVE_MAYBE_MOVED,  // Variable may have been moved (conditional branch)
-} XaMoveState;
 
 /* Canonical per-parameter semantic product.  These axes intentionally coexist:
  * a parameter may be read, retained as an execution-local alias, returned from
@@ -108,7 +102,7 @@ typedef struct XaParamEffectSummary {
     XaEscapeDestinationSet escapes;
     XaReturnProvenanceSet returns;
     XaMutationPathSet mutation_paths;
-    XrStorageOwner storage;
+    XrSemanticStorageDomain storage_domain;
     XaEffectId callable_effects;
     XaMemoryEffectId memory_effects;
     bool complete;
@@ -166,10 +160,20 @@ struct XaSymbolLinks {
     bool pointer_provenance_known;
     bool pointer_provenance_mixed;
 
-    // Move state for explicit ownership transfer of local variables.
-    XaMoveState move_state;  // Current ownership state
-    uint32_t moved_line;     // Line where variable was moved (for error message)
-    uint32_t moved_column;   // Column where variable was moved
+    // Canonical source ownership facts. Binding use is updated from the CFG;
+    // root/capability remain independent so a moved binding can transfer the
+    // same unique root without destroying the root's identity.
+    XaBindingUseState binding_use;
+    XaRootId root_id;
+    XaRootAliasState root_alias;
+    XaBindingMutability binding_mutability;
+    XaValueCapability value_capability;
+    XrSemanticStorageDomain storage_domain;
+    XaAllocationInstancePlan allocation_plan;
+    XaOwnershipCandidateProof ownership_candidate;
+    XaFinalMoveProof final_move;
+    uint32_t moved_line;    // Line where variable was moved (for error message)
+    uint32_t moved_column;  // Column where variable was moved
 
     // For functions
     XrType **param_types;
@@ -184,7 +188,7 @@ struct XaSymbolLinks {
     int param_effect_count;
     XrType *return_type;
     bool return_type_inferred;
-    uint8_t return_storage_owner;  // XrStorageOwner for known owned/shared returns
+    uint8_t return_storage_domain;  // XrSemanticStorageDomain for return values
     bool return_storage_known;
     bool return_storage_mixed;
     bool return_storage_scanned;

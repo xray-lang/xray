@@ -62,7 +62,7 @@ static const XgDeclSummary *find_storage_decl(const XaotBundle *bundle, const Xi
     for (uint32_t i = 0; i < evidence->ndecls; i++) {
         const XgDeclSummary *decl = &evidence->decls[i];
         if (decl->module_id != module_id || decl->name_id != name_id ||
-            decl->storage_owner == XR_STORAGE_NONE)
+            decl->storage_domain == XR_STORAGE_DOMAIN_UNKNOWN)
             continue;
         if (match)
             return NULL;
@@ -81,7 +81,7 @@ static bool derive_storage(const XaotBundle *bundle, const XiModule *module, uin
     out->module_index = module_index;
     out->slot = slot;
     out->flags = decl->storage_flags;
-    out->owner = decl->storage_owner;
+    out->domain = decl->storage_domain;
     out->mutability = decl->storage_mutability;
     out->address_identity = decl->address_identity;
     out->materialization_kind = decl->materialization_kind;
@@ -94,15 +94,15 @@ static XaotCapturePlan derive_capture(const XiFunc *func, uint16_t index) {
     memset(&plan, 0, sizeof(plan));
     plan.func = func;
     plan.capture_index = index;
-    plan.evidence = XAOT_CAPTURE_EV_CLOSED_CAPTURE | XAOT_CAPTURE_EV_STORAGE_OWNER |
+    plan.evidence = XAOT_CAPTURE_EV_CLOSED_CAPTURE | XAOT_CAPTURE_EV_STORAGE_DOMAIN |
                     XAOT_CAPTURE_EV_TYPE_SHAPE | XAOT_CAPTURE_EV_MUTABILITY;
     plan.action = (uint8_t) xi_capture_cross_execution_action(capture);
     if (capture->capture_kind == XI_CAPTURE_SHARED || capture->is_shared) {
-        plan.source_owner = XR_STORAGE_SHARED_SYSTEM;
+        plan.source_domain = XR_STORAGE_SYNC_SHARED;
     } else if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE) {
-        plan.source_owner = XR_STORAGE_MODULE;
+        plan.source_domain = XR_STORAGE_MODULE_STATIC;
     } else {
-        plan.source_owner = XR_STORAGE_EXEC_LOCAL;
+        plan.source_domain = XR_STORAGE_EXEC_LOCAL;
     }
     return plan;
 }
@@ -115,8 +115,8 @@ static XaotModuleInitPlan derive_module_init(const XaotBundle *bundle, const XiM
     plan.func = module ? module->init : NULL;
     plan.body_func_id = module && module->init ? module->init->xg_body_func_id : XG_NO_ID;
     plan.module_index = module_index;
-    plan.allocation_owner = XR_STORAGE_MODULE;
-    plan.evidence = XAOT_MODULE_INIT_EV_ENTRY_FUNC | XAOT_MODULE_INIT_EV_STORAGE_OWNER |
+    plan.allocation_domain = XR_STORAGE_MODULE_STATIC;
+    plan.evidence = XAOT_MODULE_INIT_EV_ENTRY_FUNC | XAOT_MODULE_INIT_EV_STORAGE_DOMAIN |
                     XAOT_MODULE_INIT_EV_NONSUSPEND;
     for (uint32_t i = 0; evidence && i < evidence->nbodies; i++) {
         if (evidence->bodies[i].func_id == plan.body_func_id) {
@@ -214,11 +214,12 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
             return false;
         out->provenance.storage_id = storage->decl_id;
         out->provenance.lifetime_id = storage->decl_id;
-        out->provenance.owner = storage->owner;
+        out->provenance.domain = storage->domain;
         out->provenance.mutability = storage->mutability;
         out->provenance.address_identity = storage->address_identity;
-        out->provenance.origin = storage->owner == XR_STORAGE_MODULE ? XR_POINTER_ORIGIN_MODULE
-                                                                     : XR_POINTER_ORIGIN_STATIC;
+        out->provenance.origin = storage->domain == XR_STORAGE_MODULE_STATIC
+                                     ? XR_POINTER_ORIGIN_MODULE
+                                     : XR_POINTER_ORIGIN_STATIC;
         out->provenance.escape = XR_POINTER_ESCAPE_STABLE;
         out->evidence |= XAOT_ADDRESS_EV_STORAGE_PLAN;
         return true;
@@ -227,7 +228,7 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         out->origin_value = value;
         out->provenance.storage_id = value->id + 1;
         out->provenance.lifetime_id = value->id + 1;
-        out->provenance.owner = XR_STORAGE_MODULE;
+        out->provenance.domain = XR_STORAGE_MODULE_STATIC;
         out->provenance.mutability = XR_STORAGE_READONLY;
         out->provenance.address_identity = XR_ADDRESS_MODULE_STABLE;
         out->provenance.origin = XR_POINTER_ORIGIN_STATIC;
@@ -236,14 +237,14 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
     }
     if ((value->op == XI_ARRAY_DATA_PTR || value_is_buffer_pointer_borrow(value)) &&
         value->nargs > 0 && value->args[0]) {
-        const XiValue *owner = value->args[0];
-        if (value->op == XI_ARRAY_DATA_PTR && owner->type &&
-            owner->type->kind == XR_KIND_FIXED_ARRAY && owner->op == XI_GET_SHARED &&
-            owner->aux_int >= 0) {
+        const XiValue *domain = value->args[0];
+        if (value->op == XI_ARRAY_DATA_PTR && domain->type &&
+            domain->type->kind == XR_KIND_FIXED_ARRAY && domain->op == XI_GET_SHARED &&
+            domain->aux_int >= 0) {
             const XiModule *storage_module = module;
-            uint32_t storage_slot = (uint32_t) owner->aux_int;
-            if (owner->aux_int < module->nslots && module->slot_imports) {
-                const XiImportRef *ref = module->slot_imports[owner->aux_int];
+            uint32_t storage_slot = (uint32_t) domain->aux_int;
+            if (domain->aux_int < module->nslots && module->slot_imports) {
+                const XiImportRef *ref = module->slot_imports[domain->aux_int];
                 if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
                     (uint32_t) ref->resolved_mod_index < bundle->nmodules &&
                     bundle->modules[ref->resolved_mod_index]) {
@@ -252,13 +253,13 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
                 }
             }
             storage = xaot_storage_plan_find(bundle, storage_module, storage_slot);
-            if (storage && storage->owner == XR_STORAGE_MODULE &&
+            if (storage && storage->domain == XR_STORAGE_MODULE_STATIC &&
                 storage->mutability == XR_STORAGE_READONLY &&
                 storage->address_identity == XR_ADDRESS_MODULE_STABLE) {
-                out->origin_value = owner;
+                out->origin_value = domain;
                 out->provenance.storage_id = storage->decl_id;
                 out->provenance.lifetime_id = storage->decl_id;
-                out->provenance.owner = storage->owner;
+                out->provenance.domain = storage->domain;
                 out->provenance.mutability = storage->mutability;
                 out->provenance.address_identity = storage->address_identity;
                 out->provenance.origin = XR_POINTER_ORIGIN_MODULE;
@@ -270,7 +271,7 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         out->origin_value = value->args[0];
         out->provenance.storage_id = value->args[0]->id + 1;
         out->provenance.lifetime_id = value->args[0]->id + 1;
-        out->provenance.owner = XR_STORAGE_EXEC_LOCAL;
+        out->provenance.domain = XR_STORAGE_EXEC_LOCAL;
         out->provenance.mutability =
             value->type->ptr_is_mut ? XR_STORAGE_MUTABLE : XR_STORAGE_READONLY;
         out->provenance.address_identity = XR_ADDRESS_LEXICAL;
@@ -278,8 +279,8 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         out->provenance.escape = XR_POINTER_ESCAPE_CALL_BOUND;
         return true;
     }
-    if ((value->op == XI_ADD || value->op == XI_COPY || value->op == XI_MOVE) && value->nargs > 0 &&
-        value->args[0]) {
+    if ((value->op == XI_ADD || value->op == XI_COPY || xi_op_is_identity_forward(value->op)) &&
+        value->nargs > 0 && value->args[0]) {
         source = xaot_address_plan_find(bundle, value->args[0]);
         if (!source)
             return false;
@@ -425,7 +426,7 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
         if (expected.func != actual->func || expected.body_func_id != actual->body_func_id ||
             expected.module_index != actual->module_index ||
             expected.evidence != actual->evidence ||
-            expected.allocation_owner != actual->allocation_owner ||
+            expected.allocation_domain != actual->allocation_domain ||
             expected.may_suspend != actual->may_suspend || actual->may_suspend) {
             if (errbuf && errbuf_len)
                 snprintf(errbuf, errbuf_len, "AOT module-init plan is stale or suspendable");
@@ -562,15 +563,14 @@ const XaotAddressPlan *xaot_address_plan_find(const XaotBundle *bundle, const Xi
 }
 
 const char *xaot_materialization_kind_name(uint8_t value) {
-    static const char *names[] = {"inline",         "exec_local",   "module_readonly",
-                                  "module_runtime", "owned_system", "shared_system",
-                                  "reject"};
+    static const char *names[] = {"invalid",   "inline",      "stack", "static_data",
+                                  "exec_heap", "system_heap", "sroa",  "external"};
     return value < sizeof(names) / sizeof(names[0]) ? names[value] : "invalid";
 }
 
-const char *xaot_capture_action_name(uint8_t value) {
-    static const char *names[] = {"inline_value",    "deep_copy",  "move",
-                                  "module_readonly", "shared_ref", "reject"};
+const char *xaot_transfer_action_name(uint8_t value) {
+    static const char *names[] = {"invalid",     "inline_copy",   "const_share", "sync_share",
+                                  "move_unique", "explicit_copy", "module_read", "reject"};
     return value < sizeof(names) / sizeof(names[0]) ? names[value] : "invalid";
 }
 

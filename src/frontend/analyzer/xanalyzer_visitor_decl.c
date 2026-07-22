@@ -783,7 +783,7 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
     }
     if (fn_links && fn_links->param_effects) {
         for (int i = 0; i < call->arg_count && i < fn_links->param_effect_count; i++) {
-            if (fn_links->param_effects[i].storage == XR_STORAGE_OWNED_SYSTEM)
+            if (fn_links->param_effects[i].storage_domain == XR_STORAGE_TRANSFERABLE)
                 xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
     }
@@ -814,7 +814,7 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
         }
         if (method_links && method_links->param_effects) {
             for (int i = 0; i < call->arg_count && i < method_links->param_effect_count; i++) {
-                if (method_links->param_effects[i].storage == XR_STORAGE_OWNED_SYSTEM)
+                if (method_links->param_effects[i].storage_domain == XR_STORAGE_TRANSFERABLE)
                     xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
             }
         }
@@ -1047,7 +1047,7 @@ static void xa_summary_mark_owned_move_requirement(XaParamEscapeSummary *summary
     XrType *param_type = summary->param_types ? summary->param_types[slot] : NULL;
     if (!xa_boundary_transfer_type_needs_explicit(param_type))
         return;
-    summary->effects[slot].storage = XR_STORAGE_OWNED_SYSTEM;
+    summary->effects[slot].storage_domain = XR_STORAGE_TRANSFERABLE;
 }
 
 static bool xa_summary_method_stores_argument(const char *method_name, int slot) {
@@ -1347,7 +1347,7 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
         }
         if (method_links && method_links->param_effects) {
             for (int i = 0; i < call->arg_count && i < method_links->param_effect_count; i++) {
-                if (method_links->param_effects[i].storage == XR_STORAGE_OWNED_SYSTEM)
+                if (method_links->param_effects[i].storage_domain == XR_STORAGE_TRANSFERABLE)
                     xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
             }
         }
@@ -1370,7 +1370,7 @@ static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
     }
     if (fn_links && fn_links->param_effects) {
         for (int i = 0; i < call->arg_count && i < fn_links->param_effect_count; i++) {
-            if (fn_links->param_effects[i].storage == XR_STORAGE_OWNED_SYSTEM)
+            if (fn_links->param_effects[i].storage_domain == XR_STORAGE_TRANSFERABLE)
                 xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
         }
     }
@@ -1634,7 +1634,8 @@ void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx, XaSymbolL
     int count = links->param_count < links->param_effect_count ? links->param_count
                                                                : links->param_effect_count;
     for (int i = 0; i < count; i++) {
-        if (links->param_effects[i].storage != XR_STORAGE_OWNED_SYSTEM || !links->param_names[i])
+        if (links->param_effects[i].storage_domain != XR_STORAGE_TRANSFERABLE ||
+            !links->param_names[i])
             continue;
         XaSymbol *param =
             xa_scope_lookup_local(ctx->analyzer->current_scope, links->param_names[i]);
@@ -4361,8 +4362,20 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     // Type will be inferred in pass 2
     // Keep NULL when no annotation (distinguishes "no annotation" from "annotated as any")
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    if (links)
+    if (links) {
+        links->binding_use = XA_BINDING_UNINITIALIZED;
+        links->root_id = sym->id;
+        links->root_alias = XA_ROOT_UNIQUE;
+        links->binding_mutability = is_const ? XA_BINDING_STABLE : XA_BINDING_REBINDABLE;
+        links->value_capability = is_const ? XA_CAP_CONST : XA_CAP_MUTABLE;
+        links->storage_domain =
+            ctx->analyzer->current_scope && ctx->analyzer->current_scope->kind == XA_SCOPE_GLOBAL
+                ? XR_STORAGE_MODULE_STATIC
+            : is_shared ? XR_STORAGE_SYNC_SHARED
+            : is_owned  ? XR_STORAGE_TRANSFERABLE
+                        : XR_STORAGE_EXEC_LOCAL;
         links->const_initializer = sym->is_const ? var->initializer : NULL;
+    }
     links->declared_type = var->type_annotation
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
                                : NULL;

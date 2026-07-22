@@ -67,15 +67,15 @@ typedef struct XrClass XrClass;
 
 #define XR_OBJ_STORAGE_NORMAL 0
 #define XR_OBJ_STORAGE_SHARED 1
-#define XR_OBJ_STORAGE_OWNED 2
+#define XR_OBJ_STORAGE_TRANSFER 2
 
 #define XR_OBJ_STORAGE_SHARED_BIT 0x0001u
-#define XR_OBJ_STORAGE_OWNED_BIT 0x8000u
-#define XR_OBJ_STORAGE_MODE_MASK (XR_OBJ_STORAGE_SHARED_BIT | XR_OBJ_STORAGE_OWNED_BIT)
+#define XR_OBJ_STORAGE_TRANSFER_BIT 0x8000u
+#define XR_OBJ_STORAGE_MODE_MASK (XR_OBJ_STORAGE_SHARED_BIT | XR_OBJ_STORAGE_TRANSFER_BIT)
 
 #define XR_OBJ_GET_STORAGE(obj)                                                                    \
-    (((obj)->extra & XR_OBJ_STORAGE_OWNED_BIT)                                                     \
-         ? XR_OBJ_STORAGE_OWNED                                                                    \
+    (((obj)->extra & XR_OBJ_STORAGE_TRANSFER_BIT)                                                  \
+         ? XR_OBJ_STORAGE_TRANSFER                                                                 \
          : (((obj)->extra & XR_OBJ_STORAGE_SHARED_BIT) ? XR_OBJ_STORAGE_SHARED                     \
                                                        : XR_OBJ_STORAGE_NORMAL))
 #define XR_OBJ_SET_STORAGE(obj, m)                                                                 \
@@ -83,11 +83,11 @@ typedef struct XrClass XrClass;
         (obj)->extra = (uint16_t) ((obj)->extra & ~(uint16_t) XR_OBJ_STORAGE_MODE_MASK);           \
         if ((m) == XR_OBJ_STORAGE_SHARED)                                                          \
             (obj)->extra |= XR_OBJ_STORAGE_SHARED_BIT;                                             \
-        else if ((m) == XR_OBJ_STORAGE_OWNED)                                                      \
-            (obj)->extra |= XR_OBJ_STORAGE_OWNED_BIT;                                              \
+        else if ((m) == XR_OBJ_STORAGE_TRANSFER)                                                   \
+            (obj)->extra |= XR_OBJ_STORAGE_TRANSFER_BIT;                                           \
     } while (0)
 #define XR_OBJ_IS_SHARED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_SHARED)
-#define XR_OBJ_IS_OWNED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_OWNED)
+#define XR_OBJ_IS_TRANSFER(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_TRANSFER)
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*

@@ -3472,7 +3472,8 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return arg_index == 0;
         default:
             return false;
@@ -5470,7 +5471,7 @@ static bool cg_array_value_only_feeds_inline_map(XiCgenCtx *ctx, const XiFunc *c
                     continue;
                 const char *method = (const char *) cur->aux;
                 if ((cur->op == XI_BOX || cur->op == XI_UNBOX || cur->op == XI_COPY ||
-                     cur->op == XI_MOVE) &&
+                     xi_op_is_identity_forward(cur->op)) &&
                     ai == 0 && cg_array_value_wraps_closure_new(cur)) {
                     if (!cg_array_value_only_feeds_inline_map(ctx, current, prefix, cur, depth + 1,
                                                               used))

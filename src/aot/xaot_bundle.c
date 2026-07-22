@@ -4813,7 +4813,8 @@ XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle) {
     if (!bundle)
         return false;
     for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
-        if (bundle->transfer_plans[i].action == XAOT_TRANSFER_ACTION_DEEP_COPY)
+        if (bundle->transfer_plans[i].action == XR_TRANSFER_EXPLICIT_COPY &&
+            (bundle->transfer_plans[i].evidence & XAOT_TRANSFER_EV_BOUNDARY_CLONE) != 0)
             deep_copy_transfer_count++;
     }
     existing = xaot_bundle_find_capability_plan(bundle, XG_CAP_DEEP_COPY);
@@ -6171,34 +6172,22 @@ xaot_bundle_callable_target_case(const XaotBundle *bundle, const XaotCallableInv
     return &bundle->callable_target_cases[index];
 }
 
-XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
-    XaotBundle *bundle, const XiFunc *func, const XiValue *site, uint16_t transfer_index,
-    const XiValue *value, const XrType *value_type, const XaotTypeKey *value_type_key,
-    uint8_t site_kind, uint8_t mode, uint8_t action, uint32_t evidence, uint8_t unproven_reason) {
+XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(XaotBundle *bundle,
+                                                        const XaotTransferPlan *source) {
     XaotTransferPlan *plan;
 
-    if (!bundle || !func || !site || site_kind == 0 || action == 0 || evidence == 0)
+    if (!bundle || !source || !source->func || !source->site || source->site_kind == 0 ||
+        source->action == XR_TRANSFER_ACTION_INVALID || source->evidence == 0)
         return NULL;
-    plan = (XaotTransferPlan *) xaot_bundle_find_transfer_plan(bundle, site, transfer_index);
+    plan = (XaotTransferPlan *) xaot_bundle_find_transfer_plan(bundle, source->site,
+                                                               source->transfer_index);
     if (plan)
         return plan;
     if (!reserve_plan_array((void **) &bundle->transfer_plans, &bundle->transfer_plan_cap,
                             bundle->ntransfer_plans + 1, sizeof(XaotTransferPlan), 16))
         return NULL;
     plan = &bundle->transfer_plans[bundle->ntransfer_plans++];
-    memset(plan, 0, sizeof(*plan));
-    plan->func = func;
-    plan->site = site;
-    plan->value = value;
-    plan->value_type = value_type;
-    if (value_type_key)
-        plan->value_type_key = *value_type_key;
-    plan->transfer_index = transfer_index;
-    plan->site_kind = site_kind;
-    plan->mode = mode;
-    plan->action = action;
-    plan->evidence = evidence;
-    plan->unproven_reason = unproven_reason;
+    *plan = *source;
     return plan;
 }
 
@@ -7633,20 +7622,7 @@ static const char *transfer_mode_name(uint8_t mode) {
 }
 
 static const char *transfer_action_name(uint8_t action) {
-    switch ((XaotTransferAction) action) {
-        case XAOT_TRANSFER_ACTION_SHARE:
-            return "share";
-        case XAOT_TRANSFER_ACTION_COPY:
-            return "copy";
-        case XAOT_TRANSFER_ACTION_MOVE:
-            return "move";
-        case XAOT_TRANSFER_ACTION_DEEP_COPY:
-            return "deep_copy";
-        case XAOT_TRANSFER_ACTION_REJECT:
-            return "reject";
-        default:
-            return "unknown";
-    }
+    return xaot_transfer_action_name(action);
 }
 
 static const char *transfer_unproven_reason_name(uint8_t reason) {
@@ -7657,6 +7633,12 @@ static const char *transfer_unproven_reason_name(uint8_t reason) {
             return "no_value";
         case XAOT_TRANSFER_UNPROVEN_BAD_MODE:
             return "bad_mode";
+        case XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF:
+            return "no_move_proof";
+        case XAOT_TRANSFER_UNPROVEN_DOMAIN:
+            return "domain";
+        case XAOT_TRANSFER_UNPROVEN_CAPABILITY:
+            return "capability";
         default:
             return "unknown";
     }
@@ -7721,6 +7703,10 @@ static void print_transfer_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_TRANSFER_EV_MODE, "mode");
     PRINT_BIT(XAOT_TRANSFER_EV_TYPE, "type");
     PRINT_BIT(XAOT_TRANSFER_EV_BOUNDARY_CLONE, "boundary_clone");
+    PRINT_BIT(XAOT_TRANSFER_EV_STORAGE_PLAN, "storage_plan");
+    PRINT_BIT(XAOT_TRANSFER_EV_MOVE_PROOF, "move_proof");
+    PRINT_BIT(XAOT_TRANSFER_EV_DOMAIN, "domain");
+    PRINT_BIT(XAOT_TRANSFER_EV_CAPABILITY, "capability");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT
@@ -7758,34 +7744,37 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out,
                 "storage-plan %u module=%u slot=%u owner=%s mutability=%u address=%u "
                 "materialization=%s flags=0x%x\n",
-                si, sp->module_index, sp->slot, xr_storage_owner_name((XrStorageOwner) sp->owner),
-                sp->mutability, sp->address_identity,
-                xaot_materialization_kind_name(sp->materialization_kind), sp->flags);
+                si, sp->module_index, sp->slot,
+                xr_storage_domain_name((XrSemanticStorageDomain) sp->domain), sp->mutability,
+                sp->address_identity, xaot_materialization_kind_name(sp->materialization_kind),
+                sp->flags);
     }
     for (uint32_t mi = 0; mi < bundle->nmodule_init_plans; mi++) {
         const XaotModuleInitPlan *mp = &bundle->module_init_plans[mi];
         fprintf(out, "module-init-plan %u func=%u owner=%s may_suspend=%u evidence=0x%x\n", mi,
-                mp->body_func_id, xr_storage_owner_name((XrStorageOwner) mp->allocation_owner),
+                mp->body_func_id,
+                xr_storage_domain_name((XrSemanticStorageDomain) mp->allocation_domain),
                 mp->may_suspend ? 1u : 0u, mp->evidence);
     }
     for (uint32_t ci = 0; ci < bundle->ncapture_plans; ci++) {
         const XaotCapturePlan *cp = &bundle->capture_plans[ci];
         fprintf(out, "capture-plan %u func=%s capture=%u owner=%s action=%s evidence=0x%x\n", ci,
                 cp->func && cp->func->name ? cp->func->name : "?", cp->capture_index,
-                xr_storage_owner_name((XrStorageOwner) cp->source_owner),
-                xaot_capture_action_name(cp->action), cp->evidence);
+                xr_storage_domain_name((XrSemanticStorageDomain) cp->source_domain),
+                xaot_transfer_action_name(cp->action), cp->evidence);
     }
     for (uint32_t ai = 0; ai < bundle->naddress_plans; ai++) {
         const XaotAddressPlan *ap = &bundle->address_plans[ai];
-        fprintf(
-            out,
-            "address-plan %u func=%s value=%u storage=%u lifetime=%u owner=%s "
-            "mutability=%u identity=%u origin=%s escape=%s evidence=0x%x\n",
-            ai, ap->func && ap->func->name ? ap->func->name : "?", ap->value ? ap->value->id : 0,
-            ap->provenance.storage_id, ap->provenance.lifetime_id,
-            xr_storage_owner_name((XrStorageOwner) ap->provenance.owner), ap->provenance.mutability,
-            ap->provenance.address_identity, xaot_pointer_origin_name(ap->provenance.origin),
-            xaot_pointer_escape_name(ap->provenance.escape), ap->evidence);
+        fprintf(out,
+                "address-plan %u func=%s value=%u storage=%u lifetime=%u owner=%s "
+                "mutability=%u identity=%u origin=%s escape=%s evidence=0x%x\n",
+                ai, ap->func && ap->func->name ? ap->func->name : "?",
+                ap->value ? ap->value->id : 0, ap->provenance.storage_id,
+                ap->provenance.lifetime_id,
+                xr_storage_domain_name((XrSemanticStorageDomain) ap->provenance.domain),
+                ap->provenance.mutability, ap->provenance.address_identity,
+                xaot_pointer_origin_name(ap->provenance.origin),
+                xaot_pointer_escape_name(ap->provenance.escape), ap->evidence);
     }
     fprintf(out,
             "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u "
@@ -8538,11 +8527,16 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         value_ref(value_buf, sizeof(value_buf), tp->value);
         fprintf(out,
                 "transfer %u func=%s site=%s kind=%s index=%u value=%s mode=%s action=%s "
-                "type-key=%016" PRIx64 " evidence=",
+                "type-key=%016" PRIx64
+                " source-domain=%u target-domain=%u source-cap=%u target-cap=%u "
+                "storage-plan=%u transfer-plan=%u move-proof=%u drop=%u cost=%u evidence=",
                 ti, safe_str(tp->func ? tp->func->name : NULL), site_buf,
                 transfer_site_kind_name(tp->site_kind), (unsigned) tp->transfer_index, value_buf,
                 transfer_mode_name(tp->mode), transfer_action_name(tp->action),
-                tp->value_type_key.fingerprint);
+                tp->value_type_key.fingerprint, (unsigned) tp->source_domain,
+                (unsigned) tp->target_domain, (unsigned) tp->source_capability,
+                (unsigned) tp->target_capability, tp->storage_plan_id, tp->transfer_plan_id,
+                tp->move_proof_id, (unsigned) tp->drop_action, (unsigned) tp->cost_class);
         print_transfer_evidence_bits(out, tp->evidence);
         fprintf(out, " reason=%s\n", transfer_unproven_reason_name(tp->unproven_reason));
     }

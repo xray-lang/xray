@@ -208,7 +208,7 @@ typedef struct UpvalInfo {
     uint8_t is_const;          // const variable flag
     uint8_t slot_type;         // XrSlotType: storage class for GC traversal
     uint8_t source;            // UPVAL_SRC_REG or UPVAL_SRC_UPVAL
-    uint8_t capture_action;    // XrCaptureAction for cross-execution materialization
+    uint8_t capture_action;    // XrTransferAction for cross-execution materialization
     struct XrType *type_info;  // full compile-time type (NULL = unknown/any)
 } UpvalInfo;
 

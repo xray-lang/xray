@@ -45,7 +45,7 @@ static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth);
 
 static bool inline_error_source_passthrough(const XiValue *v) {
     return v && v->nargs >= 1 &&
-           (v->op == XI_MOVE || xi_copy_is_identity_alias(v) ||
+           (xi_op_is_identity_forward(v->op) || xi_copy_is_identity_alias(v) ||
             xi_generated_op_class(v->op) == XI_GEN_CLASS_CONVERSION);
 }
 

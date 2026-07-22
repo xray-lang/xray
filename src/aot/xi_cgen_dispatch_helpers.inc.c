@@ -370,8 +370,10 @@ static bool xicgen_same_rep_identity_alias(XiCgenCtx *ctx, const XiValue *v, con
 }
 
 static const XiValue *xicgen_getprop_receiver_value(XiCgenCtx *ctx, const XiValue *v) {
-    while (v && (v->op == XI_UNBOX || xi_copy_is_identity_alias(v) || v->op == XI_MOVE) &&
-           v->nargs >= 1 && xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
+    while (
+        v &&
+        (v->op == XI_UNBOX || xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) &&
+        v->nargs >= 1 && xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
         v = v->args[0];
     }
     return v;
@@ -545,7 +547,7 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             const char *prefix) {
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_identity: need arg");
-    /* XI_COPY/XI_MOVE are value-level identities, but the rep planner may give
+    /* XI_COPY/XI_OWNER_FORWARD are value-level identities, but the rep planner may give
      * the result a different declared rep than its source (e.g. a native-local
      * PTR array moved into a TAGGED-declared local). Bridge that gap so the
      * emitted initializer matches the result's declared C type; when the reps
@@ -1171,8 +1173,8 @@ static const char *xicgen_vec_lane_ctype(uint8_t native_type) {
 
 static const XiValue *xicgen_vec_unwrap_value(const XiValue *value) {
     for (unsigned depth = 0; value && depth < 8; depth++) {
-        if ((value->op == XI_COPY || value->op == XI_MOVE || value->op == XI_PLACE_LOAD ||
-             value->op == XI_LOCAL_ADDR) &&
+        if ((value->op == XI_COPY || xi_op_is_identity_forward(value->op) ||
+             value->op == XI_PLACE_LOAD || value->op == XI_LOCAL_ADDR) &&
             value->nargs == 1 && value->args[0]) {
             value = value->args[0];
             continue;
@@ -3433,7 +3435,8 @@ static bool xicgen_rawptr_value_only_used_noescape(XiCgenCtx *ctx, const XiFunc 
                             return false;
                         break;
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_CONVERT:
@@ -3491,7 +3494,8 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_RETAIN:
         case XI_RELEASE:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_BOX:
         case XI_UNBOX:
         case XI_CHECKTYPE:
@@ -5766,7 +5770,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
                 cg_required_transfer_plan(ctx, v, 0, v->args[0], "shared initializer");
             if (!transfer_plan || transfer_plan->site_kind != XAOT_TRANSFER_SHARED_INIT ||
                 transfer_plan->mode != XR_TRANSFER_MOVE ||
-                transfer_plan->action != XAOT_TRANSFER_ACTION_MOVE) {
+                transfer_plan->action != XR_TRANSFER_MOVE_UNIQUE) {
                 emit_codegen_abort_expr(out);
                 return;
             }
@@ -6228,8 +6232,8 @@ static const XiClassData *xicgen_parallel_plan_ctor_result_class(XiCgenCtx *ctx,
     if (!ctx || !value || depth > 8)
         return NULL;
     const XiValue *v = cg_unwrap_identity_value(value);
-    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE || v->op == XI_BOX ||
-                  v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
+    while (v && ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op) ||
+                  v->op == XI_BOX || v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
                  v->nargs >= 1)) {
         if (++depth > 8)
             return NULL;
@@ -7141,8 +7145,9 @@ static const XiValue *xicgen_stringbuilder_receiver_origin(const XiValue *receiv
 }
 
 static bool xicgen_stringbuilder_chain_gap_value(const XiValue *v) {
-    return v && (v->op == XI_CONST || v->op == XI_ERR_CHECK || v->op == XI_BOX ||
-                 v->op == XI_UNBOX || v->op == XI_MOVE || xi_copy_is_identity_alias(v));
+    return v &&
+           (v->op == XI_CONST || v->op == XI_ERR_CHECK || v->op == XI_BOX || v->op == XI_UNBOX ||
+            xi_op_is_identity_forward(v->op) || xi_copy_is_identity_alias(v));
 }
 
 static bool xicgen_stringbuilder_previous_append_in_run(XiCgenCtx *ctx, const XiBlock *blk,
@@ -12612,10 +12617,10 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
     if (!address ||
         (address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE &&
-         address->provenance.address_identity != XR_ADDRESS_SHARED_STABLE) ||
+         address->provenance.address_identity != XR_ADDRESS_SYSTEM_STABLE) ||
         address->provenance.escape != XR_POINTER_ESCAPE_STABLE ||
         (want_mutable && address->provenance.mutability == XR_STORAGE_READONLY) ||
-        (!want_mutable && address->provenance.owner != XR_STORAGE_MODULE)) {
+        (!want_mutable && address->provenance.domain != XR_STORAGE_MODULE_STATIC)) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
                 "static address", want_mutable ? "mutable" : "readonly",
@@ -12645,7 +12650,7 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     bool owner_borrow = address && address->provenance.origin == XR_POINTER_ORIGIN_OWNER_BORROW &&
                         address->provenance.escape == XR_POINTER_ESCAPE_CALL_BOUND;
     bool static_borrow = address && address->provenance.origin == XR_POINTER_ORIGIN_MODULE &&
-                         address->provenance.owner == XR_STORAGE_MODULE &&
+                         address->provenance.domain == XR_STORAGE_MODULE_STATIC &&
                          address->provenance.mutability == XR_STORAGE_READONLY &&
                          address->provenance.address_identity == XR_ADDRESS_MODULE_STABLE &&
                          address->provenance.escape == XR_POINTER_ESCAPE_STABLE;
@@ -12680,7 +12685,7 @@ static void xicgen_static_bytes_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     (void) prefix;
     const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
     bool static_literal = address && address->provenance.origin == XR_POINTER_ORIGIN_STATIC &&
-                          address->provenance.owner == XR_STORAGE_MODULE &&
+                          address->provenance.domain == XR_STORAGE_MODULE_STATIC &&
                           address->provenance.mutability == XR_STORAGE_READONLY &&
                           address->provenance.address_identity == XR_ADDRESS_MODULE_STABLE &&
                           address->provenance.escape == XR_POINTER_ESCAPE_STABLE;

@@ -37,7 +37,13 @@
   :vm-bytecode (driver emit_copy)
   :aot-c (driver xicgen_copy))
 
-(lower xi.move
+(lower xi.source.move
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_move)
+  :aot-c (driver xicgen_move))
+
+(lower xi.owner.forward
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_move)

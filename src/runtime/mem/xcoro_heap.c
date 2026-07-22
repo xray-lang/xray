@@ -626,8 +626,8 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
         return;
     }
 
-    if (XR_OBJ_IS_OWNED(obj)) {
-        xr_owned_destroy_core(coro_heap_core(heap), obj);
+    if (XR_OBJ_IS_TRANSFER(obj)) {
+        xr_transfer_destroy_core(coro_heap_core(heap), obj);
         return;
     }
 

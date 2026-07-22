@@ -4508,17 +4508,26 @@ static void xa_check_shared_unknown_function_value_arg(XaInferContext *ctx, AstN
                                &loc);
 }
 
-static void xa_check_owned_storage_param_arg(XaInferContext *ctx, AstNode *call_node,
-                                             XaSymbolLinks *callee_links, const char *callee_name,
-                                             AstNode *arg_node, XrType *arg_type, int slot) {
+static void xa_check_transfer_storage_param_arg(XaInferContext *ctx, AstNode *call_node,
+                                                XaSymbolLinks *callee_links,
+                                                const char *callee_name, AstNode *arg_node,
+                                                XrType *arg_type, int slot) {
     const XaParamEffectSummary *effect = xa_symbol_param_effect(callee_links, slot);
-    if (!ctx || !call_node || !effect || effect->storage != XR_STORAGE_OWNED_SYSTEM)
+    if (!ctx || !call_node || !effect || effect->storage_domain != XR_STORAGE_TRANSFERABLE)
         return;
     if (!xa_boundary_transfer_type_needs_explicit(arg_type))
         return;
     XaSymbol *move_source = xa_boundary_move_source_symbol(ctx, arg_node);
-    if (move_source && move_source->is_owned)
+    XaSymbolLinks *source_links =
+        move_source ? xa_analyzer_get_links(ctx->analyzer, move_source) : NULL;
+    if (source_links && source_links->root_id != 0 && source_links->root_alias == XA_ROOT_UNIQUE &&
+        source_links->final_move.complete && source_links->allocation_plan.complete) {
+        source_links->storage_domain = XR_STORAGE_TRANSFERABLE;
+        source_links->allocation_plan.domain = XR_STORAGE_TRANSFERABLE;
+        source_links->allocation_plan.materialization = XR_MATERIALIZE_SYSTEM_HEAP;
+        source_links->allocation_plan.evidence |= XA_OWNERSHIP_EV_TRANSFER;
         return;
+    }
 
     XrLocation loc = {.file = ctx->file_path,
                       .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
@@ -4528,10 +4537,12 @@ static void xa_check_owned_storage_param_arg(XaInferContext *ctx, AstNode *call_
     char msg[320];
     if (source_name) {
         snprintf(msg, sizeof(msg),
-                 "argument %d for '%s' requires move of an owned source; declare '%s' with owned",
+                 "argument %d for '%s' requires move of a proven unique transferable source; "
+                 "end aliases/loans for '%s' first",
                  slot + 1, callee_name ? callee_name : "callee", source_name);
     } else {
-        snprintf(msg, sizeof(msg), "argument %d for '%s' requires move of an owned source",
+        snprintf(msg, sizeof(msg),
+                 "argument %d for '%s' requires move of a proven unique transferable source",
                  slot + 1, callee_name ? callee_name : "callee");
     }
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
@@ -5708,8 +5719,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (param_slot < 0 || param_slot >= param_count)
                     continue;
                 XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
-                xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot,
-                                                       param_mode);
+                if (!(slot == 0 &&
+                      xa_is_channel_send_boundary_method(callee_obj_type, method_name) &&
+                      xa_call_arg_access(call, i) == XR_CALL_ARG_MOVE)) {
+                    xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot,
+                                                           param_mode);
+                }
                 XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
@@ -5783,7 +5798,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                            arg_type, slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;
-        xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
+        if (!(slot == 0 && xa_is_channel_send_boundary_method(callee_obj_type, method_name) &&
+              access == XR_CALL_ARG_MOVE)) {
+            xa_check_call_arg_access_authorization(ctx, node, call, arg_node, i, slot, param_mode);
+        }
         xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
         if (param_mode == XR_PARAM_READ || param_mode == XR_PARAM_REF ||
             param_mode == XR_PARAM_MOVE) {
@@ -5889,8 +5907,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 arg_type =
                     xa_visit_call_arg_for_param_mode(ctx, arg_node, NULL, access, param_mode);
             }
-            xa_check_owned_storage_param_arg(ctx, node, escape_links, escape_name, arg_node,
-                                             arg_type, direct_slot);
+            xa_check_transfer_storage_param_arg(ctx, node, escape_links, escape_name, arg_node,
+                                                arg_type, direct_slot);
             xa_check_borrowed_escaping_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                                  arg_type, direct_slot);
             xa_check_shared_mutating_param_arg(ctx, node, escape_links, escape_name, arg_node,

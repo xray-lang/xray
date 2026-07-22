@@ -475,9 +475,9 @@ static bool callable_propagate_value(CallableAnalysis *a, const XiFunc *func, co
     if (!dst)
         return false;
 
-    if (value->op == XI_PHI || xi_copy_is_identity_alias(value) || value->op == XI_MOVE ||
-        value->op == XI_BOX || value->op == XI_UNBOX || value->op == XI_CONVERT ||
-        value->op == XI_CHECKTYPE) {
+    if (value->op == XI_PHI || xi_copy_is_identity_alias(value) ||
+        xi_op_is_identity_forward(value->op) || value->op == XI_BOX || value->op == XI_UNBOX ||
+        value->op == XI_CONVERT || value->op == XI_CHECKTYPE) {
         for (uint16_t i = 0; i < value->nargs; i++) {
             CallableSet *src = callable_value_set(a, func, value->args[i]);
             if (src && !callable_set_union(dst, src, changed))

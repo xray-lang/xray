@@ -1096,17 +1096,26 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                    XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
     }
 
-    // Use-after-move check: moved variables cannot be accessed. A direct
-    // `move x` source is allowed to read x when this exact move expression is
-    // being re-inferred after an earlier visit already marked it moved.
-    bool is_current_move_source = ctx->current_move_source_node == node &&
-                                  ctx->current_move_source_symbol_id == sym->id &&
-                                  ctx->current_move_source_allows_stale_mark;
-    if (links && links->move_state == XA_MOVE_MOVED && !is_current_move_source) {
+    // Binding availability comes from the CFG, not a path-insensitive symbol
+    // bit. The exact operand of `move x` is checked by xa_visit_move_expr so
+    // an invalid move can be diagnosed without poisoning later state.
+    bool is_current_move_source =
+        ctx->current_move_source_node == node && ctx->current_move_source_symbol_id == sym->id;
+    XaBindingUseState binding_state =
+        ctx->flow && ctx->flow->current_flow
+            ? xa_flow_binding_use_state(ctx->flow, name, ctx->flow->current_flow)
+            : (links ? links->binding_use : XA_BINDING_LIVE);
+    if (!is_current_move_source &&
+        (binding_state == XA_BINDING_MOVED || binding_state == XA_BINDING_MAYBE_MOVED ||
+         binding_state == XA_BINDING_UNKNOWN)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
-        snprintf(msg, sizeof(msg), "Variable '%s' used after move (moved at line %u)", name,
-                 links->moved_line);
+        if (binding_state == XA_BINDING_MOVED)
+            snprintf(msg, sizeof(msg), "Variable '%s' used after move", name);
+        else if (binding_state == XA_BINDING_MAYBE_MOVED)
+            snprintf(msg, sizeof(msg), "Variable '%s' may have been moved on another path", name);
+        else
+            snprintf(msg, sizeof(msg), "Variable '%s' ownership state is unknown", name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);
     }
@@ -4860,7 +4869,13 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
         return false;
     const char *name = arg_node->as.variable.name;
     XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
-    return xa_symbol_has_shared_provenance(sym);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    return links &&
+           (links->value_capability == XA_CAP_CONST ||
+            links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) &&
+           (links->storage_domain == XR_STORAGE_CONST_SHARED ||
+            links->storage_domain == XR_STORAGE_SYNC_SHARED ||
+            links->storage_domain == XR_STORAGE_MODULE_STATIC);
 }
 
 XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node) {
@@ -4872,9 +4887,24 @@ XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node)
     return xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
 }
 
-static bool xa_boundary_arg_is_owned_move(XaInferContext *ctx, AstNode *arg_node) {
+static bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_node) {
     XaSymbol *sym = xa_boundary_move_source_symbol(ctx, arg_node);
-    return sym && sym->is_owned;
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+    if (!links || links->root_id == 0 || links->root_alias != XA_ROOT_UNIQUE ||
+        links->value_capability == XA_CAP_UNKNOWN || !links->ownership_candidate.complete ||
+        !links->final_move.complete || !links->allocation_plan.complete)
+        return false;
+    /* Boundary context is a compile-time constraint on the allocation
+     * instance, not a runtime promotion. Re-solve materialization before Xi
+     * publication so both backends receive TRANSFERABLE from the creation
+     * plan. */
+    links->storage_domain = XR_STORAGE_TRANSFERABLE;
+    links->allocation_plan.domain = XR_STORAGE_TRANSFERABLE;
+    links->allocation_plan.materialization = XR_MATERIALIZE_SYSTEM_HEAP;
+    links->allocation_plan.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
+    links->ownership_candidate.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
+    links->final_move.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
+    return true;
 }
 
 static void xa_report_boundary_local_move(XaInferContext *ctx, AstNode *boundary_node,
@@ -4892,9 +4922,9 @@ static void xa_report_boundary_local_move(XaInferContext *ctx, AstNode *boundary
                                                  : (boundary_node ? boundary_node->column : 0)};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "%s move of '%s' requires an owned source; use copy(%s) for local storage or "
-             "declare '%s' with owned",
-             boundary_label ? boundary_label : "cross-coroutine value", name, name, name);
+             "%s move of '%s' requires a proven unique transferable root; end aliases/loans or "
+             "use copy(%s)",
+             boundary_label ? boundary_label : "cross-coroutine value", name, name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                &loc);
 }
@@ -4920,7 +4950,7 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
     if (!xa_boundary_transfer_type_needs_explicit(arg_type))
         return;
     if (arg_node->type == AST_MOVE_EXPR) {
-        if (xa_boundary_arg_is_owned_move(ctx, arg_node))
+        if (xa_boundary_arg_is_verified_move(ctx, arg_node))
             return;
         xa_report_boundary_local_move(ctx, boundary_node, arg_node, boundary_label);
         return;
@@ -4935,8 +4965,8 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                                  : (boundary_node ? boundary_node->column : 0)};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "%s transfer of type '%s' requires explicit copy(...) or move of an owned source; "
-             "use shared for shared identity",
+             "%s transfer of type '%s' requires explicit copy(...), move of a proven unique "
+             "root, or a const/synchronized shared value",
              boundary_label ? boundary_label : "cross-coroutine value",
              xr_type_to_string(arg_type));
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
@@ -5213,20 +5243,25 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         move_sym = xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
     }
 
-    // Infer type of the variable being moved
+    const char *move_name =
+        move_sym && inner->type == AST_VARIABLE ? inner->as.variable.name : NULL;
+    XaBindingUseState prior_state =
+        move_name && ctx->flow && ctx->flow->current_flow
+            ? xa_flow_binding_use_state(ctx->flow, move_name, ctx->flow->current_flow)
+            : XA_BINDING_LIVE;
+    int diagnostic_count_before = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
+
+    // Infer the operand while suppressing the ordinary use-after-move check;
+    // this function reports the more precise consume diagnostic below.
     const AstNode *saved_move_source_node = ctx->current_move_source_node;
     uint32_t saved_move_source_symbol_id = ctx->current_move_source_symbol_id;
     bool saved_move_source_allows_stale_mark = ctx->current_move_source_allows_stale_mark;
     ctx->current_move_source_node = NULL;
     ctx->current_move_source_symbol_id = 0;
-    ctx->current_move_source_allows_stale_mark = false;
+    ctx->current_move_source_allows_stale_mark = true;
     if (move_sym) {
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
         ctx->current_move_source_node = inner;
         ctx->current_move_source_symbol_id = move_sym->id;
-        ctx->current_move_source_allows_stale_mark = links && links->move_state == XA_MOVE_MOVED &&
-                                                     links->moved_line == (uint32_t) node->line &&
-                                                     links->moved_column == (uint32_t) node->column;
     }
     XrType *var_type = xa_visit_infer_expr(ctx, inner);
     ctx->current_move_source_node = saved_move_source_node;
@@ -5234,6 +5269,22 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     ctx->current_move_source_allows_stale_mark = saved_move_source_allows_stale_mark;
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    XaSymbolLinks *move_links = move_sym ? xa_analyzer_get_links(ctx->analyzer, move_sym) : NULL;
+    bool same_move_revisit = move_links && move_links->final_move.complete &&
+                             move_links->final_move.id == node->node_id + 1u &&
+                             move_links->final_move.consume_line == (uint32_t) node->line &&
+                             move_links->final_move.consume_column == (uint32_t) node->column;
+
+    if (move_sym && prior_state != XA_BINDING_LIVE && !same_move_revisit) {
+        const char *reason = prior_state == XA_BINDING_MOVED ? "was already moved"
+                             : prior_state == XA_BINDING_MAYBE_MOVED
+                                 ? "may already be moved on another path"
+                                 : "has unknown ownership state";
+        char msg[192];
+        snprintf(msg, sizeof(msg), "cannot move '%s': binding %s", move_name, reason);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
 
     // Check: variable must exist and be a movable var binding.
     if (move_sym && (move_sym->is_const || move_sym->is_shared)) {
@@ -5246,16 +5297,66 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
-    xa_check_active_span_borrow_owner_mutation(ctx, node, move_sym, "moving the owner");
-    // Mark the variable as moved — subsequent accesses are compile errors
-    if (move_sym) {
-        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
-        if (links) {
-            links->move_state = XA_MOVE_MOVED;
-            links->moved_line = (uint32_t) node->line;
-            links->moved_column = (uint32_t) node->column;
+    if (move_sym && move_sym->kind != XA_SYM_VARIABLE && move_sym->kind != XA_SYM_PARAMETER) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "move requires a local variable or move parameter", &loc);
+    }
+    if (move_sym && move_sym->kind == XA_SYM_PARAMETER && move_sym->passing_mode != XR_PARAM_MOVE) {
+        char msg[160];
+        const char *mode = move_sym->passing_mode == XR_PARAM_REF ? "ref" : "read";
+        snprintf(msg, sizeof(msg), "cannot move %s parameter '%s'; declare it with move", mode,
+                 move_name ? move_name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (move_links) {
+        if (move_links->root_id == 0) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot move value: no ownership root exists", &loc);
+        } else if (move_links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "cannot move value: unique ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
+        }
+        if (move_links->value_capability == XA_CAP_UNKNOWN) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot move value: capability is unknown", &loc);
+        } else if (move_links->value_capability == XA_CAP_CONST) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot move const-capability value", &loc);
+        } else if (move_links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot move synchronization capability", &loc);
+        }
+        if (move_links->storage_domain == XR_STORAGE_MODULE_STATIC) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "cannot consume a module-static binding", &loc);
+        }
+        if (!move_links->allocation_plan.complete) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "cannot move value: storage/ownership plan is incomplete (OWN-E-STORAGE-PLAN)",
+                &loc);
+        }
+        bool alias_analysis_failed = false;
+        XaSymbol *live_alias =
+            xa_find_live_strong_alias_after_current(ctx, move_sym, &alias_analysis_failed);
+        if (alias_analysis_failed) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                       "ownership alias analysis failed (AnalysisResourceFailure)",
+                                       &loc);
+        } else if (live_alias) {
+            char msg[224];
+            snprintf(msg, sizeof(msg),
+                     "cannot move '%s': strong alias '%s' remains live (OWN-E-LIVE-ALIAS)",
+                     move_name ? move_name : "?", live_alias->name ? live_alias->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        } else if (move_links->root_alias == XA_ROOT_LOCAL_ALIASED) {
+            xa_mark_root_alias_state(ctx, move_links->root_id, XA_ROOT_UNIQUE);
         }
     }
+    xa_check_active_span_borrow_owner_mutation(ctx, node, move_sym, "moving the owner");
 
     // Check: cannot move synchronization/concurrency handles.
     const char *handle_label = xa_concurrency_handle_label(var_type);
@@ -5270,6 +5371,63 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (var_type && xr_kind_is_primitive(var_type->kind)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "move is not meaningful for value type", &loc);
+    }
+
+    /* A binding created outside a repeated loop would be consumed again on
+     * the backedge. Bindings declared inside the loop body are recreated per
+     * iteration and remain eligible. */
+    if (move_sym && ctx->loop_scope && ctx->loop_scope->entry_scope) {
+        bool declared_before_loop = false;
+        for (XaScope *scope = ctx->loop_scope->entry_scope; scope; scope = scope->parent) {
+            if (scope == move_sym->scope) {
+                declared_before_loop = true;
+                break;
+            }
+        }
+        if (declared_before_loop) {
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "cannot move '%s' in a repeated loop: the next iteration would consume it "
+                     "again",
+                     move_name ? move_name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    }
+
+    // Publish the consume only after every condition has been verified. An
+    // invalid move therefore leaves the CFG and symbol ownership state intact.
+    if (move_sym && ctx->analyzer->diagnostic_count == diagnostic_count_before &&
+        !same_move_revisit) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
+        if (ctx->flow)
+            xa_flow_create_move(ctx->flow, move_name);
+        if (links) {
+            links->binding_use = XA_BINDING_MOVED;
+            links->moved_line = (uint32_t) node->line;
+            links->moved_column = (uint32_t) node->column;
+            links->ownership_candidate.id = node->node_id + 1;
+            links->ownership_candidate.root = links->root_id;
+            links->ownership_candidate.source_symbol_id = move_sym->id;
+            links->ownership_candidate.capability = links->value_capability;
+            links->ownership_candidate.evidence =
+                XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_ROOT_UNIQUE |
+                XA_OWNERSHIP_EV_LOAN_FREE | XA_OWNERSHIP_EV_ALIAS_FREE |
+                XA_OWNERSHIP_EV_ESCAPE_FREE | XA_OWNERSHIP_EV_CAPABILITY |
+                XA_OWNERSHIP_EV_CFG_CONSISTENT;
+            links->ownership_candidate.complete = true;
+            links->final_move.id = links->ownership_candidate.id;
+            links->final_move.candidate_id = links->ownership_candidate.id;
+            links->final_move.storage_plan_id = links->allocation_plan.id;
+            links->final_move.root = links->root_id;
+            links->final_move.source_capability = links->value_capability;
+            links->final_move.target_capability = links->value_capability;
+            links->final_move.consume_line = (uint32_t) node->line;
+            links->final_move.consume_column = (uint32_t) node->column;
+            links->final_move.evidence =
+                links->ownership_candidate.evidence | XA_OWNERSHIP_EV_STORAGE;
+            links->final_move.complete = links->allocation_plan.complete;
+        }
     }
 
     // move expr has the same type as the inner expression

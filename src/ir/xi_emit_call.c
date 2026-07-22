@@ -966,7 +966,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
     if (bname && strcmp(bname, "copy_owned") == 0) {
-        emit_builtin_unary_opcode_c(ctx, v, dst, OP_COPY, XR_OBJ_STORAGE_OWNED);
+        emit_builtin_unary_opcode_c(ctx, v, dst, OP_COPY, XR_OBJ_STORAGE_TRANSFER);
         return;
     }
     if (bname && strcmp(bname, "to_shared") == 0) {

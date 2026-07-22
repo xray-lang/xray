@@ -310,28 +310,28 @@ static void test_cross_execution_capture_actions(void) {
     memset(&capture, 0, sizeof(capture));
     capture.type = &t_int;
     capture.capture_kind = XI_CAPTURE_BY_COPY;
-    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_INLINE_VALUE,
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_INLINE_COPY,
               "scalar capture is inline");
 
     capture.type = &t_str;
-    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_DEEP_COPY,
-              "RC capture is deep copied");
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_REJECT,
+              "managed capture without explicit copy is rejected");
 
     capture.needs_cell = true;
     capture.capture_kind = XI_CAPTURE_BY_MUT_CELL;
     capture.is_mutable = true;
-    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_REJECT,
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_REJECT,
               "mutable cell capture is rejected");
 
     capture.is_mutable = false;
     capture.capture_kind = XI_CAPTURE_BY_COPY;
-    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_DEEP_COPY,
-              "read-only forward cell is privately copied");
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_REJECT,
+              "read-only forward cell without const proof is rejected");
 
     capture.needs_cell = false;
     capture.is_shared = true;
     capture.capture_kind = XI_CAPTURE_SHARED;
-    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_SHARED_REF,
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_SYNC_SHARE,
               "shared capture keeps stable identity");
 }
 

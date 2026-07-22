@@ -218,8 +218,8 @@ static uint32_t hash_param_storage_requirements32(const XaSymbolLinks *links) {
         return 0;
     h = fold_u64(h, (uint64_t) links->param_effect_count);
     for (int i = 0; i < links->param_effect_count; i++) {
-        uint8_t owner = links->param_effects[i].storage;
-        if (owner != XR_STORAGE_NONE)
+        uint8_t owner = links->param_effects[i].storage_domain;
+        if (owner != XR_STORAGE_DOMAIN_UNKNOWN)
             has_requirement = true;
         h = fold_u64(h, (uint64_t) (uint32_t) i);
         h = fold_u64(h, (uint64_t) owner);
@@ -242,7 +242,7 @@ static bool add_param_storage_summaries(XgProducer *producer, const XaSymbolLink
     if (!links || !links->param_effects || links->param_effect_count <= 0)
         return true;
     for (int i = 0; i < links->param_effect_count; i++) {
-        if (links->param_effects[i].storage != XR_STORAGE_NONE) {
+        if (links->param_effects[i].storage_domain != XR_STORAGE_DOMAIN_UNKNOWN) {
             has_requirement = true;
             break;
         }
@@ -257,7 +257,7 @@ static bool add_param_storage_summaries(XgProducer *producer, const XaSymbolLink
         row.requirement_id = start + i;
         row.owner_func_id = owner_func_id;
         row.param_index = i;
-        row.storage_owner = links->param_effects[i].storage;
+        row.storage_domain = links->param_effects[i].storage_domain;
         if (!xg_global_evidence_add_param_storage(producer->evidence, &row))
             return false;
     }
@@ -9927,10 +9927,10 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
-    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_domain = XR_STORAGE_MODULE_STATIC;
     decl.storage_mutability = XR_STORAGE_READONLY;
     decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+    decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
     if (extern_attr)
@@ -10014,10 +10014,10 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
-    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_domain = XR_STORAGE_MODULE_STATIC;
     decl.storage_mutability = XR_STORAGE_READONLY;
     decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+    decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
     if (cls->is_native)
         decl.flags |= XG_DECL_NATIVE;
     if (cls->explicit_final)
@@ -10217,10 +10217,10 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
         producer_unique_decl_source_node_id(p, module_id, producer_source_node_id(module_id, node),
                                             decl.kind, decl.name_id, decl.signature_key);
     decl.source_span_id = (uint32_t) node->line;
-    decl.storage_owner = XR_STORAGE_MODULE;
+    decl.storage_domain = XR_STORAGE_MODULE_STATIC;
     decl.storage_mutability = XR_STORAGE_READONLY;
     decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-    decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+    decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
     if (derive_flags != 0)
         decl.flags |= XG_DECL_DERIVE;
     decl.derive_flags = derive_flags;
@@ -10323,10 +10323,10 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
                 import_decl.kind = XG_DECL_GLOBAL;
                 import_decl.name_id = hash_name32(member->alias ? member->alias : member->name);
                 import_decl.source_span_id = (uint32_t) stmt->line;
-                import_decl.storage_owner = XR_STORAGE_MODULE;
+                import_decl.storage_domain = XR_STORAGE_MODULE_STATIC;
                 import_decl.storage_mutability = XR_STORAGE_READONLY;
                 import_decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-                import_decl.materialization_kind = XR_MATERIALIZE_MODULE_READONLY;
+                import_decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
                 if (!xg_global_evidence_add_decl(p->evidence, &import_decl))
                     return false;
             }
@@ -10348,20 +10348,20 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
         stmt->type == AST_IMPORT_STMT ? 0 : hash_tref32(stmt->as.var_decl.type_annotation);
     decl.source_span_id = (uint32_t) stmt->line;
     if (stmt->type == AST_SHARED_DECL) {
-        decl.storage_owner = XR_STORAGE_SHARED_SYSTEM;
+        decl.storage_domain = XR_STORAGE_SYNC_SHARED;
         decl.storage_mutability = XR_STORAGE_INTERIOR_MUTABLE;
-        decl.address_identity = XR_ADDRESS_SHARED_STABLE;
-        decl.materialization_kind = XR_MATERIALIZE_SHARED_SYSTEM;
+        decl.address_identity = XR_ADDRESS_SYSTEM_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_SYSTEM_HEAP;
     } else {
-        decl.storage_owner = XR_STORAGE_MODULE;
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
         decl.storage_mutability =
             stmt->type == AST_CONST_DECL ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
         if (stmt->type == AST_IMPORT_STMT)
             decl.storage_mutability = XR_STORAGE_READONLY;
         decl.address_identity = XR_ADDRESS_MODULE_STABLE;
         decl.materialization_kind = (stmt->type == AST_CONST_DECL || stmt->type == AST_IMPORT_STMT)
-                                        ? XR_MATERIALIZE_MODULE_READONLY
-                                        : XR_MATERIALIZE_MODULE_RUNTIME;
+                                        ? XR_MATERIALIZE_STATIC_DATA
+                                        : XR_MATERIALIZE_STATIC_DATA;
     }
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }

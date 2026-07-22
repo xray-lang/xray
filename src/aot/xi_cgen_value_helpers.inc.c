@@ -163,7 +163,8 @@ static bool cg_value_is_dead_aot_marker(const XiCgenCtx *ctx, const XiFunc *f, c
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return true;
         default:
             return false;

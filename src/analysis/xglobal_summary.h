@@ -703,7 +703,7 @@ typedef struct XgDeclSummary {
     uint32_t source_span_id;
     uint32_t derive_flags;
     uint32_t storage_flags;
-    uint8_t storage_owner;
+    uint8_t storage_domain;
     uint8_t storage_mutability;
     uint8_t address_identity;
     uint8_t materialization_kind;
@@ -837,7 +837,7 @@ typedef struct XgParamStorageSummary {
     XgParamStorageId requirement_id;
     XgFuncId owner_func_id;
     uint32_t param_index;
-    uint8_t storage_owner;
+    uint8_t storage_domain;
     uint32_t flags;
 } XgParamStorageSummary;
 

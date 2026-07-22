@@ -26,7 +26,7 @@ typedef struct XrAllocationContext {
     struct XrRuntimeCore *core;
     struct XrCoroHeap *local_heap;
     struct XrSystemHeap *shared_heap;
-    uint8_t owner; /* XrStorageOwner */
+    uint8_t domain; /* XrSemanticStorageDomain */
 } XrAllocationContext;
 
 typedef struct XrExecutionContext {
@@ -39,7 +39,7 @@ typedef struct XrExecutionContext {
 } XrExecutionContext;
 
 XR_FUNC void xr_alloc_context_init(XrAllocationContext *ctx, struct XrRuntimeCore *core,
-                                   XrStorageOwner owner);
+                                   XrSemanticStorageDomain domain);
 /* Allocate a runtime object from an explicit lifetime context.  Execution-local
  * contexts use their coroutine heap when present; root/module contexts use the
  * runtime fixed heap.  Shared-system objects require their typed system-heap
@@ -55,6 +55,6 @@ XR_FUNC XrExecutionContext *xr_exec_context_enter(XrExecutionContext *ctx);
 XR_FUNC void xr_exec_context_restore(XrExecutionContext *previous);
 XR_FUNC XrAllocationContext *xr_alloc_context_current(void);
 XR_FUNC struct XrVMRuntime *xr_exec_context_vm_owner(void);
-XR_FUNC const char *xr_storage_owner_name(XrStorageOwner owner);
+XR_FUNC const char *xr_storage_domain_name(XrSemanticStorageDomain domain);
 
 #endif /* XR_EXEC_CONTEXT_H */

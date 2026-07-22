@@ -183,7 +183,8 @@ static bool verify_vector_result_op(const XiValue *value) {
         case XI_VEC_SHUFFLE:
         case XI_VEC_WIDEN_MUL:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_PHI:
             return true;
         default:
@@ -211,7 +212,8 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
     const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, plan->func);
     unsigned lane_bytes = verify_vector_lane_bytes(rep->vector_native_type);
     unsigned width = lane_bytes * (unsigned) rep->vector_lanes;
-    bool identity = value->op == XI_COPY || value->op == XI_MOVE || value->op == XI_PHI;
+    bool identity =
+        value->op == XI_COPY || xi_op_is_identity_forward(value->op) || value->op == XI_PHI;
 
     if (!verify_vector_result_op(value))
         return set_error(errbuf, errbuf_len, "AOT vector value plan has non-vector producer");
@@ -976,6 +978,20 @@ static bool verify_transfer_plan(const XaotBundle *bundle, const XaotTransferPla
         return set_error(errbuf, errbuf_len, "AOT transfer plan mode does not re-derive");
     if (plan->action != derived.action)
         return set_error(errbuf, errbuf_len, "AOT transfer plan action does not re-derive");
+    if (plan->action == XR_TRANSFER_REJECT)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan is rejected");
+    if (plan->source_domain != derived.source_domain ||
+        plan->target_domain != derived.target_domain)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan domain does not re-derive");
+    if (plan->source_capability != derived.source_capability ||
+        plan->target_capability != derived.target_capability)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan capability does not re-derive");
+    if (plan->storage_plan_id != derived.storage_plan_id ||
+        plan->transfer_plan_id != derived.transfer_plan_id ||
+        plan->move_proof_id != derived.move_proof_id)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan proof identity does not re-derive");
+    if (plan->drop_action != derived.drop_action || plan->cost_class != derived.cost_class)
+        return set_error(errbuf, errbuf_len, "AOT transfer plan cost/drop does not re-derive");
     if (plan->evidence != derived.evidence)
         return set_error(errbuf, errbuf_len, "AOT transfer plan evidence does not re-derive");
     if (plan->unproven_reason != derived.unproven_reason)
@@ -1074,9 +1090,9 @@ static uint32_t verify_param_storage_folded32(uint64_t h) {
     return folded ? folded : 1;
 }
 
-static bool verify_param_storage_owner_valid(uint8_t owner) {
-    return owner == XR_STORAGE_NONE || owner == XR_STORAGE_OWNED_SYSTEM ||
-           owner == XR_STORAGE_SHARED_SYSTEM;
+static bool verify_param_storage_domain_valid(uint8_t domain) {
+    return domain == XR_STORAGE_DOMAIN_UNKNOWN || domain == XR_STORAGE_TRANSFERABLE ||
+           domain == XR_STORAGE_SYNC_SHARED;
 }
 
 static bool verify_body_param_storage_vector(const XgGlobalEvidence *ev, const XgBodySummary *body,
@@ -1106,13 +1122,13 @@ static bool verify_body_param_storage_vector(const XgGlobalEvidence *ev, const X
         if (row->owner_func_id != body->func_id || row->param_index != i)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence param storage vector does not re-derive");
-        if (!verify_param_storage_owner_valid(row->storage_owner))
+        if (!verify_param_storage_domain_valid(row->storage_domain))
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence param storage owner is invalid");
-        if (row->storage_owner != XR_STORAGE_NONE)
+        if (row->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN)
             has_requirement = true;
         hash = verify_param_storage_fold_u64(hash, (uint64_t) i);
-        hash = verify_param_storage_fold_u64(hash, (uint64_t) row->storage_owner);
+        hash = verify_param_storage_fold_u64(hash, (uint64_t) row->storage_domain);
     }
     if (!has_requirement)
         return set_error(errbuf, errbuf_len, "AOT global evidence param storage vector is empty");
@@ -3028,28 +3044,27 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         if (decl->module_id == XG_NO_ID || decl->source_node_id == 0)
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence declaration source identity is missing");
-        if (decl->storage_owner == XR_STORAGE_NONE) {
+        if (decl->storage_domain == XR_STORAGE_DOMAIN_UNKNOWN) {
             if (decl->storage_flags != 0 || decl->storage_mutability != XR_STORAGE_READONLY ||
                 decl->address_identity != XR_ADDRESS_NONE ||
-                decl->materialization_kind != XR_MATERIALIZE_INLINE)
+                decl->materialization_kind != XR_MATERIALIZE_INVALID)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence non-storage declaration has provenance");
-        } else if (decl->storage_owner == XR_STORAGE_MODULE) {
+        } else if (decl->storage_domain == XR_STORAGE_MODULE_STATIC) {
             if (decl->address_identity != XR_ADDRESS_MODULE_STABLE ||
-                (decl->materialization_kind != XR_MATERIALIZE_MODULE_READONLY &&
-                 decl->materialization_kind != XR_MATERIALIZE_MODULE_RUNTIME))
+                decl->materialization_kind != XR_MATERIALIZE_STATIC_DATA)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence module storage provenance is stale");
-        } else if (decl->storage_owner == XR_STORAGE_SHARED_SYSTEM) {
-            if (decl->address_identity != XR_ADDRESS_SHARED_STABLE ||
-                decl->materialization_kind != XR_MATERIALIZE_SHARED_SYSTEM)
+        } else if (decl->storage_domain == XR_STORAGE_SYNC_SHARED) {
+            if (decl->address_identity != XR_ADDRESS_SYSTEM_STABLE ||
+                decl->materialization_kind != XR_MATERIALIZE_SYSTEM_HEAP)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence shared storage provenance is stale");
-        } else if (decl->storage_owner == XR_STORAGE_OWNED_SYSTEM) {
-            if (decl->materialization_kind != XR_MATERIALIZE_OWNED_SYSTEM)
+        } else if (decl->storage_domain == XR_STORAGE_TRANSFERABLE) {
+            if (decl->materialization_kind != XR_MATERIALIZE_SYSTEM_HEAP)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence owned storage provenance is stale");
-        } else if (decl->storage_owner == XR_STORAGE_FOREIGN) {
+        } else if (decl->storage_domain == XR_STORAGE_FOREIGN) {
             if (decl->address_identity != XR_ADDRESS_FOREIGN)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence foreign storage provenance is stale");
@@ -3063,7 +3078,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 other->source_node_id == decl->source_node_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence declaration source identity is duplicated");
-            if (decl->storage_owner != XR_STORAGE_NONE && other->storage_owner != XR_STORAGE_NONE &&
+            if (decl->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN &&
+                other->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN &&
                 other->module_id == decl->module_id && other->name_id == decl->name_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence storage identity is duplicated");
@@ -3197,7 +3213,7 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         if (!verify_find_evidence_body_by_func(ev, row->owner_func_id))
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence param storage owner body is missing");
-        if (!verify_param_storage_owner_valid(row->storage_owner))
+        if (!verify_param_storage_domain_valid(row->storage_domain))
             return set_error(errbuf, errbuf_len,
                              "AOT global evidence param storage owner is invalid");
         for (uint32_t j = i + 1; j < ev->nparam_storages; j++) {
@@ -3788,7 +3804,8 @@ static uint32_t verify_capability_transfer_count(const XaotBundle *bundle, uint3
     if (!bundle || capability != XG_CAP_DEEP_COPY)
         return 0;
     for (uint32_t i = 0; i < bundle->ntransfer_plans; i++) {
-        if (bundle->transfer_plans[i].action == XAOT_TRANSFER_ACTION_DEEP_COPY)
+        if (bundle->transfer_plans[i].action == XR_TRANSFER_EXPLICIT_COPY &&
+            (bundle->transfer_plans[i].evidence & XAOT_TRANSFER_EV_BOUNDARY_CLONE) != 0)
             count++;
     }
     return count;
@@ -7598,8 +7615,10 @@ static bool verify_func_allocation_plans_recursive(const XaotBundle *bundle, con
 }
 
 static const XiFunc *verify_spawn_capture_target(const XiValue *callee) {
-    while (callee && (callee->op == XI_BOX || callee->op == XI_COPY || callee->op == XI_MOVE) &&
-           callee->nargs > 0)
+    while (
+        callee &&
+        (callee->op == XI_BOX || callee->op == XI_COPY || xi_op_is_identity_forward(callee->op)) &&
+        callee->nargs > 0)
         callee = callee->args[0];
     if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
         return (const XiFunc *) callee->aux;
@@ -7621,7 +7640,7 @@ static bool verify_spawn_capture_materialization(const XaotBundle *bundle, const
         if (!plan)
             return set_error(errbuf, errbuf_len,
                              "AOT cross-execution capture has no materialization plan");
-        if (plan->action == XR_CAPTURE_REJECT || plan->action == XR_CAPTURE_MOVE)
+        if (plan->action == XR_TRANSFER_REJECT || plan->action == XR_TRANSFER_MOVE_UNIQUE)
             return set_error(errbuf, errbuf_len,
                              "AOT cross-execution capture materialization is rejected");
     }
@@ -7715,7 +7734,7 @@ static bool verify_fixed_bytes_plan(const XaotBundle *bundle, const XaotFixedByt
     if (plan->action == XAOT_FIXED_BYTES_READONLY_PTR) {
         const XaotAddressPlan *address = xaot_address_plan_find(bundle, plan->value);
         if (!address || address->provenance.origin != XR_POINTER_ORIGIN_STATIC ||
-            address->provenance.owner != XR_STORAGE_MODULE ||
+            address->provenance.domain != XR_STORAGE_MODULE_STATIC ||
             address->provenance.mutability != XR_STORAGE_READONLY ||
             address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE ||
             address->provenance.escape != XR_POINTER_ESCAPE_STABLE)

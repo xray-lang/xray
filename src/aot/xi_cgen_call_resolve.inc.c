@@ -207,7 +207,7 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
         return cg_no_static_function_call();
 
     if ((callee->op == XI_BOX || callee->op == XI_UNBOX || xi_copy_is_identity_alias(callee) ||
-         callee->op == XI_MOVE) &&
+         xi_op_is_identity_forward(callee->op)) &&
         callee->nargs >= 1 && callee->args && callee->args[0]) {
         CgStaticFunctionCall inner = cg_resolve_static_function_call(ctx, current, callee->args[0]);
         if (inner.func)

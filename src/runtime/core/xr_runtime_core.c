@@ -49,8 +49,8 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
         goto fail;
 
     xr_alloc_context_init(&core->root_alloc, core, XR_STORAGE_EXEC_LOCAL);
-    xr_alloc_context_init(&core->module_alloc, core, XR_STORAGE_MODULE);
-    xr_alloc_context_init(&core->shared_alloc, core, XR_STORAGE_SHARED_SYSTEM);
+    xr_alloc_context_init(&core->module_alloc, core, XR_STORAGE_MODULE_STATIC);
+    xr_alloc_context_init(&core->shared_alloc, core, XR_STORAGE_SYNC_SHARED);
     xr_exec_context_init(&core->root_exec, core, &core->root_alloc);
     xr_exec_context_init(&core->module_exec, core, &core->module_alloc);
 

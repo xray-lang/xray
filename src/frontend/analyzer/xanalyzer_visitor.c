@@ -65,7 +65,7 @@ static void xa_reset_symbol_move_state_cb(const char *key, void *value, void *us
     XaSymbol *sym = (XaSymbol *) value;
     if (!sym)
         return;
-    sym->links.move_state = XA_MOVE_NOT_MOVED;
+    sym->links.binding_use = XA_BINDING_LIVE;
     sym->links.moved_line = 0;
     sym->links.moved_column = 0;
 }
@@ -2558,8 +2558,27 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
 
     symbol->passing_mode = param->passing_mode;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
-    if (links)
+    if (links) {
         links->is_definitely_assigned = true;
+        links->binding_use = XA_BINDING_LIVE;
+        links->root_id = symbol->id;
+        links->root_alias =
+            param->passing_mode == XR_PARAM_MOVE ? XA_ROOT_UNIQUE : XA_ROOT_ALIAS_UNKNOWN;
+        links->binding_mutability =
+            param->passing_mode == XR_PARAM_REF ? XA_BINDING_REBINDABLE : XA_BINDING_STABLE;
+        links->value_capability = XA_CAP_MUTABLE;
+        links->storage_domain =
+            param->passing_mode == XR_PARAM_MOVE ? XR_STORAGE_TRANSFERABLE : XR_STORAGE_EXEC_LOCAL;
+        links->allocation_plan.id = symbol->id;
+        links->allocation_plan.key.source_site = symbol->id;
+        links->allocation_plan.domain = links->storage_domain;
+        links->allocation_plan.materialization = XR_MATERIALIZE_EXTERNAL;
+        links->allocation_plan.ownership_domain = symbol->id;
+        links->allocation_plan.capability = links->value_capability;
+        links->allocation_plan.evidence =
+            XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_CAPABILITY | XA_OWNERSHIP_EV_STORAGE;
+        links->allocation_plan.complete = param->passing_mode == XR_PARAM_MOVE;
+    }
     return symbol;
 }
 
@@ -5507,14 +5526,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType **saved_return_types = ctx->return_types;
             int saved_return_count = ctx->return_type_count;
             int saved_return_cap = ctx->return_type_capacity;
-            uint8_t saved_return_storage_owner = ctx->return_storage_owner;
+            uint8_t saved_return_storage_owner = ctx->return_storage_domain;
             bool saved_return_storage_known = ctx->return_storage_known;
             bool saved_return_storage_mixed = ctx->return_storage_mixed;
             bool saved_return_storage_unknown = ctx->return_storage_unknown;
             ctx->return_types = NULL;
             ctx->return_type_count = 0;
             ctx->return_type_capacity = 0;
-            ctx->return_storage_owner = XR_STORAGE_NONE;
+            ctx->return_storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
             ctx->return_storage_known = false;
             ctx->return_storage_mixed = false;
             ctx->return_storage_unknown = false;
@@ -5651,7 +5670,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                               ? xa_analyzer_get_links(ctx->analyzer, fn_sym)
                                               : NULL;
                 if (fn_links) {
-                    fn_links->return_storage_owner = ctx->return_storage_owner;
+                    fn_links->return_storage_domain = ctx->return_storage_domain;
                     fn_links->return_storage_known = ctx->return_storage_known &&
                                                      !ctx->return_storage_mixed &&
                                                      !ctx->return_storage_unknown;
@@ -5693,7 +5712,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->return_types = saved_return_types;
             ctx->return_type_count = saved_return_count;
             ctx->return_type_capacity = saved_return_cap;
-            ctx->return_storage_owner = saved_return_storage_owner;
+            ctx->return_storage_domain = saved_return_storage_owner;
             ctx->return_storage_known = saved_return_storage_known;
             ctx->return_storage_mixed = saved_return_storage_mixed;
             ctx->return_storage_unknown = saved_return_storage_unknown;

@@ -18,7 +18,7 @@
  *   This is a PURE ANALYSIS pass: it annotates values via a side table
  *   (XiOwnInfo) keyed by SSA value id. It does NOT mutate the IR and does
  *   NOT insert dup/drop. The later xi_arc rewrite consumes these
- *   annotations to emit XI_RETAIN / XI_RELEASE / XI_MOVE.
+ *   annotations to emit XI_RETAIN / XI_RELEASE / XI_OWNER_FORWARD.
  *
  * RELATED IMPLEMENTATIONS:
  *   - Roc  crates/compiler/mono/src/inc_dec.rs (backward + owned/borrow env)
@@ -104,7 +104,7 @@ XR_FUNC void xi_own_free(XiOwnResult *out);
 /* Whether a type is reference-counted (needs dup/drop).
  * Scalars (int/float/bool/null/unit/never) are not. */
 XR_FUNC bool xi_own_type_is_rc(const struct XrType *type);
-XR_FUNC XrCaptureAction xi_capture_cross_execution_action(const XiCapture *capture);
+XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture);
 
 /* Whether a projection (field/element read) of this type could yield a heap
  * reference whose storage belongs to the owner. Conservative: only the fixed

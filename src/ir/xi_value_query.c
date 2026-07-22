@@ -62,7 +62,7 @@ XR_FUNC bool xi_type_is_thread(const XrType *type) {
 static const XiValue *xi_value_unwrap_identity(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

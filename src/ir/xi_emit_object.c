@@ -151,7 +151,8 @@ static bool struct_uses_safe_depth(EmitCtx *ctx, XiValue *target, XiValue *origi
                             return false;
                         break;
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (a != 0)
                             return false;
                         if (xi_emit_trace_struct_origin(v) != origin)

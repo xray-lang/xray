@@ -37,7 +37,7 @@ static inline void rewrite_to_builtin(XiValue *v, const char *name) {
 static const XiValue *backend_unwrap_identity_value(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

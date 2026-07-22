@@ -21,7 +21,7 @@
  *   5. Infer a per-function borrow signature for parameters.
  *
  * This is a PURE ANALYSIS: it never mutates the IR. The xi_arc rewrite
- * consumes these annotations to insert XI_RETAIN/XI_RELEASE/XI_MOVE.
+ * consumes these annotations to insert XI_RETAIN/XI_RELEASE/XI_OWNER_FORWARD.
  */
 
 #include "xi_own.h"
@@ -69,22 +69,22 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     }
 }
 
-XR_FUNC XrCaptureAction xi_capture_cross_execution_action(const XiCapture *capture) {
+XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture) {
     if (!capture)
-        return XR_CAPTURE_REJECT;
+        return XR_TRANSFER_REJECT;
     if (capture->capture_kind == XI_CAPTURE_SHARED || capture->is_shared)
-        return XR_CAPTURE_SHARED_REF;
+        return XR_TRANSFER_SYNC_SHARE;
     if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
-        return capture->is_mutable ? XR_CAPTURE_REJECT : XR_CAPTURE_MODULE_READONLY;
+        return capture->is_mutable ? XR_TRANSFER_REJECT : XR_TRANSFER_MODULE_READ;
     if (capture->is_mutable || capture->is_reassigned ||
         capture->capture_kind == XI_CAPTURE_BY_IMM_REF)
-        return XR_CAPTURE_REJECT;
-    /* A cell may be a compiler-only forward-initializer artifact rather than
-     * a source-level mutable binding.  Give the child a private copy of that
-     * cell; shared values inside it retain their shared identity. */
-    if (capture->needs_cell)
-        return XR_CAPTURE_DEEP_COPY;
-    return xi_own_type_is_rc(capture->type) ? XR_CAPTURE_DEEP_COPY : XR_CAPTURE_INLINE_VALUE;
+        return XR_TRANSFER_REJECT;
+    /* Cross-execution capture never invents a graph copy. Source `copy(...)`
+     * materializes an independent value before capture; an ordinary managed
+     * capture without const/sync/move evidence is rejected. */
+    if (capture->needs_cell || xi_own_type_is_rc(capture->type))
+        return XR_TRANSFER_REJECT;
+    return XR_TRANSFER_INLINE_COPY;
 }
 
 /* Whether a projection (field / element read) of this type could yield a heap

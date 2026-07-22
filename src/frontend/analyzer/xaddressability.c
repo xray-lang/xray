@@ -85,7 +85,7 @@ static void pointer_set_mutability(XaPointerProvenance *out, XrType *type) {
 
 static void pointer_set_foreign(XaPointerProvenance *out, XrType *type) {
     memset(out, 0, sizeof(*out));
-    out->address.owner = XR_STORAGE_FOREIGN;
+    out->address.domain = XR_STORAGE_FOREIGN;
     out->address.address_identity = XR_ADDRESS_FOREIGN;
     out->address.origin = XR_POINTER_ORIGIN_FOREIGN;
     out->address.escape = XR_POINTER_ESCAPE_STABLE;
@@ -103,7 +103,7 @@ static void pointer_set_static_literal(XaPointerProvenance *out, AstNode *expr, 
     memset(out, 0, sizeof(*out));
     out->address.storage_id = expr ? expr->node_id + 1 : 0;
     out->address.lifetime_id = out->address.storage_id;
-    out->address.owner = XR_STORAGE_MODULE;
+    out->address.domain = XR_STORAGE_MODULE_STATIC;
     out->address.address_identity = XR_ADDRESS_MODULE_STABLE;
     out->address.origin = XR_POINTER_ORIGIN_STATIC;
     out->address.escape = XR_POINTER_ESCAPE_STABLE;
@@ -120,14 +120,14 @@ static void pointer_set_owner(XaInferContext *ctx, XaPointerProvenance *out, XaS
     bool module_fixed = owner && owner->scope && owner->scope->kind == XA_SCOPE_GLOBAL &&
                         owner_type && owner_type->kind == XR_KIND_FIXED_ARRAY;
     if (module_fixed) {
-        out->address.owner = XR_STORAGE_MODULE;
+        out->address.domain = XR_STORAGE_MODULE_STATIC;
         out->address.address_identity = XR_ADDRESS_MODULE_STABLE;
         out->address.origin = XR_POINTER_ORIGIN_MODULE;
         out->address.escape = XR_POINTER_ESCAPE_STABLE;
     } else {
-        out->address.owner = owner && owner->is_shared  ? XR_STORAGE_SHARED_SYSTEM
-                             : owner && owner->is_owned ? XR_STORAGE_OWNED_SYSTEM
-                                                        : XR_STORAGE_EXEC_LOCAL;
+        out->address.domain = owner && owner->is_shared  ? XR_STORAGE_SYNC_SHARED
+                              : owner && owner->is_owned ? XR_STORAGE_TRANSFERABLE
+                                                         : XR_STORAGE_EXEC_LOCAL;
         out->address.address_identity = XR_ADDRESS_LEXICAL;
         out->address.origin = owner_type && owner_type->kind == XR_KIND_FIXED_ARRAY
                                   ? XR_POINTER_ORIGIN_STACK_BORROW
@@ -388,22 +388,27 @@ static XaAddressability classify_variable(XaInferContext *ctx, AstNode *expr, bo
     result.mutable_ok = !symbol->is_const && !symbol->is_readonly_binding;
     result.is_imported = symbol->is_imported;
     result.is_shared = symbol->is_shared;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
 
     if (symbol->scope && symbol->scope->kind == XA_SCOPE_GLOBAL) {
         result.kind = XA_ADDRESS_MODULE_STATIC;
         result.lifetime = XA_ADDRESS_LIFETIME_MODULE;
-        result.storage_owner = symbol->is_shared ? XR_STORAGE_SHARED_SYSTEM : XR_STORAGE_MODULE;
+        result.storage_domain = links && links->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN
+                                    ? links->storage_domain
+                                    : XR_STORAGE_MODULE_STATIC;
         result.address_identity =
-            symbol->is_shared ? XR_ADDRESS_SHARED_STABLE : XR_ADDRESS_MODULE_STABLE;
+            symbol->is_shared ? XR_ADDRESS_SYSTEM_STABLE : XR_ADDRESS_MODULE_STABLE;
     } else if (symbol->kind == XA_SYM_PARAMETER) {
         result.kind = XA_ADDRESS_PARAMETER;
         result.lifetime = XA_ADDRESS_LIFETIME_CALL;
-        result.storage_owner = XR_STORAGE_EXEC_LOCAL;
+        result.storage_domain = XR_STORAGE_EXEC_LOCAL;
         result.address_identity = XR_ADDRESS_LEXICAL;
     } else {
         result.kind = XA_ADDRESS_STACK_LOCAL;
         result.lifetime = XA_ADDRESS_LIFETIME_LEXICAL;
-        result.storage_owner = symbol->is_owned ? XR_STORAGE_OWNED_SYSTEM : XR_STORAGE_EXEC_LOCAL;
+        result.storage_domain = links && links->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN
+                                    ? links->storage_domain
+                                    : XR_STORAGE_EXEC_LOCAL;
         result.address_identity = XR_ADDRESS_LEXICAL;
     }
 

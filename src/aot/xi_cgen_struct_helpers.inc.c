@@ -1311,7 +1311,7 @@ static bool emit_static_tuple_get_expr(XiCgenCtx *ctx, FILE *out, const XiValue 
 }
 
 static bool cg_is_identity_copy_or_move(const XiValue *v) {
-    return v && (v->op == XI_MOVE || xi_copy_is_identity_alias(v));
+    return v && (xi_op_is_identity_forward(v->op) || xi_copy_is_identity_alias(v));
 }
 
 static bool cg_is_static_const_ref_alias(const XiValue *v) {
@@ -1589,7 +1589,8 @@ static const XiValue *cg_trace_struct_new(const XiValue *v) {
 }
 
 static const XiValue *cg_trace_struct_new_identity(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_RETAIN) && v->nargs >= 1)
+    while (v && (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN) &&
+           v->nargs >= 1)
         v = v->args[0];
     return (v && v->op == XI_AGG_NEW) ? v : NULL;
 }
@@ -1706,7 +1707,8 @@ static const XrAggregateLayout *cg_value_struct_layout(XiCgenCtx *ctx, const XiF
     for (int depth = 0; cur && depth <= 8; depth++) {
         if (cur->op == XI_AGG_NEW)
             return (const XrAggregateLayout *) cur->aux;
-        if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_RETAIN) && cur->nargs >= 1) {
+        if ((cur->op == XI_COPY || xi_op_is_identity_forward(cur->op) || cur->op == XI_RETAIN) &&
+            cur->nargs >= 1) {
             cur = cur->args[0];
             continue;
         }

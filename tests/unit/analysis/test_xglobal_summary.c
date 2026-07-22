@@ -17858,19 +17858,19 @@ TEST(storage_and_capture_plans_close_owner_actions) {
         .module_id = 1,
         .decl_id = 1,
         .kind = XG_DECL_GLOBAL,
-        .storage_owner = XR_STORAGE_MODULE,
+        .storage_domain = XR_STORAGE_MODULE_STATIC,
         .storage_mutability = XR_STORAGE_READONLY,
         .address_identity = XR_ADDRESS_MODULE_STABLE,
-        .materialization_kind = XR_MATERIALIZE_MODULE_READONLY,
+        .materialization_kind = XR_MATERIALIZE_STATIC_DATA,
     };
     XgDeclSummary shared_state_decl = {
         .module_id = 1,
         .decl_id = 2,
         .kind = XG_DECL_GLOBAL,
-        .storage_owner = XR_STORAGE_SHARED_SYSTEM,
+        .storage_domain = XR_STORAGE_SYNC_SHARED,
         .storage_mutability = XR_STORAGE_INTERIOR_MUTABLE,
-        .address_identity = XR_ADDRESS_SHARED_STABLE,
-        .materialization_kind = XR_MATERIALIZE_SHARED_SYSTEM,
+        .address_identity = XR_ADDRESS_SYSTEM_STABLE,
+        .materialization_kind = XR_MATERIALIZE_SYSTEM_HEAP,
     };
     XgBodySummary entry = {
         .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x194};
@@ -17952,7 +17952,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nmodule_init_plans, 1);
-    ASSERT_EQ_UINT(bundle.module_init_plans[0].allocation_owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(bundle.module_init_plans[0].allocation_domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_FALSE(bundle.module_init_plans[0].may_suspend);
     const XaotStoragePlan *module_const = xaot_storage_plan_find(&bundle, &module, 0);
     const XaotStoragePlan *shared_state = xaot_storage_plan_find(&bundle, &module, 1);
@@ -17966,31 +17966,31 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_NOT_NULL(shared_capture);
     ASSERT_NOT_NULL(local_capture);
     ASSERT_NOT_NULL(address);
-    ASSERT_EQ_UINT(module_const->owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(module_const->domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
     ASSERT_EQ_UINT(module_const->address_identity, XR_ADDRESS_MODULE_STABLE);
-    ASSERT_EQ_UINT(module_const->materialization_kind, XR_MATERIALIZE_MODULE_READONLY);
-    ASSERT_EQ_UINT(shared_state->owner, XR_STORAGE_SHARED_SYSTEM);
-    ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
-    ASSERT_EQ_UINT(module_capture->action, XR_CAPTURE_MODULE_READONLY);
-    ASSERT_EQ_UINT(module_capture->source_owner, XR_STORAGE_MODULE);
-    ASSERT_EQ_UINT(shared_capture->action, XR_CAPTURE_SHARED_REF);
-    ASSERT_EQ_UINT(shared_capture->source_owner, XR_STORAGE_SHARED_SYSTEM);
-    ASSERT_EQ_UINT(local_capture->action, XR_CAPTURE_INLINE_VALUE);
-    ASSERT_EQ_UINT(local_capture->source_owner, XR_STORAGE_EXEC_LOCAL);
+    ASSERT_EQ_UINT(module_const->materialization_kind, XR_MATERIALIZE_STATIC_DATA);
+    ASSERT_EQ_UINT(shared_state->domain, XR_STORAGE_SYNC_SHARED);
+    ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SYSTEM_STABLE);
+    ASSERT_EQ_UINT(module_capture->action, XR_TRANSFER_MODULE_READ);
+    ASSERT_EQ_UINT(module_capture->source_domain, XR_STORAGE_MODULE_STATIC);
+    ASSERT_EQ_UINT(shared_capture->action, XR_TRANSFER_SYNC_SHARE);
+    ASSERT_EQ_UINT(shared_capture->source_domain, XR_STORAGE_SYNC_SHARED);
+    ASSERT_EQ_UINT(local_capture->action, XR_TRANSFER_INLINE_COPY);
+    ASSERT_EQ_UINT(local_capture->source_domain, XR_STORAGE_EXEC_LOCAL);
     ASSERT_EQ_UINT(address->provenance.storage_id, module_const_decl.decl_id);
-    ASSERT_EQ_UINT(address->provenance.owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(address->provenance.domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(address->provenance.origin, XR_POINTER_ORIGIN_MODULE);
     ASSERT_EQ_UINT(address->provenance.escape, XR_POINTER_ESCAPE_STABLE);
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
-    bundle.capture_plans[1].source_owner = XR_STORAGE_EXEC_LOCAL;
+    bundle.capture_plans[1].source_domain = XR_STORAGE_EXEC_LOCAL;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan is stale"));
-    bundle.capture_plans[1].source_owner = XR_STORAGE_SHARED_SYSTEM;
-    bundle.capture_plans[2].action = XR_CAPTURE_MOVE;
+    bundle.capture_plans[1].source_domain = XR_STORAGE_SYNC_SHARED;
+    bundle.capture_plans[2].action = XR_TRANSFER_MOVE_UNIQUE;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan is stale"));
-    bundle.capture_plans[2].action = XR_CAPTURE_INLINE_VALUE;
+    bundle.capture_plans[2].action = XR_TRANSFER_INLINE_COPY;
     saved_capture_plan_count = bundle.ncapture_plans;
     bundle.ncapture_plans--;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
@@ -18038,15 +18038,15 @@ TEST(global_evidence_producer_records_storage_provenance) {
     ASSERT_NOT_NULL(frozen);
     ASSERT_NOT_NULL(module_state);
     ASSERT_NOT_NULL(shared_state);
-    ASSERT_EQ_UINT(frozen->storage_owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(frozen->storage_domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(frozen->storage_mutability, XR_STORAGE_READONLY);
-    ASSERT_EQ_UINT(frozen->materialization_kind, XR_MATERIALIZE_MODULE_READONLY);
-    ASSERT_EQ_UINT(module_state->storage_owner, XR_STORAGE_MODULE);
+    ASSERT_EQ_UINT(frozen->materialization_kind, XR_MATERIALIZE_STATIC_DATA);
+    ASSERT_EQ_UINT(module_state->storage_domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(module_state->storage_mutability, XR_STORAGE_MUTABLE);
-    ASSERT_EQ_UINT(module_state->materialization_kind, XR_MATERIALIZE_MODULE_RUNTIME);
-    ASSERT_EQ_UINT(shared_state->storage_owner, XR_STORAGE_SHARED_SYSTEM);
+    ASSERT_EQ_UINT(module_state->materialization_kind, XR_MATERIALIZE_STATIC_DATA);
+    ASSERT_EQ_UINT(shared_state->storage_domain, XR_STORAGE_SYNC_SHARED);
     ASSERT_EQ_UINT(shared_state->storage_mutability, XR_STORAGE_INTERIOR_MUTABLE);
-    ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_SHARED_SYSTEM);
+    ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_SYSTEM_HEAP);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
 }

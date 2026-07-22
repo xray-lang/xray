@@ -177,8 +177,8 @@ static bool struct_layout_has_heap_field_views(const XrAggregateLayout *sl) {
 
 static const XiValue *unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_RETAIN || v->op == XI_BOX ||
-            v->op == XI_UNBOX) &&
+           (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN ||
+            v->op == XI_BOX || v->op == XI_UNBOX) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -186,7 +186,7 @@ static const XiValue *unwrap_identity_value(const XiValue *v) {
 }
 
 static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
-    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1)
         v = v->args[0];
     if (!v || v->op != XI_AGG_GET || v->nargs < 1)
         return NULL;

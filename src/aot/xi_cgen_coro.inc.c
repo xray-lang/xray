@@ -100,7 +100,8 @@ static void emit_coro_clear_inline_await_all_task_handles(FILE *out, const XiFun
                 emit_vref(out, cur);
                 fprintf(out, " = XR_NULL_VAL;\n");
             }
-            if (cur->nargs == 1 && (xi_copy_is_identity_alias(cur) || cur->op == XI_MOVE)) {
+            if (cur->nargs == 1 &&
+                (xi_copy_is_identity_alias(cur) || xi_op_is_identity_forward(cur->op))) {
                 cur = cur->args[0];
                 continue;
             }
@@ -194,7 +195,7 @@ static const XaotTransferPlan *cg_required_transfer_plan(XiCgenCtx *ctx, const X
                 plan->value ? plan->value->id : 0);
         return NULL;
     }
-    if (plan->action == XAOT_TRANSFER_ACTION_REJECT) {
+    if (plan->action == XR_TRANSFER_REJECT) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
@@ -213,7 +214,7 @@ static void emit_coro_transfer_plan_xrvalue(XiCgenCtx *ctx, FILE *out, const XiV
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         return;
     }
-    if (plan->action == XAOT_TRANSFER_ACTION_DEEP_COPY) {
+    if (plan->action == XR_TRANSFER_EXPLICIT_COPY && cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "%s(",
                 xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
                                                : "xrt_value_clone_for_coro");
@@ -221,7 +222,8 @@ static void emit_coro_transfer_plan_xrvalue(XiCgenCtx *ctx, FILE *out, const XiV
         fprintf(out, ")");
         return;
     }
-    if (plan->action == XAOT_TRANSFER_ACTION_SHARE && cg_transfer_plan_has_boundary_clone(plan)) {
+    if ((plan->action == XR_TRANSFER_CONST_SHARE || plan->action == XR_TRANSFER_SYNC_SHARE) &&
+        cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "((void)xrt_retain(");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, "), ");
@@ -242,7 +244,7 @@ static void emit_coro_transfer_plan_as_rep(XiCgenCtx *ctx, FILE *out, const XiVa
         emit_value_as_rep_ctx(ctx, out, v, rep);
         return;
     }
-    if (plan->action == XAOT_TRANSFER_ACTION_DEEP_COPY) {
+    if (plan->action == XR_TRANSFER_EXPLICIT_COPY && cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "(");
         fprintf(out, "%s(",
                 xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
@@ -251,7 +253,8 @@ static void emit_coro_transfer_plan_as_rep(XiCgenCtx *ctx, FILE *out, const XiVa
         fprintf(out, ")).ptr");
         return;
     }
-    if (plan->action == XAOT_TRANSFER_ACTION_SHARE && cg_transfer_plan_has_boundary_clone(plan)) {
+    if ((plan->action == XR_TRANSFER_CONST_SHARE || plan->action == XR_TRANSFER_SYNC_SHARE) &&
+        cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "((void)xrt_retain(");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, "), ");
@@ -1286,7 +1289,8 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
         return false;
     for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
         const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
-        if (!plan || plan->action == XR_CAPTURE_REJECT || plan->action == XR_CAPTURE_MOVE) {
+        if (!plan || plan->action == XR_TRANSFER_REJECT ||
+            plan->action == XR_TRANSFER_MOVE_UNIQUE) {
             ctx->error = true;
             fprintf(stderr,
                     "[xi_cgen] ERROR: rejected AOT cross-execution capture target=%s index=%u\n",
@@ -1304,7 +1308,7 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
     for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
         const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
         fprintf(out, "_dst->upvals[%u] = ", (unsigned) ci);
-        if (plan->action == XR_CAPTURE_DEEP_COPY)
+        if (plan->action == XR_TRANSFER_EXPLICIT_COPY)
             fprintf(out, "xrt_value_clone_for_coro(_src->upvals[%u]); ", (unsigned) ci);
         else {
             fprintf(out, "_src->upvals[%u]; xrt_retain(_dst->upvals[%u]); ", (unsigned) ci,
@@ -2070,7 +2074,7 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
         return false;
     const XiValue *root = cg_i64_optional_blocking_result_root(v);
     if (root && root != v && cg_value_is_elided_i64_optional_blocking_result(f, root) &&
-        ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE) || v->op == XI_UNBOX) &&
+        ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) || v->op == XI_UNBOX) &&
         cg_rep(v) == XR_REP_TAGGED) {
         return true;
     }
@@ -2120,7 +2124,7 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
         }
     }
 
-    if ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1 &&
+    if ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1 &&
         cg_rep(v) != XR_REP_TAGGED) {
         root = cg_i64_optional_blocking_result_root(v->args[0]);
         if (root && cg_value_is_elided_i64_optional_blocking_result(f, root)) {

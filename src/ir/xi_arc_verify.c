@@ -64,6 +64,7 @@ typedef struct ArcVerify {
     int16_t *delta_in;  /* [nblocks*ntracked] net (retain-release) on entry (min over preds) */
     int16_t *delta_out; /* [nblocks*ntracked] net delta on exit */
     XiArcVerifyReport *rep;
+    int32_t allocation_budget; /* negative = unlimited */
 } ArcVerify;
 
 /* ========== Reporting ========== */
@@ -80,6 +81,7 @@ static const struct {
     {XI_ARC_C4_DOMINANCE, "C4 (dominance-boundary)"},
     {XI_ARC_C5_STALE_USE, "C5 (stale-use / SSA-completeness)"},
     {XI_ARC_C5_METADATA, "C5 (metadata-consistency)"},
+    {XI_ARC_INTERNAL_RESOURCE, "INTERNAL (AnalysisResourceFailure)"},
 };
 
 /* ========== Per-pass verification control (task 219 P3) ========== */
@@ -196,6 +198,28 @@ static bool report_violation(ArcVerify *av, XiArcContract contract, uint32_t val
     else
         r->path[0] = '\0';
     return false;
+}
+
+static bool report_resource_failure(ArcVerify *av, const char *detail) {
+    return report_violation(av, XI_ARC_INTERNAL_RESOURCE, UINT32_MAX, UINT32_MAX, UINT32_MAX,
+                            detail ? detail : "ARC verifier allocation failed");
+}
+
+static bool verifier_allocation_allowed(ArcVerify *av) {
+    if (av->allocation_budget < 0)
+        return true;
+    if (av->allocation_budget == 0)
+        return false;
+    av->allocation_budget--;
+    return true;
+}
+
+static void *verifier_malloc(ArcVerify *av, size_t size) {
+    return verifier_allocation_allowed(av) ? xr_malloc(size) : NULL;
+}
+
+static void *verifier_calloc(ArcVerify *av, size_t count, size_t size) {
+    return verifier_allocation_allowed(av) ? xr_calloc(count, size) : NULL;
 }
 
 /* Find any block that releases owning reference `vid`, for counterexample paths. */
@@ -527,9 +551,9 @@ static bool run_delta_dataflow(ArcVerify *av) {
     if (T == 0)
         return true; /* no retained/released references: C1/C2 vacuously hold */
 
-    int16_t *work = (int16_t *) xr_malloc(T * sizeof(int16_t));
+    int16_t *work = (int16_t *) verifier_malloc(av, T * sizeof(int16_t));
     if (!work)
-        return true; /* allocation failure: skip (do not falsely fail) */
+        return report_resource_failure(av, "delta worklist allocation failed");
 
     bool changed = true;
     uint32_t guard = 0;
@@ -568,7 +592,8 @@ static bool run_delta_dataflow(ArcVerify *av) {
 
 /* ========== Public API ========== */
 
-XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
+XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
+                                        const XiArcVerifyOptions *options) {
     XiArcVerifyReport local;
     XiArcVerifyReport *rep = report ? report : &local;
     memset(rep, 0, sizeof(*rep));
@@ -588,16 +613,21 @@ XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
     av.f = f;
     av.n = f->next_value_id;
     av.rep = rep;
-    av.def = (XiValue **) xr_calloc(av.n, sizeof(XiValue *));
-    av.is_rc = (bool *) xr_calloc(av.n, sizeof(bool));
-    av.track = (int32_t *) xr_malloc(av.n * sizeof(int32_t));
-    av.owner = (int32_t *) xr_malloc(av.n * sizeof(int32_t));
+    av.allocation_budget = options ? options->scratch_allocation_budget : -1;
+    av.def = (XiValue **) verifier_calloc(&av, av.n, sizeof(XiValue *));
+    av.is_rc = (bool *) verifier_calloc(&av, av.n, sizeof(bool));
+    av.track = (int32_t *) verifier_malloc(&av, av.n * sizeof(int32_t));
+    av.owner = (int32_t *) verifier_malloc(&av, av.n * sizeof(int32_t));
     if (!av.def || !av.is_rc || !av.track || !av.owner) {
         xr_free(av.def);
         xr_free(av.is_rc);
         xr_free(av.track);
         xr_free(av.owner);
-        return true; /* allocation failure: do not falsely fail the compile */
+        av.def = NULL;
+        av.is_rc = NULL;
+        av.track = NULL;
+        av.owner = NULL;
+        return report_resource_failure(&av, "verifier state allocation failed");
     }
     for (uint32_t i = 0; i < av.n; i++) {
         av.track[i] = -1;
@@ -615,12 +645,14 @@ XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
 
     if (ok) {
         build_tracked(&av);
-        av.delta_in = (int16_t *) xr_calloc((size_t) f->nblocks * (av.ntracked ? av.ntracked : 1),
-                                            sizeof(int16_t));
-        av.delta_out = (int16_t *) xr_calloc((size_t) f->nblocks * (av.ntracked ? av.ntracked : 1),
-                                             sizeof(int16_t));
+        av.delta_in = (int16_t *) verifier_calloc(
+            &av, (size_t) f->nblocks * (av.ntracked ? av.ntracked : 1), sizeof(int16_t));
+        av.delta_out = (int16_t *) verifier_calloc(
+            &av, (size_t) f->nblocks * (av.ntracked ? av.ntracked : 1), sizeof(int16_t));
         if (av.delta_in && av.delta_out)
             ok = run_delta_dataflow(&av); /* C1 / C2 */
+        else
+            ok = report_resource_failure(&av, "delta lattice allocation failed");
         xr_free(av.delta_in);
         xr_free(av.delta_out);
     }
@@ -630,6 +662,10 @@ XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
     xr_free(av.track);
     xr_free(av.owner);
     return ok;
+}
+
+XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
+    return xi_arc_verify_with_options(f, report, NULL);
 }
 
 XR_FUNC bool xi_arc_verify_tree(XiFunc *f, XiArcVerifyReport *report) {

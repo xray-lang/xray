@@ -57,7 +57,7 @@ typedef struct XaAddressability {
     struct XrType *pointee_type;
     struct XaSymbol *base_symbol;
     uint32_t field_offset;
-    uint8_t storage_owner;    /* XrStorageOwner */
+    uint8_t storage_domain;   /* XrSemanticStorageDomain */
     uint8_t address_identity; /* XrAddressIdentity */
     bool native_layout_ok;
     bool mutable_ok;

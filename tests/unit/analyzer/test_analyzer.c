@@ -564,6 +564,32 @@ TEST(flow_condition_branches) {
     xa_flow_builder_free(fb);
 }
 
+TEST(flow_binding_use_join_and_reassignment) {
+    XaFlowBuilder *fb = xa_flow_builder_new();
+    ASSERT(fb != NULL);
+    XaFlowNode *start = xa_flow_create_start(fb);
+    ASSERT(start != NULL);
+    ASSERT(xa_flow_binding_use_state(fb, "payload", start) == XA_BINDING_LIVE);
+
+    XaFlowNode *moved = xa_flow_create_move(fb, "payload");
+    ASSERT(moved != NULL);
+    ASSERT(xa_flow_binding_use_state(fb, "payload", moved) == XA_BINDING_MOVED);
+
+    fb->current_flow = start;
+    XaFlowNode *live = xa_flow_create_condition(fb, NULL, false);
+    XaFlowNode *merge = xa_flow_create_branch_label(fb);
+    xa_flow_add_antecedent(merge, moved);
+    xa_flow_add_antecedent(merge, live);
+    ASSERT(xa_flow_binding_use_state(fb, "payload", merge) == XA_BINDING_MAYBE_MOVED);
+
+    fb->current_flow = merge;
+    XaFlowNode *assigned = xa_flow_create_assignment(fb, NULL, "payload", xr_type_new_string(NULL));
+    ASSERT(assigned != NULL);
+    ASSERT(xa_flow_binding_use_state(fb, "payload", assigned) == XA_BINDING_LIVE);
+
+    xa_flow_builder_free(fb);
+}
+
 TEST(flow_cache) {
     XaFlowCache *cache = xa_flow_cache_new();
     ASSERT(cache != NULL);
@@ -946,6 +972,49 @@ static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary 
             return &summary->roots[i];
     }
     return NULL;
+}
+
+TEST(analyzer_inferred_unique_alias_nll_guards_move) {
+    XaAnalyzer *bad = xa_analyzer_new(g_session);
+    ASSERT(bad != NULL);
+    const char *bad_source = "fn consume(xs: move Array<int>) -> int { return len(xs) }\n"
+                             "fn bad() {\n"
+                             "  var data = [1, 2]\n"
+                             "  var alias = data\n"
+                             "  var out = consume(move data)\n"
+                             "  print(len(alias))\n"
+                             "  print(out)\n"
+                             "}\n";
+    AstNode *bad_program = xr_parse(g_session, bad_source);
+    ASSERT(bad_program != NULL);
+    xa_analyzer_analyze(bad, "alias_live_move.xr", bad_program);
+    XaSymbol *bad_data = xa_analyzer_lookup_deep(bad, "data");
+    XaSymbol *bad_alias = xa_analyzer_lookup_deep(bad, "alias");
+    ASSERT(bad_data != NULL && bad_alias != NULL);
+    ASSERT(bad_data->links.root_id != 0);
+    ASSERT(bad_data->links.root_id == bad_alias->links.root_id);
+    ASSERT(analyzer_diag_contains(bad, "OWN-E-LIVE-ALIAS"));
+    xr_program_destroy(bad_program);
+    xa_analyzer_free(bad);
+
+    XaAnalyzer *ok = xa_analyzer_new(g_session);
+    ASSERT(ok != NULL);
+    const char *ok_source = "fn consume(xs: move Array<int>) -> int { return len(xs) }\n"
+                            "fn ok() {\n"
+                            "  var data = [1, 2]\n"
+                            "  var alias = data\n"
+                            "  print(len(alias))\n"
+                            "  var out = consume(move data)\n"
+                            "  print(out)\n"
+                            "}\n";
+    AstNode *ok_program = xr_parse(g_session, ok_source);
+    ASSERT(ok_program != NULL);
+    xa_analyzer_analyze(ok, "alias_dead_move.xr", ok_program);
+    ASSERT(!analyzer_diag_contains(ok, "OWN-E-LIVE-ALIAS"));
+    ASSERT(!analyzer_diag_contains(ok, "used after move"));
+    xr_program_destroy(ok_program);
+    xa_analyzer_free(ok);
+    setup_pool();
 }
 
 TEST(analyzer_parameter_effect_is_canonical_product) {
@@ -5906,6 +5975,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
@@ -5939,6 +6009,7 @@ int main(void) {
     RUN_TEST(flow_builder_create);
     RUN_TEST(flow_basic_graph);
     RUN_TEST(flow_condition_branches);
+    RUN_TEST(flow_binding_use_join_and_reassignment);
     RUN_TEST(flow_cache);
     RUN_TEST(narrow_by_typeof);
     RUN_TEST(narrow_by_null);

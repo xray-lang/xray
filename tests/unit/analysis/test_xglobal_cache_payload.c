@@ -60,11 +60,11 @@ static void add_sample_body_summary(XgGlobalEvidence *ev) {
     param.requirement_id = 1;
     param.owner_func_id = body.func_id;
     param.param_index = 0;
-    param.storage_owner = XR_STORAGE_NONE;
+    param.storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
     ASSERT_NOT_NULL(xg_global_evidence_add_param_storage(ev, &param));
     param.requirement_id = 2;
     param.param_index = 1;
-    param.storage_owner = XR_STORAGE_OWNED_SYSTEM;
+    param.storage_domain = XR_STORAGE_TRANSFERABLE;
     ASSERT_NOT_NULL(xg_global_evidence_add_param_storage(ev, &param));
 
     call.callsite_id = 1;
@@ -546,7 +546,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
     ASSERT_NOT_NULL(strstr(info.body, "body id=11"));
     ASSERT_NOT_NULL(strstr(info.body, "param_storage=3812009484 params=1+2"));
-    ASSERT_NOT_NULL(strstr(info.body, "param-storage id=2 owner=11 index=1 storage=3"));
+    ASSERT_NOT_NULL(strstr(info.body, "param-storage id=2 owner=11 index=1 storage=2"));
     ASSERT_NOT_NULL(strstr(info.body, "interface-object-use id=4 interface=41"));
     ASSERT(xg_evidence_cache_payload_request_matches(payload, &expected_request));
     ASSERT(xg_evidence_cache_payload_matches(payload, &expected));
@@ -564,7 +564,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(materialized.bodies[0].param_storage_key, UINT32_C(3812009484));
     ASSERT_EQ_UINT(materialized.bodies[0].param_storage_start, 1);
     ASSERT_EQ_UINT(materialized.bodies[0].param_storage_count, 2);
-    ASSERT_EQ_UINT(materialized.param_storages[1].storage_owner, XR_STORAGE_OWNED_SYSTEM);
+    ASSERT_EQ_UINT(materialized.param_storages[1].storage_domain, XR_STORAGE_TRANSFERABLE);
     ASSERT_EQ_UINT(materialized.callsites[0].callsite_id, 1);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].interface_id, 41);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].reason,
@@ -929,7 +929,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.bodies[1].callsite_start, 402);
     ASSERT_EQ_UINT(target.param_storages[1].owner_func_id, 511);
     ASSERT_EQ_UINT(target.param_storages[1].param_index, 1);
-    ASSERT_EQ_UINT(target.param_storages[1].storage_owner, XR_STORAGE_OWNED_SYSTEM);
+    ASSERT_EQ_UINT(target.param_storages[1].storage_domain, XR_STORAGE_TRANSFERABLE);
     ASSERT_EQ_UINT(target.callsites[1].callsite_id, 402);
     ASSERT_EQ_UINT(target.callsites[1].owner_func_id, 511);
     ASSERT_EQ_UINT(target.callsites[1].static_target_func_id, 511);

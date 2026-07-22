@@ -3099,6 +3099,22 @@ static void stmt_mark_storage_allocs_in_range(XiBlock *block, uint32_t begin,
         stmt_mark_value_storage_alloc(block->values[i], storage_mode);
 }
 
+static void stmt_apply_canonical_allocation_plan(XiLower *l, AstNode *decl, XiBlock *block,
+                                                 uint32_t begin) {
+    if (!l || !l->analyzer || !decl || decl->as.var_decl.symbol_id == 0)
+        return;
+    XaSymbol *symbol =
+        xa_scope_lookup_by_id(l->analyzer->global_scope, decl->as.var_decl.symbol_id);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(l->analyzer, symbol) : NULL;
+    if (!links || !links->allocation_plan.complete)
+        return;
+    if (links->allocation_plan.domain == XR_STORAGE_TRANSFERABLE)
+        stmt_mark_storage_allocs_in_range(block, begin, XR_OBJ_STORAGE_TRANSFER);
+    else if (links->allocation_plan.domain == XR_STORAGE_CONST_SHARED ||
+             links->allocation_plan.domain == XR_STORAGE_SYNC_SHARED)
+        stmt_mark_storage_allocs_in_range(block, begin, XR_OBJ_STORAGE_SHARED);
+}
+
 static XiValue *stmt_wrap_to_shared_kind(XiLower *l, XiValue *value, int line, int64_t kind) {
     if (!l || !value)
         return value;
@@ -3182,7 +3198,7 @@ static XiValue *stmt_lower_owned_initializer(XiLower *l, AstNode *decl, XiValue 
 static XiFunc *stmt_static_function_value_target(XiValue *value) {
     while (value &&
            (value->op == XI_BOX || value->op == XI_UNBOX || xi_copy_is_identity_alias(value) ||
-            value->op == XI_MOVE) &&
+            xi_op_is_identity_forward(value->op)) &&
            value->nargs >= 1) {
         value = value->args[0];
     }
@@ -3330,6 +3346,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val->aux_int = (int64_t) ((key_kind << 8) | ((value_tid & 0x1F) << 3) | flags);
         }
     }
+    stmt_apply_canonical_allocation_plan(l, node, init_block, init_begin);
     init_val = stmt_lower_shared_initializer(l, node, init_val, init_block, init_begin);
     init_val = stmt_lower_owned_initializer(l, node, init_val, init_block, init_begin);
     /* When the initializer comes from a different variable, insert an

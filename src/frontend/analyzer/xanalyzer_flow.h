@@ -21,6 +21,7 @@
 #define XANALYZER_FLOW_H
 
 #include "../../runtime/value/xtype.h"
+#include "xa_ownership.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include "../../base/xdefs.h"
@@ -148,9 +149,10 @@ XR_FUNC XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder, const char
                                               XrType *declared_type, XaFlowNode *flow_node,
                                               XaFlowCache *cache);
 
-// API: Move tracking for shared variables (use-after-move detection)
+// API: CFG binding-use tracking for explicit ownership transfer.
 XR_FUNC XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name);
-XR_FUNC bool xa_flow_is_moved(XaFlowBuilder *builder, const char *name, XaFlowNode *at_node);
+XR_FUNC XaBindingUseState xa_flow_binding_use_state(XaFlowBuilder *builder, const char *name,
+                                                    XaFlowNode *at_node);
 
 // Narrowing helpers
 XR_FUNC XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true);

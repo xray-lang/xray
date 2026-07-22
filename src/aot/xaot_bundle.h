@@ -513,27 +513,39 @@ typedef enum XaotTransferSiteKind {
     XAOT_TRANSFER_SHARED_INIT = 6,
 } XaotTransferSiteKind;
 
-typedef enum XaotTransferAction {
-    XAOT_TRANSFER_ACTION_SHARE = 1,
-    XAOT_TRANSFER_ACTION_COPY = 2,
-    XAOT_TRANSFER_ACTION_MOVE = 3,
-    XAOT_TRANSFER_ACTION_DEEP_COPY = 4,
-    XAOT_TRANSFER_ACTION_REJECT = 5,
-} XaotTransferAction;
-
 enum {
     XAOT_TRANSFER_EV_SITE = 1u << 0,
     XAOT_TRANSFER_EV_VALUE = 1u << 1,
     XAOT_TRANSFER_EV_MODE = 1u << 2,
     XAOT_TRANSFER_EV_TYPE = 1u << 3,
     XAOT_TRANSFER_EV_BOUNDARY_CLONE = 1u << 4,
+    XAOT_TRANSFER_EV_STORAGE_PLAN = 1u << 5,
+    XAOT_TRANSFER_EV_MOVE_PROOF = 1u << 6,
+    XAOT_TRANSFER_EV_DOMAIN = 1u << 7,
+    XAOT_TRANSFER_EV_CAPABILITY = 1u << 8,
 };
 
 enum {
     XAOT_TRANSFER_UNPROVEN_NONE = 0,
     XAOT_TRANSFER_UNPROVEN_NO_VALUE = 1,
     XAOT_TRANSFER_UNPROVEN_BAD_MODE = 2,
+    XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF = 3,
+    XAOT_TRANSFER_UNPROVEN_DOMAIN = 4,
+    XAOT_TRANSFER_UNPROVEN_CAPABILITY = 5,
 };
+
+typedef enum XaotTransferDropAction {
+    XAOT_TRANSFER_DROP_NONE = 0,
+    XAOT_TRANSFER_DROP_RETAIN,
+    XAOT_TRANSFER_DROP_HANDOFF,
+    XAOT_TRANSFER_DROP_CLONE,
+} XaotTransferDropAction;
+
+typedef enum XaotTransferCostClass {
+    XAOT_TRANSFER_COST_O1 = 0,
+    XAOT_TRANSFER_COST_ON,
+    XAOT_TRANSFER_COST_REJECTED,
+} XaotTransferCostClass;
 
 typedef struct XaotTransferPlan {
     const XiFunc *func;
@@ -544,7 +556,16 @@ typedef struct XaotTransferPlan {
     uint16_t transfer_index;
     uint8_t site_kind;
     uint8_t mode;
-    uint8_t action;
+    uint8_t action; /* XrTransferAction */
+    uint8_t source_domain;
+    uint8_t target_domain;
+    uint8_t source_capability;
+    uint8_t target_capability;
+    uint8_t drop_action;
+    uint8_t cost_class;
+    uint32_t storage_plan_id;
+    uint32_t transfer_plan_id;
+    uint32_t move_proof_id;
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotTransferPlan;
@@ -2087,10 +2108,8 @@ xaot_bundle_find_callable_invoke_plan(const XaotBundle *bundle, const XiValue *c
 XR_FUNC const XaotCallableTargetCase *
 xaot_bundle_callable_target_case(const XaotBundle *bundle, const XaotCallableInvokePlan *plan,
                                  uint16_t target_index);
-XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
-    XaotBundle *bundle, const XiFunc *func, const XiValue *site, uint16_t transfer_index,
-    const XiValue *value, const XrType *value_type, const XaotTypeKey *value_type_key,
-    uint8_t site_kind, uint8_t mode, uint8_t action, uint32_t evidence, uint8_t unproven_reason);
+XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(XaotBundle *bundle,
+                                                        const XaotTransferPlan *source);
 XR_FUNC const XaotTransferPlan *xaot_bundle_find_transfer_plan(const XaotBundle *bundle,
                                                                const XiValue *site,
                                                                uint16_t transfer_index);

@@ -813,56 +813,70 @@ XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name) {
     return node;
 }
 
-// Recursive helper: check if variable is moved at a given flow node
-// Returns: 1 = definitely moved, 0 = not moved, -1 = maybe moved (some paths moved)
-static int flow_is_moved_at(const char *name, XaFlowNode *node, int depth) {
-    if (!node || depth > 64)
-        return 0;
-
-    // Moved: variable was moved on this path
-    if ((node->flags & XA_FLOW_MOVE) && node->assigned_name &&
-        strcmp(node->assigned_name, name) == 0) {
-        return 1;
-    }
-
-    // Re-assigned: ownership restored, no longer moved
-    if ((node->flags & XA_FLOW_ASSIGNMENT) && node->assigned_name &&
-        strcmp(node->assigned_name, name) == 0) {
-        return 0;
-    }
-
-    // Start node: variable was never moved
-    if (node->flags & XA_FLOW_START)
-        return 0;
-
-    if (node->antecedent_count == 0)
-        return 0;
-
-    if (node->antecedent_count == 1) {
-        return flow_is_moved_at(name, node->antecedents[0], depth + 1);
-    }
-
-    // Branch merge: check all paths
-    int all_moved = 1;
-    int any_moved = 0;
-    for (int i = 0; i < node->antecedent_count; i++) {
-        int r = flow_is_moved_at(name, node->antecedents[i], depth + 1);
-        if (r == 0)
-            all_moved = 0;
-        if (r != 0)
-            any_moved = 1;
-    }
-    if (all_moved)
-        return 1;
-    if (any_moved)
-        return -1;  // maybe moved
-    return 0;
-}
-
-// Check if variable is moved at a given flow node (walks back through flow graph)
-// Returns true if the variable is DEFINITELY moved on all reaching paths.
-bool xa_flow_is_moved(XaFlowBuilder *builder, const char *name, XaFlowNode *at_node) {
+XaBindingUseState xa_flow_binding_use_state(XaFlowBuilder *builder, const char *name,
+                                            XaFlowNode *at_node) {
     if (!builder || !name || !at_node)
-        return false;
-    return flow_is_moved_at(name, at_node, 0) == 1;
+        return XA_BINDING_LIVE;
+
+    /* Walk the complete backward slice instead of imposing an arbitrary
+     * recursion depth. Long straight-line functions are ordinary programs,
+     * not analysis failures. Marking nodes when enqueued also terminates CFG
+     * cycles; the loop preheader/backedge terminals still contribute their
+     * respective lattice states. Allocation or malformed graph metadata is
+     * UNKNOWN so ownership-sensitive consumers fail closed. */
+    size_t id_count = builder->next_id ? (size_t) builder->next_id : 1;
+    size_t stack_capacity = builder->node_count ? (size_t) builder->node_count : 1;
+    bool *seen = (bool *) xr_calloc(id_count, sizeof(bool));
+    XaFlowNode **stack = (XaFlowNode **) xr_malloc(stack_capacity * sizeof(*stack));
+    if (!seen || !stack) {
+        xr_free(seen);
+        xr_free(stack);
+        return XA_BINDING_UNKNOWN;
+    }
+
+    bool any_live = false;
+    bool any_moved = false;
+    bool malformed = at_node->id >= id_count;
+    size_t count = 0;
+    if (!malformed) {
+        stack[count++] = at_node;
+        seen[at_node->id] = true;
+    }
+    while (count > 0 && !malformed) {
+        XaFlowNode *node = stack[--count];
+        if ((node->flags & XA_FLOW_MOVE) && node->assigned_name &&
+            strcmp(node->assigned_name, name) == 0) {
+            any_moved = true;
+            continue;
+        }
+        if (((node->flags & XA_FLOW_ASSIGNMENT) && node->assigned_name &&
+             strcmp(node->assigned_name, name) == 0) ||
+            (node->flags & XA_FLOW_START) || node->antecedent_count == 0) {
+            any_live = true;
+            continue;
+        }
+        for (int i = 0; i < node->antecedent_count; i++) {
+            XaFlowNode *antecedent = node->antecedents ? node->antecedents[i] : NULL;
+            if (!antecedent || antecedent->id >= id_count) {
+                malformed = true;
+                break;
+            }
+            if (seen[antecedent->id])
+                continue;
+            if (count >= stack_capacity) {
+                malformed = true;
+                break;
+            }
+            seen[antecedent->id] = true;
+            stack[count++] = antecedent;
+        }
+    }
+
+    xr_free(seen);
+    xr_free(stack);
+    if (malformed || (!any_live && !any_moved))
+        return XA_BINDING_UNKNOWN;
+    if (any_live && any_moved)
+        return XA_BINDING_MAYBE_MOVED;
+    return any_moved ? XA_BINDING_MOVED : XA_BINDING_LIVE;
 }

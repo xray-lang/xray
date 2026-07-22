@@ -249,6 +249,12 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
 XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope);
 XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                         XaSymbol *owner_sym, const char *operation);
+/* Return a live local strong alias of move_sym's root, if one is used after
+ * the current statement. analysis_failed is set on evidence-allocation
+ * failure so the caller can fail closed. */
+XR_FUNC XaSymbol *xa_find_live_strong_alias_after_current(XaInferContext *ctx, XaSymbol *move_sym,
+                                                          bool *analysis_failed);
+XR_FUNC void xa_mark_root_alias_state(XaInferContext *ctx, XaRootId root, XaRootAliasState state);
 XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                              XaSymbol *owner_sym,
                                                              const char *owner_path,

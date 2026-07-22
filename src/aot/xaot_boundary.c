@@ -144,7 +144,9 @@ XR_FUNC const char *xaot_boundary_step_kind_name(XaotBoundaryStepKind kind) {
 }
 
 static const XiValue *unwrap_identity_value(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1) {
         v = v->args[0];
     }

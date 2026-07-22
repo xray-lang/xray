@@ -1010,8 +1010,8 @@ static bool xi_go_can_be_one_shot_awaited(const XiValue *v) {
 }
 
 static bool xi_identity_keeps_task_view(const XiValue *from, const XiValue *to) {
-    if (!from || !to || (to->op != XI_COPY && to->op != XI_MOVE) || to->nargs != 1 ||
-        to->args[0] != from)
+    if (!from || !to || (to->op != XI_COPY && !xi_op_is_identity_forward(to->op)) ||
+        to->nargs != 1 || to->args[0] != from)
         return false;
     if (!from->type || !to->type)
         return true;
@@ -1962,7 +1962,7 @@ static bool sr_type_has_static_typed_array_storage(const XrType *type) {
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;
@@ -2484,7 +2484,7 @@ static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolic
 static XrRep sr_value_numeric_rep_hint_depth(const XiValue *value, const XiRepPolicy *policy,
                                              uint8_t depth) {
     const XiValue *v = value;
-    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1)
         v = v->args[0];
     if (!v || depth > 8 || v->op == XI_BOX)
         return XR_REP_TAGGED;
@@ -2693,7 +2693,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_LEN:
             return XR_REP_I64;
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD: {
             XrRep atomic_rep = XR_REP_TAGGED;
@@ -3101,7 +3102,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             }
             return XR_REP_TAGGED;
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return arg_idx == 0 ? sr_def_rep(user, policy) : XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
@@ -3313,7 +3315,7 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             for (uint16_t ai = 0; ai < v->nargs; ai++) {
                 XrRep use_r = sr_use_rep(v, ai, &local_policy);
                 bool erase_descriptor = false;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) && ai == 0)
+                if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) && ai == 0)
                     erase_descriptor = sr_conversion_erases_enum_metadata(v->args[ai], v->type);
                 sr_rewrite_arg(f, &v->args[ai], use_r, box_of, erased_box_of, unbox_of, max_id,
                                &local_policy, erase_descriptor);
@@ -3452,7 +3454,8 @@ static XrType *sr_enum_erasure_arg_target(XiFunc *f, XiValue *user, uint16_t arg
         return NULL;
     switch (user->op) {
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return arg_index == 0 ? user->type : NULL;
         case XI_SET_SHARED:
             return arg_index == 0 ? sr_enum_erasure_shared_type(f, user->aux_int) : NULL;

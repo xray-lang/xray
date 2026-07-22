@@ -572,9 +572,10 @@ typedef enum {
     XI_BOUNDS_CHECK,
 
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
-    XI_RETAIN,  /* args[0]=value; increment refcount (no-op for scalars) */
-    XI_RELEASE, /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
-    XI_MOVE,    /* args[0]=value; ownership transfer (consume source, no refcount change) */
+    XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
+    XI_RELEASE,       /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
+    XI_SOURCE_MOVE,   /* explicit source consume; requires sealed FinalMoveProof evidence */
+    XI_OWNER_FORWARD, /* ARC ownership-edge forwarding; does not invalidate a source binding */
 
     /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
      * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
@@ -613,6 +614,10 @@ typedef enum {
 
     XI_OP_COUNT /* sentinel */
 } XiOp;
+
+static inline bool xi_op_is_identity_forward(uint16_t op) {
+    return op == XI_SOURCE_MOVE || op == XI_OWNER_FORWARD;
+}
 
 /* XI_CORO_OP sub-type constants (stored in aux_int) */
 #define XI_CORO_SUB_SET_LOCAL 0
@@ -868,6 +873,18 @@ typedef struct XiValue {
     uint32_t xg_capacity_op_id; /* stable XgCapacityOpId for capacity/growth plans */
     uint32_t xg_bulk_op_id;     /* stable XgBulkOpId for bulk operation plans */
     uint32_t xg_encoding_op_id; /* stable XgEncodingOpId for encoding validation plans */
+    /* Source-move evidence is meaningful only for XI_SOURCE_MOVE. Optimizers
+     * must preserve these stable IDs when replacing or migrating the op. */
+    uint32_t move_evidence_id;
+    uint32_t move_source_root_id;
+    uint32_t move_source_symbol_id;
+    uint32_t move_storage_plan_id;
+    uint32_t move_transfer_plan_id;
+    uint32_t move_evidence_bits;
+    uint8_t move_source_capability;
+    uint8_t move_target_capability;
+    uint8_t move_source_domain;
+    uint8_t move_target_domain;
     /* Typed enum-domain provenance.  `enum_metadata_owner` is the concrete E
      * in EnumVariant<E>/EnumPayloadField<E>; `enum_metadata_field` is a stable
      * XA_ENUM_META_* id (0 for domain iteration).  This survives lowering so
@@ -896,6 +913,16 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->xg_method_id = src->xg_method_id;
+    dst->move_evidence_id = src->move_evidence_id;
+    dst->move_source_root_id = src->move_source_root_id;
+    dst->move_source_symbol_id = src->move_source_symbol_id;
+    dst->move_storage_plan_id = src->move_storage_plan_id;
+    dst->move_transfer_plan_id = src->move_transfer_plan_id;
+    dst->move_evidence_bits = src->move_evidence_bits;
+    dst->move_source_capability = src->move_source_capability;
+    dst->move_target_capability = src->move_target_capability;
+    dst->move_source_domain = src->move_source_domain;
+    dst->move_target_domain = src->move_target_domain;
     dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
     dst->xg_json_access_id = src->xg_json_access_id;
     dst->xg_json_codec_id = src->xg_json_codec_id;

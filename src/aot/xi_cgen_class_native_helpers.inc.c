@@ -3275,7 +3275,7 @@ static bool cg_class_native_set_field_value_is_elided(XiCgenCtx *ctx, const XiFu
 }
 
 static bool cg_class_native_is_identity_alias(const XiValue *v) {
-    return v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_MOVE ||
+    return v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_op_is_identity_forward(v->op) ||
                  xi_copy_is_identity_alias(v));
 }
 
@@ -4106,8 +4106,8 @@ static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const Xi
                                                         const XiValue *v, int depth) {
     if (!v || depth > 8)
         return NULL;
-    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE || v->op == XI_BOX ||
-                  v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
+    while (v && ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op) ||
+                  v->op == XI_BOX || v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
                  v->nargs >= 1)) {
         if (++depth > 8)
             return NULL;
@@ -4162,7 +4162,7 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                         return false;
                     continue;
                 }
-                if ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE ||
+                if ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op) ||
                      cg_class_native_shared_copy_wrapper(v)) &&
                     ai == 0) {
                     if (cg_class_native_trace_ctor_origin(ctx, f, v, depth + 1) != origin)
@@ -4402,8 +4402,8 @@ static bool cg_class_shared_native_slot_for_value_depth(const XiCgenCtx *ctx, co
     if (!ctx || !v || depth > 8)
         return false;
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE ||
-            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
+            xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
            v->nargs >= 1) {
         if (++depth > 8)
             return false;
@@ -4473,8 +4473,8 @@ static bool cg_class_imported_shared_native_export_for_value_depth(
     if (!ctx || !v || depth > 8)
         return false;
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE ||
-            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
+            xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
            v->nargs >= 1) {
         if (++depth > 8)
             return false;
@@ -4813,7 +4813,7 @@ static const XiValue *cg_class_native_prev_block_value(const XiValue *site) {
 static const XiValue *cg_class_native_prev_error_source_value(const XiValue *site) {
     const XiValue *prev = cg_class_native_prev_block_value(site);
     for (uint8_t depth = 0; prev && depth < 8; depth++) {
-        bool passthrough = prev->op == XI_MOVE || xi_copy_is_identity_alias(prev) ||
+        bool passthrough = xi_op_is_identity_forward(prev->op) || xi_copy_is_identity_alias(prev) ||
                            xi_generated_op_class(prev->op) == XI_GEN_CLASS_CONVERSION;
         if (!passthrough || prev->nargs < 1)
             break;
@@ -4866,8 +4866,8 @@ static bool cg_class_shared_native_value_traces_to_slot_depth(const XiValue *v, 
     if (!v || slot < 0 || depth > 8)
         return false;
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE ||
-            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
+            xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
            v->nargs >= 1) {
         if (++depth > 8)
             return false;
@@ -5002,7 +5002,7 @@ static bool cg_class_shared_native_alias_safe_uses(XiCgenCtx *ctx, const XiFunc 
                 if (v->op == XI_LOAD_FIELD && ai == 0 &&
                     cg_class_shared_native_getter_field_accepts_slot(ctx, f, v, slot))
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX ||
+                if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
                      v->op == XI_UNBOX) &&
                     ai == 0) {
                     if (!cg_class_shared_native_value_traces_to_slot(v, slot))
@@ -5075,8 +5075,8 @@ static bool cg_class_shared_native_value_traces_to_export_slot_depth(
     if (!module || !v || exporter_index < 0 || exporter_slot < 0 || depth > 8)
         return false;
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE ||
-            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY ||
+            xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN || v->op == XI_RELEASE) &&
            v->nargs >= 1) {
         if (++depth > 8)
             return false;
@@ -5155,7 +5155,7 @@ static bool cg_class_shared_native_import_alias_safe_uses(XiCgenCtx *ctx, const 
                 if (v->op == XI_LOAD_FIELD && ai == 0 &&
                     cg_class_shared_native_getter_field_accepts_class(ctx, f, v, source))
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX ||
+                if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
                      v->op == XI_UNBOX) &&
                     ai == 0) {
                     if (!cg_class_shared_native_value_traces_to_export_slot(

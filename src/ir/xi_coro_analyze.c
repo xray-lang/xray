@@ -683,7 +683,7 @@ XR_FUNC bool xi_coro_value_is_logical_member(const XiFunc *f, const XiValue *v,
 XR_FUNC const XiValue *xi_coro_release_origin(const XiValue *v) {
     const XiValue *cur = v;
     for (int depth = 0; cur && depth < 8; depth++) {
-        if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_BOX ||
+        if ((cur->op == XI_COPY || xi_op_is_identity_forward(cur->op) || cur->op == XI_BOX ||
              cur->op == XI_UNBOX) &&
             cur->nargs >= 1) {
             cur = cur->args[0];

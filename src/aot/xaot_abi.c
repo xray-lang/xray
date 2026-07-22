@@ -242,8 +242,8 @@ static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
 
 static const XiValue *unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_RETAIN || v->op == XI_BOX ||
-            v->op == XI_UNBOX) &&
+           (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_RETAIN ||
+            v->op == XI_BOX || v->op == XI_UNBOX) &&
            v->nargs >= 1) {
         v = v->args[0];
     }

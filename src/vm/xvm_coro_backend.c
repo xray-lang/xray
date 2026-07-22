@@ -452,18 +452,25 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro) {
     vm_entry_reset_no_free(state);
 }
 
-static XrValue vm_entry_transfer_arg(XrCoroutine *coro, XrVMRuntime *X, XrValue value, uint8_t mode,
-                                     bool copy_args) {
-    if (mode == XR_TRANSFER_COPY || (copy_args && mode == XR_TRANSFER_SHARE))
-        return (X && XR_IS_PTR(value)) ? xr_deep_copy_to_coro(X, value, coro) : value;
+static bool vm_entry_transfer_arg(XrCoroutine *coro, XrVMRuntime *X, XrValue value, uint8_t mode,
+                                  bool copy_args, XrValue *out) {
+    if (!out || mode > XR_TRANSFER_MOVE)
+        return false;
+    if (copy_args && mode == XR_TRANSFER_SHARE)
+        return false; /* removed implicit-copy API path */
+    if (mode == XR_TRANSFER_COPY) {
+        *out = (X && XR_IS_PTR(value)) ? xr_deep_copy_explicit_to_coro(X, value, coro) : value;
+        return !(XR_IS_NULL(*out) && XR_IS_PTR(value));
+    }
     if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value) && xr_value_needs_copy(value))
-        return X ? xr_deep_copy_to_coro(X, value, coro) : value;
+        return false; /* the compiler must emit COPY or MOVE; runtime never guesses */
     if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value)) {
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
         if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
             xr_shared_retain(obj);
     }
-    return value;
+    *out = value;
+    return true;
 }
 
 static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState *state,
@@ -492,7 +499,8 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState 
     state->args = dst;
     for (int i = 0; i < arg_count; i++) {
         uint8_t mode = arg_modes ? arg_modes[i] : XR_TRANSFER_SHARE;
-        dst[i] = vm_entry_transfer_arg(coro, X, args[i], mode, copy_args);
+        if (!vm_entry_transfer_arg(coro, X, args[i], mode, copy_args, &dst[i]))
+            return false;
         /* A pointer arg can only become null when the deep copy failed
          * (depth bound R2-6 / OOM). Fail the spawn instead of handing the
          * child a silent null. */
@@ -551,16 +559,17 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrC
  * take the zero-cost fast path (no copy, plain retain) — this covers the common
  * `go topLevelFn(args)` and `go closureOverSharedConst()` shapes.
  */
-static bool vm_closure_needs_private_copy(const XrClosure *closure) {
+static bool vm_closure_has_explicit_copy_capture(const XrClosure *closure) {
     if (!closure || !closure->proto)
         return false;
     if (PROTO_UPVAL_COUNT(closure->proto) != closure->upval_count)
         return true;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
-        if (action == XR_CAPTURE_DEEP_COPY || action == XR_CAPTURE_REJECT ||
-            action == XR_CAPTURE_MOVE)
+        if (action == XR_TRANSFER_EXPLICIT_COPY)
             return true;
+        if (action == XR_TRANSFER_REJECT || action == XR_TRANSFER_MOVE_UNIQUE)
+            return false;
     }
     return false;
 }
@@ -579,7 +588,12 @@ static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
 
-    if (X && (force_private_closure || vm_closure_needs_private_copy(closure))) {
+    if (force_private_closure && closure->upval_count > 0 &&
+        !vm_closure_has_explicit_copy_capture(closure)) {
+        vm_backend_clear_entry_state(coro);
+        return false;
+    }
+    if (X && vm_closure_has_explicit_copy_capture(closure)) {
         /* Give the child its own copy of the captured environment so no private
          * mutable object is shared across the coroutine boundary. sys.Thread
          * also forces a copy for no-capture closures because detach lets the
@@ -588,7 +602,7 @@ static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *
          * copies, shared/managed upvals are retained/shared exactly as arg
          * transfer does. The copy is uniquely owned by the child, so it is
          * released against the child heap in vm_entry_reset_no_free. */
-        XrValue copied = xr_deep_copy_to_coro(X, xr_value_from_closure(closure), coro);
+        XrValue copied = xr_deep_copy_explicit_to_coro(X, xr_value_from_closure(closure), coro);
         if (!XR_IS_PTR(copied) || !xr_value_is_closure(copied)) {
             vm_backend_clear_entry_state(coro);
             return false;  // OOM during copy → fail the spawn (never fall back to unsafe sharing)

@@ -223,7 +223,7 @@ static void record_array_cache_stats(XaotPrepareStats *stats, const XaotArrayCac
 static const XiValue *unwrap_identity_value(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -1541,7 +1541,8 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return arg_index == 0;
         default:
             return false;
@@ -2643,7 +2644,8 @@ static bool prepare_alias_array_uses_are_cache_local(const XaotBundle *bundle, c
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (argi != 0)
                             return false;
                         break;
@@ -2805,7 +2807,8 @@ static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiV
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0 ||
                             !xaot_closure_value_uses_direct_symbol(owner, user, target, depth + 1))
                             return false;
@@ -2931,17 +2934,68 @@ static bool prepare_transfer_site_is_source_move_to_shared(const XiValue *site) 
            site->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED;
 }
 
-static uint8_t prepare_transfer_action(uint8_t mode, bool needs_boundary_clone) {
+static const XiValue *prepare_transfer_source_move(const XiValue *value) {
+    const XiValue *v = value;
+    while (v && v->nargs >= 1 &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_OWNER_FORWARD))
+        v = v->args[0];
+    return v && v->op == XI_SOURCE_MOVE ? v : NULL;
+}
+
+static bool prepare_transfer_type_is_sync_handle(const XrType *type) {
+    return xi_type_is_channel(type) || xi_type_is_task(type) || xi_type_is_thread(type) ||
+           xi_type_is_named_instance(type, "Atomic") ||
+           xi_type_is_named_instance(type, "WorkQueue") ||
+           xi_type_is_named_instance(type, "ResultGroup") ||
+           xi_type_is_named_instance(type, "CountdownLatch") ||
+           xi_type_is_named_instance(type, "Semaphore") ||
+           xi_type_is_named_instance(type, "EventCount");
+}
+
+static bool prepare_transfer_type_is_inline(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_NULL:
+        case XR_KIND_BOOL:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_RUNE:
+        case XR_KIND_ENUM:
+            return true;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (!prepare_transfer_type_is_inline(type->union_type.members[i]))
+                    return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8_t prepare_transfer_action(const XiValue *value, uint8_t mode) {
+    const XiValue *origin = unwrap_identity_value(value);
+    const XrType *type = origin ? origin->type : (value ? value->type : NULL);
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
-            return XAOT_TRANSFER_ACTION_SHARE;
+            if (type && prepare_transfer_type_is_sync_handle(type))
+                return XR_TRANSFER_SYNC_SHARE;
+            if (type && prepare_transfer_type_is_inline(type))
+                return XR_TRANSFER_INLINE_COPY;
+            if (type && xr_type_is_const((XrType *) type))
+                return XR_TRANSFER_CONST_SHARE;
+            if (origin && origin->op == XI_CONST && type && type->kind == XR_KIND_STRING)
+                return XR_TRANSFER_CONST_SHARE;
+            return XR_TRANSFER_REJECT;
         case XR_TRANSFER_COPY:
-            return needs_boundary_clone ? XAOT_TRANSFER_ACTION_DEEP_COPY
-                                        : XAOT_TRANSFER_ACTION_COPY;
+            return XR_TRANSFER_EXPLICIT_COPY;
         case XR_TRANSFER_MOVE:
-            return XAOT_TRANSFER_ACTION_MOVE;
+            return prepare_transfer_source_move(value) ? XR_TRANSFER_MOVE_UNIQUE
+                                                       : XR_TRANSFER_REJECT;
         default:
-            return XAOT_TRANSFER_ACTION_REJECT;
+            return XR_TRANSFER_REJECT;
     }
 }
 
@@ -2963,6 +3017,7 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
     uint8_t action;
     uint32_t evidence = XAOT_TRANSFER_EV_SITE;
     bool needs_boundary_clone = false;
+    const XiValue *move = NULL;
 
     if (!func || !site || !out)
         return false;
@@ -2996,9 +3051,13 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
     out->transfer_index = transfer_index;
     out->site_kind = site_kind;
     out->mode = mode;
+    out->transfer_plan_id = (site->id << 8u) ^ ((uint32_t) transfer_index + 1u);
+    out->target_domain =
+        site_kind == XAOT_TRANSFER_SHARED_INIT ? XR_STORAGE_CONST_SHARED : XR_STORAGE_TRANSFERABLE;
+    out->cost_class = XAOT_TRANSFER_COST_REJECTED;
 
     if (!value) {
-        out->action = XAOT_TRANSFER_ACTION_REJECT;
+        out->action = XR_TRANSFER_REJECT;
         out->evidence = evidence;
         out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NO_VALUE;
         return true;
@@ -3006,7 +3065,7 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
     evidence |= XAOT_TRANSFER_EV_VALUE;
 
     if (mode > XR_TRANSFER_MOVE) {
-        out->action = XAOT_TRANSFER_ACTION_REJECT;
+        out->action = XR_TRANSFER_REJECT;
         out->evidence = evidence;
         out->unproven_reason = XAOT_TRANSFER_UNPROVEN_BAD_MODE;
         return true;
@@ -3023,10 +3082,56 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
     needs_boundary_clone = xi_coro_value_needs_boundary_clone(value);
     if (needs_boundary_clone)
         evidence |= XAOT_TRANSFER_EV_BOUNDARY_CLONE;
-    action = prepare_transfer_action(mode, needs_boundary_clone);
+    action = prepare_transfer_action(value, mode);
+    if (action == XR_TRANSFER_MOVE_UNIQUE) {
+        move = prepare_transfer_source_move(value);
+        if (!move || move->move_evidence_id == 0 || move->move_storage_plan_id == 0) {
+            action = XR_TRANSFER_REJECT;
+            out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF;
+        } else if (move->move_source_domain != XR_STORAGE_TRANSFERABLE) {
+            action = XR_TRANSFER_REJECT;
+            out->unproven_reason = XAOT_TRANSFER_UNPROVEN_DOMAIN;
+        } else {
+            out->move_proof_id = move->move_evidence_id;
+            out->storage_plan_id = move->move_storage_plan_id;
+            out->source_domain = move->move_source_domain;
+            out->source_capability = move->move_source_capability;
+            out->target_capability = move->move_target_capability;
+            out->drop_action = XAOT_TRANSFER_DROP_HANDOFF;
+            out->cost_class = XAOT_TRANSFER_COST_O1;
+            evidence |= XAOT_TRANSFER_EV_STORAGE_PLAN | XAOT_TRANSFER_EV_MOVE_PROOF |
+                        XAOT_TRANSFER_EV_DOMAIN | XAOT_TRANSFER_EV_CAPABILITY;
+        }
+    } else if (action == XR_TRANSFER_EXPLICIT_COPY) {
+        out->source_domain = XR_STORAGE_EXEC_LOCAL;
+        out->drop_action = XAOT_TRANSFER_DROP_CLONE;
+        out->cost_class = needs_boundary_clone ? XAOT_TRANSFER_COST_ON : XAOT_TRANSFER_COST_O1;
+        evidence |= XAOT_TRANSFER_EV_DOMAIN;
+    } else if (action == XR_TRANSFER_CONST_SHARE) {
+        out->source_domain = XR_STORAGE_CONST_SHARED;
+        out->target_domain = XR_STORAGE_CONST_SHARED;
+        out->drop_action = XAOT_TRANSFER_DROP_RETAIN;
+        out->cost_class = XAOT_TRANSFER_COST_O1;
+        evidence |= XAOT_TRANSFER_EV_DOMAIN | XAOT_TRANSFER_EV_CAPABILITY;
+    } else if (action == XR_TRANSFER_SYNC_SHARE) {
+        out->source_domain = XR_STORAGE_SYNC_SHARED;
+        out->target_domain = XR_STORAGE_SYNC_SHARED;
+        out->drop_action = XAOT_TRANSFER_DROP_RETAIN;
+        out->cost_class = XAOT_TRANSFER_COST_O1;
+        evidence |= XAOT_TRANSFER_EV_DOMAIN | XAOT_TRANSFER_EV_CAPABILITY;
+    } else if (action == XR_TRANSFER_INLINE_COPY) {
+        out->source_domain = XR_STORAGE_EXEC_LOCAL;
+        out->drop_action = XAOT_TRANSFER_DROP_NONE;
+        out->cost_class = XAOT_TRANSFER_COST_O1;
+        evidence |= XAOT_TRANSFER_EV_DOMAIN;
+    } else if (out->unproven_reason == XAOT_TRANSFER_UNPROVEN_NONE) {
+        out->unproven_reason = mode == XR_TRANSFER_MOVE ? XAOT_TRANSFER_UNPROVEN_NO_MOVE_PROOF
+                                                        : XAOT_TRANSFER_UNPROVEN_CAPABILITY;
+    }
     out->action = action;
     out->evidence = evidence;
-    out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NONE;
+    if (action != XR_TRANSFER_REJECT)
+        out->unproven_reason = XAOT_TRANSFER_UNPROVEN_NONE;
     return true;
 }
 
@@ -3047,10 +3152,11 @@ static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) 
                     uint16_t transfer_index = (uint16_t) (ai - 1);
                     if (!xaot_prepare_transfer_plan_for_site(func, site, transfer_index, &derived))
                         continue;
-                    if (!xaot_bundle_add_transfer_plan(
-                            bundle, func, site, transfer_index, derived.value, derived.value_type,
-                            &derived.value_type_key, derived.site_kind, derived.mode,
-                            derived.action, derived.evidence, derived.unproven_reason)) {
+                    if (derived.action == XR_TRANSFER_REJECT) {
+                        bundle->error_msg = "cross-execution transfer lacks a verified plan";
+                        return false;
+                    }
+                    if (!xaot_bundle_add_transfer_plan(bundle, &derived)) {
                         bundle->error_msg = "failed to allocate AOT transfer plan";
                         return false;
                     }
@@ -3060,10 +3166,11 @@ static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) 
                 XaotTransferPlan derived;
                 if (!xaot_prepare_transfer_plan_for_site(func, site, 0, &derived))
                     continue;
-                if (!xaot_bundle_add_transfer_plan(bundle, func, site, 0, derived.value,
-                                                   derived.value_type, &derived.value_type_key,
-                                                   derived.site_kind, derived.mode, derived.action,
-                                                   derived.evidence, derived.unproven_reason)) {
+                if (derived.action == XR_TRANSFER_REJECT) {
+                    bundle->error_msg = "cross-execution transfer lacks a verified plan";
+                    return false;
+                }
+                if (!xaot_bundle_add_transfer_plan(bundle, &derived)) {
                     bundle->error_msg = "failed to allocate AOT transfer plan";
                     return false;
                 }
@@ -3115,7 +3222,8 @@ static bool prepare_array_native_local_data_cacheable(const XaotBundle *bundle, 
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (argi != 0)
                             return false;
                         break;
@@ -3623,7 +3731,8 @@ static bool prepare_vector_reps_same(XaotValueRep a, XaotValueRep b) {
 
 static bool prepare_vector_propagate_identity_plan(XaotBundle *bundle, XaotValuePlan *plan) {
     const XiValue *value = plan ? plan->value : NULL;
-    if (!value || (value->op != XI_COPY && value->op != XI_MOVE && value->op != XI_PHI) ||
+    if (!value ||
+        (value->op != XI_COPY && !xi_op_is_identity_forward(value->op) && value->op != XI_PHI) ||
         value->nargs == 0)
         return false;
     const XaotValuePlan *first = xaot_bundle_find_value_plan(bundle, value->args[0]);
@@ -3648,7 +3757,7 @@ static bool prepare_vector_user_accepts_native(const XaotBundle *bundle, const X
         return true;
     if (prepare_vector_native_op_supported(bundle->target_simd_features, user))
         return true;
-    if (user->op == XI_COPY || user->op == XI_MOVE || user->op == XI_PHI) {
+    if (user->op == XI_COPY || xi_op_is_identity_forward(user->op) || user->op == XI_PHI) {
         const XaotValuePlan *plan = xaot_bundle_find_value_plan(bundle, user);
         return plan && plan->rep.kind == XAOT_VALUE_VECTOR;
     }
@@ -3688,7 +3797,8 @@ static bool prepare_vector_value_has_unsupported_use(const XaotBundle *bundle, c
 static bool prepare_vector_identity_inputs_still_native(const XaotBundle *bundle,
                                                         const XiValue *value,
                                                         XaotValueRep expected) {
-    if (!bundle || !value || (value->op != XI_COPY && value->op != XI_MOVE && value->op != XI_PHI))
+    if (!bundle || !value ||
+        (value->op != XI_COPY && !xi_op_is_identity_forward(value->op) && value->op != XI_PHI))
         return true;
     for (uint16_t i = 0; i < value->nargs; i++) {
         const XaotValuePlan *incoming = xaot_bundle_find_value_plan(bundle, value->args[i]);
@@ -3851,7 +3961,8 @@ static bool prepare_identity_aggregate_rep(XaotBundle *bundle, const XiValue *va
         return false;
     switch (value->op) {
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_CHECKTYPE:
             break;
         default:
@@ -3905,7 +4016,8 @@ static void prepare_mark_aggregate_value_rep(XaotBundle *bundle, XiValue *value,
     }
     switch (value->op) {
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_CHECKTYPE:
             if (value->nargs >= 1)
                 prepare_mark_aggregate_value_rep(bundle, value->args[0], rep, changed, depth + 1);

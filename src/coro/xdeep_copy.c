@@ -132,7 +132,7 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
         return copy_ctx_alloc_transit(ctx, size, type);
     }
     if (ctx->dst_storage_mode == XR_OBJ_STORAGE_SHARED ||
-        ctx->dst_storage_mode == XR_OBJ_STORAGE_OWNED) {
+        ctx->dst_storage_mode == XR_OBJ_STORAGE_TRANSFER) {
         XrSystemHeap *heap = ctx->core ? ctx->core->sys_heap : NULL;
         return heap ? xr_sysheap_alloc_storage(heap, size, type, ctx->dst_storage_mode) : NULL;
     }
@@ -619,8 +619,8 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         return XR_NULL_VAL;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
-        if (action == XR_CAPTURE_REJECT || action == XR_CAPTURE_MOVE ||
-            (action == XR_CAPTURE_INLINE_VALUE && XR_IS_PTR(closure->upvals[i])))
+        if (action == XR_TRANSFER_REJECT || action == XR_TRANSFER_MOVE_UNIQUE ||
+            (action == XR_TRANSFER_INLINE_COPY && XR_IS_PTR(closure->upvals[i])))
             return XR_NULL_VAL;
     }
     XrValue cached = xr_copy_context_lookup(ctx, closure);
@@ -647,7 +647,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     for (int i = 0; i < closure->upval_count; i++) {
         XrValue upval = closure->upvals[i];
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
-        if (action == XR_CAPTURE_DEEP_COPY) {
+        if (action == XR_TRANSFER_EXPLICIT_COPY) {
             new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
         } else {
             new_closure->upvals[i] = upval;
@@ -1077,7 +1077,7 @@ XrValue xr_deep_copy_explicit_to_coro(struct XrVMRuntime *X, XrValue value,
 XrValue xr_deep_copy_explicit_to_storage_core(XrRuntimeCore *core, XrValue value,
                                               uint8_t storage_mode) {
     XR_DCHECK(core != NULL, "deep_copy_explicit_to_storage_core: NULL runtime core");
-    if (storage_mode != XR_OBJ_STORAGE_SHARED && storage_mode != XR_OBJ_STORAGE_OWNED)
+    if (storage_mode != XR_OBJ_STORAGE_SHARED && storage_mode != XR_OBJ_STORAGE_TRANSFER)
         return xr_deep_copy_explicit_to_coro_core(core, value, NULL);
     if (!XR_IS_PTR(value) && !XR_IS_ARRAY_REF(value))
         return value;
@@ -1437,7 +1437,7 @@ XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_OBJ_IS_SHARED(obj))
         return value;
-    if (XR_OBJ_IS_OWNED(obj)) {
+    if (XR_OBJ_IS_TRANSFER(obj)) {
         xr_shared_init(obj);
         return value;
     }

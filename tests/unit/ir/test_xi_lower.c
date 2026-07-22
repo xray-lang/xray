@@ -2214,10 +2214,10 @@ TEST(go_arg_transfer_modes) {
            "go boundary copy(...) must not lower to a separate copy op before GO");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
+    XiFunc *move_ir = lower_source("fn take(xs: move Array<int>) -> int { return len(xs) }\n"
                                    "fn moveCase() {\n"
-                                   "  owned xs: Array<int> = [1, 2]\n"
-                                   "  var task = go worker(move xs)\n"
+                                   "  var xs: Array<int> = [1, 2]\n"
+                                   "  var task = go take(move xs)\n"
                                    "  print(await task)\n"
                                    "}\n"
                                    "moveCase()\n");
@@ -2226,23 +2226,23 @@ TEST(go_arg_transfer_modes) {
     assert(move_go != NULL && "move case should lower a GO op");
     assert(xi_go_arg_transfer_mode(move_go, 0) == XR_TRANSFER_MOVE &&
            "move at a go boundary must be encoded as MOVE transfer");
-    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+    assert(func_tree_has_op(move_ir, XI_SOURCE_MOVE) &&
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
-                                    "shared xs: Array<int> = [1, 2]\n"
-                                    "var task = go worker(xs)\n"
+    XiFunc *share_ir = lower_source("fn observe(ch: Channel<int>) -> int { return 1 }\n"
+                                    "var ch = Channel<int>(1)\n"
+                                    "var task = go observe(ch)\n"
                                     "print(await task)\n");
     assert(share_ir != NULL);
     XiValue *share_go = func_tree_find_op(share_ir, XI_GO);
     assert(share_go != NULL && "shared case should lower a GO op");
     assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
-           "shared go arguments should be encoded as zero-copy SHARE transfer");
+           "sync-handle go arguments should be encoded as zero-copy SHARE transfer");
     xi_func_free(share_ir);
 }
 
-TEST(hoisted_readonly_capture_keeps_copy_semantics) {
+TEST(hoisted_readonly_capture_without_const_proof_is_rejected) {
     XiFunc *f = lower_source("fn launch() {\n"
                              "  shared gate = Atomic(0)\n"
                              "  fn worker() -> int { return gate.load() }\n"
@@ -2258,7 +2258,8 @@ TEST(hoisted_readonly_capture_keeps_copy_semantics) {
     assert(!worker->captures[0].is_mutable && !worker->captures[0].is_reassigned &&
            "initialization ordering is not source-level mutation");
     assert(worker->captures[0].capture_kind == XI_CAPTURE_BY_COPY);
-    assert(xi_capture_cross_execution_action(&worker->captures[0]) == XR_CAPTURE_DEEP_COPY);
+    assert(xi_capture_cross_execution_action(&worker->captures[0]) == XR_TRANSFER_REJECT &&
+           "a forward cell without canonical const/sync evidence must fail closed");
     xi_func_free(f);
 }
 
@@ -2286,7 +2287,7 @@ TEST(channel_send_transfer_modes) {
     assert(move_send != NULL && "move case should lower to CHAN_SEND");
     assert(xi_chan_send_transfer_mode(move_send) == XR_TRANSFER_MOVE &&
            "move at a channel send boundary must be encoded as MOVE transfer");
-    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+    assert(func_tree_has_op(move_ir, XI_SOURCE_MOVE) &&
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
@@ -2747,7 +2748,7 @@ int main(void) {
     run_go_await();
     run_direct_await_go_one_shot();
     run_go_arg_transfer_modes();
-    run_hoisted_readonly_capture_keeps_copy_semantics();
+    run_hoisted_readonly_capture_without_const_proof_is_rejected();
     run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();

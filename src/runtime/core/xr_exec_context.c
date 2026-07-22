@@ -14,19 +14,20 @@
 
 static _Thread_local XrExecutionContext *xr_tls_exec_context;
 
-void xr_alloc_context_init(XrAllocationContext *ctx, XrRuntimeCore *core, XrStorageOwner owner) {
+void xr_alloc_context_init(XrAllocationContext *ctx, XrRuntimeCore *core,
+                           XrSemanticStorageDomain domain) {
     if (!ctx)
         return;
     memset(ctx, 0, sizeof(*ctx));
     ctx->core = core;
     ctx->shared_heap = core ? core->sys_heap : NULL;
-    ctx->owner = (uint8_t) owner;
+    ctx->domain = (uint8_t) domain;
 }
 
 void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t type) {
     if (!ctx || !ctx->core || size < sizeof(XrObjHeader) || type >= XR_OBJ_TYPE_MAX)
         return NULL;
-    if (ctx->owner == XR_STORAGE_SHARED_SYSTEM)
+    if (ctx->domain == XR_STORAGE_SYNC_SHARED || ctx->domain == XR_STORAGE_CONST_SHARED)
         return NULL;
     if (ctx->local_heap)
         return xr_coro_heap_new_obj(ctx->local_heap, type, size);
@@ -70,18 +71,20 @@ XrVMRuntime *xr_exec_context_vm_owner(void) {
     return ctx && ctx->core ? xr_runtime_core_vm_owner(ctx->core) : NULL;
 }
 
-const char *xr_storage_owner_name(XrStorageOwner owner) {
-    switch (owner) {
-        case XR_STORAGE_NONE:
-            return "none";
+const char *xr_storage_domain_name(XrSemanticStorageDomain domain) {
+    switch (domain) {
+        case XR_STORAGE_DOMAIN_UNKNOWN:
+            return "unknown";
         case XR_STORAGE_EXEC_LOCAL:
             return "exec_local";
-        case XR_STORAGE_MODULE:
-            return "module";
-        case XR_STORAGE_OWNED_SYSTEM:
-            return "owned_system";
-        case XR_STORAGE_SHARED_SYSTEM:
-            return "shared_system";
+        case XR_STORAGE_MODULE_STATIC:
+            return "module_static";
+        case XR_STORAGE_TRANSFERABLE:
+            return "transferable";
+        case XR_STORAGE_CONST_SHARED:
+            return "const_shared";
+        case XR_STORAGE_SYNC_SHARED:
+            return "sync_shared";
         case XR_STORAGE_FOREIGN:
             return "foreign";
     }

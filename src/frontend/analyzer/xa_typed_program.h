@@ -22,6 +22,9 @@ struct XaResolvedCall;
 struct XaSymbol;
 struct XaEffectSummary;
 struct XaMemoryEffectSummary;
+struct XaOwnershipCandidateProof;
+struct XaFinalMoveProof;
+struct XaAllocationInstancePlan;
 
 typedef struct XaTypedProgram XaTypedProgram;
 
@@ -31,6 +34,8 @@ typedef enum XaTypedProgramReason {
     XA_TYPED_PROGRAM_REASON_ANALYZER_ERROR,
     XA_TYPED_PROGRAM_REASON_RECOVERY_POISON,
     XA_TYPED_PROGRAM_REASON_STALE_REVISION,
+    XA_TYPED_PROGRAM_REASON_OWNERSHIP_PROOF,
+    XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE,
 } XaTypedProgramReason;
 
 typedef struct XaTypedProgramPublishResult {
@@ -62,6 +67,12 @@ xa_typed_program_effect_summary(const XaTypedProgram *program, const struct XaSy
 XR_FUNC const struct XaMemoryEffectSummary *
 xa_typed_program_memory_effect_summary(const XaTypedProgram *program,
                                        const struct XaSymbol *symbol);
+XR_FUNC const struct XaOwnershipCandidateProof *
+xa_typed_program_ownership_candidate(const XaTypedProgram *program, const struct XaSymbol *symbol);
+XR_FUNC const struct XaFinalMoveProof *xa_typed_program_final_move(const XaTypedProgram *program,
+                                                                   const struct XaSymbol *symbol);
+XR_FUNC const struct XaAllocationInstancePlan *
+xa_typed_program_allocation_plan(const XaTypedProgram *program, const struct XaSymbol *symbol);
 XR_FUNC const char *xa_typed_program_reason_name(XaTypedProgramReason reason);
 
 #endif  // XA_TYPED_PROGRAM_H

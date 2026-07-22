@@ -1034,7 +1034,7 @@ static bool verify_arg_access_matches_mode(XrParamMode mode, XrCallArgAccess acc
  * general COPY as a substitute for an explicit source move. */
 static bool verify_call_arg_has_source_move(const XiValue *value) {
     for (uint8_t depth = 0; value && depth < 8; depth++) {
-        if (value->op == XI_MOVE)
+        if (value->op == XI_SOURCE_MOVE)
             return true;
         if (value->nargs != 1 || !value->args[0])
             return false;
@@ -1607,7 +1607,7 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
 }
 
 /* OWNED: escape analysis has run; every allocation op carries a
- * valid escape annotation; XI_MOVE ownership semantics are sound. */
+ * valid escape annotation; ownership forwarding preserves value types. */
 static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1642,21 +1642,21 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            /* XI_MOVE is an ownership-edge marker, not an SSA invalidation:
+            /* XI_OWNER_FORWARD is an ownership-edge marker, not an SSA invalidation:
              * a preceding RETAIN, a borrowed call result, or a branch-local
              * consume can legitimately leave the same SSA carrier usable.
              * The old same-block "no later use" heuristic rejected valid ARC
              * output while missing cross-block errors.  Verify only the local
              * executable contract here; the ARC ownership proof owns the
              * global consume accounting. */
-            if (v->op == XI_MOVE && v->nargs >= 1 && v->args[0]) {
+            if (v->op == XI_OWNER_FORWARD && v->nargs >= 1 && v->args[0]) {
                 XiValue *moved = v->args[0];
                 if (!v->type || !moved->type ||
                     (v->type->kind != XR_KIND_UNKNOWN && moved->type->kind != XR_KIND_UNKNOWN &&
                      v->type->kind != moved->type->kind &&
                      !xr_type_assignable(v->type, moved->type))) {
-                    verr(ctx, "func '%s': XI_MOVE v%u in b%u changes value type", f->name, v->id,
-                         blk->id);
+                    verr(ctx, "func '%s': XI_OWNER_FORWARD v%u in b%u changes value type", f->name,
+                         v->id, blk->id);
                     return;
                 }
             }

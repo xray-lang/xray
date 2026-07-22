@@ -22,6 +22,7 @@
 #include "xi_own.h"
 #include "xi_arc.h"
 #include "xi_arc_verify.h"
+#include "xi_source_move_verify.h"
 #include "xi_stage.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -147,10 +148,21 @@ static XiVerifyCode xi_verify_code_from_detail(const char *detail) {
 static bool xi_pipeline_verify_barrier(XiPipelineResult *res, XiPipelineStage stage) {
     char errbuf[512];
     const XiFunc *failed_func = NULL;
-    if (xi_verify_tree(res->ir, &failed_func, errbuf, sizeof(errbuf)))
+    if (!xi_verify_tree(res->ir, &failed_func, errbuf, sizeof(errbuf))) {
+        xi_pipeline_set_error(res, XI_PIPE_ERR_VERIFY, stage, xi_verify_code_from_detail(errbuf),
+                              failed_func, NULL, NULL, errbuf);
+        return false;
+    }
+
+    XiSourceMoveVerifyReport move_report;
+    XiSourceMoveVerifyStatus move_status = xi_source_move_verify_tree(res->ir, &move_report);
+    if (move_status == XI_SOURCE_MOVE_PASS)
         return true;
-    xi_pipeline_set_error(res, XI_PIPE_ERR_VERIFY, stage, xi_verify_code_from_detail(errbuf),
-                          failed_func, NULL, NULL, errbuf);
+    xi_pipeline_set_error(res,
+                          move_status == XI_SOURCE_MOVE_INTERNAL_ERROR ? XI_PIPE_ERR_INTERNAL
+                                                                       : XI_PIPE_ERR_VERIFY,
+                          stage, XI_VERIFY_STRUCTURE, move_report.func, move_report.move,
+                          "xi_source_move_verify", move_report.message);
     return false;
 }
 

@@ -37,7 +37,8 @@ static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
 }
 
 static inline bool channel_value_needs_deep_copy(XrValue value) {
-    return XR_IS_PTR(value) && xr_value_needs_copy(value) && !xr_chan_value_is_owned_message(value);
+    return XR_IS_PTR(value) && xr_value_needs_copy(value) &&
+           !xr_chan_value_is_transfer_message(value);
 }
 
 static XrRuntimeCore *channel_transfer_core(XrChannel *ch, XrCoroutine *coro) {

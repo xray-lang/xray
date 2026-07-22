@@ -181,7 +181,8 @@ static bool cg_class_field_cache_op_is_globally_safe(const XiValue *v) {
         case XI_WIDEN_U32:
         case XI_WIDEN_F32:
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_LOAD_FIELD:
         case XI_STORE_FIELD:
         case XI_RETAIN:
@@ -217,7 +218,8 @@ static bool cg_class_field_cache_receiver_use_is_safe(CgClassFieldCache *cache, 
             return true;
         }
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return arg_idx == 0 && cg_class_field_cache_is_receiver(cache, v);
         case XI_RETAIN:
         case XI_RELEASE:
@@ -269,7 +271,8 @@ static bool cg_class_field_cache_value_defines_receiver_alias(CgClassFieldCache 
         return false;
     switch ((XiOp) v->op) {
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
             return cg_class_field_cache_is_receiver(cache, v->args[0]);
         default:
             return false;

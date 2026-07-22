@@ -76,8 +76,8 @@ typedef struct XrSysHeapStats {
     _Atomic uint64_t module_alloc_count;
 
     // System object stats
-    _Atomic uint64_t owned_alloc_count;
-    _Atomic uint64_t owned_mmap_count;  // Large owned objects allocated via mmap
+    _Atomic uint64_t transfer_alloc_count;
+    _Atomic uint64_t transfer_mmap_count;  // Large owned objects allocated via mmap
     _Atomic uint64_t shared_alloc_count;
     _Atomic uint64_t shared_mmap_count;  // Large objects allocated via mmap
 
@@ -147,7 +147,7 @@ XR_FUNC void *xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size);
 /* ========== Shared Object Allocation ========== */
 
 // Allocate owned system object with non-atomic refcount (freed when unique owner drops)
-XR_FUNC void *xr_sysheap_alloc_owned(XrSystemHeap *heap, size_t size, uint8_t type);
+XR_FUNC void *xr_sysheap_alloc_transfer(XrSystemHeap *heap, size_t size, uint8_t type);
 
 // Allocate according to bytecode/object storage mode.
 XR_FUNC void *xr_sysheap_alloc_storage(XrSystemHeap *heap, size_t size, uint8_t type,
@@ -161,7 +161,7 @@ XR_FUNC void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t t
 XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 
 // Destroy owned system object: destructor then system free.
-XR_FUNC void xr_owned_destroy_core(struct XrRuntimeCore *core, XrObjHeader *obj);
+XR_FUNC void xr_transfer_destroy_core(struct XrRuntimeCore *core, XrObjHeader *obj);
 
 /* ========== XrCoroHeap Struct Pool (L2) ==========
  *

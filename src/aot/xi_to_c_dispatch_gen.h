@@ -15,7 +15,8 @@
     X(TARGET_ALIGNOF, "xi.target.alignof", xicgen_target_alignof) \
     X(TARGET_SIMD_BYTES, "xi.target.simd.bytes", xicgen_target_simd_bytes) \
     X(COPY, "xi.copy", xicgen_copy) \
-    X(MOVE, "xi.move", xicgen_move) \
+    X(SOURCE_MOVE, "xi.source.move", xicgen_move) \
+    X(OWNER_FORWARD, "xi.owner.forward", xicgen_move) \
     X(ADD, "xi.add", xicgen_add) \
     X(SUB, "xi.sub", xicgen_sub) \
     X(MUL, "xi.mul", xicgen_mul) \

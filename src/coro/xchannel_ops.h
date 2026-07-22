@@ -36,8 +36,8 @@ struct XrVMRuntime;
 
 /* ========== Send-side ownership ========== */
 
-static inline bool xr_chan_value_is_owned_message(XrValue value) {
-    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value));
+static inline bool xr_chan_value_is_transfer_message(XrValue value) {
+    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(value));
 }
 
 /* Send CONSUMES the caller's reference (XI_CHAN_SEND classifies its args
@@ -55,6 +55,7 @@ static inline bool xr_chan_value_is_owned_message(XrValue value) {
  * helper means a caller bypassed the fixed inline/owned/shared transport
  * contract and must be fixed at the producer, not papered over here. */
 static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue value) {
+    (void) core;
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
@@ -63,26 +64,12 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "channel send: TRANSIT payload is not a valid channel transport");
     if (XR_OBJ_IS_SHARED(obj))
-        return value; /* shared frozen/sync identity: transfer the caller's reference */
-    if (XR_OBJ_IS_OWNED(obj))
-        return value; /* owned-message root: move the owner token, not the graph */
-    if (!xr_value_needs_copy(value))
-        return value;
-    /* drop_is_last is mutating, so evaluate it exactly once on each path. */
-    bool coro_local = obj && !XR_OBJ_IS_SHARED(obj);
-    if (coro_local && xr_obj_drop_is_last((XrObjHeader *) obj)) {
-        XrValue copied = xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
-        xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj);
-        return copied;
-    }
-    if (coro_local) {
-        /* Not the last reference (already dropped above): copy, no destroy. */
-        return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
-    }
-    XrValue copied = xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
-    if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
-        xr_owned_destroy_core(core, obj);
-    return copied;
+        return value; /* const/sync identity: transfer the caller's reference */
+    if (XR_OBJ_IS_TRANSFER(obj))
+        return value; /* transferable root: hand off the owner token, not the graph */
+    XR_CHECK(false,
+             "channel move requires a compiler-planned TRANSFER root; implicit copy removed");
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, XrValue value,
@@ -97,22 +84,15 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
         return value;
     XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "channel send transfer: TRANSIT payload is not a valid channel transport");
-    if (XR_OBJ_IS_OWNED(obj))
-        return mode == XR_TRANSFER_COPY
-                   ? xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED)
-                   : value;
-    if (!xr_value_needs_copy(value)) {
-        if (XR_OBJ_IS_SHARED(obj))
-            xr_shared_retain(obj);
-        return value;
-    }
     if (mode == XR_TRANSFER_COPY)
-        return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
+        return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_TRANSFER);
     if (XR_OBJ_IS_SHARED(obj)) {
         xr_shared_retain(obj);
         return value;
     }
-    return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
+    XR_CHECK(false,
+             "channel share requires CONST_SHARED/SYNC_SHARED storage; implicit copy removed");
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xr_chan_prepare_send(struct XrVMRuntime *isolate, XrValue value) {
@@ -140,9 +120,9 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
         return;
     XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "channel abandon: TRANSIT payload reached channel transport");
-    if (XR_OBJ_IS_OWNED(obj)) {
+    if (XR_OBJ_IS_TRANSFER(obj)) {
         if (xr_obj_drop_is_last(obj))
-            xr_owned_destroy_core(core, obj);
+            xr_transfer_destroy_core(core, obj);
         return;
     }
     if (XR_OBJ_IS_SHARED(obj)) {
@@ -167,7 +147,7 @@ static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
         return value;
     XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "channel recv: TRANSIT payload reached channel transport");
-    if (xr_chan_value_is_owned_message(value))
+    if (xr_chan_value_is_transfer_message(value))
         return value;
     if (!xr_value_needs_copy(value))
         return value;

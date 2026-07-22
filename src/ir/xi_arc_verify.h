@@ -43,6 +43,7 @@ typedef enum XiArcContract {
     XI_ARC_C4_DOMINANCE,         /* C4: release not dominated by owner def */
     XI_ARC_C5_STALE_USE,         /* C5: operand refers to a value with no live def */
     XI_ARC_C5_METADATA,          /* C5: op ownership metadata inconsistency */
+    XI_ARC_INTERNAL_RESOURCE,    /* verifier resource failure; compilation must fail closed */
 } XiArcContract;
 
 /* Structured verification result. On success, ok = true and contract = NONE.
@@ -59,6 +60,13 @@ typedef struct XiArcVerifyReport {
     char path[192];        /* shortest counterexample block path, e.g. "b0->b2->b5" */
 } XiArcVerifyReport;
 
+/* Scratch allocation budget for deterministic resource-failure testing.
+ * Negative means unlimited; zero forces the first verifier allocation to
+ * fail. Production callers normally use xi_arc_verify(). */
+typedef struct XiArcVerifyOptions {
+    int32_t scratch_allocation_budget;
+} XiArcVerifyOptions;
+
 /* Human-readable contract label (e.g. "C1 (use-after-release)"). */
 XR_FUNC const char *xi_arc_contract_name(XiArcContract c);
 
@@ -66,6 +74,9 @@ XR_FUNC const char *xi_arc_contract_name(XiArcContract c);
  * hold. On the first violation, fills *report and returns false. Pure check:
  * never aborts. `report` may be NULL if the caller only wants the bool. */
 XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report);
+
+XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
+                                        const XiArcVerifyOptions *options);
 
 /* Verify f and all nested children. Returns true if every function passes. */
 XR_FUNC bool xi_arc_verify_tree(XiFunc *f, XiArcVerifyReport *report);

@@ -371,7 +371,7 @@ TEST(e2e_array_set) {
 }
 
 TEST(e2e_native_pointer_store_narrows_to_pointee) {
-    XrProto *p = compile_source("fn write(p: MutPtr<uint16>, value: uint16) {\n"
+    XrProto *p = compile_source("fn write(p: ref MutPtr<uint16>, value: uint16) {\n"
                                 "  unsafe { p[0] = value }\n"
                                 "}",
                                 NULL);

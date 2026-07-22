@@ -586,7 +586,7 @@ static void test_arc_branch_local_span_phi_stays_in_dominance_region(void) {
     right_span->args[0] = right_arr;
     right_span->args[1] = right_start;
     right_span->args[2] = right_end;
-    XiValue *right_move = xi_value_new(f, right, XI_MOVE, &t_span, 1);
+    XiValue *right_move = xi_value_new(f, right, XI_OWNER_FORWARD, &t_span, 1);
     right_move->args[0] = right_span;
     xi_block_set_jump(right, join);
 

@@ -372,7 +372,7 @@ static void test_legal_move_out(void) {
     XiFunc *f = make_func("legal_move_out", &t_array);
     XiBlock *b0 = f->entry;
     XiValue *v = rc_new(f, b0);
-    XiValue *m = xi_value_new(f, b0, XI_MOVE, &t_array, 1);
+    XiValue *m = xi_value_new(f, b0, XI_OWNER_FORWARD, &t_array, 1);
     m->args[0] = v; /* ownership transferred through the move */
     xi_block_set_return(b0, m);
     ASSERT_OK(f, "legal move-out via return");
@@ -421,6 +421,18 @@ static void test_legal_trivial(void) {
     xi_func_free(f);
 }
 
+static void test_verifier_resource_failure_is_not_success(void) {
+    XiFunc *f = make_func("resource_failure", &t_array);
+    XiValue *v = rc_new(f, f->entry);
+    xi_block_set_return(f->entry, v);
+    XiArcVerifyOptions options = {.scratch_allocation_budget = 0};
+    XiArcVerifyReport report;
+    bool ok = xi_arc_verify_with_options(f, &report, &options);
+    ASSERT_TRUE(!ok && report.contract == XI_ARC_INTERNAL_RESOURCE,
+                "verifier OOM must fail closed as AnalysisResourceFailure");
+    xi_func_free(f);
+}
+
 int main(void) {
     fprintf(stderr, "test_xi_arc_verify:\n");
 
@@ -439,6 +451,7 @@ int main(void) {
     test_released_retain_does_not_promote_borrow_view();
     test_legal_branch_local_release();
     test_legal_trivial();
+    test_verifier_resource_failure_is_not_success();
 
     fprintf(stderr, "\n%d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

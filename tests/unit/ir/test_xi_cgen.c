@@ -217,7 +217,7 @@ static const XiFunc *test_aot_direct_call_target(const XiFunc *owner, const XiVa
             callee->aux)
             return (const XiFunc *) callee->aux;
         if ((callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY ||
-             callee->op == XI_MOVE) &&
+             xi_op_is_identity_forward(callee->op)) &&
             callee->nargs > 0) {
             callee = callee->args[0];
             continue;
@@ -697,11 +697,11 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
                 .source_node_id = source_node_id,
                 .source_span_id = source_node_id,
                 .signature_key = source_node_id,
-                .storage_owner = XR_STORAGE_MODULE,
+                .storage_domain = XR_STORAGE_MODULE_STATIC,
                 .storage_mutability = is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
                 .address_identity = XR_ADDRESS_MODULE_STABLE,
                 .materialization_kind =
-                    is_const ? XR_MATERIALIZE_MODULE_READONLY : XR_MATERIALIZE_MODULE_RUNTIME,
+                    is_const ? XR_MATERIALIZE_STATIC_DATA : XR_MATERIALIZE_STATIC_DATA,
             };
             TEST_REQUIRE(xg_global_evidence_add_decl(&plan->evidence, &storage) != NULL,
                          "AOT storage declaration evidence allocation failed");
@@ -2664,13 +2664,13 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
 }
 
 TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
-    const char *src = "fn hot(dst: Array<byte>) -> int {\n"
+    const char *src = "fn hot(dst: ref Array<byte>) -> int {\n"
                       "    dst.reserve(8)\n"
                       "    return len(dst)\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var dst = Array<byte>(1)\n"
-                      "    return hot(dst)\n"
+                      "    return hot(ref dst)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -2835,18 +2835,10 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     xi_func_free(ir);
 }
 
-TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
-#define CHECK_RAWPTR_PAR_CAPTURE(cond, msg)                                                        \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "  FAIL: %s\n", (msg));                                                \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
+TEST(cgen_rawptr_parallel_for_each_capture_is_rejected) {
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
-                      "    shared slots: Array<int> = [0]\n"
+                      "    var slots: Array<int> = [0]\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        unsafe {\n"
                       "            var p = slots.mutPtr()\n"
@@ -2858,27 +2850,8 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
                       "run(4)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "MutPtr capture inside parallel.forEach should lower");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
-    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "MutPtr capture inside parallel.forEach should generate");
-
-    const char *par_for = strstr(code, "xr_parallel_for_range_i64(");
-    CHECK_RAWPTR_PAR_CAPTURE(par_for != NULL,
-                             "parallel.forEach should use the AOT runtime executor");
-    const char *release = strstr(par_for, "xrt_release(");
-    CHECK_RAWPTR_PAR_CAPTURE(release != NULL, "owner Array should still be released");
-    CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
-                             "Array owner borrowed by mutPtr must outlive MutPtr parallel capture");
-
-    printf("  Generated MutPtr parallel.forEach capture owner-lifetime path %zu bytes of C code\n",
-           strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-
-#undef CHECK_RAWPTR_PAR_CAPTURE
+    assert(ir == NULL &&
+           "mutable owner/raw pointer access across parallel execution must fail closed");
 }
 
 TEST(cgen_span_index_get_elides_dead_err_check) {
@@ -2965,17 +2938,18 @@ TEST(cgen_span_slice_elides_dead_err_check) {
 }
 
 TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
-    const char *src = "fn appendRange(out: Array<byte>, src: Slice<byte>, start: int, n: int) {\n"
-                      "    out.appendFrom(src[start:start + n])\n"
-                      "}\n"
-                      "fn run() -> int {\n"
-                      "    var out = Array<byte>()\n"
-                      "    var src = Array<byte>(8)\n"
-                      "    const view: Slice<byte> = src[:]\n"
-                      "    appendRange(out, view, 2, 4)\n"
-                      "    return len(out)\n"
-                      "}\n"
-                      "print(run())\n";
+    const char *src =
+        "fn appendRange(out: ref Array<byte>, src: Slice<byte>, start: int, n: int) {\n"
+        "    out.appendFrom(src[start:start + n])\n"
+        "}\n"
+        "fn run() -> int {\n"
+        "    var out = Array<byte>()\n"
+        "    var src = Array<byte>(8)\n"
+        "    const view: Slice<byte> = src[:]\n"
+        "    appendRange(ref out, view, 2, 4)\n"
+        "    return len(out)\n"
+        "}\n"
+        "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3006,14 +2980,14 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
 }
 
 TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
-    const char *src = "fn extend(out: Array<byte>) {\n"
+    const char *src = "fn extend(out: ref Array<byte>) {\n"
                       "    out.repeatFrom(2, 4)\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var out = Array<byte>()\n"
                       "    out.push(1)\n"
                       "    out.push(2)\n"
-                      "    extend(out)\n"
+                      "    extend(ref out)\n"
                       "    return len(out)\n"
                       "}\n"
                       "print(run())\n";
@@ -3044,7 +3018,7 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
 }
 
 TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
-    const char *src = "fn hot(dst: Slice<byte>, src: Slice<byte>) -> int {\n"
+    const char *src = "fn hot(dst: ref Slice<byte>, src: Slice<byte>) -> int {\n"
                       "    var copied: Slice<byte> = dst.copyFrom(src)\n"
                       "    var word: uint16 = dst.load<uint16>(0, Endian.LE)\n"
                       "    dst.store<uint16>(0, word + 1, Endian.LE)\n"
@@ -3053,7 +3027,8 @@ TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
                       "fn run() -> int {\n"
                       "    var dst = Array<byte>(8, 0)\n"
                       "    var src = Array<byte>(8, 1)\n"
-                      "    return hot(dst[:], src[:])\n"
+                      "    var dstView: Slice<byte> = dst[:]\n"
+                      "    return hot(ref dstView, src[:])\n"
                       "}\n"
                       "print(run())\n";
 
@@ -3883,7 +3858,7 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
                       "fn make(n: int) -> Counter {\n"
                       "    return Counter(n)\n"
                       "}\n"
-                      "fn touch(c: Counter) -> int {\n"
+                      "fn touch(c: ref Counter) -> int {\n"
                       "    c.value = c.value + 1\n"
                       "    return c.get()\n"
                       "}\n"
@@ -3891,7 +3866,7 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
                       "    var c = make(2)\n"
                       "    var a = c.bump(5)\n"
                       "    var b = c.value\n"
-                      "    var d = touch(c)\n"
+                      "    var d = touch(ref c)\n"
                       "    return a + b + d + c.get()\n"
                       "}\n"
                       "print(run())\n";
@@ -4032,7 +4007,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "fn make(values: Array<int>) -> Bag {\n"
                       "    return Bag(values)\n"
                       "}\n"
-                      "fn swap(b: Bag, next: Array<int>) -> int {\n"
+                      "fn swap(b: ref Bag, next: Array<int>) -> int {\n"
                       "    b.values = next\n"
                       "    return len(b.values)\n"
                       "}\n"
@@ -4044,7 +4019,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "    var a = [1]\n"
                       "    var b = [2, 3]\n"
                       "    var bag = make(a)\n"
-                      "    return bag.replace(b) + swap(bag, a) + local(a)\n"
+                      "    return bag.replace(b) + swap(ref bag, a) + local(a)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -6560,7 +6535,7 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
 }
 
 TEST(cgen_coro_go_clones_tagged_args) {
-    const char *src = "fn worker(xs: Array<int>) -> int {\n"
+    const char *src = "fn worker(xs: move Array<int>) -> int {\n"
                       "    xs.push(99)\n"
                       "    Coro.yield()\n"
                       "    return len(xs)\n"
@@ -6589,11 +6564,11 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
     const char *src = "fn compute(n: int) -> int {\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn mutate_copy(xs: Array<int>) -> int {\n"
+                      "fn mutate_copy(xs: move Array<int>) -> int {\n"
                       "    xs.push(99)\n"
                       "    return len(xs)\n"
                       "}\n"
-                      "fn identity_copy(xs: Array<int>) -> Array<int> {\n"
+                      "fn identity_copy(xs: move Array<int>) -> Array<int> {\n"
                       "    return xs\n"
                       "}\n"
                       "var high = go(name: \"compute\") compute(5)\n"
@@ -8425,7 +8400,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "fn task_status(task: Task<int>) -> TaskStatus {\n"
                       "    return task.status\n"
                       "}\n"
-                      "fn task_poll(task: Task<int>) -> TaskResult<int> {\n"
+                      "fn task_poll(task: ref Task<int>) -> TaskResult<int> {\n"
                       "    return task.poll()\n"
                       "}\n"
                       "shared ch = Channel<int>(0)\n"
@@ -8444,7 +8419,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "print(quick_result)\n"
                       "print(task_done(quick))\n"
                       "print(task_status(quick))\n"
-                      "print(task_poll(quick))\n";
+                      "print(task_poll(ref quick))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -8565,7 +8540,7 @@ int main(void) {
     run_cgen_direct_call_converts_bytes_to_byte_slice_arg();
     run_cgen_boxed_adapter_converts_byte_slice_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
-    run_cgen_rawptr_parallel_for_each_capture_keeps_owner_alive();
+    run_cgen_rawptr_parallel_for_each_capture_is_rejected();
     run_cgen_span_index_get_elides_dead_err_check();
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_byte_array_append_from_slice_elides_dead_err_check();

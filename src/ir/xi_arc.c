@@ -255,7 +255,7 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
  * and dup the escaping copy (touching freed memory): a use-after-free for the
  * textbook `var b = a; return b`.
  *
- * The fix is to make such a copy an explicit MOVE. XI_MOVE consumes its source
+ * The fix is to make such a copy an explicit MOVE. XI_OWNER_FORWARD consumes its source
  * (own-use = consume) and produces an untracked alias (result-ownership =
  * none): the existing owned/borrow machinery then transfers the source's
  * reference through the move (dup'ing it first only when the source is still
@@ -327,7 +327,7 @@ static void arc_copy_to_move(XiFunc *f) {
                     continue;
                 if (!value_has_consuming_use(f, v))
                     continue; /* result only borrowed: keep the borrow-copy */
-                v->op = XI_MOVE;
+                v->op = XI_OWNER_FORWARD;
                 changed = true;
             }
         }
@@ -518,7 +518,8 @@ static bool arc_value_is_span_view_carrier(const XiValue *v) {
         case XI_CONVERT:
         case XI_BOX:
         case XI_UNBOX:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_PHI:
         case XI_SELECT:
             return v->nargs > 0 && arc_value_is_span_view_carrier(v->args[0]);
@@ -558,7 +559,8 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         case XI_CONVERT:
         case XI_BOX:
         case XI_UNBOX:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_PHI:
         case XI_SELECT:
             for (uint16_t a = 0; a < user->nargs; a++) {
@@ -589,7 +591,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
 static const XiValue *arc_unwrap_import_source(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

@@ -176,7 +176,7 @@ static const char *local_ctype_str(const XiValue *v) {
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
     while (v &&
            (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            v->op == XI_MOVE) &&
+            xi_op_is_identity_forward(v->op)) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -229,7 +229,7 @@ static const XiValue *cg_i64_optional_blocking_result_root(const XiValue *v) {
     for (uint8_t depth = 0; cur && depth < 16; depth++) {
         if (cg_value_is_i64_optional_blocking_result_root(cur))
             return cur;
-        if (((xi_copy_is_identity_alias(cur) || cur->op == XI_MOVE) &&
+        if (((xi_copy_is_identity_alias(cur) || xi_op_is_identity_forward(cur->op)) &&
              cg_rep(cur) == XR_REP_TAGGED && cur->nargs >= 1) ||
             (cur->op == XI_UNBOX && cg_rep(cur) == XR_REP_TAGGED && cur->nargs >= 1)) {
             cur = cur->args[0];
@@ -285,7 +285,8 @@ static bool cg_i64_optional_value_uses_are_native(const XiFunc *f, const XiValue
                             return false;
                         break;
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0)
                             return false;
                         if (cg_rep(user) == XR_REP_TAGGED &&
@@ -1794,7 +1795,8 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0 || !cg_shared_static_function_value_uses_are_direct(
                                            ctx, owner, user, target, depth + 1))
                             return false;
@@ -2145,7 +2147,8 @@ static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0 || !cg_closure_new_value_can_emit_null_for_unreachable_body(
                                            ctx, owner, user, target, depth + 1))
                             return false;
@@ -3288,7 +3291,8 @@ static bool cg_class_descriptor_value_uses_are_elidable(XiCgenCtx *ctx, const Xi
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0 || !cg_class_descriptor_value_uses_are_elidable(
                                            ctx, owner, user, cd, depth + 1, saw_elidable_use))
                             return false;
@@ -3449,7 +3453,7 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
 
 /* Storage representation of v's declared C local. Must stay in sync with
  * local_ctype_str_ctx: a native-local array is emitted as xrt_array_t* (PTR),
- * everything else uses its planned storage rep. Identity ops (XI_COPY/XI_MOVE)
+ * everything else uses its planned storage rep. Identity ops (XI_COPY/XI_OWNER_FORWARD)
  * use this to bridge a source whose declared rep differs from the result's,
  * e.g. a native-local PTR array moved into a TAGGED-declared local. */
 static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
@@ -4074,7 +4078,8 @@ static bool cg_import_ref_value_use_requires_runtime_value(XiCgenCtx *ctx, const
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0)
                             return true;
                         if (cg_import_ref_value_use_requires_runtime_value(ctx, owner, user,
@@ -4144,7 +4149,8 @@ static bool cg_ref_alias_user_noescape(XiCgenCtx *ctx, const XiFunc *f, const Xi
             cg_ref_noescape_debug_fail(f, alias, user, "arc op on alias");
             return false;
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_BOX:
         case XI_UNBOX:
         case XI_CHECKTYPE:
@@ -4282,7 +4288,8 @@ static bool cg_value_is_array_slot_forwarding_or_arc(const XiValue *v) {
     switch ((XiOp) v->op) {
         case XI_RETAIN:
         case XI_RELEASE:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_BOX:
         case XI_UNBOX:
         case XI_CHECKTYPE:
@@ -4419,7 +4426,8 @@ static bool cg_borrowed_array_slot_user_is_borrow(const XiCgenCtx *ctx_ro, const
         case XI_RELEASE:
             return arg_index == 0;
         case XI_COPY:
-        case XI_MOVE:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
         case XI_BOX:
         case XI_UNBOX:
         case XI_CHECKTYPE:
@@ -4734,7 +4742,7 @@ static bool cg_class_native_ref_stack_ctor_uses_only_return_call(XiCgenCtx *ctx,
                         *saw_return_call = true;
                     continue;
                 }
-                if ((user->op == XI_COPY || user->op == XI_MOVE) && ai == 0) {
+                if ((user->op == XI_COPY || xi_op_is_identity_forward(user->op)) && ai == 0) {
                     if (!cg_class_native_ref_stack_ctor_uses_only_return_call(
                             ctx, f, user, return_call, (uint8_t) (depth + 1), saw_return_call))
                         return false;
@@ -5099,7 +5107,8 @@ static const XrAggregateLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, con
     for (int depth = 0; cur && depth <= 8; depth++) {
         if (cur->op == XI_AGG_NEW)
             return (const XrAggregateLayout *) cur->aux;
-        if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_RETAIN) && cur->nargs >= 1) {
+        if ((cur->op == XI_COPY || xi_op_is_identity_forward(cur->op) || cur->op == XI_RETAIN) &&
+            cur->nargs >= 1) {
             cur = cur->args[0];
             continue;
         }
@@ -5190,7 +5199,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
     }
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return false;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+    if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) &&
         (cg_value_traces_to_inlined_struct(f, v) ||
          cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -5555,7 +5564,7 @@ static bool cg_await_all_inline_literal_collect(const XiFunc *f, const XiValue *
                 continue;
             }
             if (v->nargs == 1 && (v->op == XI_BOX || v->op == XI_UNBOX ||
-                                  xi_copy_is_identity_alias(v) || v->op == XI_MOVE))
+                                  xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)))
                 continue;
             if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
                 cg_inline_await_all_value_traces_to_array(v->args[0], array))
@@ -5657,8 +5666,9 @@ static bool cg_value_traces_to_value_through_identity(const XiValue *value, cons
     for (uint8_t depth = 0; cur && depth < 8; depth++) {
         if (cur == target)
             return true;
-        if (cur->nargs == 1 && (cur->op == XI_BOX || cur->op == XI_UNBOX ||
-                                xi_copy_is_identity_alias(cur) || cur->op == XI_MOVE)) {
+        if (cur->nargs == 1 &&
+            (cur->op == XI_BOX || cur->op == XI_UNBOX || xi_copy_is_identity_alias(cur) ||
+             xi_op_is_identity_forward(cur->op))) {
             cur = cur->args[0];
             continue;
         }
@@ -5694,7 +5704,7 @@ static bool cg_await_all_scalar_result_allowed_user(const XiValue *user, uint16_
 
     if (arg_index == 0 && user->nargs == 1 &&
         (user->op == XI_BOX || user->op == XI_UNBOX || xi_copy_is_identity_alias(user) ||
-         user->op == XI_MOVE))
+         xi_op_is_identity_forward(user->op)))
         return true;
 
     if (arg_index == 0 && user->nargs >= 1 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
@@ -5769,7 +5779,8 @@ static const XiValue *cg_find_scalarized_inline_await_all_for_value(const XiFunc
             if (value->nargs >= 1 &&
                 cg_value_traces_to_value_through_identity(value->args[0], await) &&
                 (value->op == XI_BOX || value->op == XI_UNBOX || xi_copy_is_identity_alias(value) ||
-                 value->op == XI_MOVE || value->op == XI_RETAIN || value->op == XI_RELEASE))
+                 xi_op_is_identity_forward(value->op) || value->op == XI_RETAIN ||
+                 value->op == XI_RELEASE))
                 return await;
         }
     }
@@ -6000,7 +6011,8 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
         switch ((XiOp) v->op) {
             case XI_CONST:
             case XI_COPY:
-            case XI_MOVE:
+            case XI_SOURCE_MOVE:
+            case XI_OWNER_FORWARD:
                 break;
             default:
                 return false;
@@ -6134,7 +6146,7 @@ static bool cg_static_enum_namespace_uses_are_elidable(XiCgenCtx *ctx, const XiF
                     continue;
                 if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
                     continue;
-                if (a == 0 && (user->op == XI_COPY || user->op == XI_MOVE) &&
+                if (a == 0 && (user->op == XI_COPY || xi_op_is_identity_forward(user->op)) &&
                     cg_static_enum_namespace_uses_are_elidable(ctx, f, user, depth + 1))
                     continue;
                 if (a == 0 && user->op == XI_SET_SHARED && user->aux_int >= 0 && f->module &&
@@ -6165,7 +6177,7 @@ static bool cg_static_enum_namespace_value_is_elided(XiCgenCtx *ctx, const XiFun
         cg_static_enum_namespace_data(ctx, f, v->args[0]))
         return true;
     if ((v->op == XI_GET_SHARED || v->op == XI_IMPORT_REF || v->op == XI_COPY ||
-         v->op == XI_MOVE) &&
+         xi_op_is_identity_forward(v->op)) &&
         cg_static_enum_namespace_uses_are_elidable(ctx, f, v, 0))
         return true;
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
@@ -6292,7 +6304,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         cg_value_is_elided_static_tuple_const_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_const_ref(ctx, f, v))
         return;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+    if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) &&
         (cg_value_traces_to_inlined_struct(f, v) ||
          cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -7003,7 +7015,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return true;
-    if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+    if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) &&
         (cg_value_traces_to_inlined_struct(f, v) ||
          cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v)))
@@ -8664,7 +8676,8 @@ static bool cg_static_func_ref_use_requires_body(XiCgenCtx *ctx, const XiFunc *o
                     case XI_BOX:
                     case XI_UNBOX:
                     case XI_COPY:
-                    case XI_MOVE:
+                    case XI_SOURCE_MOVE:
+                    case XI_OWNER_FORWARD:
                         if (ai != 0)
                             return true;
                         if (cg_static_func_ref_use_requires_body(ctx, owner, user, target,

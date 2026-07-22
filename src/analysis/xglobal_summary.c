@@ -156,7 +156,7 @@ static uint64_t hash_decl_summary(uint64_t hash, const XgDeclSummary *row) {
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u32(hash, row->derive_flags);
     hash = hash_u32(hash, row->storage_flags);
-    hash = hash_u8(hash, row->storage_owner);
+    hash = hash_u8(hash, row->storage_domain);
     hash = hash_u8(hash, row->storage_mutability);
     hash = hash_u8(hash, row->address_identity);
     return hash_u8(hash, row->materialization_kind);
@@ -310,7 +310,7 @@ static uint64_t hash_param_storage_summary(uint64_t hash, const XgParamStorageSu
     hash = hash_u32(hash, row->requirement_id);
     hash = hash_u32(hash, row->owner_func_id);
     hash = hash_u32(hash, row->param_index);
-    hash = hash_u8(hash, row->storage_owner);
+    hash = hash_u8(hash, row->storage_domain);
     return hash_u32(hash, row->flags);
 }
 
@@ -3541,7 +3541,7 @@ static void dump_cache_payload_declarations(FILE *out, const XgGlobalEvidence *e
                 "derive=0x%x storage_flags=0x%x owner=%u mutability=%u address=%u materialize=%u\n",
                 d->decl_id, d->module_id, d->source_node_id, (unsigned) d->kind, d->flags,
                 d->name_id, d->type_key, d->signature_key, d->source_span_id, d->derive_flags,
-                d->storage_flags, (unsigned) d->storage_owner, (unsigned) d->storage_mutability,
+                d->storage_flags, (unsigned) d->storage_domain, (unsigned) d->storage_mutability,
                 (unsigned) d->address_identity, (unsigned) d->materialization_kind);
     }
 }
@@ -3664,7 +3664,7 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     for (uint32_t i = 0; i < evidence->nparam_storages; i++) {
         const XgParamStorageSummary *p = &evidence->param_storages[i];
         fprintf(out, "param-storage id=%u owner=%u index=%u storage=%u flags=0x%x\n",
-                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_owner,
+                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_domain,
                 p->flags);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
@@ -4101,7 +4101,7 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
     for (uint32_t i = 0; i < decl_count; i++) {
         XgDeclSummary row;
         uint32_t kind = 0;
-        uint32_t storage_owner = 0;
+        uint32_t storage_domain = 0;
         uint32_t storage_mutability = 0;
         uint32_t address_identity = 0;
         uint32_t materialization_kind = 0;
@@ -4117,14 +4117,14 @@ static bool materialize_payload_declarations(const char **cursor, XgGlobalEviden
                    " materialize=%" SCNu32 " %c",
                    &row.decl_id, &row.module_id, &row.source_node_id, &kind, &row.flags,
                    &row.name_id, &row.type_key, &row.signature_key, &row.source_span_id,
-                   &row.derive_flags, &row.storage_flags, &storage_owner, &storage_mutability,
+                   &row.derive_flags, &row.storage_flags, &storage_domain, &storage_mutability,
                    &address_identity, &materialization_kind, &trailing) != 15)
             return false;
-        if (kind > UINT8_MAX || storage_owner > UINT8_MAX || storage_mutability > UINT8_MAX ||
+        if (kind > UINT8_MAX || storage_domain > UINT8_MAX || storage_mutability > UINT8_MAX ||
             address_identity > UINT8_MAX || materialization_kind > UINT8_MAX)
             return false;
         row.kind = (uint8_t) kind;
-        row.storage_owner = (uint8_t) storage_owner;
+        row.storage_domain = (uint8_t) storage_domain;
         row.storage_mutability = (uint8_t) storage_mutability;
         row.address_identity = (uint8_t) address_identity;
         row.materialization_kind = (uint8_t) materialization_kind;
@@ -4423,7 +4423,7 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
     }
     for (uint32_t i = 0; i < param_storage_count; i++) {
         XgParamStorageSummary row;
-        uint32_t storage_owner = 0;
+        uint32_t storage_domain = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -4431,10 +4431,10 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         if (sscanf(line,
                    "param-storage id=%" SCNu32 " owner=%" SCNu32 " index=%" SCNu32
                    " storage=%" SCNu32 " flags=0x%" SCNx32 " %c",
-                   &row.requirement_id, &row.owner_func_id, &row.param_index, &storage_owner,
+                   &row.requirement_id, &row.owner_func_id, &row.param_index, &storage_domain,
                    &row.flags, &trailing) != 5)
             return false;
-        row.storage_owner = (uint8_t) storage_owner;
+        row.storage_domain = (uint8_t) storage_domain;
         if (!xg_global_evidence_add_param_storage(evidence, &row))
             return false;
     }
@@ -6311,7 +6311,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 "materialize=%u\n",
                 i, d->decl_id, d->module_id, d->source_node_id, xg_decl_kind_name(d->kind),
                 d->flags, d->name_id, d->type_key, d->signature_key, d->source_span_id,
-                d->derive_flags, d->storage_flags, (unsigned) d->storage_owner,
+                d->derive_flags, d->storage_flags, (unsigned) d->storage_domain,
                 (unsigned) d->storage_mutability, (unsigned) d->address_identity,
                 (unsigned) d->materialization_kind);
     }
@@ -6412,7 +6412,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nparam_storages; i++) {
         const XgParamStorageSummary *p = &evidence->param_storages[i];
         fprintf(out, "param-storage %u id=%u owner=%u index=%u storage=%u flags=0x%x\n", i,
-                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_owner,
+                p->requirement_id, p->owner_func_id, p->param_index, (unsigned) p->storage_domain,
                 p->flags);
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {

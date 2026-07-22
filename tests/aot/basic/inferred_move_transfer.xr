@@ -1,0 +1,15 @@
+// A plain local aggregate moved into a task must be allocated in the
+// transferable domain by the ownership solver.  Neither backend may insert a
+// boundary clone.
+fn append_and_count(values: move Array<int>) -> int {
+    values.push(3)
+    return len(values)
+}
+
+fn main() {
+    var values = [1, 2]
+    var task = go append_and_count(move values)
+    print(await task)
+}
+
+main()
