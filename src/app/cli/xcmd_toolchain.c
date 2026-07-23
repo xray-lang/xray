@@ -61,30 +61,32 @@ static bool xcmd_toolchain_request(const XrCliInvocation *inv, const char **requ
     const char *provider = xr_cli_opt_string(&inv->options, "provider", NULL);
     const char *cc = xr_cli_opt_string(&inv->options, "cc", NULL);
     const char *zig = xr_cli_opt_string(&inv->options, "zig", NULL);
+    char config_path[1200];
+    XrToolchainConfig config;
+    if (!xcmd_toolchain_load_config(config_path, sizeof(config_path), &config, err, err_size))
+        return false;
+    const XrToolchainPreference *preference = xtc_config_find(&config, *requested);
     if (!provider) {
-        char config_path[1200];
-        XrToolchainConfig config;
-        if (!xcmd_toolchain_load_config(config_path, sizeof(config_path), &config, err, err_size))
-            return false;
-        const XrToolchainPreference *preference = xtc_config_find(&config, *requested);
         if (preference) {
             options->request.selector = preference->selector;
-            if (!cc && !getenv("CC") && preference->compiler[0] &&
-                strcmp(preference->compiler, "auto") != 0) {
-                snprintf(options->cc_storage, sizeof(options->cc_storage), "%s",
-                         preference->compiler);
-                cc = options->cc_storage;
-            }
-            if (!zig && !getenv("XRAY_ZIG") && preference->zig[0] &&
-                strcmp(preference->zig, "managed") != 0 && strcmp(preference->zig, "auto") != 0) {
-                snprintf(options->zig_storage, sizeof(options->zig_storage), "%s", preference->zig);
-                zig = options->zig_storage;
-            }
         } else {
             options->request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
         }
     } else if (!xtc_selector_parse(provider, &options->request.selector, err, err_size)) {
         return false;
+    }
+
+    const char *resolved_cc = cc;
+    const char *resolved_zig = zig;
+    xtc_config_apply_provider_paths(preference, options->request.selector, cc, getenv("CC"), zig,
+                                    getenv("XRAY_ZIG"), &resolved_cc, &resolved_zig);
+    if (resolved_cc != cc) {
+        snprintf(options->cc_storage, sizeof(options->cc_storage), "%s", resolved_cc);
+        cc = options->cc_storage;
+    }
+    if (resolved_zig != zig) {
+        snprintf(options->zig_storage, sizeof(options->zig_storage), "%s", resolved_zig);
+        zig = options->zig_storage;
     }
 
     if (cc && options->request.selector == XR_TOOLCHAIN_SELECTOR_ZIG) {

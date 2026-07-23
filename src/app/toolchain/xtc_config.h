@@ -39,6 +39,11 @@ XR_FUNC bool xtc_config_load(const char *path, XrToolchainConfig *out, bool *exi
                              size_t err_size);
 XR_FUNC const XrToolchainPreference *xtc_config_find(const XrToolchainConfig *config,
                                                      const char *target);
+XR_FUNC void xtc_config_apply_provider_paths(const XrToolchainPreference *preference,
+                                             XrToolchainSelector selector, const char *requested_cc,
+                                             const char *environment_cc, const char *requested_zig,
+                                             const char *environment_zig, const char **out_cc,
+                                             const char **out_zig);
 XR_FUNC bool xtc_config_use(const char *path, const char *target, XrToolchainSelector selector,
                             const char *cc, const char *zig, char *err, size_t err_size);
 XR_FUNC bool xtc_config_reset(const char *path, const char *target, char *err, size_t err_size);

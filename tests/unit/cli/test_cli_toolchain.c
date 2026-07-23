@@ -328,6 +328,38 @@ TEST(config_update_is_atomic_and_round_trips_escaped_paths) {
 #endif
 }
 
+TEST(configured_provider_path_fills_only_matching_missing_path) {
+    XrToolchainPreference preference = {0};
+    const char *cc = NULL;
+    const char *zig = NULL;
+    preference.selector = XR_TOOLCHAIN_SELECTOR_ZIG;
+    snprintf(preference.zig, sizeof(preference.zig), "%s", "/managed/zig");
+
+    xtc_config_apply_provider_paths(&preference, XR_TOOLCHAIN_SELECTOR_ZIG, NULL, NULL, NULL, NULL,
+                                    &cc, &zig);
+    ASSERT_TRUE(cc == NULL);
+    ASSERT_STR_EQ(zig, "/managed/zig");
+
+    xtc_config_apply_provider_paths(&preference, XR_TOOLCHAIN_SELECTOR_ZIG, NULL, NULL, "/cli/zig",
+                                    NULL, &cc, &zig);
+    ASSERT_STR_EQ(zig, "/cli/zig");
+
+    xtc_config_apply_provider_paths(&preference, XR_TOOLCHAIN_SELECTOR_ZIG, NULL, NULL, NULL,
+                                    "/env/zig", &cc, &zig);
+    ASSERT_TRUE(zig == NULL);
+
+    xtc_config_apply_provider_paths(&preference, XR_TOOLCHAIN_SELECTOR_HOST, NULL, NULL, NULL, NULL,
+                                    &cc, &zig);
+    ASSERT_TRUE(zig == NULL);
+
+    memset(&preference, 0, sizeof(preference));
+    preference.selector = XR_TOOLCHAIN_SELECTOR_HOST;
+    snprintf(preference.compiler, sizeof(preference.compiler), "%s", "/configured/cc");
+    xtc_config_apply_provider_paths(&preference, XR_TOOLCHAIN_SELECTOR_HOST, NULL, NULL, NULL, NULL,
+                                    &cc, &zig);
+    ASSERT_STR_EQ(cc, "/configured/cc");
+}
+
 TEST(config_corruption_is_preserved) {
 #ifndef _WIN32
     char root_template[] = "/tmp/xray_xtc_corrupt_XXXXXX";
@@ -522,6 +554,7 @@ RUN_TEST(explicit_clang_is_classified_from_banner);
 
 RUN_TEST_SUITE("Toolchain config");
 RUN_TEST(config_update_is_atomic_and_round_trips_escaped_paths);
+RUN_TEST(configured_provider_path_fills_only_matching_missing_path);
 RUN_TEST(config_corruption_is_preserved);
 
 RUN_TEST_SUITE("Toolchain process runner");

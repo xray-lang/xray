@@ -1392,6 +1392,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XrToolchainSelection toolchain_plan;
     XrToolchainProbeResult toolchain_probe;
     XrToolchainConfig user_toolchain_config;
+    const XrToolchainPreference *user_toolchain_preference = NULL;
     char user_toolchain_config_path[XR_PATH_MAX];
     char parse_err[512];
     int rc;
@@ -1448,7 +1449,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
-    if (!toolchain_arg) {
+    if (native_mode) {
         bool config_exists = false;
         if (!xtc_config_path(user_toolchain_config_path, sizeof(user_toolchain_config_path),
                              parse_err, sizeof(parse_err)) ||
@@ -1457,17 +1458,9 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             fprintf(stderr, "Error: %s\n", parse_err);
             CMD_BUILD_RETURN(1);
         }
-        const XrToolchainPreference *preference =
-            xtc_config_find(&user_toolchain_config, target_arg);
-        if (preference) {
-            toolchain_arg = xtc_selector_name(preference->selector);
-            if ((!cc || !cc[0]) && !getenv("CC") && preference->compiler[0] &&
-                strcmp(preference->compiler, "auto") != 0)
-                cc = preference->compiler;
-            if ((!zig_path || !zig_path[0]) && !getenv("XRAY_ZIG") && preference->zig[0] &&
-                strcmp(preference->zig, "auto") != 0 && strcmp(preference->zig, "managed") != 0)
-                zig_path = preference->zig;
-        }
+        user_toolchain_preference = xtc_config_find(&user_toolchain_config, target_arg);
+        if (!toolchain_arg && user_toolchain_preference)
+            toolchain_arg = xtc_selector_name(user_toolchain_preference->selector);
     }
     if (!toolchain_arg)
         toolchain_arg = "auto";
@@ -1484,6 +1477,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
+    xtc_config_apply_provider_paths(user_toolchain_preference, toolchain_selector, cc, getenv("CC"),
+                                    zig_path, getenv("XRAY_ZIG"), &cc, &zig_path);
     if (profile != XR_CLI_BUILD_PROFILE_HOSTED && !native_mode) {
         fprintf(stderr, "Error: --profile %s requires --native\n", build_profile_name(profile));
         CMD_BUILD_RETURN(2);

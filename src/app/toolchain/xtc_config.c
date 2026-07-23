@@ -215,6 +215,26 @@ XR_FUNC const XrToolchainPreference *xtc_config_find(const XrToolchainConfig *co
     return NULL;
 }
 
+XR_FUNC void xtc_config_apply_provider_paths(const XrToolchainPreference *preference,
+                                             XrToolchainSelector selector, const char *requested_cc,
+                                             const char *environment_cc, const char *requested_zig,
+                                             const char *environment_zig, const char **out_cc,
+                                             const char **out_zig) {
+    if (out_cc)
+        *out_cc = requested_cc;
+    if (out_zig)
+        *out_zig = requested_zig;
+    if (!preference || preference->selector != selector)
+        return;
+    if (out_cc && (!requested_cc || !requested_cc[0]) && (!environment_cc || !environment_cc[0]) &&
+        preference->compiler[0] && strcmp(preference->compiler, "auto") != 0)
+        *out_cc = preference->compiler;
+    if (out_zig && (!requested_zig || !requested_zig[0]) &&
+        (!environment_zig || !environment_zig[0]) && preference->zig[0] &&
+        strcmp(preference->zig, "auto") != 0 && strcmp(preference->zig, "managed") != 0)
+        *out_zig = preference->zig;
+}
+
 static bool xtc_config_parent_dir(const char *path, char *out, size_t out_size) {
     int written = snprintf(out, out_size, "%s", path);
     if (written < 0 || (size_t) written >= out_size)
