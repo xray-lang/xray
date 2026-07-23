@@ -17,6 +17,11 @@ def digest(path: Path) -> str:
     return value.hexdigest()
 
 
+def append_suffix(path: Path, suffix: str) -> Path:
+    """Append an evidence suffix without treating release-version dots as extensions."""
+    return path.parent / f"{path.name}{suffix}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -75,9 +80,15 @@ def main() -> int:
             "runDetails": {"builder": {"id": args.builder}},
         },
     }
-    args.output_prefix.with_suffix(".spdx.json").write_text(json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    args.output_prefix.with_suffix(".provenance.json").write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    args.output_prefix.with_suffix(".sha256").write_text(f"{artifact_sha}  {args.artifact.name}\n", encoding="utf-8")
+    append_suffix(args.output_prefix, ".spdx.json").write_text(
+        json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    append_suffix(args.output_prefix, ".provenance.json").write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    append_suffix(args.output_prefix, ".sha256").write_text(
+        f"{artifact_sha}  {args.artifact.name}\n", encoding="utf-8"
+    )
     return 0
 
 
