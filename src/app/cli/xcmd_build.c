@@ -627,7 +627,10 @@ static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
         return true;
     manifest->compile.function_sections = true;
     manifest->compile.data_sections = true;
-    manifest->link.dead_strip = true;
+    /* A relocatable link preserves sections for a later final link. Apple ld
+     * rejects -r with -dead_strip, and GNU linkers must not discard that
+     * intermediate object's closure either. */
+    manifest->link.dead_strip = !manifest->link.relocatable;
     (void) err;
     (void) err_size;
     return true;

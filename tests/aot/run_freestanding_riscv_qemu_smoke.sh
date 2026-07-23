@@ -88,17 +88,24 @@ fn uart_init() {
 
 fn kernel_entry() -> i32 {
     uart_init()
-    mem.volatileStore(mem.mutPtr<byte>(UART0), int('R'.toUInt32()), 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0), int('V'.toUInt32()), 1)
+    unsafe { startupLinked() }
+    // Keep the boot fixture below the freestanding runtime boundary: rune
+    // methods require hosted builtin initialization and are tested elsewhere.
+    mem.volatileStore(mem.mutPtr<byte>(UART0), 82, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0), 86, 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), 10, 1)
     while (true) {
     }
     return 0
 }
+
+extern "C" {
+    fn startupLinked()
+}
 XR
 
-BOOT="$WORK/freestanding_riscv_start.S"
-cat >"$BOOT" <<'ASM'
+START_ASM="$WORK/freestanding_riscv_start.S"
+cat >"$START_ASM" <<'ASM'
 .section .text.start, "ax", @progbits
 .globl _start
 .type _start, @function
@@ -109,9 +116,21 @@ _start:
     wfi
     j 1b
 .size _start, . - _start
+
+.globl xray_startup_linked
+.type xray_startup_linked, @function
+xray_startup_linked:
+    ret
+.size xray_startup_linked, .-xray_startup_linked
 ASM
 
-BOOT_SHA="$(shasum -a 256 "$BOOT" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then
+    START_HASH="$(sha256sum "$START_ASM" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    START_HASH="$(shasum -a 256 "$START_ASM" | awk '{print $1}')"
+else
+    skip "SHA-256 utility not found"
+fi
 
 cat >"$WORK/xray.toml" <<TOML
 [package]
@@ -132,12 +151,19 @@ vm = "unsupported"
 name = "riscv-start"
 kind = "asm"
 sources = ["freestanding_riscv_start.S"]
-source_hashes = ["$BOOT_SHA"]
+source_hashes = ["$START_HASH"]
 optimization = "release"
 visibility = "hidden"
 warnings = "strict"
 output = "freestanding_riscv_start.o"
-purpose = "initialize the machine stack before entering Xray"
+purpose = "initialize the machine stack before entering generated Xray code"
+
+[[native.symbol]]
+xray = "startupLinked"
+native = "xray_startup_linked"
+kind = "function"
+calling_convention = "c"
+unit = "riscv-start"
 
 [[freestanding.entry]]
 xray = "kernel_entry"

@@ -40,6 +40,9 @@ static const char xtc_probe_sdk_c[] =
     "#include \"xray.h\"\n"
     "#include \"xrt_core_freestanding.h\"\n"
     "int xray_sdk_probe(void) { return XRAY_VERSION_MAJOR >= 0 && sizeof(XrValue) > 0 ? 0 : 1; }\n";
+static const char xtc_probe_freestanding_sdk_c[] =
+    "#include \"xrt_core_freestanding.h\"\n"
+    "int xray_sdk_probe(void) { return sizeof(XrValue) > 0 ? 0 : 1; }\n";
 static const char xtc_probe_runtime_c[] =
     "#include <stddef.h>\n"
     "#include <stdint.h>\n"
@@ -576,8 +579,11 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         return false;
     }
     xtc_probe_make_id(result->probe_id);
+    const char *sdk_probe_source = options->profile == XR_TOOLCHAIN_PROFILE_FREESTANDING
+                                       ? xtc_probe_freestanding_sdk_c
+                                       : xtc_probe_sdk_c;
     if (!xtc_probe_write_file(minimal_source, xtc_probe_minimal_c) ||
-        !xtc_probe_write_file(sdk_source, xtc_probe_sdk_c) ||
+        !xtc_probe_write_file(sdk_source, sdk_probe_source) ||
         !xtc_probe_write_file(runtime_source, xtc_probe_runtime_c)) {
         xtc_probe_cleanup(temp_dir, cleanup_files, sizeof(cleanup_files) / sizeof(cleanup_files[0]),
                           options->keep_probe);

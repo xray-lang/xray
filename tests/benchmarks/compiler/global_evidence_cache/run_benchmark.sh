@@ -394,7 +394,7 @@ prepare_package_payload_case() {
     local home="$dir/home"
     local pkg_dir="$home/.xray/packages/codex/pkg/1.0.0/src"
     local pkg_src="$pkg_dir/main.xr"
-    local real_pkg_src
+    local real_pkg_src probe_json normalized_target
     if [ ! -x "$PACKAGE_PAYLOAD_FIXTURE" ]; then
         echo "FAIL: package payload fixture not executable: $PACKAGE_PAYLOAD_FIXTURE" >&2
         FAIL=$((FAIL + 1))
@@ -410,7 +410,19 @@ prepare_package_payload_case() {
 0
 XR_EOF
     real_pkg_src="$(realpath_portable "$pkg_src")"
-    "$PACKAGE_PAYLOAD_FIXTURE" "$cache/aot/native" "codex/pkg" "$real_pkg_src" >/dev/null
+    # AOT cache namespaces use the normalized target ABI, including for a
+    # native build. Ask the same compiler under test for that identity instead
+    # of relying on the former generic "native" directory.
+    probe_json="$(HOME="$home" "$XRAY" toolchain probe --json 2>/dev/null || true)"
+    normalized_target="$(printf '%s\n' "$probe_json" |
+        sed -n 's/.*"normalizedTarget":"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -z "$normalized_target" ]; then
+        echo "FAIL: cannot resolve normalized native target for package payload fixture" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    "$PACKAGE_PAYLOAD_FIXTURE" "$cache/aot/$normalized_target" "codex/pkg" "$real_pkg_src" \
+        >/dev/null
 }
 
 expect_package_phase() {
