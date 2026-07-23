@@ -17,12 +17,17 @@
 #define XCLI_HELP_H
 
 #include "xcli_spec.h"
+#include <stdbool.h>
+#include <stdio.h>
 
 /* Print top-level usage (xray --help). */
 XR_FUNC void xr_cli_print_usage(void);
 
-/* Print version string. */
-XR_FUNC void xr_cli_print_version(void);
+/* Print the human version or the release-identity JSON contract. */
+XR_FUNC void xr_cli_print_version(bool json);
+
+/* Write the build identity object without a trailing newline. */
+XR_FUNC void xr_cli_print_build_identity_json(FILE *out, int indent);
 
 /* Print help for a specific command (xray help <cmd> / xray <cmd> --help). */
 XR_FUNC void xr_cli_print_command_help(const XrCliCommandSpec *spec);

@@ -15,6 +15,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  XRAY_RELEASE_TAG: ${{ github.event.inputs.release_tag || github.event.client_payload.release_tag || github.ref_name }}
 
 jobs:
   build:
@@ -48,6 +49,8 @@ jobs:
         git remote add origin https://github.com/xray-lang/xray.git
         git fetch --depth=1 origin "$GITHUB_SHA"
         git checkout --detach FETCH_HEAD
+        git fetch --force --depth=1 origin \
+          "refs/tags/$XRAY_RELEASE_TAG:refs/tags/$XRAY_RELEASE_TAG"
 
     - name: Install clang (Linux)
       if: runner.os == 'Linux'
@@ -156,6 +159,33 @@ jobs:
             Write-Host "Copied $($dll.Name)"
           }
         }
+        cmake "-DCMAKE_INSTALL_PREFIX=$((Resolve-Path dist).Path)" `
+          -P build\generated\install\GeneratePayloadManifest.cmake
+
+    - name: Verify release identity and payload (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 scripts/verify_payload_manifest.py --root dist --binary dist/bin/xray
+        python3 scripts/verify_release_identity.py \
+          --source . \
+          --binary dist/bin/xray \
+          --payload dist/share/xray/install/payload-manifest.json \
+          --tag "$XRAY_RELEASE_TAG"
+
+    - name: Verify release identity and payload (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        python scripts\verify_payload_manifest.py --root dist --binary dist\bin\xray.exe
+        if ($LASTEXITCODE -ne 0) { throw 'payload verification failed' }
+        python scripts\verify_release_identity.py `
+          --source . `
+          --binary dist\bin\xray.exe `
+          --payload dist\share\xray\install\payload-manifest.json `
+          --tag "$env:XRAY_RELEASE_TAG"
+        if ($LASTEXITCODE -ne 0) { throw 'release identity verification failed' }
 
     # This is deliberately run from outside the checkout with all SDK path
     # overrides removed. It proves the release tree, not the development tree,

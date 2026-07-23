@@ -252,6 +252,20 @@ TEST(parse_global_version_short) {
     ASSERT_EQ_INT(consumed, -2);
 }
 
+TEST(parse_global_version_json_any_order) {
+    XrCliContext ctx = {0};
+    char *argv_after[] = {"xray", "--version", "--json"};
+    int consumed = xr_cli_parse_global(3, argv_after, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+    ASSERT_TRUE(ctx.json_output);
+
+    ctx = (XrCliContext) {0};
+    char *argv_before[] = {"xray", "--json", "--version"};
+    consumed = xr_cli_parse_global(3, argv_before, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+    ASSERT_TRUE(ctx.json_output);
+}
+
 TEST(parse_global_no_color) {
     XrCliContext ctx = {0};
     char *argv[] = {"xray", "--no-color"};
@@ -718,7 +732,8 @@ TEST(help_print_subcommand_help_no_crash) {
 
 TEST(help_print_version_no_crash) {
     SUPPRESS_STDOUT_BEGIN();
-    xr_cli_print_version();
+    xr_cli_print_version(false);
+    xr_cli_print_version(true);
     SUPPRESS_STDOUT_END();
 }
 
@@ -752,6 +767,7 @@ RUN_TEST(parse_global_no_args);
 RUN_TEST(parse_global_help);
 RUN_TEST(parse_global_version);
 RUN_TEST(parse_global_version_short);
+RUN_TEST(parse_global_version_json_any_order);
 RUN_TEST(parse_global_no_color);
 RUN_TEST(parse_global_color);
 RUN_TEST(parse_global_command_not_consumed);

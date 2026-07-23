@@ -18,6 +18,7 @@
 #include "xcli_help.h"
 #include "xcli_diag.h"
 #include "xcli_fs.h"
+#include "xcli_installation.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -144,8 +145,13 @@ static int dispatch_new_handler(const XrCliCommandSpec *spec, XrCliHandler handl
 /* ========== Info Command ========== */
 
 XR_FUNC int cmd_info(const XrCliInvocation *inv) {
-    (void) inv;
-    xr_cli_print_version();
+    XR_DCHECK(inv != NULL, "inv is NULL");
+    bool installation = xr_cli_opt_bool(&inv->options, "installation");
+    bool json = inv->ctx->json_output || xr_cli_opt_bool(&inv->options, "json");
+    if (installation || json)
+        return xr_cli_print_installation_info(json);
+
+    xr_cli_print_version(false);
     printf("\nEnvironment:\n");
     const char *home = getenv("HOME");
     if (home) {
@@ -219,7 +225,7 @@ int xr_cli_main(int argc, char **argv) {
         return XR_CLI_EXIT_OK;
     }
     if (consumed == -2) {
-        xr_cli_print_version();
+        xr_cli_print_version(ctx.json_output);
         return XR_CLI_EXIT_OK;
     }
 

@@ -18,13 +18,47 @@
 #include <stdio.h>
 #include <string.h>
 
-void xr_cli_print_version(void) {
-    printf("xray v%d.%d.%d (", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
-#ifdef XRAY_HAS_AOT
-    printf("AOT");
-#else
-    printf("VM");
+#ifndef XRAY_BUILD_COMMIT
+#define XRAY_BUILD_COMMIT "unknown"
 #endif
+#ifndef XRAY_BUILD_DIRTY
+#define XRAY_BUILD_DIRTY 1
+#endif
+#ifndef XRAY_BUILD_PROFILE
+#define XRAY_BUILD_PROFILE "unknown"
+#endif
+#ifndef XRAY_BUILD_TARGET
+#define XRAY_BUILD_TARGET "unknown"
+#endif
+
+static void print_indent(FILE *out, int indent) {
+    for (int i = 0; i < indent; i++)
+        fputc(' ', out);
+}
+
+void xr_cli_print_build_identity_json(FILE *out, int indent) {
+    XR_DCHECK(out != NULL, "out is NULL");
+    print_indent(out, indent);
+    fprintf(out,
+            "{\"schema\":1,\"product\":\"xray-lang\",\"version\":\"%s\","
+            "\"commit\":\"%s\",\"dirty\":%s,\"target\":\"%s\","
+            "\"buildProfile\":\"%s\",\"features\":[\"vm\",\"aot\"",
+            XRAY_VERSION_STRING, XRAY_BUILD_COMMIT, XRAY_BUILD_DIRTY ? "true" : "false",
+            XRAY_BUILD_TARGET, XRAY_BUILD_PROFILE);
+#ifdef XR_ENABLE_TLS
+    fputs(",\"tls\"", out);
+#endif
+    fputs("]}", out);
+}
+
+void xr_cli_print_version(bool json) {
+    if (json) {
+        xr_cli_print_build_identity_json(stdout, 0);
+        putchar('\n');
+        return;
+    }
+
+    printf("xray v%d.%d.%d (VM+AOT", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
 
 #ifdef XR_ENABLE_TLS
     printf(", TLS");

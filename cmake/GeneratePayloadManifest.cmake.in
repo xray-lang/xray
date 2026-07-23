@@ -1,0 +1,101 @@
+# GeneratePayloadManifest.cmake - installed payload inventory for xray-installer.
+
+set(_xray_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_xray_manifest_dir "${_xray_root}/share/xray/install")
+set(_xray_manifest "${_xray_manifest_dir}/payload-manifest.json")
+file(MAKE_DIRECTORY "${_xray_manifest_dir}")
+
+function(_xray_json_quote input output)
+    string(REPLACE "\\" "\\\\" _value "${input}")
+    string(REPLACE "\"" "\\\"" _value "${_value}")
+    string(REPLACE "\n" "\\n" _value "${_value}")
+    string(REPLACE "\r" "\\r" _value "${_value}")
+    set(${output} "\"${_value}\"" PARENT_SCOPE)
+endfunction()
+
+function(_xray_component_for path output)
+    if(path MATCHES "^libexec/xray/zig(/|$)")
+        set(_component "zig")
+    elseif(path MATCHES "^share/xray/toolchains(/|$)" OR
+           path MATCHES "^lib/xray/aot/.+/manifest\\.json$")
+        set(_component "toolchain-integration")
+    elseif(path MATCHES "^include/xray(/|$)" OR
+           path MATCHES "^lib/(lib)?xray_(aot_core|rt_coro)" OR
+           path MATCHES "^lib/xray/sdk(/|$)")
+        set(_component "sdk")
+    else()
+        set(_component "core")
+    endif()
+    set(${output} "${_component}" PARENT_SCOPE)
+endfunction()
+
+file(GLOB_RECURSE _xray_entries
+    LIST_DIRECTORIES false
+    RELATIVE "${_xray_root}"
+    "${_xray_root}/*")
+list(REMOVE_ITEM _xray_entries "share/xray/install/payload-manifest.json")
+list(SORT _xray_entries)
+
+set(_xray_files "")
+set(_xray_components "")
+foreach(_path IN LISTS _xray_entries)
+    if(_path MATCHES "(^|/)\\.\\.(/|$)" OR _path MATCHES "^[\\/]")
+        message(FATAL_ERROR "Unsafe installed payload path: ${_path}")
+    endif()
+    set(_full "${_xray_root}/${_path}")
+    if(IS_SYMLINK "${_full}")
+        file(READ_SYMLINK "${_full}" _target)
+        if(IS_ABSOLUTE "${_target}" OR _target MATCHES "(^|/)\\.\\.(/|$)")
+            message(FATAL_ERROR "Installed symlink escapes payload root: ${_path} -> ${_target}")
+        endif()
+        _xray_json_quote("${_path}" _path_json)
+        _xray_json_quote("${_target}" _target_json)
+        set(_entry "    {\"path\":${_path_json},\"kind\":\"symlink\",\"target\":${_target_json}}")
+    else()
+        file(SIZE "${_full}" _size)
+        file(SHA256 "${_full}" _sha256)
+        if(_path MATCHES "^bin/" OR _path MATCHES "^libexec/xray/zig/.*/?zig$")
+            set(_mode "0755")
+        else()
+            set(_mode "0644")
+        endif()
+        _xray_json_quote("${_path}" _path_json)
+        set(_entry "    {\"path\":${_path_json},\"size\":${_size},\"sha256\":\"${_sha256}\",\"mode\":\"${_mode}\"}")
+    endif()
+    if(_xray_files STREQUAL "")
+        set(_xray_files "${_entry}")
+    else()
+        string(APPEND _xray_files ",\n${_entry}")
+    endif()
+    _xray_component_for("${_path}" _component)
+    list(APPEND _xray_components "${_component}")
+endforeach()
+
+list(REMOVE_DUPLICATES _xray_components)
+list(SORT _xray_components)
+set(_xray_component_json "")
+foreach(_component IN LISTS _xray_components)
+    if(_xray_component_json STREQUAL "")
+        set(_xray_component_json "\"${_component}\"")
+    else()
+        string(APPEND _xray_component_json ",\"${_component}\"")
+    endif()
+endforeach()
+
+file(WRITE "${_xray_manifest}"
+"{\n"
+"  \"schema\":1,\n"
+"  \"product\":\"xray-lang\",\n"
+"  \"version\":\"@PROJECT_VERSION@\",\n"
+"  \"commit\":\"@XRAY_GIT_COMMIT@\",\n"
+"  \"dirty\":@XRAY_GIT_DIRTY_JSON@,\n"
+"  \"target\":\"@XRAY_RELEASE_TARGET@\",\n"
+"  \"buildProfile\":\"@XRAY_BUILD_PROFILE@\",\n"
+"  \"bytecodeVersion\":@XRAY_BYTECODE_VERSION@,\n"
+"  \"moduleAbiVersion\":@XRAY_MODULE_ABI_VERSION@,\n"
+"  \"toolchainProtocol\":@XRAY_TOOLCHAIN_PROTOCOL@,\n"
+"  \"preferredZig\":\"@XRAY_PREFERRED_ZIG_VERSION@\",\n"
+"  \"requiredZig\":\"@XRAY_REQUIRED_ZIG_RANGE@\",\n"
+"  \"components\":[${_xray_component_json}],\n"
+"  \"files\":[\n${_xray_files}\n  ]\n"
+"}\n")

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "product": "xray-lang",
+  "layout": "xray-payload-v1",
+  "version": "@PROJECT_VERSION@",
+  "commit": "@XRAY_GIT_COMMIT@",
+  "target": "@XRAY_RELEASE_TARGET@"
+}

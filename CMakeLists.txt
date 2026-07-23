@@ -2,7 +2,7 @@
 # Author: xingleixu@gmail.com
 # Xray Language Interpreter Build Configuration
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.21)
 
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
@@ -13,6 +13,77 @@ project(Xray
     DESCRIPTION "Xray Programming Language Interpreter"
     LANGUAGES C CXX ASM
 )
+
+# Release identity is captured once at configure time and is shared by the
+# binary, installed marker, and payload manifest.  Release automation rejects
+# dirty/unknown identities; source builds remain explicit instead of silently
+# pretending to be a release artifact.
+find_package(Git QUIET)
+set(XRAY_GIT_COMMIT "unknown")
+set(XRAY_GIT_DIRTY 0)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --verify HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        RESULT_VARIABLE _XRAY_GIT_COMMIT_RESULT
+        OUTPUT_VARIABLE _XRAY_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    string(LENGTH "${_XRAY_GIT_COMMIT}" _XRAY_GIT_COMMIT_LENGTH)
+    if(_XRAY_GIT_COMMIT_RESULT EQUAL 0 AND _XRAY_GIT_COMMIT_LENGTH EQUAL 40 AND
+       _XRAY_GIT_COMMIT MATCHES "^[0-9a-fA-F]+$")
+        string(TOLOWER "${_XRAY_GIT_COMMIT}" XRAY_GIT_COMMIT)
+    endif()
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _XRAY_GIT_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(NOT _XRAY_GIT_STATUS STREQUAL "")
+        set(XRAY_GIT_DIRTY 1)
+    endif()
+endif()
+if(XRAY_GIT_DIRTY)
+    set(XRAY_GIT_DIRTY_JSON true)
+else()
+    set(XRAY_GIT_DIRTY_JSON false)
+endif()
+
+file(STRINGS "${CMAKE_SOURCE_DIR}/src/module/xbytecode_io.h"
+    _XRAY_BYTECODE_VERSION_LINE REGEX "^#define XR_BC_VERSION [0-9]+")
+string(REGEX MATCH "[0-9]+" XRAY_BYTECODE_VERSION "${_XRAY_BYTECODE_VERSION_LINE}")
+file(STRINGS "${CMAKE_SOURCE_DIR}/include/xray_module_sdk.h"
+    _XRAY_MODULE_ABI_VERSION_LINE REGEX "^#define XRAY_MODULE_ABI_VERSION [0-9]+")
+string(REGEX MATCH "[0-9]+" XRAY_MODULE_ABI_VERSION "${_XRAY_MODULE_ABI_VERSION_LINE}")
+if(NOT XRAY_BYTECODE_VERSION OR NOT XRAY_MODULE_ABI_VERSION)
+    message(FATAL_ERROR "Unable to derive bytecode/module ABI versions for release identity")
+endif()
+
+set(XRAY_PREFERRED_ZIG_VERSION "0.16.0" CACHE STRING
+    "Preferred managed Zig version for the current toolchain protocol")
+set(XRAY_REQUIRED_ZIG_RANGE ">=0.16.0 <0.17.0" CACHE STRING
+    "Supported managed Zig version range")
+set(XRAY_TOOLCHAIN_PROTOCOL 1 CACHE STRING "AOT toolchain provider protocol version")
+
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _XRAY_RELEASE_ARCH)
+if(_XRAY_RELEASE_ARCH MATCHES "^(aarch64|arm64)$")
+    set(_XRAY_RELEASE_ARCH "arm64")
+elseif(_XRAY_RELEASE_ARCH MATCHES "^(amd64|x86_64)$")
+    set(_XRAY_RELEASE_ARCH "x86_64")
+endif()
+if(APPLE)
+    set(XRAY_RELEASE_TARGET "macos-${_XRAY_RELEASE_ARCH}")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(XRAY_RELEASE_TARGET "linux-${_XRAY_RELEASE_ARCH}")
+elseif(WIN32)
+    set(XRAY_RELEASE_TARGET "windows-${_XRAY_RELEASE_ARCH}")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_NAME}" _XRAY_RELEASE_OS)
+    set(XRAY_RELEASE_TARGET "${_XRAY_RELEASE_OS}-${_XRAY_RELEASE_ARCH}")
+endif()
 
 find_program(XRAY_PYTHON NAMES python3 python py)
 if(NOT XRAY_PYTHON)
@@ -217,6 +288,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
+
+set(XRAY_BUILD_PROFILE "${CMAKE_BUILD_TYPE}")
+if(NOT XRAY_BUILD_PROFILE)
+    set(XRAY_BUILD_PROFILE "MultiConfig")
+endif()
+add_compile_definitions(
+    XRAY_BUILD_COMMIT="${XRAY_GIT_COMMIT}"
+    XRAY_BUILD_DIRTY=${XRAY_GIT_DIRTY}
+    XRAY_BUILD_PROFILE="${XRAY_BUILD_PROFILE}"
+    XRAY_BUILD_TARGET="${XRAY_RELEASE_TARGET}"
+)
 
 # macOS Universal Binary support (Intel + Apple Silicon)
 if(APPLE)
@@ -2800,20 +2882,40 @@ endif()
 # Install path
 set(XRAY_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}" CACHE PATH "Xray install path")
 
+set(_XRAY_INSTALL_METADATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/install")
+file(MAKE_DIRECTORY "${_XRAY_INSTALL_METADATA_DIR}")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/install-marker.json.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/install-marker.json"
+    @ONLY
+)
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/GeneratePayloadManifest.cmake.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
+    @ONLY
+)
+
 # Install executable
 install(TARGETS xray
     RUNTIME DESTINATION bin
+    COMPONENT XrayCore
 )
 
 # Install public AOT runtime libraries. xray_core remains a build-tree-only
 # aggregate for the CLI and tests; it must not become a public install target.
-install(TARGETS xray_aot_core xray_rt_coro xray_vm_runtime
+install(TARGETS xray_vm_runtime
     ARCHIVE DESTINATION lib
+    COMPONENT XrayCore
+)
+install(TARGETS xray_aot_core xray_rt_coro
+    ARCHIVE DESTINATION lib
+    COMPONENT XraySDK
 )
 
 # Install the public C API headers.
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
     DESTINATION include/xray
+    COMPONENT XraySDK
     FILES_MATCHING PATTERN "*.h"
 )
 
@@ -2822,6 +2924,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
 # layout so an installed xray can compile without a source checkout.
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
     DESTINATION lib/xray/sdk/src
+    COMPONENT XraySDK
     FILES_MATCHING
         PATTERN "*.h"
         PATTERN "*.inc.c"
@@ -2831,6 +2934,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
 # Install stdlib source files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/stdlib/
     DESTINATION lib/xray/stdlib
+    COMPONENT XrayCore
     FILES_MATCHING PATTERN "*.xr"
 )
 
@@ -2838,6 +2942,12 @@ install(FILES
     ${CMAKE_SOURCE_DIR}/README.md
     ${CMAKE_SOURCE_DIR}/LICENSE
     DESTINATION .
+    COMPONENT XrayCore
+)
+
+install(FILES "${_XRAY_INSTALL_METADATA_DIR}/install-marker.json"
+    DESTINATION share/xray/install
+    COMPONENT XrayCore
 )
 
 if(XRAY_BUNDLE_ZIG)
@@ -2855,6 +2965,7 @@ if(XRAY_BUNDLE_ZIG)
         install(DIRECTORY "${_XRAY_ZIG_ROOT}/"
             DESTINATION libexec/xray/zig
             USE_SOURCE_PERMISSIONS
+            COMPONENT XrayBundledZig
         )
     else()
         message(WARNING
@@ -2862,9 +2973,16 @@ if(XRAY_BUNDLE_ZIG)
         install(PROGRAMS "${_XRAY_ZIG_REALPATH}"
             DESTINATION libexec/xray/zig
             RENAME "zig${CMAKE_EXECUTABLE_SUFFIX}"
+            COMPONENT XrayBundledZig
         )
     endif()
 endif()
+
+# Run after component payload rules.  ALL_COMPONENTS also gives a Core-only or
+# SDK-only staging install an exact manifest of what is actually present.
+install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
+    ALL_COMPONENTS
+)
 
 # ============================================================================
 # Packaging Configuration (CPack)
@@ -2875,6 +2993,12 @@ set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_VENDOR "Xray Language")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Xray Programming Language")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://xray-lang.org")
+set(CPACK_COMPONENTS_ALL XrayCore XraySDK XrayToolchainIntegration)
+if(XRAY_BUNDLE_ZIG)
+    list(APPEND CPACK_COMPONENTS_ALL XrayBundledZig)
+endif()
+set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
+set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
 
 # Set package type based on system
 if(APPLE)
@@ -2885,6 +3009,7 @@ elseif(UNIX)
     set(CPACK_SYSTEM_NAME "linux-${CMAKE_SYSTEM_PROCESSOR}")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "xingleixu@gmail.com")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libpthread-stubs0-dev")
+    set(CPACK_DEB_COMPONENT_INSTALL OFF)
 elseif(WIN32)
     set(CPACK_GENERATOR "ZIP")
     set(CPACK_SYSTEM_NAME "windows-${CMAKE_SYSTEM_PROCESSOR}")

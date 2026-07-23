@@ -44,17 +44,21 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
         return 0;
 
     int consumed = 0;
+    int action = 0;
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         /* Stop at first non-flag or end-of-flags */
         if (arg[0] != '-')
             break;
 
-        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)
-            return -1;
-        if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0)
-            return -2;
-        if (strcmp(arg, "--color") == 0) {
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
+            action = -1;
+            consumed++;
+        } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
+            if (action == 0)
+                action = -2;
+            consumed++;
+        } else if (strcmp(arg, "--color") == 0) {
             ctx->color = true;
             xr_cli_set_color(XR_COLOR_ON);
             consumed++;
@@ -92,7 +96,7 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
         xr_cli_set_json(true);
     }
 
-    return consumed;
+    return action != 0 ? action : consumed;
 }
 
 /* ========== Option Matching Helpers ========== */

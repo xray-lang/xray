@@ -154,6 +154,12 @@ static const XrCliOptionSpec pkg_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
+static const XrCliOptionSpec info_options[] = {
+    {"installation", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Report installed payload identity and ownership paths"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec explain_options[] = {
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
     XR_CLI_OPT_END};
@@ -243,7 +249,8 @@ static XrCliCommandSpec cli_commands[] = {
     {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},
 
     /* Utility commands */
-    {"info", "Environment info", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
+    {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
+     NULL, 0},
     {"builtin-dump", "Dump analyzer builtin metadata", NULL, empty_options, 0, 0, false, true, NULL,
      NULL, 0},
     {"help", "Show help for a command", NULL, empty_options, 0, 1, false, false, NULL, NULL, 0},
