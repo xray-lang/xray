@@ -333,10 +333,12 @@ XR_FUNC bool xr_aot_root_descriptor_end(XrAotRuntime *runtime);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,
-                                      bool one_shot_await, const char *name);
+                                      bool one_shot_await, bool result_copy_shared,
+                                      const char *name);
 XR_FUNC XrAotSpawnResult xr_aot_spawn_deferred(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                                void *frame, int link_mode, bool fire_and_forget,
-                                               bool one_shot_await, const char *name);
+                                               bool one_shot_await, bool result_copy_shared,
+                                               const char *name);
 XR_FUNC bool xr_parallel_for_range_i64(const XrAotContext *ctx, int64_t start, int64_t end,
                                        int64_t workers, XrParallelRangeI64Fn body,
                                        struct xrt_closure *closure);

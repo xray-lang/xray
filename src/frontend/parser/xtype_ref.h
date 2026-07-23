@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
+#include "../../shared/xr_scalar_type.h"
 
 struct XrCompilerSession;
 struct AstNode;
@@ -42,7 +43,7 @@ typedef enum {
     XR_TREF_NULL,   /* null                             */
     XR_TREF_ERROR,  /* compiler-only error recovery      */
 
-    /* Native-width scalars: native_width carries the width tag */
+    /* Numeric scalars: scalar_rep is semantic; builtin_spelling is syntax-only. */
     XR_TREF_INT_WIDTH,   /* int8 / int16 / int32 / int64 /
                             uint8 / uint16 / uint32 / uint64 */
     XR_TREF_FLOAT_WIDTH, /* float32 / float64                */
@@ -63,22 +64,6 @@ typedef enum {
     XR_TREF_TYPE_PARAM,  /* generic type parameter (T, U, ...)  */
 } XrTypeRefKind;
 
-/* Native-width tags — mirrors xstruct_layout.h values so the
- * resolver can map directly without a lookup table. */
-#define XR_TREF_NW_I64 0
-#define XR_TREF_NW_F64 1
-#define XR_TREF_NW_BOOL 2
-#define XR_TREF_NW_I8 3
-#define XR_TREF_NW_I16 4
-#define XR_TREF_NW_I32 5
-#define XR_TREF_NW_U8 6
-#define XR_TREF_NW_U16 7
-#define XR_TREF_NW_U32 8
-#define XR_TREF_NW_U64 9
-#define XR_TREF_NW_F32 10
-#define XR_TREF_NW_ISIZE 18
-#define XR_TREF_NW_USIZE 19
-
 /* Union member limit (mirrors XR_UNION_MAX_MEMBERS in xtype.h) */
 #define XR_TREF_UNION_MAX 6
 
@@ -87,8 +72,8 @@ typedef enum {
 typedef struct XrTypeRef {
     uint8_t kind;                      /* XrTypeRefKind                    */
     uint8_t nchildren;                 /* number of child type refs        */
-    uint8_t native_width;              /* XR_TREF_NW_* for INT_WIDTH /
-                                          FLOAT_WIDTH; 0 otherwise         */
+    uint8_t scalar_rep;                /* XrNativeType scalar representation */
+    uint8_t builtin_spelling;          /* XrSourceTypeSpelling or NONE       */
     bool extensible;                   /* OBJECT: has ... marker           */
     bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
@@ -120,6 +105,8 @@ XR_FUNC XrTypeRef *xr_tref_error(struct XrCompilerSession *session);
 /* Native-width scalars */
 XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t nw);
 XR_FUNC XrTypeRef *xr_tref_float_width(struct XrCompilerSession *session, uint8_t nw);
+XR_FUNC XrTypeRef *xr_tref_scalar(struct XrCompilerSession *session, XrSourceTypeSpelling spelling,
+                                  uint8_t scalar_rep, bool float_family);
 
 /* Named type (class / enum / prelude name, no generic args) */
 XR_FUNC XrTypeRef *xr_tref_named(struct XrCompilerSession *session, const char *name);

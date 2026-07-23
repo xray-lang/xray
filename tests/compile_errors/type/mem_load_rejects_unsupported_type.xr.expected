@@ -1,1 +1,1 @@
-mem.load<T>() supports T = int8, uint8, int16, uint16, int32, uint32, int64, uint64, intsize, uintsize, float32, float64, Ptr<U> or MutPtr<U>
+mem.load<T>() supports T = i8, u8, i16, u16, i32, u32, i64, u64, isize, usize, f32, f64, Ptr<U> or MutPtr<U>

@@ -5,8 +5,8 @@
 // (VM used arithmetic shift on top-bit-set uint64 payloads, 2026-07-03).
 
 // 高位置位的 uint64（字面量 > INT64_MAX 会饱和，用拼接构造）
-var hi: uint64 = 0x8000_0000
-var x: uint64 = hi << 32              // 0x8000000000000000
+var hi: u64 = 0x8000_0000
+var x: u64 = hi << 32              // 0x8000000000000000
 print(x)                              // 9223372036854775808
 print(x >> 1)                         // 4611686018427387904（逻辑移）
 print(x >> 63)                        // 1
@@ -19,14 +19,14 @@ print(x >> n1)                        // 4611686018427387904
 print(x >> n63)                       // 1
 
 // 全 1 位型
-var ones: uint64 = 0xFFFF_FFFF
-var all: uint64 = (ones << 32) | ones
+var ones: u64 = 0xFFFF_FFFF
+var all: u64 = (ones << 32) | ones
 print(all >> 33)                      // 2147483647
 print(all >> n63)                     // 1
 
 // xxHash64 avalanche 形状（乘出高位后异或右移）
-var p2: uint64 = (0xC2B2_AE3D << 32) | 0x27D4_EB4F
-var h: uint64 = (0x27D4_EB2F << 32) | 0x1656_67C5
+var p2: u64 = (0xC2B2_AE3D << 32) | 0x27D4_EB4F
+var h: u64 = (0x27D4_EB2F << 32) | 0x1656_67C5
 h ^= h >> 33
 h *= p2
 h ^= h >> 29
@@ -39,11 +39,11 @@ var sn: int = 1
 print(s >> sn)                        // -4
 
 // uint32/byte 右移（零扩展 payload，语义不变回归）
-var u32top: uint32 = 0x8000_0000
+var u32top: u32 = 0x8000_0000
 print(u32top >> 31)                   // 1
 var u8top: byte = 128
 print(u8top >> 7)                     // 1
 
 // 常量折叠路径（两操作数均编译期常量）
-var cfold: uint64 = ((hi << 32) >> 62)
+var cfold: u64 = ((hi << 32) >> 62)
 print(cfold)                          // 2

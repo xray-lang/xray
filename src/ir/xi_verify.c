@@ -790,10 +790,10 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
         return false;
     }
     if (!verify_exact_bit_native_type(v->aux_int) ||
-        v->args[0]->type->native_width != (uint8_t) v->aux_int) {
+        v->args[0]->type->scalar_rep != (uint8_t) v->aux_int) {
         verr(ctx, "func '%s': v%u %s in b%u has native type %lld but receiver width tag is %u",
              f->name, v->id, xi_op_name(v->op), blk->id, (long long) v->aux_int,
-             (unsigned) v->args[0]->type->native_width);
+             (unsigned) v->args[0]->type->scalar_rep);
         return false;
     }
     /* The second operand is an integer value; accept XR_KIND_UNKNOWN because
@@ -832,7 +832,8 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
              xi_op_name(v->op), blk->id);
         return false;
     }
-    if (query && (!v->type || v->type->kind != XR_KIND_INT || v->type->native_width != 0)) {
+    if (query &&
+        (!v->type || v->type->kind != XR_KIND_INT || v->type->scalar_rep != XR_NATIVE_I64)) {
         verr(ctx, "func '%s': v%u %s in b%u must return int", f->name, v->id, xi_op_name(v->op),
              blk->id);
         return false;
@@ -1814,8 +1815,8 @@ static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 17: NARROW Required Before Typed-Array Store ========== */
 
-static bool native_width_needs_narrow(uint8_t native_width) {
-    switch (native_width) {
+static bool scalar_rep_needs_narrow(uint8_t scalar_rep) {
+    switch (scalar_rep) {
         case XR_NATIVE_I8:
         case XR_NATIVE_U8:
         case XR_NATIVE_I16:
@@ -1829,8 +1830,8 @@ static bool native_width_needs_narrow(uint8_t native_width) {
     }
 }
 
-static const char *native_width_result_name(uint8_t native_width) {
-    switch (native_width) {
+static const char *scalar_rep_result_name(uint8_t scalar_rep) {
+    switch (scalar_rep) {
         case XR_NATIVE_I8:
             return "i8";
         case XR_NATIVE_U8:
@@ -1850,8 +1851,8 @@ static const char *native_width_result_name(uint8_t native_width) {
     }
 }
 
-static bool value_has_native_width_result(const XiValue *v, uint8_t native_width) {
-    const char *expected = native_width_result_name(native_width);
+static bool value_has_scalar_rep_result(const XiValue *v, uint8_t scalar_rep) {
+    const char *expected = scalar_rep_result_name(scalar_rep);
     const char *actual = v ? xi_generated_op_result_native_type(v->op) : NULL;
     return expected && actual && strcmp(expected, actual) == 0;
 }
@@ -1884,20 +1885,20 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             struct XrType *elem = coll_type->container.element_type;
-            if (!elem || !native_width_needs_narrow(elem->native_width))
+            if (!elem || !scalar_rep_needs_narrow(elem->scalar_rep))
                 continue;
 
             /* Sub-width element: args[2] must produce the exact native width. */
             XiValue *val = v->args[2];
             XR_DCHECK(val != NULL, "verify: INDEX_SET val arg is NULL");
-            const char *expected = native_width_result_name(elem->native_width);
+            const char *expected = scalar_rep_result_name(elem->scalar_rep);
             const char *actual = xi_generated_op_result_native_type(val->op);
-            if (!value_has_native_width_result(val, elem->native_width)) {
+            if (!value_has_scalar_rep_result(val, elem->scalar_rep)) {
                 verr(ctx,
                      "func '%s': XI_INDEX_SET v%u in b%u stores to "
-                     "sub-width typed array (native_width=%u, expected %s) but "
+                     "sub-width typed array (scalar_rep=%u, expected %s) but "
                      "value v%u (op %s, native result %s) does not match",
-                     f->name, v->id, blk->id, elem->native_width, expected ? expected : "none",
+                     f->name, v->id, blk->id, elem->scalar_rep, expected ? expected : "none",
                      val->id, xi_op_name(val->op), actual ? actual : "none");
                 return;
             }

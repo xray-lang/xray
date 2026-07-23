@@ -145,7 +145,8 @@ typedef struct XrValue {
 } XrValue;
 
 #define XRT_VALUE_FLAG_ARRAY_REF_OWNED 0x01u
-#define XRT_VALUE_FLAG_EMBEDDED_HEADER 0x02u
+#define XR_VALUE_FLAG_EMBEDDED_HEADER 0x02u
+#define XRT_VALUE_FLAG_EMBEDDED_HEADER XR_VALUE_FLAG_EMBEDDED_HEADER
 
 /* =========================================================================
  * Tag constants — base tags (0-7) identical to VM's XrValueTag.

@@ -201,8 +201,8 @@ AstNode *xr_parse_literal(Parser *parser) {
             ParsedIntLiteral value =
                 parse_integer_literal(parser->previous.start, parser->previous.length);
             if (value.overflows_u64)
-                xr_parser_error_at_previous(parser, "integer literal exceeds uint64 range");
-            // Full int64 range allowed at parse time; range checks against
+                xr_parser_error_at_previous(parser, "integer literal exceeds u64 range");
+            // Full i64 range allowed at parse time; range checks against
             // the target type happen later in the analyzer/compiler.
             AstNode *node = xr_ast_literal_int_bits(parser->compiler_session, value.bits,
                                                     value.overflows_i64, parser->previous.line);

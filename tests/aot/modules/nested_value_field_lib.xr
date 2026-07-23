@@ -1,14 +1,14 @@
 export struct InnerValue {
-    value: uint64
-    other: uint64
+    value: u64
+    other: u64
 }
 
 export struct OuterValue {
     inner: InnerValue
-    marker: uint64
+    marker: u64
 }
 
-export fn makeOuter(value: uint64) -> OuterValue {
+export fn makeOuter(value: u64) -> OuterValue {
     return OuterValue{
         inner: InnerValue{value: value, other: value + 1},
         marker: value + 2,

@@ -146,6 +146,14 @@ AstNode *xr_parse_await_expr(Parser *parser) {
     if (xr_parser_check(parser, TK_LPAREN)) {
         xr_parser_advance(parser);  // Consume '('
 
+        if (xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
+            xr_parser_error_at_current(
+                parser,
+                "await move is not allowed; await the Task directly because await performs the "
+                "required terminal take automatically");
+            return NULL;
+        }
+
         // Expect 'timeout:'
         if (xr_parser_check(parser, TK_NAME)) {
             Token name = parser->current;

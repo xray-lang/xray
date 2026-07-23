@@ -1,4 +1,4 @@
-fn hashStep(seq: uint64) -> uint64 {
+fn hashStep(seq: u64) -> u64 {
     var mixed = seq << 24
     return mixed >> 52
 }

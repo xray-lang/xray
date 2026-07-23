@@ -1,3 +1,3 @@
-extern "C" { fn call_cfn(cb: CFn<(int32) -> int32>, x: int32) -> int32 }
+extern "C" { fn call_cfn(cb: CFn<(i32) -> i32>, x: i32) -> i32 }
 
-print(unsafe { call_cfn(fn(x: int32) -> int32 { return x + 1 }, 41) })
+print(unsafe { call_cfn(fn(x: i32) -> i32 { return x + 1 }, 41) })

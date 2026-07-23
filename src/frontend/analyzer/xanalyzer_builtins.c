@@ -289,7 +289,7 @@ bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *me
                                                 char *msg, size_t msg_cap) {
     if (!receiver || !method_name || receiver->kind != XR_KIND_INT || receiver->is_nullable)
         return false;
-    if (receiver->native_width == XR_NATIVE_I64)
+    if (receiver->scalar_rep == XR_NATIVE_I64)
         return false;  // plain int / explicit int64: int64 semantics are exact
 
     static const char *const blocked[] = {
@@ -1259,18 +1259,18 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     // e.g., "int?" means int or null
 
     XrType *type = NULL;
-    if (base_len == 3 && strncmp(s, TYPE_NAME_INT, 3) == 0) {
-        type = xr_type_new_int(NULL);
-    } else if (base_len == 5 && strncmp(s, TYPE_NAME_FLOAT, 5) == 0) {
-        type = xr_type_new_float(NULL);
-    } else if (base_len == 4 && strncmp(s, TYPE_NAME_BOOL, 4) == 0) {
+    XrSourceTypeSpelling scalar_source = xr_source_type_spelling_lookup(s, base_len);
+    if (scalar_source != XR_SOURCE_TYPE_NONE) {
+        uint8_t scalar_rep = xr_source_type_scalar_rep(scalar_source);
+        type = xr_scalar_rep_is_float(scalar_rep) ? xr_type_new_float_width(X, scalar_rep)
+                                                  : xr_type_new_int_width(X, scalar_rep);
+    }
+    if (!type && base_len == 4 && strncmp(s, TYPE_NAME_BOOL, 4) == 0) {
         type = xr_type_new_bool(NULL);
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_RUNE, 4) == 0) {
         type = xr_type_new_rune(NULL);
-    } else if (base_len == 4 && strncmp(s, "byte", 4) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_U8);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
@@ -1311,31 +1311,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_never(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_NULL, 4) == 0) {
         type = xr_type_new_null(NULL);
-        // Native-width integer types
-    } else if (base_len == 5 && strncmp(s, "uint8", 5) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_U8);
-    } else if (base_len == 6 && strncmp(s, "uint16", 6) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_U16);
-    } else if (base_len == 6 && strncmp(s, "uint32", 6) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_U32);
-    } else if (base_len == 6 && strncmp(s, "uint64", 6) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_U64);
-    } else if (base_len == 8 && strncmp(s, "uintsize", 8) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_USIZE);
-    } else if (base_len == 4 && strncmp(s, "int8", 4) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_I8);
-    } else if (base_len == 5 && strncmp(s, "int16", 5) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_I16);
-    } else if (base_len == 5 && strncmp(s, "int32", 5) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_I32);
-    } else if (base_len == 5 && strncmp(s, "int64", 5) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_I64);
-    } else if (base_len == 7 && strncmp(s, "intsize", 7) == 0) {
-        type = xr_type_new_int_width(X, XR_NATIVE_ISIZE);
-    } else if (base_len == 7 && strncmp(s, "float32", 7) == 0) {
-        type = xr_type_new_float_width(X, XR_NATIVE_F32);
-    } else if (base_len == 7 && strncmp(s, "float64", 7) == 0) {
-        type = xr_type_new_float_width(X, XR_NATIVE_F64);
         // Generic containers: recursively parse element types
     } else if (base_len >= 6 && strncmp(s, TYPE_NAME_ARRAY "<", 6) == 0) {
         // Array<ElemType>: parse inner type between '<' and last '>'

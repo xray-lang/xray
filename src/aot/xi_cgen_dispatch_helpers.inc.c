@@ -665,7 +665,7 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
          * canonical literal is sufficient proof to emit the same wrapping
          * native operation as two ordinary I64 operands. */
         if (cg_type_is_unsigned_int(v->type)) {
-            const char *ctype = cg_native_int_ctype(v->type->native_width);
+            const char *ctype = cg_native_int_ctype(v->type->scalar_rep);
             if (!ctype)
                 ctype = "uint64_t";
             fprintf(out, "(%s)((%s)(", ctype, ctype);
@@ -2009,6 +2009,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         xicgen_vec_error(ctx, out, v, "unsupported lane type/count");
         return;
     }
+    if (v->op == XI_VEC_STORE &&
+        cg_emit_span_readonly_void_trap(ctx, out, v, XAOT_SLICE_ACCESS_VEC_STORE))
+        return;
     if (xicgen_emit_vec_native(ctx, out, f, v, prefix, lanes, native_type))
         return;
 
@@ -4465,7 +4468,7 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFun
 static bool xicgen_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -4579,7 +4582,11 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
             if (print_span) {
                 fprintf(out, "xr_mkptr(");
-                emit_span_array_view_ptr_expr(out, v->args[0]);
+                if (!emit_span_array_view_ptr_expr(ctx, out, v->args[0])) {
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+                    emit_codegen_abort_expr(out);
+                }
                 fprintf(out, ", XR_TAG_ARRAY)");
             } else {
                 emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -4609,7 +4616,11 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
         if (print_span) {
             fprintf(out, "xr_mkptr(");
-            emit_span_array_view_ptr_expr(out, v->args[0]);
+            if (!emit_span_array_view_ptr_expr(ctx, out, v->args[0])) {
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+                emit_codegen_abort_expr(out);
+            }
             fprintf(out, ", XR_TAG_ARRAY)");
         } else {
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -4788,6 +4799,7 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     bool target_is_sync_go;
     int link_mode;
     bool one_shot_await;
+    bool result_copy_shared;
     bool fire_and_forget;
     if (!v || v->nargs < 1) {
         ctx->error = true;
@@ -4809,6 +4821,7 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
     link_mode = (int) v->aux_int & 0xff;
     one_shot_await = (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0;
+    result_copy_shared = (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0;
     fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
     fprintf(out, "xr_aot_spawn(%s, &", xicgen_aot_context_expr(ctx, f));
     emit_fname_suffix(ctx, out, target_prefix, target, "_aot_desc");
@@ -4817,8 +4830,9 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     fprintf(out, "(");
     emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, target_is_sync_go, v->args, 1,
                                  v->nargs, v);
-    fprintf(out, "), %d, %s, %s, \"%s\").task_value", link_mode, fire_and_forget ? "true" : "false",
-            one_shot_await ? "true" : "false", target->name ? target->name : "aot");
+    fprintf(out, "), %d, %s, %s, %s, \"%s\").task_value", link_mode,
+            fire_and_forget ? "true" : "false", one_shot_await ? "true" : "false",
+            result_copy_shared ? "true" : "false", target->name ? target->name : "aot");
 }
 
 static void xicgen_emit_json_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -9785,7 +9799,7 @@ static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
         (uint64_t) v->type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT)
         return false;
     XrType *elem = v->type->fixed_array.element_type;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
         native = XR_NATIVE_VALUE;
     if (native_out)
@@ -9815,7 +9829,7 @@ static void xicgen_fixed_bytes_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         (v->aux_int > 0 && !v->aux) || !v->type || v->type->kind != XR_KIND_FIXED_ARRAY ||
         v->type->fixed_array.length != v->aux_int || !v->type->fixed_array.element_type ||
         xr_type_kind_to_native(v->type->fixed_array.element_type->kind,
-                               v->type->fixed_array.element_type->native_width) != XR_NATIVE_U8) {
+                               v->type->fixed_array.element_type->scalar_rep) != XR_NATIVE_U8) {
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;
@@ -11596,6 +11610,8 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
     CgArrayElemInfo info;
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
+    if (cg_emit_span_readonly_void_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_STORE))
+        return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
@@ -11631,6 +11647,8 @@ static bool xicgen_emit_byte_slice_float_store(XiCgenCtx *ctx, FILE *out, const 
     CgArrayElemInfo info;
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
+    if (cg_emit_span_readonly_void_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_STORE))
+        return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
         fprintf(out, "({ xr_span_t _s = ");
@@ -11855,6 +11873,8 @@ static void xicgen_byte_slice_store_f64(XiCgenCtx *ctx, FILE *out, const XiFunc 
 static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) prefix;
+    if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_FILL))
+        return;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_FILL, "Slice<byte>.fill");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
@@ -11937,6 +11957,8 @@ static bool xicgen_emit_byte_slice_expr(XiCgenCtx *ctx, FILE *out, const XiValue
 static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) prefix;
+    if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
+        return;
     const XaotBulkPlan *bulk =
         cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<byte>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
@@ -12124,6 +12146,8 @@ static void xicgen_byte_slice_common_prefix(XiCgenCtx *ctx, FILE *out, const XiF
 static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
     (void) prefix;
+    if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_REPEAT))
+        return;
     const XaotBulkPlan *bulk =
         cg_required_bulk_plan(ctx, f, v, XG_BULK_REPEAT, "Slice<byte>.repeatFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
@@ -12274,6 +12298,8 @@ static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     (void) prefix;
+    if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_SLICE_FILL))
+        return;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_FILL, "Slice.fill");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
@@ -12330,6 +12356,8 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     (void) prefix;
+    if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_SLICE_COPY))
+        return;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);

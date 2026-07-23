@@ -1,6 +1,6 @@
 @repr(C)
 struct OldPoint {
-    x: int32
+    x: i32
 }
 
 print(1)

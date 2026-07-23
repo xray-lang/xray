@@ -50,6 +50,7 @@ static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 static XrType t_span = {.kind = XR_KIND_SLICE, .id = 5, .frozen = true};
+static XrType t_function = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -95,6 +96,30 @@ static void test_use_policy(void) {
     };
     ASSERT_EQ(xi_own_value_arg_is_consuming(&string_byte_slice, 0), false,
               "string bytes view borrows its string owner");
+
+    XiImportRef net_write_ref = {
+        .module_path = "net",
+        .member_name = "write",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+    };
+    XiValue net_write_callee = {
+        .op = XI_IMPORT_REF,
+        .type = &t_function,
+        .aux = &net_write_ref,
+    };
+    XiValue net_conn = {.op = XI_PARAM, .type = &t_any};
+    XiValue *net_write_args[] = {&net_write_callee, &net_conn, &string_value};
+    XiValue net_write = {
+        .op = XI_CALL,
+        .type = &t_int,
+        .nargs = 3,
+        .args = net_write_args,
+    };
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 1), false,
+              "native net call borrows its connection handle");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 2), false,
+              "native net call borrows its string payload");
 }
 
 /* ========== Test: dead value → drop at definition ========== */

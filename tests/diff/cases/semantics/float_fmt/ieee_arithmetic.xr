@@ -7,7 +7,7 @@ fn runtime_div(a: float, b: float) -> float {
     return a / b
 }
 
-fn runtime_div_f32(a: float32, b: float32) -> float32 {
+fn runtime_div_f32(a: f32, b: f32) -> f32 {
     return a / b
 }
 

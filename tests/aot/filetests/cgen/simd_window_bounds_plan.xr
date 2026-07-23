@@ -1,6 +1,6 @@
 import { U64x2 } from simd
 
-fn mutateWindow(values: Slice<uint64>, start: int) -> uint64 {
+fn mutateWindow(values: Slice<u64>, start: int) -> u64 {
     var window = values.window(start, 2)
     var loaded = U64x2.load(window, 0)
     var next = loaded.add(U64x2.splat(7))
@@ -8,5 +8,5 @@ fn mutateWindow(values: Slice<uint64>, start: int) -> uint64 {
     return next.reduceAdd()
 }
 
-var values: [uint64; 4] = [11, 13, 17, 19]
+var values: [u64; 4] = [11, 13, 17, 19]
 print(mutateWindow(values[:], 1))

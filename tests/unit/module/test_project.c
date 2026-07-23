@@ -170,7 +170,7 @@ TEST(load_verified_native_package_plan) {
         "\n"
         "[native.symbol.contract]\n"
         "params = []\n"
-        "return = { ownership = \"value\", nullable = false, validity = \"int32\" }\n"
+        "return = { ownership = \"value\", nullable = false, validity = \"i32\" }\n"
         "effects = [\"foreign\"]\n"
         "callbacks = []\n"
         "failure = \"none\"\n"

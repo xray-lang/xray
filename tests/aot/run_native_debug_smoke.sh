@@ -163,10 +163,10 @@ fi
 
 cat > "$AGG_SRC" <<'XR'
 struct Point {
-    x: int32
-    y: int32
+    x: i32
+    y: i32
 }
-fn make(seed: int32) -> Point {
+fn make(seed: i32) -> Point {
     if (seed < 0) { return Point{x: 0, y: 0} }
     var p = Point{x: seed + 1, y: seed + 2}
     var q = p

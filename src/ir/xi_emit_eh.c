@@ -322,6 +322,9 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->aux_int & XI_GO_AUX_DEFER_BATCH) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 6, 1));
     }
+    if (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) {
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 7, 1));
+    }
 }
 
 /* sys.Thread.spawn: same closure+argument register packing and transfer-mode

@@ -2,12 +2,12 @@ fn compute(n: int) -> int {
     return n * n
 }
 
-fn mutate_copy(xs: Array<int>) -> int {
+fn mutate_copy(xs: move Array<int>) -> int {
     xs.push(99)
     return len(xs)
 }
 
-fn identity_copy(xs: Array<int>) -> Array<int> {
+fn identity_copy(xs: move Array<int>) -> Array<int> {
     return xs
 }
 

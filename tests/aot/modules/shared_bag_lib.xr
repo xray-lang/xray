@@ -29,5 +29,3 @@ export class SharedBag {
         return sum
     }
 }
-
-export const shared_bag = SharedBag()

@@ -1,6 +1,6 @@
 fn read(src: Array<byte>) -> int {
     unsafe {
         var p = src.ptr()
-        return int(p.loadLEUnchecked<uint16>(0))
+        return int(p.loadLEUnchecked<u16>(0))
     }
 }

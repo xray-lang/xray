@@ -2,20 +2,20 @@
 fn main() {
     var bytes = Array<byte>(12)
     var view: Slice<byte> = bytes[:]
-    view.store<uint16>(0, 4660, Endian.LE)
-    view.store<uint16>(2, 4660, Endian.BE)
-    view.store<uint32>(4, 16909060, Endian.BE)
-    view.store<uint16>(8, 2569)
+    view.store<u16>(0, 4660, Endian.LE)
+    view.store<u16>(2, 4660, Endian.BE)
+    view.store<u32>(4, 16909060, Endian.BE)
+    view.store<u16>(8, 2569)
     print(bytes[0])
     print(bytes[1])
     print(bytes[2])
     print(bytes[3])
     print(bytes[4])
     print(bytes[7])
-    print(int(view.load<uint16>(0, Endian.LE)))
-    print(int(view.load<uint16>(2, Endian.BE)))
-    print(int(view.load<uint32>(4, Endian.BE)))
-    print(int(view.load<uint16>(8)))
+    print(int(view.load<u16>(0, Endian.LE)))
+    print(int(view.load<u16>(2, Endian.BE)))
+    print(int(view.load<u32>(4, Endian.BE)))
+    print(int(view.load<u16>(8)))
 }
 
 main()

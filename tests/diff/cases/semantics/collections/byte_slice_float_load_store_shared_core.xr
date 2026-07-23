@@ -2,9 +2,9 @@
 fn main() {
     var bytes = Array<byte>(16)
     var view: Slice<byte> = bytes[:]
-    view.store<float32>(0, 1.5, Endian.LE)
-    view.store<float32>(4, -2.5, Endian.BE)
-    view.store<float64>(8, -2.25, Endian.LE)
+    view.store<f32>(0, 1.5, Endian.LE)
+    view.store<f32>(4, -2.5, Endian.BE)
+    view.store<f64>(8, -2.25, Endian.LE)
     print(bytes[0])
     print(bytes[1])
     print(bytes[2])
@@ -15,9 +15,9 @@ fn main() {
     print(bytes[7])
     print(bytes[14])
     print(bytes[15])
-    print(view.load<float32>(0, Endian.LE))
-    print(view.load<float32>(4, Endian.BE))
-    print(view.load<float64>(8, Endian.LE))
+    print(view.load<f32>(0, Endian.LE))
+    print(view.load<f32>(4, Endian.BE))
+    print(view.load<f64>(8, Endian.LE))
 }
 
 main()

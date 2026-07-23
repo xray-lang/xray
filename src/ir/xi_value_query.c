@@ -375,8 +375,8 @@ static bool xi_value_is_unsigned_i64_safe_width(const XiValue *v) {
     if (!v || !v->type || v->type->kind != XR_KIND_INT)
         return false;
 
-    if (v->type->native_width == XR_NATIVE_U8 || v->type->native_width == XR_NATIVE_U16 ||
-        v->type->native_width == XR_NATIVE_U32)
+    if (v->type->scalar_rep == XR_NATIVE_U8 || v->type->scalar_rep == XR_NATIVE_U16 ||
+        v->type->scalar_rep == XR_NATIVE_U32)
         return true;
 
     switch ((XiOp) v->op) {

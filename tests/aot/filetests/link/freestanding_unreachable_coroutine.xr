@@ -7,6 +7,6 @@ fn unused_coroutine_helper() -> int {
     return await task
 }
 
-fn xray_entry() -> int32 {
+fn xray_entry() -> i32 {
     return 0
 }

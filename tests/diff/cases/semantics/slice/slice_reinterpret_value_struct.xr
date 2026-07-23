@@ -1,6 +1,6 @@
 struct Pair {
-    first: uint32
-    second: uint32
+    first: u32
+    second: u32
 }
 
 fn main() {

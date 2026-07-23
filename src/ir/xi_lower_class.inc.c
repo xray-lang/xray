@@ -182,7 +182,7 @@ static bool class_collect_native_fields_from_info(XiLower *l, XrClassInfo *info,
         XrType *type = links ? links->type : NULL;
         if (!type || type->kind == XR_KIND_UNKNOWN || type->is_nullable)
             return false;
-        int native = xr_type_kind_to_native(type->kind, type->native_width);
+        int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
         if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
                            type->kind == XR_KIND_SLICE))
             native = XR_NATIVE_ARRAY_REF;
@@ -299,7 +299,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         type = xi_lower_type_or_any(l, type, "class field type", 0);
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
-        int native = xr_type_kind_to_native(type->kind, type->native_width);
+        int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
         if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
                            type->kind == XR_KIND_SLICE))
             native = XR_NATIVE_ARRAY_REF;

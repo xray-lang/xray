@@ -17,11 +17,11 @@ fn byte_ops() -> int {
 }
 
 fn word_ops() -> int {
-    var words: Array<uint32> = Array<uint32>(4, 0)
-    var sourceWords: Array<uint32> = Array<uint32>(2, 9)
+    var words: Array<u32> = Array<u32>(4, 0)
+    var sourceWords: Array<u32> = Array<u32>(2, 9)
     words.fill(6)
-    var view: Slice<uint32> = words[:]
-    var source: Slice<uint32> = sourceWords[:]
+    var view: Slice<u32> = words[:]
+    var source: Slice<u32> = sourceWords[:]
     view.fill(7)
     view.copyFrom(source)
     view.fill(0)

@@ -350,7 +350,7 @@ TEST(attribute_visibility_modifier_order_roundtrip) {
                       "export fn hash() -> int { return 1 }\n"
                       "@derive(Clone)\n"
                       "export final class Box {}\n"
-                      "export packed struct Word { value: uint32 }\n";
+                      "export packed struct Word { value: u32 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "@deprecated(\"use hash64\")\nexport fn hash"));
@@ -368,7 +368,7 @@ TEST(method_deprecated_attribute_roundtrip) {
     setup();
     const char *src = "export struct Word {\n"
                       "  @deprecated(\"use rotateLeft\")\n"
-                      "  rotate(n: int) -> uint32 { return 0 }\n"
+                      "  rotate(n: int) -> u32 { return 0 }\n"
                       "}\n"
                       "enum State {\n"
                       "  Ready\n"
@@ -430,7 +430,7 @@ TEST(parameter_modes_roundtrip) {
                       "interface ParamModeIface {\n"
                       "    touch(a: int, b: ref int, c: move Buffer) -> int\n"
                       "}\n"
-                      "type ComplexHandler = (Array<int>, ref Slice<uint8>?, "
+                      "type ComplexHandler = (Array<int>, ref Slice<u8>?, "
                       "move Buffer, (int, string), (ref int) -> bool,) -> Array<string>\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
@@ -439,7 +439,7 @@ TEST(parameter_modes_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "touch(a: int, b: ref int, c: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "configure(limit: int = 4)"));
     ASSERT_TRUE(contains(fmt1, "collect(...values: int)"));
-    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (Array<int>, ref Slice<byte>?, "
+    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (Array<int>, ref Slice<u8>?, "
                                "move Buffer, (int, string), (ref int) -> bool) -> "
                                "Array<string>"));
     ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
@@ -464,8 +464,8 @@ TEST(unknown_effect_attribute_rejected) {
 TEST(extern_block_roundtrip) {
     setup();
     const char *src = "extern \"C\" {\n"
-                      "  export fn cos(x: float64) -> float64\n"
-                      "  fn clear(value: MutPtr<int32>)\n"
+                      "  export fn cos(x: f64) -> f64\n"
+                      "  fn clear(value: MutPtr<i32>)\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "extern-block.xr");
     ASSERT_NOT_NULL(fmt1);

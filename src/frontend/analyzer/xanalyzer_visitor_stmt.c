@@ -7101,9 +7101,11 @@ static XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value) {
 }
 
 bool xa_type_has_movable_root(XrType *type) {
+    if (type && XR_TYPE_IS_TUPLE(type))
+        return true;
     if (!type || XR_TYPE_IS_UNKNOWN_OR_ERROR(type) || xr_kind_is_primitive(type->kind) ||
         XR_TYPE_IS_POINTER(type) || XR_TYPE_IS_SLICE(type))
-        return type && XR_TYPE_IS_TUPLE(type);
+        return false;
     /* Structs are source-level value types: assignment/return copies their
      * inline value and no ownership root crosses the boundary.  Treating a
      * struct as a heap owner makes equivalent literal/local/call return paths
@@ -9196,6 +9198,12 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
         // Store return type info in the analyzer side table.
         xa_analyzer_set_node_type(ctx->analyzer, node, return_type);
         xa_check_span_return_escape(ctx, node, return_type);
+
+        /* The legacy multi-expression AST is lowered to one freshly allocated
+         * tuple.  Its outer root crosses the return boundary even when every
+         * lane is an inline scalar, so publish the same transferable storage
+         * fact as an explicit tuple literal. */
+        xa_record_return_storage_owner(ctx, XR_STORAGE_TRANSFERABLE);
 
         xr_free(element_types);
     }

@@ -536,7 +536,7 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
         source_path, "import mem\n"
                      "struct TargetPair {\n"
                      "    ptr: Ptr<byte>\n"
-                     "    size: uintsize\n"
+                     "    size: usize\n"
                      "}\n"
                      "comptime {\n"
                      "    compile_assert(mem.sizeOf<TargetPair>() == 8)\n"

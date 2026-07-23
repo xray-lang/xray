@@ -243,9 +243,9 @@ static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
  * closure only reads them: the rule cannot depend on scheduler topology or
  * a whole-program count of spawned coroutines.
  *
- *   - shared          -> allowed (user declared shared identity)
- *   - function parameter -> ERROR (must pass via explicit go argument)
- *   - plain var/const    -> ERROR (must pass via explicit go argument)
+ *   - shareable const       -> allowed (including audited synchronization handles)
+ *   - function parameter   -> ERROR (must pass via explicit go argument)
+ *   - ordinary mutable var -> ERROR even for a read-only capture
  */
 static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char *name) {
     for (int d = ctx->go_scope_boundary - 1; d >= 0; d--) {
@@ -287,7 +287,7 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                 }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "go closure cannot capture mutable variable '%s'\n"
-                              "hint: route shared updates through Channel/Atomic/Mutex, or "
+                              "hint: bind a Channel/Atomic/Mutex handle as const, or "
                               "transfer one owner with go worker(move %s)",
                               name);
                 return;

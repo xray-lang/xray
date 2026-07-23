@@ -65,8 +65,8 @@ conn.error                      // 连接失败时的错误字段
 ### HTTP 服务端
 - `http.route(method, path, value)` - 添加静态响应
 - `http.routeHandler(method, path, handler)` - 添加 `(Json) -> Json` 动态路由
-- `http.listen(port)` - 监听端口并由纯 Xray 控制面调度 HTTP/1.x 请求
-- `http.stopServer()` - 停止服务器
+- `http.listen(port, running)` - 使用调用者持有的 `Atomic<bool>` 生命周期能力监听端口
+- `running.store(false)` - 从其他协程请求停止；`http` 不保存隐藏的跨协程可变全局状态
 
 WebSocket 服务端入口在独立 `ws` 模块中；`http` 模块不再提供 HTTP upgrade 路由快捷入口。
 

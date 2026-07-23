@@ -2,19 +2,19 @@ import mem
 
 struct Header {
     magic: byte
-    version: uint16
+    version: u16
     flags: byte
-    length: uint32
+    length: u32
 }
 
 packed struct PackedHeader {
     magic: byte
-    length: uint32
-    flags: uint16
+    length: u32
+    flags: u16
 }
 
 struct Inner {
-    code: uint16
+    code: u16
     tag: byte
 }
 
@@ -26,20 +26,20 @@ struct Outer {
 
 print(mem.sizeOf<byte>())
 print(mem.alignOf<byte>())
-print(mem.sizeOf<uint16>())
-print(mem.alignOf<uint16>())
-print(mem.sizeOf<uint32>())
-print(mem.alignOf<uint32>())
-print(mem.sizeOf<uint64>())
-print(mem.alignOf<uint64>())
-print(mem.sizeOf<float32>())
-print(mem.alignOf<float32>())
-print(mem.sizeOf<float64>())
-print(mem.alignOf<float64>())
+print(mem.sizeOf<u16>())
+print(mem.alignOf<u16>())
+print(mem.sizeOf<u32>())
+print(mem.alignOf<u32>())
+print(mem.sizeOf<u64>())
+print(mem.alignOf<u64>())
+print(mem.sizeOf<f32>())
+print(mem.alignOf<f32>())
+print(mem.sizeOf<f64>())
+print(mem.alignOf<f64>())
 print(mem.sizeOf<Ptr<byte>>())
 print(mem.alignOf<Ptr<byte>>())
-print(mem.sizeOf<[uint16; 3]>())
-print(mem.alignOf<[uint16; 3]>())
+print(mem.sizeOf<[u16; 3]>())
+print(mem.alignOf<[u16; 3]>())
 
 print(mem.sizeOf<Header>())
 print(mem.alignOf<Header>())

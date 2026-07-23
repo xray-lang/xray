@@ -1,6 +1,6 @@
-extern "C" { fn call_plain(cb: (int32) -> int32) -> int32 }
+extern "C" { fn call_plain(cb: (i32) -> i32) -> i32 }
 
-fn inc(x: int32) -> int32 {
+fn inc(x: i32) -> i32 {
     return x + 1
 }
 

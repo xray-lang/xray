@@ -92,7 +92,7 @@ var blocks = blockCountFor(len(src), BLOCK)
 const sharedSrc = copy(src)
 const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
 
-var tasks: Array<Task> = []
+var tasks: Array<Task<int>> = []
 var w = 0
 while (w < WORKERS) {
     tasks.push(go worker(sharedSrc, queue, w, BLOCK))

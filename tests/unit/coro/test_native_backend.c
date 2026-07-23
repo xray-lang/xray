@@ -1040,6 +1040,7 @@ TEST(aot_channel_uses_runtime_owner_without_isolate) {
 
     xr_aot_chan_close(&ctx, channel_value);
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_chan_is_closed(&ctx, channel_value)));
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_chan_is_closed(NULL, channel_value)));
 
     xr_coro_destroy(ctx.coro);
     xr_obj_destroy_channel(&channel->gc_header, NULL);

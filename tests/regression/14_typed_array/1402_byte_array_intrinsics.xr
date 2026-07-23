@@ -13,10 +13,10 @@ fn test_byte_array_intrinsics_and_capacity() {
     b[7] = 8
 
     var view: Slice<byte> = b[:]
-    var u32: uint32 = view.load<uint32>(0, Endian.LE)
-    var u64: uint64 = view.load<uint64>(0, Endian.LE)
-    assert_eq(int(u32), 67305985)
-    assert_eq(int(u64), 578437695752307201)
+    var word32: u32 = view.load<u32>(0, Endian.LE)
+    var word64: u64 = view.load<u64>(0, Endian.LE)
+    assert_eq(int(word32), 67305985)
+    assert_eq(int(word64), 578437695752307201)
 
     var dst: Array<byte> = Array.withCapacity(6)
     assert_eq(len(dst), 0)
@@ -69,11 +69,11 @@ fn test_array_filled_constructor_and_integer_wrap() {
     assert_eq(xs[0], 9)
     assert_eq(xs[3], 9)
 
-    var u: uint32 = 4294967295
+    var u: u32 = 4294967295
     var wrapped = u + 1
     assert_eq(wrapped, 0)
 
-    var assigned_expr: uint32 = 4294967295 + 1
+    var assigned_expr: u32 = 4294967295 + 1
     assert_eq(assigned_expr, 0)
 
     var octet: byte = 255

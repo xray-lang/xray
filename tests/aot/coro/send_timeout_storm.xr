@@ -9,7 +9,7 @@ fn run_once(count: int, timeout_ms: int) -> int {
     const ch = Channel(1)
     ch.send(1)
 
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < count; i++) {
         tasks.push(go send_timeout_worker(ch, timeout_ms, i + 2))
     }

@@ -71,7 +71,7 @@ order: 015
 | 方法 | 签名 | 说明 |
 |--|--|--|
 | `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
-| `toUInt32()` | `() -> uint32` | 返回 Unicode scalar code point |
+| `toUInt32()` | `() -> u32` | 返回 Unicode scalar code point |
 | `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
 | `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
@@ -348,7 +348,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | Method | Signature | Description |
 |--|--|--|
 | `toString()` | `() -> string` | return a one-Unicode-scalar string |
-| `toUInt32()` | `() -> uint32` | return the Unicode scalar code point |
+| `toUInt32()` | `() -> u32` | return the Unicode scalar code point |
 | `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
 | `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
 | `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |

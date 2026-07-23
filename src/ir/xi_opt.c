@@ -269,7 +269,7 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
 static bool opt_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -835,7 +835,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             if (const_float_value(lhs, &lhs_f) && const_float_value(rhs, &rhs_f)) {
                 double dresult;
                 bool is_f32 = v->type && v->type->kind == XR_KIND_FLOAT &&
-                              v->type->native_width == XR_NATIVE_F32;
+                              v->type->scalar_rep == XR_NATIVE_F32;
                 if (fold_float_binary(v->op, lhs_f, rhs_f, is_f32, &dresult)) {
                     rewrite_to_const_float(v, dresult);
                     chg.values_changed = true;
@@ -1005,6 +1005,12 @@ static bool xi_go_can_be_one_shot_awaited(const XiValue *v) {
     if (!v || v->op != XI_GO)
         return false;
     if (v->flags & XI_FLAG_FIRE_AND_FORGET)
+        return false;
+    /* A named Task with a compiler-published shared Copy result preserves the
+     * source multi-observer contract.  Only the direct-temporary lowering path
+     * may consume such a handle; use-count optimization must not reclassify it
+     * as a unique-result Task. */
+    if ((v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0)
         return false;
     return (v->aux_int & XI_GO_AUX_LINK_MASK) == 0;
 }
@@ -1934,7 +1940,7 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
     const XrType *elem = sr_array_elem_type(type);
     if (!elem || elem->is_nullable)
         return XR_REP_TAGGED;
-    switch (elem->native_width) {
+    switch (elem->scalar_rep) {
         case XR_NATIVE_I8:
         case XR_NATIVE_U8:
         case XR_NATIVE_I16:

@@ -773,7 +773,7 @@ static bool xaot_bundle_add_class_field_plans(XaotBundle *bundle, const XgGlobal
         plan->field_flags = field->flags;
         plan->semantic_kind = field->semantic_kind;
         plan->native_type = physical.native_type;
-        plan->native_width = field->native_width;
+        plan->scalar_rep = field->scalar_rep;
         plan->storage_kind = physical.storage_kind;
         plan->action = physical.action;
         plan->representation = physical.representation;
@@ -2953,8 +2953,8 @@ static bool hash_eq_kind_valid(uint8_t kind) {
 
 static bool map_shape_value_type_supports_bool_direct(uint32_t value_type_key) {
     return value_type_key == xg_synthetic_type_key(XR_TREF_INT) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I64) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_TREF_NW_F32);
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I64) ||
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_NATIVE_F32);
 }
 
 static bool map_shape_supports_bool_direct(const XgMapShapeSummary *shape) {
@@ -3520,9 +3520,9 @@ static bool bulk_op_kind_valid(uint8_t kind) {
 
 static bool bulk_elem_type_is_memset_byte(uint32_t elem_type_key) {
     return elem_type_key == xg_synthetic_type_key(XR_TREF_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I8) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_BOOL) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I8) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
 }
 
 static uint8_t bulk_action_for(const XgBulkOpSummary *bulk) {
@@ -5262,7 +5262,7 @@ XR_FUNC bool xaot_fixed_bytes_plan_derive(const XiFunc *func, const XiValue *val
             type->fixed_array.length != value->aux_int ||
             (uint64_t) value->aux_int > XR_ARRAY_REF_MAX_COUNT ||
             xr_type_kind_to_native(type->fixed_array.element_type->kind,
-                                   type->fixed_array.element_type->native_width) != XR_NATIVE_U8)
+                                   type->fixed_array.element_type->scalar_rep) != XR_NATIVE_U8)
             return false;
         out->action = XAOT_FIXED_BYTES_VALUE_COPY;
         return true;
@@ -7493,6 +7493,7 @@ static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
         PRINT_BIT(XAOT_SLICE_EV_ENDIAN_CONST, "endian_const");
         PRINT_BIT(XAOT_SLICE_EV_NO_CLOBBER, "no_clobber");
         PRINT_BIT(XAOT_SLICE_EV_ASSERT_GUARD, "assert_guard");
+        PRINT_BIT(XAOT_SLICE_EV_READONLY, "readonly");
     } else {
         PRINT_BIT(XAOT_SLICE_DROP_BOUNDS, "bounds");
         PRINT_BIT(XAOT_SLICE_DROP_READONLY, "readonly");
@@ -7853,7 +7854,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             "element=%u key=%u value=%u fixed=%u size=%u align=%u native=%u ref_kind=%u "
             "storage=%s "
             "action=%s rep=%s ownership=%s drop=%s reason=%s flags=0x%x evidence=0x%x\n",
-            (unsigned) fp->semantic_kind, (unsigned) fp->native_width, fp->target_name_id,
+            (unsigned) fp->semantic_kind, (unsigned) fp->scalar_rep, fp->target_name_id,
             fp->target_class_id, fp->target_interface_id, fp->element_type_key, fp->key_type_key,
             fp->value_type_key, fp->fixed_length, fp->size, fp->align, (unsigned) fp->native_type,
             (unsigned) fp->ref_kind, class_field_storage_kind_name(fp->storage_kind),

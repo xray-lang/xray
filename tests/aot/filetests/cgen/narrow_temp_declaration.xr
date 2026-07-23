@@ -1,7 +1,7 @@
-const OFFSET: uint32 = 17
+const OFFSET: u32 = 17
 
-fn mix(seed: uint32) -> uint32 {
-    var t: uint32 = seed + 1
+fn mix(seed: u32) -> u32 {
+    var t: u32 = seed + 1
     return t + OFFSET
 }
 

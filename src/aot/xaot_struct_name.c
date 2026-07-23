@@ -105,7 +105,7 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
     h *= UINT64_C(1099511628211);
     h ^= type->is_nullable ? UINT64_C(0x100) : UINT64_C(0);
     h *= UINT64_C(1099511628211);
-    h ^= type->native_width;
+    h ^= type->scalar_rep;
     h *= UINT64_C(1099511628211);
     h ^= type->ptr_is_mut ? UINT64_C(0x200) : UINT64_C(0);
     h *= UINT64_C(1099511628211);

@@ -1,8 +1,8 @@
 extern "C" {
-    fn xrayffi_noarg() -> int32
+    fn xrayffi_noarg() -> i32
 }
 extern "C" {
-    fn xrayffi_unused_float(x: float64) -> float64
+    fn xrayffi_unused_float(x: f64) -> f64
 }
 
 print(unsafe { xrayffi_noarg() })

@@ -1,9 +1,9 @@
 fn captured_string(s: string) -> string {
-    fn child() -> string {
-        return s + "!"
+    fn child(value: move string) -> string {
+        return value + "!"
     }
 
-    return (await go child()) ?? "failed"
+    return (await go child(copy(s))) ?? "failed"
 }
 
 print(await go captured_string("capture"))

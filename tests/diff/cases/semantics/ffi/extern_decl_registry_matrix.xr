@@ -1,26 +1,26 @@
 // task-208: every supported extern ABI shape is materialized through one
 // canonical prepare registry; two source aliases intentionally share labs.
 extern "C" {
-    fn strlen(s: Ptr<byte>) -> uintsize
-    fn memchr(s: Ptr<byte>, c: int32, n: uintsize) -> Ptr<byte>
-    fn sinf(x: float32) -> float32
-    fn srand(seed: uint32) -> ()
-    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: uintsize, size: uintsize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>) -> Ptr<byte>
+    fn strlen(s: Ptr<byte>) -> usize
+    fn memchr(s: Ptr<byte>, c: i32, n: usize) -> Ptr<byte>
+    fn sinf(x: f32) -> f32
+    fn srand(seed: u32) -> ()
+    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: usize, size: usize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>) -> Ptr<byte>
 
-    fn task208LabsA(x: intsize) -> intsize
+    fn task208LabsA(x: isize) -> isize
 
-    fn task208LabsB(x: intsize) -> intsize
+    fn task208LabsB(x: isize) -> isize
 }
 
 extern "C" {
-    fn task208NeverLinked(x: float64) -> float64
+    fn task208NeverLinked(x: f64) -> f64
 }
 
-fn zeroCompare(left: Ptr<byte>, right: Ptr<byte>) -> int32 {
+fn zeroCompare(left: Ptr<byte>, right: Ptr<byte>) -> i32 {
     return 0
 }
 
-fn callNativeSize(f: (Ptr<byte>) -> uintsize, bytes: Ptr<byte>) -> uintsize {
+fn callNativeSize(f: (Ptr<byte>) -> usize, bytes: Ptr<byte>) -> usize {
     return f(bytes)
 }
 

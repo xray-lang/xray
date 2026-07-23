@@ -593,7 +593,7 @@ static bool cg_static_tuple_native_for_type(const XrType *type, uint8_t *out_nat
     else if (type->kind == XR_KIND_RUNE)
         native = XR_NATIVE_U32;
     else
-        native = xr_type_kind_to_native(type->kind, type->native_width);
+        native = xr_type_kind_to_native(type->kind, type->scalar_rep);
     if (native < 0 ||
         (native != XR_NATIVE_STRING && !cg_static_struct_native_scalar_supported((uint8_t) native)))
         return false;

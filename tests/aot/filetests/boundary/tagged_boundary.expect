@@ -6,14 +6,14 @@ contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
 contains=function 3 name=make_counter module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
 contains=  ret class=ptr kind=ptr rep=ptr c_type=void *
 contains=function 4 name=read_counter module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
-contains=  param 0 class=ptr kind=view rep=rawptr c_type=XrValue *
+contains=  param 0 class=ptr kind=view rep=rawptr c_type=void * *
 contains=  value v2 op=PLACE_LOAD kind=ptr rep=ptr c_type=void *
 contains=boundary 0 kind=func-abi func=<main> value=- input=- reason=module-init
 regex=  value v[0-9]+ op=CALL kind=ptr rep=ptr c_type=void \*
 contains=reason=box
 contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
 c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_[0-9a-f]+_Counter \*p0, int64_t p1\)
-c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, XrValue \* p0\)
+c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, void \* \* p0\)
 c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, INT64_C\(41\)\)
 c_regex=xrt_shared\[[0-9]+\] = \(\{ XrValue _xsv = xrt_box_obj\(v[0-9]+\)
 c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, \(void \*\)\(v[0-9]+\)\)

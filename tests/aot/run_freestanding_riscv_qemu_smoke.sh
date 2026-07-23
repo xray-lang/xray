@@ -71,7 +71,7 @@ import mem
 
 const UART0 = 0x10000000
 
-fn kernel_entry() -> int32 {
+fn kernel_entry() -> i32 {
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('R'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('V'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), 10, 1)

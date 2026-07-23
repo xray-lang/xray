@@ -1,6 +1,6 @@
 fn write(dst: Array<byte>) {
     unsafe {
         var p = dst.mutPtr()
-        p.storeLEUnchecked<uint16>(0, 1)
+        p.storeLEUnchecked<u16>(0, 1)
     }
 }

@@ -129,7 +129,7 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
         return false;
 
     const char *ctype = NULL;
-    switch (v->type->native_width) {
+    switch (v->type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:

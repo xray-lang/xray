@@ -1,9 +1,9 @@
-fn fillZero(a: ref Array<uint32>) -> int {
+fn fillZero(a: ref Array<u32>) -> int {
     a.fill(0)
     unsafe {
         return int(a.get(1)) + int(a.get(2)) + int(a.get(6))
     }
 }
 
-var a = Array<uint32>(8, 7)
+var a = Array<u32>(8, 7)
 print(fillZero(ref a))

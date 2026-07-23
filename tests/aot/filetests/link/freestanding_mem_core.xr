@@ -2,7 +2,7 @@ import mem
 
 struct XrayMemHeader {
     tag: byte
-    value: uint32
+    value: u32
 }
 
 fn xray_mem_addr_roundtrip(addr: int) -> int {
@@ -18,13 +18,13 @@ fn xray_mem_layout_constants() -> int {
 }
 
 fn xray_mem_typed_from_address(addr: int) -> int {
-    var p = mem.mutPtr<uint32>(addr)
+    var p = mem.mutPtr<u32>(addr)
     return mem.addr(p)
 }
 
 fn xray_mem_typed_addr_null() -> int {
-    var p = Ptr<uint32>.null()
-    var q = MutPtr<uint64>.null()
+    var p = Ptr<u32>.null()
+    var q = MutPtr<u64>.null()
     return mem.addr(p) + mem.addr(q)
 }
 

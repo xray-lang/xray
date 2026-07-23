@@ -50,4 +50,5 @@ http.route("GET", "/api/redirect", fn(req: Json) -> Array<Json> {
 })
 
 print("Server starting on http://localhost:3000")
-http.listen(3000)
+const serverRunning = Atomic(true)
+http.listen(3000, serverRunning)

@@ -4,32 +4,32 @@
 // stay on the i64-wrap path because the native expression would risk C UB or
 // lose carry bits.
 
-fn add8(a: int8, b: int8) -> int8 { return a + b }
-fn sub8(a: int8, b: int8) -> int8 { return a - b }
-fn mul8(a: int8, b: int8) -> int8 { return a * b }
+fn add8(a: i8, b: i8) -> i8 { return a + b }
+fn sub8(a: i8, b: i8) -> i8 { return a - b }
+fn mul8(a: i8, b: i8) -> i8 { return a * b }
 
 fn addu8(a: byte, b: byte) -> byte { return a + b }
 fn subu8(a: byte, b: byte) -> byte { return a - b }
 fn mulu8(a: byte, b: byte) -> byte { return a * b }
 
-fn add16(a: int16, b: int16) -> int16 { return a + b }
-fn sub16(a: int16, b: int16) -> int16 { return a - b }
-fn mul16(a: int16, b: int16) -> int16 { return a * b }
+fn add16(a: i16, b: i16) -> i16 { return a + b }
+fn sub16(a: i16, b: i16) -> i16 { return a - b }
+fn mul16(a: i16, b: i16) -> i16 { return a * b }
 
-fn addu16(a: uint16, b: uint16) -> uint16 { return a + b }
-fn subu16(a: uint16, b: uint16) -> uint16 { return a - b }
-fn mulu16(a: uint16, b: uint16) -> uint16 { return a * b }
+fn addu16(a: u16, b: u16) -> u16 { return a + b }
+fn subu16(a: u16, b: u16) -> u16 { return a - b }
+fn mulu16(a: u16, b: u16) -> u16 { return a * b }
 
-fn mix(a: int8, b: int16) -> int { return a + b }
+fn mix(a: i8, b: i16) -> int { return a + b }
 
-fn addu32(a: uint32, b: uint32) -> uint32 { return a + b }
-fn subu32(a: uint32, b: uint32) -> uint32 { return a - b }
-fn mulu32(a: uint32, b: uint32) -> uint32 { return a * b }
-fn addi32(a: int32, b: int32) -> int32 { return a + b }
-fn subi32(a: int32, b: int32) -> int32 { return a - b }
-fn muli32(a: int32, b: int32) -> int32 { return a * b }
-fn shlu8(a: byte, b: int16) -> byte { return a << b }
-fn shru8(a: byte, b: int16) -> byte { return a >> b }
+fn addu32(a: u32, b: u32) -> u32 { return a + b }
+fn subu32(a: u32, b: u32) -> u32 { return a - b }
+fn mulu32(a: u32, b: u32) -> u32 { return a * b }
+fn addi32(a: i32, b: i32) -> i32 { return a + b }
+fn subi32(a: i32, b: i32) -> i32 { return a - b }
+fn muli32(a: i32, b: i32) -> i32 { return a * b }
+fn shlu8(a: byte, b: i16) -> byte { return a << b }
+fn shru8(a: byte, b: i16) -> byte { return a >> b }
 
 print(add8(127, 1))          // -128
 print(sub8(-128, 1))         // 127

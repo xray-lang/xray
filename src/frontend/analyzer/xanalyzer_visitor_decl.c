@@ -67,7 +67,7 @@ static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attr
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (!elem || elem->is_nullable)
         return XR_NATIVE_VALUE;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
         native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
         native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
@@ -3557,7 +3557,7 @@ skip_interfaces:
                 break;
             }
 
-            int native = xr_type_kind_to_native(ft->kind, ft->native_width);
+            int native = xr_type_kind_to_native(ft->kind, ft->scalar_rep);
             if (native < 0) {
                 // Fixed-size array field: [T; N]
                 if (ft->kind == XR_KIND_FIXED_ARRAY && ft->fixed_array.element_type) {

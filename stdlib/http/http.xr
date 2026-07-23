@@ -774,8 +774,6 @@ class _ServerRouter {
 }
 
 var _serverRouter = _ServerRouter()
-var _serverRunning = false
-var _serverListener: NetListener? = null
 
 export fn route<T>(method: string, path: string, value: T) {
     _serverRouter.add(method, path, value)
@@ -925,6 +923,17 @@ fn _serverWriteAll(conn: NetConn, data: string) -> bool {
     return true
 }
 
+fn _serverGracefulClose(conn: NetConn) {
+    // A response can be followed by request bytes that were already queued in
+    // the kernel (notably an oversized body).  An immediate SHUT_RDWR close in
+    // that state may reset TCP and discard the response.  Half-close writes,
+    // drain only until a bounded deadline, then release the unique handle.
+    net.shutdownWrite(conn)
+    net.setReadDeadline(conn, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
+    while (net.read(conn, HTTP_SERVER_READ_CHUNK_BYTES) != null) {}
+    net.close(conn)
+}
+
 fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
     var path = _serverTargetPath(msg.head.target)
     var found = _serverRouter.find(msg.head.method, path)
@@ -949,22 +958,21 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
            msg.head.keepAlive
 }
 
-fn _serveHttpConnection(conn: move NetConn?) {
-    if (conn == null) { return }
-    var live = conn!
+fn _serveHttpConnection(conn: move NetConn, running: Atomic<bool>) {
+    var live = conn
     var raw = ""
-    while (_serverRunning) {
+    while (running.load()) {
         var headEnd = _responseHeadEnd(raw)
         if (headEnd >= 0) {
             var head = parseRequestHead(raw)
             if (head == null) {
                 _serverWriteAll(live, _serverStatusResponse(400, "Bad Request", false))
-                net.close(live)
+                _serverGracefulClose(live)
                 return
             }
             if (head!.contentLength > HTTP_SERVER_MAX_BODY_BYTES) {
                 _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
-                net.close(live)
+                _serverGracefulClose(live)
                 return
             }
 
@@ -972,7 +980,7 @@ fn _serveHttpConnection(conn: move NetConn?) {
             if (msg != null) {
                 var keep = _serverDispatch(live, msg!)
                 if (!keep) {
-                    net.close(live)
+                    _serverGracefulClose(live)
                     return
                 }
                 var rest = _byteSlice(raw, msg!.consumedBytes, len(raw.bytes()))
@@ -982,7 +990,7 @@ fn _serveHttpConnection(conn: move NetConn?) {
         }
         if (len(raw.bytes()) > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
             _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
-            net.close(live)
+            _serverGracefulClose(live)
             return
         }
 
@@ -996,40 +1004,36 @@ fn _serveHttpConnection(conn: move NetConn?) {
     net.close(live)
 }
 
-fn _spawnHttpConnection(conn: move NetConn?) -> bool {
-    if (conn == null) { return false }
-    go _serveHttpConnection(move conn)
-    return true
-}
-
-export fn listen(port: int) -> bool {
-    if (_serverRunning) { return false }
+// Listen while the caller-owned synchronization capability remains true.
+// The explicit Atomic handle keeps lifecycle state out of hidden mutable
+// module globals and lets another coroutine request shutdown with
+// running.store(false).  A false initial value is rejected.
+export fn listen(port: int, running: Atomic<bool>) -> bool {
+    if (!running.load()) { return false }
     var listener = net.listen(port, HTTP_SERVER_BACKLOG)
     if (listener == null) { return false }
 
-    _serverListener = listener
-    _serverRunning = true
-    while (_serverRunning) {
+    while (running.load()) {
         net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-        if (_spawnHttpConnection(net.accept(listener!))) { continue }
+        var conn = net.accept(listener!)
+        if (conn != null) {
+            // Accepted connections are unique capabilities.  Until the route
+            // table has an immutable, SyncShareable snapshot representation,
+            // the listener owns request dispatch and never shares the mutable
+            // router with per-connection coroutines.
+            var accepted: NetConn = conn!
+            conn = null
+            _serveHttpConnection(move accepted, running)
+            continue
+        }
         var err = net.lastError(listener!)
-        if (!_serverRunning || err == "closed") { break }
+        if (!running.load() || err == "closed") { break }
         if (err == "timeout") { continue }
         break
     }
 
-    _serverRunning = false
     net.close(listener!)
-    _serverListener = null
     return true
-}
-
-export fn stopServer() {
-    _serverRunning = false
-    if (_serverListener != null) {
-        net.close(_serverListener!)
-        _serverListener = null
-    }
 }
 
 // MultipartBody - Built multipart/form-data payload and matching Content-Type.

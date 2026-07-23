@@ -1,16 +1,16 @@
 import mem
 
-fn xray_uintsize_roundtrip(addr: uintsize) -> uintsize {
-    var local: uintsize = addr
+fn xray_uintsize_roundtrip(addr: usize) -> usize {
+    var local: usize = addr
     return local + 1
 }
 
-fn xray_intsize_roundtrip(delta: intsize) -> intsize {
-    var local: intsize = delta
+fn xray_intsize_roundtrip(delta: isize) -> isize {
+    var local: isize = delta
     return local - 1
 }
 
 fn xray_uintsize_layout() -> int {
-    return mem.sizeOf<uintsize>() + mem.alignOf<uintsize>() +
-        mem.sizeOf<intsize>() + mem.alignOf<intsize>()
+    return mem.sizeOf<usize>() + mem.alignOf<usize>() +
+        mem.sizeOf<isize>() + mem.alignOf<isize>()
 }

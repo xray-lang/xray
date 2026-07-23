@@ -148,24 +148,24 @@ static inline const char *xrt_type_name(int64_t tid) {
             return TYPE_NAME_NULL;
         case XR_TID_BOOL:
             return TYPE_NAME_BOOL;
-        case XR_TID_INT8:
-            return TYPE_NAME_INT8;
-        case XR_TID_UINT8:
-            return TYPE_NAME_UINT8;
-        case XR_TID_INT16:
-            return TYPE_NAME_INT16;
-        case XR_TID_UINT16:
-            return TYPE_NAME_UINT16;
-        case XR_TID_INT32:
-            return TYPE_NAME_INT32;
-        case XR_TID_UINT32:
-            return TYPE_NAME_UINT32;
+        case XR_TID_I8:
+            return TYPE_NAME_I8;
+        case XR_TID_U8:
+            return TYPE_NAME_U8;
+        case XR_TID_I16:
+            return TYPE_NAME_I16;
+        case XR_TID_U16:
+            return TYPE_NAME_U16;
+        case XR_TID_I32:
+            return TYPE_NAME_I32;
+        case XR_TID_U32:
+            return TYPE_NAME_U32;
         case XR_TID_INT:
             return TYPE_NAME_INT;
-        case XR_TID_UINT64:
-            return TYPE_NAME_UINT64;
-        case XR_TID_FLOAT32:
-            return TYPE_NAME_FLOAT32;
+        case XR_TID_U64:
+            return TYPE_NAME_U64;
+        case XR_TID_F32:
+            return TYPE_NAME_F32;
         case XR_TID_FLOAT:
             return TYPE_NAME_FLOAT;
         case XR_TID_STRING:

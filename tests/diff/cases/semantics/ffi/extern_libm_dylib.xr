@@ -1,7 +1,7 @@
 // FFI: manifest-declared libm symbols must resolve consistently in VM and AOT.
 extern "C" {
-    fn cos(x: float64) -> float64
-    fn pow(base: float64, exp: float64) -> float64
+    fn cos(x: f64) -> f64
+    fn pow(base: f64, exp: f64) -> f64
 }
 
 print(unsafe { cos(0.0) })

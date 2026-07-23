@@ -2,4 +2,4 @@
 // Imported into another module it loads via GET_SHARED typed unknown; folding it
 // must keep a concrete (native) integer type so `as int` + pointer `.offset`
 // lower to native address arithmetic instead of xrt_add(void*, XrValue).
-export const PAGE: uint64 = 4096
+export const PAGE: u64 = 4096

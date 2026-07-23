@@ -332,7 +332,7 @@ static bool xi_emit_fixed_array_type_info(EmitCtx *ctx, const XrType *type, uint
     }
 
     XrType *elem = type->fixed_array.element_type;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
         native = XR_NATIVE_VALUE;
 
@@ -377,7 +377,7 @@ XR_FUNC void xi_emit_fixed_bytes_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) 
         v->type->kind != XR_KIND_FIXED_ARRAY || v->type->fixed_array.length != v->aux_int ||
         !v->type->fixed_array.element_type ||
         xr_type_kind_to_native(v->type->fixed_array.element_type->kind,
-                               v->type->fixed_array.element_type->native_width) != XR_NATIVE_U8) {
+                               v->type->fixed_array.element_type->scalar_rep) != XR_NATIVE_U8) {
         if (ctx)
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;

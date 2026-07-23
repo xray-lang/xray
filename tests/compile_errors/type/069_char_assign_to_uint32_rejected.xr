@@ -1,1 +1,1 @@
-var x: uint32 = 'a'
+var x: u32 = 'a'

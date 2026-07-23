@@ -7,7 +7,7 @@ import mem
 
 fn run() {
     // Null round-trip: address 0 is the null pointer.
-    var z = mem.ptr<uint8>(0)
+    var z = mem.ptr<u8>(0)
     print(z.isNull())
     print(mem.addr(z))
     // Data round-trip: rebuild a pointer from its numeric address and observe
@@ -22,7 +22,7 @@ fn run() {
         p[15] = 99
     }
     var addr = mem.addr(p)
-    var q = mem.ptr<uint8>(addr)
+    var q = mem.ptr<u8>(addr)
     print(q.isNull())
     unsafe {
         print(q[0])
@@ -32,40 +32,40 @@ fn run() {
     }
     // Manual pointer arithmetic through the address domain: mutPtr(addr + i)
     // must see byte i of the original buffer.
-    var q15 = mem.ptr<uint8>(addr + 15)
+    var q15 = mem.ptr<u8>(addr + 15)
     unsafe {
         print(q15[0])
     }
     // addr is stable: same pointer, same address.
     print(mem.addr(q) == addr)
     // Typed C/MMIO pointers carry their pointee type directly.
-    var q32 = mem.mutPtr<uint32>(addr)
+    var q32 = mem.mutPtr<u32>(addr)
     unsafe {
-        q32[0] = 16909060 as uint32
+        q32[0] = 16909060 as u32
     }
-    var p_ro: Ptr<uint8> = p
+    var p_ro: Ptr<u8> = p
     unsafe {
-        print(int(mem.load<uint32>(p_ro, 0, Endian.LE)))
+        print(int(mem.load<u32>(p_ro, 0, Endian.LE)))
     }
     // The address-domain view is not limited to integer pointees. C APIs often pass
     // pointer slots and float buffers as raw bytes before rebuilding the typed view.
-    var qptr = mem.ptr<Ptr<uint8>>(addr)
-    var qf32 = mem.ptr<float32>(addr)
-    var qf64 = mem.ptr<float64>(addr)
+    var qptr = mem.ptr<Ptr<u8>>(addr)
+    var qf32 = mem.ptr<f32>(addr)
+    var qf64 = mem.ptr<f64>(addr)
     print(mem.addr(qptr) == addr)
     print(mem.addr(qf32) == addr)
     print(mem.addr(qf64) == addr)
     // addr is pointee-type agnostic: C pointer comparisons/differences often
     // start from typed pointers, not only byte pointers.
-    var typed_null = mem.ptr<uint32>(0)
-    var typed_mut_null = mem.mutPtr<uint64>(0)
+    var typed_null = mem.ptr<u32>(0)
+    var typed_mut_null = mem.mutPtr<u64>(0)
     print(mem.addr(typed_null))
     print(mem.addr(typed_mut_null))
     // Page storage provides a stable, page-aligned foreign address.
     print(addr % 4096)
     // MMIO access pattern: volatile store/load through an address-constructed
     // pointer (the real driver-code shape mutPtr exists for).
-    var reg = mem.mutPtr<uint8>(addr + 8)
+    var reg = mem.mutPtr<u8>(addr + 8)
     mem.volatileStore(reg, 305419896, 4)
     print(mem.volatileLoad(reg, 4))
     print(mem.pageFree(p, 4096))

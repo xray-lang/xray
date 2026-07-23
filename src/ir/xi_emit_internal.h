@@ -48,7 +48,7 @@ static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
 static inline bool xi_emit_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:

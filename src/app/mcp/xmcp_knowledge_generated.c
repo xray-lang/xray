@@ -1834,7 +1834,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "listen",
-        .signature = "(port: int): bool",
+        .signature = "(port: int, running: Atomic<bool>): bool",
         .summary = "",
     },
     {
@@ -1910,11 +1910,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "router",
         .signature = "(): Router<T>",
-        .summary = "",
-    },
-    {
-        .name = "stopServer",
-        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -3635,17 +3630,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.extract",
-        .signature = "(lane: int): uint32",
+        .signature = "(lane: int): u32",
         .summary = "",
     },
     {
         .name = "U32x4.fromLanes",
-        .signature = "(lanes: [uint32; 4]): U32x4",
+        .signature = "(lanes: [u32; 4]): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.load",
-        .signature = "(data: Slice<uint32>, offset: int = 0): U32x4",
+        .signature = "(data: Slice<u32>, offset: int = 0): U32x4",
         .summary = "",
     },
     {
@@ -3665,7 +3660,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.replace",
-        .signature = "(lane: int, value: uint32): U32x4",
+        .signature = "(lane: int, value: u32): U32x4",
         .summary = "",
     },
     {
@@ -3685,12 +3680,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.splat",
-        .signature = "(value: uint32): U32x4",
+        .signature = "(value: u32): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.store",
-        .signature = "(output: ref Slice<uint32>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u32>, offset: int = 0): ()",
         .summary = "",
     },
     {
@@ -3740,7 +3735,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x8.fromLanes",
-        .signature = "(lanes: [uint32; 8]): U32x8",
+        .signature = "(lanes: [u32; 8]): U32x8",
         .summary = "",
     },
     {
@@ -3785,17 +3780,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.extract",
-        .signature = "(lane: int): uint64",
+        .signature = "(lane: int): u64",
         .summary = "",
     },
     {
         .name = "U64x2.fromLanes",
-        .signature = "(lanes: [uint64; 2]): U64x2",
+        .signature = "(lanes: [u64; 2]): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.load",
-        .signature = "(data: Slice<uint64>, offset: int = 0): U64x2",
+        .signature = "(data: Slice<u64>, offset: int = 0): U64x2",
         .summary = "",
     },
     {
@@ -3805,7 +3800,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.reduceAdd",
-        .signature = "(): uint64",
+        .signature = "(): u64",
         .summary = "",
     },
     {
@@ -3820,7 +3815,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.replace",
-        .signature = "(lane: int, value: uint64): U64x2",
+        .signature = "(lane: int, value: u64): U64x2",
         .summary = "",
     },
     {
@@ -3840,12 +3835,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.splat",
-        .signature = "(value: uint64): U64x2",
+        .signature = "(value: u64): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.store",
-        .signature = "(output: ref Slice<uint64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
         .summary = "",
     },
     {
@@ -3870,22 +3865,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x4.fromLanes",
-        .signature = "(lanes: [uint64; 4]): U64x4",
+        .signature = "(lanes: [u64; 4]): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.load",
-        .signature = "(data: Slice<uint64>, offset: int = 0): U64x4",
+        .signature = "(data: Slice<u64>, offset: int = 0): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.reduceAdd",
-        .signature = "(): uint64",
+        .signature = "(): u64",
         .summary = "",
     },
     {
         .name = "U64x4.store",
-        .signature = "(output: ref Slice<uint64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
         .summary = "",
     },
     {
@@ -7839,7 +7834,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
-            "| `http.listen` | `(port: int): bool` |  |\n"
+            "| `http.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
@@ -7855,7 +7850,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
             "| `http.routeHandler` | `(method: string, path: string, handler: (HttpRequest): HttpResponse` |  |\n"
             "| `http.router` | `(): Router<T>` |  |\n"
-            "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.textResponse` | `(body: string, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
@@ -8476,8 +8470,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "import { Capabilities, U32x4 } from simd\n"
             "\n"
             "fn main() {\n"
-            "    var words = Array<uint32>([1, 2, 3, 4])\n"
-            "    var view: Slice<uint32> = words[:]\n"
+            "    var words = Array<u32>([1, 2, 3, 4])\n"
+            "    var view: Slice<u32> = words[:]\n"
             "    var result = U32x4.load(view).add(U32x4.splat(10))\n"
             "\n"
             "    print(result.extract(2))\n"
@@ -8499,18 +8493,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.bitNot` | `(): U32x4` |  |\n"
             "| `U32x4.bitOr` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.bitXor` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.extract` | `(lane: int): uint32` |  |\n"
-            "| `U32x4.fromLanes` | `(lanes: [uint32; 4]): U32x4` |  |\n"
-            "| `U32x4.load` | `(data: Slice<uint32>, offset: int = 0): U32x4` |  |\n"
+            "| `U32x4.extract` | `(lane: int): u32` |  |\n"
+            "| `U32x4.fromLanes` | `(lanes: [u32; 4]): U32x4` |  |\n"
+            "| `U32x4.load` | `(data: Slice<u32>, offset: int = 0): U32x4` |  |\n"
             "| `U32x4.mul` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n"
             "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U32x4.replace` | `(lane: int, value: uint32): U32x4` |  |\n"
+            "| `U32x4.replace` | `(lane: int, value: u32): U32x4` |  |\n"
             "| `U32x4.shiftLeft` | `(bits: int): U32x4` |  |\n"
             "| `U32x4.shiftRight` | `(bits: int): U32x4` |  |\n"
             "| `U32x4.shuffle` | `(i0: int, i1: int, i2: int, i3: int): U32x4` |  |\n"
-            "| `U32x4.splat` | `(value: uint32): U32x4` |  |\n"
-            "| `U32x4.store` | `(output: ref Slice<uint32>, offset: int = 0): ()` |  |\n"
+            "| `U32x4.splat` | `(value: u32): U32x4` |  |\n"
+            "| `U32x4.store` | `(output: ref Slice<u32>, offset: int = 0): ()` |  |\n"
             "| `U32x4.sub` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
             "| `U32x4.unzipEven` | `(other: U32x4): U32x4` |  |\n"
@@ -8520,7 +8514,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.widenMulLow` | `(other: U32x4): U64x2` |  |\n"
             "| `U32x4.widenMulOdd` | `(other: U32x4): U64x2` |  |\n"
             "| `U32x8` | `U32x8` |  |\n"
-            "| `U32x8.fromLanes` | `(lanes: [uint32; 8]): U32x8` |  |\n"
+            "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n"
             "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
             "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
             "| `U64x2` | `U64x2` |  |\n"
@@ -8529,27 +8523,27 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x2.bitNot` | `(): U64x2` |  |\n"
             "| `U64x2.bitOr` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.bitXor` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.extract` | `(lane: int): uint64` |  |\n"
-            "| `U64x2.fromLanes` | `(lanes: [uint64; 2]): U64x2` |  |\n"
-            "| `U64x2.load` | `(data: Slice<uint64>, offset: int = 0): U64x2` |  |\n"
+            "| `U64x2.extract` | `(lane: int): u64` |  |\n"
+            "| `U64x2.fromLanes` | `(lanes: [u64; 2]): U64x2` |  |\n"
+            "| `U64x2.load` | `(data: Slice<u64>, offset: int = 0): U64x2` |  |\n"
             "| `U64x2.mul` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.reduceAdd` | `(): uint64` |  |\n"
+            "| `U64x2.reduceAdd` | `(): u64` |  |\n"
             "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n"
             "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U64x2.replace` | `(lane: int, value: uint64): U64x2` |  |\n"
+            "| `U64x2.replace` | `(lane: int, value: u64): U64x2` |  |\n"
             "| `U64x2.shiftLeft` | `(bits: int): U64x2` |  |\n"
             "| `U64x2.shiftRight` | `(bits: int): U64x2` |  |\n"
             "| `U64x2.shuffle` | `(i0: int, i1: int): U64x2` |  |\n"
-            "| `U64x2.splat` | `(value: uint64): U64x2` |  |\n"
-            "| `U64x2.store` | `(output: ref Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x2.splat` | `(value: u64): U64x2` |  |\n"
+            "| `U64x2.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
             "| `U64x2.sub` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
             "| `U64x4` | `U64x4` |  |\n"
             "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n"
-            "| `U64x4.fromLanes` | `(lanes: [uint64; 4]): U64x4` |  |\n"
-            "| `U64x4.load` | `(data: Slice<uint64>, offset: int = 0): U64x4` |  |\n"
-            "| `U64x4.reduceAdd` | `(): uint64` |  |\n"
-            "| `U64x4.store` | `(output: ref Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x4.fromLanes` | `(lanes: [u64; 4]): U64x4` |  |\n"
+            "| `U64x4.load` | `(data: Slice<u64>, offset: int = 0): U64x4` |  |\n"
+            "| `U64x4.reduceAdd` | `(): u64` |  |\n"
+            "| `U64x4.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
             "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
             "| `U8x16` | `U8x16` |  |\n"
             "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"

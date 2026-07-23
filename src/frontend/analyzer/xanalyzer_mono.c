@@ -52,10 +52,10 @@ static const char *mono_type_display_name(XrTypeRef *t) {
     switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
         case XR_TREF_INT_WIDTH:
-            return "int";
+            return xr_scalar_rep_canonical_name(t->scalar_rep);
         case XR_TREF_FLOAT:
         case XR_TREF_FLOAT_WIDTH:
-            return "float";
+            return xr_scalar_rep_canonical_name(t->scalar_rep);
         case XR_TREF_BOOL:
             return "bool";
         case XR_TREF_RUNE:
@@ -90,10 +90,33 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
     switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
         case XR_TREF_INT_WIDTH:
-            return "i64";
+            switch ((XrNativeType) t->scalar_rep) {
+                case XR_NATIVE_I8:
+                    return "i8";
+                case XR_NATIVE_U8:
+                    return "u8";
+                case XR_NATIVE_I16:
+                    return "i16";
+                case XR_NATIVE_U16:
+                    return "u16";
+                case XR_NATIVE_I32:
+                    return "i32";
+                case XR_NATIVE_U32:
+                    return "u32";
+                case XR_NATIVE_I64:
+                    return "i64";
+                case XR_NATIVE_U64:
+                    return "u64";
+                case XR_NATIVE_ISIZE:
+                    return "isize";
+                case XR_NATIVE_USIZE:
+                    return "usize";
+                default:
+                    return "int_unknown";
+            }
         case XR_TREF_FLOAT:
         case XR_TREF_FLOAT_WIDTH:
-            return "f64";
+            return t->scalar_rep == XR_NATIVE_F32 ? "f32" : "f64";
         case XR_TREF_BOOL:
             return "bool";
         case XR_TREF_RUNE:

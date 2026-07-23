@@ -40,10 +40,9 @@ static XrType stub_task_array = {
     .frozen = true,
     .container = {.element_type = &stub_task},
 };
-static XrType stub_u8 = {
-    .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U8};
+static XrType stub_u8 = {.kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U8};
 static XrType stub_uint64 = {
-    .kind = XR_KIND_INT, .id = 11, .frozen = true, .native_width = XR_NATIVE_U64};
+    .kind = XR_KIND_INT, .id = 11, .frozen = true, .scalar_rep = XR_NATIVE_U64};
 static XrType stub_u8_array = {
     .kind = XR_KIND_ARRAY,
     .id = 9,
@@ -186,7 +185,7 @@ TEST(const_fold_uint64_compare) {
     xi_opt_const_fold(f);
 
     assert(gt->op == XI_CONST && gt->aux_int == 1 &&
-           "uint64 high-bit value should fold as greater than zero");
+           "u64 high-bit value should fold as greater than zero");
     xi_func_free(f);
 }
 
@@ -204,8 +203,8 @@ TEST(const_fold_uint64_type_view_copy) {
     xi_opt_const_fold(f);
 
     assert(sum->op == XI_CONST && sum->aux_int == INT64_MIN &&
-           "uint64 type-view copy should not block constant folding");
-    assert(sum->type == &stub_uint64 && "folded value should keep uint64 static type");
+           "u64 type-view copy should not block constant folding");
+    assert(sum->type == &stub_uint64 && "folded value should keep u64 static type");
     xi_func_free(f);
 }
 

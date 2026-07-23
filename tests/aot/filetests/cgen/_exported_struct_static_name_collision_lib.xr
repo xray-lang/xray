@@ -1,25 +1,25 @@
 export struct NarrowState {
     data: [byte; 4]
-    total: uint32
+    total: u32
 
-    static init(seed: uint32) -> NarrowState {
+    static init(seed: u32) -> NarrowState {
         return NarrowState{data: [0; 4], total: seed}
     }
 
-    digest() -> uint64 {
+    digest() -> u64 {
         return this.total
     }
 }
 
 export struct WideState {
     data: [byte; 32]
-    total: uint64
+    total: u64
 
-    static init(seed: uint64) -> WideState {
+    static init(seed: u64) -> WideState {
         return WideState{data: [0; 32], total: seed}
     }
 
-    digest() -> uint64 {
+    digest() -> u64 {
         return this.total
     }
 }

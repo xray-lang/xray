@@ -19,12 +19,14 @@
 | `scripts/check_query_surface_residue.py` | 192：`len` / container membership / `typeOf` / `typeName` 查询表面 residue 分类 inventory，区分 public alias 与内部 lowering/runtime 名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认输出 inventory；CTest `query_surface_residue` 阻止 public query alias 回流 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
 | `scripts/check_byte_width_predicates.py` | 204：高层 analyzer/IR/AOT 不得重新用 `native_width == XR_NATIVE_U8` 或 `elem_name == "XR_ELEM_U8"` 选择 byte 语义 | `--root <repo>`；可选 `--json` | 未登记的直接 U8 width/string predicate=1；CTest `byte_width_predicate_audit` 固定共享 helper 边界 | < 2s |
-| `scripts/run_byte_uint8_canonical_audit.sh` | 204：`byte`/`uint8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_uint8_canonical_audit` 固定可复跑组合证据 | < 120s |
+| `scripts/run_byte_u8_canonical_audit.sh` | 204/239：`byte`/`u8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_u8_canonical_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/run_byte_receiver_effect_audit.sh` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
 | `scripts/check_param_mode_convergence.py` | 232：READ/REF/MOVE 参数表面与单一 `XrParamNode` AST 的 fail-closed 收敛门禁 | `--root <repo>`；可选 `--json` | 旧 `in/out` 声明/调用、旧 enum 或并行声明 AST 回流时失败 | < 2s |
+| `scripts/numeric_type_spelling.py` | 239：token-aware 数值类型迁移与 inventory；跳过 comment/string/rune/template | `check|rewrite <roots...>` | `check` 有旧源码 token 时失败；`rewrite` 输出逐拼写计数和内容 hash | < 5s |
+| `scripts/check_numeric_type_spelling_residue.py` | 239：shipping Xray token 与 spec/knowledge/LSP/MCP/API metadata 的旧长拼写 fail-closed gate | `--root <repo> --fail-on-public` | live public residue 非零时失败；内部 C ABI 和 `aot_const` payload 不误报 | < 5s |
 | `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | CTest `meta_ownership_inventory` 对三类均固定 `--max-category NAME=0`，发现回流即失败；standalone inventory 仍可用于审计 | < 2s |
 | `scripts/check_contract_freeze.py` | 220：八份语义契约的 anchor digest 与 `CONTRACT-CHANGE` trailer 门禁 | `--root <repo>`；注入验证用 `--self-test` | digest 漂移、契约锚点缺失或干净提交缺 trailer=1；dirty tree 只检查 digest，trailer 延迟到 post-commit/CI | < 2s |
 | `scripts/run_asan_focused.sh` | 218 防线 2：ASan+UBSan 聚焦门禁——C 单测 + 快速 backend-diff 子集（task190）+ xxhash 端口与已提交 bili-analysis-server fixture 的全量 AOT C 发射。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过；普通非 sanitizer 构建的 CTest 常驻 `asan_focused` | 增量测试面 <10min（全量 ASan 自举另计） |
@@ -124,15 +126,15 @@ canonical `mem.ptr/mutPtr/addr/load/store`、允许保留的 compile-error 负�
 等共享 helper 或 receiver registry；脚本只允许数值宽度 lattice、bulk memset byte-pattern type-key
 和 class-field schema verifier 这类低层验证/编码点继续直写 U8。
 
-### `run_byte_uint8_canonical_audit.sh`
+### `run_byte_u8_canonical_audit.sh`
 
-串联 204 完成定义中 `byte` / `uint8` canonical U8 identity 的三类证据：
+串联 204/239 完成定义中 `byte` / `u8` canonical U8 identity 的三类证据：
 
-- `1409_byte_uint8_canonical_identity.xr` 固定 scalar、`Array<T>`、`Slice<T>`、函数参数和 U8 条件方法互通。
-- `test_lsp_document` 固定 `Array<uint8>` 源码拼写的 completion/hover docs canonicalize 到 `Array<byte>` / `Slice<byte>`。
-- `test_xglobal_summary` 固定 global evidence 和 cache materialization 里的 `Array<byte>` / `Array<uint8>`、`Slice<byte>` / `Slice<uint8>` type key 同一。
+- `1409_byte_u8_canonical_identity.xr` 固定 scalar、`Array<T>`、`Slice<T>`、函数参数和 U8 条件方法互通。
+- `test_lsp_document` 固定 `Array<u8>` 源码拼写的 completion/hover docs canonicalize 到 `Array<byte>` / `Slice<byte>`。
+- `test_xglobal_summary` 固定 global evidence 和 cache materialization 里的 `Array<byte>` / `Array<u8>`、`Slice<byte>` / `Slice<u8>` type key 同一。
 
-CTest `byte_uint8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 final audit 退回到手工命令列表。
+CTest `byte_u8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 final audit 退回到手工命令列表。
 
 ### `run_byte_receiver_effect_audit.sh`
 
@@ -252,3 +254,4 @@ tooling 或 VM/AOT fallback 中；显式替代路径是 `Slice<T>`、`s.runes().
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |
 | 2026-07-14 | 增加 source unknown convergence inventory，接 202 P0 source unknown 与 typed erasure 边界分类 | Codex |
 | 2026-07-15 | 增加 string surface residue 检查，接 191 string indexing 删除与公开知识库同步门禁 | Codex |
+| 2026-07-23 | 增加 numeric type token codemod、public residue 与 surface-drift 联动，接 239 原子短拼写切换 | Codex |

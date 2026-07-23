@@ -1,1 +1,1 @@
-integer literal exceeds uint64 range
+integer literal exceeds u64 range

@@ -37,4 +37,5 @@ http.routeHandler("GET", "/users/:id", fn(req: HttpRequest) -> HttpResponse {
 })
 
 print("xray Dynamic Handler Benchmark on port " + string(port))
-http.listen(port)
+const serverRunning = Atomic(true)
+http.listen(port, serverRunning)

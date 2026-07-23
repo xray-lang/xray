@@ -105,15 +105,15 @@ XrTypeId xr_value_typeid(XrValue v) {
 XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_NULL] = TYPE_NAME_NULL,
     [XR_TID_BOOL] = TYPE_NAME_BOOL,
-    [XR_TID_INT8] = TYPE_NAME_INT8,
-    [XR_TID_UINT8] = TYPE_NAME_UINT8,
-    [XR_TID_INT16] = TYPE_NAME_INT16,
-    [XR_TID_UINT16] = TYPE_NAME_UINT16,
-    [XR_TID_INT32] = TYPE_NAME_INT32,
-    [XR_TID_UINT32] = TYPE_NAME_UINT32,
+    [XR_TID_I8] = TYPE_NAME_I8,
+    [XR_TID_U8] = TYPE_NAME_U8,
+    [XR_TID_I16] = TYPE_NAME_I16,
+    [XR_TID_U16] = TYPE_NAME_U16,
+    [XR_TID_I32] = TYPE_NAME_I32,
+    [XR_TID_U32] = TYPE_NAME_U32,
     [XR_TID_INT] = TYPE_NAME_INT,
-    [XR_TID_UINT64] = TYPE_NAME_UINT64,
-    [XR_TID_FLOAT32] = TYPE_NAME_FLOAT32,
+    [XR_TID_U64] = TYPE_NAME_U64,
+    [XR_TID_F32] = TYPE_NAME_F32,
     [XR_TID_FLOAT] = TYPE_NAME_FLOAT,
     [XR_TID_STRING] = TYPE_NAME_STRING,
     [XR_TID_RUNE] = TYPE_NAME_RUNE,
@@ -165,32 +165,32 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_ERROR:
             return 0;
         case XR_KIND_INT:
-            switch (type->native_width) {
+            switch (type->scalar_rep) {
                 case XR_NATIVE_I8:
-                    return XR_TID_INT8;
+                    return XR_TID_I8;
                 case XR_NATIVE_U8:
-                    return XR_TID_UINT8;
+                    return XR_TID_U8;
                 case XR_NATIVE_I16:
-                    return XR_TID_INT16;
+                    return XR_TID_I16;
                 case XR_NATIVE_U16:
-                    return XR_TID_UINT16;
+                    return XR_TID_U16;
                 case XR_NATIVE_I32:
-                    return XR_TID_INT32;
+                    return XR_TID_I32;
                 case XR_NATIVE_U32:
-                    return XR_TID_UINT32;
+                    return XR_TID_U32;
                 case XR_NATIVE_U64:
-                    return XR_TID_UINT64;
+                    return XR_TID_U64;
                 case XR_NATIVE_ISIZE:
                     return XR_TID_INT;
                 case XR_NATIVE_USIZE:
-                    return XR_TID_UINT64;
+                    return XR_TID_U64;
                 default:
                     break;
             }
             return XR_TID_INT;
         case XR_KIND_FLOAT:
-            if (type->native_width == XR_NATIVE_F32)
-                return XR_TID_FLOAT32;
+            if (type->scalar_rep == XR_NATIVE_F32)
+                return XR_TID_F32;
             return XR_TID_FLOAT;
         case XR_KIND_STRING:
             return XR_TID_STRING;

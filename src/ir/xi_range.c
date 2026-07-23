@@ -87,10 +87,10 @@ XR_FUNC bool xi_range_contains(XiRange outer, XiRange inner) {
 
 /* ========== Arithmetic Transfer Functions ========== */
 
-static bool xi_range_for_native_int_width(uint8_t native_width, XiRange *out) {
+static bool xi_range_for_native_int_width(uint8_t scalar_rep, XiRange *out) {
     if (!out)
         return false;
-    switch (native_width) {
+    switch (scalar_rep) {
         case XR_NATIVE_I8:
             *out = xi_range_make(-128, 127);
             return true;
@@ -117,7 +117,7 @@ static bool xi_range_for_native_int_width(uint8_t native_width, XiRange *out) {
 static XiRange xi_range_bound_by_type(const XrType *type, XiRange range) {
     XiRange type_range = xi_range_top();
     if (!type || type->kind != XR_KIND_INT ||
-        !xi_range_for_native_int_width(type->native_width, &type_range))
+        !xi_range_for_native_int_width(type->scalar_rep, &type_range))
         return range;
     return xi_range_intersect(range, type_range);
 }

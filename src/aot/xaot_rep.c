@@ -214,7 +214,7 @@ static bool fixed_array_elem_rep_for_value(const XiValue *value, XaotRep *out) {
     if (container && container->type && container->type->kind == XR_KIND_FIXED_ARRAY &&
         container->type->fixed_array.element_type) {
         const XrType *elem = container->type->fixed_array.element_type;
-        int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+        int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
         if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
             native = XR_NATIVE_VALUE;
         return xaot_rep_from_native_type((uint8_t) native, out);

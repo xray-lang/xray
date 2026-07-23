@@ -2794,7 +2794,7 @@ class AotAbiDef:
     nullable: bool
     abi_class: str
     default_rep: str
-    native_width: bool
+    scalar_rep: bool
     typed_boundary: bool
 
 
@@ -2836,7 +2836,7 @@ def parse_aot_abi_def(text: str, reps: list[AotRepDef], path: str = '<input>') -
         entries.append(AotAbiDef(name=name, ident=_xi_c_ident(name), type_kind=type_kind,
                                  nullable=_aot_bool_atom(form, ':nullable', context),
                                  abi_class=abi_class, default_rep=default_rep,
-                                 native_width=_aot_bool_atom(form, ':native-width', context),
+                                 scalar_rep=_aot_bool_atom(form, ':scalar-rep', context),
                                  typed_boundary=_aot_bool_atom(form, ':typed-boundary', context)))
     return entries
 
@@ -2871,7 +2871,7 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
     lines.append('    uint8_t abi_class;')
     lines.append('    XaotRep default_rep;')
     lines.append('    bool allows_nullable;')
-    lines.append('    bool uses_native_width;')
+    lines.append('    bool uses_scalar_rep;')
     lines.append('    bool typed_boundary;')
     lines.append('} XaotAbiInfo;')
     lines.append('')
@@ -2881,7 +2881,7 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
         lines.append(
             f'    X({entry.ident}, "{entry.name}", {entry.type_kind}, '
             f'XAOT_ABI_CLASS_{_xi_c_ident(entry.abi_class)}, XAOT_REP_{_xi_c_ident(entry.default_rep)}, '
-            f'{_c_bool(entry.nullable)}, {_c_bool(entry.native_width)}, '
+            f'{_c_bool(entry.nullable)}, {_c_bool(entry.scalar_rep)}, '
             f'{_c_bool(entry.typed_boundary)}){suffix}')
     lines.append('')
     lines.append('')
@@ -2891,7 +2891,7 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
         lines.append(f'        {{"{entry.name}", {entry.type_kind},')
         lines.append(f'         XAOT_ABI_CLASS_{_xi_c_ident(entry.abi_class)},')
         lines.append(f'         XAOT_REP_{_xi_c_ident(entry.default_rep)}, {_c_bool(entry.nullable)},')
-        lines.append(f'         {_c_bool(entry.native_width)}, {_c_bool(entry.typed_boundary)}}},')
+        lines.append(f'         {_c_bool(entry.scalar_rep)}, {_c_bool(entry.typed_boundary)}}},')
     lines.append('    };')
     lines.append('    for (unsigned i = 0; i < sizeof(table) / sizeof(table[0]); i++) {')
     lines.append('        if (table[i].type_kind == kind)')
@@ -2910,8 +2910,8 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
     lines.append('    abi = xaot_abi_for_type_kind(type->kind);')
     lines.append('    if (!abi || (type->is_nullable && !abi->allows_nullable))')
     lines.append('        return XAOT_REP_TAGGED;')
-    lines.append('    if (abi->uses_native_width && type->native_width != 0 &&')
-    lines.append('        xaot_rep_from_native_type(type->native_width, &rep))')
+    lines.append('    if (abi->uses_scalar_rep &&')
+    lines.append('        xaot_rep_from_native_type(type->scalar_rep, &rep))')
     lines.append('        return rep;')
     lines.append('    return abi->default_rep;')
     lines.append('}')
@@ -3907,13 +3907,13 @@ def _test_aot_abi_parser():
       :nullable no
       :abi-class scalar
       :default-rep i64
-      :native-width yes
+      :scalar-rep yes
       :typed-boundary yes)
     '''
     entries = parse_aot_abi_def(text, reps)
     assert len(entries) == 1
     assert entries[0].ident == 'INT'
-    assert entries[0].native_width
+    assert entries[0].scalar_rep
     header = generate_aot_abi_header(entries)
     assert 'xaot_abi_storage_rep_for_type' in header
     assert 'XAOT_REP_I64' in header
@@ -3924,7 +3924,7 @@ def _test_aot_abi_parser():
           :nullable no
           :abi-class scalar
           :default-rep missing
-          :native-width no
+          :scalar-rep no
           :typed-boundary yes)
         ''', reps)
         assert False, "unknown ABI rep should be rejected"

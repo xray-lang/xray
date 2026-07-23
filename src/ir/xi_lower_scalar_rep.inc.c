@@ -5,7 +5,7 @@
 static uint16_t xi_narrow_op_for_elem(struct XrType *elem_type) {
     if (!elem_type)
         return 0;
-    uint8_t nw = elem_type->native_width;
+    uint8_t nw = elem_type->scalar_rep;
     if (nw == 0) {
         /* Default width: int->i64, float->f64; no narrowing. */
         return 0;
@@ -115,7 +115,7 @@ static XiValue *xi_lower_narrow_for_static_type(XiLower *l, AstNode *node, XiVal
     if (!target_type || !val)
         return val;
     XiValue *narrowed =
-        xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->native_width);
+        xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->scalar_rep);
     if (narrowed != val)
         return narrowed;
     if (val->type && !xr_type_equals(target_type, val->type) &&
@@ -185,7 +185,7 @@ static void xi_lower_check_set_method_args(XiLower *l, AstNode *node, const char
 static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
     if (!elem_type)
         return 0;
-    uint8_t nw = elem_type->native_width;
+    uint8_t nw = elem_type->scalar_rep;
     if (nw == 0)
         return 0;
     switch (nw) {

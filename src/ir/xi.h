@@ -762,6 +762,10 @@ typedef enum {
  * deliberately not a fourth source parameter mode: callers still use an
  * ordinary argument, while lowering proves a nonescaping call-bound place. */
 #define XI_LOWERING_FLAG_PARAM_READ_PLACE (1u << 3)
+/* Exact module-provenance fact for `time.sleep(duration)`.  The VM emitter
+ * consumes this fact to select OP_SLEEP; spelling alone is not sufficient
+ * because user-defined objects may also have a method named `sleep`. */
+#define XI_LOWERING_FLAG_TIME_SLEEP (1u << 4)
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
@@ -782,6 +786,8 @@ typedef enum {
 #define XI_GO_AUX_LINK_MASK 0xff
 #define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
 #define XI_GO_AUX_DEFER_BATCH (1 << 9) /* defer child submission until aggregate await batch */
+#define XI_GO_AUX_RESULT_COPY_SHARED                                                               \
+    (1 << 10) /* compiler-planned shared copy for pointer-backed Copy result */
 #define XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT 16
 #define XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK ((int64_t) 0x0000ffffffffffffULL)
 

@@ -19,14 +19,14 @@ fn run() {
 
     var owner = mem.allocZeroed(4)
     {
-        var view: Slice<uint8> = owner.asMutBytes()
+        var view: Slice<u8> = owner.asMutBytes()
         view[0] = 42
         view[3] = 99
     }
     assert(owner.resize(12))
     assert(len(owner) == 12)
     {
-        var view: Slice<uint8> = owner.asBytes()
+        var view: Slice<u8> = owner.asBytes()
         assert(view[0] == 42)
         assert(view[3] == 99)
     }

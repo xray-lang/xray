@@ -1,14 +1,14 @@
 fn main() {
-    var bytes = Array<uint8>(4, 1)
-    var src = Array<uint8>(2, 7)
+    var bytes = Array<u8>(4, 1)
+    var src = Array<u8>(2, 7)
     bytes.appendFrom(src[:])
     bytes.repeatFrom(2, 2)
 
-    var view: Slice<uint8> = bytes[:]
-    view.store<uint16>(0, 513, Endian.LE)
+    var view: Slice<u8> = bytes[:]
+    view.store<u16>(0, 513, Endian.LE)
 
     print(len(bytes))
-    print(view.load<uint16>(0, Endian.LE))
+    print(view.load<u16>(0, Endian.LE))
     print(bytes[0])
     print(bytes[1])
     print(bytes[4])

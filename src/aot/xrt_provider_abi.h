@@ -198,10 +198,12 @@ XR_FUNC bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime);
 XR_FUNC bool xr_aot_root_descriptor_end(XrAotRuntime *runtime);
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,
-                                      bool one_shot_await, const char *name);
+                                      bool one_shot_await, bool result_copy_shared,
+                                      const char *name);
 XR_FUNC XrAotSpawnResult xr_aot_spawn_deferred(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                                void *frame, int link_mode, bool fire_and_forget,
-                                               bool one_shot_await, const char *name);
+                                               bool one_shot_await, bool result_copy_shared,
+                                               const char *name);
 XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value,
                                       XrSlotRef out_slot, int64_t timeout_ms, bool discard_result,
                                       bool one_shot_await);

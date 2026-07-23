@@ -97,7 +97,7 @@ MISSING_LIB_DIR="$WORK/missing_lib"
 mkdir -p "$MISSING_LIB_DIR"
 VM_MISSING_LIB_SRC="$MISSING_LIB_DIR/main.xr"
 cat > "$VM_MISSING_LIB_SRC" <<'XR'
-extern "C" { fn nope(x: int32) -> int32 }
+extern "C" { fn nope(x: i32) -> i32 }
 print(unsafe { nope(1) })
 XR
 cat > "$MISSING_LIB_DIR/xray.toml" <<TOML
@@ -146,7 +146,7 @@ MISSING_SYMBOL_DIR="$WORK/missing_symbol"
 mkdir -p "$MISSING_SYMBOL_DIR"
 VM_MISSING_SYMBOL_SRC="$MISSING_SYMBOL_DIR/main.xr"
 cat > "$VM_MISSING_SYMBOL_SRC" <<XR
-extern "C" { fn $MISSING_SYMBOL(x: int32) -> int32 }
+extern "C" { fn $MISSING_SYMBOL(x: i32) -> i32 }
 print(unsafe { $MISSING_SYMBOL(1) })
 XR
 cat > "$MISSING_SYMBOL_DIR/xray.toml" <<TOML

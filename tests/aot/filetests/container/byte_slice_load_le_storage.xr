@@ -1,53 +1,53 @@
 fn read16(src: Slice<byte>, pos: int) -> int {
-    var value: uint16 = src.load<uint16>(pos, Endian.LE)
+    var value: u16 = src.load<u16>(pos, Endian.LE)
     return int(value)
 }
 
 fn read32(src: Slice<byte>, pos: int) -> int {
-    var value: uint32 = src.load<uint32>(pos, Endian.LE)
+    var value: u32 = src.load<u32>(pos, Endian.LE)
     return int(value)
 }
 
 fn read64(src: Slice<byte>, pos: int) -> int {
-    var value: uint64 = src.load<uint64>(pos, Endian.LE)
+    var value: u64 = src.load<u64>(pos, Endian.LE)
     return int(value)
 }
 
 fn readI16(src: Slice<byte>, pos: int) -> int {
-    var value: int16 = src.load<int16>(pos, Endian.LE)
+    var value: i16 = src.load<i16>(pos, Endian.LE)
     return int(value)
 }
 
 fn readI32(src: Slice<byte>, pos: int) -> int {
-    var value: int32 = src.load<int32>(pos, Endian.LE)
+    var value: i32 = src.load<i32>(pos, Endian.LE)
     return int(value)
 }
 
-fn readF32(src: Slice<byte>, pos: int) -> float32 {
-    var value: float32 = src.load<float32>(pos, Endian.LE)
+fn readF32(src: Slice<byte>, pos: int) -> f32 {
+    var value: f32 = src.load<f32>(pos, Endian.LE)
     return value
 }
 
-fn readF64(src: Slice<byte>, pos: int) -> float64 {
-    var value: float64 = src.load<float64>(pos, Endian.LE)
+fn readF64(src: Slice<byte>, pos: int) -> f64 {
+    var value: f64 = src.load<f64>(pos, Endian.LE)
     return value
 }
 
 fn read32BE(src: Slice<byte>, pos: int) -> int {
-    var value: uint32 = src.load<uint32>(pos, Endian.BE)
+    var value: u32 = src.load<u32>(pos, Endian.BE)
     return int(value)
 }
 
-fn write16(src: ref Slice<byte>, pos: int, value: uint16) {
-    src.store<uint16>(pos, value, Endian.LE)
+fn write16(src: ref Slice<byte>, pos: int, value: u16) {
+    src.store<u16>(pos, value, Endian.LE)
 }
 
-fn writeI16(src: ref Slice<byte>, pos: int, value: int16) {
-    src.store<int16>(pos, value, Endian.LE)
+fn writeI16(src: ref Slice<byte>, pos: int, value: i16) {
+    src.store<i16>(pos, value, Endian.LE)
 }
 
-fn writeF32(src: ref Slice<byte>, pos: int, value: float32) {
-    src.store<float32>(pos, value, Endian.LE)
+fn writeF32(src: ref Slice<byte>, pos: int, value: f32) {
+    src.store<f32>(pos, value, Endian.LE)
 }
 
 fn runLoads() {

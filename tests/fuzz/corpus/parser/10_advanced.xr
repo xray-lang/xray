@@ -96,12 +96,12 @@ let weakMap = WeakMap()
 let weakSet = WeakSet()
 
 // Typed arrays
-let int8 = Int8Array(10)
-let uint8 = Uint8Array(10)
-let int16 = Int16Array(10)
-let float32 = Float32Array(10)
-let float64 = Float64Array(10)
+let i8 = Int8Array(10)
+let u8 = Uint8Array(10)
+let i16 = Int16Array(10)
+let f32 = Float32Array(10)
+let f64 = Float64Array(10)
 
-int8[0] = 127
-uint8[0] = 255
-float32[0] = 3.14
+i8[0] = 127
+u8[0] = 255
+f32[0] = 3.14

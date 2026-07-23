@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<uint8> must stay as byte storage with direct raw access.
+# Local Array<u8> must stay as byte storage with direct raw access.
 hot_function=^array_u8_wrap_sum_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_count=1

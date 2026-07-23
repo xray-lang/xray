@@ -455,7 +455,7 @@ static XiValue *xi_lower_apply_primitive_type_view(XiLower *l, AstNode *node, Xi
     if (!l || !node || !val || !val->type || !target_type || xr_type_equals(val->type, target_type))
         return val;
     if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type) &&
-        target_type->native_width == XR_NATIVE_F32) {
+        target_type->scalar_rep == XR_NATIVE_F32) {
         XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, target_type, 1);
         if (!n)
             return val;
@@ -821,7 +821,7 @@ static XiValue *xi_lower_wrap_if_needed(XiLower *l, AstNode *node, XiValue *valu
     if (!value || !result_type || result_type->kind != XR_KIND_INT ||
         !xi_binary_needs_wrap(source_op))
         return value;
-    uint16_t narrow_op = xi_narrow_op_for_native_type(result_type->native_width);
+    uint16_t narrow_op = xi_narrow_op_for_native_type(result_type->scalar_rep);
     if (!narrow_op)
         return value;
     XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, result_type, 1);
@@ -853,7 +853,7 @@ static XiValue *xi_lower_promote_int_to_float(XiLower *l, AstNode *node, XiValue
 /* Narrow a float32 operand to single precision before a wider (float64) op,
  * mirroring AOT's `(float)operand` at use. */
 static XiValue *xi_lower_narrow_f32_operand(XiLower *l, AstNode *node, XiValue *v) {
-    if (!v || !v->type || v->type->kind != XR_KIND_FLOAT || v->type->native_width != XR_NATIVE_F32)
+    if (!v || !v->type || v->type->kind != XR_KIND_FLOAT || v->type->scalar_rep != XR_NATIVE_F32)
         return v;
     XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, v->type, 1);
     if (!n)
@@ -928,7 +928,7 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     // operands by mirroring AOT's per-operand narrowing in the shared IR.
     if (op == XI_ADD || op == XI_SUB || op == XI_MUL || op == XI_DIV) {
         if (result_type && result_type->kind == XR_KIND_FLOAT &&
-            result_type->native_width == XR_NATIVE_F32) {
+            result_type->scalar_rep == XR_NATIVE_F32) {
             // float32 result: promote int operands to float so the
             // single-precision opcode operates on two float values.
             lhs = xi_lower_promote_int_to_float(l, node, lhs);
@@ -1129,9 +1129,9 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 val = conv;
             }
         }
-        if (var_type && var_type->kind == XR_KIND_INT && var_type->native_width != 0 && val->type &&
-            XR_TYPE_IS_INT(val->type)) {
-            uint16_t narrow_op = xi_narrow_op_for_native_type(var_type->native_width);
+        if (var_type && var_type->kind == XR_KIND_INT && var_type->scalar_rep != XR_NATIVE_I64 &&
+            val->type && XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(var_type->scalar_rep);
             if (narrow_op) {
                 XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, var_type, 1);
                 if (n) {
@@ -1193,9 +1193,9 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     /* Check for program-level variable from nested scope */
     XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
     if (xi_top_binding_valid(tb)) {
-        if (tb.type && tb.type->kind == XR_KIND_INT && tb.type->native_width != 0 && val->type &&
-            XR_TYPE_IS_INT(val->type)) {
-            uint16_t narrow_op = xi_narrow_op_for_native_type(tb.type->native_width);
+        if (tb.type && tb.type->kind == XR_KIND_INT && tb.type->scalar_rep != XR_NATIVE_I64 &&
+            val->type && XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(tb.type->scalar_rep);
             if (narrow_op) {
                 XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, tb.type, 1);
                 if (n) {
@@ -1214,9 +1214,9 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     struct XrType *upval_type = NULL;
     int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
     if (upval_idx >= 0) {
-        if (upval_type && upval_type->kind == XR_KIND_INT && upval_type->native_width != 0 &&
-            val->type && XR_TYPE_IS_INT(val->type)) {
-            uint16_t narrow_op = xi_narrow_op_for_native_type(upval_type->native_width);
+        if (upval_type && upval_type->kind == XR_KIND_INT &&
+            upval_type->scalar_rep != XR_NATIVE_I64 && val->type && XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(upval_type->scalar_rep);
             if (narrow_op) {
                 XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, upval_type, 1);
                 if (n) {
@@ -1452,10 +1452,10 @@ static bool lower_mem_layout_member_name(const char *name) {
 static bool lower_type_is_target_width_int(const XrType *type, uint8_t *out_native) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    if (type->native_width != XR_NATIVE_ISIZE && type->native_width != XR_NATIVE_USIZE)
+    if (type->scalar_rep != XR_NATIVE_ISIZE && type->scalar_rep != XR_NATIVE_USIZE)
         return false;
     if (out_native)
-        *out_native = type->native_width;
+        *out_native = type->scalar_rep;
     return true;
 }
 
@@ -2347,7 +2347,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     return v;
 }
 
-#include "xi_lower_native_width.inc.c"
+#include "xi_lower_scalar_rep.inc.c"
 
 static bool xi_lower_type_is_unknown(struct XrType *type) {
     return !type || XR_TYPE_IS_UNKNOWN(type);
@@ -2391,7 +2391,7 @@ static struct XrType *xi_lower_widened_elem_type(XiLower *l, struct XrType *fall
                                                  struct XrType *elem_type) {
     if (!elem_type)
         return fallback;
-    switch (elem_type->native_width) {
+    switch (elem_type->scalar_rep) {
         case XR_NATIVE_I8:
         case XR_NATIVE_U8:
         case XR_NATIVE_I16:
@@ -2431,8 +2431,8 @@ static int64_t xi_pointer_pointee_size(XiLower *l, struct XrType *ptr_type) {
     struct XrType *pointee = ptr_type->container.element_type;
     if (!pointee)
         return 1;
-    if (pointee->native_width != 0)
-        return (int64_t) xr_native_type_size(xi_lower_target_data_layout(l), pointee->native_width);
+    if (pointee->kind == XR_KIND_INT || pointee->kind == XR_KIND_FLOAT)
+        return (int64_t) xr_native_type_size(xi_lower_target_data_layout(l), pointee->scalar_rep);
     switch (pointee->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
@@ -2545,7 +2545,7 @@ static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
         return XR_ELEM_ANY;
     switch (type->kind) {
         case XR_KIND_INT:
-            switch (type->native_width) {
+            switch (type->scalar_rep) {
                 case XR_NATIVE_I8:
                     return XR_ELEM_I8;
                 case XR_NATIVE_U8:
@@ -2567,7 +2567,7 @@ static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
                     return XR_ELEM_I64;
             }
         case XR_KIND_FLOAT:
-            return type->native_width == XR_NATIVE_F32 ? XR_ELEM_F32 : XR_ELEM_F64;
+            return type->scalar_rep == XR_NATIVE_F32 ? XR_ELEM_F32 : XR_ELEM_F64;
         case XR_KIND_BOOL:
             return XR_ELEM_BOOL;
         case XR_KIND_RUNE:
@@ -2986,7 +2986,7 @@ static int xi_fixed_array_elem_native_type(struct XrType *type) {
     XrType *elem = type->fixed_array.element_type;
     if (elem->is_nullable)
         return XR_NATIVE_VALUE;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (native == XR_NATIVE_I64 || native == XR_NATIVE_F64 || native == XR_NATIVE_BOOL ||
         native == XR_NATIVE_I8 || native == XR_NATIVE_I16 || native == XR_NATIVE_I32 ||
         native == XR_NATIVE_U8 || native == XR_NATIVE_U16 || native == XR_NATIVE_U32 ||
@@ -5165,7 +5165,7 @@ static uint16_t lower_byte_slice_typed_op_for_target(XrType *target, bool is_loa
     if (!target)
         return 0;
     if (XR_TYPE_IS_INT(target)) {
-        switch (target->native_width) {
+        switch (target->scalar_rep) {
             case XR_NATIVE_I16:
             case XR_NATIVE_U16:
                 return is_load ? XI_BYTE_SLICE_LOAD_U16 : XI_BYTE_SLICE_STORE_U16;
@@ -5180,7 +5180,7 @@ static uint16_t lower_byte_slice_typed_op_for_target(XrType *target, bool is_loa
         }
     }
     if (XR_TYPE_IS_FLOAT(target)) {
-        switch (target->native_width) {
+        switch (target->scalar_rep) {
             case XR_NATIVE_F32:
                 return is_load ? XI_BYTE_SLICE_LOAD_F32 : XI_BYTE_SLICE_STORE_F32;
             case XR_NATIVE_F64:
@@ -5196,7 +5196,7 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
                                                           XrType *target) {
     if (!target || !value || !XR_TYPE_IS_INT(target))
         return value;
-    switch (target->native_width) {
+    switch (target->scalar_rep) {
         case XR_NATIVE_I16:
         case XR_NATIVE_I32:
             return xi_lower_narrow_for_static_type(l, node, value, target);
@@ -5659,7 +5659,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
                                              desc->shape_rule.result_lanes) |
                          extra;
     } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
-        value->aux_int = receiver->type ? receiver->type->native_width : 0;
+        value->aux_int = receiver->type ? receiver->type->scalar_rep : 0;
     }
     value->xa_intrinsic_id = (uint32_t) desc->id;
     value->flags = xi_op_default_effects(op);
@@ -6017,6 +6017,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
+        bool is_time_sleep = n == 1 && ma->name && strcmp(ma->name, "sleep") == 0 &&
+                             lower_value_is_whole_module_import(l, recv, "time");
 
         if (recv->type && xr_type_is_named_class(recv->type, "CoroLocal") && ma->name) {
             int sub = -1;
@@ -6370,6 +6372,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->aux = (void *) arena_strdup(l->func, ma->name);
         v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
         v->call_plan = call_plan;
+        if (is_time_sleep)
+            v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);
         v->flags |= XI_FLAG_SIDE_EFFECT;
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
@@ -8363,6 +8367,8 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
             v->aux = modes;
         }
         v->aux_int = (int64_t) pack_go_aux((int) go->link_mode);
+        if (spawn_op == XI_GO && xa_task_type_requires_shared_copy_publication(result_type))
+            v->aux_int |= XI_GO_AUX_RESULT_COPY_SHARED;
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
         return v;
@@ -8377,6 +8383,8 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = callee;
     v->aux_int = (int64_t) pack_go_aux((int) go->link_mode);
+    if (spawn_op == XI_GO && xa_task_type_requires_shared_copy_publication(result_type))
+        v->aux_int |= XI_GO_AUX_RESULT_COPY_SHARED;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
@@ -8384,12 +8392,12 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     AwaitExprNode *aw = &node->as.await_expr;
-    XrType *task_type = xi_lower_node_type(l, aw->expr);
     bool direct_temporary_task = aw->expr && aw->expr->type == AST_GO_EXPR &&
                                  aw->expr->as.go_expr.link_mode == 0 && !aw->timeout &&
                                  !aw->is_any && !aw->is_all && !aw->is_any_success && !aw->into;
+    struct XrType *result_type = xi_lower_node_type(l, node);
     bool consumes_unique_task = !aw->is_any && !aw->is_all && !aw->is_any_success && !aw->into &&
-                                xa_task_type_requires_consuming_await(task_type);
+                                xa_task_result_requires_consuming_await(result_type);
     XiValue *task = xi_lower_expr(l, aw->expr);
     if (!task)
         return NULL;
@@ -8401,7 +8409,6 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     XiValue *timeout = aw->timeout ? xi_lower_expr(l, aw->timeout) : NULL;
     uint16_t nargs = (uint16_t) (1 + (into ? 1 : 0) + (timeout ? 1 : 0));
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AWAIT, result_type, nargs);
     if (!v)
         return NULL;

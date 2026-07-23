@@ -1,1 +1,1 @@
-@dylib("m") fn cos(x: float64) -> float64
+@dylib("m") fn cos(x: f64) -> f64

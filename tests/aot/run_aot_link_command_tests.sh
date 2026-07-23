@@ -106,7 +106,7 @@ FFI_HASH="$(shasum -a 256 "$FFI_LIB" | awk '{print $1}')"
 FFI_NAME="$(basename "$FFI_LIB")"
 cat >"$FFI_DIR/main.xr" <<'XR'
 extern "C" {
-    fn manifestAdd1(value: int32) -> int32
+    fn manifestAdd1(value: i32) -> i32
 }
 print(unsafe { manifestAdd1(41) })
 XR

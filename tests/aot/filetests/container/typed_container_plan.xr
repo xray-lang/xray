@@ -2,11 +2,11 @@ var bytes: Array<byte> = []
 bytes.push(7)
 bytes.push(9)
 
-var values: Map<byte, int32> = #{}
+var values: Map<byte, i32> = #{}
 values.set(1, 11)
 values.set(2, 22)
 
-var seen: Set<uint16> = #[]
+var seen: Set<u16> = #[]
 seen.add(1)
 seen.add(2)
 
@@ -116,8 +116,8 @@ fn char_ord_sum() -> int {
 }
 
 class Bag {
-    values: Map<byte, int32>
-    seen: Set<uint16>
+    values: Map<byte, i32>
+    seen: Set<u16>
 
     constructor() {
         this.values = #{}

@@ -1,9 +1,9 @@
 fn local_bump() -> int {
-    var words = Array<uint32>(3, 0)
+    var words = Array<u32>(3, 0)
     words[0] = 1
     words[1] = 2
     words[2] = 3
-    var view: Slice<uint32> = words[:]
+    var view: Slice<u32> = words[:]
     view[1] = view[1] + 7
     return int(view[1])
 }

@@ -1,7 +1,7 @@
 extern "C" {
-    fn task208LabsFirst(x: intsize) -> intsize
+    fn task208LabsFirst(x: isize) -> isize
 
-    fn task208LabsSecond(x: intsize) -> intsize
+    fn task208LabsSecond(x: isize) -> isize
 }
 
 print(unsafe { task208LabsFirst(-11) + task208LabsSecond(-31) })

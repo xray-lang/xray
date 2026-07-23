@@ -126,7 +126,7 @@ static bool fixed_array_lane_native_info(const XrType *type, uint8_t *native_out
         type->fixed_array.length <= 0)
         return false;
     XrType *elem = type->fixed_array.element_type;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
         native = XR_NATIVE_VALUE;
     const char *ctype = xaot_layout_c_type_for_native_type((uint8_t) native);
@@ -439,6 +439,14 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
                                              const XrType *type, const XiValue *value) {
     XrParamMode mode = XR_PARAM_READ;
     (void) param_uses_place_abi(func, value, false, &mode);
+
+    /* A native-layout class value is already represented by its instance
+     * pointer.  A ref/read-place parameter therefore borrows the address of
+     * that pointer (void ** at the generic ABI layer), not an XrValue place.
+     * Keeping the pointee native prevents a local class instance from being
+     * boxed solely because its variable is passed with `ref`. */
+    if (type_is_class_instance_ptr_boundary(bundle, type))
+        return native_value_slot_for_type(bundle, func, type, value, false);
 
     /* Read-only aggregate borrows have concrete storage at both boundaries:
      * direct calls pass the aggregate address and boxed adapters project the

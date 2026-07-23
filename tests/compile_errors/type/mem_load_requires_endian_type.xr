@@ -1,4 +1,4 @@
 import mem
 
 var p = mem.ptr<byte>(0)
-unsafe { print(mem.load<uint32>(p, 0, 1)) }
+unsafe { print(mem.load<u32>(p, 0, 1)) }

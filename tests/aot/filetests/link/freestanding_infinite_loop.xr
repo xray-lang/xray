@@ -1,4 +1,4 @@
-fn xray_spin() -> int32 {
+fn xray_spin() -> i32 {
     while (true) {
     }
     return 0

@@ -6,7 +6,7 @@
   :nullable no
   :abi-class scalar
   :default-rep i64
-  :native-width yes
+  :scalar-rep yes
   :typed-boundary yes)
 
 (define-aot-abi float
@@ -14,7 +14,7 @@
   :nullable no
   :abi-class scalar
   :default-rep f64
-  :native-width yes
+  :scalar-rep yes
   :typed-boundary yes)
 
 (define-aot-abi bool
@@ -22,7 +22,7 @@
   :nullable no
   :abi-class scalar
   :default-rep bool
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi unit
@@ -30,7 +30,7 @@
   :nullable no
   :abi-class void
   :default-rep void
-  :native-width no
+  :scalar-rep no
   :typed-boundary no)
 
 (define-aot-abi string
@@ -38,7 +38,7 @@
   :nullable no
   :abi-class pointer
   :default-rep ptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi array
@@ -46,7 +46,7 @@
   :nullable no
   :abi-class pointer
   :default-rep ptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi slice
@@ -54,7 +54,7 @@
   :nullable no
   :abi-class aggregate
   :default-rep slice
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi map
@@ -62,7 +62,7 @@
   :nullable no
   :abi-class pointer
   :default-rep ptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi set
@@ -70,7 +70,7 @@
   :nullable no
   :abi-class pointer
   :default-rep ptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi tuple
@@ -78,7 +78,7 @@
   :nullable no
   :abi-class pointer
   :default-rep ptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)
 
 (define-aot-abi record
@@ -86,7 +86,7 @@
   :nullable yes
   :abi-class tagged
   :default-rep tagged
-  :native-width no
+  :scalar-rep no
   :typed-boundary no)
 
 ; FFI raw pointer (Ptr<T> / MutPtr<T>). Carried as a native C pointer in AOT
@@ -97,5 +97,5 @@
   :nullable no
   :abi-class scalar
   :default-rep rawptr
-  :native-width no
+  :scalar-rep no
   :typed-boundary yes)

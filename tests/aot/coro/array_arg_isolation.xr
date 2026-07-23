@@ -1,4 +1,4 @@
-fn worker(xs: Array<int>) -> int {
+fn worker(xs: move Array<int>) -> int {
     xs.push(99)
     Coro.yield()
     return len(xs)

@@ -1,19 +1,19 @@
-fn bump(acc: ref [uint32; 4], x: uint32) {
+fn bump(acc: ref [u32; 4], x: u32) {
     for (var i = 0; i < 1; i++) {
         acc[0] = acc[0] + x
     }
 }
 
-fn read_pair(acc: [uint32; 4]) -> uint32 {
-    var out: uint32 = 0
+fn read_pair(acc: [u32; 4]) -> u32 {
+    var out: u32 = 0
     for (var i = 0; i < 1; i++) {
         out = acc[0] + acc[1]
     }
     return out
 }
 
-fn run() -> uint32 {
-    var acc: [uint32; 4] = [1, 2, 3, 4]
+fn run() -> u32 {
+    var acc: [u32; 4] = [1, 2, 3, 4]
     bump(ref acc, 7)
     return read_pair(acc)
 }

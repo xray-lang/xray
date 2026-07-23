@@ -15,7 +15,7 @@ vm = "unsupported"
 name = "native-output"
 kind = "c"
 sources = ["native_output.c"]
-source_hashes = ["1224b84a22e9b9c14478abc135536e04e15fc69b74d2380f841aee8e6105bc6d"]
+source_hashes = ["09e4a85e190794da814fd550869df3543c40f6229efb63964dde90a1ef062a02"]
 include_dirs = []
 defines = []
 system_links = []
@@ -43,7 +43,7 @@ unit = "native-output"
 params = [
   { index = 0, access = "write", nullable = false, length_from = -1, escape = "noescape", ownership = "borrowed", output = "complete", descriptor_rebind = false, may_relocate = false, may_shorten = false, invalidates_views = false },
 ]
-return = { ownership = "value", nullable = false, validity = "int32" }
+return = { ownership = "value", nullable = false, validity = "i32" }
 effects = ["foreign"]
 callbacks = []
 failure = "status_nonzero"

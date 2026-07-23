@@ -1,12 +1,12 @@
 // FFI: pointer-return externs and float32 C prototypes must stay isolated in
 // the ABI descriptor across VM libffi and AOT direct-call lowering.
 extern "C" {
-    fn memchr(s: Ptr<byte>, c: int32, n: uintsize) -> Ptr<byte>
-    fn sinf(x: float32) -> float32
+    fn memchr(s: Ptr<byte>, c: i32, n: usize) -> Ptr<byte>
+    fn sinf(x: f32) -> f32
 }
 
 extern "C" {
-    fn xrayffi_unused_float(x: float64) -> float64
+    fn xrayffi_unused_float(x: f64) -> f64
 }
 
 const bytes = b"ABC"

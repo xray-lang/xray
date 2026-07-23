@@ -10,8 +10,8 @@ fn run() {
     assert_eq(b.extract(0), bytes[3])
     assert_eq(b.extract(15), bytes[18])
     assert_eq(b.bitXor(U8x16.splat(255)).extract(4), (~bytes[7]) as byte)
-    var words = Array<uint32>([1, 2, 3, 4, 5, 6])
-    var wordView: Slice<uint32> = words[:]
+    var words = Array<u32>([1, 2, 3, 4, 5, 6])
+    var wordView: Slice<u32> = words[:]
     var a32 = U32x4.load(wordView, 1)
     var b32 = U32x4.splat(7)
     assert_eq(a32.add(b32).extract(0), 9)
@@ -36,7 +36,7 @@ fn run() {
     assert_eq(lowProducts.extract(1), 20)
     assert_eq(highProducts.extract(0), 49)
     assert_eq(highProducts.extract(1), 49)
-    var lanes64: [uint64; 2] = [18446744073709551615, 9]
+    var lanes64: [u64; 2] = [18446744073709551615, 9]
     var a64 = U64x2.fromLanes(lanes64)
     assert_eq(a64.add(U64x2.splat(1)).extract(0), 0)
     assert_eq(a64.swapLanes().extract(0), 9)
@@ -53,20 +53,20 @@ fn run() {
     for (i in 0..16) {
         assert_eq(roundTrip64.extract(i), b.extract(i))
     }
-    var out = Array<uint64>(4)
-    var outView: Slice<uint64> = out[:]
+    var out = Array<u64>(4)
+    var outView: Slice<u64> = out[:]
     a64.store(ref outView, 1)
     assert_eq(out[1], lanes64[0])
     assert_eq(out[2], lanes64[1])
-    var wideWords: [uint32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var wideWords: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
     var x32 = U32x8.fromLanes(wideWords)
     var products = x32.widenMulEven(x32.swapAdjacent())
-    var wide64: [uint64; 4] = [10, 20, 30, 40]
+    var wide64: [u64; 4] = [10, 20, 30, 40]
     var combined = U64x4.fromLanes(wide64).add(U64x4.fromLanes(wide64).swapAdjacent())
     combined = combined.add(products)
     assert_eq(combined.reduceAdd(), 300)
-    var wideOut = Array<uint64>(4)
-    var wideOutView: Slice<uint64> = wideOut[:]
+    var wideOut = Array<u64>(4)
+    var wideOutView: Slice<u64> = wideOut[:]
     combined.store(ref wideOutView)
     assert_eq(wideOut[0], 32)
     assert_eq(wideOut[1], 42)

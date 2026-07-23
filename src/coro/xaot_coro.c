@@ -2688,7 +2688,8 @@ static XrAotResult aot_await_any_ready_result(const XrAotContext *ctx, XrArray *
 
 static XrAotSpawnResult aot_spawn_common(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                          void *frame, int link_mode, bool fire_and_forget,
-                                         bool one_shot_await, const char *name, bool defer_batch) {
+                                         bool one_shot_await, bool result_copy_shared,
+                                         const char *name, bool defer_batch) {
     XrAotSpawnResult result;
     result.task_value = XR_NULL_VAL;
     result.child = NULL;
@@ -2729,6 +2730,8 @@ static XrAotSpawnResult aot_spawn_common(const XrAotContext *ctx, const XrAotCor
         task->link_mode = (uint8_t) link_mode;
         if (one_shot_await)
             task->flags |= XR_TASK_FLG_ONE_SHOT_AWAIT;
+        if (result_copy_shared)
+            task->flags |= XR_TASK_FLG_RESULT_COPY_SHARED;
     }
 
     if (fire_and_forget)
@@ -2783,16 +2786,17 @@ static XrAotSpawnResult aot_spawn_common(const XrAotContext *ctx, const XrAotCor
 
 XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc, void *frame,
                               int link_mode, bool fire_and_forget, bool one_shot_await,
-                              const char *name) {
-    return aot_spawn_common(ctx, desc, frame, link_mode, fire_and_forget, one_shot_await, name,
-                            false);
+                              bool result_copy_shared, const char *name) {
+    return aot_spawn_common(ctx, desc, frame, link_mode, fire_and_forget, one_shot_await,
+                            result_copy_shared, name, false);
 }
 
 XrAotSpawnResult xr_aot_spawn_deferred(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                        void *frame, int link_mode, bool fire_and_forget,
-                                       bool one_shot_await, const char *name) {
-    return aot_spawn_common(ctx, desc, frame, link_mode, fire_and_forget, one_shot_await, name,
-                            true);
+                                       bool one_shot_await, bool result_copy_shared,
+                                       const char *name) {
+    return aot_spawn_common(ctx, desc, frame, link_mode, fire_and_forget, one_shot_await,
+                            result_copy_shared, name, true);
 }
 
 XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode) {
@@ -3563,7 +3567,10 @@ XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value) {
 }
 
 XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value) {
-    if (!ctx || !xr_value_is_channel(channel_value))
+    /* This is a synchronous state query.  Non-coroutine AOT entry functions
+     * intentionally pass a null context, just like length/capacity above. */
+    (void) ctx;
+    if (!xr_value_is_channel(channel_value))
         return xr_bool(false);
     return xr_bool(xr_channel_is_closed(xr_value_to_channel(channel_value)));
 }

@@ -1814,6 +1814,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME numeric_type_spelling_residue
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_numeric_type_spelling_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-public
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(numeric_type_spelling_residue PROPERTIES
+        LABELS "frontend;syntax;metadata;lsp"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME byte_width_predicate_audit
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_byte_width_predicates.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1827,15 +1841,15 @@ if(BUILD_TESTS)
 
     if(XR_BUILD_LSP AND NOT WIN32)
         add_test(
-            NAME byte_uint8_canonical_audit
+            NAME byte_u8_canonical_audit
             COMMAND ${CMAKE_COMMAND} -E env
                     XRAY_BIN=$<TARGET_FILE:xray>
                     XRAY_TEST_LSP_DOCUMENT=$<TARGET_FILE:test_lsp_document>
                     XRAY_TEST_XGLOBAL_SUMMARY=$<TARGET_FILE:test_xglobal_summary>
-                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_uint8_canonical_audit.sh
+                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_u8_canonical_audit.sh
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
-        set_tests_properties(byte_uint8_canonical_audit PROPERTIES
+        set_tests_properties(byte_u8_canonical_audit PROPERTIES
             LABELS "frontend;types;lsp;analysis"
             PROCESSORS 1
             TIMEOUT 120

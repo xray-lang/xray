@@ -4,6 +4,6 @@ asm {
     ".byte 0"
 }
 
-fn global_asm_entry() -> int32 {
+fn global_asm_entry() -> i32 {
     return 7
 }

@@ -178,7 +178,7 @@ uint8_t xr_ffi_type_from_xrtype(const struct XrType *t, bool is_return) {
         case XR_KIND_BOOL:
         case XR_KIND_FLOAT:
         case XR_KIND_INT: {
-            int native_type = xr_type_kind_to_native(t->kind, t->native_width);
+            int native_type = xr_type_kind_to_native(t->kind, t->scalar_rep);
             const XrAbiScalarDesc *desc =
                 native_type >= 0 ? xr_abi_scalar_desc_for_native((uint8_t) native_type) : NULL;
             return desc ? (uint8_t) desc->ffi_type : XR_FFI_T_I64;

@@ -8,7 +8,7 @@ fn small(x: int) -> int {
 // budget in Xi because each lane operation carries error/copy/release
 // bookkeeping.  It is nevertheless one straight-line, allocation-free native
 // kernel and must stay C-inlineable when called from a hot loop.
-fn vectorStripe(acc: Slice<uint64>, input: Slice<byte>, secret: Slice<byte>) {
+fn vectorStripe(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
     assert(len(acc) >= 8)
     assert(len(input) >= 64)
     assert(len(secret) >= 64)
@@ -60,6 +60,6 @@ export fn runPolicy(n: int) -> int {
     return looping(n) + small(n) + stackAggregate(n)
 }
 
-export fn runVectorPolicy(acc: Slice<uint64>, input: Slice<byte>, secret: Slice<byte>) {
+export fn runVectorPolicy(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
     vectorStripe(acc, input, secret)
 }

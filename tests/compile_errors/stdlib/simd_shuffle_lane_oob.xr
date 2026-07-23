@@ -1,5 +1,5 @@
 import {U64x2} from simd
 
-var lanes: [uint64; 2] = [1, 2]
+var lanes: [u64; 2] = [1, 2]
 var vector = U64x2.fromLanes(lanes)
 print(vector.shuffle(0, 2).extract(0))

@@ -14,7 +14,7 @@
  *
  * RULES ENFORCED:
  *   - Plain local `var x` captured by a go closure     -> ERROR
- *     (route shared updates through Channel/Atomic/Mutex, or transfer one
+ *     (bind a Channel/Atomic/Mutex handle as const, or transfer one
  *      owner through an explicit go argument)
  *   - Audited synchronization handles captured by go   -> allowed
  *     (mutable state remains accessible only through their synchronized API)

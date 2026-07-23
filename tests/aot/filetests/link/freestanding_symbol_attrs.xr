@@ -1,7 +1,7 @@
-fn boot_score(x: int32) -> int32 {
+fn boot_score(x: i32) -> i32 {
     return x + 3
 }
 
-fn hook_score() -> int32 {
+fn hook_score() -> i32 {
     return 7
 }

@@ -1,0 +1,28 @@
+/*
+ * Public scalar spelling registry.
+ *
+ * Consumers define:
+ *   XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep,
+ *                  type_family, role, canonical_display, public_type_id,
+ *                  range_class)
+ *
+ * Source spelling is syntax-only. scalar_rep is the semantic identity used by
+ * the analyzer, caches and backends. Multiple deliberate spellings may share
+ * one scalar_rep, but each representation has exactly one canonical display.
+ */
+
+XR_SCALAR_TYPE(INT,   "int",   3, TK_INT,   XR_NATIVE_I64,   INT,   DEFAULT, "int",   XR_TID_INT,   SIGNED)
+XR_SCALAR_TYPE(I8,    "i8",    2, TK_I8,    XR_NATIVE_I8,    INT,   EXACT,   "i8",    XR_TID_I8,    SIGNED)
+XR_SCALAR_TYPE(I16,   "i16",   3, TK_I16,   XR_NATIVE_I16,   INT,   EXACT,   "i16",   XR_TID_I16,   SIGNED)
+XR_SCALAR_TYPE(I32,   "i32",   3, TK_I32,   XR_NATIVE_I32,   INT,   EXACT,   "i32",   XR_TID_I32,   SIGNED)
+XR_SCALAR_TYPE(I64,   "i64",   3, TK_I64,   XR_NATIVE_I64,   INT,   EXACT,   "int",   XR_TID_INT,   SIGNED)
+XR_SCALAR_TYPE(BYTE,  "byte",  4, TK_BYTE,  XR_NATIVE_U8,    INT,   DOMAIN,  "byte",  XR_TID_U8,    UNSIGNED)
+XR_SCALAR_TYPE(U8,    "u8",    2, TK_U8,    XR_NATIVE_U8,    INT,   EXACT,   "byte",  XR_TID_U8,    UNSIGNED)
+XR_SCALAR_TYPE(U16,   "u16",   3, TK_U16,   XR_NATIVE_U16,   INT,   EXACT,   "u16",   XR_TID_U16,   UNSIGNED)
+XR_SCALAR_TYPE(U32,   "u32",   3, TK_U32,   XR_NATIVE_U32,   INT,   EXACT,   "u32",   XR_TID_U32,   UNSIGNED)
+XR_SCALAR_TYPE(U64,   "u64",   3, TK_U64,   XR_NATIVE_U64,   INT,   EXACT,   "u64",   XR_TID_U64,   UNSIGNED)
+XR_SCALAR_TYPE(FLOAT, "float", 5, TK_FLOAT, XR_NATIVE_F64,   FLOAT, DEFAULT, "float", XR_TID_FLOAT, FLOATING)
+XR_SCALAR_TYPE(F32,   "f32",   3, TK_F32,   XR_NATIVE_F32,   FLOAT, EXACT,   "f32",   XR_TID_F32,   FLOATING)
+XR_SCALAR_TYPE(F64,   "f64",   3, TK_F64,   XR_NATIVE_F64,   FLOAT, EXACT,   "float", XR_TID_FLOAT, FLOATING)
+XR_SCALAR_TYPE(ISIZE, "isize", 5, TK_ISIZE, XR_NATIVE_ISIZE, INT,   TARGET,  "isize", XR_TID_COUNT, SIGNED)
+XR_SCALAR_TYPE(USIZE, "usize", 5, TK_USIZE, XR_NATIVE_USIZE, INT,   TARGET,  "usize", XR_TID_COUNT, UNSIGNED)

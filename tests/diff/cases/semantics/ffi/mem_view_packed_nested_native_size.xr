@@ -2,18 +2,18 @@
 import mem
 
 packed struct PackedNativeSize {
-    tag: uint8
-    length: uintsize
-    delta: intsize
+    tag: u8
+    length: usize
+    delta: isize
 }
 
 struct NativeSizeEnvelope {
-    prefix: uint8
+    prefix: u8
     payload: PackedNativeSize
 }
 
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 

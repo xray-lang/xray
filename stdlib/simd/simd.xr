@@ -72,21 +72,21 @@ export struct U8x16 align(16) {
         return U8x16{_lanes: lanes}
     }
     reinterpretU32() -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             var base = i * 4
-            lanes[i] = (this._lanes[base] as uint32) | ((this._lanes[base + 1] as uint32) << 8) | ((this._lanes[base + 2] as uint32) << 16) | ((this._lanes[base + 3] as uint32) << 24)
+            lanes[i] = (this._lanes[base] as u32) | ((this._lanes[base + 1] as u32) << 8) | ((this._lanes[base + 2] as u32) << 16) | ((this._lanes[base + 3] as u32) << 24)
             i += 1
         }
         return U32x4.fromLanes(lanes)
     }
     reinterpretU64() -> U64x2 {
-        var lanes: [uint64; 2] = [0; 2]
+        var lanes: [u64; 2] = [0; 2]
         var i = 0
         while (i < 2) {
             var base = i * 8
-            lanes[i] = (this._lanes[base] as uint64) | ((this._lanes[base + 1] as uint64) << 8) | ((this._lanes[base + 2] as uint64) << 16) | ((this._lanes[base + 3] as uint64) << 24) | ((this._lanes[base + 4] as uint64) << 32) | ((this._lanes[base + 5] as uint64) << 40) | ((this._lanes[base + 6] as uint64) << 48) | ((this._lanes[base + 7] as uint64) << 56)
+            lanes[i] = (this._lanes[base] as u64) | ((this._lanes[base + 1] as u64) << 8) | ((this._lanes[base + 2] as u64) << 16) | ((this._lanes[base + 3] as u64) << 24) | ((this._lanes[base + 4] as u64) << 32) | ((this._lanes[base + 5] as u64) << 40) | ((this._lanes[base + 6] as u64) << 48) | ((this._lanes[base + 7] as u64) << 56)
             i += 1
         }
         return U64x2.fromLanes(lanes)
@@ -94,15 +94,15 @@ export struct U8x16 align(16) {
 }
 
 export struct U32x4 align(16) {
-    private _lanes: [uint32; 4]
-    static fromLanes(lanes: [uint32; 4]) -> U32x4 {
+    private _lanes: [u32; 4]
+    static fromLanes(lanes: [u32; 4]) -> U32x4 {
         return U32x4{_lanes: copy(lanes)}
     }
-    static splat(value: uint32) -> U32x4 {
+    static splat(value: u32) -> U32x4 {
         return U32x4{_lanes: [value; 4]}
     }
-    static load(data: Slice<uint32>, offset: int = 0) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+    static load(data: Slice<u32>, offset: int = 0) -> U32x4 {
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = data[offset + i]
@@ -110,23 +110,23 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-    store(output: ref Slice<uint32>, offset: int = 0) {
+    store(output: ref Slice<u32>, offset: int = 0) {
         var i = 0
         while (i < 4) {
             output[offset + i] = this._lanes[i]
             i += 1
         }
     }
-    extract(lane: int) -> uint32 {
+    extract(lane: int) -> u32 {
         return this._lanes[lane]
     }
-    replace(lane: int, value: uint32) -> U32x4 {
+    replace(lane: int, value: u32) -> U32x4 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U32x4{_lanes: lanes}
     }
     add(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] + other._lanes[i]
@@ -135,7 +135,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     sub(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] - other._lanes[i]
@@ -144,7 +144,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     mul(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] * other._lanes[i]
@@ -153,7 +153,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     bitAnd(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] & other._lanes[i]
@@ -162,7 +162,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     bitOr(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] | other._lanes[i]
@@ -171,7 +171,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     bitXor(other: U32x4) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] ^ other._lanes[i]
@@ -180,7 +180,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     bitNot() -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = ~this._lanes[i]
@@ -189,7 +189,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     shiftLeft(bits: int) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] << bits
@@ -198,7 +198,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
     shiftRight(bits: int) -> U32x4 {
-        var lanes: [uint32; 4] = [0; 4]
+        var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             lanes[i] = this._lanes[i] >> bits
@@ -213,10 +213,10 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2]]}
     }
     widenMulEven(other: U32x4) -> U64x2 {
-        return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64)])
+        return U64x2.fromLanes([(this._lanes[0] as u64) * (other._lanes[0] as u64), (this._lanes[2] as u64) * (other._lanes[2] as u64)])
     }
     widenMulOdd(other: U32x4) -> U64x2 {
-        return U64x2.fromLanes([(this._lanes[1] as uint64) * (other._lanes[1] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
+        return U64x2.fromLanes([(this._lanes[1] as u64) * (other._lanes[1] as u64), (this._lanes[3] as u64) * (other._lanes[3] as u64)])
     }
     unzipEven(other: U32x4) -> U32x4 {
         return U32x4{_lanes: [this._lanes[0], this._lanes[2], other._lanes[0], other._lanes[2]]}
@@ -225,10 +225,10 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: [this._lanes[1], this._lanes[3], other._lanes[1], other._lanes[3]]}
     }
     widenMulLow(other: U32x4) -> U64x2 {
-        return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[1] as uint64) * (other._lanes[1] as uint64)])
+        return U64x2.fromLanes([(this._lanes[0] as u64) * (other._lanes[0] as u64), (this._lanes[1] as u64) * (other._lanes[1] as u64)])
     }
     widenMulHigh(other: U32x4) -> U64x2 {
-        return U64x2.fromLanes([(this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
+        return U64x2.fromLanes([(this._lanes[2] as u64) * (other._lanes[2] as u64), (this._lanes[3] as u64) * (other._lanes[3] as u64)])
     }
     reinterpretU8() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
@@ -245,29 +245,29 @@ export struct U32x4 align(16) {
         return U8x16.fromLanes(lanes)
     }
     reinterpretU64() -> U64x2 {
-        return U64x2.fromLanes([(this._lanes[0] as uint64) | ((this._lanes[1] as uint64) << 32), (this._lanes[2] as uint64) | ((this._lanes[3] as uint64) << 32)])
+        return U64x2.fromLanes([(this._lanes[0] as u64) | ((this._lanes[1] as u64) << 32), (this._lanes[2] as u64) | ((this._lanes[3] as u64) << 32)])
     }
 }
 
 export struct U64x2 align(16) {
-    private _lanes: [uint64; 2]
-    static fromLanes(lanes: [uint64; 2]) -> U64x2 {
+    private _lanes: [u64; 2]
+    static fromLanes(lanes: [u64; 2]) -> U64x2 {
         return U64x2{_lanes: copy(lanes)}
     }
-    static splat(value: uint64) -> U64x2 {
+    static splat(value: u64) -> U64x2 {
         return U64x2{_lanes: [value; 2]}
     }
-    static load(data: Slice<uint64>, offset: int = 0) -> U64x2 {
+    static load(data: Slice<u64>, offset: int = 0) -> U64x2 {
         return U64x2{_lanes: [data[offset], data[offset + 1]]}
     }
-    store(output: ref Slice<uint64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
     }
-    extract(lane: int) -> uint64 {
+    extract(lane: int) -> u64 {
         return this._lanes[lane]
     }
-    replace(lane: int, value: uint64) -> U64x2 {
+    replace(lane: int, value: u64) -> U64x2 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U64x2{_lanes: lanes}
@@ -305,11 +305,11 @@ export struct U64x2 align(16) {
     shuffle(i0: int, i1: int) -> U64x2 {
         return U64x2{_lanes: [this._lanes[i0], this._lanes[i1]]}
     }
-    reduceAdd() -> uint64 {
+    reduceAdd() -> u64 {
         return this._lanes[0] + this._lanes[1]
     }
     reinterpretU32() -> U32x4 {
-        return U32x4.fromLanes([(this._lanes[0] & 4294967295) as uint32, (this._lanes[0] >> 32) as uint32, (this._lanes[1] & 4294967295) as uint32, (this._lanes[1] >> 32) as uint32])
+        return U32x4.fromLanes([(this._lanes[0] & 4294967295) as u32, (this._lanes[0] >> 32) as u32, (this._lanes[1] & 4294967295) as u32, (this._lanes[1] >> 32) as u32])
     }
     reinterpretU8() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
@@ -372,21 +372,21 @@ export struct U8x32 align(32) {
         return U8x32{_lanes: lanes}
     }
     reinterpretU32() -> U32x8 {
-        var lanes: [uint32; 8] = [0; 8]
+        var lanes: [u32; 8] = [0; 8]
         var i = 0
         while (i < 8) {
             var base = i * 4
-            lanes[i] = (this._lanes[base] as uint32) | ((this._lanes[base + 1] as uint32) << 8) | ((this._lanes[base + 2] as uint32) << 16) | ((this._lanes[base + 3] as uint32) << 24)
+            lanes[i] = (this._lanes[base] as u32) | ((this._lanes[base + 1] as u32) << 8) | ((this._lanes[base + 2] as u32) << 16) | ((this._lanes[base + 3] as u32) << 24)
             i += 1
         }
         return U32x8.fromLanes(lanes)
     }
     reinterpretU64() -> U64x4 {
-        var lanes: [uint64; 4] = [0; 4]
+        var lanes: [u64; 4] = [0; 4]
         var i = 0
         while (i < 4) {
             var base = i * 8
-            lanes[i] = (this._lanes[base] as uint64) | ((this._lanes[base + 1] as uint64) << 8) | ((this._lanes[base + 2] as uint64) << 16) | ((this._lanes[base + 3] as uint64) << 24) | ((this._lanes[base + 4] as uint64) << 32) | ((this._lanes[base + 5] as uint64) << 40) | ((this._lanes[base + 6] as uint64) << 48) | ((this._lanes[base + 7] as uint64) << 56)
+            lanes[i] = (this._lanes[base] as u64) | ((this._lanes[base + 1] as u64) << 8) | ((this._lanes[base + 2] as u64) << 16) | ((this._lanes[base + 3] as u64) << 24) | ((this._lanes[base + 4] as u64) << 32) | ((this._lanes[base + 5] as u64) << 40) | ((this._lanes[base + 6] as u64) << 48) | ((this._lanes[base + 7] as u64) << 56)
             i += 1
         }
         return U64x4.fromLanes(lanes)
@@ -394,27 +394,27 @@ export struct U8x32 align(32) {
 }
 
 export struct U32x8 align(32) {
-    private _lanes: [uint32; 8]
-    static fromLanes(lanes: [uint32; 8]) -> U32x8 {
+    private _lanes: [u32; 8]
+    static fromLanes(lanes: [u32; 8]) -> U32x8 {
         return U32x8{_lanes: copy(lanes)}
     }
     swapAdjacent() -> U32x8 {
         return U32x8{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2], this._lanes[5], this._lanes[4], this._lanes[7], this._lanes[6]]}
     }
     widenMulEven(other: U32x8) -> U64x4 {
-        return U64x4.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[4] as uint64) * (other._lanes[4] as uint64), (this._lanes[6] as uint64) * (other._lanes[6] as uint64)])
+        return U64x4.fromLanes([(this._lanes[0] as u64) * (other._lanes[0] as u64), (this._lanes[2] as u64) * (other._lanes[2] as u64), (this._lanes[4] as u64) * (other._lanes[4] as u64), (this._lanes[6] as u64) * (other._lanes[6] as u64)])
     }
 }
 
 export struct U64x4 align(32) {
-    private _lanes: [uint64; 4]
-    static fromLanes(lanes: [uint64; 4]) -> U64x4 {
+    private _lanes: [u64; 4]
+    static fromLanes(lanes: [u64; 4]) -> U64x4 {
         return U64x4{_lanes: copy(lanes)}
     }
-    static load(data: Slice<uint64>, offset: int = 0) -> U64x4 {
+    static load(data: Slice<u64>, offset: int = 0) -> U64x4 {
         return U64x4{_lanes: [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]}
     }
-    store(output: ref Slice<uint64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
         output[offset + 2] = this._lanes[2]
@@ -423,7 +423,7 @@ export struct U64x4 align(32) {
     add(other: U64x4) -> U64x4 {
         return U64x4{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1], this._lanes[2] + other._lanes[2], this._lanes[3] + other._lanes[3]]}
     }
-    reduceAdd() -> uint64 {
+    reduceAdd() -> u64 {
         return this._lanes[0] + this._lanes[1] + this._lanes[2] + this._lanes[3]
     }
     swapAdjacent() -> U64x4 {

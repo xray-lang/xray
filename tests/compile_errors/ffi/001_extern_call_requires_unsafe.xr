@@ -1,5 +1,5 @@
 // 113 FFI: extern calls must cross the unsafe boundary explicitly.
-extern "C" { fn abs(x: int32) -> int32 }
+extern "C" { fn abs(x: i32) -> i32 }
 
 var x = abs(-1)
 print(x)

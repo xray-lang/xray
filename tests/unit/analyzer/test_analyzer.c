@@ -12,6 +12,7 @@
 
 // Only include analyzer headers (avoid GC type conflicts)
 #include "xtype.h"
+#include "xtype_names.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer.h"
 #include "xanalyzer_builtins.h"
@@ -119,6 +120,44 @@ TEST(type_primitives) {
     ASSERT(XR_TYPE_IS_PRIMITIVE(t_int));
     ASSERT(XR_TYPE_IS_PRIMITIVE(t_string));
     ASSERT(!XR_TYPE_IS_PRIMITIVE(t_null));
+}
+
+TEST(type_scalar_alias_identity) {
+    XrType *int_default = xr_type_new_int(NULL);
+    XrType *int_exact = xr_type_new_int_width(NULL, XR_NATIVE_I64);
+    XrType *float_default = xr_type_new_float(NULL);
+    XrType *float_exact = xr_type_new_float_width(NULL, XR_NATIVE_F64);
+    XrType *byte_type = xr_type_new_int_width(NULL, XR_NATIVE_U8);
+    XrType *u8_type = xr_type_new_int_width(NULL, XR_NATIVE_U8);
+
+    ASSERT(int_default == int_exact);
+    ASSERT(float_default == float_exact);
+    ASSERT(xr_type_equals(byte_type, u8_type));
+    ASSERT(int_default->scalar_rep == XR_NATIVE_I64);
+    ASSERT(float_default->scalar_rep == XR_NATIVE_F64);
+    ASSERT(byte_type->scalar_rep == XR_NATIVE_U8);
+
+    ASSERT(xr_type_equals(xr_type_new_array(g_isolate, int_default),
+                          xr_type_new_array(g_isolate, int_exact)));
+    ASSERT(xr_type_equals(xr_type_new_slice(g_isolate, byte_type),
+                          xr_type_new_slice(g_isolate, u8_type)));
+    XrType *default_params[] = {int_default};
+    XrType *exact_params[] = {int_exact};
+    ASSERT(xr_type_equals(xr_type_new_function(g_isolate, default_params, 1, byte_type, false),
+                          xr_type_new_function(g_isolate, exact_params, 1, u8_type, false)));
+
+    ASSERT(xr_type_from_name("int") == XR_TID_INT);
+    ASSERT(xr_type_from_name("i64") == XR_TID_INT);
+    ASSERT(xr_type_from_name("float") == XR_TID_FLOAT);
+    ASSERT(xr_type_from_name("f64") == XR_TID_FLOAT);
+    ASSERT(xr_type_from_name("byte") == XR_TID_U8);
+    ASSERT(xr_type_from_name("u8") == XR_TID_U8);
+    static const char *retired[] = {
+        "int8",   "int16",  "int32",   "int64",   "uint8",   "uint16",
+        "uint32", "uint64", "float32", "float64", "intsize", "uintsize",
+    };
+    for (size_t i = 0; i < sizeof(retired) / sizeof(retired[0]); i++)
+        ASSERT(xr_type_from_name(retired[i]) == -1);
 }
 
 TEST(type_const_capability_is_part_of_identity_and_format) {
@@ -295,11 +334,11 @@ TEST(type_to_string) {
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_u8), "byte") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_u64), "uint64") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_u64), "u64") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_arr), "Array<byte>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int32): int32>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(i32): i32>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte): byte") == 0);
     ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(int, ref string, move bool): ()") == 0);
 }
@@ -1145,6 +1184,13 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
            source_links->memory_effect_id);
     xa_memory_effect_summary_clear(&collision);
 
+    /* A graph namespace import may temporarily consume the exported links
+     * directly. Its id must still be resolved in the exporting analyzer. */
+    const XaMemoryEffectSummary *foreign_memory =
+        xa_symbol_links_memory_effect_summary(source_links);
+    ASSERT(foreign_memory != NULL);
+    ASSERT(foreign_memory->root_count == 0);
+
     xa_symbol_links_copy_export_metadata(target, target_links, source_links);
     const XaEffectSummary *imported_effect =
         xa_effect_db_get(target->effect_db, target_links->effect_id);
@@ -1169,11 +1215,11 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
 TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn keepResult(dst: ref Slice<uint32>) -> int {\n"
-                         "  var filled: Slice<uint32> = dst.fill(7)\n"
+    const char *source = "fn keepResult(dst: ref Slice<u32>) -> int {\n"
+                         "  var filled: Slice<u32> = dst.fill(7)\n"
                          "  return len(filled)\n"
                          "}\n"
-                         "fn discardResult(dst: ref Slice<uint32>) -> int {\n"
+                         "fn discardResult(dst: ref Slice<u32>) -> int {\n"
                          "  dst.fill(0)\n"
                          "  return len(dst)\n"
                          "}\n";
@@ -6032,6 +6078,7 @@ int main(void) {
 
     printf("Type tests:\n");
     RUN_TEST(type_primitives);
+    RUN_TEST(type_scalar_alias_identity);
     RUN_TEST(type_const_capability_is_part_of_identity_and_format);
     RUN_TEST(type_containers);
     RUN_TEST(type_union);

@@ -1,5 +1,5 @@
 @weak
-fn weak_without_export() -> int32 {
+fn weak_without_export() -> i32 {
     return 1
 }
 

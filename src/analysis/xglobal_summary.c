@@ -12,6 +12,7 @@
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
+#include "../frontend/parser/xtype_ref.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,17 +41,26 @@ static uint32_t type_key_folded32(uint64_t h) {
 
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = type_key_fold_u64(h, tref_kind);
-    h = type_key_fold_u64(h, 0);
+    if (tref_kind == XR_TREF_INT || tref_kind == XR_TREF_FLOAT) {
+        h = type_key_fold_u64(h, UINT64_C(0x5343414c4152));
+        h = type_key_fold_u64(h, tref_kind == XR_TREF_INT ? XR_NATIVE_I64 : XR_NATIVE_F64);
+    } else {
+        h = type_key_fold_u64(h, tref_kind);
+        h = type_key_fold_u64(h, 0);
+    }
     h = type_key_fold_u64(h, 0);
     h = type_key_fold_u64(h, 0);
     return type_key_folded32(h);
 }
 
-XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width) {
+XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_rep) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = type_key_fold_u64(h, tref_kind);
-    h = type_key_fold_u64(h, native_width);
+    if (tref_kind == XR_TREF_INT || tref_kind == XR_TREF_INT_WIDTH || tref_kind == XR_TREF_FLOAT ||
+        tref_kind == XR_TREF_FLOAT_WIDTH)
+        h = type_key_fold_u64(h, UINT64_C(0x5343414c4152));
+    else
+        h = type_key_fold_u64(h, tref_kind);
+    h = type_key_fold_u64(h, scalar_rep);
     h = type_key_fold_u64(h, 0);
     h = type_key_fold_u64(h, 0);
     return type_key_folded32(h);
@@ -205,7 +215,7 @@ static uint64_t hash_class_field_summary(uint64_t hash, const XgClassFieldSummar
     hash = hash_u32(hash, row->instance_slot);
     hash = hash_u32(hash, row->flags);
     hash = hash_u8(hash, row->semantic_kind);
-    return hash_u8(hash, row->native_width);
+    return hash_u8(hash, row->scalar_rep);
 }
 
 static uint64_t hash_method_summary(uint64_t hash, const XgMethodSummary *row) {
@@ -3580,7 +3590,7 @@ static void dump_cache_payload_semantic(FILE *out, const XgGlobalEvidence *evide
                 f->type_key, f->target_name_id, f->target_class_id, f->target_interface_id,
                 f->element_type_key, f->key_type_key, f->value_type_key, f->fixed_length,
                 f->decl_ordinal, f->instance_slot, (unsigned) f->semantic_kind,
-                (unsigned) f->native_width, f->flags);
+                (unsigned) f->scalar_rep, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];
@@ -4205,7 +4215,7 @@ static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvi
     for (uint32_t i = 0; i < class_field_count; i++) {
         XgClassFieldSummary row;
         uint32_t semantic_kind = 0;
-        uint32_t native_width = 0;
+        uint32_t scalar_rep = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -4221,13 +4231,13 @@ static bool materialize_payload_semantic_cursor(const char **cursor, XgGlobalEvi
                    &row.name_id, &row.type_key, &row.target_name_id, &row.target_class_id,
                    &row.target_interface_id, &row.element_type_key, &row.key_type_key,
                    &row.value_type_key, &row.fixed_length, &row.decl_ordinal, &row.instance_slot,
-                   &semantic_kind, &native_width, &row.flags, &trailing) != 18)
+                   &semantic_kind, &scalar_rep, &row.flags, &trailing) != 18)
             return false;
         if (semantic_kind == 0 || semantic_kind > XG_CLASS_FIELD_TYPE_DYNAMIC ||
-            native_width > UINT8_MAX)
+            scalar_rep > UINT8_MAX)
             return false;
         row.semantic_kind = (uint8_t) semantic_kind;
-        row.native_width = (uint8_t) native_width;
+        row.scalar_rep = (uint8_t) scalar_rep;
         if (!xg_global_evidence_add_class_field(evidence, &row))
             return false;
     }
@@ -6333,7 +6343,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 f->type_key, f->target_name_id, f->target_class_id, f->target_interface_id,
                 f->element_type_key, f->key_type_key, f->value_type_key, f->fixed_length,
                 f->decl_ordinal, f->instance_slot, (unsigned) f->semantic_kind,
-                (unsigned) f->native_width, f->flags);
+                (unsigned) f->scalar_rep, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nmethods; i++) {
         const XgMethodSummary *m = &evidence->methods[i];

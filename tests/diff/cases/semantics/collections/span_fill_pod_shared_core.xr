@@ -1,9 +1,9 @@
 // anchor: span-fill-pod-shared-core
 fn main() {
-    var words = Array<uint32>(4, 0)
-    var wordSlice: Slice<uint32> = words[:]
-    var wordWindow: Slice<uint32> = wordSlice[1:3]
-    var filledWords: Slice<uint32> = wordWindow.fill(9)
+    var words = Array<u32>(4, 0)
+    var wordSlice: Slice<u32> = words[:]
+    var wordWindow: Slice<u32> = wordSlice[1:3]
+    var filledWords: Slice<u32> = wordWindow.fill(9)
     print(len(filledWords))
     print(int(words[0]))
     print(int(words[1]))
@@ -19,8 +19,8 @@ fn main() {
     var charSlice: Slice<rune> = chars[:]
     charSlice.fill('z')
     print(chars[0].toString() + chars[1].toString() + chars[2].toString())
-    var zeros = Array<uint16>(3, 7)
-    var zeroSlice: Slice<uint16> = zeros[:]
+    var zeros = Array<u16>(3, 7)
+    var zeroSlice: Slice<u16> = zeros[:]
     zeroSlice.fill(0)
     print(int(zeros[0]) + int(zeros[1]) + int(zeros[2]))
 }

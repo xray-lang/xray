@@ -22,7 +22,7 @@
     {
       "heading": "Example",
       "code": [
-        "import { Capabilities, U32x4 } from simd\n\nfn main() {\n    var words = Array<uint32>([1, 2, 3, 4])\n    var view: Slice<uint32> = words[:]\n    var result = U32x4.load(view).add(U32x4.splat(10))\n\n    print(result.extract(2))\n    print(Capabilities.nativeBytes() >= 16)\n}\n\nmain()"
+        "import { Capabilities, U32x4 } from simd\n\nfn main() {\n    var words = Array<u32>([1, 2, 3, 4])\n    var view: Slice<u32> = words[:]\n    var result = U32x4.load(view).add(U32x4.splat(10))\n\n    print(result.extract(2))\n    print(Capabilities.nativeBytes() >= 16)\n}\n\nmain()"
       ]
     }
   ]

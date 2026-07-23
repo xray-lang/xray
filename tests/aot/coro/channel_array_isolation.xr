@@ -1,7 +1,7 @@
 fn worker(ch: Channel<Array<int>>) -> int {
-    var xs = match (ch.recv()) {
+    var xs: Array<int> = match (ch.recv()) {
         Recv.Value(value) -> value
-        _ -> []
+        _ -> Array<int>(0)
     }
     xs.push(99)
     Coro.yield()

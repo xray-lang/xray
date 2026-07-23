@@ -220,8 +220,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `rune`
+`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
+`float` `f32` `f64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
@@ -263,9 +263,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
-- 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
-- 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：`i64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: i8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -284,7 +284,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-字面量类型为 `float`（= `float64`，IEEE-754 双精度）。
+字面量类型为 `float`（= `f64`，IEEE-754 双精度）。
 
 ```xray
 3.14
@@ -572,8 +572,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 类别 | 示例 |
 |--|--|
 | Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
-| 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
-| 精确浮点 | `float32`、`float64` |
+| 精确整数 | `i8`、`i16`、`i32`、`i64`、`byte`..`u64` |
+| 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
@@ -584,7 +584,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
@@ -595,25 +595,25 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类型 | 范围 | 别名 |
 |--|--|--|
-| `int8` | `[-128, 127]` | — |
-| `int16` | `[-32768, 32767]` | — |
-| `int32` | `[-2³¹, 2³¹-1]` | — |
-| `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `byte`..`uint64` | 无符号对应 | — |
+| `i8` | `[-128, 127]` | — |
+| `i16` | `[-32768, 32767]` | — |
+| `i32` | `[-2³¹, 2³¹-1]` | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
+| `byte`..`u64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `i32` 变量），但直接字面量必须落在目标范围内（`var x: i8 = 200` 编译拒绝）。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`byte + byte -> byte`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
-- 静态类型为 `byte`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: byte = 255 + 1` 得到 `0`。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
 
 | 类型 | 标准 |
 |--|--|
-| `float32` | IEEE-754 单精度 |
-| `float64` | IEEE-754 双精度；`float` 的别名 |
+| `f32` | IEEE-754 单精度 |
+| `f64` | IEEE-754 双精度；`float` 的别名 |
 
 字面量默认 `float`。
 
@@ -659,7 +659,7 @@ if (len(s) != 0) { }     // OK
 
 #### 2.3.5 `rune`
 
-`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `u32` 的别名。
 
 ```xray
 var a: rune = 'a'
@@ -670,7 +670,7 @@ print(smile.toUInt32())   // 128512
 ```
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
+- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
 - 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
@@ -693,8 +693,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 | 类型 | C ABI 含义 | 备注 |
 |--|--|--|
-| `uintsize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `uint64` 代用 |
-| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `int64` 代用 |
+| `usize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `u64` 代用 |
+| `isize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `i64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
 | `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
@@ -703,7 +703,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 
@@ -717,7 +717,7 @@ unsafe {
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
-`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
+`usize` / `isize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
@@ -1065,7 +1065,7 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 源 | 目标 | 允许 |
 |--|--|--|
 | `int` | `float` | ✅ |
-| `int8` | `int` (= `int64`) | ✅ |
+| `i8` | `int` (= `i64`) | ✅ |
 | `T` | `T?` | ✅ |
 | `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
 | `null` | `T?` | ✅ |
@@ -1238,7 +1238,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 
@@ -1300,7 +1300,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- 结果类型为 `float`/`float32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
+- 结果类型为 `float`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
@@ -2357,9 +2357,9 @@ greet()                   // 必须显式调用
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-    fn cos(x: float64) -> float64
+    fn cos(x: f64) -> f64
 }
 
 var p = unsafe { malloc(4) }
@@ -2378,8 +2378,8 @@ C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` �
 import mem
 
 struct CHeader {
-    tag: uint8
-    count: uint32
+    tag: u8
+    count: u32
 }
 
 print(mem.sizeOf<CHeader>())
@@ -2394,7 +2394,7 @@ print(mem.offsetOf<CHeader>("count"))
 - C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
 - 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
 - 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
-- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
@@ -2403,13 +2403,13 @@ extern "C" {
     fn bsearch(
         key: Ptr<byte>,
         base: Ptr<byte>,
-        count: uintsize,
-        size: uintsize,
-        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+        count: usize,
+        size: usize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>
     ) -> Ptr<byte>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
+fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
     return 0
 }
 
@@ -2421,7 +2421,7 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
 ```xray
-fn add(a: int32, b: int32) -> int32 {
+fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
 
@@ -2439,7 +2439,7 @@ header = true
 规则：
 - `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
 - `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
-- 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 当前支持的导出边界类型是 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
 - `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
 - export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
@@ -5136,7 +5136,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | 方法 | 签名 | 说明 |
 |--|--|--|
 | `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
-| `toUInt32()` | `() -> uint32` | 返回 Unicode scalar code point |
+| `toUInt32()` | `() -> u32` | 返回 Unicode scalar code point |
 | `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
 | `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
 | `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
@@ -5490,8 +5490,8 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **Descriptor（8 字节）**：`tag: byte`、`flags: byte`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
-- **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
+- **Descriptor（8 字节）**：`tag: byte`、`flags: byte`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
 - **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
 
@@ -5506,7 +5506,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
-Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<uint32>` 混淆。
+Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
 
 ### 16.2 内存分配
 
@@ -6157,8 +6157,8 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `false` | §1.6.4 |
 | `final` | §5.3 |
 | `float` | §2.3.2 |
-| `float32` | §2.3.2 |
-| `float64` | §2.3.2 |
+| `f32` | §2.3.2 |
+| `f64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
@@ -6167,10 +6167,10 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `import` | §11 |
 | `in` | §4.4 |
 | `int` | §2.3.1 |
-| `int16` | §2.3.1 |
-| `int32` | §2.3.1 |
-| `int64` | §2.3.1 |
-| `int8` | §2.3.1 |
+| `i16` | §2.3.1 |
+| `i32` | §2.3.1 |
+| `i64` | §2.3.1 |
+| `i8` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
 | `match` | §3.13 / §4.5 |
@@ -6193,10 +6193,10 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `uint16` | §2.3.1 |
-| `uint32` | §2.3.1 |
-| `uint64` | §2.3.1 |
-| `uint8` | §2.3.1 |
+| `u16` | §2.3.1 |
+| `u32` | §2.3.1 |
+| `u64` | §2.3.1 |
+| `u8` | §2.3.1 |
 | `union` | §5.2.9 |
 | `unsafe` | §3.2 / §5.2 |
 | `var` | §5.1 |
@@ -6332,7 +6332,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
 | **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
-| **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
+| **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `u32` 别名（见 §2.3.5） |
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |

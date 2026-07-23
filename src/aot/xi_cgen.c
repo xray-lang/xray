@@ -99,40 +99,40 @@ static const char *ctype_str(XrRep rep) {
     }
 }
 
-static const char *cg_native_int_ctype(uint8_t native_width) {
-    return xaot_c_type_for_native_int_type(native_width);
+static const char *cg_native_int_ctype(uint8_t scalar_rep) {
+    return xaot_c_type_for_native_int_type(scalar_rep);
 }
 
-static uint8_t cg_narrow_int_native_width(const XiValue *v) {
+static uint8_t cg_narrow_int_scalar_rep(const XiValue *v) {
     if (!v || !xi_generated_op_result_native_type(v->op) || !v->type ||
-        v->type->kind != XR_KIND_INT || v->type->native_width == 0)
-        return 0;
-    return v->type->native_width;
+        v->type->kind != XR_KIND_INT || v->type->scalar_rep == XR_NATIVE_I64)
+        return XR_SCALAR_REP_NONE;
+    return v->type->scalar_rep;
 }
 
-static bool cg_const_int_fits_native_width(int64_t value, uint8_t native_width) {
-    return xaot_native_int_const_fits(native_width, value);
+static bool cg_const_int_fits_scalar_rep(int64_t value, uint8_t scalar_rep) {
+    return xaot_native_int_const_fits(scalar_rep, value);
 }
 
-static bool cg_value_narrow_local_native_width(const XiValue *v, uint8_t depth,
-                                               uint8_t *out_native_width) {
+static bool cg_value_narrow_local_scalar_rep(const XiValue *v, uint8_t depth,
+                                             uint8_t *out_scalar_rep) {
     if (!v || cg_rep(v) != XR_REP_I64 || depth > 8)
         return false;
 
-    uint8_t op_width = cg_narrow_int_native_width(v);
-    if (op_width != 0) {
-        if (out_native_width)
-            *out_native_width = op_width;
+    uint8_t op_width = cg_narrow_int_scalar_rep(v);
+    if (op_width != XR_SCALAR_REP_NONE) {
+        if (out_scalar_rep)
+            *out_scalar_rep = op_width;
         return true;
     }
 
     if (v->op != XI_PHI)
         return false;
 
-    uint8_t phi_width = 0;
-    if (v->type && v->type->kind == XR_KIND_INT && v->type->native_width != 0 &&
-        cg_native_int_ctype(v->type->native_width))
-        phi_width = v->type->native_width;
+    uint8_t phi_width = XR_SCALAR_REP_NONE;
+    if (v->type && v->type->kind == XR_KIND_INT && v->type->scalar_rep != XR_NATIVE_I64 &&
+        cg_native_int_ctype(v->type->scalar_rep))
+        phi_width = v->type->scalar_rep;
 
     for (uint16_t i = 0; i < v->nargs; i++) {
         const XiValue *arg = v->args[i];
@@ -141,33 +141,33 @@ static bool cg_value_narrow_local_native_width(const XiValue *v, uint8_t depth,
         if (arg->op == XI_CONST)
             continue;
         uint8_t arg_width = 0;
-        if (!cg_value_narrow_local_native_width(arg, (uint8_t) (depth + 1), &arg_width) ||
+        if (!cg_value_narrow_local_scalar_rep(arg, (uint8_t) (depth + 1), &arg_width) ||
             !cg_native_int_ctype(arg_width))
             return false;
-        if (phi_width == 0)
+        if (phi_width == XR_SCALAR_REP_NONE)
             phi_width = arg_width;
         else if (arg_width != phi_width)
             return false;
     }
 
-    if (phi_width == 0)
+    if (phi_width == XR_SCALAR_REP_NONE)
         return false;
 
     for (uint16_t i = 0; i < v->nargs; i++) {
         const XiValue *arg = v->args[i];
-        if (arg && arg->op == XI_CONST && !cg_const_int_fits_native_width(arg->aux_int, phi_width))
+        if (arg && arg->op == XI_CONST && !cg_const_int_fits_scalar_rep(arg->aux_int, phi_width))
             return false;
     }
 
-    if (out_native_width)
-        *out_native_width = phi_width;
+    if (out_scalar_rep)
+        *out_scalar_rep = phi_width;
     return true;
 }
 
 static const char *local_ctype_str(const XiValue *v) {
-    uint8_t native_width = 0;
-    if (cg_value_narrow_local_native_width(v, 0, &native_width)) {
-        const char *ctype = cg_native_int_ctype(native_width);
+    uint8_t scalar_rep = XR_SCALAR_REP_NONE;
+    if (cg_value_narrow_local_scalar_rep(v, 0, &scalar_rep)) {
+        const char *ctype = cg_native_int_ctype(scalar_rep);
         if (ctype)
             return ctype;
     }
@@ -411,6 +411,29 @@ static const XaotSliceAccessPlan *cg_span_access_plan(XiCgenCtx *ctx, const XiVa
 static bool cg_span_plan_drops(XiCgenCtx *ctx, const XiValue *value, uint8_t kind, uint32_t drops) {
     const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, value, kind);
     return plan && (plan->eliminated_checks & drops) == drops;
+}
+
+static bool cg_span_plan_readonly_proven(XiCgenCtx *ctx, const XiValue *value, uint8_t kind) {
+    const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, value, kind);
+    return plan && (plan->evidence & XAOT_SLICE_EV_READONLY) != 0;
+}
+
+static bool cg_emit_span_readonly_void_trap(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                            uint8_t kind) {
+    if (!cg_span_plan_readonly_proven(ctx, value, kind))
+        return false;
+    fprintf(out, "({ xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                 "XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); XR_NULL_VAL; })");
+    return true;
+}
+
+static bool cg_emit_span_readonly_span_trap(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                            uint8_t kind) {
+    if (!cg_span_plan_readonly_proven(ctx, value, kind))
+        return false;
+    fprintf(out, "({ xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                 "XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG); (xr_span_t){0}; })");
+    return true;
 }
 
 #include "xi_cgen_type_helpers.inc.c"
@@ -2249,10 +2272,10 @@ static bool cg_const_literal_is_static_raw_scalar_kind(const XiConstLiteral *lit
     switch (lit->kind) {
         case XI_CONST_LITERAL_INT:
             return lit->type && lit->type->kind == XR_KIND_INT &&
-                   lit->type->native_width == XR_NATIVE_I64;
+                   lit->type->scalar_rep == XR_NATIVE_I64;
         case XI_CONST_LITERAL_FLOAT:
             return lit->type && lit->type->kind == XR_KIND_FLOAT &&
-                   lit->type->native_width != XR_NATIVE_F32;
+                   lit->type->scalar_rep != XR_NATIVE_F32;
         case XI_CONST_LITERAL_BOOL:
         case XI_CONST_LITERAL_CHAR:
             return true;
@@ -3531,8 +3554,7 @@ static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiVal
         have_rep = true;
     } else {
         uint8_t code = 0;
-        if (cg_value_narrow_local_native_width(v, 0, &code) &&
-            xaot_rep_from_native_type(code, &rep))
+        if (cg_value_narrow_local_scalar_rep(v, 0, &code) && xaot_rep_from_native_type(code, &rep))
             have_rep = true;
     }
     if (!have_rep)
@@ -3675,7 +3697,7 @@ static bool cg_shift_const_int_value(const XiValue *value, int64_t *out) {
 static bool cg_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -3699,7 +3721,7 @@ static bool emit_native_unsigned_const_shift_expr(XiCgenCtx *ctx, FILE *out, con
 
     const char *ctype = NULL;
     int width = 64;
-    switch (v->args[0]->type->native_width) {
+    switch (v->args[0]->type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -8049,7 +8071,7 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
 }
 
 static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
-    return f && !f->export_plan && (f->link_plan || f->entry_plan);
+    return f && !f->export_plan && !f->entry_plan && f->link_plan;
 }
 
 static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrapper) {
@@ -8066,6 +8088,17 @@ static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrap
         fprintf(out, "XRT_ATTR_WEAK ");
     if ((f->link_plan && f->link_plan->used) || f->entry_plan)
         fprintf(out, "XRT_ATTR_USED ");
+}
+
+static void emit_aot_entry_attrs(FILE *out, const XiFunc *f) {
+    if (!f || !f->entry_plan)
+        return;
+    if (f->entry_plan->section) {
+        fprintf(out, "XRT_ATTR_SECTION(");
+        emit_c_string_literal(out, f->entry_plan->section);
+        fprintf(out, ") ");
+    }
+    fprintf(out, "XRT_ATTR_USED ");
 }
 
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -8320,12 +8353,39 @@ static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
     return cg_c_export_xray_func_signature_supported(ctx, f);
 }
 
+static bool cg_func_can_have_entry_stub(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !f->entry_plan || !f->entry_plan->symbol || !f->entry_plan->symbol[0] ||
+        f->is_extern || !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
+        cg_func_needs_aot_coro_ctx(ctx, f))
+        return false;
+    return cg_c_export_xray_func_signature_supported(ctx, f);
+}
+
 static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const char *prefix, bool with_attrs) {
     if (with_attrs)
         emit_aot_symbol_attrs(out, f, true);
     emit_c_export_return_c_type(ctx, out, f, prefix);
     fprintf(out, " %s(", f->export_plan->symbol);
+    if (f->nparams == 0) {
+        fprintf(out, "void");
+    } else {
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            emit_c_export_param_c_type(ctx, out, f, prefix, i);
+            fprintf(out, " p%u", i);
+        }
+    }
+    fprintf(out, ")");
+}
+
+static void emit_entry_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                      const char *prefix, bool with_attrs) {
+    if (with_attrs)
+        emit_aot_entry_attrs(out, f);
+    emit_c_export_return_c_type(ctx, out, f, prefix);
+    fprintf(out, " %s(", f->entry_plan->symbol);
     if (f->nparams == 0) {
         fprintf(out, "void");
     } else {
@@ -8546,6 +8606,68 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     fprintf(out, ";\n");
     fprintf(out, "}\n\n");
+}
+
+static void emit_entry_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const char *prefix) {
+    const XrType *ret_type;
+    const char *ret_c_type;
+    XrRep ret_rep;
+    XrRep c_ret_rep;
+
+    if (!f || !f->entry_plan)
+        return;
+    if (!cg_func_can_have_entry_stub(ctx, f)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: freestanding.entry function '%s' must be a top-level "
+                "noncapturing non-coroutine function with a supported C ABI signature\n",
+                f->name ? f->name : "<anonymous>");
+        ctx->error = true;
+        return;
+    }
+
+    emit_entry_stub_signature(ctx, out, f, prefix, true);
+    fprintf(out, " {\n");
+
+    ret_type = f->return_type;
+    if (!ret_type || ret_type->kind == XR_KIND_UNIT) {
+        fprintf(out, "    ");
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
+        fprintf(out, ";\n}\n\n");
+        return;
+    }
+
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret)) {
+        fprintf(out, "    return ");
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
+        fprintf(out, ";\n}\n\n");
+        return;
+    }
+
+    ret_c_type = cg_cfn_value_c_type(ret_type, true);
+    ret_rep = cg_func_return_abi_rep(ctx, f);
+    c_ret_rep = cg_cfn_value_storage_rep(ret_type, true);
+
+    fprintf(out, "    return ");
+    if (ret_type->kind == XR_KIND_POINTER) {
+        if (ret_rep == XR_REP_PTR || ret_rep == XR_REP_RAWPTR) {
+            fprintf(out, "(%s)", ret_c_type);
+            emit_c_export_target_call_expr(ctx, out, f, prefix);
+        } else {
+            fprintf(out, "(%s)(uintptr_t)(", ret_c_type);
+            emit_c_export_target_call_expr(ctx, out, f, prefix);
+            fprintf(out, ")");
+        }
+    } else {
+        const char *suffix;
+        fprintf(out, "(%s)(", ret_c_type);
+        suffix = emit_conversion_prefix_ctx(ctx, out, ret_type, ret_rep, c_ret_rep);
+        emit_c_export_target_call_expr(ctx, out, f, prefix);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ")");
+    }
+    fprintf(out, ";\n}\n\n");
 }
 
 static bool cg_func_is_module_export(const XiCgenCtx *ctx, const XiFunc *f) {
@@ -9247,6 +9369,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     emit_cfn_stub_definition(ctx, out, f, prefix);
     emit_c_export_stub_definition(ctx, out, f, prefix);
+    emit_entry_stub_definition(ctx, out, f, prefix);
 
     if (native_receiver && boxed_adapter) {
         ctx->stats.boxed_adapters++;
@@ -9510,6 +9633,10 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
     if (cg_func_can_have_c_export_stub(ctx, f)) {
         emit_c_export_stub_signature(ctx, out, f, prefix, false);
+        fprintf(out, ";\n");
+    }
+    if (cg_func_can_have_entry_stub(ctx, f)) {
+        emit_entry_stub_signature(ctx, out, f, prefix, false);
         fprintf(out, ";\n");
     }
 

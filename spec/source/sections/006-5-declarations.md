@@ -249,9 +249,9 @@ greet()                   // 必须显式调用
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-    fn cos(x: float64) -> float64
+    fn cos(x: f64) -> f64
 }
 
 var p = unsafe { malloc(4) }
@@ -270,8 +270,8 @@ C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` �
 import mem
 
 struct CHeader {
-    tag: uint8
-    count: uint32
+    tag: u8
+    count: u32
 }
 
 print(mem.sizeOf<CHeader>())
@@ -286,7 +286,7 @@ print(mem.offsetOf<CHeader>("count"))
 - C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
 - 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
 - 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
-- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
@@ -295,13 +295,13 @@ extern "C" {
     fn bsearch(
         key: Ptr<byte>,
         base: Ptr<byte>,
-        count: uintsize,
-        size: uintsize,
-        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+        count: usize,
+        size: usize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>
     ) -> Ptr<byte>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
+fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
     return 0
 }
 
@@ -313,7 +313,7 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
 ```xray
-fn add(a: int32, b: int32) -> int32 {
+fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
 
@@ -331,7 +331,7 @@ header = true
 规则：
 - `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
 - `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
-- 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 当前支持的导出边界类型是 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
 - `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
 - export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
@@ -1331,9 +1331,9 @@ An `extern "C"` block declares external **function symbols** that share the C AB
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-    fn cos(x: float64) -> float64
+    fn cos(x: f64) -> f64
 }
 
 var p = unsafe { malloc(4) }
@@ -1352,8 +1352,8 @@ C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native
 import mem
 
 struct CHeader {
-    tag: uint8
-    count: uint32
+    tag: u8
+    count: u32
 }
 
 print(mem.sizeOf<CHeader>())
@@ -1368,7 +1368,7 @@ Rules:
 - C output pointers write raw `Buffer` storage first. A success path may materialize `T` only with `unsafe { mem.assumeInitialized<T>(move buffer) }`, after exact size/alignment, complete output validity, success-path dominance, and header-layout evidence are proven. Partial or failed writes never produce `T`.
 - Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
 - Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
-- The aligned VM/AOT boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callbacks use `CFn<(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
 ```xray
@@ -1376,13 +1376,13 @@ extern "C" {
     fn bsearch(
         key: Ptr<byte>,
         base: Ptr<byte>,
-        count: uintsize,
-        size: uintsize,
-        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+        count: usize,
+        size: usize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>
     ) -> Ptr<byte>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
+fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
     return 0
 }
 
@@ -1394,7 +1394,7 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
 
 ```xray
-fn add(a: int32, b: int32) -> int32 {
+fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
 ```

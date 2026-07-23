@@ -2,20 +2,20 @@ import mem
 
 struct Task208Function {
     code: Ptr<byte>
-    codeSize: uintsize
-    locals: [uint32; 4]
-    constants: [uint64; 4]
+    codeSize: usize
+    locals: [u32; 4]
+    constants: [u64; 4]
     next: Ptr<Task208Function>
 }
 
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>) -> ()
 }
 
-fn functionReleaseLike(count: uintsize) -> uintsize {
-    var released: uintsize = 0
-    var index: uintsize = 0
+fn functionReleaseLike(count: usize) -> usize {
+    var released: usize = 0
+    var index: usize = 0
     while (index < count) {
         var block = unsafe { malloc(mem.sizeOf<Task208Function>()) }
         unsafe {

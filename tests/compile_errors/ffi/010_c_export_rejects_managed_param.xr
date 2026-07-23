@@ -1,5 +1,5 @@
 @c_export("xr_bad_string")
-fn bad(s: string) -> int32 {
+fn bad(s: string) -> i32 {
     return 1
 }
 

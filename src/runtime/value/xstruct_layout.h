@@ -130,14 +130,14 @@ XR_FUNC bool xr_type_has_static_field_offset(const XrTargetDataLayout *target_la
                                              uint32_t *out_offset);
 
 /*
- * Convert XrTypeKind + native_width to XrNativeType for value struct fields.
- * native_width stores XrNativeType directly (0 = use default for kind).
+ * Convert XrTypeKind + scalar_rep to XrNativeType for value struct fields.
+ * scalar_rep stores XrNativeType directly (0 = use default for kind).
  * Returns -1 if the type is not valid for struct fields.
  *
  * Implemented in xstruct_layout.c to avoid pulling xtype.h into this
  * header (xtype.h already includes xstruct_layout.h, so a back-reference
  * here would form an include cycle).
  */
-XR_FUNC int xr_type_kind_to_native(int kind, uint8_t native_width);
+XR_FUNC int xr_type_kind_to_native(int kind, uint8_t scalar_rep);
 
 #endif  // XSTRUCT_LAYOUT_H

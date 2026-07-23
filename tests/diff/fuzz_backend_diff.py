@@ -29,16 +29,16 @@ import tempfile
 # Numeric types and their value ranges (inclusive) for literal generation.
 INT_TYPES = {
     "int": (-(2**62), 2**62),
-    "int8": (-128, 127),
-    "int16": (-32768, 32767),
-    "int32": (-(2**31), 2**31 - 1),
-    "int64": (-(2**62), 2**62),
-    "uint8": (0, 255),
-    "uint16": (0, 65535),
-    "uint32": (0, 2**32 - 1),
-    "uint64": (0, 2**63),
+    "i8": (-128, 127),
+    "i16": (-32768, 32767),
+    "i32": (-(2**31), 2**31 - 1),
+    "i64": (-(2**62), 2**62),
+    "u8": (0, 255),
+    "u16": (0, 65535),
+    "u32": (0, 2**32 - 1),
+    "u64": (0, 2**63),
 }
-FLOAT_TYPES = ("float", "float32", "float64")
+FLOAT_TYPES = ("float", "f32", "f64")
 
 # Interesting float literals that exercise formatting / rounding boundaries.
 FLOAT_LITERALS = [

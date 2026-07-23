@@ -22,19 +22,18 @@ static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 2, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 4, .frozen = true};
-static XrType stub_i8 = {
-    .kind = XR_KIND_INT, .id = 5, .frozen = true, .native_width = XR_NATIVE_I8};
+static XrType stub_i8 = {.kind = XR_KIND_INT, .id = 5, .frozen = true, .scalar_rep = XR_NATIVE_I8};
 static XrType stub_u16 = {
-    .kind = XR_KIND_INT, .id = 11, .frozen = true, .native_width = XR_NATIVE_U16};
+    .kind = XR_KIND_INT, .id = 11, .frozen = true, .scalar_rep = XR_NATIVE_U16};
 static XrType stub_u64 = {
-    .kind = XR_KIND_INT, .id = 6, .frozen = true, .native_width = XR_NATIVE_U64};
+    .kind = XR_KIND_INT, .id = 6, .frozen = true, .scalar_rep = XR_NATIVE_U64};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
 static XrType stub_usize = {
-    .kind = XR_KIND_INT, .id = 14, .frozen = true, .native_width = XR_NATIVE_USIZE};
+    .kind = XR_KIND_INT, .id = 14, .frozen = true, .scalar_rep = XR_NATIVE_USIZE};
 static XrType stub_pointer = {
-    .kind = XR_KIND_POINTER, .id = 15, .frozen = true, .native_width = XR_NATIVE_POINTER};
+    .kind = XR_KIND_POINTER, .id = 15, .frozen = true, .scalar_rep = XR_NATIVE_POINTER};
 static XrType stub_array_error = {
     .kind = XR_KIND_ARRAY, .id = 13, .frozen = true, .container = {.element_type = &stub_error}};
 static XrType stub_array_i8 = {
@@ -1127,7 +1126,7 @@ TEST(exact_bit_receiver_result_width_mismatch_fails) {
     xi_func_free(f);
 }
 
-TEST(exact_bit_native_width_tag_mismatch_fails) {
+TEST(exact_bit_scalar_rep_tag_mismatch_fails) {
     XiFunc *f = make_func("exact_bit_aux_width");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
@@ -1826,7 +1825,7 @@ int main(void) {
     run_typed_array_store_u64_without_narrow_passes();
     run_exact_bit_rotate_accepts_canonical_int_width_tag();
     run_exact_bit_receiver_result_width_mismatch_fails();
-    run_exact_bit_native_width_tag_mismatch_fails();
+    run_exact_bit_scalar_rep_tag_mismatch_fails();
     run_duplicate_value_id_fails();
     run_phi_arg_count_mismatch_fails();
     run_use_not_dominated_by_def_fails();

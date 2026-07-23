@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<uint32> must stay as uint32_t storage with direct raw access.
+# Local Array<u32> must stay as uint32_t storage with direct raw access.
 hot_function=^array_u32_sum_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_local_count=2

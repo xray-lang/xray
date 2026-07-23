@@ -4,7 +4,7 @@
 // MutPtr args flow into Ptr params via mut->const coercion.
 import mem
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 

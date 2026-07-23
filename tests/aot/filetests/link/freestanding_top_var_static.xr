@@ -6,8 +6,8 @@ var NOTHING = null
 var LABEL: string = "boot"
 var OFFSET: int = -3
 var DRIFT: float = -0.25
-var WORD: intsize = -5
-var COUNT: uintsize = 8
+var WORD: isize = -5
+var COUNT: usize = 8
 
 fn xray_top_var_static() -> int {
     COUNTER = COUNTER + 2

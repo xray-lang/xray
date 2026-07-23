@@ -654,17 +654,17 @@ XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
 
     int target_kind = -1;
     switch (type_id) {
-        case XR_TID_INT8:
-        case XR_TID_UINT8:
-        case XR_TID_INT16:
-        case XR_TID_UINT16:
-        case XR_TID_INT32:
-        case XR_TID_UINT32:
+        case XR_TID_I8:
+        case XR_TID_U8:
+        case XR_TID_I16:
+        case XR_TID_U16:
+        case XR_TID_I32:
+        case XR_TID_U32:
         case XR_TID_INT:
-        case XR_TID_UINT64:
+        case XR_TID_U64:
             target_kind = XR_KIND_INT;
             break;
-        case XR_TID_FLOAT32:
+        case XR_TID_F32:
         case XR_TID_FLOAT:
             target_kind = XR_KIND_FLOAT;
             break;

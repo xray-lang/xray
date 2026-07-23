@@ -121,7 +121,7 @@ def case_dir_key(case_file: Path) -> str:
             return cached
 
     chunks: list[str] = []
-    for pattern in ("*.xr", "*.args"):
+    for pattern in ("*.xr", "*.args", "*.toml"):
         for file in sorted(directory.glob(pattern)):
             if not file.is_file():
                 continue
@@ -342,6 +342,14 @@ def run_negative(config: RunnerConfig, order: int, case: Path) -> CaseResult:
             return CaseResult(order, "pass", prefix + "PASS (cached rejection)")
 
         out = neg_dir / f"aot.{os.getpid()}.{threading.get_ident()}"
+        build_case = case
+        companion_manifest = case.with_suffix(".toml")
+        if companion_manifest.is_file():
+            project_dir = neg_dir / "project"
+            project_dir.mkdir(parents=True, exist_ok=True)
+            build_case = project_dir / case.name
+            shutil.copy2(case, build_case)
+            shutil.copy2(companion_manifest, project_dir / "xray.toml")
         cmd = [
             str(config.xray),
             "build",
@@ -350,7 +358,7 @@ def run_negative(config: RunnerConfig, order: int, case: Path) -> CaseResult:
             config.aot_opt,
             "--cache-dir",
             str(config.aot_cache),
-            str(case),
+            str(build_case),
             "-o",
             str(out),
         ]

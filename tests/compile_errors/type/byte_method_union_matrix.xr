@@ -3,5 +3,5 @@ fn unionArray(values: Array<byte> | Array<int>, src: Slice<byte>) {
 }
 
 fn unionSlice(view: Slice<byte> | Slice<int>) -> int {
-    return int(view.load<uint16>(0, Endian.LE))
+    return int(view.load<u16>(0, Endian.LE))
 }

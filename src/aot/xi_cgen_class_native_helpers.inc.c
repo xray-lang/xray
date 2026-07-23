@@ -3941,11 +3941,27 @@ static const XiClassData *cg_func_param_native_class_data(XiCgenCtx *ctx, const 
     return cg_class_native_data_for_abi_type(ctx, param_type);
 }
 
+static const XiClassData *cg_func_param_native_class_place_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                                uint16_t param_idx) {
+    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
+    if (!f || param_idx >= f->nparams || !plan || !plan->abi.params ||
+        param_idx >= plan->abi.nparams)
+        return NULL;
+    const XaotAbiSlot *slot = &plan->abi.params[param_idx];
+    if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
+        xaot_value_storage_rep(slot->pointee_rep) != XR_REP_PTR)
+        return NULL;
+    const XrType *param_type =
+        f->params && f->params[param_idx] ? f->params[param_idx]->type : NULL;
+    return cg_class_native_data_for_abi_type(ctx, param_type);
+}
+
 static bool cg_func_has_native_class_ptr_param(XiCgenCtx *ctx, const XiFunc *f) {
     if (!f)
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (cg_func_param_native_class_data(ctx, f, i))
+        if (cg_func_param_native_class_data(ctx, f, i) ||
+            cg_func_param_native_class_place_data(ctx, f, i))
             return true;
     }
     return false;
@@ -3964,21 +3980,30 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     fprintf(out, ") {\n");
 
     for (uint16_t i = 0; i < f->nparams; i++) {
-        const XiClassData *cd = cg_func_param_native_class_data(ctx, f, i);
+        const XiClassData *place_cd = cg_func_param_native_class_place_data(ctx, f, i);
+        const XiClassData *cd = place_cd ? place_cd : cg_func_param_native_class_data(ctx, f, i);
         if (!cd)
             continue;
         const char *type_prefix = cg_class_native_prefix_for_data(ctx, cd, prefix);
+        if (place_cd)
+            fprintf(out, "    XrValue *_p%u_place = (XrValue *)(uintptr_t)XR_TO_INT(p%u);\n", i, i);
         fprintf(out, "    ");
         emit_class_native_type_name(out, type_prefix, cd->class_name);
         fprintf(out, " *_p%u_ptr = NULL;\n", i);
         fprintf(out, "    ");
-        char boxed_expr[32];
-        snprintf(boxed_expr, sizeof(boxed_expr), "p%u", i);
+        char boxed_expr[48];
+        if (place_cd)
+            snprintf(boxed_expr, sizeof(boxed_expr), "(*_p%u_place)", i);
+        else
+            snprintf(boxed_expr, sizeof(boxed_expr), "p%u", i);
         emit_class_native_instance_guard(ctx, out, cd, boxed_expr);
         fprintf(out, "\n");
         fprintf(out, "        _p%u_ptr = (", i);
         emit_class_native_type_name(out, type_prefix, cd->class_name);
-        fprintf(out, "*)p%u.ptr;\n", i);
+        if (place_cd)
+            fprintf(out, "*)(*_p%u_place).ptr;\n", i);
+        else
+            fprintf(out, "*)p%u.ptr;\n", i);
     }
 
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
@@ -3998,6 +4023,11 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     fprintf(out, "(_cl");
     for (uint16_t i = 0; i < f->nparams; i++) {
         fprintf(out, ", ");
+        const XiClassData *place_cd = cg_func_param_native_class_place_data(ctx, f, i);
+        if (place_cd) {
+            fprintf(out, "(void **)&_p%u_ptr", i);
+            continue;
+        }
         const XiClassData *cd = cg_func_param_native_class_data(ctx, f, i);
         if (cd) {
             fprintf(out, "_p%u_ptr", i);
@@ -4008,6 +4038,14 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
         emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
     }
     fprintf(out, ");\n");
+
+    /* Boxed ref arguments encode an XrValue place address.  The native core
+     * mutates a pointer slot, so publish that slot back to the boxed place
+     * before returning through the dynamic callable boundary. */
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_func_param_native_class_place_data(ctx, f, i))
+            fprintf(out, "    *_p%u_place = xrt_box_obj(_p%u_ptr);\n", i, i);
+    }
 
     if (ret_rep == XR_REP_VOID) {
         fprintf(out, "    return XR_NULL_VAL;\n");

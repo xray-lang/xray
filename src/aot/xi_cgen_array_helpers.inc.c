@@ -70,7 +70,7 @@ static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayL
         (uint64_t) type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT || !out)
         return false;
     XrType *elem = type->fixed_array.element_type;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (elem->is_nullable || native < 0)
         native = XR_NATIVE_VALUE;
     *out = (CgFixedArrayLaneInfo) {
@@ -4213,10 +4213,16 @@ static bool cg_span_value_u8_info(XiCgenCtx *ctx, const XiValue *value, CgArrayE
     return true;
 }
 
-static void emit_span_array_view_ptr_expr(FILE *out, const XiValue *value) {
-    fprintf(out, "xrt_array_stack_borrow_span_view(");
+static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    CgArrayElemInfo info;
+    if (!cg_span_elem_info_from_value(ctx, value, &info) || !info.elem_name || !info.ctype)
+        return false;
+    fprintf(out, "xrt_array_stack_borrow_span_view_typed(");
     emit_span_ref_expr(out, value);
-    fprintf(out, ")");
+    fprintf(out, ", %s, sizeof(%s), %u, %u)", info.elem_name, info.ctype,
+            (unsigned) xr_type_to_tid(info.type),
+            (unsigned) (strcmp(info.elem_name, "XR_ELEM_ANY") == 0));
+    return true;
 }
 
 static bool emit_span_length_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -4305,6 +4311,9 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         !cg_value_plan_is_span_aggregate(ctx, v->args[0]) ||
         !cg_span_elem_info_from_value(ctx, v->args[0], &info))
         return false;
+
+    if (cg_emit_span_readonly_void_trap(ctx, out, v, XAOT_SLICE_ACCESS_INDEX_SET))
+        return true;
 
     bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_SET);
     fprintf(out, "({ xr_span_t _s = ");

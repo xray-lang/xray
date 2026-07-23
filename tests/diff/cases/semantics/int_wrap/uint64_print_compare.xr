@@ -1,32 +1,32 @@
 // anchor: uint64-print-compare
 // Static uint64 print/format/compare must interpret the stored bits as unsigned.
 
-var max: uint64 = 9223372036854775807
-var high: uint64 = max + 1
-var all: uint64 = 0 - 1
-var zero: uint64 = 0
-var one: uint64 = 1
+var max: u64 = 9223372036854775807
+var high: u64 = max + 1
+var all: u64 = 0 - 1
+var zero: u64 = 0
+var one: u64 = 1
 
-fn gt_zero(x: uint64) -> bool {
+fn gt_zero(x: u64) -> bool {
     return x > 0
 }
 
-fn zero_lt(x: uint64) -> bool {
+fn zero_lt(x: u64) -> bool {
     return 0 < x
 }
 
-fn all_gt(x: uint64, y: uint64) -> bool {
+fn all_gt(x: u64, y: u64) -> bool {
     return x > y
 }
 
-fn branch_gt(x: uint64) -> string {
+fn branch_gt(x: u64) -> string {
     if (x > 0) {
         return "branch-gt"
     }
     return "branch-miss"
 }
 
-fn branch_le(x: uint64, y: uint64) -> string {
+fn branch_le(x: u64, y: u64) -> string {
     if (x <= y) {
         return "branch-le"
     }

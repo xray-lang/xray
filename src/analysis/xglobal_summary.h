@@ -62,7 +62,7 @@ enum {
     /* 33: combines the sequence/native-class evidence carried by schema 32
      * with enum static-domain and descriptor metadata evidence from task 210.
      * Use a fresh version so caches from either parent lineage are invalidated. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 34,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 35,
 };
 
 typedef enum XgBuildProfile {
@@ -748,7 +748,7 @@ typedef struct XgClassFieldSummary {
     uint32_t instance_slot;
     uint32_t flags;
     uint8_t semantic_kind;
-    uint8_t native_width;
+    uint8_t scalar_rep;
 } XgClassFieldSummary;
 
 typedef struct XgMethodSummary {
@@ -1319,7 +1319,7 @@ XR_FUNC uint32_t xg_name_id(const char *name);
 XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kind, uint32_t line,
                                           uint32_t column);
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
-XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width);
+XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_rep);
 XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count);
 XR_FUNC uint64_t xg_json_shape_hash_add_field(uint64_t hash, uint8_t shape_kind, uint32_t name_id,
                                               uint32_t type_key);

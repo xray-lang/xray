@@ -2,21 +2,21 @@ fn takes_u8(x: byte) {
     print(x)
 }
 
-fn returns_i16() -> int16 {
+fn returns_i16() -> i16 {
     return 32768
 }
 
-var a: int8 = 128
-var b: int8 = -129
+var a: i8 = 128
+var b: i8 = -129
 var c: byte = 256
 var d: byte = -1
-var e: uint32 = 4294967296
+var e: u32 = 4294967296
 
 var f: byte = 0
 f = 256
 takes_u8(256)
 
 var xs: Array<byte> = [0, 256]
-var pair: (byte, uint16) = (1, 65536)
+var pair: (byte, u16) = (1, 65536)
 var m: Map<byte, byte> = #{256: 1, 1: 256}
 var s: Set<byte> = #[256]

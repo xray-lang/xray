@@ -31,7 +31,7 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * operands in registers (no immediate/const fusion). This keeps the VM
      * bit-identical with AOT, which narrows each f32 operand to native `float`
      * and rounds every op at single precision. */
-    if (v->type && v->type->kind == XR_KIND_FLOAT && v->type->native_width == XR_NATIVE_F32) {
+    if (v->type && v->type->kind == XR_KIND_FLOAT && v->type->scalar_rep == XR_NATIVE_F32) {
         OpCode fop = v->op == XI_ADD   ? OP_ADD_F32
                      : v->op == XI_SUB ? OP_SUB_F32
                      : v->op == XI_MUL ? OP_MUL_F32

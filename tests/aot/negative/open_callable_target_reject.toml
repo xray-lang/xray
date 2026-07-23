@@ -1,0 +1,11 @@
+[package]
+name = "aot-negative-open-callable-target"
+version = "1.0.0"
+license = "MIT"
+main = "open_callable_target_reject.xr"
+
+# Keep `invoke` as an externally reachable entry without reviving the removed
+# source-level @used attribute.  Its callback parameter is intentionally open.
+[[link.symbol]]
+xray = "invoke"
+used = true

@@ -723,10 +723,10 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "  var src = Array<byte>(8)\n"
                              "  var view: Slice<byte> = src[:]\n"
                              "  var dst = Array<byte>(0)\n"
-                             "  var h = view.load<uint16>(0, Endian.LE)\n"
-                             "  var a = view.load<uint32>(0, Endian.LE)\n"
-                             "  var b = view.load<uint64>(0, Endian.LE)\n"
-                             "  view.store<uint16>(6, h, Endian.LE)\n"
+                             "  var h = view.load<u16>(0, Endian.LE)\n"
+                             "  var a = view.load<u32>(0, Endian.LE)\n"
+                             "  var b = view.load<u64>(0, Endian.LE)\n"
+                             "  view.store<u16>(6, h, Endian.LE)\n"
                              "  dst.appendFrom(view[0:2])\n"
                              "  dst.repeatFrom(2, 4)\n"
                              "  print(h)\n"
@@ -736,13 +736,13 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "exerciseBytes()\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
-           "load<uint16> should lower to Array<byte> op");
+           "load<u16> should lower to Array<byte> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U32) &&
-           "load<uint32> should lower to Array<byte> op");
+           "load<u32> should lower to Array<byte> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U64) &&
-           "load<uint64> should lower to Array<byte> op");
+           "load<u64> should lower to Array<byte> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
-           "store<uint16> should lower to Array<byte> op");
+           "store<u16> should lower to Array<byte> op");
     XiValue *load_u16 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U16);
     XiValue *load_u32 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U32);
     XiValue *load_u64 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
@@ -815,10 +815,10 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
 }
 
 TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
-    XiFunc *f = lower_source("var octet: uint8 = 129\n"
+    XiFunc *f = lower_source("var octet: u8 = 129\n"
                              "var rotated = octet.rotateLeft(-1)\n"
                              "var restored = rotated.rotateRight(15)\n"
-                             "var half: int16 = -2\n"
+                             "var half: i16 = -2\n"
                              "var swapped = half.byteswap()\n"
                              "print(restored)\n"
                              "print(swapped)\n"
@@ -838,16 +838,16 @@ TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
            "all exact-width bit methods should lower to stable Xi ops");
     assert(rotl->aux_int == XR_NATIVE_U8 && rotr->aux_int == XR_NATIVE_U8 &&
            "rotate ops should retain the exact receiver width in aux_int");
-    assert(rotl->type && rotl->type->native_width == XR_NATIVE_U8 && rotr->type &&
-           rotr->type->native_width == XR_NATIVE_U8 &&
+    assert(rotl->type && rotl->type->scalar_rep == XR_NATIVE_U8 && rotr->type &&
+           rotr->type->scalar_rep == XR_NATIVE_U8 &&
            "rotate results should preserve the exact receiver type");
     assert(bswap->aux_int == XR_NATIVE_I16 && bswap->type &&
-           bswap->type->native_width == XR_NATIVE_I16 &&
+           bswap->type->scalar_rep == XR_NATIVE_I16 &&
            "byteswap should preserve signed exact-width receiver type");
     assert(popcount->aux_int == XR_NATIVE_U8 && popcount->type &&
-           popcount->type->kind == XR_KIND_INT && popcount->type->native_width == 0 &&
+           popcount->type->kind == XR_KIND_INT && popcount->type->scalar_rep == 0 &&
            "bit queries should return canonical int while retaining receiver width metadata");
-    assert(ctz->aux_int == 0 && ctz->type && ctz->type->native_width == 0 &&
+    assert(ctz->aux_int == 0 && ctz->type && ctz->type->scalar_rep == 0 &&
            "canonical int should retain its zero native-width tag and 64-bit bit semantics");
     assert(!func_tree_find_method(f, "rotateLeft") && !func_tree_find_method(f, "byteswap") &&
            !func_tree_find_method(f, "popcount") &&
@@ -2220,6 +2220,66 @@ TEST(unique_result_task_await_consumes_handle) {
     xi_func_free(f);
 }
 
+#define TUPLE_TASK_REQUIRE(cond, msg)                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "tuple_result_task_await_consumes_handle: %s\n", (msg));               \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+TEST(tuple_result_task_await_consumes_handle) {
+    XiFunc *f = lower_source("fn pair() -> (int, int) { return (10, 20) }\n"
+                             "var task = go pair()\n"
+                             "var result = await task\n"
+                             "print(result)\n");
+    TUPLE_TASK_REQUIRE(f != NULL, "tuple Task source should lower");
+    XiValue *await = func_tree_find_op(f, XI_AWAIT);
+    TUPLE_TASK_REQUIRE(await != NULL, "tuple Task source should contain await");
+    TUPLE_TASK_REQUIRE((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) != 0,
+                       "tuple-result Task await must consume its handle");
+    XiFunc *pair = func_tree_find_func_name(f, "pair");
+    XiValue *tuple = pair ? func_tree_find_op(pair, XI_TUPLE_NEW) : NULL;
+    TUPLE_TASK_REQUIRE(tuple != NULL, "pair should lower a tuple allocation");
+    TUPLE_TASK_REQUIRE(xi_tuple_storage_mode(tuple) == XR_OBJ_STORAGE_TRANSFER,
+                       "fresh tuple Task result must be allocated transferable");
+    xi_func_free(f);
+}
+
+#undef TUPLE_TASK_REQUIRE
+
+TEST(copy_struct_task_result_plans_shared_publication) {
+    XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
+                             "fn pair() -> Pair { return Pair{a: 10, b: 20} }\n"
+                             "var task = go pair()\n"
+                             "var result = await task\n"
+                             "print(result.a + result.b)\n");
+    assert(f != NULL);
+    XiValue *go = func_tree_find_op(f, XI_GO);
+    XiValue *await = func_tree_find_op(f, XI_AWAIT);
+    assert(go != NULL && await != NULL);
+    assert((go->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0 &&
+           "pointer-backed Copy result must carry a compiler publication plan");
+    assert((await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0 &&
+           "Copy result Task remains multi-observer");
+    xi_func_free(f);
+
+    XiFunc *record_f = lower_source("type PairRecord = { a: int, b: int }\n"
+                                    "fn recordPair() -> PairRecord { return {a: 10, b: 20} }\n"
+                                    "var recordTask = go recordPair()\n"
+                                    "var recordResult = await recordTask\n"
+                                    "print(recordResult.a + recordResult.b)\n");
+    assert(record_f != NULL);
+    XiValue *record_go = func_tree_find_op(record_f, XI_GO);
+    XiValue *record_await = func_tree_find_op(record_f, XI_AWAIT);
+    assert(record_go != NULL && record_await != NULL);
+    assert((record_go->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0 &&
+           "pointer-backed record result must carry a compiler publication plan");
+    assert((record_await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0 &&
+           "record result Task remains multi-observer");
+    xi_func_free(record_f);
+}
+
 TEST(go_arg_transfer_modes) {
     XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
                                    "var xs = [1, 2]\n"
@@ -2520,7 +2580,7 @@ TEST(unresolved_struct_literal_does_not_lower_to_json) {
     assert(f == NULL && "unresolved struct literal must not fall back to Json object");
 }
 
-TEST(struct_field_store_narrows_native_width) {
+TEST(struct_field_store_narrows_scalar_rep) {
     XiFunc *f = lower_source("struct Sample {\n"
                              "    octet: byte\n"
                              "}\n"
@@ -2532,10 +2592,10 @@ TEST(struct_field_store_narrows_native_width) {
                              "print(run())\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_NARROW_U8) &&
-           "uint8 struct field writes should narrow before storage");
+           "u8 struct field writes should narrow before storage");
     XiValue *narrow = func_tree_find_op(f, XI_NARROW_U8);
     assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
-           narrow->type->native_width == XR_NATIVE_U8 &&
+           narrow->type->scalar_rep == XR_NATIVE_U8 &&
            "NARROW_U8 result type should carry the target native width");
     assert(func_tree_has_op(f, XI_AGG_SET) && "struct field writes should use AGG_SET");
     xi_func_free(f);
@@ -2600,19 +2660,19 @@ TEST(read_value_struct_param_uses_internal_call_place) {
     xi_func_free(f);
 }
 
-TEST(as_to_native_width_int_lowers_to_narrow) {
+TEST(as_to_scalar_rep_int_lowers_to_narrow) {
     XiFunc *f = lower_source("fn run(i: int) -> int {\n"
-                             "    var v = i as uint16\n"
+                             "    var v = i as u16\n"
                              "    return int(v)\n"
                              "}\n"
                              "print(run(65537))\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_NARROW_U16) &&
-           "int as uint16 should lower to native-width narrowing");
+           "int as u16 should lower to native-width narrowing");
     assert(!func_tree_has_op(f, XI_AS) && "numeric width cast should not use tagged XI_AS");
     XiValue *narrow = func_tree_find_op(f, XI_NARROW_U16);
     assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
-           narrow->type->native_width == XR_NATIVE_U16 &&
+           narrow->type->scalar_rep == XR_NATIVE_U16 &&
            "NARROW_U16 result type should carry the cast target width");
     xi_func_free(f);
 }
@@ -2795,6 +2855,8 @@ int main(void) {
     run_go_await();
     run_direct_await_go_one_shot();
     run_unique_result_task_await_consumes_handle();
+    run_tuple_result_task_await_consumes_handle();
+    run_copy_struct_task_result_plans_shared_publication();
     run_go_arg_transfer_modes();
     run_hoisted_sync_handle_capture_is_shared();
     run_channel_send_transfer_modes();
@@ -2810,10 +2872,10 @@ int main(void) {
     run_struct_literal();
     run_struct_literal_inside_function();
     run_unresolved_struct_literal_does_not_lower_to_json();
-    run_struct_field_store_narrows_native_width();
+    run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
     run_read_value_struct_param_uses_internal_call_place();
-    run_as_to_native_width_int_lowers_to_narrow();
+    run_as_to_scalar_rep_int_lowers_to_narrow();
     run_force_unwrap();
     run_destructure_decl();
     run_multi_assign();

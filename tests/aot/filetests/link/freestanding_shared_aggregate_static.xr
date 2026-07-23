@@ -4,8 +4,8 @@ struct Pair {
 }
 
 union I32Bits {
-    i: int32
-    u: uint32
+    i: i32
+    u: u32
 }
 
 struct Holder {

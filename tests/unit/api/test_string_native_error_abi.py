@@ -163,11 +163,11 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             source.unlink(missing_ok=True)
 
     def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
-        valid_source = "var valid: Array<uint8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
+        valid_source = "var valid: Array<u8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
         self.assertEqual(self.run_checked([str(self.xray), "-e", valid_source]).stdout, b"ok\n")
 
         self.assert_uncaught_pending_error(
-            "var invalid: Array<uint8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
+            "var invalid: Array<u8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
             "task-198-uncaught-invalid-utf8",
             [b"null\n", b"string.fromUtf8 invalid UTF-8"],
         )

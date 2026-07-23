@@ -1,10 +1,10 @@
 extern "C" {
-    fn memchr(bytes: Ptr<byte>, value: int32, count: uintsize) -> Ptr<byte>
+    fn memchr(bytes: Ptr<byte>, value: i32, count: usize) -> Ptr<byte>
 }
 
-fn readUtf8Like(bytes: Ptr<byte>, length: uintsize) -> uintsize {
-    var cursor: uintsize = 0
-    var checksum: uintsize = 0
+fn readUtf8Like(bytes: Ptr<byte>, length: usize) -> usize {
+    var cursor: usize = 0
+    var checksum: usize = 0
     while (cursor < length) {
         checksum += unsafe { bytes[cursor] }
         cursor += 1

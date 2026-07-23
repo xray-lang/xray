@@ -1,4 +1,4 @@
-fn fill(out: Array<byte>, src: Array<byte>) -> int {
+fn fill(out: ref Array<byte>, src: ref Array<byte>) -> int {
     out.resize(4, 0)
     unsafe {
         var p = out.mutPtr()
@@ -15,9 +15,9 @@ src[2] = 30
 src[3] = 40
 
 var bytes: Array<byte> = Array.withCapacity(4)
-print(fill(bytes, src))
+print(fill(ref bytes, ref src))
 
-fn second(out: Array<byte>) -> int {
+fn second(out: ref Array<byte>) -> int {
     var view: Slice<byte> = out[:]
     unsafe {
         var p = view.ptr()
@@ -25,4 +25,4 @@ fn second(out: Array<byte>) -> int {
     }
 }
 
-print(second(bytes))
+print(second(ref bytes))

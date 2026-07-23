@@ -1,4 +1,4 @@
-/* C reference for sort_i64_random.xr: libc qsort on int64 (idiomatic C). */
+/* C reference for sort_i64_random.xr: libc qsort on i64 (idiomatic C). */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

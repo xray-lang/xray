@@ -1,43 +1,43 @@
 import mem
 
-fn xray_mem_u32_load_le(p: Ptr<uint8>, offset: int) -> uint32 {
+fn xray_mem_u32_load_le(p: Ptr<u8>, offset: int) -> u32 {
     unsafe {
-        return mem.load<uint32>(p, offset, Endian.LE)
+        return mem.load<u32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_u32_store_le(p: MutPtr<uint8>, offset: int, value: uint32) {
+fn xray_mem_u32_store_le(p: MutPtr<u8>, offset: int, value: u32) {
     unsafe {
-        mem.store<uint32>(p, offset, value, Endian.LE)
+        mem.store<u32>(p, offset, value, Endian.LE)
     }
 }
 
-fn xray_mem_u32_roundtrip(p: MutPtr<uint8>, offset: int) -> uint32 {
+fn xray_mem_u32_roundtrip(p: MutPtr<u8>, offset: int) -> u32 {
     unsafe {
-        mem.store<uint32>(p, offset, 270544960, Endian.LE)
-        return mem.load<uint32>(p, offset, Endian.LE)
+        mem.store<u32>(p, offset, 270544960, Endian.LE)
+        return mem.load<u32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_f32_roundtrip(p: MutPtr<uint8>, offset: int, value: float32) -> float32 {
+fn xray_mem_f32_roundtrip(p: MutPtr<u8>, offset: int, value: f32) -> f32 {
     unsafe {
-        mem.store<float32>(p, offset, value, Endian.LE)
-        return mem.load<float32>(p, offset, Endian.LE)
+        mem.store<f32>(p, offset, value, Endian.LE)
+        return mem.load<f32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_ptr_roundtrip(p: MutPtr<uint8>, q: Ptr<uint8>, offset: int) -> Ptr<uint8> {
+fn xray_mem_ptr_roundtrip(p: MutPtr<u8>, q: Ptr<u8>, offset: int) -> Ptr<u8> {
     unsafe {
-        mem.store<Ptr<uint8>>(p, offset, q)
-        return mem.load<Ptr<uint8>>(p, offset)
+        mem.store<Ptr<u8>>(p, offset, q)
+        return mem.load<Ptr<u8>>(p, offset)
     }
 }
 
-fn xray_mem_u64_dynamic_endian(p: MutPtr<uint8>, offset: int, value: uint64,
-                               little: bool) -> uint64 {
+fn xray_mem_u64_dynamic_endian(p: MutPtr<u8>, offset: int, value: u64,
+                               little: bool) -> u64 {
     var endian = little ? Endian.LE : Endian.BE
     unsafe {
-        mem.store<uint64>(p, offset, value, endian)
-        return mem.load<uint64>(p, offset, endian)
+        mem.store<u64>(p, offset, value, endian)
+        return mem.load<u64>(p, offset, endian)
     }
 }

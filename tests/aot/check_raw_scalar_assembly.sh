@@ -7,10 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 XRAY="${1:-$PROJECT_DIR/build/xray}"
 FIXTURE="$SCRIPT_DIR/filetests/cgen/mem_load_store_rawptr_shape.xr"
+MANIFEST="${FIXTURE%.xr}.toml"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray-raw-scalar-asm.XXXXXX")" || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
-if ! "$XRAY" build --native -O2 --shared --rebuild -o "$WORK/raw-scalar" "$FIXTURE" \
+cp "$FIXTURE" "$WORK/mem_load_store_rawptr_shape.xr"
+cp "$MANIFEST" "$WORK/xray.toml"
+
+if ! "$XRAY" build --native -O2 --shared --rebuild -o "$WORK/raw-scalar" \
+        "$WORK/mem_load_store_rawptr_shape.xr" \
         >"$WORK/build.log" 2>&1; then
     echo "raw scalar assembly gate: native build failed" >&2
     sed -n '1,160p' "$WORK/build.log" >&2

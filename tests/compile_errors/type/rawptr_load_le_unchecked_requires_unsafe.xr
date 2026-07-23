@@ -1,4 +1,4 @@
 fn read(src: Slice<byte>) -> int {
     var p = unsafe { src.ptr() }
-    return int(p.loadLE<uint16>(0))
+    return int(p.loadLE<u16>(0))
 }

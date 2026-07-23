@@ -48,16 +48,16 @@ export const GROUPS: [Outer; 2] = comptime [
 
 packed struct PackedPair {
     tag: byte
-    value: uint32
+    value: u32
 }
 
 struct AlignedWord align(16) {
-    value: int32
+    value: i32
 }
 
 packed struct PackedAligned align(16) {
     tag: byte
-    value: uint32
+    value: u32
 }
 
 export const PACKED = comptime PackedPair{tag: 5, value: 37}
@@ -78,12 +78,12 @@ export const NESTED = comptime ((TABLE[0], HEADER.flags), (PACKET.base, TABLE[3]
 export const NESTED_LABEL = comptime ((TABLE[0], LABEL), ("done", TABLE[3]))
 
 union I32Bits {
-    i: int32
-    u: uint32
+    i: i32
+    u: u32
 }
 
 union U32Bytes {
-    u: uint32
+    u: u32
     b: [byte; 4]
 }
 

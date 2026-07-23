@@ -39,8 +39,8 @@ XR_FUNC struct XrType *xi_lower_infer_binary_type(XiLower *l, AstNodeType ast_ty
     if (left && left->kind == XR_KIND_FLOAT) {
         // Mirror the analyzer: float32 result only when both operands are
         // float32; any float64 operand widens the result to float64.
-        if (left->native_width == XR_NATIVE_F32 && right && right->kind == XR_KIND_FLOAT &&
-            right->native_width == XR_NATIVE_F32)
+        if (left->scalar_rep == XR_NATIVE_F32 && right && right->kind == XR_KIND_FLOAT &&
+            right->scalar_rep == XR_NATIVE_F32)
             return xr_type_new_float_width(l->isolate, XR_NATIVE_F32);
         return l->type_float;
     }

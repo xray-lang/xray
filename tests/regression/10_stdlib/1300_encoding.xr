@@ -147,39 +147,39 @@ fn test_utf8_invalid_bytes() {
 
 @test
 fn test_utf16_encode_decode_le() {
-    var u16 = encoding.utf16Encode("AB")
-    assert_eq(len(u16), 4)
+    var units = encoding.utf16Encode("AB")
+    assert_eq(len(units), 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
-    assert_eq(u16[0], 0x41)
-    assert_eq(u16[1], 0x00)
-    var decoded = encoding.utf16Decode(u16[:])
+    assert_eq(units[0], 0x41)
+    assert_eq(units[1], 0x00)
+    var decoded = encoding.utf16Decode(units[:])
     assert_eq(decoded, "AB")
 }
 
 @test
 fn test_utf16_encode_decode_be() {
-    var u16 = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
-    assert_eq(len(u16), 4)
+    var units = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
+    assert_eq(len(units), 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
-    assert_eq(u16[0], 0x00)
-    assert_eq(u16[1], 0x41)
-    var decoded = encoding.utf16Decode(u16[:], utf16Options(Endian.BE))
+    assert_eq(units[0], 0x00)
+    assert_eq(units[1], 0x41)
+    var decoded = encoding.utf16Decode(units[:], utf16Options(Endian.BE))
     assert_eq(decoded, "AB")
 }
 
 @test
 fn test_utf16_cjk() {
-    var u16 = encoding.utf16Encode("你好")
-    assert_eq(len(u16), 4)  // 2 BMP chars x 2 bytes
-    var decoded = encoding.utf16Decode(u16[:])
+    var units = encoding.utf16Encode("你好")
+    assert_eq(len(units), 4)  // 2 BMP chars x 2 bytes
+    var decoded = encoding.utf16Decode(units[:])
     assert_eq(decoded, "你好")
 }
 
 @test
 fn test_utf16_empty() {
-    var u16 = encoding.utf16Encode("")
-    assert_eq(len(u16), 0)
-    var decoded = encoding.utf16Decode(u16[:])
+    var units = encoding.utf16Encode("")
+    assert_eq(len(units), 0)
+    var decoded = encoding.utf16Decode(units[:])
     assert_eq(decoded, "")
 }
 

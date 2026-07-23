@@ -40,7 +40,7 @@ b.delete(false)
 print("size=" + len(b).toString() + " has true=" + b.containsKey(true).toString())
 
 print("-- float32 narrowing --")
-var c: Map<bool, float32> = #{}
+var c: Map<bool, f32> = #{}
 c.set(true, 1.5)
 c.set(false, 2.25)
 print("csize=" + len(c).toString())

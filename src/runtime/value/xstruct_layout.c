@@ -16,20 +16,14 @@
 #include <stddef.h>
 #include <string.h>
 
-int xr_type_kind_to_native(int kind, uint8_t native_width) {
+int xr_type_kind_to_native(int kind, uint8_t scalar_rep) {
     switch ((XrTypeKind) kind) {
         case XR_KIND_BOOL:
             return XR_NATIVE_BOOL;
         case XR_KIND_INT:
-            // native_width carries the explicit XrNativeType for sized
-            // integers (i8/i16/i32/u8/...). Zero means "default int" (i64).
-            if (native_width != 0)
-                return (int) native_width;
-            return XR_NATIVE_I64;
+            return xr_scalar_rep_is_integer(scalar_rep) ? (int) scalar_rep : -1;
         case XR_KIND_FLOAT:
-            if (native_width == XR_NATIVE_F32)
-                return XR_NATIVE_F32;
-            return XR_NATIVE_F64;
+            return xr_scalar_rep_is_float(scalar_rep) ? (int) scalar_rep : -1;
         case XR_KIND_STRING:
             return XR_NATIVE_STRING;
         case XR_KIND_POINTER:
@@ -251,7 +245,7 @@ bool xr_type_has_static_layout(const XrTargetDataLayout *target_layout, const Xr
     if (!xr_target_data_layout_validate(target_layout) || !type || type->is_nullable)
         return false;
 
-    int native = xr_type_kind_to_native(type->kind, type->native_width);
+    int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
     if (native >= 0) {
         uint8_t size = xr_native_type_size(target_layout, (uint8_t) native);
         uint8_t align = xr_native_type_align(target_layout, (uint8_t) native);

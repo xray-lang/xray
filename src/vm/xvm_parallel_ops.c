@@ -24,6 +24,7 @@
 #include "../base/xmalloc.h"
 #include "../os/os_thread.h"
 #include "../coro/xcountdown_latch.h"
+#include "../coro/xdeep_copy.h"
 #include "../coro/xparallel_executor.h"
 #include "../coro/xworker.h"
 #include "../coro/xyieldable.h"
@@ -191,6 +192,20 @@ static XrValue vm_par_validate_terminal_value(XrValue value, const char *label) 
     return value;
 }
 
+static XrValue vm_par_publish_error_value(XrRuntimeCore *core, XrValue value) {
+    if (!XR_IS_PTR(value))
+        return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (obj && (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj)))
+        return value;
+    /* A parallel lane is an explicit compiler/runtime concurrency boundary.
+     * Errors raised while invoking its closure originate on the lane heap, so
+     * materialize the batch-owned shared publication before the parent worker
+     * observes it.  This is the intrinsic's planned error edge, not an
+     * implicit fallback in the generic Task/runtime path. */
+    return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_SHARED);
+}
+
 static void vm_par_batch_free(XrVmParBatch *batch) {
     if (!batch)
         return;
@@ -238,6 +253,8 @@ static void vm_par_batch_record_failure(XrVMRuntime *isolate, XrVmParBatch *batc
         } else if (!is_value_error && isolate && !xr_value_is_panic_info(isolate, exc)) {
             exc = xr_panic_info_from_value(isolate, exc);
         }
+        if (!XR_IS_NULL(exc))
+            exc = vm_par_publish_error_value(batch->core, exc);
         batch->first_error_is_value = is_value_error;
         if (!XR_IS_NULL(exc))
             batch->first_error = vm_par_validate_terminal_value(

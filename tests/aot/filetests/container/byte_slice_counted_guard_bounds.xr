@@ -1,28 +1,28 @@
-fn byte_slice_counted_guard_bounds(bytes: Slice<byte>) -> uint32 {
+fn byte_slice_counted_guard_bounds(bytes: Slice<byte>) -> u32 {
     var offset = 0
-    var total: uint32 = 0
+    var total: u32 = 0
     while (offset <= len(bytes) - 16) {
-        total += bytes.load<uint32>(offset, Endian.LE)
-        total += bytes.load<uint32>(offset + 12, Endian.LE)
+        total += bytes.load<u32>(offset, Endian.LE)
+        total += bytes.load<u32>(offset + 12, Endian.LE)
         offset += 16
     }
     return total
 }
 
-fn byte_slice_chained_tail_bounds(bytes: Slice<byte>) -> uint64 {
+fn byte_slice_chained_tail_bounds(bytes: Slice<byte>) -> u64 {
     var offset = 0
-    var total: uint64 = 0
+    var total: u64 = 0
     while (offset <= len(bytes) - 8) {
-        total += bytes.load<uint64>(offset, Endian.LE)
+        total += bytes.load<u64>(offset, Endian.LE)
         offset += 8
     }
     while (offset <= len(bytes) - 4) {
-        var lane: uint64 = bytes.load<uint32>(offset, Endian.LE)
+        var lane: u64 = bytes.load<u32>(offset, Endian.LE)
         total += lane
         offset += 4
     }
     while (offset < len(bytes)) {
-        var lane: uint64 = bytes[offset]
+        var lane: u64 = bytes[offset]
         total += lane
         offset += 1
     }

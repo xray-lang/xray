@@ -77,9 +77,9 @@ static bool container_elem_plan_for_type(const XrType *type, XaotContainerElemPl
     if (!type || type->is_nullable || !out)
         return false;
 
-    if (type->native_width != 0) {
-        elem_name = xaot_elem_name_for_native_type(type->native_width);
-        if (elem_name && xaot_rep_from_native_type(type->native_width, &rep))
+    if (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT) {
+        elem_name = xaot_elem_name_for_native_type(type->scalar_rep);
+        if (elem_name && xaot_rep_from_native_type(type->scalar_rep, &rep))
             return elem_plan_make(type, rep, elem_name, out);
     }
 

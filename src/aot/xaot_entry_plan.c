@@ -113,6 +113,22 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
         xr_free(reachable);
         return true;
     }
+    /* Every imported module initializer executes before the entry module.
+     * Treating only the final entry initializer as a root can omit runtime
+     * capabilities used by imported global initializers (for example an
+     * Atomic<T> constructed by stdlib/http), leaving generated calls without
+     * their runtime archive at link time. */
+    for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+        const XgBodySummary *body = &evidence->bodies[bi];
+        if (body->kind != XG_BODY_MODULE_INIT || body->func_id == root)
+            continue;
+        if (!xg_body_reachability_mark_closed_world_calls(evidence, body->func_id, reachable,
+                                                          evidence->nbodies)) {
+            out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
+            xr_free(reachable);
+            return true;
+        }
+    }
     for (uint32_t di = 0; di < evidence->ndecls; di++) {
         const XgDeclSummary *decl = &evidence->decls[di];
         if ((decl->flags & XG_DECL_C_EXPORT) == 0)

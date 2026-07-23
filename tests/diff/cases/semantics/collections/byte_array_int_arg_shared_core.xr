@@ -13,7 +13,7 @@ fn show_load_u32() {
     var loadBytes = Array<byte>(8, 1)
     var view: Slice<byte> = loadBytes[:]
     try {
-        var value: uint32 = view.load<uint32>(dyn.badOffset, Endian.LE)
+        var value: u32 = view.load<u32>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -25,7 +25,7 @@ fn show_load_u64() {
     var loadBytes = Array<byte>(8, 1)
     var view: Slice<byte> = loadBytes[:]
     try {
-        var value: uint64 = view.load<uint64>(dyn.badOffset, Endian.LE)
+        var value: u64 = view.load<u64>(dyn.badOffset, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)

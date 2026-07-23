@@ -1,8 +1,8 @@
 class FloatIntMapBag {
-    values: Map<float32, int>
+    values: Map<f32, int>
 
     constructor() {
-        var values: Map<float32, int> = #{}
+        var values: Map<f32, int> = #{}
         this.values = values
     }
 

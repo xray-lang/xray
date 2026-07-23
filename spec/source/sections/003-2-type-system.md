@@ -26,8 +26,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 类别 | 示例 |
 |--|--|
 | Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
-| 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
-| 精确浮点 | `float32`、`float64` |
+| 精确整数 | `i8`、`i16`、`i32`、`i64`、`byte`..`u64` |
+| 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
@@ -38,7 +38,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
@@ -49,25 +49,25 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类型 | 范围 | 别名 |
 |--|--|--|
-| `int8` | `[-128, 127]` | — |
-| `int16` | `[-32768, 32767]` | — |
-| `int32` | `[-2³¹, 2³¹-1]` | — |
-| `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `byte`..`uint64` | 无符号对应 | — |
+| `i8` | `[-128, 127]` | — |
+| `i16` | `[-32768, 32767]` | — |
+| `i32` | `[-2³¹, 2³¹-1]` | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
+| `byte`..`u64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`var x: int8 = 200` 编译拒绝）。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `i32` 变量），但直接字面量必须落在目标范围内（`var x: i8 = 200` 编译拒绝）。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`byte + byte -> byte`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
-- 静态类型为 `byte`..`uint64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `uint64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: byte = 255 + 1` 得到 `0`。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `int64` 正范围的 `uint64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
 
 | 类型 | 标准 |
 |--|--|
-| `float32` | IEEE-754 单精度 |
-| `float64` | IEEE-754 双精度；`float` 的别名 |
+| `f32` | IEEE-754 单精度 |
+| `f64` | IEEE-754 双精度；`float` 的别名 |
 
 字面量默认 `float`。
 
@@ -113,7 +113,7 @@ if (len(s) != 0) { }     // OK
 
 #### 2.3.5 `rune`
 
-`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `u32` 的别名。
 
 ```xray
 var a: rune = 'a'
@@ -124,7 +124,7 @@ print(smile.toUInt32())   // 128512
 ```
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
-- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: uint32 = 'a'` 都会在分析期拒绝。
+- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
 - 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
@@ -147,8 +147,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 | 类型 | C ABI 含义 | 备注 |
 |--|--|--|
-| `uintsize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `uint64` 代用 |
-| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `int64` 代用 |
+| `usize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `u64` 代用 |
+| `isize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `i64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
 | `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
@@ -157,7 +157,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 
@@ -171,7 +171,7 @@ unsafe {
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
-`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
+`usize` / `isize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
@@ -519,7 +519,7 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 源 | 目标 | 允许 |
 |--|--|--|
 | `int` | `float` | ✅ |
-| `int8` | `int` (= `int64`) | ✅ |
+| `i8` | `int` (= `i64`) | ✅ |
 | `T` | `T?` | ✅ |
 | `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
 | `null` | `T?` | ✅ |
@@ -659,8 +659,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Category | Examples |
 |--|--|
 | Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
-| Sized integers | `int8`, `int16`, `int32`, `int64`, `byte`..`uint64` |
-| Sized floats | `float32`, `float64` |
+| Sized integers | `i8`, `i16`, `i32`, `i64`, `byte`..`u64` |
+| Sized floats | `f32`, `f64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
@@ -671,7 +671,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `usize`, `isize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
@@ -682,25 +682,25 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Type | Range | Alias |
 |--|--|--|
-| `int8` | `[-128, 127]` | — |
-| `int16` | `[-32768, 32767]` | — |
-| `int32` | `[-2³¹, 2³¹-1]` | — |
-| `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
-| `byte`..`uint64` | unsigned counterparts | — |
+| `i8` | `[-128, 127]` | — |
+| `i16` | `[-32768, 32767]` | — |
+| `i32` | `[-2³¹, 2³¹-1]` | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
+| `byte`..`u64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`var x: int8 = 200` is rejected at compile time).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `i32` variable), but a direct literal must fit the target range (`var x: i8 = 200` is rejected at compile time).
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`byte + byte -> byte`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
-- Values with static type `byte`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: byte = 255 + 1` evaluates to `0`.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
 | Type | Standard |
 |--|--|
-| `float32` | IEEE-754 single precision |
-| `float64` | IEEE-754 double precision; alias of `float` |
+| `f32` | IEEE-754 single precision |
+| `f64` | IEEE-754 double precision; alias of `float` |
 
 Literals default to `float`.
 
@@ -746,7 +746,7 @@ Internally uses ARC; runtime short strings are coroutine-local by default (lock-
 
 #### 2.3.5 `rune`
 
-`rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+`rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `u32`.
 
 ```xray
 var a: rune = 'a'
@@ -757,7 +757,7 @@ print(smile.toUInt32())   // 128512
 ```
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
-- `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: uint32 = 'a'` are rejected by the analyzer.
+- `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
 - Explicit conversions: `int(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
@@ -780,8 +780,8 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 
 | Type | C ABI meaning | Notes |
 |--|--|--|
-| `uintsize` | `size_t` | width comes from the compilation target; it must not be substituted with the host's `uint64` |
-| `intsize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `int64` |
+| `usize` | `size_t` | width comes from the compilation target; it must not be substituted with the host's `u64` |
+| `isize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `i64` |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
 | `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
@@ -790,7 +790,7 @@ Raw pointer values may be stored, passed, compared, and offset with `offset(i)` 
 
 ```xray
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 
@@ -804,7 +804,7 @@ unsafe {
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
-`uintsize` / `intsize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
+`usize` / `isize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
 
 `CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
@@ -1158,7 +1158,7 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | From | To | Allowed |
 |--|--|--|
 | `int` | `float` | ✅ |
-| `int8` | `int` (= `int64`) | ✅ |
+| `i8` | `int` (= `i64`) | ✅ |
 | `T` | `T?` | ✅ |
 | `T` | `Json` (if T is Json-compatible) | ✅ |
 | `null` | `T?` | ✅ |

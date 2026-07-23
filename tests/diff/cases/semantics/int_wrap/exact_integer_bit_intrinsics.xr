@@ -5,48 +5,48 @@
 
 fn rotl8(x: byte, n: int) -> byte { return x.rotateLeft(n) }
 fn rotr8(x: byte, n: int) -> byte { return x.rotateRight(n) }
-fn swap16(x: uint16) -> uint16 { return x.byteswap() }
-fn round32(x: int32, n: int) -> int32 { return x.rotateLeft(n).rotateRight(n) }
-fn swap64(x: uint64) -> uint64 { return x.byteswap() }
-fn mulhi32(x: uint32, y: uint32) -> uint32 { return x.mulHigh(y) }
-fn mulhi64(x: uint64, y: uint64) -> uint64 { return x.mulHigh(y) }
+fn swap16(x: u16) -> u16 { return x.byteswap() }
+fn round32(x: i32, n: int) -> i32 { return x.rotateLeft(n).rotateRight(n) }
+fn swap64(x: u64) -> u64 { return x.byteswap() }
+fn mulhi32(x: u32, y: u32) -> u32 { return x.mulHigh(y) }
+fn mulhi64(x: u64, y: u64) -> u64 { return x.mulHigh(y) }
 
 var b: byte = rotl8(129, 1)
-var u8: uint8 = b.byteswap()
-var i8: int8 = (-128 as int8).rotateLeft(-1)
+var resultU8: u8 = b.byteswap()
+var resultI8: i8 = (-128 as i8).rotateLeft(-1)
 print(b)                                  // 3
-print(u8)                                 // 3 (one-byte swap is identity)
-print(i8)                                 // 64 (negative count is Euclidean mod 8)
+print(resultU8)                           // 3 (one-byte swap is identity)
+print(resultI8)                           // 64 (negative count is Euclidean mod 8)
 print(rotr8(1, 1))                        // 128
 print(rotl8(1, 9))                        // 2
 
-var i16: int16 = (4660 as int16).byteswap()
-var u16: uint16 = swap16(33023)
-print(i16)                                // 13330: 0x1234 -> 0x3412
-print(u16)                                // 65408: 0x80ff -> 0xff80
-print((0 as int16).leadingZeros())        // 16
-print((-1 as int16).popcount())           // 16
+var resultI16: i16 = (4660 as i16).byteswap()
+var resultU16: u16 = swap16(33023)
+print(resultI16)                          // 13330: 0x1234 -> 0x3412
+print(resultU16)                          // 65408: 0x80ff -> 0xff80
+print((0 as i16).leadingZeros())        // 16
+print((-1 as i16).popcount())           // 16
 
-var i32: int32 = round32(16909060, -37)
-var u32: uint32 = (16909060 as uint32).byteswap()
-print(i32)                                // round trip preserves 0x01020304
-print(u32)                                // 67305985: 0x04030201
-print((0 as uint32).trailingZeros())      // 32
+var resultI32: i32 = round32(16909060, -37)
+var resultU32: u32 = (16909060 as u32).byteswap()
+print(resultI32)                          // round trip preserves 0x01020304
+print(resultU32)                          // 67305985: 0x04030201
+print((0 as u32).trailingZeros())      // 32
 
-var i64: int64 = (1 as int64).rotateRight(1)
-var u64: uint64 = swap64(72623859790382856)
-print(i64)                                // INT64_MIN bit pattern
-print(u64)                                // 0x0807060504030201
-print((-1 as uint64).popcount())          // 64
+var resultI64: i64 = (1 as i64).rotateRight(1)
+var resultU64: u64 = swap64(72623859790382856)
+print(resultI64)                          // INT64_MIN bit pattern
+print(resultU64)                          // 0x0807060504030201
+print((-1 as u64).popcount())          // 64
 print((255 as byte).mulHigh(2 as byte))   // 1
-print((65535 as uint16).mulHigh(2 as uint16)) // 1
-var max32: uint32 = (0 as uint32) - (1 as uint32)
-var max64: uint64 = (0 as uint64) - (1 as uint64)
-print(mulhi32(max32, 2 as uint32))         // 1
-print(mulhi64(max64, 2 as uint64))         // 1
+print((65535 as u16).mulHigh(2 as u16)) // 1
+var max32: u32 = (0 as u32) - (1 as u32)
+var max64: u64 = (0 as u64) - (1 as u64)
+print(mulhi32(max32, 2 as u32))         // 1
+print(mulhi64(max64, 2 as u64))         // 1
 
-var iz: intsize = (1 as intsize).rotateLeft(-1).rotateRight(-1)
-var uz: uintsize = (1 as uintsize).byteswap().byteswap()
+var iz: isize = (1 as isize).rotateLeft(-1).rotateRight(-1)
+var uz: usize = (1 as usize).byteswap().byteswap()
 print(iz)                                 // pointer-width round trip
 print(uz)
 

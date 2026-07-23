@@ -3,7 +3,7 @@
 // fixed-width int receivers are rejected (R2-2 stopgap): the runtime would
 // compute them at int64 width and silently use the wrong overflow boundary.
 fn main() {
-    var a: int32 = 2147483647
+    var a: i32 = 2147483647
     print(a.checkedAdd(1))
 }
 main()

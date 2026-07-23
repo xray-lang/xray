@@ -72,7 +72,7 @@ import mem
 const UART0_DATA = 0x40004000
 const MPS2_LEDS = 0x40028000
 
-fn kernel_entry() -> int32 {
+fn kernel_entry() -> i32 {
     mem.volatileStore(mem.mutPtr<byte>(MPS2_LEDS), 0x5a, 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), int('M'.toUInt32()), 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), int('4'.toUInt32()), 4)

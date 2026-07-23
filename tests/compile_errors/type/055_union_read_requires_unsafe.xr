@@ -1,6 +1,6 @@
 union U32Bits {
-    u: uint32
-    i: int32
+    u: u32
+    i: i32
 }
 
 var bits = U32Bits{u: 1}

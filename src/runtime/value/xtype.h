@@ -26,6 +26,7 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_json_type.h"
+#include "../../shared/xr_scalar_type.h"
 
 /* ========== XrRep - Machine Representation ========== */
 /*
@@ -284,9 +285,9 @@ struct XrType {
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
     bool ptr_is_mut;          // POINTER only: MutPtr<T> (true) vs Ptr<T> (false, const)
 
-    // Native width for int/float types (XrSlotType value)
-    // 0 = default (int=int64, float=float64), nonzero = specific width
-    uint8_t native_width;
+    // Semantic scalar representation. Numeric kinds always carry a valid
+    // XrNativeType, including explicit I64/F64; non-numeric kinds do not read it.
+    uint8_t scalar_rep;
 
     // Type alias name (NULL unless resolved through a type alias)
     const char *alias_name;
@@ -409,13 +410,13 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 XR_FUNC bool xr_type_contains_error(const XrType *type);
 
 static inline bool xr_type_is_exact_u8(const XrType *type) {
-    return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
+    return type && type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_U8;
 }
 
 static inline bool xr_type_is_exact_unsigned_integer(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -552,7 +553,7 @@ XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);
 // nothing and for the empty tuple literal.
 XR_FUNC XrType *xr_type_new_unit(XrVMRuntime *X);
 
-// API: Native-width types (int8/16/32/64, uint8/16/32/64, float32/64)
+// API: Exact scalar representations.
 XR_FUNC XrType *xr_type_new_int_width(XrVMRuntime *X, int width);    // XrNativeType value
 XR_FUNC XrType *xr_type_new_float_width(XrVMRuntime *X, int width);  // XrNativeType value
 
@@ -563,19 +564,17 @@ XR_FUNC XrType *xr_type_new_pointer(XrVMRuntime *X, XrType *element_type, bool i
 
 // API: Derive XrSlotType from XrType for the unified type pipeline.
 // Returns the storage slot type — used by GC scanning and AOT codegen.
-// native_width stores XrNativeType; widen all int variants to I64, float variants to F64.
+// scalar_rep stores XrNativeType; slot storage widens integer and float scalars.
 static inline uint8_t xr_type_to_slot_type(XrType *type) {
     if (!type)
         return XR_SLOT_ANY;
     if (xr_type_is_enum_metadata(type))
         return XR_SLOT_I64;
-    if (type->native_width != 0 && !type->is_nullable) {
-        uint8_t nw = type->native_width;
-        if (nw == XR_NATIVE_F32 || nw == XR_NATIVE_F64)
+    if (!type->is_nullable && (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT)) {
+        uint8_t rep = type->scalar_rep;
+        if (rep == XR_NATIVE_F32 || rep == XR_NATIVE_F64)
             return XR_SLOT_F64;
-        if (nw == XR_NATIVE_BOOL)
-            return XR_SLOT_BOOL;
-        return XR_SLOT_I64;  // I8/U8/I16/U16/I32/U32/I64/U64 all widen to I64
+        return XR_SLOT_I64;
     }
     switch (type->kind) {
         case XR_KIND_INT:

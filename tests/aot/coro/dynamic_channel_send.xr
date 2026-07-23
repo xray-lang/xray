@@ -1,7 +1,7 @@
-const reply = Channel(1)
-var packet = [7, reply]
+const reply: Channel<int> = Channel(1)
+var packet = (7, reply)
 
-packet[1].send(42)
+packet.1.send(42)
 
 var value = match (reply.recv()) {
     Recv.Value(v) -> v

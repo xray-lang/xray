@@ -31,4 +31,5 @@ http.routeHandler("POST", "/echo", fn(req: HttpRequest) -> HttpResponse {
 })
 
 print("xray HTTP Server on port " + string(port))
-http.listen(port)
+const serverRunning = Atomic(true)
+http.listen(port, serverRunning)

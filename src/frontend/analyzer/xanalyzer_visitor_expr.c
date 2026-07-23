@@ -1219,10 +1219,10 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
             // that have single-precision opcodes (+, -, *, /).
             if (op == AST_BINARY_ADD || op == AST_BINARY_SUB || op == AST_BINARY_MUL ||
                 op == AST_BINARY_DIV) {
-                bool left_f32 = XR_TYPE_IS_FLOAT(left) && left->native_width == XR_NATIVE_F32;
-                bool right_f32 = XR_TYPE_IS_FLOAT(right) && right->native_width == XR_NATIVE_F32;
-                bool left_f64 = XR_TYPE_IS_FLOAT(left) && left->native_width != XR_NATIVE_F32;
-                bool right_f64 = XR_TYPE_IS_FLOAT(right) && right->native_width != XR_NATIVE_F32;
+                bool left_f32 = XR_TYPE_IS_FLOAT(left) && left->scalar_rep == XR_NATIVE_F32;
+                bool right_f32 = XR_TYPE_IS_FLOAT(right) && right->scalar_rep == XR_NATIVE_F32;
+                bool left_f64 = XR_TYPE_IS_FLOAT(left) && left->scalar_rep != XR_NATIVE_F32;
+                bool right_f64 = XR_TYPE_IS_FLOAT(right) && right->scalar_rep != XR_NATIVE_F32;
                 if ((left_f32 || right_f32) && !left_f64 && !right_f64)
                     return xr_type_new_float_width(NULL, XR_NATIVE_F32);
             }
@@ -1231,11 +1231,11 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
         return NULL;
     }
     if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right)) {
-        uint8_t lw = left->native_width;
-        uint8_t rw = right->native_width;
-        if (lw != 0 && (rw == 0 || rw == lw))
+        uint8_t lw = left->scalar_rep;
+        uint8_t rw = right->scalar_rep;
+        if (lw != XR_NATIVE_I64 && (rw == XR_NATIVE_I64 || rw == lw))
             return xr_type_new_int_width(NULL, lw);
-        if (rw != 0 && lw == 0)
+        if (rw != XR_NATIVE_I64 && lw == XR_NATIVE_I64)
             return xr_type_new_int_width(NULL, rw);
         return xr_type_new_int(NULL);
     }
@@ -1255,14 +1255,13 @@ static XrType *binary_int_result_pair(XrType *left, XrType *right, bool shift) {
     if (!left || !right || !XR_TYPE_IS_INT(left) || !XR_TYPE_IS_INT(right))
         return NULL;
     if (shift) {
-        return left->native_width != 0 ? xr_type_new_int_width(NULL, left->native_width)
-                                       : xr_type_new_int(NULL);
+        return xr_type_new_int_width(NULL, left->scalar_rep);
     }
-    uint8_t lw = left->native_width;
-    uint8_t rw = right->native_width;
-    if (lw != 0 && (rw == 0 || rw == lw))
+    uint8_t lw = left->scalar_rep;
+    uint8_t rw = right->scalar_rep;
+    if (lw != XR_NATIVE_I64 && (rw == XR_NATIVE_I64 || rw == lw))
         return xr_type_new_int_width(NULL, lw);
-    if (rw != 0 && lw == 0)
+    if (rw != XR_NATIVE_I64 && lw == XR_NATIVE_I64)
         return xr_type_new_int_width(NULL, rw);
     return xr_type_new_int(NULL);
 }
@@ -5235,6 +5234,17 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
     // Infer the type of the awaited expression
     if (await->expr) {
+        if (await->expr->type == AST_MOVE_EXPR) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = await->expr->line ? await->expr->line : node->line,
+                              .column = await->expr->column ? await->expr->column : node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                "await move is not allowed; await the Task directly because await performs the "
+                "required terminal take automatically",
+                &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
         XaSymbol *task_sym = xa_await_task_binding(ctx, await->expr);
         XaSymbolLinks *task_links =
             task_sym ? xa_analyzer_get_links(ctx->analyzer, task_sym) : NULL;

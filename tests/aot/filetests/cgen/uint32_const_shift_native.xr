@@ -1,4 +1,4 @@
-fn rotl32(x: uint32) -> uint32 {
+fn rotl32(x: u32) -> u32 {
     return (x << 13) | (x >> 19)
 }
 

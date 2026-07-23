@@ -506,6 +506,11 @@ XR_FUNC XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links
                                                             int *out_count);
 XR_FUNC void xa_symbol_links_copy_export_metadata(struct XaAnalyzer *dst_analyzer,
                                                   XaSymbolLinks *dst, const XaSymbolLinks *src);
+/* Sidecar ids are local to summary_owner. Consumers of graph-export symbols
+ * must resolve through that owner instead of interpreting the numeric id in
+ * the current analyzer's database. */
+XR_FUNC const XaMemoryEffectSummary *
+xa_symbol_links_memory_effect_summary(const XaSymbolLinks *links);
 XR_FUNC void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present,
                                             const char *message);
 

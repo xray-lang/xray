@@ -17,6 +17,11 @@ const char *xr_keywords[] = {
 #define XR_KW(spelling, length, token) spelling,
 #include "xkeywords.def"
 #undef XR_KW
+#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
+                       canonical_display, public_type_id, range_class)                             \
+    spelling,
+#include "../../../shared/xr_scalar_type.def"
+#undef XR_SCALAR_TYPE
     NULL};
 
 // Builtin and prelude symbols offered by completion and protected from rename.

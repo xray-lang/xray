@@ -1,7 +1,7 @@
-fn compare_words(left: Slice<uint32>, right: Slice<uint32>) -> int {
+fn compare_words(left: Slice<u32>, right: Slice<u32>) -> int {
     return left.compare(right)
 }
 
-var left = Array<uint32>(2, 1)
-var right = Array<uint32>(2, 1)
+var left = Array<u32>(2, 1)
+var right = Array<u32>(2, 1)
 print(compare_words(left[:], right[:]))

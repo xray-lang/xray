@@ -2,19 +2,19 @@
 import mem
 
 struct Header {
-    length: uint64
-    delta: int64
+    length: u64
+    delta: i64
 }
 
 extern "C" {
-    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }
 
 fn main() {
     var raw = unsafe { malloc(mem.sizeOf<Header>()) }
     var result = unsafe {
-        mem.withSliceMut<Header>(raw, 1, ref raw, fn(view: ref Slice<Header>) -> int64 {
+        mem.withSliceMut<Header>(raw, 1, ref raw, fn(view: ref Slice<Header>) -> i64 {
             view[0].length = 73
             view[0].delta = -73
             return view[0].delta
@@ -22,8 +22,8 @@ fn main() {
     }
     print(result)
     unsafe {
-        print(mem.load<uint64>(raw, mem.offsetOf<Header>("length"), Endian.Native))
-        print(mem.load<int64>(raw, mem.offsetOf<Header>("delta"), Endian.Native))
+        print(mem.load<u64>(raw, mem.offsetOf<Header>("length"), Endian.Native))
+        print(mem.load<i64>(raw, mem.offsetOf<Header>("delta"), Endian.Native))
         free(raw)
     }
 }

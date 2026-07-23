@@ -1,7 +1,7 @@
 extern "C" {
-    fn task208LabsInt(x: intsize) -> intsize
+    fn task208LabsInt(x: isize) -> isize
 
-    fn task208LabsFloat(x: float32) -> float32
+    fn task208LabsFloat(x: f32) -> f32
 }
 
 print(unsafe { task208LabsInt(-7) })

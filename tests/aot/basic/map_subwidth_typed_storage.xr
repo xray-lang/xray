@@ -1,4 +1,4 @@
-var m: Map<byte, int32> = #{}
+var m: Map<byte, i32> = #{}
 m.set(255, 2147483647)
 m.set(255 + 1, 2147483647 + 1)
 m.set(1, -2147483648 - 1)
@@ -18,10 +18,10 @@ print(m.containsKey(255))
 print(m.get(255) == null)
 
 class ByteMapBag {
-    values: Map<byte, int32>
+    values: Map<byte, i32>
 
     constructor() {
-        var values: Map<byte, int32> = #{}
+        var values: Map<byte, i32> = #{}
         this.values = values
     }
 

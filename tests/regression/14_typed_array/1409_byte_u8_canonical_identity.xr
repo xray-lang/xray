@@ -2,7 +2,7 @@ fn takeByte(x: byte) -> int {
     return x
 }
 
-fn takeUint8(x: uint8) -> int {
+fn takeU8(x: u8) -> int {
     return x
 }
 
@@ -10,7 +10,7 @@ fn firstByteArray(xs: Array<byte>) -> int {
     return xs[0]
 }
 
-fn secondUint8Array(xs: Array<uint8>) -> int {
+fn secondU8Array(xs: Array<u8>) -> int {
     return xs[1]
 }
 
@@ -18,41 +18,41 @@ fn sumByteSlice(xs: Slice<byte>) -> int {
     return xs[0] + xs[1]
 }
 
-fn sumUint8Slice(xs: Slice<uint8>) -> int {
+fn sumU8Slice(xs: Slice<u8>) -> int {
     return xs[0] + xs[1]
 }
 
 @test
-fn test_byte_uint8_scalar_and_container_identity() {
-    var u: uint8 = 250
+fn test_byte_u8_scalar_and_container_identity() {
+    var u: u8 = 250
     var b: byte = u
-    var u2: uint8 = b
+    var u2: u8 = b
 
     assert_eq(takeByte(u), 250)
-    assert_eq(takeUint8(b), 250)
+    assert_eq(takeU8(b), 250)
     assert_eq(u2, 250)
 
     var byteArray: Array<byte> = [1, 2, 3]
-    var uint8Array: Array<uint8> = [4, 5, 6]
+    var uint8Array: Array<u8> = [4, 5, 6]
     var byteFromUint8: Array<byte> = uint8Array
-    var uint8FromByte: Array<uint8> = byteArray
+    var uint8FromByte: Array<u8> = byteArray
 
     assert_eq(firstByteArray(uint8Array), 4)
-    assert_eq(secondUint8Array(byteArray), 2)
+    assert_eq(secondU8Array(byteArray), 2)
     assert_eq(byteFromUint8[2], 6)
     assert_eq(uint8FromByte[0], 1)
 }
 
 @test
-fn test_byte_uint8_slice_and_method_identity() {
+fn test_byte_u8_slice_and_method_identity() {
     var byteArray: Array<byte> = [10, 20, 30]
-    var uint8Array: Array<uint8> = [40, 50, 60]
+    var uint8Array: Array<u8> = [40, 50, 60]
 
     var byteView: Slice<byte> = uint8Array[:]
-    var uint8View: Slice<uint8> = byteArray[:]
+    var uint8View: Slice<u8> = byteArray[:]
 
     assert_eq(sumByteSlice(uint8Array[:]), 90)
-    assert_eq(sumUint8Slice(byteArray[:]), 30)
+    assert_eq(sumU8Slice(byteArray[:]), 30)
     assert_eq(byteView[2], 60)
     assert_eq(uint8View[1], 20)
 
@@ -61,7 +61,7 @@ fn test_byte_uint8_slice_and_method_identity() {
     assert_eq(len(appendToByte), 3)
     assert_eq(appendToByte[2], 50)
 
-    var appendToUint8: Array<uint8> = [2]
+    var appendToUint8: Array<u8> = [2]
     appendToUint8.appendFrom(byteArray[1:3])
     assert_eq(len(appendToUint8), 3)
     assert_eq(appendToUint8[1], 20)

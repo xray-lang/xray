@@ -1,15 +1,15 @@
 import mem
 
 struct NativeSizePair {
-    length: uintsize
-    delta: intsize
+    length: usize
+    delta: isize
 }
 
-fn xray_native_size_fields(p: MutPtr<uint8>) -> intsize {
+fn xray_native_size_fields(p: MutPtr<u8>) -> isize {
     var guard = p
     return unsafe {
         mem.withSliceMut<NativeSizePair>(p, 1, ref guard,
-            fn(pairs: ref Slice<NativeSizePair>) -> intsize {
+            fn(pairs: ref Slice<NativeSizePair>) -> isize {
                 pairs[0].length = 37
                 pairs[0].delta = -37
                 return pairs[0].delta
@@ -17,9 +17,9 @@ fn xray_native_size_fields(p: MutPtr<uint8>) -> intsize {
     }
 }
 
-fn xray_native_size_unaligned(p: MutPtr<uint8>) -> uintsize {
+fn xray_native_size_unaligned(p: MutPtr<u8>) -> usize {
     unsafe {
-        mem.store<uintsize>(p, 1, 91, Endian.LE)
-        return mem.load<uintsize>(p, 1, Endian.LE)
+        mem.store<usize>(p, 1, 91, Endian.LE)
+        return mem.load<usize>(p, 1, Endian.LE)
     }
 }

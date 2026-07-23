@@ -1,35 +1,35 @@
 extern "C" {
     fn xrayffi_bool_flip(x: bool) -> bool
-    fn xrayffi_i8_add(x: int8, y: int8) -> int8
-    fn xrayffi_u8_add(x: uint8, y: uint8) -> uint8
-    fn xrayffi_i16_add(x: int16, y: int16) -> int16
-    fn xrayffi_u16_add(x: uint16, y: uint16) -> uint16
-    fn xrayffi_i32_add(x: int32, y: int32) -> int32
-    fn xrayffi_u32_add(x: uint32, y: uint32) -> uint32
-    fn xrayffi_i64_add(x: int64, y: int64) -> int64
-    fn xrayffi_u64_add(x: uint64, y: uint64) -> uint64
-    fn xrayffi_size_roundtrip(x: uintsize) -> uintsize
-    fn xrayffi_ssize_roundtrip(x: intsize) -> intsize
-    fn xrayffi_f32_add(x: float32, y: float32) -> float32
-    fn xrayffi_f64_add(x: float64, y: float64) -> float64
+    fn xrayffi_i8_add(x: i8, y: i8) -> i8
+    fn xrayffi_u8_add(x: u8, y: u8) -> u8
+    fn xrayffi_i16_add(x: i16, y: i16) -> i16
+    fn xrayffi_u16_add(x: u16, y: u16) -> u16
+    fn xrayffi_i32_add(x: i32, y: i32) -> i32
+    fn xrayffi_u32_add(x: u32, y: u32) -> u32
+    fn xrayffi_i64_add(x: i64, y: i64) -> i64
+    fn xrayffi_u64_add(x: u64, y: u64) -> u64
+    fn xrayffi_size_roundtrip(x: usize) -> usize
+    fn xrayffi_ssize_roundtrip(x: isize) -> isize
+    fn xrayffi_f32_add(x: f32, y: f32) -> f32
+    fn xrayffi_f64_add(x: f64, y: f64) -> f64
     fn xrayffi_ptr_identity(p: Ptr<byte>) -> Ptr<byte>
-    fn xrayffi_void_sink(x: int32) -> ()
+    fn xrayffi_void_sink(x: i32) -> ()
 }
 
-var i8a: int8 = -2
-var i8b: int8 = 5
-var u8a: uint8 = 2
-var u8b: uint8 = 5
-var i16a: int16 = -20
-var i16b: int16 = 7
-var u16a: uint16 = 20
-var u16b: uint16 = 7
-var u32a: uint32 = 20
-var u32b: uint32 = 7
-var u64a: uint64 = 20
-var u64b: uint64 = 7
-var usizeValue: uintsize = 9
-var ssizeValue: intsize = -9
+var i8a: i8 = -2
+var i8b: i8 = 5
+var u8a: u8 = 2
+var u8b: u8 = 5
+var i16a: i16 = -20
+var i16b: i16 = 7
+var u16a: u16 = 20
+var u16b: u16 = 7
+var u32a: u32 = 20
+var u32b: u32 = 7
+var u64a: u64 = 20
+var u64b: u64 = 7
+var usizeValue: usize = 9
+var ssizeValue: isize = -9
 const bytes = b"X"
 
 unsafe { xrayffi_void_sink(1) }

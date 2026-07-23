@@ -1,0 +1,11 @@
+fn worker() -> Array<int> {
+    return [1, 2, 3]
+}
+
+fn main_logic() {
+    var task = go worker()
+    var values = await (move task)
+    print(values)
+}
+
+main_logic()

@@ -1,1 +1,1 @@
-mem.store<T>() expects MutPtr<uint8> as its first argument, got 'Ptr<byte>'
+mem.store<T>() expects MutPtr<u8> as its first argument, got 'Ptr<byte>'

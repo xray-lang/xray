@@ -30,6 +30,7 @@
 #include "xi_escape.h"
 #include "xi_ops_gen.h"
 #include "xi_value_query.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
@@ -241,6 +242,35 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
     return false;
 }
 
+static const XiValue *own_unwrap_identity_value(const XiValue *value) {
+    while (value &&
+           (value->op == XI_BOX || value->op == XI_UNBOX || xi_copy_is_identity_alias(value) ||
+            xi_op_is_identity_forward(value->op)) &&
+           value->nargs >= 1)
+        value = value->args[0];
+    return value;
+}
+
+static bool native_module_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if (!user || user->op != XI_CALL || arg_idx == 0 || user->nargs < 2 || !user->args[0])
+        return false;
+    const XiValue *callee = own_unwrap_identity_value(user->args[0]);
+    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
+        return false;
+    const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    if (!ref->module_path || !ref->member_name ||
+        !xa_builtin_get_module_func_signature(ref->module_path, ref->member_name))
+        return false;
+
+    /* Native net functions inspect their arguments only for the duration of
+     * the call.  They neither retain nor release the Xray values: connection
+     * handles remain owned by the caller even after net.close(), while string
+     * and byte-buffer inputs are copied/read synchronously.  Model that ABI
+     * contract here so ARC does not move a caller parameter into the bodyless
+     * runtime call and infer a false owning signature for its wrapper. */
+    return strcmp(ref->module_path, "net") == 0;
+}
+
 static bool use_is_consuming(const XiValue *user, uint16_t arg_idx) {
     return xi_own_value_arg_is_consuming(user, arg_idx);
 }
@@ -299,6 +329,8 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
     if (low_level_byte_method_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_call_arg_is_borrowed(user, arg_idx))
+        return false;
+    if (native_module_call_arg_is_borrowed(user, arg_idx))
         return false;
     if (channel_send_method_payload_arg(user, arg_idx))
         return xi_chan_send_transfer_mode(user) == XR_TRANSFER_MOVE;

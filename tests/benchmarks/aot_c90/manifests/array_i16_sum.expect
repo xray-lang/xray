@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<int16> must stay as int16_t storage with direct raw access.
+# Local Array<i16> must stay as int16_t storage with direct raw access.
 hot_function=^array_i16_sum_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_local_count=2

@@ -149,9 +149,9 @@ static XiFunc *make_manual_extern_func(const char *source_name, const char *link
 TEST(aot_extern_registry_deduplicates_and_rejects_conflicts) {
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 120, .frozen = true};
     XrType int32_type = {
-        .kind = XR_KIND_INT, .id = 121, .native_width = XR_NATIVE_I32, .frozen = true};
+        .kind = XR_KIND_INT, .id = 121, .scalar_rep = XR_NATIVE_I32, .frozen = true};
     XrType float32_type = {
-        .kind = XR_KIND_FLOAT, .id = 122, .native_width = XR_NATIVE_F32, .frozen = true};
+        .kind = XR_KIND_FLOAT, .id = 122, .scalar_rep = XR_NATIVE_F32, .frozen = true};
     XiFunc *init = xi_func_new("<module-init>", &unit_type);
     XiFunc *first =
         make_manual_extern_func("first_alias", "task208_same_symbol", &int32_type, &int32_type);
@@ -443,7 +443,7 @@ static uint8_t test_aot_class_field_semantic_kind(uint8_t native_type) {
     }
 }
 
-static uint8_t test_aot_class_field_native_width(uint8_t semantic_kind, uint8_t native_type) {
+static uint8_t test_aot_class_field_scalar_rep(uint8_t semantic_kind, uint8_t native_type) {
     switch ((XgClassFieldTypeKind) semantic_kind) {
         case XG_CLASS_FIELD_TYPE_I8:
         case XG_CLASS_FIELD_TYPE_U8:
@@ -459,7 +459,7 @@ static uint8_t test_aot_class_field_native_width(uint8_t semantic_kind, uint8_t 
         case XG_CLASS_FIELD_TYPE_F64:
             return native_type;
         default:
-            return 0;
+            return XR_SCALAR_REP_NONE;
     }
 }
 
@@ -536,8 +536,8 @@ static void test_aot_add_class_evidence(TestAotPlan *plan, XiModule *module, XgM
             field.decl_ordinal = fi;
             field.instance_slot = layout_idx;
             field.semantic_kind = semantic_kind;
-            field.native_width =
-                test_aot_class_field_native_width(semantic_kind, layout_field->native_type);
+            field.scalar_rep =
+                test_aot_class_field_scalar_rep(semantic_kind, layout_field->native_type);
             if (xaot_class_field_physical_layout(&plan->bundle.target_data_layout, semantic_kind,
                                                  &physical) &&
                 physical.ownership == XAOT_CLASS_FIELD_OWNERSHIP_OWNED)
@@ -1530,7 +1530,7 @@ TEST(cgen_canonical_generic_function_body_is_executable) {
 }
 
 TEST(cgen_plain_function_does_not_emit_public_c_abi_wrapper) {
-    const char *src = "fn add(a: int32, b: int32) -> int32 {\n"
+    const char *src = "fn add(a: i32, b: i32) -> i32 {\n"
                       "    return a + b\n"
                       "}\n"
                       "print(add(3, 4))\n";
@@ -1756,10 +1756,10 @@ TEST(cgen_emits_shadowed_debug_source_var_slots) {
 
 TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
     const char *src = "struct Point {\n"
-                      "    x: int32\n"
-                      "    y: int32\n"
+                      "    x: i32\n"
+                      "    y: i32\n"
                       "}\n"
-                      "fn make(seed: int32) -> Point {\n"
+                      "fn make(seed: i32) -> Point {\n"
                       "    if (seed < 0) { return Point{x: 0, y: 0} }\n"
                       "    var p = Point{x: seed + 1, y: seed + 2}\n"
                       "    var q = p\n"
@@ -2078,8 +2078,8 @@ TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
                       "flags.reserve(8)\n"
                       "parallel.mapInto(0..4, ref flags, (i) -> ((i + bias) % 2) == 0, "
                       "parallel.Options(2))\n"
-                      "fn byteValue() -> uint8 { return 2 }\n"
-                      "var bytes: Array<uint8> = []\n"
+                      "fn byteValue() -> u8 { return 2 }\n"
+                      "var bytes: Array<u8> = []\n"
                       "bytes.reserve(8)\n"
                       "parallel.mapInto(0..4, ref bytes, (i) -> byteValue(), parallel.Options(2))\n"
                       "print(len(floats))\n"
@@ -2100,7 +2100,7 @@ TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
     TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 1,
                  "Array<float> mapInto should store through direct double storage");
     TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 2,
-                 "Array<bool>/Array<uint8> mapInto should store through direct byte storage");
+                 "Array<bool>/Array<u8> mapInto should store through direct byte storage");
     TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
                  "scalar mapInto must not box through preallocated array writes");
 
@@ -2445,11 +2445,11 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
 
 TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    var bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<u8> = []\n"
                       "    bytes.push(200)\n"
                       "    unsafe {\n"
                       "        var value = 42\n"
-                      "        bytes.set(0, value as uint8)\n"
+                      "        bytes.set(0, value as u8)\n"
                       "    }\n"
                       "    return bytes[0] + len(bytes)\n"
                       "}\n"
@@ -2463,20 +2463,19 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed byte array fast path should generate");
     assert((contains(code, "xrt_array_new_typed(") || contains(code, "xrt_array_new_typed_ptr(")) &&
-           "Array<uint8> creation must preserve typed storage");
-    assert(contains(code, "XR_ELEM_U8") && "Array<uint8> must use the U8 typed element layout");
+           "Array<u8> creation must preserve typed storage");
+    assert(contains(code, "XR_ELEM_U8") && "Array<u8> must use the U8 typed element layout");
     assert(contains(code, "((uint8_t*)_a->data)") &&
-           "Array<uint8> index reads and writes must access raw byte storage");
-    assert(contains(code, "(uint8_t)") &&
-           "Array<uint8> writes must narrow to the byte storage width");
+           "Array<u8> index reads and writes must access raw byte storage");
+    assert(contains(code, "(uint8_t)") && "Array<u8> writes must narrow to the byte storage width");
     assert(!contains(code, "xrt_method_1(") &&
-           "Array<uint8>.push must not fall back to dynamic method dispatch");
+           "Array<u8>.push must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_getprop(") &&
-           "len(Array<uint8>) must not fall back to dynamic property dispatch");
+           "len(Array<u8>) must not fall back to dynamic property dispatch");
     assert(!contains(code, "xrt_index_get(") &&
-           "Array<uint8> index read must not fall back to runtime index dispatch");
+           "Array<u8> index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_index_set(") &&
-           "Array<uint8>.set must not fall back to runtime index dispatch");
+           "Array<u8>.set must not fall back to runtime index dispatch");
 
     printf("  Generated typed byte array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2510,7 +2509,7 @@ TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
 
 TEST(cgen_typed_array_zero_fill_range_uses_memset) {
     const char *src = "fn run() -> int {\n"
-                      "    var values = Array<uint32>(8, 7)\n"
+                      "    var values = Array<u32>(8, 7)\n"
                       "    values.fill(0, 0, 8)\n"
                       "    unsafe {\n"
                       "        return int(values.get(1)) + int(values.get(6))\n"
@@ -2557,10 +2556,10 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
                       "    var prefixLeft: Slice<byte> = dstView[0:2]\n"
                       "    var prefixRight: Slice<byte> = dstView[4:6]\n"
                       "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
-                      "    var v16: uint16 = view.load<uint16>(0, Endian.LE)\n"
-                      "    var v32: uint32 = view.load<uint32>(0, Endian.LE)\n"
-                      "    var v64: uint64 = view.load<uint64>(0, Endian.LE)\n"
-                      "    view.store<uint16>(8, v16, Endian.LE)\n"
+                      "    var v16: u16 = view.load<u16>(0, Endian.LE)\n"
+                      "    var v32: u32 = view.load<u32>(0, Endian.LE)\n"
+                      "    var v64: u64 = view.load<u64>(0, Endian.LE)\n"
+                      "    view.store<u16>(8, v16, Endian.LE)\n"
                       "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9] + prefix\n"
                       "}\n"
                       "print(run())\n";
@@ -2583,13 +2582,13 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
            "run function body should be bounded");
 
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u16_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<uint16>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<u16>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u32_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<uint32>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<u32>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u64_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<uint64>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<byte>.load<u64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
-           "Slice<byte>.store<uint16> must lower to the plan-driven core store helper");
+           "Slice<byte>.store<u16> must lower to the plan-driven core store helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_nonoverlap_bytes(") > 0 &&
            "Array<byte>.appendFrom must lower to the inline Array<byte>+Slice<byte> non-overlap "
            "fast path");
@@ -2697,7 +2696,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
 
 TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
     const char *src = "fn sum(src: Slice<byte>) -> int {\n"
-                      "    var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "    var v: u32 = src.load<u32>(0, Endian.LE)\n"
                       "    return int(v)\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -2741,7 +2740,7 @@ TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
                       "    return apply(fn(src: Slice<byte>) -> int {\n"
-                      "        var v: uint32 = src.load<uint32>(0, Endian.LE)\n"
+                      "        var v: u32 = src.load<u32>(0, Endian.LE)\n"
                       "        return int(v)\n"
                       "    }, bytes)\n"
                       "}\n"
@@ -2807,7 +2806,7 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "Ptr/MutPtr locals must use native pointer C storage");
     assert(count_between(fn, fn_end, "xr_raw_store_u8_unaligned(") > 0 &&
            count_between(fn, fn_end, "xr_raw_load_u8_unaligned(") > 0 &&
-           "MutPtr<uint8>/Ptr<uint8> accesses must use alias-safe raw scalar operations");
+           "MutPtr<u8>/Ptr<u8> accesses must use alias-safe raw scalar operations");
     assert(count_between(fn, fn_end, "memcpy(") > 0 &&
            "MutPtr.copyFromNonOverlapping must lower to raw memcpy");
     assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
@@ -3014,8 +3013,8 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
 TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
     const char *src = "fn hot(dst: ref Slice<byte>, src: Slice<byte>) -> int {\n"
                       "    var copied: Slice<byte> = dst.copyFrom(src)\n"
-                      "    var word: uint16 = dst.load<uint16>(0, Endian.LE)\n"
-                      "    dst.store<uint16>(0, word + 1, Endian.LE)\n"
+                      "    var word: u16 = dst.load<u16>(0, Endian.LE)\n"
+                      "    dst.store<u16>(0, word + 1, Endian.LE)\n"
                       "    return len(copied) + dst.compare(src)\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -3053,9 +3052,9 @@ TEST(cgen_mem_load_uses_pointer_helper) {
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = view.ptr()\n"
-                      "        var v16: uint16 = mem.load<uint16>(p, 1, Endian.LE)\n"
-                      "        var v32: uint32 = mem.load<uint32>(p, 0, Endian.LE)\n"
-                      "        var v64: uint64 = mem.load<uint64>(p, 0, Endian.LE)\n"
+                      "        var v16: u16 = mem.load<u16>(p, 1, Endian.LE)\n"
+                      "        var v32: u32 = mem.load<u32>(p, 0, Endian.LE)\n"
+                      "        var v64: u64 = mem.load<u64>(p, 0, Endian.LE)\n"
                       "        sum = int(v16) + int(v32) + int(v64)\n"
                       "    }\n"
                       "    return sum\n"
@@ -3122,9 +3121,9 @@ TEST(cgen_mem_store_uses_pointer_helper) {
                       "    var view: Slice<byte> = dst[:]\n"
                       "    unsafe {\n"
                       "        var p = view.mutPtr()\n"
-                      "        mem.store<uint16>(p, 1, 0x1234, Endian.LE)\n"
-                      "        mem.store<uint32>(p, 4, 0x01020304, Endian.LE)\n"
-                      "        mem.store<uint64>(p, 8, 0x0102030405060708, Endian.LE)\n"
+                      "        mem.store<u16>(p, 1, 0x1234, Endian.LE)\n"
+                      "        mem.store<u32>(p, 4, 0x01020304, Endian.LE)\n"
+                      "        mem.store<u64>(p, 8, 0x0102030405060708, Endian.LE)\n"
                       "    }\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -3212,7 +3211,7 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
 }
 
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
-    const char *src = "fn leakPtr(src: Slice<byte>) -> Ptr<uint8> {\n"
+    const char *src = "fn leakPtr(src: Slice<byte>) -> Ptr<u8> {\n"
                       "    unsafe {\n"
                       "        return src.ptr()\n"
                       "    }\n"
@@ -3239,8 +3238,8 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
 
 TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
     const char *src = "fn mix() -> int {\n"
-                      "    var i16s: Array<int16> = []\n"
-                      "    var u32s: Array<uint32> = []\n"
+                      "    var i16s: Array<i16> = []\n"
+                      "    var u32s: Array<u32> = []\n"
                       "    i16s.push(32767)\n"
                       "    u32s.push(4294967295)\n"
                       "    return i16s[0] + u32s[0] + len(i16s) + len(u32s)\n"
@@ -3254,16 +3253,16 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed sub-width array fast path should generate");
-    assert(contains(code, "XR_ELEM_I16") && "Array<int16> must use the I16 typed element layout");
+    assert(contains(code, "XR_ELEM_I16") && "Array<i16> must use the I16 typed element layout");
     assert(contains(code, "((int16_t*)_a->data)") &&
-           "Array<int16> index reads and writes must access raw int16 storage");
+           "Array<i16> index reads and writes must access raw i16 storage");
     assert(contains(code, "(int16_t)") &&
-           "Array<int16> writes must narrow to the signed 16-bit storage width");
-    assert(contains(code, "XR_ELEM_U32") && "Array<uint32> must use the U32 typed element layout");
+           "Array<i16> writes must narrow to the signed 16-bit storage width");
+    assert(contains(code, "XR_ELEM_U32") && "Array<u32> must use the U32 typed element layout");
     assert(contains(code, "((uint32_t*)_a->data)") &&
-           "Array<uint32> index reads and writes must access raw uint32 storage");
+           "Array<u32> index reads and writes must access raw u32 storage");
     assert(contains(code, "(uint32_t)") &&
-           "Array<uint32> writes must narrow to the unsigned 32-bit storage width");
+           "Array<u32> writes must narrow to the unsigned 32-bit storage width");
     assert(!contains(code, "xrt_method_1(") &&
            "sub-width typed array push must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_index_get(") &&
@@ -3277,7 +3276,7 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
 TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     const char *src = "fn mix() -> float {\n"
                       "    var values: Array<float> = []\n"
-                      "    var samples: Array<float32> = []\n"
+                      "    var samples: Array<f32> = []\n"
                       "    var flags: Array<bool> = []\n"
                       "    values.push(3.5)\n"
                       "    samples.push(1.25)\n"
@@ -3299,11 +3298,11 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     assert(contains(code, "XR_ELEM_F64") && "Array<float> must use the F64 typed element layout");
     assert(contains(code, "((double*)_a->data)") &&
            "Array<float> index reads and writes must access raw double storage");
-    assert(contains(code, "XR_ELEM_F32") && "Array<float32> must use the F32 typed element layout");
+    assert(contains(code, "XR_ELEM_F32") && "Array<f32> must use the F32 typed element layout");
     assert(contains(code, "((float*)_a->data)") &&
-           "Array<float32> index reads and writes must access raw float storage");
+           "Array<f32> index reads and writes must access raw float storage");
     assert(!contains(code, "(double)(float)((float*)") &&
-           "Array<float32> raw loads are already float-rounded");
+           "Array<f32> raw loads are already float-rounded");
     assert(contains(code, "XR_ELEM_BOOL") && "Array<bool> must use the BOOL typed element layout");
     assert(contains(code, "((uint8_t*)_a->data)") &&
            "Array<bool> index reads and writes must access raw byte storage");
@@ -3340,7 +3339,7 @@ TEST(cgen_typed_array_rune_uses_scalar_storage_with_rune_boxing) {
     assert(contains(code, "XR_TO_RUNE(") && "Array<rune> writes must unbox tagged rune values");
     assert(contains(code, "XR_FROM_RUNE((uint32_t)") &&
            "Array<rune> reads must re-box raw scalars as rune");
-    assert(!contains(code, "XR_ELEM_U32") && "Array<rune> must not degrade to Array<uint32>");
+    assert(!contains(code, "XR_ELEM_U32") && "Array<rune> must not degrade to Array<u32>");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<rune>.push must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_index_get(") &&
@@ -3356,7 +3355,7 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
                       "    x: int\n"
                       "    y: float\n"
                       "    ok: bool\n"
-                      "    octet: uint8\n"
+                      "    octet: u8\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var p = Sample{x: 41, y: 2.5, ok: true, octet: 200}\n"
@@ -3396,7 +3395,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
                       "    x: int\n"
                       "    y: float\n"
                       "    ok: bool\n"
-                      "    octet: uint8\n"
+                      "    octet: u8\n"
                       "}\n"
                       "var p = Sample{x: 41, y: 2.5, ok: true, octet: 200}\n"
                       "p.x = p.x + 1\n"
@@ -3503,8 +3502,8 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
 
 TEST(cgen_fixed_layout_struct_omits_native_header) {
     const char *src = "struct CPair {\n"
-                      "    a: int32\n"
-                      "    b: uint8\n"
+                      "    a: i32\n"
+                      "    b: u8\n"
                       "}\n"
                       "var p = CPair{a: 41, b: 1}\n"
                       "p.a = p.a + 1\n"
@@ -3527,9 +3526,9 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
     assert(count_between(typedef_start, typedef_end, "_layout") == 0 &&
            "fixed-layout typedef must not include the Xray layout header");
     assert(count_between(typedef_start, typedef_end, "int32_t a") == 1 &&
-           "fixed-layout int32 field must be placed at payload offset 0");
+           "fixed-layout i32 field must be placed at payload offset 0");
     assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
-           "fixed-layout uint8 field must be emitted as raw C storage");
+           "fixed-layout u8 field must be emitted as raw C storage");
     assert(contains(code, "xr_aggregate_ref(_s, (uint16_t)sizeof(") &&
            "fixed-layout struct refs must carry storage size outside the payload");
 
@@ -3578,7 +3577,7 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
 
 TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     const char *src = "struct Buf {\n"
-                      "    data: [uint8; 4]\n"
+                      "    data: [u8; 4]\n"
                       "    bias: int\n"
                       "}\n"
                       "var buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
@@ -3632,14 +3631,14 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
 }
 
 TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
-    const char *src = "fn first(key: [uint8; 4]) -> int {\n"
+    const char *src = "fn first(key: [u8; 4]) -> int {\n"
                       "    return key[0]\n"
                       "}\n"
-                      "fn at(key: [uint8; 4], i: int) -> int {\n"
+                      "fn at(key: [u8; 4], i: int) -> int {\n"
                       "    return key[i]\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var key: [uint8; 4] = [1, 2, 3, 4]\n"
+                      "    var key: [u8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
                       "    return len(key) + first(key) + key[1] + at(key, 2)\n"
                       "}\n"
@@ -4112,9 +4111,9 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *fn_end = next_static_after(fn);
 
     assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_I64)") &&
-           "Set<int> class field constructor should use typed int64 set storage");
+           "Set<int> class field constructor should use typed i64 set storage");
     assert(count_between(fn, fn_end, "xrt_set_add_i64(") == 1 &&
-           "Set<int>.add should use the int64 direct helper");
+           "Set<int>.add should use the i64 direct helper");
     assert(count_between(fn, fn_end, "int64_t v") > 0 && count_between(fn, fn_end, "->len") > 0 &&
            "len(Set<int>) should be materialized as a scalar field load");
     assert(count_between(fn, fn_end, "XR_FROM_INT((p0)->") == 0 &&
@@ -4133,7 +4132,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
 
 TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
     const char *src = "class Bag {\n"
-                      "    values: Set<uint8>\n"
+                      "    values: Set<u8>\n"
                       "    constructor() {\n"
                       "        this.values = #[]\n"
                       "    }\n"
@@ -4177,7 +4176,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "class Set<uint8> direct helpers should generate");
+    assert(!had_error && "class Set<u8> direct helpers should generate");
 
     const char *fill = strstr(code, "static int64_t test_fill_");
     assert(fill != NULL && "fill method should use typed ABI");
@@ -4196,17 +4195,17 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
     const char *prune_end = next_static_after(prune);
 
     assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_U8)") &&
-           "Set<uint8> class field constructor should use byte set storage");
+           "Set<u8> class field constructor should use byte set storage");
     assert(count_between(fill, fill_end, "xrt_set_add_i64_typed(") == 1 &&
-           "Set<uint8>.add should use the typed integer direct helper");
+           "Set<u8>.add should use the typed integer direct helper");
     assert(count_between(scan, scan_end, "xrt_set_has_i64_typed(") == 1 &&
-           "Set<uint8>.has should use the typed integer direct helper");
+           "Set<u8>.has should use the typed integer direct helper");
     assert(count_between(prune, prune_end, "xrt_set_delete_i64_typed(") == 1 &&
-           "Set<uint8>.delete should use the typed integer direct helper");
-    assert(contains(code, "XR_ELEM_U8") && "Set<uint8> helper calls should pass XR_ELEM_U8");
+           "Set<u8>.delete should use the typed integer direct helper");
+    assert(contains(code, "XR_ELEM_U8") && "Set<u8> helper calls should pass XR_ELEM_U8");
     assert(!contains(code, "xrt_set_add(") && !contains(code, "xrt_set_has(") &&
            !contains(code, "xrt_set_delete(") &&
-           "Set<uint8> class hot methods should not fall back to tagged set helpers");
+           "Set<u8> class hot methods should not fall back to tagged set helpers");
 
     xr_free(code);
     xi_func_free(ir);
@@ -4303,7 +4302,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
 }
 TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     const char *src =
-        "class Bag { values: Map<bool, float32>\n"
+        "class Bag { values: Map<bool, f32>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
         "this.values.set(false, 2.25); return len(this.values) } "
         "scan() -> float { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
@@ -4517,11 +4516,11 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
 
 TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    var bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    var mid: Slice<uint8> = bytes[1:3]\n"
+                      "    var mid: Slice<u8> = bytes[1:3]\n"
                       "    return mid[0] + len(mid)\n"
                       "}\n"
                       "print(sum())\n";
@@ -4535,17 +4534,17 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     assert(!had_error && "typed array slice fast path should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
            "typed array slice must stay in native borrowed-span storage");
-    assert(contains(code, "XR_ELEM_U8") && "Array<uint8> source must keep byte storage");
+    assert(contains(code, "XR_ELEM_U8") && "Array<u8> source must keep byte storage");
     assert((contains(code, "((uint8_t*)_a->data)") || contains(code, "uint8_t *_ad")) &&
-           "Array<uint8> slice reads must access raw byte storage");
+           "Array<u8> slice reads must access raw byte storage");
     assert(contains(code, "((xrt_array_t*)") &&
-           "Array<uint8> slice length must read the runtime array length directly");
+           "Array<u8> slice length must read the runtime array length directly");
     assert(!contains(code, "xrt_index_get(") &&
-           "Array<uint8> slice index read must not fall back to runtime index dispatch");
+           "Array<u8> slice index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
-           "Array<uint8> slice length must not fall back to dynamic property dispatch");
+           "Array<u8> slice length must not fall back to dynamic property dispatch");
     assert(!contains(code, "xrt_method_") &&
-           "Array<uint8> slice expression must not use dynamic method dispatch");
+           "Array<u8> slice expression must not use dynamic method dispatch");
 
     printf("  Generated typed array slice fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4617,13 +4616,13 @@ TEST(cgen_range_uses_direct_aot_driver) {
 
 TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
     const char *src = "fn sum(n: int) -> int {\n"
-                      "    var bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<u8> = []\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        bytes.push(i)\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    var mid: Slice<uint8> = bytes[1:n - 1]\n"
+                      "    var mid: Slice<u8> = bytes[1:n - 1]\n"
                       "    var total = 0\n"
                       "    i = 0\n"
                       "    while (i < len(mid)) {\n"
@@ -4644,11 +4643,11 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
     const char *code_end = code + strlen(code);
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "guarded Array<uint8> fill loop must preallocate uninitialized typed storage");
+           "guarded Array<u8> fill loop must preallocate uninitialized typed storage");
     assert(contains(code, "uint8_t *_ad") &&
-           "guarded Array<uint8> fill loop must cache raw byte storage");
+           "guarded Array<u8> fill loop must cache raw byte storage");
     assert(count_between(code, code_end, "uint8_t *_ad") >= 2 &&
-           "guarded Array<uint8> slice loop must cache source and slice data pointers");
+           "guarded Array<u8> slice loop must cache source and slice data pointers");
     assert(!contains(code, "_a->len =") &&
            "guarded typed array fill loop must use final len store outside the push body");
     assert(!contains(code, "_a->len >= _a->cap") &&
@@ -4725,11 +4724,11 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
 
 TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
-                      "    var bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    var kept = bytes.filter(fn(x: u8) -> bool { return x > 1 })\n"
                       "    kept.push(9)\n"
                       "    return kept[0] + kept[2] + len(kept)\n"
                       "}\n"
@@ -4743,30 +4742,30 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed array filter fast path should generate");
     assert(!contains(code, "xrt_array_filter_typed(") &&
-           "pure Array<uint8>.filter callback must inline instead of using boxed runtime helper");
+           "pure Array<u8>.filter callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "pure inlined Array<uint8>.filter must not allocate a callback closure");
+           "pure inlined Array<u8>.filter must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
-           "pure inlined Array<uint8>.filter must not emit a dead boxed callback adapter");
+           "pure inlined Array<u8>.filter must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "inlined Array<uint8>.filter must preallocate typed result storage");
+           "inlined Array<u8>.filter must preallocate typed result storage");
     assert(contains(code, "XR_ELEM_U8") &&
-           "Array<uint8>.filter result must use the U8 typed element layout");
+           "Array<u8>.filter result must use the U8 typed element layout");
     assert(contains(code, "uint8_t *_dstd") &&
-           "inlined Array<uint8>.filter must write through a typed result pointer");
+           "inlined Array<u8>.filter must write through a typed result pointer");
     assert(contains(code, "uint8_t *_srcd") &&
-           "inlined Array<uint8>.filter must read through a typed source pointer");
+           "inlined Array<u8>.filter must read through a typed source pointer");
     assert(contains(code, "test___anonymous__") &&
-           "inlined Array<uint8>.filter must call the callback's native function");
+           "inlined Array<u8>.filter must call the callback's native function");
     assert((contains(code, "((uint8_t*)_a->data)") || contains(code, "uint8_t *_dstd")) &&
-           "Array<uint8> filter result reads and writes must access raw byte storage");
+           "Array<u8> filter result reads and writes must access raw byte storage");
     assert(!contains(code, "xrt_method_1(") &&
-           "Array<uint8>.filter must not fall back to dynamic method dispatch");
+           "Array<u8>.filter must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_index_get(") &&
-           "Array<uint8> filter result index read must not fall back to runtime index dispatch");
+           "Array<u8> filter result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
-           "Array<uint8> filter result length must not fall back to dynamic property dispatch");
+           "Array<u8> filter result length must not fall back to dynamic property dispatch");
 
     printf("  Generated typed array filter fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4810,7 +4809,7 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
     assert(contains(code, "test___anonymous__") &&
            "inlined Array<int>.map must call the callback's native function");
     assert((contains(code, "((int64_t*)_a->data)") || contains(code, "int64_t *_dstd")) &&
-           "Array<int>.map result reads and writes must access raw int64 storage");
+           "Array<int>.map result reads and writes must access raw i64 storage");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<int>.map must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_index_get(") &&
@@ -5113,11 +5112,11 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
 
 TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     const char *src = "fn sum() -> int {\n"
-                      "    var bytes: Array<uint8> = []\n"
+                      "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    var kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    var kept = bytes.filter(fn(x: u8) -> bool { return x > 1 })\n"
                       "    var i = 0\n"
                       "    var total = 0\n"
                       "    while (i < len(kept)) {\n"
@@ -5137,14 +5136,14 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     const char *code_end = code + strlen(code);
     assert(!had_error && "read-only typed array filter scan should generate");
     assert(!contains(code, "xrt_array_filter_typed(") &&
-           "read-only pure Array<uint8>.filter must inline instead of using boxed runtime helper");
+           "read-only pure Array<u8>.filter must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "read-only pure Array<uint8>.filter must not allocate a callback closure");
+           "read-only pure Array<u8>.filter must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
-           "read-only pure Array<uint8>.filter must not emit a dead boxed callback adapter");
+           "read-only pure Array<u8>.filter must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "read-only pure Array<uint8>.filter must preallocate typed result storage");
+           "read-only pure Array<u8>.filter must preallocate typed result storage");
     assert(contains(code, "uint8_t *_ad") &&
            "read-only filter result must cache the typed data pointer");
     assert(count_between(code, code_end, "uint8_t *_ad") >= 1 &&
@@ -5300,11 +5299,11 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
 }
 
 TEST(cgen_nonnegative_const_shr_uses_native_op) {
-    const char *src = "fn fast(b: uint8) -> int {\n"
+    const char *src = "fn fast(b: u8) -> int {\n"
                       "    var x = int(b)\n"
                       "    return x >> 4\n"
                       "}\n"
-                      "fn widen(b: uint8) -> int {\n"
+                      "fn widen(b: u8) -> int {\n"
                       "    var x = int(b)\n"
                       "    return x << 8\n"
                       "}\n"
@@ -5387,11 +5386,11 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
 }
 
 TEST(cgen_unsigned_const_shift_uses_native_op) {
-    const char *src = "fn unsignedShift(x: uint64) -> uint64 {\n"
+    const char *src = "fn unsignedShift(x: u64) -> u64 {\n"
                       "    var shifted = x << 24\n"
                       "    return shifted >> 52\n"
                       "}\n"
-                      "fn dynamicShift(x: uint64, s: int) -> uint64 {\n"
+                      "fn dynamicShift(x: u64, s: int) -> u64 {\n"
                       "    return x >> s\n"
                       "}\n"
                       "print(unsignedShift(889523592379))\n"
@@ -5409,19 +5408,19 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
     assert(fast != NULL && "unsignedShift function should be generated");
     const char *fast_end = next_static_after(fast);
     assert(count_between(fast, fast_end, "<< UINT64_C(24)") == 1 &&
-           "uint64 constant left shift should use native C <<");
+           "u64 constant left shift should use native C <<");
     assert(count_between(fast, fast_end, ">> UINT64_C(52)") == 1 &&
-           "uint64 constant right shift should use native C >>");
+           "u64 constant right shift should use native C >>");
     assert(count_between(fast, fast_end, "UINT64_C(24)))") == 0 &&
-           "uint64 constant left shift expression must be balanced C");
+           "u64 constant left shift expression must be balanced C");
     assert(count_between(fast, fast_end, "UINT64_C(52)))") == 0 &&
-           "uint64 constant right shift expression must be balanced C");
+           "u64 constant right shift expression must be balanced C");
     assert(count_between(fast, fast_end, "(int64_t)(((uint64_t)") == 0 &&
-           "unboxed uint64 constant shifts should stay unsigned in generated C");
+           "unboxed u64 constant shifts should stay unsigned in generated C");
     assert(count_between(fast, fast_end, "xrt_i64_shl(") == 0 &&
-           "uint64 constant left shift must not call the runtime helper");
+           "u64 constant left shift must not call the runtime helper");
     assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
-           "uint64 constant right shift must not call the runtime helper");
+           "u64 constant right shift must not call the runtime helper");
 
     const char *dynamic = find_static_function_definition(code, "test_dynamicShift_");
     assert(dynamic != NULL && "dynamicShift function should be generated");
@@ -5435,12 +5434,12 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
 }
 
 TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
-    const char *src = "fn hash32(seq: uint32) -> uint32 {\n"
-                      "    var prime: uint32 = 2654435761\n"
+    const char *src = "fn hash32(seq: u32) -> u32 {\n"
+                      "    var prime: u32 = 2654435761\n"
                       "    return seq * prime\n"
                       "}\n"
-                      "fn mix64(seq: uint64) -> uint64 {\n"
-                      "    var prime: uint64 = 889523592379\n"
+                      "fn mix64(seq: u64) -> u64 {\n"
+                      "    var prime: u64 = 889523592379\n"
                       "    return (seq + prime) * prime\n"
                       "}\n"
                       "fn signedMul(a: int, b: int) -> int {\n"
@@ -5462,19 +5461,19 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     assert(hash32 != NULL && "hash32 function should be generated");
     const char *hash32_end = next_static_after(hash32);
     assert(count_between(hash32, hash32_end, "(uint32_t)(") >= 3 &&
-           "uint32 arithmetic should use width-precise unsigned C operands");
+           "u32 arithmetic should use width-precise unsigned C operands");
     assert(count_between(hash32, hash32_end, "(uint64_t)(") == 0 &&
-           "uint32 arithmetic should not widen through uint64_t");
+           "u32 arithmetic should not widen through uint64_t");
     assert(count_between(hash32, hash32_end, "(int64_t)((uint64_t)") == 0 &&
-           "uint32 arithmetic should not cast the product through int64_t");
+           "u32 arithmetic should not cast the product through int64_t");
 
     const char *mix64 = find_static_function_definition(code, "test_mix64_");
     assert(mix64 != NULL && "mix64 function should be generated");
     const char *mix64_end = next_static_after(mix64);
     assert(count_between(mix64, mix64_end, "(uint64_t)(") >= 4 &&
-           "uint64 arithmetic should use unsigned C operands");
+           "u64 arithmetic should use unsigned C operands");
     assert(count_between(mix64, mix64_end, "(int64_t)((uint64_t)") == 0 &&
-           "unboxed uint64 arithmetic should not cast through int64_t");
+           "unboxed u64 arithmetic should not cast through int64_t");
 
     const char *signed_mul = find_static_function_definition(code, "test_signedMul_");
     assert(signed_mul != NULL && "signedMul function should be generated");
@@ -7707,7 +7706,7 @@ TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
            "await-all-only task producers should use deferred batch submission");
     assert(!contains(code, "xr_aot_spawn_child") &&
            "await-all-only task producers should not yield after each go");
-    assert(contains(code, ", 0, false, true, \"worker\"") &&
+    assert(contains(code, ", 0, false, true, false, \"worker\"") &&
            "unique pushed task producers should be spawned as one-shot await tasks");
     assert(count_between(code, await_call, "xrt_value_clone_for_coro(") == 0 &&
            "named task arrays are frame roots and should not be deep-cloned before await all");
@@ -7771,7 +7770,7 @@ TEST(cgen_coro_await_all_reused_push_task_array_uses_one_shot) {
            "loop-pushed await-all tasks should use deferred batch submission");
     assert(!contains(code, "xr_aot_spawn_child") &&
            "loop-pushed await-all tasks should not yield after each go");
-    assert(contains(code, ", 0, false, true, \"worker\"") &&
+    assert(contains(code, ", 0, false, true, false, \"worker\"") &&
            "loop-pushed go producers should be spawned as one-shot await tasks");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "deferred spawn registration loops should not poll before the aggregate await submit");
@@ -7841,7 +7840,7 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
            "await all into task producers should use deferred batch submission");
     assert(!contains(code, "xr_aot_spawn(ctx, &") &&
            "await all into task producers should not yield after each go");
-    assert(contains(code, ", 0, false, true, \"worker\"") &&
+    assert(contains(code, ", 0, false, true, false, \"worker\"") &&
            "await all into task producers should be spawned as one-shot await tasks");
     assert(!contains(code, "xrt_array_reserve_value(") &&
            "await all into setup should reserve typed arrays through the raw pointer helper");
@@ -7946,7 +7945,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
            "deferred ResultGroup producers should not yield after each go");
     assert(contains_between(code, recv_call, "xr_aot_submit_deferred_spawns(ctx);") &&
            "ResultGroup recv should submit deferred fire-and-forget producers first");
-    assert(contains(code, ", 0, true, false, \"worker\"") &&
+    assert(contains(code, ", 0, true, false, false, \"worker\"") &&
            "fire-and-forget ResultGroup producers should stay task-less");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "deferred fire-and-forget producer loops should not poll before the blocking recv");

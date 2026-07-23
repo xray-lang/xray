@@ -48,6 +48,12 @@ XR_FUNC const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyze
  * Await lowering consumes that handle even though the source language keeps
  * the uniform `await task` spelling. */
 XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type);
+XR_FUNC bool xa_task_result_requires_consuming_await(const XrType *result);
+/* Copy-value aggregates can still be pointer-backed in the hosted runtimes.
+ * Their Task result is compiler-planned as a shared copy so the source-level
+ * multi-observer contract does not depend on backend representation. */
+XR_FUNC bool xa_task_type_requires_shared_copy_publication(const XrType *type);
+XR_FUNC bool xa_task_result_requires_shared_copy_publication(const XrType *result);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)

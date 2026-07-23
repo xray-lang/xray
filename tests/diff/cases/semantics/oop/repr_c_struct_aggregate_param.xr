@@ -1,18 +1,18 @@
 struct Inner {
-    x: int32
+    x: i32
 }
 
 struct Outer {
     inner: Inner
-    y: int32
+    y: i32
 }
 
 struct Buf {
     data: [byte; 4]
-    bias: int32
+    bias: i32
 }
 
-fn sum_outer(p: Outer) -> int32 {
+fn sum_outer(p: Outer) -> i32 {
     return p.inner.x + p.y
 }
 
@@ -20,17 +20,17 @@ fn grow_outer(p: Outer) -> Outer {
     return Outer{inner: Inner{x: p.inner.x + 1}, y: p.y + 2}
 }
 
-fn sum_buf(p: Buf) -> int32 {
-    return p.data[0] as int32 + p.data[1] as int32 + p.bias
+fn sum_buf(p: Buf) -> i32 {
+    return p.data[0] as i32 + p.data[1] as i32 + p.bias
 }
 
-fn pick_buf(p: Buf, i: int) -> int32 {
-    return p.data[i] as int32 + p.bias
+fn pick_buf(p: Buf, i: int) -> i32 {
+    return p.data[i] as i32 + p.bias
 }
 
-fn patch_buf(p: Buf) -> int32 {
+fn patch_buf(p: Buf) -> i32 {
     p.data[1] = 9
-    return p.data[0] as int32 + p.data[1] as int32 + p.bias
+    return p.data[0] as i32 + p.data[1] as i32 + p.bias
 }
 
 var outer = Outer{inner: Inner{x: 35}, y: 7}

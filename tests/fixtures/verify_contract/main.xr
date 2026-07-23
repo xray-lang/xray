@@ -10,4 +10,4 @@ export fn allocates(value: int) -> int {
 }
 
 print(pure(41))
-print(callPrivateWide(41 as uint64))
+print(callPrivateWide(41 as u64))

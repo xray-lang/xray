@@ -974,6 +974,13 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->is_loop_variable = src->is_loop_variable;
 }
 
+const XaMemoryEffectSummary *xa_symbol_links_memory_effect_summary(const XaSymbolLinks *links) {
+    XaAnalyzer *owner = links ? links->summary_owner : NULL;
+    if (!owner || !owner->memory_effect_db || links->memory_effect_id == XA_MEMORY_EFFECT_NONE)
+        return NULL;
+    return xa_memory_effect_db_get(owner->memory_effect_db, links->memory_effect_id);
+}
+
 void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present, const char *message) {
     if (!links)
         return;

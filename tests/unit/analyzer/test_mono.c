@@ -32,6 +32,39 @@ TEST(mono_type_tag_basic) {
     ASSERT_STR_EQ(xr_mono_type_tag(NULL), "unknown");
 }
 
+TEST(mono_scalar_tags_are_semantic_and_unique) {
+    struct {
+        uint8_t kind;
+        uint8_t scalar_rep;
+        const char *tag;
+    } cases[] = {
+        {XR_TREF_INT_WIDTH, XR_NATIVE_I8, "i8"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_U8, "u8"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_I16, "i16"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_U16, "u16"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_I32, "i32"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_U32, "u32"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_I64, "i64"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_U64, "u64"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_ISIZE, "isize"},
+        {XR_TREF_INT_WIDTH, XR_NATIVE_USIZE, "usize"},
+        {XR_TREF_FLOAT_WIDTH, XR_NATIVE_F32, "f32"},
+        {XR_TREF_FLOAT_WIDTH, XR_NATIVE_F64, "f64"},
+    };
+    XrTypeRef refs[sizeof(cases) / sizeof(cases[0])];
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        refs[i] = (XrTypeRef) {.kind = cases[i].kind, .scalar_rep = cases[i].scalar_rep};
+        ASSERT_STR_EQ(xr_mono_type_tag(&refs[i]), cases[i].tag);
+        for (size_t j = 0; j < i; j++)
+            ASSERT(strcmp(xr_mono_type_tag(&refs[i]), xr_mono_type_tag(&refs[j])) != 0);
+    }
+
+    XrTypeRef int_default = {.kind = XR_TREF_INT, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef float_default = {.kind = XR_TREF_FLOAT, .scalar_rep = XR_NATIVE_F64};
+    ASSERT_STR_EQ(xr_mono_type_tag(&int_default), xr_mono_type_tag(&refs[6]));
+    ASSERT_STR_EQ(xr_mono_type_tag(&float_default), xr_mono_type_tag(&refs[11]));
+}
+
 TEST(mono_mangle_single) {
     XrTypeRef int_t = {.kind = XR_TREF_INT};
     XrTypeRef *args[] = {&int_t};
@@ -311,6 +344,7 @@ int main(void) {
     xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Name Mangling");
     RUN_TEST(mono_type_tag_basic);
+    RUN_TEST(mono_scalar_tags_are_semantic_and_unique);
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
     RUN_TEST(mono_mangle_preserves_const_capability_identity);

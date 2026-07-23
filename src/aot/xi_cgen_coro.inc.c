@@ -2659,6 +2659,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         int link_mode = (int) v->aux_int & 0xff;
         bool one_shot_await = (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0;
+        bool result_copy_shared = (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0;
         bool defer_batch = (v->aux_int & XI_GO_AUX_DEFER_BATCH) != 0;
         bool fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
         int sid = ++(*state_id);
@@ -2673,9 +2674,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrAotSpawnResult _spawn_%u = %s(ctx, &", v->id,
                 defer_batch ? "xr_aot_spawn_deferred" : "xr_aot_spawn");
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_desc");
-        fprintf(out, ", _child_frame_%u, %d, %s, %s, \"%s\");\n", v->id, link_mode,
+        fprintf(out, ", _child_frame_%u, %d, %s, %s, %s, \"%s\");\n", v->id, link_mode,
                 fire_and_forget ? "true" : "false", one_shot_await ? "true" : "false",
-                target->name ? target->name : "aot");
+                result_copy_shared ? "true" : "false", target->name ? target->name : "aot");
         fprintf(out, "    ");
         emit_vref(out, v);
         fprintf(out, " = _spawn_%u.task_value;\n", v->id);

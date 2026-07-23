@@ -1213,9 +1213,9 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
             return xr_type_new_error(NULL);
 
         case XR_TREF_INT_WIDTH:
-            return xr_type_new_int_width(X, t->native_width);
+            return xr_type_new_int_width(X, t->scalar_rep);
         case XR_TREF_FLOAT_WIDTH:
-            return xr_type_new_float_width(X, t->native_width);
+            return xr_type_new_float_width(X, t->scalar_rep);
 
         case XR_TREF_NAMED:
             return resolve_named(X, t->name);

@@ -93,6 +93,11 @@ typedef struct XrValue {
     };
 } XrValue;
 
+/* Cross-runtime value-descriptor bit: the object header lives at value.ptr
+ * instead of immediately before it.  AOT records use this layout and runtime
+ * ownership paths must preserve the bit when calling the AOT release hook. */
+#define XR_VALUE_FLAG_EMBEDDED_HEADER 0x02u
+
 // Layout offset constants — change only here if layout ever changes
 #define XRVAL_OFF_TAG 0        // offsetof(XrValue, tag)       uint8_t
 #define XRVAL_OFF_FLAGS 1      // offsetof(XrValue, flags)     uint8_t

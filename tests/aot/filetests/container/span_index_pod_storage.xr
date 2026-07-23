@@ -1,4 +1,4 @@
-fn bump_word(words: ref Slice<uint32>, index: int, delta: uint32) -> int {
+fn bump_word(words: ref Slice<u32>, index: int, delta: u32) -> int {
     var old = words[index]
     words[index] = old + delta
     return int(words[index])

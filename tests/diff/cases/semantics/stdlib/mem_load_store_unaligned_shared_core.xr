@@ -7,14 +7,14 @@ fn run() {
     var view: Slice<byte> = bytes[:]
     unsafe {
         var p = view.mutPtr()
-        mem.store<uint16>(p, 1, 0x1234, Endian.LE)
-        mem.store<uint32>(p, 4, 0x01020304, Endian.LE)
-        mem.store<uint64>(p, 8, 0x0102030405060708, Endian.LE)
+        mem.store<u16>(p, 1, 0x1234, Endian.LE)
+        mem.store<u32>(p, 4, 0x01020304, Endian.LE)
+        mem.store<u64>(p, 8, 0x0102030405060708, Endian.LE)
 
         var rp: Ptr<byte> = p
-        print(int(mem.load<uint16>(rp, 1, Endian.LE)))
-        print(int(mem.load<uint32>(rp, 4, Endian.LE)))
-        print(int(mem.load<uint64>(rp, 8, Endian.LE)))
+        print(int(mem.load<u16>(rp, 1, Endian.LE)))
+        print(int(mem.load<u32>(rp, 4, Endian.LE)))
+        print(int(mem.load<u64>(rp, 8, Endian.LE)))
     }
 
     print(bytes[1])

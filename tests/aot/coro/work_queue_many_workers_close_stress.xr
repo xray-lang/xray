@@ -28,7 +28,7 @@ fn worker(id: int) -> int {
     return sum
 }
 
-var workers: Array<Task> = []
+var workers: Array<Task<int>> = []
 var w = 0
 while (w < WORKERS) {
     workers.push(go worker(w))

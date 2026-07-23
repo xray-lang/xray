@@ -2293,8 +2293,8 @@ static bool verify_hash_eq_kind_valid(uint8_t kind) {
 
 static bool verify_map_shape_value_type_supports_bool_direct(uint32_t value_type_key) {
     return value_type_key == xg_synthetic_type_key(XR_TREF_INT) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I64) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_TREF_NW_F32);
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I64) ||
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_NATIVE_F32);
 }
 
 static bool verify_map_shape_supports_bool_direct(const XgMapShapeSummary *shape) {
@@ -5813,9 +5813,9 @@ static bool verify_bulk_op_kind_valid(uint8_t kind) {
 
 static bool verify_bulk_elem_type_is_memset_byte(uint32_t elem_type_key) {
     return elem_type_key == xg_synthetic_type_key(XR_TREF_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_I8) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_BOOL) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I8) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
 }
 
 static uint8_t verify_bulk_action_for(const XgBulkOpSummary *bulk) {
@@ -6067,34 +6067,34 @@ static bool verify_enum_identity_exists(const XgGlobalEvidence *ev, XgModuleId m
     return scoped_count == 1 || (scoped_count == 0 && global_count == 1);
 }
 
-static bool verify_class_field_native_width(uint8_t semantic_kind, uint8_t native_width) {
+static bool verify_class_field_scalar_rep(uint8_t semantic_kind, uint8_t scalar_rep) {
     switch ((XgClassFieldTypeKind) semantic_kind) {
         case XG_CLASS_FIELD_TYPE_I8:
-            return native_width == XR_NATIVE_I8;
+            return scalar_rep == XR_NATIVE_I8;
         case XG_CLASS_FIELD_TYPE_U8:
-            return native_width == XR_NATIVE_U8;
+            return scalar_rep == XR_NATIVE_U8;
         case XG_CLASS_FIELD_TYPE_I16:
-            return native_width == XR_NATIVE_I16;
+            return scalar_rep == XR_NATIVE_I16;
         case XG_CLASS_FIELD_TYPE_U16:
-            return native_width == XR_NATIVE_U16;
+            return scalar_rep == XR_NATIVE_U16;
         case XG_CLASS_FIELD_TYPE_I32:
-            return native_width == XR_NATIVE_I32;
+            return scalar_rep == XR_NATIVE_I32;
         case XG_CLASS_FIELD_TYPE_U32:
-            return native_width == XR_NATIVE_U32;
+            return scalar_rep == XR_NATIVE_U32;
         case XG_CLASS_FIELD_TYPE_I64:
-            return native_width == XR_NATIVE_I64;
+            return scalar_rep == XR_NATIVE_I64;
         case XG_CLASS_FIELD_TYPE_U64:
-            return native_width == XR_NATIVE_U64;
+            return scalar_rep == XR_NATIVE_U64;
         case XG_CLASS_FIELD_TYPE_ISIZE:
-            return native_width == XR_NATIVE_ISIZE;
+            return scalar_rep == XR_NATIVE_ISIZE;
         case XG_CLASS_FIELD_TYPE_USIZE:
-            return native_width == XR_NATIVE_USIZE;
+            return scalar_rep == XR_NATIVE_USIZE;
         case XG_CLASS_FIELD_TYPE_F32:
-            return native_width == XR_NATIVE_F32;
+            return scalar_rep == XR_NATIVE_F32;
         case XG_CLASS_FIELD_TYPE_F64:
-            return native_width == 0 || native_width == XR_NATIVE_F64;
+            return scalar_rep == XR_NATIVE_F64;
         default:
-            return native_width == 0;
+            return scalar_rep == XR_SCALAR_REP_NONE;
     }
 }
 
@@ -6140,9 +6140,9 @@ static bool verify_class_field_rows(const XgGlobalEvidence *ev,
             if (field->semantic_kind == 0 || field->semantic_kind > XG_CLASS_FIELD_TYPE_DYNAMIC ||
                 !xaot_class_field_physical_layout(target_layout, field->semantic_kind, &physical))
                 return set_error(errbuf, errbuf_len, "AOT class field storage is invalid");
-            if (!verify_class_field_native_width(field->semantic_kind, field->native_width))
+            if (!verify_class_field_scalar_rep(field->semantic_kind, field->scalar_rep))
                 return set_error(errbuf, errbuf_len,
-                                 "AOT class field native width does not re-derive");
+                                 "AOT class field scalar representation does not re-derive");
             if (field->target_class_id != XG_NO_ID && field->target_interface_id != XG_NO_ID)
                 return set_error(errbuf, errbuf_len,
                                  "AOT class field semantic target is ambiguous");
@@ -6296,7 +6296,7 @@ static bool verify_class_layout_rederives(const XgGlobalEvidence *ev, const Xaot
             field_plan->instance_slot != field->instance_slot ||
             field_plan->field_flags != field->flags ||
             field_plan->semantic_kind != field->semantic_kind ||
-            field_plan->native_width != field->native_width)
+            field_plan->scalar_rep != field->scalar_rep)
             return set_error(errbuf, errbuf_len, "AOT class field plan identity is stale");
         if (field_plan->size != physical.size || field_plan->align != physical.align ||
             field_plan->ref_kind != physical.ref_kind ||

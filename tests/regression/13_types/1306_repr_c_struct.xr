@@ -2,8 +2,8 @@
 // fixed-layout structs use headerless payload storage.
 
 struct CPoint {
-    x: int32
-    y: int32
+    x: i32
+    y: i32
 }
 
 struct CBox {

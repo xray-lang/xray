@@ -23,6 +23,7 @@
 #include "xsched_trace.h"
 #include "xtask.h"
 #include "../runtime/core/xr_exec_context.h"
+#include "../runtime/xshared.h"
 
 static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *coro) {
     int wr = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
@@ -276,6 +277,28 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             // to other threads before FLG_DONE is observed.
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
             bool was_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
+            if (done_task && (done_task->flags & XR_TASK_FLG_RESULT_COPY_SHARED) &&
+                XR_IS_PTR(coro->result)) {
+                XrObjHeader *result_obj = XR_VALUE_GCPTR(coro->result);
+                XrValue published = XR_NULL_VAL;
+                if (result_obj && XR_OBJ_GET_FLAG(result_obj, XR_OBJ_AOT_NATIVE) &&
+                    XR_OBJ_GET_TYPE(result_obj) == XR_TINSTANCE) {
+                    /* AOT sealed records are immutable Copy values backed by a
+                     * malloc-owned embedded-header object.  The child owns the
+                     * only live root at completion, so representation-aware
+                     * publication promotes that root in place; VM instances
+                     * still require a graph copy out of the coroutine heap. */
+                    xr_shared_init(result_obj);
+                    published = coro->result;
+                } else {
+                    published = xr_deep_copy_explicit_to_storage_core(
+                        done_task->core ? done_task->core : coro->core, coro->result,
+                        XR_OBJ_STORAGE_SHARED);
+                }
+                XR_CHECK(!XR_IS_NULL(published),
+                         "compiler-planned Task Copy result publication failed");
+                coro->result = published;
+            }
             if (done_task)
                 coro->result = xr_task_validate_publish_value(done_task, coro->result);
 

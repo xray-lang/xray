@@ -462,8 +462,8 @@ TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
 TEST(parser_extern_block_flattens_typed_descriptors) {
     setup();
     AstNode *program = parse_ok("extern \"C\" {\n"
-                                "  export fn cos(x: float64) -> float64\n"
-                                "  fn clear(value: int32)\n"
+                                "  export fn cos(x: f64) -> f64\n"
+                                "  fn clear(value: i32)\n"
                                 "}");
     ASSERT_EQ_INT(program->as.program.count, 2);
     for (int i = 0; i < program->as.program.count; i++) {
@@ -484,9 +484,9 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
 TEST(parser_extern_block_rejects_layout_declarations) {
     setup();
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
-                         "extern \"C\" { struct Header { tag: uint8 } }"));
+                         "extern \"C\" { struct Header { tag: u8 } }"));
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
-                         "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }"));
+                         "extern \"C\" dylib(\"m\") { fn cos(x: f64) -> f64 }"));
     teardown();
 }
 
@@ -613,8 +613,8 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(buf, "(int, ref string, move bool) -> int");
 
     AstNode *complex_alias =
-        parse_first("type ComplexHandler = (Array<int>, ref Slice<uint8>?, "
-                    "move [uint8; 16], (int, string), (ref int) -> bool,) -> Array<string>");
+        parse_first("type ComplexHandler = (Array<int>, ref Slice<u8>?, "
+                    "move [u8; 16], (int, string), (ref int) -> bool,) -> Array<string>");
     XrTypeRef *complex = complex_alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(complex);
     ASSERT_EQ_INT(complex->kind, XR_TREF_FUNCTION);
@@ -641,7 +641,7 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
     xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
-    ASSERT_STR_EQ(complex_buf, "(Array<int>, ref Slice<byte>?, move [byte; 16], (int, string), "
+    ASSERT_STR_EQ(complex_buf, "(Array<int>, ref Slice<u8>?, move [u8; 16], (int, string), "
                                "(ref int) -> bool) -> Array<string>");
 
     teardown();
@@ -724,7 +724,7 @@ TEST(parser_direct_visibility_owns_declaration) {
     AstNode *program = parse_ok("@deprecated(\"use hash64\")\n"
                                 "export fn hash() -> int { return 1 }\n"
                                 "export final class FinalBox {}\n"
-                                "export struct Word { value: uint32 }\n");
+                                "export struct Word { value: u32 }\n");
     ASSERT_EQ_INT(program->as.program.count, 3);
 
     AstNode *fn = program->as.program.statements[0];
@@ -749,7 +749,7 @@ TEST(parser_method_deprecated_attribute) {
     setup();
     AstNode *program = parse_ok("struct Word {\n"
                                 "  @deprecated(\"use rotateLeft\")\n"
-                                "  rotate(n: int) -> uint32 { return 0 }\n"
+                                "  rotate(n: int) -> u32 { return 0 }\n"
                                 "}\n");
     AstNode *st = program->as.program.statements[0];
     ASSERT_EQ_INT(st->type, AST_STRUCT_DECL);
@@ -962,19 +962,19 @@ TEST(parser_member_access) {
 
 TEST(parser_member_generic_call_uintsize_type_arg) {
     setup();
-    AstNode *stmt = parse_first("mem.sizeOf<uintsize>()");
+    AstNode *stmt = parse_first("mem.sizeOf<usize>()");
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.call_expr.type_arg_count, 1);
     ASSERT_NOT_NULL(expr->as.call_expr.type_args);
     ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
-    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->native_width, XR_TREF_NW_USIZE);
+    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->scalar_rep, XR_NATIVE_USIZE);
     teardown();
 }
 
 TEST(parser_member_generic_call_uintsize_after_binary_op) {
     setup();
-    AstNode *stmt = parse_first("mem.sizeOf<uintsize>() + mem.alignOf<intsize>()");
+    AstNode *stmt = parse_first("mem.sizeOf<usize>() + mem.alignOf<isize>()");
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
     ASSERT_EQ_INT(expr->as.binary.left->type, AST_CALL_EXPR);
@@ -982,7 +982,42 @@ TEST(parser_member_generic_call_uintsize_after_binary_op) {
     ASSERT_EQ_INT(expr->as.binary.right->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_arg_count, 1);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
-    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->native_width, XR_TREF_NW_ISIZE);
+    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->scalar_rep, XR_NATIVE_ISIZE);
+    teardown();
+}
+
+TEST(parser_scalar_spelling_registry_roundtrip) {
+    setup();
+    AstNode *alias = parse_first("type Scalars = (int, i8, i16, i32, i64, byte, u8, u16, u32, u64, "
+                                 "float, f32, f64, isize, usize)");
+    ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
+    XrTypeRef *tuple = alias->as.type_alias.resolved_type;
+    ASSERT_NOT_NULL(tuple);
+    ASSERT_EQ_INT(tuple->kind, XR_TREF_TUPLE);
+    ASSERT_EQ_INT(tuple->nchildren, 15);
+    char formatted[256];
+    xr_tref_to_string_buf(tuple, formatted, sizeof(formatted));
+    ASSERT_STR_EQ(formatted, "(int, i8, i16, i32, i64, byte, u8, u16, u32, u64, float, f32, f64, "
+                             "isize, usize)");
+    ASSERT_EQ_INT(tuple->children[0]->scalar_rep, XR_NATIVE_I64);
+    ASSERT_EQ_INT(tuple->children[4]->scalar_rep, XR_NATIVE_I64);
+    ASSERT_EQ_INT(tuple->children[5]->scalar_rep, XR_NATIVE_U8);
+    ASSERT_EQ_INT(tuple->children[6]->scalar_rep, XR_NATIVE_U8);
+    ASSERT_EQ_INT(tuple->children[10]->scalar_rep, XR_NATIVE_F64);
+    ASSERT_EQ_INT(tuple->children[12]->scalar_rep, XR_NATIVE_F64);
+    ASSERT_EQ_INT(tuple->children[13]->scalar_rep, XR_NATIVE_ISIZE);
+    ASSERT_EQ_INT(tuple->children[14]->scalar_rep, XR_NATIVE_USIZE);
+    teardown();
+}
+
+TEST(parser_retired_scalar_spelling_is_ordinary_identifier) {
+    setup();
+    AstNode *alias = parse_first("type int32 = i32");
+    ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
+    ASSERT_STR_EQ(alias->as.type_alias.name, "int32");
+    ASSERT_NOT_NULL(alias->as.type_alias.resolved_type);
+    ASSERT_EQ_INT(alias->as.type_alias.resolved_type->kind, XR_TREF_INT_WIDTH);
+    ASSERT_EQ_INT(alias->as.type_alias.resolved_type->scalar_rep, XR_NATIVE_I32);
     teardown();
 }
 
@@ -1302,6 +1337,8 @@ int main(void) {
     RUN_TEST(parser_member_access);
     RUN_TEST(parser_member_generic_call_uintsize_type_arg);
     RUN_TEST(parser_member_generic_call_uintsize_after_binary_op);
+    RUN_TEST(parser_scalar_spelling_registry_roundtrip);
+    RUN_TEST(parser_retired_scalar_spelling_is_ordinary_identifier);
 
     // Tuples
     RUN_TEST(parser_tuple_unit_literal);

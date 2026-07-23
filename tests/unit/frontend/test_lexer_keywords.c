@@ -84,7 +84,7 @@ static const KwExpect kKnownKeywords[] = {
     {"await", TK_AWAIT},
     {"bool", TK_BOOL},
     {"break", TK_BREAK},
-    {"byte", TK_UINT8},
+    {"byte", TK_BYTE},
     {"catch", TK_CATCH},
     {"class", TK_CLASS},
     {"comptime", TK_COMPTIME},
@@ -99,8 +99,8 @@ static const KwExpect kKnownKeywords[] = {
     {"false", TK_FALSE},
     {"final", TK_FINAL},
     {"float", TK_FLOAT},
-    {"float32", TK_FLOAT32},
-    {"float64", TK_FLOAT64},
+    {"f32", TK_F32},
+    {"f64", TK_F64},
     {"fn", TK_FN},
     {"for", TK_FOR},
     {"go", TK_GO},
@@ -109,10 +109,11 @@ static const KwExpect kKnownKeywords[] = {
     {"import", TK_IMPORT},
     {"in", TK_IN},
     {"int", TK_INT},
-    {"int8", TK_INT8},
-    {"int16", TK_INT16},
-    {"int32", TK_INT32},
-    {"int64", TK_INT64},
+    {"i8", TK_I8},
+    {"i16", TK_I16},
+    {"i32", TK_I32},
+    {"i64", TK_I64},
+    {"isize", TK_ISIZE},
     {"interface", TK_INTERFACE},
     {"is", TK_IS},
     {"match", TK_MATCH},
@@ -135,12 +136,13 @@ static const KwExpect kKnownKeywords[] = {
     {"true", TK_TRUE},
     {"try", TK_TRY},
     {"type", TK_TYPE_ALIAS},
-    {"uint8", TK_UINT8},
-    {"uint16", TK_UINT16},
-    {"uint32", TK_UINT32},
-    {"uint64", TK_UINT64},
+    {"u8", TK_U8},
+    {"u16", TK_U16},
+    {"u32", TK_U32},
+    {"u64", TK_U64},
     {"union", TK_UNION},
     {"unsafe", TK_UNSAFE},
+    {"usize", TK_USIZE},
     {"var", TK_VAR},
     {"while", TK_WHILE},
     {"yield", TK_YIELD},
@@ -159,7 +161,11 @@ TEST(every_keyword_recognised) {
 }
 
 TEST(removed_keywords_are_identifiers) {
-    static const char *removed[] = {"abstract", "char", "override", "owned", "shared"};
+    static const char *removed[] = {
+        "abstract", "char",    "override", "owned",   "shared",   "int8",
+        "int16",    "int32",   "int64",    "uint8",   "uint16",   "uint32",
+        "uint64",   "float32", "float64",  "intsize", "uintsize",
+    };
     int n = (int) (sizeof(removed) / sizeof(removed[0]));
     for (int i = 0; i < n; i++) {
         Token t = scan_one(removed[i]);
@@ -183,7 +189,7 @@ TEST(removed_keywords_are_identifiers) {
 //   - longer keywords (`letter`, `interface_thing`) to cover the
 //     X-macro binary search's longer paths.
 //   - keywords that share a prefix with each other (`int`,
-//     `int8`, `int32`, `interface`).
+//     `i8`, `i32`, `interface`).
 //
 // Adding a new keyword to xkeywords.def MUST be paired with a
 // matching row here.
@@ -255,7 +261,7 @@ static const char *kPrefixIdentifiers[] = {
     "interfaces",  // covers `interface` prefix, NOT `int`
     "int_thing",   // identifier starting with `int_`, not int
     "int8x",
-    "int32_t",  // `int8` and `int32` are keywords; with extra letters they are NAME
+    "int32_t",  // `i8` and `i32` are keywords; with extra letters they are NAME
     "float_x",
     "float32x",
     "float64x",

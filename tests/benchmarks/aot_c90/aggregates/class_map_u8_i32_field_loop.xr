@@ -1,8 +1,8 @@
 class ByteMapBag {
-    values: Map<byte, int32>
+    values: Map<byte, i32>
 
     constructor() {
-        var values: Map<byte, int32> = #{}
+        var values: Map<byte, i32> = #{}
         this.values = values
     }
 

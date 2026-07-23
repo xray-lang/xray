@@ -109,11 +109,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                 "\n".join(
                     [
                         "export struct U32x4 align(16) {",
-                        "    private _lanes: [uint32; 4]",
-                        "    static splat(value: uint32) -> U32x4 {",
+                        "    private _lanes: [u32; 4]",
+                        "    static splat(value: u32) -> U32x4 {",
                         "        return U32x4{_lanes: [value; 4]}",
                         "    }",
-                        "    extract(lane: int) -> uint32 {",
+                        "    extract(lane: int) -> u32 {",
                         "        return this._lanes[lane]",
                         "    }",
                         "}",
@@ -131,11 +131,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
 
         self.assertEqual("U32x4", signatures[("U32x4", "U32x4", "type")])
         self.assertEqual(
-            "(value: uint32): U32x4",
+            "(value: u32): U32x4",
             signatures[("U32x4", "splat", "static-method")],
         )
         self.assertEqual(
-            "(lane: int): uint32",
+            "(lane: int): u32",
             signatures[("U32x4", "extract", "method")],
         )
 

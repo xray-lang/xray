@@ -51,8 +51,8 @@ fn main() {
     packet[6] = 7
     packet[7] = 8
     var packetView: Slice<byte> = packet[:]
-    var packet32: uint32 = packetView.load<uint32>(0, Endian.LE)
-    var packet64: uint64 = packetView.load<uint64>(0, Endian.LE)
+    var packet32: u32 = packetView.load<u32>(0, Endian.LE)
+    var packet64: u64 = packetView.load<u64>(0, Endian.LE)
     print(int(packet32))
     print(int(packet64))
     var copied: Array<byte> = Array.withCapacity(6)

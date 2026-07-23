@@ -9,4 +9,5 @@ http.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
     return http.jsonResponse({message: "Hello, World!"})
 })
 
-http.listen(8080)
+const serverRunning = Atomic(true)
+http.listen(8080, serverRunning)

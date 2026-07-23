@@ -1,8 +1,8 @@
 import mem
 
 struct CScalar {
-    tag: uint8
-    count: uint32
+    tag: u8
+    count: u32
 }
 
 struct CPointer {
@@ -10,25 +10,25 @@ struct CPointer {
 }
 
 struct CArray {
-    samples: [uint16; 3]
+    samples: [u16; 3]
 }
 
 struct M3FuncType {
     next: Ptr<M3FuncType>
-    numRets: uint16
-    numArgs: uint16
+    numRets: u16
+    numArgs: u16
 }
 
 struct CHeader {
-    tag: uint8
-    count: uint32
+    tag: u8
+    count: u32
     next: Ptr<byte>
-    samples: [uint16; 3]
+    samples: [u16; 3]
 }
 
 union CWord {
-    word: uint32
-    bytes: [uint8; 4]
+    word: u32
+    bytes: [u8; 4]
 }
 
 struct CEnvelope {

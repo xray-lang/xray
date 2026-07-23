@@ -1,6 +1,6 @@
 @align(16)
 struct OldAligned {
-    x: int32
+    x: i32
 }
 
 print(1)

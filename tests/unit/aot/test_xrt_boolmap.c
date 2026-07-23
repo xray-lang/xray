@@ -124,8 +124,8 @@ static void test_boolmap_f32_tagged_value_still_narrows(void) {
     xrt_boolmap_set_v(m, XR_FROM_BOOL(true), XR_FROM_FLOAT(1.25));
     XrValue got = xrt_boolmap_get_v(m, XR_FROM_BOOL(true));
 
-    ASSERT_EQ_TAG(got, XR_TAG_F64, "float32 boolmap get boxes as float");
-    ASSERT_TRUE(fabs(got.f - 1.25) < 0.00001, "float32 boolmap value round-trips");
+    ASSERT_EQ_TAG(got, XR_TAG_F64, "f32 boolmap get boxes as float");
+    ASSERT_TRUE(fabs(got.f - 1.25) < 0.00001, "f32 boolmap value round-trips");
 
     xrt_boolmap_destroy(m);
 }

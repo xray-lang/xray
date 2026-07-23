@@ -3,6 +3,6 @@ struct HasString {
 }
 
 @c_export("xr_bad_managed_struct")
-fn bad_managed_struct(p: HasString) -> int32 {
+fn bad_managed_struct(p: HasString) -> i32 {
     return 0
 }

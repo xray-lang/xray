@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Class Map<uint8,int32> fields must use typed backing and direct primitive map helpers.
+# Class Map<u8,i32> fields must use typed backing and direct primitive map helpers.
 hot_function=^class_map_u8_i32_field_loop_(fill|scan)_[0-9]+$
 hot_function_count=2
 hot_xrvalue_count=0

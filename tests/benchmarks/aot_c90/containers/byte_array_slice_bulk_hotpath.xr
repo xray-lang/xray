@@ -21,8 +21,8 @@ fn run(n: int, rounds: int) -> int {
 
         var p = 0
         while (p < n * 2) {
-            var word: uint16 = copyView.load<uint16>(p, Endian.LE)
-            copyView.store<uint16>(p, word + 1, Endian.LE)
+            var word: u16 = copyView.load<u16>(p, Endian.LE)
+            copyView.store<u16>(p, word + 1, Endian.LE)
             p = p + 64
         }
 

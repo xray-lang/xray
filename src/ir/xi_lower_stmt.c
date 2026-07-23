@@ -167,9 +167,9 @@ static int stmt_json_field_index(struct XrType *type, const char *name) {
 }
 
 static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->native_width == 0)
+    if (!type || type->kind != XR_KIND_INT || type->scalar_rep == XR_NATIVE_I64)
         return 0;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_I8:
             return XI_NARROW_I8;
         case XR_NATIVE_U8:
@@ -190,7 +190,7 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
 static bool stmt_type_is_unsigned_int(struct XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -318,7 +318,7 @@ static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *
     if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type)) {
         if (xr_type_equals(target_type, val->type))
             return val;
-        if (target_type->native_width == XR_NATIVE_F32) {
+        if (target_type->scalar_rep == XR_NATIVE_F32) {
             XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, target_type, 1);
             if (!n)
                 return val;

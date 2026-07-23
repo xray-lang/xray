@@ -1,16 +1,16 @@
-fn views(words: Slice<uint32>, raw: Slice<byte>) -> int {
+fn views(words: Slice<u32>, raw: Slice<byte>) -> int {
     var bytes: Slice<byte> = words.asBytes()
-    var pairs: Slice<uint16> = raw.reinterpret<uint16>()
+    var pairs: Slice<u16> = raw.reinterpret<u16>()
     return len(bytes) + len(pairs)
 }
 
-fn roundtrip(words: Slice<uint32>) -> int {
+fn roundtrip(words: Slice<u32>) -> int {
     var bytes: Slice<byte> = words.asBytes()
-    var words_again: Slice<uint32> = bytes.reinterpret<uint32>()
+    var words_again: Slice<u32> = bytes.reinterpret<u32>()
     return len(words_again)
 }
 
-var words = Array<uint32>(4, 0)
+var words = Array<u32>(4, 0)
 var raw = Array<byte>(8, 0)
 print(views(words[:], raw[:]))
 print(roundtrip(words[:]))

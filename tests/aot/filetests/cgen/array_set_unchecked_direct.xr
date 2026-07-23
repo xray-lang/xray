@@ -1,11 +1,11 @@
-fn patch(values: ref Array<uint32>) {
+fn patch(values: ref Array<u32>) {
     unsafe {
         values.set(0, 11)
         values.set(1, 31)
     }
 }
 
-var values: Array<uint32> = []
+var values: Array<u32> = []
 values.reserve(2)
 unsafe {
     values.push(0)

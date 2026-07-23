@@ -1,0 +1,9 @@
+fn main_logic() {
+    var answer = 41
+    var task = go {
+        return answer + 1
+    }
+    await task
+}
+
+main_logic()

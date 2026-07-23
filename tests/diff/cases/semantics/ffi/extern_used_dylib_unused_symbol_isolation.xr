@@ -1,12 +1,12 @@
 // FFI: an unused extern declaration inside an otherwise used dylib must not
 // pollute VM resolution or AOT direct-call prototypes.
 extern "C" {
-    fn cos(x: float64) -> float64
-    fn xrayffi_missing_from_used_math(x: float64) -> float64
+    fn cos(x: f64) -> f64
+    fn xrayffi_missing_from_used_math(x: f64) -> f64
 }
 
 extern "C" {
-    fn xrayffi_unused_side_dylib(x: float64) -> float64
+    fn xrayffi_unused_side_dylib(x: f64) -> f64
 }
 
 print(unsafe { cos(0.0) == 1.0 })

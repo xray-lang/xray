@@ -10,13 +10,13 @@ fn run_bytes_boundary() {
     bytes[7] = 8
     print(len(bytes))
     var view: Slice<byte> = bytes[:]
-    var u16: uint16 = view.load<uint16>(0, Endian.LE)
-    var u32: uint32 = view.load<uint32>(0, Endian.LE)
-    var u64: uint64 = view.load<uint64>(0, Endian.LE)
-    view.store<uint16>(6, 0x0a09, Endian.LE)
-    print(int(u16))
-    print(int(u32))
-    print(int(u64))
+    var word16: u16 = view.load<u16>(0, Endian.LE)
+    var word32: u32 = view.load<u32>(0, Endian.LE)
+    var word64: u64 = view.load<u64>(0, Endian.LE)
+    view.store<u16>(6, 0x0a09, Endian.LE)
+    print(int(word16))
+    print(int(word32))
+    print(int(word64))
     print(bytes[6])
 
     var dst: Array<byte> = Array.withCapacity(6)

@@ -337,10 +337,7 @@ static const XaMemoryEffectSummary *memory_callee_summary(XaMemoryPass *pass, Xa
     XaMemoryFunctionRow *local = memory_row_for_symbol(pass, callee);
     if (local)
         return &local->result;
-    return callee && callee->links.memory_effect_id != XA_MEMORY_EFFECT_NONE
-               ? xa_memory_effect_db_get(pass->analyzer->memory_effect_db,
-                                         callee->links.memory_effect_id)
-               : NULL;
+    return callee ? xa_symbol_links_memory_effect_summary(&callee->links) : NULL;
 }
 
 static void memory_instantiate_callee(XaMemoryScan *scan, const XaMemoryEffectSummary *callee,

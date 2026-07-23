@@ -625,6 +625,7 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     int link_mode = 0;
     bool one_shot_await = false;
     bool defer_batch = false;
+    bool result_copy_shared = false;
     uint8_t arg_modes[128];
     for (int i = 0; i < c; i++)
         arg_modes[i] = XR_TRANSFER_SHARE;
@@ -650,6 +651,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
             mode_base += (int) XR_TRANSFER_MODES_PER_U32;
         } else if (ann == 6) {
             defer_batch = GETARG_Bx(next_inst) != 0;
+        } else if (ann == 7) {
+            result_copy_shared = GETARG_Bx(next_inst) != 0;
         } else {
             break;
         }
@@ -735,6 +738,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
         task->link_mode = task_link_mode;
         if (one_shot_await)
             task->flags |= XR_TASK_FLG_ONE_SHOT_AWAIT;
+        if (result_copy_shared)
+            task->flags |= XR_TASK_FLG_RESULT_COPY_SHARED;
     }
 
     /* linked go (standalone, NOT in scope): establish parent-child Task hierarchy.

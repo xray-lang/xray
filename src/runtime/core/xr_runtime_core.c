@@ -146,7 +146,14 @@ bool xr_runtime_core_release_aot_native_value(XrRuntimeCore *core, XrObjHeader *
     if (!core || !obj || (obj->extra & XR_OBJ_AOT_NATIVE) == 0 || !core->aot_native_value_release) {
         return false;
     }
-    core->aot_native_value_release(xr_make_ptr_val(obj));
+    XrValue value = xr_make_ptr_val(obj);
+    /* AOT Record/Json objects carry an embedded-at-zero header.  Reconstruct
+     * that descriptor bit when a VM-neutral Task/shared owner releases the
+     * final reference; otherwise the AOT ARC hook would look for a prepended
+     * header and free through the wrong address. */
+    if (XR_OBJ_GET_TYPE(obj) == XR_TINSTANCE)
+        value.flags |= XR_VALUE_FLAG_EMBEDDED_HEADER;
+    core->aot_native_value_release(value);
     return true;
 }
 

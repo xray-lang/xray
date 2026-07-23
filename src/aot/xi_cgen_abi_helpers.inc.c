@@ -155,7 +155,7 @@ static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, ui
         (uint64_t) type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT)
         return false;
     XrType *elem = type->fixed_array.element_type;
-    int native = xr_type_kind_to_native(elem->kind, elem->native_width);
+    int native = xr_type_kind_to_native(elem->kind, elem->scalar_rep);
     if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
         native = XR_NATIVE_VALUE;
     if (!xaot_layout_c_type_for_native_type((uint8_t) native))
@@ -303,9 +303,9 @@ static const char *cg_cfn_value_c_type(const XrType *type, bool is_return) {
         case XR_KIND_BOOL:
             return "uint8_t";
         case XR_KIND_FLOAT:
-            return type->native_width == XR_NATIVE_F32 ? "float" : "double";
+            return type->scalar_rep == XR_NATIVE_F32 ? "float" : "double";
         case XR_KIND_INT:
-            switch (type->native_width) {
+            switch (type->scalar_rep) {
                 case XR_NATIVE_I8:
                     return "int8_t";
                 case XR_NATIVE_U8:

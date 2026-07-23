@@ -222,6 +222,20 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
 
+    /* Lowering has proven this exact receiver is the imported `time` module.
+     * Emit the dedicated operation so bytecode entry planning sees the timer
+     * suspension and creates a resumable root. */
+    if (v->nargs == 2 && (v->lowering_flags & XI_LOWERING_FLAG_TIME_SLEEP) != 0) {
+        XiEmitReg milliseconds = reg_of(ctx, v->args[1]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        if (milliseconds != dst)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, milliseconds, 0));
+        emit_inst(ctx, CREATE_ABC(OP_SLEEP, dst, 0, 0));
+        emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
+        return;
+    }
+
     for (uint16_t a = 0; a < v->nargs; a++) {
         (void) reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)

@@ -1,4 +1,4 @@
-fn caughtUtf8Invalid(bytes: Array<uint8>) -> bool {
+fn caughtUtf8Invalid(bytes: Array<u8>) -> bool {
     try {
         string.fromUtf8(bytes[:])
     } catch (e: Utf8Error) {
@@ -7,11 +7,11 @@ fn caughtUtf8Invalid(bytes: Array<uint8>) -> bool {
     return false
 }
 
-fn decodeStrict(bytes: Array<uint8>) -> string {
+fn decodeStrict(bytes: Array<u8>) -> string {
     return string.fromUtf8(bytes[:])
 }
 
-fn caughtUtf8InvalidViaCall(bytes: Array<uint8>) -> bool {
+fn caughtUtf8InvalidViaCall(bytes: Array<u8>) -> bool {
     try {
         decodeStrict(bytes)
     } catch (e: Utf8Error) {
@@ -29,9 +29,9 @@ fn caughtInvalidByteRange(s: string, start: int, end: int) -> bool {
     return false
 }
 
-var ascii: Array<uint8> = [104, 105]
-var unicode: Array<uint8> = [104, 195, 169]
-var invalid: Array<uint8> = [65, 255, 66]
+var ascii: Array<u8> = [104, 105]
+var unicode: Array<u8> = [104, 195, 169]
+var invalid: Array<u8> = [65, 255, 66]
 print(string.fromUtf8(ascii[:]))
 print(string.fromUtf8(unicode[:]))
 var caught_invalid_utf8 = false
@@ -44,10 +44,10 @@ try {
 }
 print(caught_invalid_utf8)
 print(invalid_utf8_error)
-var overlongNul: Array<uint8> = [192, 128]
-var surrogateScalar: Array<uint8> = [237, 160, 128]
-var outOfRangeScalar: Array<uint8> = [244, 144, 128, 128]
-var invalidContinuation: Array<uint8> = [226, 40, 161]
+var overlongNul: Array<u8> = [192, 128]
+var surrogateScalar: Array<u8> = [237, 160, 128]
+var outOfRangeScalar: Array<u8> = [244, 144, 128, 128]
+var invalidContinuation: Array<u8> = [226, 40, 161]
 print(caughtUtf8Invalid(overlongNul))
 print(caughtUtf8Invalid(surrogateScalar))
 print(caughtUtf8Invalid(outOfRangeScalar))
@@ -55,15 +55,15 @@ print(caughtUtf8Invalid(invalidContinuation))
 print(caughtUtf8InvalidViaCall(invalid))
 print(string.fromUtf8Lossy(invalid[:]))
 print(string.fromUtf8Lossy(invalidContinuation[:]))
-var truncatedFour: Array<uint8> = [240, 144, 128]
+var truncatedFour: Array<u8> = [240, 144, 128]
 print(string.fromUtf8Lossy(truncatedFour[:]))
-var validThenOutOfRange: Array<uint8> = [65, 226, 130, 172, 244, 144, 128, 128, 66]
+var validThenOutOfRange: Array<u8> = [65, 226, 130, 172, 244, 144, 128, 128, 66]
 print(string.fromUtf8Lossy(validThenOutOfRange[:]))
-var nonShortest: Array<uint8> = [192, 175, 224, 128, 191, 240, 129, 130, 65]
+var nonShortest: Array<u8> = [192, 175, 224, 128, 191, 240, 129, 130, 65]
 print(string.fromUtf8Lossy(nonShortest[:]))
-var surrogate: Array<uint8> = [237, 160, 128, 65]
+var surrogate: Array<u8> = [237, 160, 128, 65]
 print(string.fromUtf8Lossy(surrogate[:]))
-var truncated: Array<uint8> = [225, 128, 226, 240, 145, 146, 241, 191, 65]
+var truncated: Array<u8> = [225, 128, 226, 240, 145, 146, 241, 191, 65]
 print(string.fromUtf8Lossy(truncated[:]))
 print(ascii.toString())
 print(string.fromRune('é'))

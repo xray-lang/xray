@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Class Set<int> fields must use native receiver layout, typed int64 set helpers,
+# Class Set<int> fields must use native receiver layout, typed i64 set helpers,
 # and native length/size arithmetic without boxing.
 hot_function=^class_set_field_loop_(fill|scan|prune)_[0-9]+$
 hot_function_count=3

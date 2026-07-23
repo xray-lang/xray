@@ -242,7 +242,7 @@ static bool both_int(SccpCell a, SccpCell b) {
 static bool sccp_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:
@@ -610,7 +610,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
          * narrowed to float), mirroring the VM *_F32 opcodes and AOT codegen;
          * folding in double would round once and diverge from the runtime. */
         if (both_float(a, b) && v->type && v->type->kind == XR_KIND_FLOAT &&
-            v->type->native_width == XR_NATIVE_F32) {
+            v->type->scalar_rep == XR_NATIVE_F32) {
             float fa = (float) a.fval, fb = (float) b.fval;
             if (v->op == XI_ADD)
                 return sccp_float((double) (float) (fa + fb));

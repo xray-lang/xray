@@ -18,6 +18,7 @@
 #include "../../base/xutf8.h"
 #include "../../base/xsimd.h"
 #include "../../base/xmalloc.h"
+#include "../../shared/xr_scalar_type.h"
 
 // ============================================================================
 // Trivia Functions
@@ -417,12 +418,31 @@ static const XrKeyword keywords[] = {
 
 #define NUM_KEYWORDS (sizeof(keywords) / sizeof(keywords[0]))
 
+/* Scalar keywords intentionally live in their semantic registry rather than
+ * xkeywords.def. Keeping a separate tiny table preserves the sorted binary
+ * search invariant of the general keyword table. */
+static const XrKeyword scalar_keywords[] = {
+#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
+                       canonical_display, public_type_id, range_class)                             \
+    {spelling, length, lexer_token},
+#include "../../shared/xr_scalar_type.def"
+#undef XR_SCALAR_TYPE
+};
+
+#define NUM_SCALAR_KEYWORDS (sizeof(scalar_keywords) / sizeof(scalar_keywords[0]))
+
 // Compile-time check: each entry's `length` field equals sizeof(spelling) - 1.
 // Catches manual-edit mistakes in xkeywords.def at build time.
 #define XR_KW(name, len, type)                                                                     \
     _Static_assert(sizeof(name) - 1 == (len), "keyword length mismatch in xkeywords.def: " name);
 #include "xkeywords.def"
 #undef XR_KW
+
+#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
+                       canonical_display, public_type_id, range_class)                             \
+    _Static_assert(sizeof(spelling) - 1 == (length), "scalar keyword length mismatch: " spelling);
+#include "../../shared/xr_scalar_type.def"
+#undef XR_SCALAR_TYPE
 
 static XrTokenType identifier_type(Scanner *scanner) {
     const char *s = scanner->start;
@@ -453,6 +473,11 @@ static XrTokenType identifier_type(Scanner *scanner) {
             hi = mid - 1;
         else
             lo = mid + 1;
+    }
+    for (size_t i = 0; i < NUM_SCALAR_KEYWORDS; i++) {
+        const XrKeyword *kw = &scalar_keywords[i];
+        if (kw->length == len && memcmp(s, kw->name, (size_t) len) == 0)
+            return kw->type;
     }
     return TK_NAME;
 }
@@ -1340,20 +1365,14 @@ static const char *token_names[] = {
     [TK_MOVE] = "move",
 
     // Type keywords
-    [TK_INT] = "int",
-    [TK_FLOAT] = "float",
     [TK_STRING] = "string",
     [TK_BOOL] = "bool",
-    [TK_INT8] = "int8",
-    [TK_INT16] = "int16",
-    [TK_INT32] = "int32",
-    [TK_INT64] = "int64",
-    [TK_UINT8] = "uint8",
-    [TK_UINT16] = "uint16",
-    [TK_UINT32] = "uint32",
-    [TK_UINT64] = "uint64",
-    [TK_FLOAT32] = "float32",
-    [TK_FLOAT64] = "float64",
+    [TK_RUNE] = "rune",
+#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
+                       canonical_display, public_type_id, range_class)                             \
+    [lexer_token] = spelling,
+#include "../../shared/xr_scalar_type.def"
+#undef XR_SCALAR_TYPE
 
     // Type operators / special
     [TK_QUESTION] = "?",

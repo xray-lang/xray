@@ -1,9 +1,9 @@
 // FFI: call C standard-library math functions through an extern block.
 // Verifies the VM (libffi) and AOT (direct C call) backends agree.
 extern "C" {
-    fn sqrt(x: float64) -> float64
-    fn pow(base: float64, exp: float64) -> float64
-    fn abs(x: int32) -> int32
+    fn sqrt(x: f64) -> f64
+    fn pow(base: f64, exp: f64) -> f64
+    fn abs(x: i32) -> i32
 }
 
 print(unsafe { sqrt(2.0) })

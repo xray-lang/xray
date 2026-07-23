@@ -1,11 +1,11 @@
 import { U32x4 } from simd
 
-fn products(a: U32x4, b: U32x4) -> uint64 {
+fn products(a: U32x4, b: U32x4) -> u64 {
     var even = a.unzipEven(b)
     var odd = a.unzipOdd(b)
     return even.widenMulLow(odd).reduceAdd() + even.widenMulHigh(odd).reduceAdd()
 }
 
-var a: [uint32; 4] = [2, 3, 4, 5]
-var b: [uint32; 4] = [7, 11, 13, 17]
+var a: [u32; 4] = [2, 3, 4, 5]
+var b: [u32; 4] = [7, 11, 13, 17]
 print(products(U32x4.fromLanes(a), U32x4.fromLanes(b)))

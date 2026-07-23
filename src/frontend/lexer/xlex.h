@@ -144,22 +144,27 @@ typedef enum {
     TK_SCOPE,   // scope - structured concurrency
     TK_UNSAFE,  // unsafe - FFI / raw-pointer escape hatch block
 
-    // Type keywords
-    TK_INT,      // int (= int64)
-    TK_FLOAT,    // float (= float64)
-    TK_STRING,   // string
-    TK_BOOL,     // bool
-    TK_RUNE,     // char (Unicode scalar value)
-    TK_INT8,     // int8
-    TK_INT16,    // int16
-    TK_INT32,    // int32
-    TK_INT64,    // int64
-    TK_UINT8,    // uint8
-    TK_UINT16,   // uint16
-    TK_UINT32,   // uint32
-    TK_UINT64,   // uint64
-    TK_FLOAT32,  // float32
-    TK_FLOAT64,  // float64
+    // Type keywords. Public scalar spellings are generated/audited from
+    // shared/xr_scalar_type.def; byte has its own token so the formatter can
+    // preserve the author's deliberate byte/u8 choice.
+    TK_STRING,  // string
+    TK_BOOL,    // bool
+    TK_RUNE,    // rune (Unicode scalar value)
+    TK_INT,     // int (= i64)
+    TK_I8,
+    TK_I16,
+    TK_I32,
+    TK_I64,
+    TK_BYTE,  // byte (= u8)
+    TK_U8,
+    TK_U16,
+    TK_U32,
+    TK_U64,
+    TK_FLOAT,  // float (= f64)
+    TK_F32,
+    TK_F64,
+    TK_ISIZE,
+    TK_USIZE,
     // None of the uppercase native type names are lexer keywords any
     // more. Array / BigInt / Channel / DateTime / Json / Map /
     // Range / Regex / Set / StringBuilder all reach the parser as plain
@@ -167,7 +172,7 @@ typedef enum {
     // stdlib/prelude/prelude.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
     // produces a dedicated AST_CHANNEL_NEW node.
-    TK_LAST_KEYWORD = TK_FLOAT64,
+    TK_LAST_KEYWORD = TK_USIZE,
 
     // Contextual keywords (NOT in keyword range — can be used as identifiers)
     // These are recognized by the parser via string comparison, not by the lexer.

@@ -1,3 +1,3 @@
-export fn length(value: string) -> int32 {
-    return value.length as int32
+export fn length(value: string) -> i32 {
+    return value.length as i32
 }

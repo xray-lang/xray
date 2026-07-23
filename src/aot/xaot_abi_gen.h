@@ -25,7 +25,7 @@ typedef struct {
     uint8_t abi_class;
     XaotRep default_rep;
     bool allows_nullable;
-    bool uses_native_width;
+    bool uses_scalar_rep;
     bool typed_boundary;
 } XaotAbiInfo;
 
@@ -112,8 +112,8 @@ static inline XaotRep xaot_abi_rep_for_type(const XrType *type) {
     abi = xaot_abi_for_type_kind(type->kind);
     if (!abi || (type->is_nullable && !abi->allows_nullable))
         return XAOT_REP_TAGGED;
-    if (abi->uses_native_width && type->native_width != 0 &&
-        xaot_rep_from_native_type(type->native_width, &rep))
+    if (abi->uses_scalar_rep &&
+        xaot_rep_from_native_type(type->scalar_rep, &rep))
         return rep;
     return abi->default_rep;
 }

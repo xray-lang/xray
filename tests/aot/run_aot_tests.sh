@@ -363,7 +363,7 @@ XRAY_CORO_SEED=${XRAY_CORO_SEED:-}"
 
 run_negative_test() {
     local xr_file="$1"
-    local rel_name test_name safe_name case_work bin_out log_out
+    local rel_name test_name safe_name case_work bin_out log_out manifest_file build_input
 
     rel_name="$(rel_case_name "$xr_file")"
     test_name="${rel_name%.xr}"
@@ -376,10 +376,21 @@ run_negative_test() {
     }
     bin_out="$case_work/aot"
     log_out="$case_work/build.log"
+    build_input="$xr_file"
+
+    # A negative may need an external reachability/link contract.  A companion
+    # <case>.toml is staged as the project's xray.toml so cases remain isolated
+    # and no removed source attribute has to be resurrected.
+    manifest_file="${xr_file%.xr}.toml"
+    if [ -f "$manifest_file" ]; then
+        cp "$xr_file" "$case_work/$(basename "$xr_file")"
+        cp "$manifest_file" "$case_work/xray.toml"
+        build_input="$case_work/$(basename "$xr_file")"
+    fi
 
     printf "  %-42s" "$test_name"
 
-    if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
+    if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$build_input" \
             -o "$bin_out" \
             >"$log_out" 2>&1; then
         echo "FAIL (unexpected AOT success)"

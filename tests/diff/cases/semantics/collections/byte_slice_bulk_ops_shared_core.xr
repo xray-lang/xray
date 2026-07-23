@@ -6,7 +6,7 @@ fn main() {
     var srcView: Slice<byte> = src[:]
     dstView.fill(1)
     srcView.fill(7)
-    srcView.store<uint16>(1, 2312, Endian.LE)
+    srcView.store<u16>(1, 2312, Endian.LE)
     var copiedWindow: Slice<byte> = dstView[2:6]
     var copied: Slice<byte> = copiedWindow.copyFrom(srcView)
     print(dst[0])
@@ -35,7 +35,7 @@ fn main() {
     print(dstEmpty.commonPrefix(srcView))
     var rep = Array<byte>(10)
     var repView: Slice<byte> = rep[:]
-    repView.store<uint16>(0, 16961, Endian.LE)
+    repView.store<u16>(0, 16961, Endian.LE)
     repView.repeatFrom(2, 2, 6)
     print(rep[0])
     print(rep[1])

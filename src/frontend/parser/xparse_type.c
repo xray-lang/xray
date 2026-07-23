@@ -201,9 +201,13 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         case XR_TREF_ERROR:
             return xr_tref_error(parser->compiler_session);
         case XR_TREF_INT_WIDTH:
-            return xr_tref_int_width(parser->compiler_session, src->native_width);
+            return xr_tref_scalar(parser->compiler_session,
+                                  (XrSourceTypeSpelling) src->builtin_spelling, src->scalar_rep,
+                                  false);
         case XR_TREF_FLOAT_WIDTH:
-            return xr_tref_float_width(parser->compiler_session, src->native_width);
+            return xr_tref_scalar(parser->compiler_session,
+                                  (XrSourceTypeSpelling) src->builtin_spelling, src->scalar_rep,
+                                  true);
         case XR_TREF_TYPE_PARAM: {
             int idx = alias_param_index(subst_alias, src->name);
             if (idx >= 0 && type_args)
@@ -567,7 +571,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_check(parser, TK_LBRACKET)) {
         xr_parser_advance(parser);
         if (parser->current.type == TK_LITERAL_INT) {
-            xr_parser_error(parser, "fixed array type uses [T; N], e.g. [uint8; 64]");
+            xr_parser_error(parser, "fixed array type uses [T; N], e.g. [u8; 64]");
             return xr_tref_error(parser->compiler_session);
         }
         XrTypeRef *elem = xr_parse_type_annotation(parser);
@@ -602,29 +606,15 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->compiler_session);
 
-    /* Native-width integer types */
-    if (xr_parser_match(parser, TK_INT8))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I8);
-    if (xr_parser_match(parser, TK_INT16))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I16);
-    if (xr_parser_match(parser, TK_INT32))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I32);
-    if (xr_parser_match(parser, TK_INT64))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I64);
-    if (xr_parser_match(parser, TK_UINT8))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U8);
-    if (xr_parser_match(parser, TK_UINT16))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U16);
-    if (xr_parser_match(parser, TK_UINT32))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U32);
-    if (xr_parser_match(parser, TK_UINT64))
-        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U64);
-
-    /* Native-width float types */
-    if (xr_parser_match(parser, TK_FLOAT32))
-        return xr_tref_float_width(parser->compiler_session, XR_TREF_NW_F32);
-    if (xr_parser_match(parser, TK_FLOAT64))
-        return xr_tref_float_width(parser->compiler_session, XR_TREF_NW_F64);
+    /* Exact/domain scalar spellings are generated from the shared registry.
+     * int/float were consumed above so their established TRef kinds remain. */
+#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
+                       canonical_display, public_type_id, range_class)                             \
+    if (lexer_token != TK_INT && lexer_token != TK_FLOAT && xr_parser_match(parser, lexer_token))  \
+        return xr_tref_scalar(parser->compiler_session, XR_SOURCE_TYPE_##source_id, scalar_rep,    \
+                              xr_scalar_rep_is_float(scalar_rep));
+#include "../../shared/xr_scalar_type.def"
+#undef XR_SCALAR_TYPE
 
     /* Struct type literal: { x: float, y: float } or { x: float, ... } */
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -836,13 +826,6 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
             return xr_tref_unit(parser->compiler_session);
         }
-
-        /* Platform-width integers (FFI: C size_t / ptrdiff_t). Contextual type
-         * names (not lexer keywords) avoid reserving common identifiers. */
-        if (strcmp(temp_name, "uintsize") == 0)
-            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_USIZE);
-        if (strcmp(temp_name, "intsize") == 0)
-            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_ISIZE);
 
         /* Generic type arguments: Name<T1, T2, ...> */
         if (xr_parser_match(parser, TK_LT)) {

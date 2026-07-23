@@ -1,5 +1,5 @@
 extern "C" {
-    fn xrayffi_unused(x: int32) -> int32
+    fn xrayffi_unused(x: i32) -> i32
 }
 
 print(42)

@@ -1,5 +1,5 @@
 union BadMethod {
-    x: uint32
+    x: u32
 
     value() -> int {
         return 1

@@ -371,7 +371,7 @@ TEST(e2e_array_set) {
 }
 
 TEST(e2e_native_pointer_store_narrows_to_pointee) {
-    XrProto *p = compile_source("fn write(p: ref MutPtr<uint16>, value: uint16) {\n"
+    XrProto *p = compile_source("fn write(p: ref MutPtr<u16>, value: u16) {\n"
                                 "  unsafe { p[0] = value }\n"
                                 "}",
                                 NULL);
@@ -380,13 +380,13 @@ TEST(e2e_native_pointer_store_narrows_to_pointee) {
 }
 
 TEST(e2e_inlined_ref_forwarding_remaps_place_origin) {
-    XrProto *p = compile_source("fn core(cursor: ref Ptr<uint8>) {\n"
+    XrProto *p = compile_source("fn core(cursor: ref Ptr<u8>) {\n"
                                 "  cursor = cursor.offset(1)\n"
                                 "}\n"
-                                "fn forward(cursor: ref Ptr<uint8>) {\n"
+                                "fn forward(cursor: ref Ptr<u8>) {\n"
                                 "  core(ref cursor)\n"
                                 "}\n"
-                                "fn adapter(input: Ptr<uint8>) {\n"
+                                "fn adapter(input: Ptr<u8>) {\n"
                                 "  var cursor = input\n"
                                 "  forward(ref cursor)\n"
                                 "}",
@@ -858,6 +858,16 @@ TEST(e2e_status_str) {
     assert(strcmp(xi_pipeline_stage_str(XI_PIPE_STAGE_OPTIMIZE), "optimize") == 0);
 }
 
+TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
+    XrProto *p = compile_source("import time\ntime.sleep(1)\nprint(7)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_SLEEP));
+    assert(xr_vm_entry_plan_derive(p));
+    assert(p->entry_plan.root_representation == XR_ROOT_RESUMABLE_FRAME);
+    assert(p->entry_plan.scheduler_mode == XR_SCHED_SINGLE);
+    xr_vm_proto_free(p);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -985,6 +995,7 @@ int main(void) {
     /* API */
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
+    run_e2e_time_sleep_uses_dedicated_vm_suspend();
 
     teardown();
 

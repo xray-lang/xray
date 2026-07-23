@@ -4,8 +4,8 @@
 // `(uint32_t)x` from silently staying in the wider int domain.
 
 var big = 4294967297
-var castU32 = big as uint32
-var assignedU32: uint32 = big
+var castU32 = big as u32
+var assignedU32: u32 = big
 print(castU32)
 print(assignedU32)
 
@@ -15,7 +15,7 @@ var assignedU8: byte = neg
 print(castU8)
 print(assignedU8)
 
-print(2147483648 as int32)
+print(2147483648 as i32)
 
-var wide: uint64 = 4294967297
-print(wide as uint32)
+var wide: u64 = 4294967297
+print(wide as u32)

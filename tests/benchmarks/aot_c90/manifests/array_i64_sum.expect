@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<int> must stay as int64 storage with direct raw access.
+# Local Array<int> must stay as i64 storage with direct raw access.
 hot_function=^array_i64_sum_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_count=0

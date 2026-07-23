@@ -132,6 +132,11 @@ ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURES = {
     "tests/regression/11_coroutine/1123_channel_timeout.xr.expected",
 }
 
+ALLOWED_NON_TYPE_UNKNOWN_DIAGNOSTICS = {
+    "tests/compile_errors/ffi/016_extern_attribute_removed.xr.expected",
+    "tests/compile_errors/ffi/017_dylib_attribute_removed.xr.expected",
+}
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -246,6 +251,12 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         and "<unknown>" in line
     ):
         categories.append("ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE")
+        return categories
+    if (
+        has_unknown
+        and rel_path in ALLOWED_NON_TYPE_UNKNOWN_DIAGNOSTICS
+        and "unknown attribute name" in line
+    ):
         return categories
     if has_unknown and REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
         categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")

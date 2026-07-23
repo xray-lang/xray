@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Class Map<bool,float32> fields must use typed backing and direct mixed map helpers.
+# Class Map<bool,f32> fields must use typed backing and direct mixed map helpers.
 hot_function=^class_map_bool_f32_field_loop_(fill|scan)_[0-9]+$
 hot_function_count=2
 hot_xrvalue_count=0

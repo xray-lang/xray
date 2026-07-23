@@ -109,37 +109,37 @@ static XrType g_type_rune_nullable;
 static XR_THREAD_LOCAL XrTypePool *g_current_type_pool = NULL;
 
 static void init_singleton(XrType *t, XrTypeKind kind, uint32_t id, bool nullable,
-                           uint8_t native_width) {
+                           uint8_t scalar_rep) {
     memset(t, 0, sizeof(XrType));
     t->kind = kind;
     t->id = id;
     t->frozen = true;
     t->is_nullable = nullable;
-    t->native_width = native_width;
+    t->scalar_rep = scalar_rep;
 }
 
 static void xr_type_global_init_once(void) {
     uint32_t id = 1;
-    init_singleton(&g_type_int, XR_KIND_INT, id++, false, 0);
-    init_singleton(&g_type_float, XR_KIND_FLOAT, id++, false, 0);
-    init_singleton(&g_type_string, XR_KIND_STRING, id++, false, 0);
-    init_singleton(&g_type_bool, XR_KIND_BOOL, id++, false, 0);
-    init_singleton(&g_type_rune, XR_KIND_RUNE, id++, false, 0);
-    init_singleton(&g_type_null, XR_KIND_NULL, id++, false, 0);
-    init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
-    init_singleton(&g_type_error, XR_KIND_ERROR, id++, false, 0);
-    init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
+    init_singleton(&g_type_int, XR_KIND_INT, id++, false, XR_NATIVE_I64);
+    init_singleton(&g_type_float, XR_KIND_FLOAT, id++, false, XR_NATIVE_F64);
+    init_singleton(&g_type_string, XR_KIND_STRING, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_bool, XR_KIND_BOOL, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_rune, XR_KIND_RUNE, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_null, XR_KIND_NULL, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_error, XR_KIND_ERROR, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, XR_SCALAR_REP_NONE);
     // Unit type singleton: dedicated XR_KIND_UNIT kind, spelled `()` in user
     // syntax. Acts as the canonical "no meaningful value" type for functions
     // returning nothing and as the unique value of the empty tuple literal.
-    init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, 0);
-    init_singleton(&g_type_json, XR_KIND_JSON, id++, false, 0);
+    init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_json, XR_KIND_JSON, id++, false, XR_SCALAR_REP_NONE);
 
-    init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, 0);
-    init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, 0);
-    init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, 0);
-    init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, 0);
-    init_singleton(&g_type_rune_nullable, XR_KIND_RUNE, id++, true, 0);
+    init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, XR_NATIVE_I64);
+    init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, XR_NATIVE_F64);
+    init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, XR_SCALAR_REP_NONE);
+    init_singleton(&g_type_rune_nullable, XR_KIND_RUNE, id++, true, XR_SCALAR_REP_NONE);
 }
 
 void xr_type_global_init(void) {
@@ -181,7 +181,13 @@ static XrType *type_alloc(XrVMRuntime *X, XrTypeKind kind) {
     X = resolve_isolate(X);
     XrTypePool *pool = resolve_type_pool(X);
     XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
-    return xr_pool_alloc_type(pool, kind);
+    XrType *type = xr_pool_alloc_type(pool, kind);
+    if (type) {
+        type->scalar_rep = kind == XR_KIND_INT     ? XR_NATIVE_I64
+                           : kind == XR_KIND_FLOAT ? XR_NATIVE_F64
+                                                   : XR_SCALAR_REP_NONE;
+    }
+    return type;
 }
 
 static void *type_alloc_array(XrTypePool *pool, size_t elem_size, int count, size_t *out_size) {
@@ -245,21 +251,23 @@ XrType *xr_type_new_unit(XrVMRuntime *X) {
     return &g_type_unit;
 }
 
-// Native-width integer type (int8/16/32/64, uint8/16/32/64)
 XrType *xr_type_new_int_width(XrVMRuntime *X, int width) {
+    if (width == XR_NATIVE_I64)
+        return xr_type_new_int(X);
     XrType *type = type_alloc(X, XR_KIND_INT);
     if (!type)
         return NULL;
-    type->native_width = (uint8_t) width;
+    type->scalar_rep = (uint8_t) width;
     return type;
 }
 
-// Native-width float type (float32/64)
 XrType *xr_type_new_float_width(XrVMRuntime *X, int width) {
+    if (width == XR_NATIVE_F64)
+        return xr_type_new_float(X);
     XrType *type = type_alloc(X, XR_KIND_FLOAT);
     if (!type)
         return NULL;
-    type->native_width = (uint8_t) width;
+    type->scalar_rep = (uint8_t) width;
     return type;
 }
 
@@ -1155,7 +1163,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
     copy->is_nullable = type->is_nullable;
 
     copy->is_const = type->is_const;
-    copy->native_width = type->native_width;
+    copy->scalar_rep = type->scalar_rep;
 
     switch (type->kind) {
         case XR_KIND_ARRAY:
@@ -1349,8 +1357,12 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
     if (type->frozen && resolve_type_pool(X)) {
         switch (type->kind) {
             case XR_KIND_INT:
+                if (type->scalar_rep != XR_NATIVE_I64)
+                    break;
                 return &g_type_int_nullable;
             case XR_KIND_FLOAT:
+                if (type->scalar_rep != XR_NATIVE_F64)
+                    break;
                 return &g_type_float_nullable;
             case XR_KIND_STRING:
                 return &g_type_string_nullable;
@@ -1875,7 +1887,7 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return false;
     if (a->is_const != b->is_const)
         return false;
-    if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->native_width != b->native_width)
+    if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->scalar_rep != b->scalar_rep)
         return false;
     if (a->kind == XR_KIND_ERROR)
         return true;
@@ -2064,9 +2076,9 @@ XrType *xr_type_non_nullable(XrVMRuntime *X, XrType *type) {
     if (type->is_nullable) {
         switch (type->kind) {
             case XR_KIND_INT:
-                return xr_type_new_int(X);
+                return xr_type_new_int_width(X, type->scalar_rep);
             case XR_KIND_FLOAT:
-                return xr_type_new_float(X);
+                return xr_type_new_float_width(X, type->scalar_rep);
             case XR_KIND_STRING:
                 return xr_type_new_string(X);
             case XR_KIND_BOOL:

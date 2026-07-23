@@ -18,7 +18,7 @@ fn task_status(task: Task<int>) -> TaskStatus {
     return task.status
 }
 
-fn task_poll(task: Task<int>) -> TaskResult<int> {
+fn task_poll(task: ref Task<int>) -> TaskResult<int> {
     return task.poll()
 }
 
@@ -41,4 +41,4 @@ print(quick.awaitResult())
 print(quick_result)
 print(task_done(quick))
 print(task_status(quick))
-print(task_poll(quick))
+print(task_poll(ref quick))

@@ -45,7 +45,7 @@ fn show_bytes_load_oob() {
     var bytes = Array<byte>(4, 1)
     var view: Slice<byte> = bytes[:]
     try {
-        var value: uint32 = view.load<uint32>(2, Endian.LE)
+        var value: u32 = view.load<u32>(2, Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)

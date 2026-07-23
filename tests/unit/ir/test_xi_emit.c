@@ -26,7 +26,7 @@ static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_uint64 = {
-    .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U64};
+    .kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U64};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -333,11 +333,11 @@ TEST(emit_uint64_cmp_uses_unsigned_opcode) {
         XrInstruction inst = PROTO_CODE(proto, i);
         if (GET_OPCODE(inst) == OP_CMP_LTU) {
             found = true;
-            assert(GETARG_C(inst) == 0 && "uint64 GT should compare 0 < param with unsigned op");
+            assert(GETARG_C(inst) == 0 && "u64 GT should compare 0 < param with unsigned op");
             break;
         }
     }
-    assert(found && "uint64 compare should emit CMP_LTU");
+    assert(found && "u64 compare should emit CMP_LTU");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -1030,7 +1030,7 @@ TEST(emit_str_concat_uint64_formats_before_append) {
         if (GET_OPCODE(inst) == OP_STRBUF_APPEND)
             found_append = true;
     }
-    assert(found_tostring_u64 && "uint64 concat part should be formatted before append");
+    assert(found_tostring_u64 && "u64 concat part should be formatted before append");
     assert(found_append && "concat should still use StringBuilder append sequence");
 
     xr_vm_proto_free(proto);

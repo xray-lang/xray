@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Task 204 final audit for byte/uint8 canonical U8 identity.
+# Task 239 final audit for byte/u8 canonical U8 identity.
 
 set -euo pipefail
 
@@ -10,12 +10,12 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 : "${XRAY_TEST_LSP_DOCUMENT:?XRAY_TEST_LSP_DOCUMENT must point to test_lsp_document}"
 : "${XRAY_TEST_XGLOBAL_SUMMARY:?XRAY_TEST_XGLOBAL_SUMMARY must point to test_xglobal_summary}"
 
-REGRESSION_CASE="${PROJECT_ROOT}/tests/regression/14_typed_array/1409_byte_uint8_canonical_identity.xr"
+REGRESSION_CASE="${PROJECT_ROOT}/tests/regression/14_typed_array/1409_byte_u8_canonical_identity.xr"
 
 run_step() {
     local label="$1"
     shift
-    printf '[byte-uint8-canonical] %s\n' "${label}"
+    printf '[byte-u8-canonical] %s\n' "${label}"
     "$@"
 }
 

@@ -542,16 +542,33 @@ static XrTypeRef *xa_synth_tref_from_type(const XrType *t) {
     const char *name = NULL;
     int nch = 0;
     XrTypeRef **children = NULL;
+    uint8_t scalar_rep = XR_SCALAR_REP_NONE;
+    XrSourceTypeSpelling builtin_spelling = XR_SOURCE_TYPE_NONE;
     switch (t->kind) {
         case XR_KIND_INT:
-            if (t->native_width != 0)
+            scalar_rep = t->scalar_rep;
+            builtin_spelling = t->scalar_rep == XR_NATIVE_I64     ? XR_SOURCE_TYPE_INT
+                               : t->scalar_rep == XR_NATIVE_I8    ? XR_SOURCE_TYPE_I8
+                               : t->scalar_rep == XR_NATIVE_U8    ? XR_SOURCE_TYPE_BYTE
+                               : t->scalar_rep == XR_NATIVE_I16   ? XR_SOURCE_TYPE_I16
+                               : t->scalar_rep == XR_NATIVE_U16   ? XR_SOURCE_TYPE_U16
+                               : t->scalar_rep == XR_NATIVE_I32   ? XR_SOURCE_TYPE_I32
+                               : t->scalar_rep == XR_NATIVE_U32   ? XR_SOURCE_TYPE_U32
+                               : t->scalar_rep == XR_NATIVE_U64   ? XR_SOURCE_TYPE_U64
+                               : t->scalar_rep == XR_NATIVE_ISIZE ? XR_SOURCE_TYPE_ISIZE
+                               : t->scalar_rep == XR_NATIVE_USIZE ? XR_SOURCE_TYPE_USIZE
+                                                                  : XR_SOURCE_TYPE_NONE;
+            if (builtin_spelling == XR_SOURCE_TYPE_NONE)
                 return NULL;
-            kind = XR_TREF_INT;
+            kind = t->scalar_rep == XR_NATIVE_I64 ? XR_TREF_INT : XR_TREF_INT_WIDTH;
             break;
         case XR_KIND_FLOAT:
-            if (t->native_width != 0)
+            if (!xr_scalar_rep_is_float(t->scalar_rep))
                 return NULL;
-            kind = XR_TREF_FLOAT;
+            scalar_rep = t->scalar_rep;
+            builtin_spelling =
+                t->scalar_rep == XR_NATIVE_F64 ? XR_SOURCE_TYPE_FLOAT : XR_SOURCE_TYPE_F32;
+            kind = t->scalar_rep == XR_NATIVE_F64 ? XR_TREF_FLOAT : XR_TREF_FLOAT_WIDTH;
             break;
         case XR_KIND_STRING:
             kind = XR_TREF_STRING;
@@ -610,6 +627,8 @@ static XrTypeRef *xa_synth_tref_from_type(const XrType *t) {
         return NULL;
     }
     r->kind = kind;
+    r->scalar_rep = scalar_rep;
+    r->builtin_spelling = (uint8_t) builtin_spelling;
     r->name = name;
     r->nchildren = (uint8_t) nch;
     r->children = children;
@@ -2073,7 +2092,7 @@ static bool xa_type_is_supported_byte_slice_typed_scalar(XrType *type) {
     if (!type)
         return false;
     if (XR_TYPE_IS_INT(type)) {
-        switch (type->native_width) {
+        switch (type->scalar_rep) {
             case XR_NATIVE_I16:
             case XR_NATIVE_U16:
             case XR_NATIVE_I32:
@@ -2086,7 +2105,7 @@ static bool xa_type_is_supported_byte_slice_typed_scalar(XrType *type) {
         }
     }
     return XR_TYPE_IS_FLOAT(type) &&
-           (type->native_width == XR_NATIVE_F32 || type->native_width == XR_NATIVE_F64);
+           (type->scalar_rep == XR_NATIVE_F32 || type->scalar_rep == XR_NATIVE_F64);
 }
 
 static bool xa_type_is_pod_span_elem(XrType *type) {
@@ -2124,7 +2143,7 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
     if (!supported) {
         char msg[192];
         snprintf(msg, sizeof(msg), "%s currently supports T = %s", label,
-                 "int16, uint16, int32, uint32, int64, uint64, float32 or float64");
+                 "i16, u16, i32, u32, i64, u64, f32 or f64");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -2143,10 +2162,10 @@ static bool xa_type_is_supported_mem_access(XrType *type) {
     if (XR_TYPE_IS_POINTER(type))
         return true;
     if (XR_TYPE_IS_FLOAT(type))
-        return type->native_width == XR_NATIVE_F32 || type->native_width == XR_NATIVE_F64;
+        return type->scalar_rep == XR_NATIVE_F32 || type->scalar_rep == XR_NATIVE_F64;
     if (!XR_TYPE_IS_INT(type))
         return false;
-    switch (type->native_width) {
+    switch (type->scalar_rep) {
         case XR_NATIVE_I8:
         case XR_NATIVE_U8:
         case XR_NATIVE_I16:
@@ -2237,8 +2256,8 @@ static XrType *xa_mem_access_return_type(XaInferContext *ctx, AstNode *node, Cal
     if (!xa_type_is_supported_mem_access(target)) {
         char msg[256];
         snprintf(msg, sizeof(msg),
-                 "%s supports T = int8, uint8, int16, uint16, int32, uint32, int64, uint64, "
-                 "intsize, uintsize, float32, float64, Ptr<U> or MutPtr<U>",
+                 "%s supports T = i8, u8, i16, u16, i32, u32, i64, u64, "
+                 "isize, usize, f32, f64, Ptr<U> or MutPtr<U>",
                  label);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
@@ -2261,7 +2280,7 @@ static XrType *xa_mem_access_return_type(XaInferContext *ctx, AstNode *node, Cal
     if (!ptr_type || !xr_type_is_u8_pointer(ptr_type) || (is_store && !ptr_type->ptr_is_mut)) {
         char msg[224];
         snprintf(msg, sizeof(msg), "%s expects %s as its first argument, got '%s'", label,
-                 is_store ? "MutPtr<uint8>" : "Ptr<uint8> or MutPtr<uint8>",
+                 is_store ? "MutPtr<u8>" : "Ptr<u8> or MutPtr<u8>",
                  ptr_type ? xr_type_to_string(ptr_type) : "unknown");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
@@ -5749,7 +5768,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         /* R2-2 stopgap: checked/saturating/overflows methods on fixed-width
-         * int receivers would silently evaluate at int64 boundaries. */
+         * int receivers would silently evaluate at i64 boundaries. */
         {
             char ofw_msg[320];
             if (xa_builtin_int_overflow_method_unsupported(callee_obj_type, method_name, ofw_msg,
@@ -6543,10 +6562,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         escape_name = method_name;
     }
     const XaMemoryEffectSummary *call_memory_effects =
-        escape_links && escape_links->memory_effect_id != XA_MEMORY_EFFECT_NONE
-            ? xa_memory_effect_db_get(ctx->analyzer->memory_effect_db,
-                                      escape_links->memory_effect_id)
-            : NULL;
+        xa_symbol_links_memory_effect_summary(escape_links);
     if (method_name && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         xa_check_call_memory_effect_actual(ctx, node, call_memory_effects, XA_MEMORY_ROOT_RECEIVER,
                                            0, call->callee->as.member_access.object, escape_name);
@@ -6710,10 +6726,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     /* R2-2: wrapping* on a fixed-width int receiver is width-lowered to the
      * arithmetic ops, so the result keeps the receiver's width
-     * (int32.wrappingAdd -> int32), not the plain `int` from the native
+     * (i32.wrappingAdd -> i32), not the plain `int` from the native
      * class signature. */
     if (method_name && callee_obj_type && XR_TYPE_IS_INT(callee_obj_type) &&
-        !callee_obj_type->is_nullable && callee_obj_type->native_width != XR_NATIVE_I64 &&
+        !callee_obj_type->is_nullable && callee_obj_type->scalar_rep != XR_NATIVE_I64 &&
         (strcmp(method_name, "wrappingAdd") == 0 || strcmp(method_name, "wrappingSub") == 0 ||
          strcmp(method_name, "wrappingMul") == 0)) {
         return_type = callee_obj_type;

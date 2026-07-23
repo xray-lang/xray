@@ -161,9 +161,9 @@ static bool xlsp_receiver_matches(XrType *type, XlspReceiverKind receiver) {
             return type && type->kind == XR_KIND_INT && !type->is_nullable;
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return type && type->kind == XR_KIND_INT && !type->is_nullable &&
-                   (type->native_width == XR_NATIVE_U8 || type->native_width == XR_NATIVE_U16 ||
-                    type->native_width == XR_NATIVE_U32 || type->native_width == XR_NATIVE_U64 ||
-                    type->native_width == XR_NATIVE_USIZE);
+                   (type->scalar_rep == XR_NATIVE_U8 || type->scalar_rep == XR_NATIVE_U16 ||
+                    type->scalar_rep == XR_NATIVE_U32 || type->scalar_rep == XR_NATIVE_U64 ||
+                    type->scalar_rep == XR_NATIVE_USIZE);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(type);
         case XA_BUILTIN_RECEIVER_ARRAY:

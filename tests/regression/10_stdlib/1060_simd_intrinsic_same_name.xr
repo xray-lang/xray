@@ -1,8 +1,8 @@
 // User declarations that share canonical SIMD spellings remain ordinary code.
 struct U32x4 {
-    value: uint32
+    value: u32
 
-    bitXor(other: U32x4) -> uint32 {
+    bitXor(other: U32x4) -> u32 {
         return this.value + other.value
     }
 }

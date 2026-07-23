@@ -4,8 +4,8 @@ struct CounterState {
 }
 
 union FlagBits {
-    i: int32
-    u: uint32
+    i: i32
+    u: u32
 }
 
 struct DeviceState {

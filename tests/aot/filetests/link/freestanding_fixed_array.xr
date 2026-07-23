@@ -21,8 +21,8 @@ fn xray_fixed_array_byte_slice(i: int) -> int {
 fn xray_fixed_array_byte_slice_load_store(pos: int) -> int {
     var xs: [byte; 8] = [0, 0, 0, 0, 0, 0, 0, 0]
     var view: Slice<byte> = xs[:]
-    view.store<uint16>(pos, 0x1234, Endian.LE)
-    return int(view.load<uint16>(pos, Endian.LE))
+    view.store<u16>(pos, 0x1234, Endian.LE)
+    return int(view.load<u16>(pos, Endian.LE))
 }
 
 fn xray_fixed_array_byte_slice_wide_ints(pos: int) -> int {
@@ -33,30 +33,30 @@ fn xray_fixed_array_byte_slice_wide_ints(pos: int) -> int {
         0, 0, 0, 0, 0, 0, 0, 0,
     ]
     var view: Slice<byte> = xs[:]
-    view.store<uint32>(pos, 0x01020304, Endian.BE)
-    view.store<uint64>(8, 42, Endian.LE)
-    view.store<int16>(16, -2, Endian.LE)
-    view.store<int32>(18, -1234, Endian.LE)
-    view.store<int64>(24, -5, Endian.LE)
-    var a: uint32 = view.load<uint32>(pos, Endian.BE)
-    var b: uint64 = view.load<uint64>(8, Endian.LE)
-    var c: int16 = view.load<int16>(16, Endian.LE)
-    var d: int32 = view.load<int32>(18, Endian.LE)
-    var e: int64 = view.load<int64>(24, Endian.LE)
+    view.store<u32>(pos, 0x01020304, Endian.BE)
+    view.store<u64>(8, 42, Endian.LE)
+    view.store<i16>(16, -2, Endian.LE)
+    view.store<i32>(18, -1234, Endian.LE)
+    view.store<i64>(24, -5, Endian.LE)
+    var a: u32 = view.load<u32>(pos, Endian.BE)
+    var b: u64 = view.load<u64>(8, Endian.LE)
+    var c: i16 = view.load<i16>(16, Endian.LE)
+    var d: i32 = view.load<i32>(18, Endian.LE)
+    var e: i64 = view.load<i64>(24, Endian.LE)
     return int(a) + int(b) + int(c) + int(d) + int(e)
 }
 
-fn xray_fixed_array_byte_slice_wide_floats(pos: int) -> float64 {
+fn xray_fixed_array_byte_slice_wide_floats(pos: int) -> f64 {
     var xs: [byte; 16] = [
         0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0,
     ]
     var view: Slice<byte> = xs[:]
-    view.store<float32>(pos, 1.5, Endian.LE)
-    view.store<float64>(8, -2.25, Endian.BE)
-    var a: float32 = view.load<float32>(pos, Endian.LE)
-    var b: float64 = view.load<float64>(8, Endian.BE)
-    return (a as float64) + b
+    view.store<f32>(pos, 1.5, Endian.LE)
+    view.store<f64>(8, -2.25, Endian.BE)
+    var a: f32 = view.load<f32>(pos, Endian.LE)
+    var b: f64 = view.load<f64>(8, Endian.BE)
+    return (a as f64) + b
 }
 
 fn xray_fixed_array_byte_slice_bulk() -> int {
@@ -73,14 +73,14 @@ fn xray_fixed_array_byte_slice_bulk() -> int {
 }
 
 fn xray_fixed_array_span_bulk() -> int {
-    var dstWords: [uint32; 4] = [0, 0, 0, 0]
-    var srcWords: [uint32; 2] = [11, 22]
-    var dst: Slice<uint32> = dstWords[:]
-    var src: Slice<uint32> = srcWords[:]
+    var dstWords: [u32; 4] = [0, 0, 0, 0]
+    var srcWords: [u32; 2] = [11, 22]
+    var dst: Slice<u32> = dstWords[:]
+    var src: Slice<u32> = srcWords[:]
     dst.fill(3)
-    var window: Slice<uint32> = dst[1:3]
+    var window: Slice<u32> = dst[1:3]
     window.copyFrom(src)
     var asBytes: Slice<byte> = dst.asBytes()
-    var pairs: Slice<uint16> = asBytes.reinterpret<uint16>()
+    var pairs: Slice<u16> = asBytes.reinterpret<u16>()
     return window.compare(src) + int(pairs[2])
 }

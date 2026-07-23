@@ -114,8 +114,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `rune`
+`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
+`float` `f32` `f64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
@@ -157,9 +157,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
-- 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
-- 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：`i64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: i8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -178,7 +178,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-字面量类型为 `float`（= `float64`，IEEE-754 双精度）。
+字面量类型为 `float`（= `f64`，IEEE-754 双精度）。
 
 ```xray
 3.14
@@ -556,8 +556,8 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `rune`
+`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
+`float` `f32` `f64` `bool` `string` `rune`
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
@@ -599,9 +599,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
-- Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
-- Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
+- Default literal type is `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: `i64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: i8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42
@@ -620,7 +620,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-Literal type is `float` (= `float64`, IEEE-754 double precision).
+Literal type is `float` (= `f64`, IEEE-754 double precision).
 
 ```xray
 3.14

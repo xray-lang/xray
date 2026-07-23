@@ -511,7 +511,7 @@ TEST(completion_uint8_array_uses_canonical_byte_docs) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var bytes = Array<uint8>(0)\n"
+    const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///uint8_array.xr", content, 1);
     ASSERT(doc != NULL);
@@ -525,8 +525,8 @@ TEST(completion_uint8_array_uses_canonical_byte_docs) {
     const char *doc_text = xjson_get_string(append, "documentation");
     ASSERT(doc_text != NULL);
     ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
-    ASSERT(strstr(doc_text, "Array<uint8>") == NULL);
-    ASSERT(strstr(doc_text, "Slice<uint8>") == NULL);
+    ASSERT(strstr(doc_text, "Array<u8>") == NULL);
+    ASSERT(strstr(doc_text, "Slice<u8>") == NULL);
 
     xjson_free(items);
     xlsp_server_free(server);
@@ -768,7 +768,7 @@ TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
     XrType u32;
     memset(&u32, 0, sizeof(u32));
     u32.kind = XR_KIND_INT;
-    u32.native_width = XR_NATIVE_U32;
+    u32.scalar_rep = XR_NATIVE_U32;
 
     XrJsonValue *items = xlsp_builtin_get_completions_for_type(&u32);
     ASSERT(items != NULL);
@@ -781,7 +781,7 @@ TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
 
     XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
     ASSERT(rotate != NULL);
-    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): uint32");
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): u32");
     const char *documentation = xjson_get_string(rotate, "documentation");
     ASSERT(documentation != NULL);
     ASSERT(strstr(documentation, "Allocation: no heap allocation") != NULL);
@@ -790,7 +790,7 @@ TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
     char signature[160];
     ASSERT(xlsp_builtin_get_signature_for_type(&u32, "byteswap", signature, sizeof(signature)) !=
            NULL);
-    ASSERT_STR_EQ(signature, "byteswap(): uint32");
+    ASSERT_STR_EQ(signature, "byteswap(): u32");
     ASSERT(xlsp_builtin_get_signature_for_type(&u32, "popcount", signature, sizeof(signature)) !=
            NULL);
     ASSERT_STR_EQ(signature, "popcount(): int");
@@ -1104,7 +1104,7 @@ TEST(code_action_go_capture_has_no_keyword_rewrite) {
     XrJsonValue *params = make_code_action_params(
         "file:///t.xr", 2, 21, 28,
         "go closure cannot capture mutable variable 'counter'\n"
-        "hint: route shared updates through Channel/Atomic/Mutex, or transfer one owner with "
+        "hint: bind a Channel/Atomic/Mutex handle as const, or transfer one owner with "
         "go worker(move counter)");
 
     XrJsonValue *actions = xlsp_handle_code_action(server, params);

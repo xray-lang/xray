@@ -5,13 +5,13 @@ import time
 
 const PORT = 9196
 
-fn serveStaticRoutes(port: int) {
+fn serveStaticRoutes(port: int, running: Atomic<bool>) {
     http.route("GET", "/plain", "hello static")
     http.route("GET", "/empty", "")
     http.routeHandler("POST", "/dynamic", fn(req: HttpRequest) -> HttpResponse {
         return http.textResponse(req.query.get("streaming") != null ? "handler:true" : "handler:false")
     })
-    http.listen(port)
+    http.listen(port, running)
 }
 
 fn waitForServer(port: int) -> bool {
@@ -31,8 +31,21 @@ fn sendRaw(port: int, request: string) -> string {
     if (conn == null) {
         return ""
     }
-    net.write(conn!, request)
-    var response = net.read(conn!, 4096) ?? ""
+    var written = 0
+    while (written < len(request)) {
+        var n = net.write(conn!, request.slice(written, len(request)))
+        if (n <= 0) {
+            net.close(conn!)
+            return ""
+        }
+        written = written + n
+    }
+    var response = ""
+    while (true) {
+        var chunk = net.read(conn!, 4096)
+        if (chunk == null) { break }
+        response = response + chunk!
+    }
     net.close(conn!)
     return response
 }
@@ -44,7 +57,8 @@ export fn runHttpStaticRouteFullParse() {
     }
     net.close(probe!)
 
-    go serveStaticRoutes(PORT)
+    const running = Atomic(true)
+    go serveStaticRoutes(PORT, running)
     assert(waitForServer(PORT))
 
     var plain = sendRaw(
@@ -88,5 +102,5 @@ export fn runHttpStaticRouteFullParse() {
     assert(oversized.contains("HTTP/1.1 413 Payload Too Large\r\n"))
     assert(!oversized.contains("handler:"))
 
-    http.stopServer()
+    running.store(false)
 }

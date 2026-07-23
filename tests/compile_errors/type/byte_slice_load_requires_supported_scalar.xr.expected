@@ -1,1 +1,1 @@
-Slice<byte>.load<T>() currently supports T = int16, uint16, int32, uint32, int64, uint64, float32 or float64
+Slice<byte>.load<T>() currently supports T = i16, u16, i32, u32, i64, u64, f32 or f64

@@ -75,6 +75,13 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         self.assertIn("ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE", categories)
         self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
 
+    def test_unknown_attribute_diagnostic_is_not_a_source_type(self) -> None:
+        categories = classify_line(
+            "tests/compile_errors/ffi/016_extern_attribute_removed.xr.expected",
+            "error: unknown attribute name",
+        )
+        self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
+
     def test_current_inventory_has_only_task_failed_unknown_boundary(self) -> None:
         inventory = build_inventory(ROOT)
         hits = inventory["SOURCE_UNKNOWN_TYPE_SURFACE"]

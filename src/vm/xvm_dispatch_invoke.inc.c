@@ -330,9 +330,16 @@ invoke_dispatch:;
                 vmbreak;
             }
             if (status == XR_CFUNC_BLOCKED) {
+                /* Continuation-backed natives already saved the next pc and
+                 * publish their result through cfunc_result_slot on resume.
+                 * Replay is only for polling-style natives with no continuation. */
+                if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
+                    vm_suspend_block_replay_yielded(ci, pc);
                 return XR_VM_BLOCKED;
             }
             if (status == XR_CFUNC_YIELD) {
+                if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
+                    vm_suspend_yield_replay_yielded(ci, pc);
                 return XR_VM_YIELD;
             }
             return XR_VM_RUNTIME_ERROR;
@@ -547,9 +554,13 @@ vmcase(OP_INVOKE_DIRECT) {
             vmbreak;
         }
         if (status == XR_CFUNC_BLOCKED) {
+            if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
+                vm_suspend_block_replay_yielded(ci, pc);
             return XR_VM_BLOCKED;
         }
         if (status == XR_CFUNC_YIELD) {
+            if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
+                vm_suspend_yield_replay_yielded(ci, pc);
             return XR_VM_YIELD;
         }
         return XR_VM_RUNTIME_ERROR;

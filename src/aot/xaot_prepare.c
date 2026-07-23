@@ -1271,6 +1271,20 @@ static bool prepare_array_fill_loop_match(const XaotBundle *bundle, const XiFunc
         !prepare_call_method_matches_receiver_registry_id(push,
                                                           XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH))
         return false;
+    /* Keep plan construction in lockstep with C emission.  When the global
+     * capacity pass attached a site, raw fill-loop stores are legal only if
+     * that site proved an exact one-shot reservation.  Otherwise Cgen keeps
+     * the growing runtime push, so caching array->data here would leave a
+     * stale pointer after the first relocation. */
+    if (push->xg_capacity_op_id != XG_NO_ID) {
+        const XaotCapacityPlan *plan =
+            xaot_bundle_find_capacity_plan(bundle, (XgCapacityOpId) push->xg_capacity_op_id);
+        const uint32_t required = XAOT_CAPACITY_EV_EXACT_COUNT | XAOT_CAPACITY_EV_LOOP_APPEND |
+                                  XAOT_CAPACITY_EV_NO_CLOBBER;
+        if (!plan || plan->action != XAOT_CAPACITY_RESERVE_ONCE ||
+            (plan->evidence & required) != required)
+            return false;
+    }
     if (prepare_array_single_block_fill_loop_match(bundle, func, push, out))
         return true;
     if (prepare_array_branchy_fill_loop_match(bundle, func, push, out))
@@ -1519,6 +1533,9 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_LEN:
             return arg_index == 0;
         case XI_CALL_METHOD: {
+            /* Native-local representation keeps the array object itself as a
+             * direct pointer; relocating its backing data does not invalidate
+             * that pointer.  Data-cache eligibility is checked separately. */
             if (arg_index == 0 && (prepare_call_method_matches_receiver_registry_id(
                                        user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) ||
                                    prepare_call_method_matches_receiver_registry_id(
@@ -2164,6 +2181,48 @@ static bool prepare_span_value_writable_proven(const XaotBundle *bundle, const X
     }
 }
 
+static bool prepare_span_value_readonly_proven(const XaotBundle *bundle, const XiValue *value,
+                                               uint8_t depth) {
+    const XiValue *origin = unwrap_identity_value(value);
+    if (!bundle || !origin || depth > 8 || !origin->type || origin->type->kind != XR_KIND_SLICE ||
+        !prepare_value_plan_is_span_aggregate(bundle, origin))
+        return false;
+
+    switch ((XiOp) origin->op) {
+        case XI_SLICE:
+        case XI_SLICE_WINDOW:
+            if (origin->nargs < 1 || !origin->args[0] || !origin->args[0]->type)
+                return false;
+            if (origin->args[0]->type->kind == XR_KIND_SLICE)
+                return prepare_span_value_readonly_proven(bundle, origin->args[0], depth + 1);
+            return xr_type_is_const(origin->args[0]->type) ||
+                   origin->args[0]->type->kind == XR_KIND_STRING;
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_REINTERPRET:
+            return origin->nargs >= 1 &&
+                   prepare_span_value_readonly_proven(bundle, origin->args[0], depth + 1);
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            return origin->aux && strcmp((const char *) origin->aux, "asBytes") == 0 &&
+                   origin->nargs >= 1 && origin->args[0] && origin->args[0]->type &&
+                   xr_type_is_named_class(origin->args[0]->type, "Buffer");
+        case XI_PHI: {
+            bool saw_arg = false;
+            for (uint16_t i = 0; i < origin->nargs; i++) {
+                const XiValue *arg = unwrap_identity_value(origin->args[i]);
+                if (!arg || arg == origin)
+                    continue;
+                if (!prepare_span_value_readonly_proven(bundle, arg, depth + 1))
+                    return false;
+                saw_arg = true;
+            }
+            return saw_arg;
+        }
+        default:
+            return false;
+    }
+}
+
 static bool prepare_span_elem_matches(const XaotContainerElemPlan *a,
                                       const XaotContainerElemPlan *b) {
     return a && b && a->elem_name && b->elem_name && a->c_type && b->c_type &&
@@ -2521,10 +2580,13 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         evidence |= XAOT_SLICE_EV_RECV_BYTE_SLICE;
     if (prepare_span_elem_is_pod(&recv_elem))
         evidence |= XAOT_SLICE_EV_RECV_POD;
-    if (prepare_span_access_is_write(kind) &&
-        prepare_span_value_writable_proven(bundle, receiver, 0)) {
-        evidence |= XAOT_SLICE_EV_WRITABLE;
-        drop |= XAOT_SLICE_DROP_READONLY;
+    if (prepare_span_access_is_write(kind)) {
+        if (prepare_span_value_writable_proven(bundle, receiver, 0)) {
+            evidence |= XAOT_SLICE_EV_WRITABLE;
+            drop |= XAOT_SLICE_DROP_READONLY;
+        } else if (prepare_span_value_readonly_proven(bundle, receiver, 0)) {
+            evidence |= XAOT_SLICE_EV_READONLY;
+        }
     }
 
     if (prepare_span_access_is_index(kind)) {
@@ -4389,7 +4451,7 @@ static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFun
     return true;
 }
 
-static bool prepare_seed_direct_call_aggregate_places(XaotBundle *bundle, XiFunc *func) {
+static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func) {
     if (!bundle || !func)
         return false;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -4414,13 +4476,26 @@ static bool prepare_seed_direct_call_aggregate_places(XaotBundle *bundle, XiFunc
                     break;
                 const XaotAbiSlot *slot = &target_plan->abi.params[param_idx];
                 XiValue *place = call->args[a];
-                if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
-                    !value_rep_is_struct_aggregate(slot->pointee_rep) || !place ||
+                if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 || !place ||
                     place->op != XI_LOCAL_ADDR || place->nargs != 1 || !place->args[0])
                     continue;
-                bool changed = false;
-                prepare_mark_aggregate_value_rep(bundle, place->args[0], slot->pointee_rep,
-                                                 &changed, 0);
+                if (value_rep_is_struct_aggregate(slot->pointee_rep)) {
+                    bool changed = false;
+                    prepare_mark_aggregate_value_rep(bundle, place->args[0], slot->pointee_rep,
+                                                     &changed, 0);
+                } else if (slot->pointee_rep.kind != XAOT_VALUE_VIEW) {
+                    /* The callee dereferences exactly the ABI pointee type.
+                     * Keep the address-taken local in that representation too;
+                     * otherwise `ref Class` can pass an 8-byte native-pointer
+                     * local to an XrValue* ABI and the callee reads a different
+                     * object than the source place.  A VIEW pointee is instead
+                     * a projection ABI (for example `ref [u32; 4]`); its source
+                     * remains the owning aggregate and the call boundary
+                     * projects the element pointer. */
+                    XaotValuePlan *source = xaot_bundle_find_value_plan_mut(bundle, place->args[0]);
+                    if (source)
+                        source->rep = slot->pointee_rep;
+                }
             }
         }
     }
@@ -4903,7 +4978,7 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_seed_direct_call_aggregate_returns(bundle, func))
             return false;
-        if (!prepare_seed_direct_call_aggregate_places(bundle, func))
+        if (!prepare_seed_direct_call_place_reps(bundle, func))
             return false;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {

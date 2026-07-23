@@ -325,6 +325,10 @@ enum {
     XAOT_SLICE_EV_ENDIAN_CONST = 1u << 9,
     XAOT_SLICE_EV_NO_CLOBBER = 1u << 10,
     XAOT_SLICE_EV_ASSERT_GUARD = 1u << 11,
+    /* The receiver provenance is definitely readonly (for example
+     * Buffer.asBytes()).  This is positive evidence, distinct from merely
+     * failing to prove writability. */
+    XAOT_SLICE_EV_READONLY = 1u << 12,
 };
 
 enum {
@@ -632,7 +636,7 @@ typedef struct XaotClassFieldPlan {
     uint32_t evidence;
     uint8_t semantic_kind;
     uint8_t native_type;
-    uint8_t native_width;
+    uint8_t scalar_rep;
     uint8_t storage_kind;
     uint8_t action;
     uint8_t representation;

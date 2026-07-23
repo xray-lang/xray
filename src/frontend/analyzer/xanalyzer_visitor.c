@@ -346,17 +346,43 @@ XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type) {
     return xa_concurrency_handle_label(type) != NULL;
 }
 
-XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type) {
-    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
-        return false;
-    const XrType *result = type->instance.type_args[0];
+XR_FUNC bool xa_task_result_requires_consuming_await(const XrType *result) {
     if (!result || XR_TYPE_IS_UNKNOWN(result) || XR_TYPE_IS_ERROR(result) ||
         XR_TYPE_IS_TYPE_PARAM(result))
         return true;
+    /* Tuples are source-level value aggregates, but the VM represents them as
+     * heap payloads.  A Task must therefore publish and hand off the tuple's
+     * unique root exactly once, even when every tuple lane is primitive. */
+    if (XR_TYPE_IS_TUPLE(result))
+        return true;
     if (xr_type_is_const((XrType *) result) || result->is_value_type ||
+        result->kind == XR_KIND_RECORD || xa_type_has_fixed_layout_data_object(result) ||
         xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
         return false;
     return true;
+}
+
+XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type) {
+    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
+        return false;
+    return xa_task_result_requires_consuming_await(type->instance.type_args[0]);
+}
+
+XR_FUNC bool xa_task_result_requires_shared_copy_publication(const XrType *result) {
+    if (!result || XR_TYPE_IS_UNKNOWN_OR_ERROR(result) || XR_TYPE_IS_TYPE_PARAM(result) ||
+        XR_TYPE_IS_TUPLE(result))
+        return false;
+    if (xr_type_base_rep(result) != XR_REP_PTR || xr_type_is_const((XrType *) result) ||
+        xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
+        return false;
+    return result->is_value_type || result->kind == XR_KIND_RECORD ||
+           xa_type_has_fixed_layout_data_object(result);
+}
+
+XR_FUNC bool xa_task_type_requires_shared_copy_publication(const XrType *type) {
+    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
+        return false;
+    return xa_task_result_requires_shared_copy_publication(type->instance.type_args[0]);
 }
 
 XR_FUNC bool xa_freestanding_profile_enabled(XaAnalyzer *analyzer) {
@@ -492,15 +518,15 @@ XR_FUNC void xa_parallel_capture_check(XaInferContext *ctx, AstNode *loc_node, X
         return;
     } else if (sym->kind == XA_SYM_PARAMETER) {
         snprintf(msg, sizeof(msg),
-                 "%s cannot capture parameter '%s'; copy immutable data to a const or shared "
-                 "binding",
+                 "%s cannot capture parameter '%s'; pass it explicitly or copy immutable data "
+                 "to a shareable const binding",
                  callback_name, name);
     } else if (sym->is_const) {
         return;
     } else {
         snprintf(msg, sizeof(msg),
-                 "%s cannot capture mutable variable '%s'; copy it to a const, use Atomic<T>, "
-                 "or use Plan state",
+                 "%s cannot capture mutable variable '%s'; copy it to a const, bind Atomic<T> "
+                 "as const, or use Plan state",
                  callback_name, name);
     }
 
@@ -1333,8 +1359,8 @@ static bool extract_contextual_int_literal(AstNode *node, XaContextualIntLiteral
     return true;
 }
 
-static const char *int_range_label(uint8_t native_width) {
-    switch (native_width) {
+static const char *int_range_label(uint8_t scalar_rep) {
+    switch (scalar_rep) {
         case XR_NATIVE_I8:
             return "-128..127";
         case XR_NATIVE_U8:
@@ -1360,38 +1386,15 @@ static const char *int_range_label(uint8_t native_width) {
     }
 }
 
-static const char *int_native_width_label(uint8_t native_width) {
-    switch (native_width) {
-        case XR_NATIVE_I8:
-            return "int8";
-        case XR_NATIVE_U8:
-            return "byte";
-        case XR_NATIVE_I16:
-            return "int16";
-        case XR_NATIVE_U16:
-            return "uint16";
-        case XR_NATIVE_I32:
-            return "int32";
-        case XR_NATIVE_U32:
-            return "uint32";
-        case XR_NATIVE_I64:
-            return "int64";
-        case XR_NATIVE_U64:
-            return "uint64";
-        case XR_NATIVE_ISIZE:
-            return "intsize";
-        case XR_NATIVE_USIZE:
-            return "uintsize";
-        default:
-            return "int";
-    }
+static const char *int_scalar_rep_label(uint8_t scalar_rep) {
+    const char *name = xr_scalar_rep_canonical_name(scalar_rep);
+    return name ? name : "int";
 }
 
-static bool int_literal_fits_native_width(const XaContextualIntLiteral *value,
-                                          uint8_t native_width) {
+static bool int_literal_fits_scalar_rep(const XaContextualIntLiteral *value, uint8_t scalar_rep) {
     if (!value)
         return true;
-    switch (native_width) {
+    switch (scalar_rep) {
         case XR_NATIVE_I8:
             return value->signed_valid && value->signed_value >= INT8_MIN &&
                    value->signed_value <= INT8_MAX;
@@ -1921,15 +1924,15 @@ static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *nod
     if (!ctx || !ctx->analyzer || !node || !target_type || !XR_TYPE_IS_INT(target_type))
         return;
 
-    uint8_t native_width = target_type->native_width;
-    const char *range = int_range_label(native_width);
+    uint8_t scalar_rep = target_type->scalar_rep;
+    const char *range = int_range_label(scalar_rep);
     if (!range)
         return;
 
     XaContextualIntLiteral value;
     if (!extract_contextual_int_literal(node, &value))
         return;
-    if (int_literal_fits_native_width(&value, native_width))
+    if (int_literal_fits_scalar_rep(&value, scalar_rep))
         return;
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1937,7 +1940,7 @@ static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *nod
     format_contextual_int_literal(&value, value_buf, sizeof(value_buf));
     char msg[256];
     snprintf(msg, sizeof(msg), "Integer literal %s is out of range for type '%s' (expected %s)",
-             value_buf, int_native_width_label(native_width), range);
+             value_buf, int_scalar_rep_label(scalar_rep), range);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }

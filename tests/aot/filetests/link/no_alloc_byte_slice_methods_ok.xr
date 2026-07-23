@@ -1,16 +1,16 @@
 fn xray_no_alloc_byte_slice_methods_ok(seed: int) -> int {
     var raw: [byte; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     var srcRaw: [byte; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
-    var wordsRaw: [uint32; 2] = [11, 12]
+    var wordsRaw: [u32; 2] = [11, 12]
 
     var view: Slice<byte> = raw[:]
     var src: Slice<byte> = srcRaw[:]
-    var words: Slice<uint32> = wordsRaw[:]
+    var words: Slice<u32> = wordsRaw[:]
 
-    view.store<uint32>(0, 0x01020304, Endian.LE)
-    view.store<uint64>(8, 42, Endian.LE)
-    var loaded32: uint32 = view.load<uint32>(0, Endian.LE)
-    var loaded64: uint64 = view.load<uint64>(8, Endian.LE)
+    view.store<u32>(0, 0x01020304, Endian.LE)
+    view.store<u64>(8, 42, Endian.LE)
+    var loaded32: u32 = view.load<u32>(0, Endian.LE)
+    var loaded64: u64 = view.load<u64>(8, Endian.LE)
 
     var window: Slice<byte> = view[4:12]
     window.copyFrom(src)
@@ -19,9 +19,9 @@ fn xray_no_alloc_byte_slice_methods_ok(seed: int) -> int {
     view.repeatFrom(12, 4, 4)
 
     var asBytes: Slice<byte> = words.asBytes()
-    var halfWords: Slice<uint16> = asBytes.reinterpret<uint16>()
-    var copiedWordsRaw: [uint32; 2] = [0, 0]
-    var copiedWords: Slice<uint32> = copiedWordsRaw[:]
+    var halfWords: Slice<u16> = asBytes.reinterpret<u16>()
+    var copiedWordsRaw: [u32; 2] = [0, 0]
+    var copiedWords: Slice<u32> = copiedWordsRaw[:]
     copiedWords.copyFrom(words)
     var cmp = copiedWords.compare(words)
 

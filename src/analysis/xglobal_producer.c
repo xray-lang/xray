@@ -570,8 +570,17 @@ static bool producer_add_stdlib_symbol_dependency(XgProducer *p, XgModuleId modu
 static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
     if (!t)
         return fold_u64(h, 0);
-    h = fold_u64(h, t->kind);
-    h = fold_u64(h, t->native_width);
+    if (t->kind == XR_TREF_INT || t->kind == XR_TREF_INT_WIDTH || t->kind == XR_TREF_FLOAT ||
+        t->kind == XR_TREF_FLOAT_WIDTH) {
+        /* Source spelling and the legacy default-vs-exact TRef shape are not
+         * semantic identity. int/i64, float/f64 and byte/u8 therefore share a
+         * TypeKey, while every distinct scalar representation remains unique. */
+        h = fold_u64(h, UINT64_C(0x5343414c4152)); /* "SCALAR" */
+        h = fold_u64(h, t->scalar_rep);
+    } else {
+        h = fold_u64(h, t->kind);
+        h = fold_u64(h, 0);
+    }
     h = fold_u64(h, t->fixed_length);
     h = fold_u64(h, t->extensible ? 1 : 0);
     if (t->name)
@@ -641,8 +650,13 @@ static uint32_t hash_name_list32(const char **names, int name_count) {
 static uint32_t hash_synthetic_tref32(uint8_t kind, const char *name, XrTypeRef **children,
                                       int child_count) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = fold_u64(h, kind);
-    h = fold_u64(h, 0);
+    if (kind == XR_TREF_INT || kind == XR_TREF_FLOAT) {
+        h = fold_u64(h, UINT64_C(0x5343414c4152)); /* "SCALAR" */
+        h = fold_u64(h, kind == XR_TREF_INT ? XR_NATIVE_I64 : XR_NATIVE_F64);
+    } else {
+        h = fold_u64(h, kind);
+        h = fold_u64(h, 0);
+    }
     h = fold_u64(h, 0);
     h = fold_u64(h, 0);
     if (name)
@@ -652,10 +666,14 @@ static uint32_t hash_synthetic_tref32(uint8_t kind, const char *name, XrTypeRef 
     return hash_folded32(h);
 }
 
-static uint32_t hash_synthetic_width_tref32(uint8_t kind, uint8_t native_width) {
+static uint32_t hash_synthetic_width_tref32(uint8_t kind, uint8_t scalar_rep) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = fold_u64(h, kind);
-    h = fold_u64(h, native_width);
+    if (kind == XR_TREF_INT || kind == XR_TREF_INT_WIDTH || kind == XR_TREF_FLOAT ||
+        kind == XR_TREF_FLOAT_WIDTH)
+        h = fold_u64(h, UINT64_C(0x5343414c4152)); /* "SCALAR" */
+    else
+        h = fold_u64(h, kind);
+    h = fold_u64(h, scalar_rep);
     h = fold_u64(h, 0);
     h = fold_u64(h, 0);
     return hash_folded32(h);
@@ -669,27 +687,27 @@ static uint32_t hash_named_type_key32(const char *name, XrTypeRef **type_args, i
     return hash_synthetic_tref32(XR_TREF_NAMED, name, NULL, 0);
 }
 
-static uint8_t class_field_int_semantic_kind(uint8_t native_width) {
-    switch (native_width) {
-        case XR_TREF_NW_I8:
+static uint8_t class_field_int_semantic_kind(uint8_t scalar_rep) {
+    switch (scalar_rep) {
+        case XR_NATIVE_I8:
             return XG_CLASS_FIELD_TYPE_I8;
-        case XR_TREF_NW_U8:
+        case XR_NATIVE_U8:
             return XG_CLASS_FIELD_TYPE_U8;
-        case XR_TREF_NW_I16:
+        case XR_NATIVE_I16:
             return XG_CLASS_FIELD_TYPE_I16;
-        case XR_TREF_NW_U16:
+        case XR_NATIVE_U16:
             return XG_CLASS_FIELD_TYPE_U16;
-        case XR_TREF_NW_I32:
+        case XR_NATIVE_I32:
             return XG_CLASS_FIELD_TYPE_I32;
-        case XR_TREF_NW_U32:
+        case XR_NATIVE_U32:
             return XG_CLASS_FIELD_TYPE_U32;
-        case XR_TREF_NW_U64:
+        case XR_NATIVE_U64:
             return XG_CLASS_FIELD_TYPE_U64;
-        case XR_TREF_NW_ISIZE:
+        case XR_NATIVE_ISIZE:
             return XG_CLASS_FIELD_TYPE_ISIZE;
-        case XR_TREF_NW_USIZE:
+        case XR_NATIVE_USIZE:
             return XG_CLASS_FIELD_TYPE_USIZE;
-        case XR_TREF_NW_I64:
+        case XR_NATIVE_I64:
         default:
             return XG_CLASS_FIELD_TYPE_I64;
     }
@@ -756,7 +774,7 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
         row->flags |= XG_CLASS_FIELD_CONST;
         return ok;
     }
-    row->native_width = type->native_width;
+    row->scalar_rep = type->scalar_rep;
     target = class_field_target_type(type);
     if (target && (target->kind == XR_TREF_NAMED || target->kind == XR_TREF_GENERIC) &&
         target->name)
@@ -775,14 +793,14 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
             row->semantic_kind = XG_CLASS_FIELD_TYPE_I64;
             break;
         case XR_TREF_INT_WIDTH:
-            row->semantic_kind = class_field_int_semantic_kind(type->native_width);
+            row->semantic_kind = class_field_int_semantic_kind(type->scalar_rep);
             break;
         case XR_TREF_FLOAT:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_F64;
             break;
         case XR_TREF_FLOAT_WIDTH:
-            row->semantic_kind = type->native_width == XR_TREF_NW_F32 ? XG_CLASS_FIELD_TYPE_F32
-                                                                      : XG_CLASS_FIELD_TYPE_F64;
+            row->semantic_kind = type->scalar_rep == XR_NATIVE_F32 ? XG_CLASS_FIELD_TYPE_F32
+                                                                   : XG_CLASS_FIELD_TYPE_F64;
             break;
         case XR_TREF_BOOL:
             row->semantic_kind = XG_CLASS_FIELD_TYPE_BOOL;
@@ -3322,7 +3340,7 @@ static bool body_type_ref_is_json(const XrTypeRef *type) {
 }
 
 static uint32_t body_uint8_type_key(void) {
-    return hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+    return hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
 }
 
 static uint32_t body_rune_type_key(void) {
@@ -3408,11 +3426,10 @@ static bool body_type_ref_is_json_array(const XrTypeRef *type) {
 }
 
 static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
-    static const uint8_t int_widths[] = {XR_TREF_NW_I64,   XR_TREF_NW_BOOL, XR_TREF_NW_I8,
-                                         XR_TREF_NW_I16,   XR_TREF_NW_I32,  XR_TREF_NW_U8,
-                                         XR_TREF_NW_U16,   XR_TREF_NW_U32,  XR_TREF_NW_U64,
-                                         XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE};
-    static const uint8_t float_widths[] = {XR_TREF_NW_F64, XR_TREF_NW_F32};
+    static const uint8_t int_widths[] = {
+        XR_NATIVE_I64, XR_NATIVE_BOOL, XR_NATIVE_I8,  XR_NATIVE_I16,   XR_NATIVE_I32,  XR_NATIVE_U8,
+        XR_NATIVE_U16, XR_NATIVE_U32,  XR_NATIVE_U64, XR_NATIVE_ISIZE, XR_NATIVE_USIZE};
+    static const uint8_t float_widths[] = {XR_NATIVE_F64, XR_NATIVE_F32};
     if (type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0) ||
         type_key == hash_synthetic_tref32(XR_TREF_BOOL, NULL, NULL, 0) ||
@@ -6465,8 +6482,8 @@ static uint64_t body_map_const_prehash(const AstNode *expr) {
 
 static bool body_map_key_type_is_dense_int(uint32_t key_type_key) {
     static const uint8_t int_widths[] = {
-        XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
-        XR_TREF_NW_U16, XR_TREF_NW_U32, XR_TREF_NW_U64, XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE,
+        XR_NATIVE_I64, XR_NATIVE_I8,  XR_NATIVE_I16, XR_NATIVE_I32,   XR_NATIVE_U8,
+        XR_NATIVE_U16, XR_NATIVE_U32, XR_NATIVE_U64, XR_NATIVE_ISIZE, XR_NATIVE_USIZE,
     };
     if (key_type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0))
         return true;
@@ -6616,8 +6633,8 @@ static bool body_map_literal_has_dense_enum_domain(XgBodyCollect *bc, AstNode **
 
 static bool body_map_value_type_supports_bool_direct(uint32_t value_type_key) {
     return value_type_key == hash_synthetic_tref32(XR_TREF_INT, NULL, NULL, 0) ||
-           value_type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_TREF_NW_I64) ||
-           value_type_key == hash_synthetic_width_tref32(XR_TREF_FLOAT_WIDTH, XR_TREF_NW_F32);
+           value_type_key == hash_synthetic_width_tref32(XR_TREF_INT_WIDTH, XR_NATIVE_I64) ||
+           value_type_key == hash_synthetic_width_tref32(XR_TREF_FLOAT_WIDTH, XR_NATIVE_F32);
 }
 
 static bool body_map_literal_has_bool_domain(AstNode **keys, int count, uint32_t key_type_key) {
@@ -6672,12 +6689,12 @@ static bool body_map_key_type_has_builtin_hash_eq(uint32_t key_type_key) {
         XR_TREF_INT, XR_TREF_FLOAT, XR_TREF_STRING, XR_TREF_RUNE, XR_TREF_BOOL,
     };
     static const uint8_t int_widths[] = {
-        XR_TREF_NW_I64, XR_TREF_NW_I8,  XR_TREF_NW_I16, XR_TREF_NW_I32,   XR_TREF_NW_U8,
-        XR_TREF_NW_U16, XR_TREF_NW_U32, XR_TREF_NW_U64, XR_TREF_NW_ISIZE, XR_TREF_NW_USIZE,
+        XR_NATIVE_I64, XR_NATIVE_I8,  XR_NATIVE_I16, XR_NATIVE_I32,   XR_NATIVE_U8,
+        XR_NATIVE_U16, XR_NATIVE_U32, XR_NATIVE_U64, XR_NATIVE_ISIZE, XR_NATIVE_USIZE,
     };
     static const uint8_t float_widths[] = {
-        XR_TREF_NW_F64,
-        XR_TREF_NW_F32,
+        XR_NATIVE_F64,
+        XR_NATIVE_F32,
     };
     if (key_type_key == 0)
         return false;

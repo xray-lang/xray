@@ -149,8 +149,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
     {"router", XLSP_SYM_FUNCTION, "fn(): Router<T>", "", NULL, 0},
     {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, value: T): ()", "", NULL, 0},
-    {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "", NULL, 0},
-    {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(port: int, running: Atomic<bool>): bool", "", NULL, 0},
     {"formData", XLSP_SYM_FUNCTION, "fn(maxTotalSize?: int, maxFileSize?: int): FormData", "Create an explicit multipart/form-data builder.", NULL, 0},
     {"parseMethod", XLSP_SYM_FUNCTION, "fn(token: string): HttpMethod?", "", NULL, 0},
     {"textResponse", XLSP_SYM_FUNCTION, "fn(body: string, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
@@ -188,7 +187,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
     {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 42
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 41
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

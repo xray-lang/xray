@@ -280,8 +280,8 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
     return NULL;
 }
 
-static void assert_byte_uint8_sequence_type_keys_canonical(const XgGlobalEvidence *ev) {
-    uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_TREF_NW_U8);
+static void assert_byte_u8_sequence_type_keys_canonical(const XgGlobalEvidence *ev) {
+    uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
     uint32_t array_receiver_key = 0;
     uint32_t slice_receiver_key = 0;
     uint32_t array_count = 0;
@@ -807,7 +807,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=34 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=35 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1181,15 +1181,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=34 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=34 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=34 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=34 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=35 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=35 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=35 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=35 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=34 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=34 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=34 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=34 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -6777,7 +6777,7 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
 
 TEST(global_evidence_producer_disambiguates_same_location_callsites) {
     setup_parser_session();
-    const char *source = "fn caller(a: uint32, b: uint64, c: int16) -> int {\n"
+    const char *source = "fn caller(a: u32, b: u64, c: i16) -> int {\n"
                          "    return int(a) + int(b) + int(c)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -7422,7 +7422,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
 
 TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics) {
     setup_parser_session();
-    const char *source = "fn caller(x: uint32) -> int { return int(x) }\n";
+    const char *source = "fn caller(x: u32) -> int { return int(x) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7495,8 +7495,8 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
 
 TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
     setup_parser_session();
-    const char *source = "extern \"C\" { fn cos(x: float64) -> float64 }\n"
-                         "fn useCos() -> float64 { return cos(0.0) }\n";
+    const char *source = "extern \"C\" { fn cos(x: f64) -> f64 }\n"
+                         "fn useCos() -> f64 { return cos(0.0) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -8892,15 +8892,14 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
     ASSERT_NOT_NULL(mutable_tone);
 
     XgClassFieldSummary *mutable_wide_evidence = &ev.class_fields[wide->field_id - 1];
-    uint8_t saved_native_width = mutable_wide_evidence->native_width;
-    uint8_t stale_native_width =
-        saved_native_width == XR_NATIVE_I32 ? XR_NATIVE_I64 : XR_NATIVE_I32;
-    mutable_wide_evidence->native_width = stale_native_width;
-    mutable_wide->native_width = stale_native_width;
+    uint8_t saved_scalar_rep = mutable_wide_evidence->scalar_rep;
+    uint8_t stale_scalar_rep = saved_scalar_rep == XR_NATIVE_I32 ? XR_NATIVE_I64 : XR_NATIVE_I32;
+    mutable_wide_evidence->scalar_rep = stale_scalar_rep;
+    mutable_wide->scalar_rep = stale_scalar_rep;
     bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    mutable_wide_evidence->native_width = saved_native_width;
-    mutable_wide->native_width = saved_native_width;
+    mutable_wide_evidence->scalar_rep = saved_scalar_rep;
+    mutable_wide->scalar_rep = saved_scalar_rep;
 
     XgClassFieldSummary *mutable_tone_evidence = &ev.class_fields[tone_field->field_id - 1];
     uint32_t saved_tone_name = mutable_tone_evidence->target_name_id;
@@ -9035,7 +9034,7 @@ TEST(global_evidence_class_layout_uses_selected_target_abi) {
                                  .type_key = 103,
                                  .instance_slot = 0,
                                  .semantic_kind = XG_CLASS_FIELD_TYPE_ISIZE,
-                                 .native_width = XR_NATIVE_ISIZE};
+                                 .scalar_rep = XR_NATIVE_ISIZE};
     XrTargetDataLayout ilp32;
     XrTargetDataLayout lp64;
     XaotBundle bundle;
@@ -11979,10 +11978,10 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys) {
+TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
     setup_parser_session();
     const char *source =
-        "fn touch(b: Array<byte>, u: Array<uint8>, bs: Slice<byte>, us: Slice<uint8>) -> int {\n"
+        "fn touch(b: Array<byte>, u: Array<u8>, bs: Slice<byte>, us: Slice<u8>) -> int {\n"
         "    var a = b[0]\n"
         "    var c = u[0]\n"
         "    var d = bs[0]\n"
@@ -12007,13 +12006,13 @@ TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    assert_byte_uint8_sequence_type_keys_canonical(&ev);
+    assert_byte_u8_sequence_type_keys_canonical(&ev);
 
     char *payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     XgGlobalEvidence materialized = {0};
     ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
-    assert_byte_uint8_sequence_type_keys_canonical(&materialized);
+    assert_byte_u8_sequence_type_keys_canonical(&materialized);
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
@@ -16710,7 +16709,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     setup_parser_session();
     const char *source = "fn makeEmpty() -> int {\n"
                          "    var scores: Map<string, int> = #{}\n"
-                         "    var seen: Set<uint8> = #[]\n"
+                         "    var seen: Set<u8> = #[]\n"
                          "    return 0\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -17791,6 +17790,65 @@ TEST(entry_plan_elides_unreachable_coroutine_capabilities) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(entry_plan_includes_imported_module_initializer_capabilities) {
+    XgBuildKey key = {.source_hash = 0x198,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 2,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary imported_init = {.func_id = 1,
+                                   .module_id = 1,
+                                   .kind = XG_BODY_MODULE_INIT,
+                                   .capability_bits = XG_CAP_ATOMIC | XG_CAP_OBJECTS,
+                                   .body_hash = 0x198};
+    XgBodySummary entry_init = {
+        .func_id = 2, .module_id = 2, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x199};
+    XgBodySummary unreachable = {.func_id = 3,
+                                 .module_id = 1,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .capability_bits = XG_CAP_TIMER,
+                                 .body_hash = 0x19a};
+    XiFunc imported_init_func;
+    XiFunc entry_init_func;
+    XiModule imported_module;
+    XiModule entry_module;
+    XiModule *modules[2];
+    XaotBundle bundle;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &imported_init));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry_init));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &unreachable));
+
+    memset(&imported_init_func, 0, sizeof(imported_init_func));
+    imported_init_func.name = "imported_init";
+    imported_init_func.xg_body_func_id = imported_init.func_id;
+    memset(&entry_init_func, 0, sizeof(entry_init_func));
+    entry_init_func.name = "entry_init";
+    entry_init_func.xg_body_func_id = entry_init.func_id;
+    memset(&imported_module, 0, sizeof(imported_module));
+    imported_module.path = "imported.xr";
+    imported_module.name = "imported";
+    imported_module.init = &imported_init_func;
+    memset(&entry_module, 0, sizeof(entry_module));
+    entry_module.path = "entry.xr";
+    entry_module.name = "entry";
+    entry_module.init = &entry_init_func;
+    modules[0] = &imported_module;
+    modules[1] = &entry_module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 2, 1));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_TRUE(bundle.has_entry_plan);
+    ASSERT_EQ_UINT(bundle.entry_plan.reachable_body_count, 2);
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_ATOMIC) != 0);
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_OBJECTS) != 0);
+    ASSERT_TRUE((bundle.entry_plan.required_capability_bits & XG_CAP_TIMER) == 0);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(storage_and_capture_plans_close_owner_actions) {
     XgBuildKey key = {.source_hash = 0x194,
                       .compiler_semver_hash = 2,
@@ -18230,7 +18288,7 @@ RUN_TEST(capacity_plan_requires_no_clobber_for_counted_loop_reserve_once);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked);
 RUN_TEST(global_evidence_producer_proves_stringbuilder_literal_append_count);
-RUN_TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys);
+RUN_TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_json_codec_calls);
 RUN_TEST(global_evidence_producer_records_json_computed_key_access);
@@ -18359,6 +18417,7 @@ RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 RUN_TEST(entry_plan_elides_unreachable_coroutine_capabilities);
+RUN_TEST(entry_plan_includes_imported_module_initializer_capabilities);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);
 RUN_TEST(address_plan_rejects_owner_pointer_escape);

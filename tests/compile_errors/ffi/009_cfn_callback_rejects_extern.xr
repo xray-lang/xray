@@ -1,6 +1,6 @@
 extern "C" {
-    fn call_cfn(cb: CFn<(int32) -> int32>, x: int32) -> int32
-    fn abs(x: int32) -> int32
+    fn call_cfn(cb: CFn<(i32) -> i32>, x: i32) -> i32
+    fn abs(x: i32) -> i32
 }
 
 print(unsafe { call_cfn(abs, -41) })

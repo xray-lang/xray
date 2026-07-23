@@ -20,7 +20,7 @@ fn use_counter(c: Counter) -> int {
     return c.get()
 }
 
-fn bump_counter(c: Counter) -> int {
+fn bump_counter(c: ref Counter) -> int {
     return c.increment()
 }
 
@@ -31,5 +31,5 @@ print(c.increment())
 
 // Method call through typed parameter
 print(use_counter(c))
-print(bump_counter(c))
+print(bump_counter(ref c))
 print(c.get())

@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<float32> must stay as float storage with direct raw access.
+# Local Array<f32> must stay as float storage with direct raw access.
 hot_function=^array_f32_sum_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_local_count=2

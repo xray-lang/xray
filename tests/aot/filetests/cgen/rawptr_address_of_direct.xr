@@ -4,6 +4,6 @@ fn xray_rawptr_address_before(p: Ptr<byte>, q: Ptr<byte>) -> bool {
     return mem.addr(p) < mem.addr(q)
 }
 
-fn xray_rawmut_address(p: MutPtr<uint32>) -> int {
+fn xray_rawmut_address(p: MutPtr<u32>) -> int {
     return mem.addr(p)
 }

@@ -65,21 +65,21 @@ static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
         case 1:
             return XR_ELEM_BOOL; /* XR_TID_BOOL */
         case 2:
-            return XR_ELEM_I8; /* XR_TID_INT8 */
+            return XR_ELEM_I8; /* XR_TID_I8 */
         case 3:
-            return XR_ELEM_U8; /* XR_TID_UINT8 */
+            return XR_ELEM_U8; /* XR_TID_U8 */
         case 4:
-            return XR_ELEM_I16; /* XR_TID_INT16 */
+            return XR_ELEM_I16; /* XR_TID_I16 */
         case 5:
-            return XR_ELEM_U16; /* XR_TID_UINT16 */
+            return XR_ELEM_U16; /* XR_TID_U16 */
         case 6:
-            return XR_ELEM_I32; /* XR_TID_INT32 */
+            return XR_ELEM_I32; /* XR_TID_I32 */
         case 7:
-            return XR_ELEM_U32; /* XR_TID_UINT32 */
+            return XR_ELEM_U32; /* XR_TID_U32 */
         case 9:
-            return XR_ELEM_U64; /* XR_TID_UINT64 */
+            return XR_ELEM_U64; /* XR_TID_U64 */
         case 10:
-            return XR_ELEM_F32; /* XR_TID_FLOAT32 */
+            return XR_ELEM_F32; /* XR_TID_F32 */
         case 45:
             return XR_ELEM_RUNE; /* XR_TID_RUNE */
         default:

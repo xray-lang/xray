@@ -46,55 +46,55 @@ TEST(error_core_defines_bytes_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_OFFSET_EXPECTS_MSG,
                   "Slice<byte>.load<T>() expects integer offset");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_EXPECTS_MSG,
-                  "Slice<byte>.load<uint16>(offset) expects Slice<byte> and integer");
+                  "Slice<byte>.load<u16>(offset) expects Slice<byte> and integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG,
-                  "Slice<byte>.load<uint16>() receiver must be Slice<byte>");
+                  "Slice<byte>.load<u16>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG,
-                  "Slice<byte>.load<uint16>() offset out of bounds");
+                  "Slice<byte>.load<u16>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_EXPECTS_MSG,
-                  "Slice<byte>.load<uint32>(offset) expects Slice<byte> and integer");
+                  "Slice<byte>.load<u32>(offset) expects Slice<byte> and integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG,
-                  "Slice<byte>.load<uint32>() receiver must be Slice<byte>");
+                  "Slice<byte>.load<u32>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG,
-                  "Slice<byte>.load<uint32>() offset out of bounds");
+                  "Slice<byte>.load<u32>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_EXPECTS_MSG,
-                  "Slice<byte>.load<uint64>(offset) expects Slice<byte> and integer");
+                  "Slice<byte>.load<u64>(offset) expects Slice<byte> and integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG,
-                  "Slice<byte>.load<uint64>() receiver must be Slice<byte>");
+                  "Slice<byte>.load<u64>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG,
-                  "Slice<byte>.load<uint64>() offset out of bounds");
+                  "Slice<byte>.load<u64>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_RECEIVER_MSG,
-                  "Slice<byte>.load<float32>() receiver must be Slice<byte>");
+                  "Slice<byte>.load<f32>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_OOB_MSG,
-                  "Slice<byte>.load<float32>() offset out of bounds");
+                  "Slice<byte>.load<f32>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_RECEIVER_MSG,
-                  "Slice<byte>.load<float64>() receiver must be Slice<byte>");
+                  "Slice<byte>.load<f64>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_OOB_MSG,
-                  "Slice<byte>.load<float64>() offset out of bounds");
+                  "Slice<byte>.load<f64>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_VALUE_EXPECTS_MSG,
                   "Slice<byte>.store<T>() expects integer offset and value");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_FLOAT_VALUE_EXPECTS_MSG,
                   "Slice<byte>.store<T>() expects integer offset and float value");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U16_RECEIVER_MSG,
-                  "Slice<byte>.store<uint16>() receiver must be Slice<byte>");
+                  "Slice<byte>.store<u16>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG,
-                  "Slice<byte>.store<uint16>() offset out of bounds");
+                  "Slice<byte>.store<u16>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U32_RECEIVER_MSG,
-                  "Slice<byte>.store<uint32>() receiver must be Slice<byte>");
+                  "Slice<byte>.store<u32>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG,
-                  "Slice<byte>.store<uint32>() offset out of bounds");
+                  "Slice<byte>.store<u32>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U64_RECEIVER_MSG,
-                  "Slice<byte>.store<uint64>() receiver must be Slice<byte>");
+                  "Slice<byte>.store<u64>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG,
-                  "Slice<byte>.store<uint64>() offset out of bounds");
+                  "Slice<byte>.store<u64>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_F32_RECEIVER_MSG,
-                  "Slice<byte>.store<float32>() receiver must be Slice<byte>");
+                  "Slice<byte>.store<f32>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_F32_OOB_MSG,
-                  "Slice<byte>.store<float32>() offset out of bounds");
+                  "Slice<byte>.store<f32>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_F64_RECEIVER_MSG,
-                  "Slice<byte>.store<float64>() receiver must be Slice<byte>");
+                  "Slice<byte>.store<f64>() receiver must be Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_STORE_F64_OOB_MSG,
-                  "Slice<byte>.store<float64>() offset out of bounds");
+                  "Slice<byte>.store<f64>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG,
                   "cannot write through readonly Slice<byte>");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_FILL_RECEIVER_MSG,

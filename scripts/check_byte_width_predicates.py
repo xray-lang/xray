@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Audit task-204 direct U8 width predicates.
 
-The canonical byte/uint8 identity must be tested through shared helpers such as
+The canonical byte/u8 identity must be tested through shared helpers such as
 `xr_type_is_exact_u8`, `xr_type_is_u8_array`, and `xr_type_is_u8_slice`.
 This gate allows only low-level numeric/schema verifier predicates to mention
 `XR_NATIVE_U8` directly, and rejects string-based `XR_ELEM_U8` selection.

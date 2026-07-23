@@ -51,34 +51,34 @@ const char *xr_type_to_string(XrType *type) {
     if (XR_TYPE_IS_UNIT(type))
         return TYPE_NAME_UNIT;
     if (XR_TYPE_IS_INT(type) && !type->is_nullable) {
-        switch (type->native_width) {
+        switch (type->scalar_rep) {
             case XR_NATIVE_I8:
-                return TYPE_NAME_INT8;
+                return TYPE_NAME_I8;
             case XR_NATIVE_U8:
-                return TYPE_NAME_UINT8;
+                return TYPE_NAME_U8;
             case XR_NATIVE_I16:
-                return TYPE_NAME_INT16;
+                return TYPE_NAME_I16;
             case XR_NATIVE_U16:
-                return TYPE_NAME_UINT16;
+                return TYPE_NAME_U16;
             case XR_NATIVE_I32:
-                return TYPE_NAME_INT32;
+                return TYPE_NAME_I32;
             case XR_NATIVE_U32:
-                return TYPE_NAME_UINT32;
+                return TYPE_NAME_U32;
             case XR_NATIVE_U64:
-                return TYPE_NAME_UINT64;
+                return TYPE_NAME_U64;
             case XR_NATIVE_ISIZE:
-                return TYPE_NAME_INTSIZE;
+                return TYPE_NAME_ISIZE;
             case XR_NATIVE_USIZE:
-                return TYPE_NAME_UINTSIZE;
+                return TYPE_NAME_USIZE;
             default:
                 return TYPE_NAME_INT;
         }
     }
     if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable) {
-        if (type->native_width == XR_NATIVE_F32)
-            return TYPE_NAME_FLOAT32;
-        if (type->native_width == XR_NATIVE_F64)
-            return TYPE_NAME_FLOAT64;
+        if (type->scalar_rep == XR_NATIVE_F32)
+            return TYPE_NAME_F32;
+        if (type->scalar_rep == XR_NATIVE_F64)
+            return TYPE_NAME_F64;
         return TYPE_NAME_FLOAT;
     }
     if (XR_TYPE_IS_STRING(type) && !type->is_nullable)

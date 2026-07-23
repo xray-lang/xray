@@ -113,6 +113,8 @@ typedef enum {
 #define XR_TASK_FLG_RUNTIME_OWNED (1 << 3)      // handle lives outside executor heap
 #define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 4)     // compiler-proven single await consumer
 #define XR_TASK_FLG_DEFERRED_REGISTRY (1 << 5)  // registry link delayed until batch submit
+#define XR_TASK_FLG_RESULT_COPY_SHARED                                                             \
+    (1 << 6)  // compiler-planned shared copy for pointer-backed Copy result
 
 /* ========== Completion Listener ========== */
 

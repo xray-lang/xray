@@ -10,10 +10,10 @@ fn runByteArrayIntrinsics() {
     b[7] = 8
 
     var view: Slice<byte> = b[:]
-    var u32: uint32 = view.load<uint32>(0, Endian.LE)
-    var u64: uint64 = view.load<uint64>(0, Endian.LE)
-    print(int(u32))
-    print(int(u64))
+    var word32: u32 = view.load<u32>(0, Endian.LE)
+    var word64: u64 = view.load<u64>(0, Endian.LE)
+    print(int(word32))
+    print(int(word64))
 
     var dst: Array<byte> = Array.withCapacity(6)
     print(len(dst))
@@ -42,11 +42,11 @@ fn runByteArrayIntrinsics() {
     print(xs[0])
     print(xs[3])
 
-    var u: uint32 = 4294967295
+    var u: u32 = 4294967295
     var wrapped = u + 1
     print(wrapped)
 
-    var assigned: uint32 = 4294967295 + 1
+    var assigned: u32 = 4294967295 + 1
     print(assigned)
 
     var octet: byte = 255

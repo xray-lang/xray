@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Local Array<uint8> slice must preserve byte storage and scan through raw access.
+# Local Array<u8> slice must preserve byte storage and scan through raw access.
 hot_function=^array_u8_slice_scan_run_[0-9]+$
 hot_function_count=1
 hot_xrvalue_local_count=6

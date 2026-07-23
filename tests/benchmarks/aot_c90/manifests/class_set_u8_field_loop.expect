@@ -1,5 +1,5 @@
 min_ratio=0.90
-# Class Set<uint8> fields must use typed byte storage through direct set helpers.
+# Class Set<u8> fields must use typed byte storage through direct set helpers.
 hot_function=^class_set_u8_field_loop_(fill|scan|prune)_[0-9]+$
 hot_function_count=3
 hot_xrvalue_count=0

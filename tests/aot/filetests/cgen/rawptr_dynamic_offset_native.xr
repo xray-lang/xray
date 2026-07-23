@@ -1,4 +1,4 @@
-fn storeOffset(p: MutPtr<uint8>, offset: int, value: uint8) -> uint8 {
+fn storeOffset(p: MutPtr<u8>, offset: int, value: u8) -> u8 {
     var target = p
     unsafe {
         target[offset + 1] = value

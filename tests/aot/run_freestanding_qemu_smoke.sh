@@ -65,13 +65,13 @@ SRC="$WORK/freestanding_qemu_io.xr"
 cat >"$SRC" <<'XR'
 import mem
 
-const MULTIBOOT_MAGIC: uint32 = 0x1BADB002
-const MULTIBOOT_FLAGS: uint32 = 0x00000003
+const MULTIBOOT_MAGIC: u32 = 0x1BADB002
+const MULTIBOOT_FLAGS: u32 = 0x00000003
 
 struct MultibootHeader {
-    magic: uint32
-    flags: uint32
-    checksum: uint32
+    magic: u32
+    flags: u32
+    checksum: u32
 }
 
 const MULTIBOOT = comptime MultibootHeader{
@@ -80,14 +80,14 @@ const MULTIBOOT = comptime MultibootHeader{
     checksum: 0 - (MULTIBOOT_MAGIC + MULTIBOOT_FLAGS),
 }
 
-fn kernel_entry() -> int32 {
+fn kernel_entry() -> i32 {
     const vga = 0xb8000
     mem.volatileStore(mem.mutPtr<byte>(vga), int('X'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(vga + 1), 0x0f, 1)
     print("XR")
     while (true) {
     }
-    return MULTIBOOT.magic as int32
+    return MULTIBOOT.magic as i32
 }
 XR
 

@@ -26,19 +26,19 @@
 /* ========== Primitive Types ========== */
 
 #define TYPE_NAME_INT "int"
-#define TYPE_NAME_INT8 "int8"
-#define TYPE_NAME_UINT8 "byte"
-#define TYPE_NAME_INT16 "int16"
-#define TYPE_NAME_UINT16 "uint16"
-#define TYPE_NAME_INT32 "int32"
-#define TYPE_NAME_UINT32 "uint32"
-#define TYPE_NAME_INT64 "int64"
-#define TYPE_NAME_UINT64 "uint64"
-#define TYPE_NAME_INTSIZE "intsize"
-#define TYPE_NAME_UINTSIZE "uintsize"
+#define TYPE_NAME_I8 "i8"
+#define TYPE_NAME_U8 "byte"
+#define TYPE_NAME_I16 "i16"
+#define TYPE_NAME_U16 "u16"
+#define TYPE_NAME_I32 "i32"
+#define TYPE_NAME_U32 "u32"
+#define TYPE_NAME_I64 "int"
+#define TYPE_NAME_U64 "u64"
+#define TYPE_NAME_ISIZE "isize"
+#define TYPE_NAME_USIZE "usize"
 #define TYPE_NAME_FLOAT "float"
-#define TYPE_NAME_FLOAT32 "float32"
-#define TYPE_NAME_FLOAT64 "float64"
+#define TYPE_NAME_F32 "f32"
+#define TYPE_NAME_F64 "float"
 #define TYPE_NAME_STRING "string"
 #define TYPE_NAME_BOOL "bool"
 #define TYPE_NAME_RUNE "rune"
@@ -134,17 +134,17 @@ typedef enum {
     XR_TID_NULL = 0,
     XR_TID_BOOL,  // 1
     // Integer family
-    XR_TID_INT8,    // 2
-    XR_TID_UINT8,   // 3
-    XR_TID_INT16,   // 4
-    XR_TID_UINT16,  // 5
-    XR_TID_INT32,   // 6
-    XR_TID_UINT32,  // 7
-    XR_TID_INT,     // 8  (= int64, "int" is the canonical name)
-    XR_TID_UINT64,  // 9
+    XR_TID_I8,   // 2
+    XR_TID_U8,   // 3
+    XR_TID_I16,  // 4
+    XR_TID_U16,  // 5
+    XR_TID_I32,  // 6
+    XR_TID_U32,  // 7
+    XR_TID_INT,  // 8  (= int64, "int" is the canonical name)
+    XR_TID_U64,  // 9
     // Float family
-    XR_TID_FLOAT32,  // 10
-    XR_TID_FLOAT,    // 11 (= float64, "float" is the canonical name)
+    XR_TID_F32,    // 10
+    XR_TID_FLOAT,  // 11 (= float64, "float" is the canonical name)
     // Object types
     XR_TID_STRING,          // 12
     XR_TID_FUNCTION,        // 13
@@ -187,13 +187,9 @@ typedef enum {
     XR_TID_COUNT
 } XrTypeId;
 
-// Aliases
-#define XR_TID_INT64 XR_TID_INT
-#define XR_TID_FLOAT64 XR_TID_FLOAT
-
 // Range check macros
-#define XR_TID_IS_INT(tid) ((tid) >= XR_TID_INT8 && (tid) <= XR_TID_UINT64)
-#define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_FLOAT32 || (tid) == XR_TID_FLOAT)
+#define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
+#define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
 #define XR_TID_IS_NUMBER(tid) (XR_TID_IS_INT(tid) || XR_TID_IS_FLOAT(tid))
 
 /* ========== Utility Functions ========== */

@@ -2,12 +2,12 @@
 // calls must share the same descriptor in VM/AOT, and unused extern dylibs must
 // not pollute the AOT link manifest.
 extern "C" {
-    fn srand(seed: uint32) -> ()
-    fn rand() -> int32
+    fn srand(seed: u32) -> ()
+    fn rand() -> i32
 }
 
 extern "C" {
-    fn xrayffi_unused_float(x: float64) -> float64
+    fn xrayffi_unused_float(x: f64) -> f64
 }
 
 unsafe { srand(7) }

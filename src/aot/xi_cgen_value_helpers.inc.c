@@ -27,7 +27,7 @@ static void emit_c_float_literal(FILE *out, double value) {
 static bool cg_value_type_is_unsigned_int(const XiValue *v) {
     if (!v || !v->type || v->type->kind != XR_KIND_INT || v->type->is_nullable)
         return false;
-    switch (v->type->native_width) {
+    switch (v->type->scalar_rep) {
         case XR_NATIVE_U8:
         case XR_NATIVE_U16:
         case XR_NATIVE_U32:

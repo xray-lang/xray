@@ -1,5 +1,5 @@
 fn clearLocal() -> int {
-    var a = Array<uint32>(4, 7)
+    var a = Array<u32>(4, 7)
     a.resize(0, 0)
     a.push(9)
     unsafe {

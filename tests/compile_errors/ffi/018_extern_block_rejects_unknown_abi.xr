@@ -1,1 +1,1 @@
-extern "stdcall" { fn call() -> int32 }
+extern "stdcall" { fn call() -> i32 }

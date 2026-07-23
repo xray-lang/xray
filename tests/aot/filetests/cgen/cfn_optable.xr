@@ -3,17 +3,17 @@
 // raw-pointer array (XR_ELEM_RAWPTR), loaded as raw pointers, and indirect-called
 // as a typed native C function pointer — no closure allocation, no XrValue boxing.
 // This is the wasm3-style zero-cost dispatch primitive.
-extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
+extern "C" { fn malloc(n: usize) -> MutPtr<i32> }
 
-type Op = CFn<(int, MutPtr<int32>, int) -> int>
+type Op = CFn<(int, MutPtr<i32>, int) -> int>
 
-fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+fn opConst(pc: int, stack: MutPtr<i32>, sp: int) -> int {
     var target = stack
     unsafe { target[sp] = 42 }
     return sp + 1
 }
 
-fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+fn opAdd(pc: int, stack: MutPtr<i32>, sp: int) -> int {
     var target = stack
     var b = unsafe { target[sp - 1] }
     var a = unsafe { target[sp - 2] }
@@ -21,7 +21,7 @@ fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
     return sp - 1
 }
 
-fn run_optable() -> int32 {
+fn run_optable() -> i32 {
     var ops: Array<Op> = [opConst, opConst, opAdd]
     var stack = unsafe { malloc(64) }
     var sp = 0

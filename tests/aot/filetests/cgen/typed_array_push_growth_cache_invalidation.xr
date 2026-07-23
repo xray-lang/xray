@@ -1,0 +1,17 @@
+fn sumAfterGrowth(n: int) -> float {
+    var values: Array<float> = []
+    var i = 0
+    while (i < n) {
+        values.push(float(i) + 0.5)
+        i = i + 1
+    }
+    var sum = 0.0
+    i = 0
+    while (i < len(values)) {
+        sum = sum + values[i]
+        i = i + 1
+    }
+    return sum
+}
+
+print(sumAfterGrowth(12))

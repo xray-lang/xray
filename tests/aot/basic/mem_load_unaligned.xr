@@ -1,14 +1,14 @@
 import mem
 
 fn readRaw(src: Slice<byte>) -> int {
-    var value16: uint16 = 0
-    var value32: uint32 = 0
-    var value64: uint64 = 0
+    var value16: u16 = 0
+    var value32: u32 = 0
+    var value64: u64 = 0
     unsafe {
         var p = src.ptr()
-        value16 = mem.load<uint16>(p, 1, Endian.LE)
-        value32 = mem.load<uint32>(p, 0, Endian.LE)
-        value64 = mem.load<uint64>(p, 0, Endian.LE)
+        value16 = mem.load<u16>(p, 1, Endian.LE)
+        value32 = mem.load<u32>(p, 0, Endian.LE)
+        value64 = mem.load<u64>(p, 0, Endian.LE)
     }
     return int(value16) + int(value32) + int(value64)
 }

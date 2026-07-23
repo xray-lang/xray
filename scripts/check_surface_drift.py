@@ -74,12 +74,21 @@ REMOVED_FORMS: tuple[RemovedForm, ...] = (
         "157",
         re.compile(r"\bmem\.alloc\w*\s*\([^()]*\)\s*\["),
     ),
+    RemovedForm(
+        "NUMERIC_TYPE_LONG_SPELLING",
+        "task 239 removed long numeric type spellings from public docs and tooling",
+        "239",
+        re.compile(
+            r"\b(?:int8|int16|int32|int64|uint8|uint16|uint32|uint64|"
+            r"float32|float64|intsize|uintsize)\b"
+        ),
+    ),
 )
 
 CATEGORIES: tuple[str, ...] = tuple(form.category for form in REMOVED_FORMS)
 
 # In-repo scan roots (relative to --root).
-IN_REPO_SCAN_DIRS = ("tests", "stdlib", "docs/knowledge")
+IN_REPO_SCAN_DIRS = ("tests", "stdlib", "docs/knowledge", "spec/source", "src/app/lsp")
 
 TEXT_SUFFIXES = (
     ".xr",
@@ -170,6 +179,12 @@ def compute_scan_roots(root: Path, extra_knowledge: list[str], include_external:
         ):
             if candidate.is_dir():
                 roots.append(candidate)
+        for candidate in (
+            root / ".." / "xray-vscode" / "src",
+            root / ".." / "xray-vscode" / "syntaxes",
+        ):
+            if candidate.is_dir():
+                roots.append(candidate)
     roots.extend(Path(k) for k in extra_knowledge)
 
     seen: set[Path] = set()
@@ -209,8 +224,22 @@ def scan_file(root: Path, path: Path) -> list[Hit]:
         return []
     rel_path = display_path(path, root)
     hits: list[Hit] = []
+    normalized = str(path.resolve()).replace("\\", "/")
+    numeric_public = any(
+        marker in normalized
+        for marker in (
+            "/docs/knowledge/",
+            "/spec/source/",
+            "/src/app/lsp/",
+            "/xray-docs/knowledge/",
+            "/xray-vscode/src/",
+            "/xray-vscode/syntaxes/",
+        )
+    )
     for lineno, line in enumerate(lines, 1):
         for form in REMOVED_FORMS:
+            if form.category == "NUMERIC_TYPE_LONG_SPELLING" and not numeric_public:
+                continue
             if form.pattern.search(line):
                 hits.append(Hit(form.category, rel_path, lineno, line.strip()))
     return hits

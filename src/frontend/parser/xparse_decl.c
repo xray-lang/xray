@@ -1892,9 +1892,10 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // Type keyword followed by identifier means user intended a declaration
     {
         XrTokenType t = parser->current.type;
-        if (t == TK_INT || t == TK_INT8 || t == TK_INT16 || t == TK_INT32 || t == TK_INT64 ||
-            t == TK_UINT8 || t == TK_UINT16 || t == TK_UINT32 || t == TK_UINT64 || t == TK_FLOAT ||
-            t == TK_FLOAT32 || t == TK_FLOAT64 || t == TK_STRING || t == TK_BOOL) {
+        if (t == TK_INT || t == TK_I8 || t == TK_I16 || t == TK_I32 || t == TK_I64 ||
+            t == TK_BYTE || t == TK_U8 || t == TK_U16 || t == TK_U32 || t == TK_U64 ||
+            t == TK_FLOAT || t == TK_F32 || t == TK_F64 || t == TK_ISIZE || t == TK_USIZE ||
+            t == TK_STRING || t == TK_BOOL || t == TK_RUNE) {
             // Peek ahead: if next token is TK_NAME, this is a C-style declaration
             Token saved = parser->current;
             Parser checkpoint = *parser;

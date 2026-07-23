@@ -7,16 +7,16 @@
 import mem
 
 struct Slot {
-    ptr: uint64
+    ptr: u64
 }
 
 // Small enough to be inlined; the literal argument replaces the uint64 param.
-fn storeSlot(slots: ref Slice<Slot>, val: uint64) {
+fn storeSlot(slots: ref Slice<Slot>, val: u64) {
     slots[0].ptr = val
 }
 
 fn main() {
-    var a = Array<uint8>(8)
+    var a = Array<u8>(8)
     a.fill(255)
     var p = unsafe { a.mutPtr() }
     unsafe {

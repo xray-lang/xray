@@ -988,7 +988,7 @@ TEST(bytecode_roundtrips_extern_ffi_signature) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
-    /* Manifest-mapped extern "C" function pow(base: float64, exp: float64) -> float64.
+    /* Manifest-mapped extern "C" function pow(base: f64, exp: f64) -> f64.
      * The Xi IR is not serialized into embedded bytecode, so the FFI signature
      * must round-trip on the proto for the libffi invoker to work. */
     XrProto *proto = make_minimal_proto();
@@ -1029,7 +1029,7 @@ TEST(bytecode_roundtrips_extern_default_library) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
-    /* extern "C" fn sqrt(x: float64) -> float64 (default/process lookup). */
+    /* extern "C" fn sqrt(x: f64) -> f64 (default/process lookup). */
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
     proto->is_extern = true;

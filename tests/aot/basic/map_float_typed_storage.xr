@@ -1,4 +1,4 @@
-var by_int: Map<int, float32> = #{}
+var by_int: Map<int, f32> = #{}
 by_int.set(1, 1.25)
 by_int.set(2, 2.5)
 by_int.set(1, 3.75)
@@ -10,7 +10,7 @@ var int_values = by_int.values()
 print(len(int_values))
 print(int_values[0] + int_values[1])
 
-var by_float: Map<float32, int> = #{}
+var by_float: Map<f32, int> = #{}
 by_float.set(1.25, 10)
 by_float.set(2.5, 20)
 print(len(by_float))
@@ -27,17 +27,17 @@ print(by_double.get(1.125))
 print(by_double.delete(2.25))
 print(by_double.containsKey(2.25))
 
-var by_bool: Map<bool, float32> = #{}
+var by_bool: Map<bool, f32> = #{}
 by_bool.set(true, 1.5)
 by_bool.set(false, 2.25)
 print(len(by_bool))
 print(by_bool.get(true) + by_bool.get(false))
 
 class BoolFloatMapBag {
-    values: Map<bool, float32>
+    values: Map<bool, f32>
 
     constructor() {
-        var values: Map<bool, float32> = #{}
+        var values: Map<bool, f32> = #{}
         this.values = values
     }
 
@@ -78,10 +78,10 @@ print(bool_bag.prune())
 print(bool_bag.scan(3))
 
 class FloatMapBag {
-    values: Map<float32, float32>
+    values: Map<f32, f32>
 
     constructor() {
-        var values: Map<float32, float32> = #{}
+        var values: Map<f32, f32> = #{}
         this.values = values
     }
 

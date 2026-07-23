@@ -1,5 +1,5 @@
 union U32Bytes {
-    u: uint32
+    u: u32
     b: [byte; 4]
 }
 

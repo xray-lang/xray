@@ -1,7 +1,7 @@
-fn privateWide(value: uint64) -> uint64 {
-    return value + (1 as uint64)
+fn privateWide(value: u64) -> u64 {
+    return value + (1 as u64)
 }
 
-export fn callPrivateWide(value: uint64) -> uint64 {
+export fn callPrivateWide(value: u64) -> u64 {
     return privateWide(value)
 }

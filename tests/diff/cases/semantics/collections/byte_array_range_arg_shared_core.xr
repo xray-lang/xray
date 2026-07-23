@@ -4,7 +4,7 @@ fn main() {
     var view: Slice<byte> = bytes[:]
     var offset = 4294967296
     print("before-range")
-    var value: uint32 = view.load<uint32>(offset, Endian.LE)
+    var value: u32 = view.load<u32>(offset, Endian.LE)
     print(int(value))
     print("unreachable")
 }

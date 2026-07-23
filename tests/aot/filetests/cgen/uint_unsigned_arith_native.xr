@@ -1,18 +1,18 @@
-fn hash32(seq: uint32) -> uint32 {
-    var prime: uint32 = 2654435761
+fn hash32(seq: u32) -> u32 {
+    var prime: u32 = 2654435761
     return seq * prime
 }
 
-fn compound32(acc: uint32, input: uint32) -> uint32 {
+fn compound32(acc: u32, input: u32) -> u32 {
     var hash = acc
-    var prime: uint32 = 2246822519
+    var prime: u32 = 2246822519
     hash += input * prime
     hash ^= hash >> 13
     return hash
 }
 
-fn mix64(seq: uint64) -> uint64 {
-    var prime: uint64 = 889523592379
+fn mix64(seq: u64) -> u64 {
+    var prime: u64 = 889523592379
     return (seq + prime) * prime
 }
 
