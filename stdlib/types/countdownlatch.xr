@@ -1,6 +1,4 @@
 // Built-in CountdownLatch type; implemented by the runtime.
-
-@native
 class CountdownLatch {
     remaining: int
     isClosed: bool

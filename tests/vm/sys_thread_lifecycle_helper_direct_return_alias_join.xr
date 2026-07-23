@@ -1,10 +1,10 @@
 import sys
 
-fn wrapThread(t: Thread<int>) -> Thread<int> {
-    return passThread(t)
+fn wrapThread(t: move Thread<int>) -> Thread<int> {
+    return passThread(move t)
 }
 
-fn passThread(t: Thread<int>) -> Thread<int> {
+fn passThread(t: move Thread<int>) -> Thread<int> {
     return t
 }
 
@@ -12,7 +12,7 @@ fn run() {
     var t = sys.Thread.spawn(fn() -> int {
         return 42
     })
-    print(wrapThread(t).join())
+    print(wrapThread(move t).join())
 }
 
 run()

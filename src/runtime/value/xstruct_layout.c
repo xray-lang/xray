@@ -32,6 +32,8 @@ int xr_type_kind_to_native(int kind, uint8_t native_width) {
             return XR_NATIVE_F64;
         case XR_KIND_STRING:
             return XR_NATIVE_STRING;
+        case XR_KIND_POINTER:
+            return XR_NATIVE_POINTER;
         default:
             return -1;
     }

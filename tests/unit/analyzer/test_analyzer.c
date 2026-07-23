@@ -722,7 +722,7 @@ TEST(type_function_throw_effect_covariance) {
     ASSERT(!xr_type_assignable(no, may));
     ASSERT(xr_type_assignable(no, poly));
     ASSERT(xr_type_assignable(may, poly));
-    ASSERT(strstr(xr_type_to_string(no), "@no_throw") != NULL);
+    ASSERT(strstr(xr_type_to_string(no), "@") == NULL);
 }
 
 TEST(type_void_never) {
@@ -1133,6 +1133,7 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
         xa_memory_effect_db_intern(source->memory_effect_db, &source_memory);
     xa_memory_effect_summary_clear(&source_memory);
     ASSERT(source_links->memory_effect_id != XA_MEMORY_EFFECT_NONE);
+    xa_symbol_links_set_deprecated(source_links, true, "use safeRead");
 
     /* Occupy the same target-local numeric id with an incompatible summary.
      * Import must re-intern the source semantics instead of copying that id. */
@@ -1154,6 +1155,9 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
     ASSERT(xa_effect_summary_has_semantic_effect(imported_effect, XA_SEM_EFFECT_IO));
     ASSERT(imported_memory != NULL);
     ASSERT(imported_memory->root_count == 0);
+    ASSERT(target_links->is_deprecated);
+    ASSERT(target_links->deprecated_message != NULL);
+    ASSERT(strcmp(target_links->deprecated_message, "use safeRead") == 0);
 
     xa_symbol_free(target_symbol);
     xa_symbol_free(source_symbol);
@@ -1251,7 +1255,6 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "import mem\n"
-                         "@no_alloc\n"
                          "fn scalar(x: int) -> int { return x + 1 }\n"
                          "fn cycleA(n: int) -> int {\n"
                          "  if (n <= 0) { return 0 }\n"
@@ -1261,46 +1264,35 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "  if (n <= 0) { return 0 }\n"
                          "  return cycleA(n - 1)\n"
                          "}\n"
-                         "@no_alloc\n"
                          "fn cycleEntry(n: int) -> int { return cycleA(n) }\n"
                          "fn allocateLeaf() { var values = [1, 2, 3] }\n"
-                         "@no_alloc\n"
                          "fn twoHop() { allocateLeaf() }\n"
-                         "@no_alloc\n"
                          "fn unknownCall(cb: () -> ()) { cb() }\n"
-                         "@no_alloc\n"
                          "fn callbackOk(xs: Array<int>) {\n"
                          "  xs.forEach(fn(value: int, index: int) { var sum = value + index })\n"
                          "}\n"
-                         "@no_alloc\n"
                          "fn callbackBad(xs: Array<int>) {\n"
                          "  xs.forEach(fn(value: int, index: int) { var copy = [value, index] })\n"
                          "}\n"
-                         "@no_alloc\n"
                          "fn slicePointerViews(data: Slice<byte>) {\n"
                          "  unsafe {\n"
                          "    var readPtr = data.ptr()\n"
                          "    var writePtr = data.mutPtr()\n"
                          "  }\n"
                          "}\n"
-                         "@no_alloc\n"
                          "fn rawSliceProjection(data: Ptr<byte>, count: int) -> Slice<byte> {\n"
                          "  return unsafe { mem.slice<byte>(data, count, data) }\n"
                          "}\n"
                          "enum ValueError { Bad(actual: int, minimum: int) }\n"
-                         "@no_alloc\n"
                          "fn fixedValueCopy(data: [byte; 4]) -> [byte; 4] {\n"
                          "  return copy(data)\n"
                          "}\n"
-                         "@no_alloc\n"
                          "fn valueError(actual: int) {\n"
                          "  if (actual < 4) { throw ValueError.Bad(actual, 4) }\n"
                          "}\n"
                          "struct Counter {\n"
                          "  value: int\n"
-                         "  @no_alloc\n"
                          "  read() -> int { return this.value }\n"
-                         "  @no_alloc\n"
                          "  bad() { var copy = [this.value] }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -1343,15 +1335,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(xa_effect_summary_has_semantic_effect(two_hop_effect, XA_SEM_EFFECT_ALLOC));
     ASSERT((unknown_effect->unknown_semantic_effects & XA_SEM_EFFECT_ALLOC) != 0);
     ASSERT(scalar->stable_fingerprint != 0);
-    ASSERT(analyzer_diag_contains(a, "allocates via call 'allocateLeaf'"));
-    ASSERT(analyzer_diag_contains(a, "'allocateLeaf' allocates via literal 'Array'"));
-    ASSERT(analyzer_diag_contains(a, "indirect callback target is unknown"));
-    ASSERT(analyzer_diag_contains(a, "callbackBad"));
-    ASSERT(analyzer_diag_contains(a, "bad"));
-    ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'callbackOk'"));
-    ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'slicePointerViews'"));
-    ASSERT(!analyzer_diag_contains(a, "fixedValueCopy"));
-    ASSERT(!analyzer_diag_contains(a, "valueError"));
+    /* Effect facts are inferred unconditionally. Guarantee failures are now
+     * produced by `xray verify`, not by source attributes. */
 
     xa_analyzer_free(a);
     setup_pool();
@@ -1471,16 +1456,15 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
     setup_pool();
 }
 
-TEST(analyzer_no_throw_constraints_accept_proven_callbacks) {
+TEST(analyzer_inferred_effects_accept_function_values) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "@no_throw\n"
-                         "fn increment(value: int) -> int { return value + 1 }\n"
-                         "fn applyPure(callback: @no_throw (int) -> int, value: int) -> int {\n"
+    const char *source = "fn increment(value: int) -> int { return value + 1 }\n"
+                         "fn applyPure(callback: (int) -> int, value: int) -> int {\n"
                          "  return callback(value)\n"
                          "}\n"
                          "fn main() -> int {\n"
-                         "  const local: @no_throw (int) -> int = fn(value: int) -> int {\n"
+                         "  const local: (int) -> int = fn(value: int) -> int {\n"
                          "    return value * 2\n"
                          "  }\n"
                          "  return applyPure(increment, local(2))\n"
@@ -1490,18 +1474,16 @@ TEST(analyzer_no_throw_constraints_accept_proven_callbacks) {
     xa_analyzer_analyze(a, "no_throw_constraints.xr", program);
     int diagnostic_count = 0;
     xa_analyzer_get_diagnostics(a, &diagnostic_count);
-    ASSERT(diagnostic_count == 1);
-    ASSERT(analyzer_diag_contains(a, "has not rejected any may-throw value"));
+    ASSERT(diagnostic_count == 0);
     check_throw_effect_consistency(a, "increment", XR_FN_EFFECT_NO_THROW);
     xa_analyzer_free(a);
     setup_pool();
 }
 
-TEST(analyzer_no_throw_lints_redundant_try_catch) {
+TEST(analyzer_effect_inference_handles_redundant_try_catch) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "@no_throw\n"
-                         "fn guarded(value: int) -> int {\n"
+    const char *source = "fn guarded(value: int) -> int {\n"
                          "  try {\n"
                          "    return value + 1\n"
                          "  } catch (e) {\n"
@@ -1511,8 +1493,29 @@ TEST(analyzer_no_throw_lints_redundant_try_catch) {
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "no_throw_redundant_try.xr", program);
-    ASSERT(analyzer_diag_contains(a, "redundant try/catch in @no_throw function"));
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
     check_throw_effect_consistency(a, "guarded", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_deprecated_message_reaches_use_diagnostic) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@deprecated(\"use modern\")\n"
+                         "fn legacy(value: int) -> int { return value }\n"
+                         "fn caller() -> int { return legacy(1) }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "deprecated_message.xr", program);
+    XaSymbol *legacy = analyzer_function_symbol(a, "legacy");
+    ASSERT(legacy != NULL);
+    ASSERT(legacy->links.is_deprecated);
+    ASSERT(legacy->links.deprecated_message != NULL);
+    ASSERT(strcmp(legacy->links.deprecated_message, "use modern") == 0);
+    ASSERT(analyzer_diag_contains(a, "use of deprecated declaration 'legacy': use modern"));
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -2421,7 +2424,6 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
                              "export fn applyImported(cb: () -> ()) { cb() }\n"
-                             "@no_alloc\n"
                              "export fn importedScalar(x: int) -> int { return x + 1 }\n"
                              "export fn importedAlloc() { var values = [1, 2, 3] }\n";
     const char *reexport_source =
@@ -2467,7 +2469,6 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "applyImported(failForeignCallback) }\n"
                                "fn viaImportedHigherOrderNamespaceCallback() { "
                                "effects.applyImported(callbacks.failForeignCallback) }\n"
-                               "@no_alloc\n"
                                "fn viaImportedNoAlloc() { importedScalar(1) }\n"
                                "fn viaImportedAlloc() { importedAlloc() }\n";
 
@@ -2801,20 +2802,19 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     setup_pool();
 }
 
-TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
+TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts) {
     char tmpdir_template[] = "/tmp/xray_effect_xrd_XXXXXX";
     char *tmpdir = xr_test_mkdtemp(tmpdir_template);
     ASSERT(tmpdir != NULL);
 
     char xrd_path[256];
     snprintf(xrd_path, sizeof(xrd_path), "%s/native_effects.xrd", tmpdir);
-    ASSERT(write_text_file(xrd_path,
-                           "export fn failNative(): int @errors(NativeErr.Boom) @may_alloc\n"
-                           "export fn noThrowNative(): int @nothrow @no_alloc\n"
-                           "export fn missingNative(): int\n"
-                           "export fn makeBox(): NativeBox @nothrow @may_alloc\n"
-                           "type NativeBox = { const id: int }\n"
-                           "fn NativeBox.failMethod(): int @errors(NativeErr.Other) @no_alloc\n"));
+    ASSERT(write_text_file(xrd_path, "export fn failNative(): int\n"
+                                     "export fn noThrowNative(): int\n"
+                                     "export fn missingNative(): int\n"
+                                     "export fn makeBox(): NativeBox\n"
+                                     "type NativeBox = { const id: int }\n"
+                                     "fn NativeBox.failMethod(): int\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -2832,11 +2832,8 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
                          "fn viaNoThrow() { noThrowNative() }\n"
                          "fn viaMissing() { missingNative() }\n"
                          "fn viaHandle() { native_effects.makeBox().failMethod() }\n"
-                         "@no_alloc\n"
                          "fn allocNativeOk() { noThrowNative() }\n"
-                         "@no_alloc\n"
                          "fn allocNativeBad() { native_effects.makeBox() }\n"
-                         "@no_alloc\n"
                          "fn allocNativeUnknown() { missingNative() }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2852,43 +2849,25 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     ASSERT(nothrow_call != NULL);
     ASSERT(missing_call != NULL);
     ASSERT(handle_call != NULL);
-    ASSERT(namespace_call->error_set_completeness == XA_EFFECT_COMPLETE);
-    ASSERT(selective_call->error_set_completeness == XA_EFFECT_COMPLETE);
-    ASSERT(handle_call->error_set_completeness == XA_EFFECT_COMPLETE);
-    ASSERT(xa_effect_summary_is_nothrow(nothrow_call));
+    ASSERT(namespace_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT(selective_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT(nothrow_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
     ASSERT(missing_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT(handle_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((namespace_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT((selective_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT((nothrow_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
     ASSERT((missing_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
-    ASSERT((missing_call->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-
-    const XaErrorTypeSet *namespace_set =
-        effect_summary_enum_set_named(a, namespace_call, "NativeErr");
-    const XaErrorTypeSet *selective_set =
-        effect_summary_enum_set_named(a, selective_call, "NativeErr");
-    const XaErrorTypeSet *handle_set = effect_summary_enum_set_named(a, handle_call, "NativeErr");
-    ASSERT(namespace_set != NULL);
-    ASSERT(selective_set != NULL);
-    ASSERT(handle_set != NULL);
-    ASSERT(!namespace_set->all_variants);
-    ASSERT(!selective_set->all_variants);
-    ASSERT(!handle_set->all_variants);
-    ASSERT(xa_bitset_test(&namespace_set->variants, 0));
-    ASSERT(!xa_bitset_test(&namespace_set->variants, 1));
-    ASSERT(xa_bitset_test(&selective_set->variants, 0));
-    ASSERT(!xa_bitset_test(&selective_set->variants, 1));
-    ASSERT(!xa_bitset_test(&handle_set->variants, 0));
-    ASSERT(xa_bitset_test(&handle_set->variants, 1));
+    ASSERT((handle_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
 
     const XaAllocationSummary *alloc_ok = analyzer_function_allocation_summary(a, "allocNativeOk");
     const XaAllocationSummary *alloc_bad =
         analyzer_function_allocation_summary(a, "allocNativeBad");
     const XaAllocationSummary *alloc_unknown =
         analyzer_function_allocation_summary(a, "allocNativeUnknown");
-    ASSERT(alloc_ok && alloc_ok->state == XA_ALLOC_PROVEN_NONE);
-    ASSERT(alloc_bad && alloc_bad->state == XA_ALLOC_MAY);
+    ASSERT(alloc_ok && alloc_ok->state == XA_ALLOC_UNKNOWN);
+    ASSERT(alloc_bad && alloc_bad->state == XA_ALLOC_UNKNOWN);
     ASSERT(alloc_unknown && alloc_unknown->state == XA_ALLOC_UNKNOWN);
-    ASSERT(analyzer_diag_contains(a, "contract is not satisfied for 'allocNativeBad'"));
-    ASSERT(analyzer_diag_contains(a, "contract cannot be proven for 'allocNativeUnknown'"));
-    ASSERT(analyzer_diag_contains(a, "native or extern callee has no allocation contract"));
 
     xa_analyzer_free(a);
     xa_xrd_cleanup();
@@ -2916,15 +2895,13 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     snprintf(legacy_path, sizeof(legacy_path), "%s/native_legacy_byte_effects.xrd", tmpdir);
     snprintf(span_only_path, sizeof(span_only_path), "%s/native_legacy_bytespan_only.xrd", tmpdir);
     snprintf(view_only_path, sizeof(view_only_path), "%s/native_legacy_byteview_only.xrd", tmpdir);
-    ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte> "
-                                    "@errors(NativeByteErr.BadInput)\n"));
-    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSlice): Bytes "
-                                        "@errors(NativeByteErr.BadInput)\n"
-                                        "export fn viewOld(input: ByteView): int @nothrow\n"));
+    ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte>\n"));
+    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSlice): Bytes\n"
+                                        "export fn viewOld(input: ByteView): int\n"));
     ASSERT(write_text_file(span_only_path, "export fn spanOnly(input: Byte"
-                                           "Slice): int @nothrow\n"));
+                                           "Slice): int\n"));
     ASSERT(write_text_file(view_only_path, "export fn viewOnly(input: Byte"
-                                           "View): int @nothrow\n"));
+                                           "View): int\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -2942,11 +2919,8 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(!analyzer_diag_contains(ok, "error"));
     const XaEffectSummary *ok_effect = analyzer_function_effect_summary(ok, "viaNative");
     ASSERT(ok_effect != NULL);
-    ASSERT(ok_effect->error_set_completeness == XA_EFFECT_COMPLETE);
-    const XaErrorTypeSet *ok_set = effect_summary_enum_set_named(ok, ok_effect, "NativeByteErr");
-    ASSERT(ok_set != NULL);
-    ASSERT(!ok_set->all_variants);
-    ASSERT(xa_bitset_test(&ok_set->variants, 0));
+    ASSERT(ok_effect->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((ok_effect->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
     xa_analyzer_free(ok);
 
     XaAnalyzer *legacy = xa_analyzer_new(g_session);
@@ -6088,8 +6062,9 @@ int main(void) {
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
-    RUN_TEST(analyzer_no_throw_constraints_accept_proven_callbacks);
-    RUN_TEST(analyzer_no_throw_lints_redundant_try_catch);
+    RUN_TEST(analyzer_inferred_effects_accept_function_values);
+    RUN_TEST(analyzer_effect_inference_handles_redundant_try_catch);
+    RUN_TEST(analyzer_deprecated_message_reaches_use_diagnostic);
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
@@ -6100,7 +6075,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
-    RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);
+    RUN_TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts);
     RUN_TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases);
     RUN_TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases);
     RUN_TEST(analyzer_xrd_namespace_reports_invalid_descriptor);

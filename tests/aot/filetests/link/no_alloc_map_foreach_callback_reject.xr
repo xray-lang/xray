@@ -4,7 +4,6 @@ fn xray_no_alloc_map_foreach_allocating_callback(key: int, value: int) {
     print(len(scratch))
 }
 
-@no_alloc
 fn xray_no_alloc_map_foreach_callback_reject(values: Map<int, int>) {
     values.forEach(xray_no_alloc_map_foreach_allocating_callback)
 }

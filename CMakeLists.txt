@@ -2436,7 +2436,7 @@ if(BUILD_TESTS)
         TIMEOUT 90
     )
 
-    # AOT @c_export smoke: generated public C ABI symbols must be linkable
+    # Manifest export smoke: generated public C ABI symbols must be linkable
     # from an external C translation unit and callable with scalar values.
     add_test(
         NAME ffi_c_export_smoke
@@ -2447,6 +2447,20 @@ if(BUILD_TESTS)
     )
     set_tests_properties(ffi_c_export_smoke PROPERTIES
         LABELS "ffi;aot;regression"
+        PROCESSORS 2
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME native_output_boundary
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_output_boundary_tests.sh
+                $<TARGET_FILE:xray>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/native_output
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(native_output_boundary PROPERTIES
+        LABELS "ffi;aot;native;regression"
         PROCESSORS 2
         TIMEOUT 60
     )
@@ -2469,26 +2483,15 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME cli_fix_no_throw
+        NAME verify_contract_cli
         COMMAND bash
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_fix_no_throw_tests.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_verify_contract_tests.sh
                 $<TARGET_FILE:xray>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/verify_contract
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(cli_fix_no_throw PROPERTIES
-        LABELS "cli;frontend;regression"
-        TIMEOUT 30
-    )
-
-    add_test(
-        NAME aot_no_throw_contract
-        COMMAND bash
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_no_throw_contract_tests.sh
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(aot_no_throw_contract PROPERTIES
-        LABELS "aot;effects;frontend;regression"
+    set_tests_properties(verify_contract_cli PROPERTIES
+        LABELS "cli;effects;frontend;regression"
         TIMEOUT 60
     )
 

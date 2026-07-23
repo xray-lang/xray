@@ -28,10 +28,30 @@
 #include <limits.h>
 #include <stdint.h>
 
+static void xa_report_deprecated_use(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,
+                                     const XaSymbolLinks *links) {
+    if (!ctx || !ctx->analyzer || !node || !symbol || !links || !links->is_deprecated)
+        return;
+    char message[512];
+    if (links->deprecated_message && links->deprecated_message[0]) {
+        snprintf(message, sizeof(message), "use of deprecated declaration '%s': %s", symbol->name,
+                 links->deprecated_message);
+    } else {
+        snprintf(message, sizeof(message), "use of deprecated declaration '%s'", symbol->name);
+    }
+    XrLocation location = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE, message,
+                               &location);
+}
+
 /* Record a selection fact for a member/index access node. */
 static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
                              XrType *receiver, XaSymbol *target, int32_t field_idx, XrType *result,
                              bool is_optional) {
+    if (target) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, target);
+        xa_report_deprecated_use(ctx, node, target, links);
+    }
     XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
     if (!st)
         return;
@@ -1052,8 +1072,11 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     node->as.variable.symbol_id = sym->id;
     xa_parallel_capture_check(ctx, node, sym, false);
 
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+
     if (sym->kind == XA_SYM_ENUM) {
-        XaSymbolLinks *enum_links = xa_analyzer_get_links(ctx->analyzer, sym);
+        XaSymbolLinks *enum_links = links;
+        xa_report_deprecated_use(ctx, node, sym, enum_links);
         XrType *enum_type = enum_links && enum_links->type ? enum_links->type : NULL;
         if (!enum_type || !XR_TYPE_IS_ENUM(enum_type))
             enum_type = sym->name ? xr_type_new_enum(ctx->analyzer->isolate, sym->name)
@@ -1069,7 +1092,6 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     }
 
     // Record reference location for Find References
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     /* A graph module may be collected after the importing file's declaration
      * pass, so a selective import can initially carry only an unknown value
      * type. Resolve its exported semantic metadata lazily on first use. This
@@ -1088,6 +1110,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
             links->import_member_name = member_name;
         }
     }
+    xa_report_deprecated_use(ctx, node, sym, links);
     if (links) {
         uint32_t end_col = node->column + (name ? strlen(name) : 0);
         xa_symbol_add_ref(links, node->line, node->column, end_col, false);
@@ -4741,9 +4764,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     XrType *result = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                           return_type, has_rest);
     if (result) {
-        xr_type_function_set_throw_effect(result, xa_decl_has_attribute(node, ATTR_NO_THROW)
-                                                      ? XR_FN_EFFECT_NO_THROW
-                                                      : XR_FN_EFFECT_POLY);
+        xr_type_function_set_throw_effect(result, XR_FN_EFFECT_POLY);
         result->function.min_params = fn->required_count;
         for (int i = 0; i < fn->param_count; i++) {
             if (fn->params[i])
@@ -5383,13 +5404,29 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (!inner)
         return xr_type_new_unknown(NULL);
 
+    /* Parentheses, casts, and nullable force-unwrap preserve the identity of a
+     * whole binding.  `move handle!` therefore consumes the nullable binding
+     * itself while producing its narrowed non-null type; field/index
+     * projections remain non-binding expressions and cannot manufacture a
+     * partial-move proof. */
+    AstNode *move_source = inner;
+    while (move_source && (move_source->type == AST_GROUPING || move_source->type == AST_AS_EXPR ||
+                           move_source->type == AST_FORCE_UNWRAP)) {
+        if (move_source->type == AST_GROUPING)
+            move_source = move_source->as.grouping;
+        else if (move_source->type == AST_AS_EXPR)
+            move_source = move_source->as.as_expr.expr;
+        else
+            move_source = move_source->as.unary.operand;
+    }
     XaSymbol *move_sym = NULL;
-    if (inner->type == AST_VARIABLE) {
-        move_sym = xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
+    if (move_source && move_source->type == AST_VARIABLE) {
+        move_sym = xa_scope_lookup(ctx->analyzer->current_scope, move_source->as.variable.name);
     }
 
-    const char *move_name =
-        move_sym && inner->type == AST_VARIABLE ? inner->as.variable.name : NULL;
+    const char *move_name = move_sym && move_source && move_source->type == AST_VARIABLE
+                                ? move_source->as.variable.name
+                                : NULL;
     XaBindingUseState prior_state =
         move_name && ctx->flow && ctx->flow->current_flow
             ? xa_flow_binding_use_state(ctx->flow, move_name, ctx->flow->current_flow)
@@ -5405,7 +5442,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     ctx->current_move_source_symbol_id = 0;
     ctx->current_move_source_allows_stale_mark = true;
     if (move_sym) {
-        ctx->current_move_source_node = inner;
+        ctx->current_move_source_node = move_source;
         ctx->current_move_source_symbol_id = move_sym->id;
     }
     XrType *var_type = xa_visit_infer_expr(ctx, inner);
@@ -5432,7 +5469,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
 
     // Check: variable must exist and be a movable var binding.
     if (move_sym && move_sym->is_const) {
-        const char *name = inner->as.variable.name;
+        const char *name = move_source->as.variable.name;
         char msg[128];
         snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,

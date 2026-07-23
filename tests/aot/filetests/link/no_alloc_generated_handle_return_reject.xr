@@ -2,12 +2,10 @@ import io
 import os
 import path
 
-@no_alloc
 fn xray_no_alloc_io_stat_handle_reject(pathValue: Path) -> bool {
     return io.stat(pathValue) != null
 }
 
-@no_alloc
 fn xray_no_alloc_os_exec_handle_reject(cmd: string) -> bool {
     return os.exec(cmd) != null
 }

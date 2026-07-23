@@ -1,0 +1,13 @@
+[package]
+name = "filetest-freestanding_prelude_enum_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_prelude_enum_static.xr"
+
+[[export.c]]
+xray = "probe_endian_ordinal"
+symbol = "probe_endian_ordinal"
+
+[[export.c]]
+xray = "probe_ordering_ordinal"
+symbol = "probe_ordering_ordinal"

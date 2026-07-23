@@ -99,7 +99,6 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
 ```xray
-@native
 class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
@@ -228,7 +227,6 @@ See `stdlib/os/` for details.
 The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
 ```xray
-@native
 class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame

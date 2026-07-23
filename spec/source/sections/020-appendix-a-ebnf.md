@@ -65,8 +65,7 @@ ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
-FunctionEffect ::= '@no_throw' | '@no_suspend'
+FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -261,17 +260,13 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
-ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
-ExternDecl ::= ExternFnDecl | Visibility? ExternLayoutDecl
-ExternFnDecl ::= AttrList? Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
-ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
@@ -319,9 +314,11 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
-AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
-              // 例如 @c_export("sym")、@zero_cost(allow: bounds, box)
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
@@ -395,8 +392,7 @@ ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
-FunctionEffect ::= '@no_throw' | '@no_suspend'
+FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -591,17 +587,13 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
-ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
-ExternDecl ::= ExternFnDecl | Visibility? ExternLayoutDecl
-ExternFnDecl ::= AttrList? Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
-ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
@@ -649,9 +641,11 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
-AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
-              // e.g. @c_export("sym"), @zero_cost(allow: bounds, box)
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

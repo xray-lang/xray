@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_register_abstraction"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_register_abstraction.xr"
+
+[[export.c]]
+xray = "xray_register_sample"
+symbol = "xray_register_sample"

@@ -8244,11 +8244,8 @@ TEST(global_evidence_producer_marks_call_effect) {
 
 TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     setup_parser_session();
-    const char *source = "@native class Handle {\n"
-                         "    id() -> int\n"
-                         "}\n"
-                         "fn read(h: Handle) -> int {\n"
-                         "    return h.id()\n"
+    const char *source = "fn read(h: Atomic<int>) -> int {\n"
+                         "    return h.load()\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -8268,11 +8265,8 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nclasses, 1);
-    ASSERT_EQ_UINT(ev.nmethods, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
-    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_METHOD);
-    ASSERT_TRUE((ev.methods[0].flags & XG_METHOD_NATIVE) != 0);
+    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
     ASSERT_TRUE((ev.bodies[0].capability_bits & XG_CAP_NATIVE) != 0);
 
     XaotBundle bundle;
@@ -8287,9 +8281,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
 
 TEST(global_evidence_producer_marks_native_methods_bodyless) {
     setup_parser_session();
-    const char *source = "@native class Handle {\n"
-                         "    id() -> int\n"
-                         "}\n";
+    const char *source = "fn read(h: Atomic<int>) -> int { return h.load() }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -8308,12 +8300,10 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nclasses, 1);
-    ASSERT_EQ_UINT(ev.nmethods, 1);
-    ASSERT_TRUE((ev.classes[0].flags & XG_CLASS_NATIVE) != 0);
-    ASSERT_TRUE((ev.methods[0].flags & XG_METHOD_NATIVE) != 0);
+    ASSERT_EQ_UINT(ev.nclasses, 0);
+    ASSERT_EQ_UINT(ev.nmethods, 0);
     for (uint32_t i = 0; i < ev.nbodies; i++)
-        ASSERT_TRUE(ev.bodies[i].owner_method_id != ev.methods[0].method_id);
+        ASSERT_EQ_UINT(ev.bodies[i].owner_method_id, 0);
 
     XiFunc init_func;
     XiModule module;
@@ -17025,8 +17015,7 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
 
 TEST(global_evidence_publishes_allocation_contracts) {
     setup_parser_session();
-    const char *source = "@no_alloc\n"
-                         "export fn scalar(x: int) -> int { return x + 1 }\n"
+    const char *source = "export fn scalar(x: int) -> int { return x + 1 }\n"
                          "fn allocates() { var values = [1, 2, 3] }\n"
                          "fn unknown(cb: () -> ()) { cb() }\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -17060,11 +17049,9 @@ TEST(global_evidence_publishes_allocation_contracts) {
     ASSERT_NOT_NULL(unknown);
     ASSERT_EQ_UINT(scalar->allocation_state, XA_ALLOC_PROVEN_NONE);
     ASSERT_EQ_UINT(scalar->allocation_complete, 1);
-    ASSERT_EQ_UINT(scalar->no_alloc_contract, 1);
     ASSERT_NE(scalar->allocation_fingerprint, 0);
     ASSERT_EQ_UINT(allocates->allocation_state, XA_ALLOC_MAY);
     ASSERT_TRUE((allocates->allocation_reason_bits & XA_ALLOC_REASON_CONTAINER) != 0);
-    ASSERT_EQ_UINT(allocates->no_alloc_contract, 0);
     ASSERT_EQ_UINT(unknown->allocation_state, XA_ALLOC_UNKNOWN);
     ASSERT_TRUE((unknown->allocation_reason_bits & XA_ALLOC_REASON_DYNAMIC_CALL) != 0);
 

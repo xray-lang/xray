@@ -1,5 +1,5 @@
 status=fail
-contains=error[E0655]: @zero_cost violated in 'zeroCostAllocReject'
-contains=R1 runtime-helper call
-contains=violate their @zero_cost shape contract
+contains=contract 'zeroCostAllocReject' failed
+contains=runtime-helper call
+contains=contract check(s) failed
 not_contains=CRASH

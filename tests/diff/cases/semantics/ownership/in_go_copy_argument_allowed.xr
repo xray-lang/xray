@@ -1,6 +1,6 @@
 fn launch(data: Array<int>) {
     var originalLength = len(data)
-    var task = go fn(buffer: Array<int>) -> int {
+    var task = go fn(buffer: move Array<int>) -> int {
         buffer.push(5)
         return len(buffer)
     }(copy(data))

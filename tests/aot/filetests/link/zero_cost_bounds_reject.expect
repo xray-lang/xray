@@ -1,5 +1,5 @@
 status=fail
-contains=error[E0655]: @zero_cost violated in 'zeroCostBoundsReject'
-contains=R4 bounds-panic branch
-contains=window proof missing
+contains=contract 'zeroCostBoundsReject' failed
+contains=bounds-panic branch
+contains=-> R4
 not_contains=CRASH

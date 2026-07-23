@@ -81,21 +81,21 @@ fn make_owned_return_buffer() -> Array<byte> {
     var bytes = Array<byte>(2, 0)
     bytes[0] = 11
     bytes[1] = 12
-    return move bytes
+    return bytes
 }
 
 fn make_owned_return_buffer_alt() -> Array<byte> {
     var bytes = Array<byte>(2, 0)
     bytes[0] = 31
     bytes[1] = 32
-    return move bytes
+    return bytes
 }
 
 fn choose_owned_return_buffer(flag: bool) -> Array<byte> {
     return flag ? make_owned_return_buffer() : make_owned_return_buffer_alt()
 }
 
-fn make_shared_return_buffer() -> Array<byte> {
+fn make_shared_return_buffer() -> const Array<byte> {
     var bytes = Array<byte>(2, 0)
     bytes[0] = 21
     bytes[1] = 22

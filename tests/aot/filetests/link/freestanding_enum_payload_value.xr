@@ -10,7 +10,6 @@ fn pick(n: int) -> FastResult {
     return FastResult.Err(9)
 }
 
-@c_export("xray_enum_payload_value")
 fn xray_enum_payload_value(n: int) -> int {
     var result = pick(n)
     match (result) {

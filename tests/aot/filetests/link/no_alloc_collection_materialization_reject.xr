@@ -1,90 +1,72 @@
-@no_alloc
-fn xray_no_alloc_array_unshift_reject(values: Array<int>) -> int {
+fn xray_no_alloc_array_unshift_reject(values: ref Array<int>) -> int {
     values.unshift(0)
     return len(values)
 }
 
-@no_alloc
 fn xray_no_alloc_array_tostring_reject(values: Array<int>) -> string {
     return values.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_array_entries_reject(values: Array<int>) -> int {
     return len(values.entries())
 }
 
-@no_alloc
 fn xray_no_alloc_array_entries_iterator_reject(values: Array<int>) -> bool {
     return values.entriesIterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_map_keys_reject(values: Map<int, int>) -> int {
     return len(values.keys())
 }
 
-@no_alloc
 fn xray_no_alloc_map_values_reject(values: Map<int, int>) -> int {
     return len(values.values())
 }
 
-@no_alloc
 fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
     return len(values.entries())
 }
 
-@no_alloc
 fn xray_no_alloc_map_iterator_reject(values: Map<int, int>) -> bool {
     return values.iterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_map_entries_iterator_reject(values: Map<int, int>) -> bool {
     return values.entriesIterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_map_tostring_reject(values: Map<int, int>) -> string {
     return values.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_set_toarray_reject(values: Set<int>) -> int {
     return len(values.toArray())
 }
 
-@no_alloc
 fn xray_no_alloc_set_values_reject(values: Set<int>) -> int {
     return len(values.values())
 }
 
-@no_alloc
 fn xray_no_alloc_set_union_reject(values: Set<int>, other: Set<int>) -> int {
     return len(values.union(other))
 }
 
-@no_alloc
 fn xray_no_alloc_set_intersection_reject(values: Set<int>, other: Set<int>) -> int {
     return len(values.intersection(other))
 }
 
-@no_alloc
 fn xray_no_alloc_set_difference_reject(values: Set<int>, other: Set<int>) -> int {
     return len(values.difference(other))
 }
 
-@no_alloc
 fn xray_no_alloc_set_symmetric_difference_reject(values: Set<int>, other: Set<int>) -> int {
     return len(values.symmetricDifference(other))
 }
 
-@no_alloc
 fn xray_no_alloc_set_iterator_reject(values: Set<int>) -> bool {
     return values.iterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_set_tostring_reject(values: Set<int>) -> string {
     return values.toString()
 }
@@ -97,7 +79,7 @@ xray_no_alloc_collection_set.add(1)
 var xray_no_alloc_collection_set_other: Set<int> = #[]
 xray_no_alloc_collection_set_other.add(2)
 
-print(xray_no_alloc_array_unshift_reject(xray_no_alloc_collection_array))
+print(xray_no_alloc_array_unshift_reject(ref xray_no_alloc_collection_array))
 print(xray_no_alloc_array_tostring_reject(xray_no_alloc_collection_array))
 print(xray_no_alloc_array_entries_reject(xray_no_alloc_collection_array))
 print(xray_no_alloc_array_entries_iterator_reject(xray_no_alloc_collection_array))

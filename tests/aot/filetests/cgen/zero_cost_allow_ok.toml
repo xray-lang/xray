@@ -1,0 +1,9 @@
+[package]
+name = "filetest-zero-cost-allow-ok"
+version = "1.0.0"
+license = "MIT"
+main = "zero_cost_allow_ok.xr"
+
+[[export.c]]
+xray = "zc_allow_sum"
+symbol = "zc_allow_sum"

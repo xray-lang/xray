@@ -125,25 +125,6 @@ static const char *read_to_eol(const char *p, char *buf, size_t buf_size) {
     return p;
 }
 
-static int compare_effect_error_refs(const void *lhs, const void *rhs) {
-    const char *const *a = (const char *const *) lhs;
-    const char *const *b = (const char *const *) rhs;
-    return strcmp(*a, *b);
-}
-
-static bool effect_ref_char(char c) {
-    return isalnum((unsigned char) c) || c == '_' || c == '.' || c == ':';
-}
-
-static char *duplicate_effect_ref(const char *start, size_t len) {
-    char *result = (char *) xr_malloc(len + 1u);
-    if (!result)
-        return NULL;
-    memcpy(result, start, len);
-    result[len] = '\0';
-    return result;
-}
-
 static bool xrd_ident_boundary(char c) {
     return !(isalnum((unsigned char) c) || c == '_');
 }
@@ -166,6 +147,11 @@ static bool xrd_validate_signature_types(const char *signature) {
     static const char *const removed_byte_aliases[] = {"Bytes", "ByteSlice", "ByteView"};
     if (!signature)
         return true;
+    if (strchr(signature, '@')) {
+        xrd_set_error("XRD textual metadata is not supported; declare effects and allocation "
+                      "in the typed native package contract");
+        return false;
+    }
     for (size_t i = 0; i < sizeof(removed_byte_aliases) / sizeof(removed_byte_aliases[0]); i++) {
         if (xrd_signature_contains_token(signature, removed_byte_aliases[i])) {
             xrd_set_error("XRD descriptor uses removed byte alias '%s'; use Array<byte> or "
@@ -174,164 +160,6 @@ static bool xrd_validate_signature_types(const char *signature) {
             return false;
         }
     }
-    return true;
-}
-
-static char *xrd_find_metadata_token(char *signature, const char *token) {
-    size_t token_len = strlen(token);
-    for (char *p = signature; (p = strstr(p, token)) != NULL; p += token_len) {
-        char after = p[token_len];
-        if ((p == signature || isspace((unsigned char) p[-1])) &&
-            (after == '\0' || isspace((unsigned char) after)))
-            return p;
-    }
-    return NULL;
-}
-
-bool xa_allocation_contract_parse_suffix(char *signature, XaAllocationContractKind *contract) {
-    if (!signature || !contract)
-        return false;
-    *contract = XA_ALLOCATION_CONTRACT_MISSING;
-    char *no_heap = xrd_find_metadata_token(signature, "@no_alloc");
-    char *may_heap = xrd_find_metadata_token(signature, "@may_alloc");
-    if (no_heap && may_heap) {
-        xrd_set_error("conflicting allocation metadata @no_alloc and @may_alloc");
-        return false;
-    }
-    char *metadata = no_heap ? no_heap : may_heap;
-    if (!metadata)
-        return true;
-    const char *token = no_heap ? "@no_alloc" : "@may_alloc";
-    if (xrd_find_metadata_token(metadata + strlen(token), token)) {
-        xrd_set_error("duplicate allocation metadata %s", token);
-        return false;
-    }
-    *contract = no_heap ? XA_ALLOCATION_CONTRACT_NO_HEAP : XA_ALLOCATION_CONTRACT_MAY_HEAP;
-
-    char *tail = metadata + strlen(token);
-    while (isspace((unsigned char) *tail))
-        tail++;
-    char *remove_start = metadata;
-    while (remove_start > signature && isspace((unsigned char) remove_start[-1]))
-        remove_start--;
-    if (*tail && remove_start > signature)
-        *remove_start++ = ' ';
-    memmove(remove_start, tail, strlen(tail) + 1u);
-
-    size_t len = strlen(signature);
-    while (len > 0 && isspace((unsigned char) signature[len - 1]))
-        signature[--len] = '\0';
-    return true;
-}
-
-bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *contract) {
-    memset(contract, 0, sizeof(*contract));
-    char *at = strchr(signature, '@');
-    if (!at)
-        return true;
-
-    char metadata[256];
-    size_t metadata_len = strlen(at);
-    if (metadata_len >= sizeof(metadata)) {
-        xrd_set_error("effect metadata is too long");
-        return false;
-    }
-    memcpy(metadata, at, metadata_len + 1u);
-    char *signature_end = at;
-    while (signature_end > signature && isspace((unsigned char) signature_end[-1]))
-        signature_end--;
-    *signature_end = '\0';
-
-    if (strncmp(metadata, "@nothrow", 8) == 0) {
-        const char *tail = skip_ws(metadata + 8);
-        if (*tail != '\0') {
-            xrd_set_error("invalid or conflicting effect metadata after @nothrow");
-            return false;
-        }
-        contract->kind = XA_EFFECT_CONTRACT_NOTHROW;
-        return true;
-    }
-    if (strncmp(metadata, "@errors", 7) != 0) {
-        xrd_set_error("unknown effect metadata '%s'", metadata);
-        return false;
-    }
-
-    const char *p = skip_ws(metadata + 7);
-    if (*p != '(') {
-        xrd_set_error("@errors must contain a parenthesized error list");
-        return false;
-    }
-    p++;
-    uint32_t capacity = 0;
-    bool expects_entry = true;
-    bool closed = false;
-    while (*p) {
-        p = skip_ws(p);
-        if (*p == ')') {
-            if (expects_entry) {
-                xrd_set_error("@errors requires a non-empty error list");
-                xa_effect_contract_clear(contract);
-                return false;
-            }
-            p++;
-            closed = true;
-            break;
-        }
-        const char *start = p;
-        if (!(isalpha((unsigned char) *p) || *p == '_')) {
-            xrd_set_error("invalid error reference in @errors");
-            xa_effect_contract_clear(contract);
-            return false;
-        }
-        while (*p && effect_ref_char(*p))
-            p++;
-        size_t len = (size_t) (p - start);
-        p = skip_ws(p);
-        if (*p != ',' && *p != ')') {
-            xrd_set_error("invalid error reference in @errors");
-            xa_effect_contract_clear(contract);
-            return false;
-        }
-        if (contract->error_count == capacity) {
-            uint32_t next_capacity = capacity ? capacity * 2u : 4u;
-            const char **next = (const char **) xr_realloc(
-                contract->errors, (size_t) next_capacity * sizeof(const char *));
-            if (!next) {
-                xrd_set_error("out of memory while parsing @errors");
-                xa_effect_contract_clear(contract);
-                return false;
-            }
-            contract->errors = next;
-            capacity = next_capacity;
-        }
-        char *error_ref = duplicate_effect_ref(start, len);
-        if (!error_ref) {
-            xrd_set_error("out of memory while parsing @errors");
-            xa_effect_contract_clear(contract);
-            return false;
-        }
-        contract->errors[contract->error_count++] = error_ref;
-        expects_entry = false;
-        if (*p == ',') {
-            p++;
-            expects_entry = true;
-        }
-    }
-    if (!closed || expects_entry || *skip_ws(p) != '\0') {
-        xrd_set_error("invalid trailing content in @errors metadata");
-        xa_effect_contract_clear(contract);
-        return false;
-    }
-
-    qsort(contract->errors, contract->error_count, sizeof(const char *), compare_effect_error_refs);
-    for (uint32_t i = 1; i < contract->error_count; i++) {
-        if (strcmp(contract->errors[i - 1u], contract->errors[i]) == 0) {
-            xrd_set_error("duplicate error '%s' in @errors", contract->errors[i]);
-            xa_effect_contract_clear(contract);
-            return false;
-        }
-    }
-    contract->kind = XA_EFFECT_CONTRACT_ERRORS;
     return true;
 }
 
@@ -521,18 +349,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
 
                 char sig[256];
                 read_to_eol(after_ident, sig, sizeof(sig));
-                XaAllocationContractKind allocation_contract;
-                if (!xa_allocation_contract_parse_suffix(sig, &allocation_contract)) {
-                    free_xrd_module(xrd);
-                    return NULL;
-                }
-                XaEffectContract effect_contract;
-                if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
-                    free_xrd_module(xrd);
-                    return NULL;
-                }
                 if (!xrd_validate_signature_types(sig)) {
-                    xa_effect_contract_clear(&effect_contract);
                     free_xrd_module(xrd);
                     return NULL;
                 }
@@ -550,18 +367,22 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                     XaBuiltinHandle *h = &xrd->handles[handle_idx];
                     int midx = h->method_count;
                     if (midx >= xrd->handle_method_caps[handle_idx]) {
-                        int new_cap = xrd->handle_method_caps[handle_idx] * 2;
+                        int old_cap = xrd->handle_method_caps[handle_idx];
+                        int new_cap = old_cap * 2;
                         if (new_cap < 8)
                             new_cap = 8;
                         XaBuiltinMember *new_methods = xr_realloc(
                             (void *) h->methods, (size_t) new_cap * sizeof(XaBuiltinMember));
                         if (new_methods) {
+                            memset(new_methods + old_cap, 0,
+                                   (size_t) (new_cap - old_cap) * sizeof(XaBuiltinMember));
                             h->methods = new_methods;
                             xrd->handle_method_caps[handle_idx] = new_cap;
                         }
                     }
                     if (midx < xrd->handle_method_caps[handle_idx]) {
                         XaBuiltinMember *methods = (XaBuiltinMember *) h->methods;
+                        memset(&methods[midx], 0, sizeof(methods[midx]));
                         methods[midx].name = xrd_strdup(meth_name);
                         methods[midx].signature = xrd_strdup(sig);
                         methods[midx].doc = xrd_strdup("");
@@ -570,14 +391,10 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].is_internal = false;
                         methods[midx].is_lowered_only = false;
                         methods[midx].is_yieldable = false;
-                        methods[midx].effect_contract = effect_contract;
-                        methods[midx].allocation_contract = allocation_contract;
+                        methods[midx].effect_contract.kind = XA_EFFECT_CONTRACT_MISSING;
+                        methods[midx].allocation_contract = XA_ALLOCATION_CONTRACT_MISSING;
                         h->method_count++;
-                    } else {
-                        xa_effect_contract_clear(&effect_contract);
                     }
-                } else {
-                    xa_effect_contract_clear(&effect_contract);
                 }
 
                 // Skip to next line
@@ -600,18 +417,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             // Rest of line is the signature
             char sig[256];
             p = read_to_eol(p, sig, sizeof(sig));
-            XaAllocationContractKind allocation_contract;
-            if (!xa_allocation_contract_parse_suffix(sig, &allocation_contract)) {
-                free_xrd_module(xrd);
-                return NULL;
-            }
-            XaEffectContract effect_contract;
-            if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
-                free_xrd_module(xrd);
-                return NULL;
-            }
             if (!xrd_validate_signature_types(sig)) {
-                xa_effect_contract_clear(&effect_contract);
                 free_xrd_module(xrd);
                 return NULL;
             }
@@ -619,11 +425,15 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             if (func_name[0] && sig[0]) {
                 int idx = xrd->module.function_count;
                 if (idx >= xrd->function_cap) {
+                    int old_cap = xrd->function_cap;
                     xrd->function_cap *= 2;
                     XR_REALLOC_OR_ABORT(xrd->functions,
                                         (size_t) xrd->function_cap * sizeof(XaBuiltinMember),
                                         "xrd functions grow");
+                    memset(xrd->functions + old_cap, 0,
+                           (size_t) (xrd->function_cap - old_cap) * sizeof(XaBuiltinMember));
                 }
+                memset(&xrd->functions[idx], 0, sizeof(xrd->functions[idx]));
                 xrd->functions[idx].name = xrd_strdup(func_name);
                 xrd->functions[idx].signature = xrd_strdup(sig);
                 xrd->functions[idx].doc = xrd_strdup("");
@@ -632,11 +442,9 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].is_internal = false;
                 xrd->functions[idx].is_lowered_only = false;
                 xrd->functions[idx].is_yieldable = false;
-                xrd->functions[idx].effect_contract = effect_contract;
-                xrd->functions[idx].allocation_contract = allocation_contract;
+                xrd->functions[idx].effect_contract.kind = XA_EFFECT_CONTRACT_MISSING;
+                xrd->functions[idx].allocation_contract = XA_ALLOCATION_CONTRACT_MISSING;
                 xrd->module.function_count++;
-            } else {
-                xa_effect_contract_clear(&effect_contract);
             }
 
             if (*p)

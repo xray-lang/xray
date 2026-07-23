@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
     return len(values.entries())
 }

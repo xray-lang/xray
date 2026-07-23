@@ -89,29 +89,15 @@ class StringNativeErrorAbiTest(unittest.TestCase):
     def test_public_declaration_is_typed_and_non_nullable(self) -> None:
         declaration = STRING_DECL.read_text(encoding="utf-8")
         generated = embedded_native_def("string")
-        self.assertIn(
-            "static fromUtf8(bytes: Slice<byte>) -> string "
-            "@errors(Utf8Error.InvalidUtf8)",
-            declaration,
-        )
-        self.assertIn(
-            "sliceBytes(start: int, end: int) -> string "
-            "@errors(StringSliceError.InvalidByteRange)",
-            declaration,
-        )
+        self.assertIn("static fromUtf8(bytes: Slice<byte>) -> string", declaration)
+        self.assertIn("sliceBytes(start: int, end: int) -> string", declaration)
         self.assertNotIn("fromUtf8(bytes: Slice<byte>) -> string?", declaration)
-        self.assertIn("@native\nenum Utf8Error", generated)
-        self.assertIn("@native\nenum StringSliceError", generated)
-        self.assertIn(
-            "static fromUtf8(bytes: Slice<byte>) -> string "
-            "@errors(Utf8Error.InvalidUtf8)",
-            generated,
-        )
-        self.assertIn(
-            "sliceBytes(start: int, end: int) -> string "
-            "@errors(StringSliceError.InvalidByteRange)",
-            generated,
-        )
+        self.assertIn("enum Utf8Error", generated)
+        self.assertIn("enum StringSliceError", generated)
+        self.assertIn("static fromUtf8(bytes: Slice<byte>) -> string", generated)
+        self.assertIn("sliceBytes(start: int, end: int) -> string", generated)
+        self.assertNotIn("@" + "native", generated)
+        self.assertNotIn("@" + "errors", generated)
         self.assertNotIn("fromUtf8(bytes: Slice<byte>) -> string?", generated)
 
     def test_runtime_sources_route_failures_to_typed_error_channel(self) -> None:

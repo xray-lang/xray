@@ -5,8 +5,8 @@
  *              safety, min_arity, max_arity, flags,
  *              input_native, input_lanes, result_native, result_lanes)
  *
- * `key` is declaration metadata carried by the compiler-owned @intrinsic
- * attribute.  It is never reconstructed from a call-site spelling, import
+ * `key` is sealed compiler-owned declaration metadata. It is never
+ * reconstructed from a call-site spelling, import
  * alias, display type name, or source path.
  */
 

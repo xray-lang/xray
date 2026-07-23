@@ -1106,7 +1106,7 @@ static XrValue compress_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
     return result;
 }
 
-// compress.gunzip(data) -> string @errors(CompressionError.InvalidData)
+// compress.gunzip(data) -> string; errors: CompressionError.InvalidData
 static XrValue compress_gunzip(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
@@ -1152,7 +1152,7 @@ static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
     return result;
 }
 
-// compress.inflate(data) -> string @errors(CompressionError.InvalidData)
+// compress.inflate(data) -> string; errors: CompressionError.InvalidData
 static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
@@ -1200,7 +1200,7 @@ static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) 
     return result;
 }
 
-// compress.zlibDecompress(data) -> string @errors(CompressionError.InvalidData)
+// compress.zlibDecompress(data) -> string; errors: CompressionError.InvalidData
 static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();

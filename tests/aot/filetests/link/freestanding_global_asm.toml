@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_global_asm"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_global_asm.xr"
+
+[[export.c]]
+xray = "global_asm_entry"
+symbol = "xray_global_asm_entry"

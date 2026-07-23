@@ -1,6 +1,5 @@
 import mem
 
-@c_export("xray_page_hook_score")
 fn xray_page_hook_score(n: int) -> int {
     var size = n
     if (size <= 0) {

@@ -205,9 +205,12 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
                 "contract->errors[i]",
             ),
             "tests/unit/analyzer/test_analyzer.c": (
-                "analyzer_error_effect_consumes_xrd_native_contracts",
-                "@errors(NativeErr.Boom)",
+                "analyzer_error_effect_consumes_builtin_type_member_contracts",
                 "analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases",
+            ),
+            "src/frontend/analyzer/xa_native_member_contract.def": (
+                'XA_NATIVE_MEMBER_CONTRACT("string", "fromUtf8"',
+                'XA_EFFECT_CONTRACT_ERRORS, "Utf8Error.InvalidUtf8"',
             ),
         },
         "full_marker": "TASK_198_TYPED_NATIVE_ERRORS_READY",
@@ -232,8 +235,14 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
                 'LABELS "vm;aot;frontend;task-198"',
             ),
             "stdlib/types/string.xr": (
-                "static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8)",
-                "sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange)",
+                "static fromUtf8(bytes: Slice<byte>) -> string",
+                "sliceBytes(start: int, end: int) -> string",
+            ),
+            "src/frontend/analyzer/xa_native_member_contract.def": (
+                'XA_NATIVE_MEMBER_CONTRACT("string", "fromUtf8"',
+                'XA_EFFECT_CONTRACT_ERRORS, "Utf8Error.InvalidUtf8"',
+                'XA_NATIVE_MEMBER_CONTRACT("string", "sliceBytes"',
+                'XA_EFFECT_CONTRACT_ERRORS, "StringSliceError.InvalidByteRange"',
             ),
             "tests/aot/basic/string_utf8_conversion.xr": (
                 "catch (e: Utf8Error)",

@@ -15,7 +15,6 @@
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_capability.h"
 #include "xanalyzer_incremental.h"
-#include "../parser/xa_assertion_attr.h"
 #include "../../base/xstorage.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/symbol/xsymbol_table.h"
@@ -98,8 +97,8 @@ XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
 /* Task 216: a function item can carry a precise inferred effect, but storing it
  * in an unannotated variable/field creates a merge point whose type defaults to
  * MAY_THROW. Copy before widening so the declaration symbol's precise function
- * type remains unchanged. An explicit @no_throw function type bypasses this
- * helper by using its declared type. */
+ * type remains unchanged. A compiler-owned effect constraint may bypass this
+ * helper by using its canonical declared type. */
 static inline XrType *xa_function_value_storage_type(XaInferContext *ctx, XrType *inferred) {
     if (!ctx || !ctx->analyzer || !inferred || inferred->kind != XR_KIND_FUNCTION)
         return inferred;

@@ -3,7 +3,7 @@ fn takes_bool(x: bool) {
 }
 
 fn return_int(x: Json) -> int {
-    return x
+    return copy(x)
 }
 
 var dyn: Json = { "goodBool": true, "badBool": 1, "goodInt": 7, "badInt": 3.5 }

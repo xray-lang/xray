@@ -1,7 +1,7 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_datetime_tostring_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_datetime_format_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_add_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_toutc_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_tolocal_reject'
+contains=contract 'xray_no_alloc_datetime_tostring_reject' failed
+contains=contract 'xray_no_alloc_datetime_format_reject' failed
+contains=contract 'xray_no_alloc_datetime_add_reject' failed
+contains=contract 'xray_no_alloc_datetime_toutc_reject' failed
+contains=contract 'xray_no_alloc_datetime_tolocal_reject' failed
 not_contains=CRASH

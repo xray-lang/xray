@@ -1,42 +1,39 @@
 import mem
 
-extern "C" {
-    struct CScalar {
-        tag: uint8
-        count: uint32
-    }
+struct CScalar {
+    tag: uint8
+    count: uint32
+}
 
-    struct CPointer {
-        next: Ptr<byte>
-    }
+struct CPointer {
+    next: Ptr<byte>
+}
 
-    struct CArray {
-        samples: [uint16; 3]
-    }
+struct CArray {
+    samples: [uint16; 3]
+}
 
-    struct M3FuncType {
-        next: Ptr<M3FuncType>
-        numRets: uint16
-        numArgs: uint16
-        types: flex uint8
-    }
+struct M3FuncType {
+    next: Ptr<M3FuncType>
+    numRets: uint16
+    numArgs: uint16
+}
 
-    struct CHeader {
-        tag: uint8
-        count: uint32
-        next: Ptr<byte>
-        samples: [uint16; 3]
-    }
+struct CHeader {
+    tag: uint8
+    count: uint32
+    next: Ptr<byte>
+    samples: [uint16; 3]
+}
 
-    union CWord {
-        word: uint32
-        bytes: [uint8; 4]
-    }
+union CWord {
+    word: uint32
+    bytes: [uint8; 4]
+}
 
-    struct CEnvelope {
-        header: CHeader
-        word: CWord
-    }
+struct CEnvelope {
+    header: CHeader
+    word: CWord
 }
 
 comptime {
@@ -48,7 +45,6 @@ comptime {
     compile_assert(mem.offsetOf<M3FuncType>("next") == 0)
     compile_assert(mem.offsetOf<M3FuncType>("numRets") == 8)
     compile_assert(mem.offsetOf<M3FuncType>("numArgs") == 10)
-    compile_assert(mem.offsetOf<M3FuncType>("types") == 12)
     compile_assert(mem.sizeOf<CHeader>() == 24)
     compile_assert(mem.alignOf<CHeader>() == 8)
     compile_assert(mem.offsetOf<CHeader>("tag") == 0)
@@ -73,7 +69,6 @@ print(mem.alignOf<M3FuncType>())
 print(mem.offsetOf<M3FuncType>("next"))
 print(mem.offsetOf<M3FuncType>("numRets"))
 print(mem.offsetOf<M3FuncType>("numArgs"))
-print(mem.offsetOf<M3FuncType>("types"))
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("tag"))

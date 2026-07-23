@@ -1,0 +1,13 @@
+[package]
+name = "filetest-no-throw-equivalence-invariant"
+version = "1.0.0"
+license = "MIT"
+main = "no_throw_equivalence_invariant.xr"
+
+[[export.c]]
+xray = "xray_call_plain"
+symbol = "xray_call_plain"
+
+[[export.c]]
+xray = "xray_call_asserted"
+symbol = "xray_call_asserted"

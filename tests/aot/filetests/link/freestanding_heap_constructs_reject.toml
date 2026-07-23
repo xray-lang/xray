@@ -1,0 +1,37 @@
+[package]
+name = "filetest-freestanding_heap_constructs_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_heap_constructs_reject.xr"
+
+[[export.c]]
+xray = "xray_map_reject"
+symbol = "xray_map_reject"
+
+[[export.c]]
+xray = "xray_set_reject"
+symbol = "xray_set_reject"
+
+[[export.c]]
+xray = "xray_object_reject"
+symbol = "xray_object_reject"
+
+[[export.c]]
+xray = "xray_regex_reject"
+symbol = "xray_regex_reject"
+
+[[export.c]]
+xray = "xray_bigint_reject"
+symbol = "xray_bigint_reject"
+
+[[export.c]]
+xray = "xray_closure_reject"
+symbol = "xray_closure_reject"
+
+[[export.c]]
+xray = "xray_string_concat_reject"
+symbol = "xray_string_concat_reject"
+
+[[export.c]]
+xray = "xray_class_reject"
+symbol = "xray_class_reject"

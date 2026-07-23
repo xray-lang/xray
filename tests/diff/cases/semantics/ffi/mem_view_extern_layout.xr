@@ -1,17 +1,17 @@
 import mem
 
+struct Child {
+    code: uint32
+}
+
+struct Header {
+    tag: uint8
+    count: uint32
+    next: Ptr<Child>
+    child: Child
+}
+
 extern "C" {
-    struct Child {
-        code: uint32
-    }
-
-    struct Header {
-        tag: uint8
-        count: uint32
-        next: Ptr<Child>
-        child: Child
-    }
-
     fn malloc(n: uintsize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
 }

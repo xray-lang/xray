@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_string_conversion_reject(value: int) -> string {
     return string(value)
 }

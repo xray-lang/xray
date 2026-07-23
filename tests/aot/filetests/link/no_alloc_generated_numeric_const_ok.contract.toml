@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_generated_numeric_const_ok"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

@@ -534,18 +534,15 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
              (long) xr_test_getpid());
     ASSERT_TRUE(write_file_text(
         source_path, "import mem\n"
-                     "extern \"C\" {\n"
-                     "    struct TargetPair {\n"
-                     "        ptr: Ptr<byte>\n"
-                     "        size: uintsize\n"
-                     "    }\n"
+                     "struct TargetPair {\n"
+                     "    ptr: Ptr<byte>\n"
+                     "    size: uintsize\n"
                      "}\n"
                      "comptime {\n"
                      "    compile_assert(mem.sizeOf<TargetPair>() == 8)\n"
                      "    compile_assert(mem.alignOf<TargetPair>() == 4)\n"
                      "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 4)\n"
                      "}\n"
-                     "@c_export(\"target_pair_size\")\n"
                      "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
     ASSERT_TRUE(xaot_target_init(&target, "riscv32imac-unknown-none-elf"));
     options.target = &target;

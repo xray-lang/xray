@@ -290,7 +290,6 @@ static uint64_t hash_body_summary(uint64_t hash, const XgBodySummary *row) {
     hash = hash_u32(hash, row->effect_bits);
     hash = hash_u8(hash, row->allocation_state);
     hash = hash_u8(hash, row->allocation_complete);
-    hash = hash_u8(hash, row->no_alloc_contract);
     hash = hash_u32(hash, row->allocation_reason_bits);
     hash = hash_u64(hash, row->allocation_fingerprint);
     hash = hash_u32(hash, row->escape_bits);
@@ -3646,20 +3645,19 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
         return;
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *b = &evidence->bodies[i];
-        fprintf(out,
-                "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
-                "kind=%u flags=0x%x hash=%016" PRIx64
-                " effect=0x%x alloc_state=%u alloc_complete=%u "
-                "noalloc=%u alloc_reason=0x%x alloc_fp=%016" PRIx64 " escape=0x%x caps=0x%x "
-                "param_storage=%u params=%u+%u calls=%u+%u metadata=0x%x static=0x%x\n",
-                b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
-                b->owner_method_id, b->name_id, b->signature_key, b->source_span_id,
-                (unsigned) b->kind, b->flags, b->body_hash, b->effect_bits,
-                (unsigned) b->allocation_state, (unsigned) b->allocation_complete,
-                (unsigned) b->no_alloc_contract, b->allocation_reason_bits,
-                b->allocation_fingerprint, b->escape_bits, b->capability_bits, b->param_storage_key,
-                b->param_storage_start, b->param_storage_count, b->callsite_start,
-                b->callsite_count, b->metadata_use_bits, b->static_data_use_bits);
+        fprintf(
+            out,
+            "body id=%u module=%u node=%u decl=%u class=%u method=%u name=%u sig=%u span=%u "
+            "kind=%u flags=0x%x hash=%016" PRIx64 " effect=0x%x alloc_state=%u alloc_complete=%u "
+            "alloc_reason=0x%x alloc_fp=%016" PRIx64 " escape=0x%x caps=0x%x "
+            "param_storage=%u params=%u+%u calls=%u+%u metadata=0x%x static=0x%x\n",
+            b->func_id, b->module_id, b->source_node_id, b->owner_decl_id, b->owner_class_id,
+            b->owner_method_id, b->name_id, b->signature_key, b->source_span_id, (unsigned) b->kind,
+            b->flags, b->body_hash, b->effect_bits, (unsigned) b->allocation_state,
+            (unsigned) b->allocation_complete, b->allocation_reason_bits, b->allocation_fingerprint,
+            b->escape_bits, b->capability_bits, b->param_storage_key, b->param_storage_start,
+            b->param_storage_count, b->callsite_start, b->callsite_count, b->metadata_use_bits,
+            b->static_data_use_bits);
     }
     for (uint32_t i = 0; i < evidence->nparam_storages; i++) {
         const XgParamStorageSummary *p = &evidence->param_storages[i];
@@ -4391,7 +4389,6 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         uint32_t kind = 0;
         uint32_t allocation_state = 0;
         uint32_t allocation_complete = 0;
-        uint32_t no_alloc_contract = 0;
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -4401,23 +4398,21 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
                    " class=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " span=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64
                    " effect=0x%" SCNx32 " alloc_state=%" SCNu32 " alloc_complete=%" SCNu32
-                   " noalloc=%" SCNu32 " alloc_reason=0x%" SCNx32 " alloc_fp=%" SCNx64
-                   " escape=0x%" SCNx32 " caps=0x%" SCNx32 " param_storage=%" SCNu32
-                   " params=%" SCNu32 "+%" SCNu32 " calls=%" SCNu32 "+%" SCNu32
-                   " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
+                   " alloc_reason=0x%" SCNx32 " alloc_fp=%" SCNx64 " escape=0x%" SCNx32
+                   " caps=0x%" SCNx32 " param_storage=%" SCNu32 " params=%" SCNu32 "+%" SCNu32
+                   " calls=%" SCNu32 "+%" SCNu32 " metadata=0x%" SCNx32 " static=0x%" SCNx32 " %c",
                    &row.func_id, &row.module_id, &row.source_node_id, &row.owner_decl_id,
                    &row.owner_class_id, &row.owner_method_id, &row.name_id, &row.signature_key,
                    &row.source_span_id, &kind, &row.flags, &row.body_hash, &row.effect_bits,
-                   &allocation_state, &allocation_complete, &no_alloc_contract,
-                   &row.allocation_reason_bits, &row.allocation_fingerprint, &row.escape_bits,
-                   &row.capability_bits, &row.param_storage_key, &row.param_storage_start,
-                   &row.param_storage_count, &row.callsite_start, &row.callsite_count,
-                   &row.metadata_use_bits, &row.static_data_use_bits, &trailing) != 27)
+                   &allocation_state, &allocation_complete, &row.allocation_reason_bits,
+                   &row.allocation_fingerprint, &row.escape_bits, &row.capability_bits,
+                   &row.param_storage_key, &row.param_storage_start, &row.param_storage_count,
+                   &row.callsite_start, &row.callsite_count, &row.metadata_use_bits,
+                   &row.static_data_use_bits, &trailing) != 26)
             return false;
         row.kind = (uint8_t) kind;
         row.allocation_state = (uint8_t) allocation_state;
         row.allocation_complete = (uint8_t) allocation_complete;
-        row.no_alloc_contract = (uint8_t) no_alloc_contract;
         if (!xg_global_evidence_add_body(evidence, &row))
             return false;
     }
@@ -6390,11 +6385,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 xg_body_kind_name(b->kind), b->flags, b->body_hash, b->effect_bits);
         dump_named_bitset(out, b->effect_bits, effects, effect_count, xg_body_effect_name);
         fprintf(out,
-                " alloc_state=%u alloc_complete=%u noalloc=%u alloc_reason=0x%x "
+                " alloc_state=%u alloc_complete=%u alloc_reason=0x%x "
                 "alloc_fp=%016" PRIx64,
                 (unsigned) b->allocation_state, (unsigned) b->allocation_complete,
-                (unsigned) b->no_alloc_contract, b->allocation_reason_bits,
-                b->allocation_fingerprint);
+                b->allocation_reason_bits, b->allocation_fingerprint);
         fprintf(out, " escape=0x%x", b->escape_bits);
         dump_named_bitset(out, b->escape_bits, escapes, escape_count, xg_body_escape_name);
         fprintf(out, " caps=0x%x", b->capability_bits);

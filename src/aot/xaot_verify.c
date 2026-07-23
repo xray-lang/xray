@@ -135,25 +135,12 @@ static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFun
                      (body->flags & XG_BODY_GENERIC_TEMPLATE) != 0 ? 1u : 0u);
         return false;
     }
-    if (func->is_generic_template && func->c_export)
+    if (func->is_generic_template && func->export_plan)
         return set_error(errbuf, errbuf_len, "generic template cannot expose a concrete C ABI");
-    if (body && (func->has_no_alloc_contract || body->no_alloc_contract)) {
-        if (!func->has_no_alloc_contract || !body->no_alloc_contract)
-            return set_error(errbuf, errbuf_len, "AOT @no_alloc contract metadata is stale");
-        if (!func->allocation_effect_complete || !body->allocation_complete)
-            return set_error(errbuf, errbuf_len,
-                             "AOT @no_alloc contract has no complete allocation proof");
-        if (func->allocation_state != XA_ALLOC_PROVEN_NONE ||
-            body->allocation_state != XA_ALLOC_PROVEN_NONE)
-            return set_error(errbuf, errbuf_len,
-                             "AOT @no_alloc contract contradicts allocation proof");
-        if (func->allocation_fingerprint == 0 ||
-            func->allocation_fingerprint != body->allocation_fingerprint)
-            return set_error(errbuf, errbuf_len, "AOT @no_alloc allocation fingerprint is stale");
-    } else if (body && func->allocation_effect_complete && body->allocation_complete &&
-               (func->allocation_state != body->allocation_state ||
-                func->allocation_reason_bits != body->allocation_reason_bits ||
-                func->allocation_fingerprint != body->allocation_fingerprint)) {
+    if (body && func->allocation_effect_complete && body->allocation_complete &&
+        (func->allocation_state != body->allocation_state ||
+         func->allocation_reason_bits != body->allocation_reason_bits ||
+         func->allocation_fingerprint != body->allocation_fingerprint)) {
         return set_error(errbuf, errbuf_len, "AOT allocation effect metadata is stale");
     }
     for (ci = 0; ci < func->nchildren; ci++) {

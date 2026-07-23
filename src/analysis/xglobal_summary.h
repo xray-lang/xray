@@ -819,7 +819,6 @@ typedef struct XgBodySummary {
     uint32_t effect_bits;
     uint8_t allocation_state; /* XaAllocState */
     uint8_t allocation_complete;
-    uint8_t no_alloc_contract;
     uint32_t allocation_reason_bits;
     uint64_t allocation_fingerprint;
     uint32_t escape_bits;

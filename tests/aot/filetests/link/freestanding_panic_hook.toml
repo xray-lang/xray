@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_panic_hook"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_panic_hook.xr"
+
+[[export.c]]
+xray = "xray_checked_div"
+symbol = "xray_checked_div"

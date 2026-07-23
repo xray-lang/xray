@@ -1,0 +1,11 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_os_loadavg_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_os_environ_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

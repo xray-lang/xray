@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_string_tostring_ok(value: string) -> string {
     return value.toString()
 }

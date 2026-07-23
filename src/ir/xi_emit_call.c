@@ -622,6 +622,39 @@ XR_FUNC void xi_emit_slice_from_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_SLICE_FROM_PTR, dst, ptr, base));
 }
 
+XR_FUNC void xi_emit_buffer_materialize(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg buffer = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint8_t code = XI_BUFFER_MATERIALIZE_CODE(v->aux_int);
+    uint32_t size = XI_BUFFER_MATERIALIZE_SIZE(v->aux_int);
+    uint16_t align = XI_BUFFER_MATERIALIZE_ALIGN(v->aux_int);
+    uint16_t struct_slot = 0;
+    if (code == XI_BUFFER_MATERIALIZE_AGGREGATE &&
+        !xi_emit_alloc_struct_area_bytes(ctx, size, &struct_slot))
+        return;
+    if (ctx->next_reg + 5 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (XiEmitReg) (base + 5);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    xi_emit_i64_const_reg(ctx, base, (int64_t) size);
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 1), (int64_t) align);
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 2), (int64_t) code);
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 3), (int64_t) struct_slot);
+    uint64_t layout_key =
+        v->aux ? xr_aggregate_layout_stable_key((const XrAggregateLayout *) v->aux) : 0;
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 4), (int64_t) layout_key);
+    emit_inst(ctx, CREATE_ABC(OP_BUFFER_MATERIALIZE, dst, buffer, base));
+}
+
 XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

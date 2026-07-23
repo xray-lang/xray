@@ -29,7 +29,7 @@
       "bullets": [
         "Errors are values (enum variants), not exceptions",
         "No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors",
-        "No `throws` in function signatures — errors are inferred; `@no_throw` optionally freezes a checked contract",
+        "No `throws` in function signatures — errors are inferred, and `xray verify` freezes checked guarantees",
         "Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types",
         "Use ADT enums for structured error causes with exhaustive `match`"
       ]

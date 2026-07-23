@@ -1,0 +1,26 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_int_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_int_tohex_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_float_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_bool_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_char_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

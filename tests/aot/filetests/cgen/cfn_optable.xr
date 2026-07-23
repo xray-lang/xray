@@ -21,7 +21,6 @@ fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
     return sp - 1
 }
 
-@c_export("run_optable")
 fn run_optable() -> int32 {
     var ops: Array<Op> = [opConst, opConst, opAdd]
     var stack = unsafe { malloc(64) }

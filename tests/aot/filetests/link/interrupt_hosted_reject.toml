@@ -1,0 +1,13 @@
+[package]
+name = "filetest-interrupt-hosted-reject"
+version = "1.0.0"
+license = "MIT"
+main = "interrupt_hosted_reject.xr"
+
+[[freestanding.entry]]
+xray = "xray_timer_irq"
+symbol = "xray_timer_irq"
+kind = "interrupt"
+abi = "irq"
+section = "__TEXT,.xray_irq"
+stub = "freestanding_entry_stub.S"

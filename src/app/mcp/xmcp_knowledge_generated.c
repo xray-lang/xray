@@ -2150,82 +2150,82 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.containsKey",
-        .signature = "(obj: Json, key: string): bool @no_alloc",
+        .signature = "(obj: Json, key: string): bool",
         .summary = "",
     },
     {
         .name = "Json.encode",
-        .signature = "(value: T): Json @may_alloc",
+        .signature = "(value: T): Json",
         .summary = "",
     },
     {
         .name = "Json.entries",
-        .signature = "(): Array<(string, Json)> @may_alloc",
+        .signature = "(): Array<(string, Json)>",
         .summary = "",
     },
     {
         .name = "Json.entries",
-        .signature = "(obj: Json): Array<(string, Json)> @may_alloc",
+        .signature = "(obj: Json): Array<(string, Json)>",
         .summary = "",
     },
     {
         .name = "Json.entriesIterator",
-        .signature = "(): Iterator<(string, Json)> @may_alloc",
+        .signature = "(): Iterator<(string, Json)>",
         .summary = "",
     },
     {
         .name = "Json.get",
-        .signature = "(obj: Json, key: string, default?: T): Json @no_alloc",
+        .signature = "(obj: Json, key: string, default?: T): Json",
         .summary = "",
     },
     {
         .name = "Json.isValid",
-        .signature = "(text: string, strict?: bool): bool @may_alloc",
+        .signature = "(text: string, strict?: bool): bool",
         .summary = "",
     },
     {
         .name = "Json.iterator",
-        .signature = "(): Iterator<string> @may_alloc",
+        .signature = "(): Iterator<string>",
         .summary = "",
     },
     {
         .name = "Json.keys",
-        .signature = "(): Array<string> @may_alloc",
+        .signature = "(): Array<string>",
         .summary = "",
     },
     {
         .name = "Json.keys",
-        .signature = "(obj: Json): Array<string> @may_alloc",
+        .signature = "(obj: Json): Array<string>",
         .summary = "",
     },
     {
         .name = "Json.parse",
-        .signature = "(text: string): Json @may_alloc",
+        .signature = "(text: string): Json",
         .summary = "",
     },
     {
         .name = "Json.stringify",
-        .signature = "(value: T, indent?: int): string @may_alloc",
+        .signature = "(value: T, indent?: int): string",
         .summary = "",
     },
     {
         .name = "Json.toString",
-        .signature = "(): string @may_alloc",
+        .signature = "(): string",
         .summary = "",
     },
     {
         .name = "Json.tryParse",
-        .signature = "(text: string): Json @may_alloc",
+        .signature = "(text: string): Json",
         .summary = "",
     },
     {
         .name = "Json.values",
-        .signature = "(): Array<Json> @may_alloc",
+        .signature = "(): Array<Json>",
         .summary = "",
     },
     {
         .name = "Json.values",
-        .signature = "(obj: Json): Array<Json> @may_alloc",
+        .signature = "(obj: Json): Array<Json>",
         .summary = "",
     },
 };
@@ -2671,6 +2671,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "allocZeroed",
         .signature = "(n: int): Buffer",
         .summary = "Allocate n zero-initialized bytes as a managed Buffer",
+    },
+    {
+        .name = "assumeInitialized",
+        .signature = "(buffer: Buffer): any",
+        .summary = "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T",
     },
     {
         .name = "cacheFlush",
@@ -3399,37 +3404,37 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "Regex.find",
-        .signature = "(text: string): RegexMatch? @may_alloc",
+        .signature = "(text: string): RegexMatch?",
         .summary = "",
     },
     {
         .name = "Regex.findAll",
-        .signature = "(text: string, limit?: int): Array<RegexMatch> @may_alloc",
+        .signature = "(text: string, limit?: int): Array<RegexMatch>",
         .summary = "",
     },
     {
         .name = "Regex.findGroup",
-        .signature = "(text: string, index: int): string? @may_alloc",
+        .signature = "(text: string, index: int): string?",
         .summary = "",
     },
     {
         .name = "Regex.findText",
-        .signature = "(text: string): string? @may_alloc",
+        .signature = "(text: string): string?",
         .summary = "",
     },
     {
         .name = "Regex.replace",
-        .signature = "(text: string, replacement: string): string @may_alloc",
+        .signature = "(text: string, replacement: string): string",
         .summary = "",
     },
     {
         .name = "Regex.split",
-        .signature = "(text: string, limit?: int): Array<string> @may_alloc",
+        .signature = "(text: string, limit?: int): Array<string>",
         .summary = "",
     },
     {
         .name = "Regex.test",
-        .signature = "(text: string): bool @no_alloc",
+        .signature = "(text: string): bool",
         .summary = "",
     },
     {
@@ -6116,13 +6121,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Sharing model\n"
             "- `const T` is the ordinary deep-read-only capability; audited synchronization handles normalize to an internal synchronized shared capability\n"
-            "- every cross-execution boundary consumes the same provenance-based capture plan\n"
-            "- inline values, published const values, and verified synchronization handles may cross directly\n"
-            "- execution-local graphs require explicit `copy(...)` or `move` from a unique rebindable local `var`; module-mutable state and short-lived views/pointers are rejected\n"
-            "- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(copy(arg))`, `move arg`, or `go worker(arg)` as appropriate\n"
+            "- a `go` closure may not capture any outer `var`, even for reads\n"
+            "- pass local data as explicit `go` arguments using ordinary inline values, `copy(...)`, or `move`\n"
+            "- mutable state shared by coroutines must flow through Channel, Atomic, or audited sync handles; direct captured mutation is a compile error\n"
+            "- module-mutable state and short-lived views/pointers are rejected, and `unsafe` does not relax these rules\n"
             "\n"
             "### await all\n"
-            "`await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`. Await heterogeneous tasks individually, or convert each task to a common enum / union / Json result type.\n"
+            "Plain waiting is always `await task`; there is no `await (move task)` form. A unique mutable result makes that await a compiler-proven one-time terminal take. `await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`.\n"
             "\n"
             "### Move into coroutine\n"
             "```xray\n"
@@ -6390,7 +6395,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Common constraints\n"
-            "`go { ... }` is a zero-argument block form and consumes the same provenance-based capture plan as other execution boundaries. Inline values, published const values, and audited synchronization handles may cross directly; pass execution-local graphs with explicit `copy(...)` / `move` arguments. `await all` is homogeneous: mixed `Task<int>` / `Task<string>` collections must be awaited individually or converted to a common result type.\n"
+            "`go { ... }` is a zero-argument block form. It may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with inline values, `copy(...)`, or `move`. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous.\n"
             "\n"
             "### Task handle\n"
             "```xray\n"
@@ -6581,7 +6586,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "functions",
         .title = "Functions",
-        .aliases_csv = "fn,function,arrow,closure,lambda,params,no_throw,no_suspend,zero_cost,no_alloc",
+        .aliases_csv = "fn,function,arrow,closure,lambda,params,effect inference,verify contract",
         .body =
             "[Language reference](#52-fn-\xe5\x87\xbd\xe6\x95\xb0\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -6679,31 +6684,15 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var identity = fn<T>(x: T) -> T { return x }     // generic\n"
             "```\n"
             "\n"
-            "### Checked system assertions\n"
-            "- `@no_alloc`, `@no_throw`, and `@no_suspend` are analyzer-proven, fail-closed contracts\n"
-            "- `@zero_cost` is an AOT generated-shape contract; its optional allow list names explicit residue exemptions\n"
-            "- `@no_throw` and `@no_suspend` may prefix function types to constrain callbacks\n"
-            "```xray\n"
-            "@no_throw\n"
-            "@no_suspend\n"
-            "fn addOne(x: int) -> int {\n"
-            "    return x + 1\n"
-            "}\n"
-            "\n"
-            "fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {\n"
-            "    return f(x)\n"
-            "}\n"
-            "\n"
-            "@zero_cost\n"
-            "fn hotAdd(x: int, y: int) -> int {\n"
-            "    return x + y\n"
-            "}\n"
-            "```\n"
+            "### Inferred effects and external verification\n"
+            "- allocation, throw, suspend, blocking, panic, IO, foreign, and synchronization effects are always inferred\n"
+            "- source annotations cannot promise effects or unlock optimizations\n"
+            "- release and performance guarantees belong in versioned `xray verify --contract FILE` assets, which fail closed and report a witness\n"
             "\n"
             "### Higher-order functions\n"
-            "- Function types use `(T1, T2) -> R` in type position, optionally prefixed by `@no_throw` and/or `@no_suspend`\n"
+            "- Function types use `(T1, T2) -> R` in type position\n"
             "- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n"
-            "- Unconstrained callback parameters are effect-polymorphic; explicit effect prefixes are fixed constraints\n"
+            "- Higher-order effects are inferred as expressions over callback effects; dynamic targets remain fail-closed when a strong external contract is requested\n"
             "- Closure capture rules are described in the scoping and concurrency sections\n"
             "",
     },
@@ -6901,7 +6890,6 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Exports\n"
             "```xray\n"
             "// 1. visibility belongs to the declaration\n"
-            "@no_alloc\n"
             "export fn helper() { return }\n"
             "export final class MyClass {\n"
             "    value: int\n"
@@ -6983,7 +6971,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Design principles\n"
             "- Errors are values (enum variants), not exceptions\n"
             "- No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors\n"
-            "- No `throws` in function signatures \xe2\x80\x94 errors are inferred; `@no_throw` optionally freezes a checked contract\n"
+            "- No `throws` in function signatures \xe2\x80\x94 errors are inferred, and `xray verify` freezes checked guarantees\n"
             "- Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types\n"
             "- Use ADT enums for structured error causes with exhaustive `match`\n"
             "",
@@ -7958,22 +7946,22 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
-            "| `Json.containsKey` | `(obj: Json, key: string): bool @no_alloc` |  |\n"
-            "| `Json.encode` | `(value: T): Json @may_alloc` |  |\n"
-            "| `Json.entries` | `(): Array<(string, Json)> @may_alloc` |  |\n"
-            "| `Json.entries` | `(obj: Json): Array<(string, Json)> @may_alloc` |  |\n"
-            "| `Json.entriesIterator` | `(): Iterator<(string, Json)> @may_alloc` |  |\n"
-            "| `Json.get` | `(obj: Json, key: string, default?: T): Json @no_alloc` |  |\n"
-            "| `Json.isValid` | `(text: string, strict?: bool): bool @may_alloc` |  |\n"
-            "| `Json.iterator` | `(): Iterator<string> @may_alloc` |  |\n"
-            "| `Json.keys` | `(): Array<string> @may_alloc` |  |\n"
-            "| `Json.keys` | `(obj: Json): Array<string> @may_alloc` |  |\n"
-            "| `Json.parse` | `(text: string): Json @may_alloc` |  |\n"
-            "| `Json.stringify` | `(value: T, indent?: int): string @may_alloc` |  |\n"
-            "| `Json.toString` | `(): string @may_alloc` |  |\n"
-            "| `Json.tryParse` | `(text: string): Json @may_alloc` |  |\n"
-            "| `Json.values` | `(): Array<Json> @may_alloc` |  |\n"
-            "| `Json.values` | `(obj: Json): Array<Json> @may_alloc` |  |\n"
+            "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
+            "| `Json.encode` | `(value: T): Json` |  |\n"
+            "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
+            "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
+            "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
+            "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
+            "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
+            "| `Json.iterator` | `(): Iterator<string>` |  |\n"
+            "| `Json.keys` | `(): Array<string>` |  |\n"
+            "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
+            "| `Json.parse` | `(text: string): Json` |  |\n"
+            "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
+            "| `Json.toString` | `(): string` |  |\n"
+            "| `Json.tryParse` | `(text: string): Json` |  |\n"
+            "| `Json.values` | `(): Array<Json>` |  |\n"
+            "| `Json.values` | `(obj: Json): Array<Json>` |  |\n"
             "",
         .symbols = _symbols_json,
         .symbol_count = (int)(sizeof(_symbols_json) / sizeof(_symbols_json[0])),
@@ -8115,6 +8103,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
             "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
+            "| `mem.assumeInitialized` | `(buffer: Buffer): any` | Unsafe compiler-verified materialization of a completely initialized native output Buffer as T |\n"
             "| `mem.cacheFlush` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
@@ -8402,13 +8391,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
-            "| `Regex.find` | `(text: string): RegexMatch? @may_alloc` |  |\n"
-            "| `Regex.findAll` | `(text: string, limit?: int): Array<RegexMatch> @may_alloc` |  |\n"
-            "| `Regex.findGroup` | `(text: string, index: int): string? @may_alloc` |  |\n"
-            "| `Regex.findText` | `(text: string): string? @may_alloc` |  |\n"
-            "| `Regex.replace` | `(text: string, replacement: string): string @may_alloc` |  |\n"
-            "| `Regex.split` | `(text: string, limit?: int): Array<string> @may_alloc` |  |\n"
-            "| `Regex.test` | `(text: string): bool @no_alloc` |  |\n"
+            "| `Regex.find` | `(text: string): RegexMatch?` |  |\n"
+            "| `Regex.findAll` | `(text: string, limit?: int): Array<RegexMatch>` |  |\n"
+            "| `Regex.findGroup` | `(text: string, index: int): string?` |  |\n"
+            "| `Regex.findText` | `(text: string): string?` |  |\n"
+            "| `Regex.replace` | `(text: string, replacement: string): string` |  |\n"
+            "| `Regex.split` | `(text: string, limit?: int): Array<string>` |  |\n"
+            "| `Regex.test` | `(text: string): bool` |  |\n"
             "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile regex pattern |\n"
             "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
@@ -9476,7 +9465,6 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```\n"
     "```xray\n"
     "// 1. visibility belongs to the declaration\n"
-    "@no_alloc\n"
     "export fn helper() { return }\n"
     "export final class MyClass {\n"
     "    value: int\n"

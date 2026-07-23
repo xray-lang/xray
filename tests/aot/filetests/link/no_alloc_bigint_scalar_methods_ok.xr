@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_bigint_scalar_methods_ok(value: BigInt) -> int {
     var score = value.sign()
     if (value.isPositive()) {

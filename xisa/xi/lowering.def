@@ -1095,6 +1095,12 @@
   :vm-bytecode (driver xi_emit_slice_from_ptr)
   :aot-c (driver xicgen_slice_from_ptr))
 
+(lower xi.buffer.materialize
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_buffer_materialize)
+  :aot-c (driver xicgen_buffer_materialize))
+
 (lower xi.slice.as.bytes
   :match ()
   :required-targets (vm-bytecode aot-c)

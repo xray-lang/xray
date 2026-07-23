@@ -897,6 +897,12 @@ XaAllocationContractKind xa_builtin_get_module_func_allocation_contract(const ch
     return member ? member->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
 }
 
+XaBuiltinReturnOwnership xa_builtin_get_module_func_return_ownership(const char *module_name,
+                                                                     const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? member->return_ownership : XA_BUILTIN_RETURN_UNKNOWN;
+}
+
 bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
     return member && member->is_method && member->is_yieldable;

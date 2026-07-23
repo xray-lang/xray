@@ -6,12 +6,10 @@ fn xray_no_alloc_array_filter_keep(value: int) -> bool {
     return value > 0
 }
 
-@no_alloc
 fn xray_no_alloc_array_map_reject(values: Array<int>) -> int {
     return len(values.map(xray_no_alloc_array_map_bump))
 }
 
-@no_alloc
 fn xray_no_alloc_array_filter_reject(values: Array<int>) -> int {
     return len(values.filter(xray_no_alloc_array_filter_keep))
 }

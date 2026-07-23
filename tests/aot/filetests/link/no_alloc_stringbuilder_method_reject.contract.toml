@@ -1,0 +1,11 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_stringbuilder_append_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_stringbuilder_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

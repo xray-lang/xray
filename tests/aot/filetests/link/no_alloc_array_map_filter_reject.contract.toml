@@ -1,0 +1,11 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_array_map_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_array_filter_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

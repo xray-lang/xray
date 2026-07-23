@@ -8,14 +8,16 @@ type Op = CFn<(int, MutPtr<int32>, int) -> int>
 var IMM: Array<int32> = [10, 20, 0, 0]
 
 fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    unsafe { stack[sp] = IMM[pc] }
+    var cursor = stack
+    unsafe { cursor[sp] = IMM[pc] }
     return sp + 1
 }
 
 fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    var b = unsafe { stack[sp - 1] }
-    var a = unsafe { stack[sp - 2] }
-    unsafe { stack[sp - 2] = a + b }
+    var cursor = stack
+    var b = unsafe { cursor[sp - 1] }
+    var a = unsafe { cursor[sp - 2] }
+    unsafe { cursor[sp - 2] = a + b }
     return sp - 1
 }
 

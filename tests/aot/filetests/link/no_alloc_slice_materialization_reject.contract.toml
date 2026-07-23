@@ -1,0 +1,11 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_view_slice_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_span_slice_ok"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

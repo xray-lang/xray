@@ -1,4 +1,4 @@
-extern "C" dylib("xrayffi_scalar_matrix") {
+extern "C" {
     fn xrayffi_bool_flip(x: bool) -> bool
     fn xrayffi_i8_add(x: int8, y: int8) -> int8
     fn xrayffi_u8_add(x: uint8, y: uint8) -> uint8

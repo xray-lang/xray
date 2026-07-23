@@ -1,0 +1,13 @@
+[package]
+name = "filetest-freestanding_enum_name_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_enum_name_static.xr"
+
+[[export.c]]
+xray = "xrayEnumNameStatic"
+symbol = "xray_enum_name_static"
+
+[[export.c]]
+xray = "xrayPreludeEnumNameStatic"
+symbol = "xray_prelude_enum_name_static"

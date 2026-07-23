@@ -1,0 +1,23 @@
+/*
+ * Compiler-owned capabilities for source-defined standard-library types.
+ *
+ * XA_TYPE_CAPABILITY(module, declaration, flags)
+ *
+ * INTERIOR_MUTABLE permits mutation behind a stable const identity.
+ * SYNC_SHAREABLE additionally permits that identity to cross execution
+ * boundaries.  Source spelling alone never grants either capability: the
+ * analyzer also verifies the canonical stdlib module source path.
+ */
+XA_TYPE_CAPABILITY("sync", "Mutex",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("sync", "RwLock",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("sync", "Once",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("sync", "Barrier",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("sync", "Condvar",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("sys", "ThreadLocal",
+                   XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE)
+XA_TYPE_CAPABILITY("parallel", "Plan", XA_TYPE_CAP_INTERIOR_MUTABLE)

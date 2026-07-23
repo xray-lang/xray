@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_mem_alloc_selective"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_mem_alloc_selective.xr"
+
+[[export.c]]
+xray = "xray_alloc_selective_score"
+symbol = "xray_alloc_selective_score"

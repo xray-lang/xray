@@ -826,8 +826,7 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
         const XiFunc *func = a->funcs[fi].func;
         if (!func)
             continue;
-        if (func->c_export || func->aot_used || func->aot_naked || func->aot_weak ||
-            func->aot_section || (func->aot_interrupt_abi && func->aot_interrupt_abi[0]) ||
+        if (func->export_plan || func->link_plan || func->entry_plan ||
             (func->is_generic_template &&
              xaot_callable_func_has_executable_body_plan(bundle, func))) {
             if (!callable_mark_reachable_func(a, func, &changed))

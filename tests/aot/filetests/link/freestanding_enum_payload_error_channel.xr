@@ -9,7 +9,6 @@ fn mayFail(n: int) -> int {
     return n
 }
 
-@c_export("xray_enum_payload_error")
 fn xray_enum_payload_error(n: int) -> int {
     var out = 0
     try {

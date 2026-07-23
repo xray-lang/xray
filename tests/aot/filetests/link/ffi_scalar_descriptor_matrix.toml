@@ -1,0 +1,127 @@
+[package]
+name = "filetest-ffi_scalar_descriptor_matrix"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_scalar_descriptor_matrix.xr"
+
+[native]
+name = "ffi-ffi_scalar_descriptor_matrix"
+version = "1"
+license = "test"
+source = "AOT FFI manifest fixture"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "library-0"
+kind = "platform"
+system_links = ["xrayffi_scalar_matrix"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_bool_flip"
+native = "xrayffi_bool_flip"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_i8_add"
+native = "xrayffi_i8_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_u8_add"
+native = "xrayffi_u8_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_i16_add"
+native = "xrayffi_i16_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_u16_add"
+native = "xrayffi_u16_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_i32_add"
+native = "xrayffi_i32_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_u32_add"
+native = "xrayffi_u32_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_i64_add"
+native = "xrayffi_i64_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_u64_add"
+native = "xrayffi_u64_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_size_roundtrip"
+native = "xrayffi_size_roundtrip"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_ssize_roundtrip"
+native = "xrayffi_ssize_roundtrip"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_f32_add"
+native = "xrayffi_f32_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_f64_add"
+native = "xrayffi_f64_add"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_ptr_identity"
+native = "xrayffi_ptr_identity"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_void_sink"
+native = "xrayffi_void_sink"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"

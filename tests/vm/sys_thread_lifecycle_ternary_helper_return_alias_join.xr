@@ -1,6 +1,6 @@
 import sys
 
-fn passThread(t: Thread<int>) -> Thread<int> {
+fn passThread(t: move Thread<int>) -> Thread<int> {
     return t
 }
 
@@ -8,7 +8,8 @@ fn run(flag: bool) {
     var t = sys.Thread.spawn(fn() -> int {
         return 42
     })
-    var joined = flag ? passThread(t) : passThread(t)
+    var observed = flag
+    var joined = passThread(move t)
     print(joined.join())
 }
 

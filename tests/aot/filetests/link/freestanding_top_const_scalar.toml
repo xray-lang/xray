@@ -1,0 +1,46 @@
+[package]
+name = "filetest-freestanding_top_const_scalar"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_top_const_scalar.xr"
+
+[[export.c]]
+xray = "xray_magic"
+symbol = "xray_magic"
+
+[[export.c]]
+xray = "xray_scalar_string_print"
+symbol = "xray_scalar_string_print"
+
+[[link.symbol]]
+xray = "MAGIC"
+section = "__DATA,.xray_magic"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "ENABLED"
+section = "__DATA,.xray_enabled"
+
+[[link.symbol]]
+xray = "CODE"
+used = true
+
+[[link.symbol]]
+xray = "SCALE"
+section = "__DATA,.xray_scale"
+
+[[link.symbol]]
+xray = "NOTHING"
+section = "__DATA,.xray_none"
+used = true
+
+[[link.symbol]]
+xray = "LABEL"
+section = "__DATA,.xray_label"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LOCAL_LABEL"
+section = "__DATA,.xray_lbl"

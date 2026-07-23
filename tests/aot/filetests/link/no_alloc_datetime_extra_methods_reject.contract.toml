@@ -1,0 +1,26 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_datetime_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_datetime_format_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_datetime_add_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_datetime_toutc_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_datetime_tolocal_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

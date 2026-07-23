@@ -1,12 +1,10 @@
 import mem
 
-@no_alloc
-fn xray_no_alloc_buffer_resize_reject(b: Buffer, n: int) -> bool {
+fn xray_no_alloc_buffer_resize_reject(b: ref Buffer, n: int) -> bool {
     return b.resize(n)
 }
 
-@c_export("xray_no_alloc_buffer_resize_entry")
 fn xray_no_alloc_buffer_resize_entry(n: int) -> bool {
     var b = mem.alloc(n)
-    return xray_no_alloc_buffer_resize_reject(b, n + 1)
+    return xray_no_alloc_buffer_resize_reject(ref b, n + 1)
 }

@@ -12,7 +12,6 @@ fn code(m: FsMode) -> int {
     }
 }
 
-@c_export("xray_enum_static")
 fn xray_enum_static(n: int) -> int {
     var m = FsMode.Boot
     if (n == 1) {

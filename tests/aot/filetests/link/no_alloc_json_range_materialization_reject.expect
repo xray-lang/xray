@@ -1,8 +1,8 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_values_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_entries_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_iterator_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_entries_iterator_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_tostring_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_range_values_reject'
+contains=contract 'xray_no_alloc_json_values_reject' failed
+contains=contract 'xray_no_alloc_json_entries_reject' failed
+contains=contract 'xray_no_alloc_json_iterator_reject' failed
+contains=contract 'xray_no_alloc_json_entries_iterator_reject' failed
+contains=contract 'xray_no_alloc_json_tostring_reject' failed
+contains=contract 'xray_no_alloc_range_values_reject' failed
 not_contains=CRASH

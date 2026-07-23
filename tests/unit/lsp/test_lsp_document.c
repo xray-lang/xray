@@ -601,40 +601,27 @@ TEST(hover_u8_array_registry_method) {
     xlsp_server_free(server);
 }
 
-TEST(hover_noalloc_contract_and_violation) {
+TEST(hover_deprecated_message_roundtrip) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "@no_alloc\n"
-                          "export fn scalar(x: int) -> int { return x + 1 }\n"
-                          "@no_alloc\n"
-                          "fn allocates() { var values = [1, 2, 3] }\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_noalloc.xr", content, 1);
+    const char *content = "@deprecated(\"use modern\")\n"
+                          "export fn legacy(x: int) -> int { return x + 1 }\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_deprecated.xr", content, 1);
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
     int line = 0;
     int col = 0;
-    ASSERT(content_position_of_nth(content, "scalar", 1, &line, &col));
-    XrLspPosition scalar_pos = {(uint32_t) line, (uint32_t) col};
-    XrJsonValue *scalar_hover = xlsp_analyze_hover(server, doc, scalar_pos);
-    ASSERT(scalar_hover != NULL);
-    const char *scalar_text = hover_markdown_value(scalar_hover);
-    ASSERT(scalar_text != NULL);
-    ASSERT(strstr(scalar_text, "@no_alloc\nfn scalar") != NULL);
-    ASSERT(strstr(scalar_text, "proven no heap allocation") != NULL);
-    xjson_free(scalar_hover);
-
-    ASSERT(content_position_of_nth(content, "allocates", 1, &line, &col));
-    XrLspPosition allocates_pos = {(uint32_t) line, (uint32_t) col};
-    XrJsonValue *allocates_hover = xlsp_analyze_hover(server, doc, allocates_pos);
-    ASSERT(allocates_hover != NULL);
-    const char *allocates_text = hover_markdown_value(allocates_hover);
-    ASSERT(allocates_text != NULL);
-    ASSERT(strstr(allocates_text, "@no_alloc\nfn allocates") != NULL);
-    ASSERT(strstr(allocates_text, "Allocation contract violation") != NULL);
-    ASSERT(strstr(allocates_text, "Array") != NULL);
-    xjson_free(allocates_hover);
+    ASSERT(content_position_of_nth(content, "legacy", 1, &line, &col));
+    XrJsonValue *hover =
+        xlsp_analyze_hover(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
+    ASSERT(hover != NULL);
+    const char *text = hover_markdown_value(hover);
+    ASSERT(text != NULL);
+    ASSERT(strstr(text, "fn legacy") != NULL);
+    ASSERT(strstr(text, "Deprecated: use modern.") != NULL);
+    xjson_free(hover);
 
     xlsp_server_free(server);
 }
@@ -752,6 +739,28 @@ TEST(global_type_query_builtins_use_canonical_names) {
     ASSERT(strstr(type_name_label, "typename") == NULL);
     xjson_free(type_name_sig);
 
+    xlsp_server_free(server);
+}
+
+TEST(completion_public_attributes_use_registry) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    XrLspDocument *doc = xlsp_document_open(server, "file:///attributes.xr", "\n", 1);
+    ASSERT(doc != NULL);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {0, 0});
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "@test"));
+    ASSERT(json_array_contains_label(items, "@before_each"));
+    ASSERT(json_array_contains_label(items, "@after_each"));
+    ASSERT(json_array_contains_label(items, "@before_all"));
+    ASSERT(json_array_contains_label(items, "@after_all"));
+    ASSERT(json_array_contains_label(items, "@deprecated"));
+    ASSERT(json_array_contains_label(items, "@derive"));
+    ASSERT(!json_array_contains_label(items, "@no_alloc"));
+    ASSERT(!json_array_contains_label(items, "@native"));
+    ASSERT(!json_array_contains_label(items, "@c_export"));
+    xjson_free(items);
     xlsp_server_free(server);
 }
 
@@ -1148,10 +1157,11 @@ int main(int argc, char **argv) {
     RUN_TEST(completion_int_array_excludes_u8_registry_methods);
     RUN_TEST(completion_u8_slice_registry_methods);
     RUN_TEST(hover_u8_array_registry_method);
-    RUN_TEST(hover_noalloc_contract_and_violation);
+    RUN_TEST(hover_deprecated_message_roundtrip);
     RUN_TEST(signature_help_u8_array_registry_method);
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
     RUN_TEST(global_type_query_builtins_use_canonical_names);
+    RUN_TEST(completion_public_attributes_use_registry);
     RUN_TEST(exact_integer_bit_builtins_use_receiver_specialized_registry);
     RUN_TEST(param_mode_user_function_lsp_display);
     RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);

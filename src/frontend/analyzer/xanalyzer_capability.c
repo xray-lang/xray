@@ -8,6 +8,7 @@
 #include "xanalyzer_builtins.h"
 #include "../../runtime/class/xclass_info.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static bool path_has_suffix(const char *path, const char *suffix) {
@@ -21,31 +22,61 @@ static bool path_has_suffix(const char *path, const char *suffix) {
            path[path_len - suffix_len - 1] == '\\';
 }
 
-static bool name_in_set(const char *name, const char *const *set, size_t count) {
-    if (!name)
+typedef struct XaDeclaredTypeCapabilitySpec {
+    const char *module_name;
+    const char *declaration_name;
+    uint32_t flags;
+} XaDeclaredTypeCapabilitySpec;
+
+static const XaDeclaredTypeCapabilitySpec declared_type_capabilities[] = {
+#define XA_TYPE_CAPABILITY(module_name, declaration_name, flags)                                   \
+    {module_name, declaration_name, flags},
+#include "xa_type_capability_registry.def"
+#undef XA_TYPE_CAPABILITY
+};
+
+static bool declaration_identity_matches(const char *actual, const char *declared) {
+    if (!actual || !declared)
         return false;
-    for (size_t i = 0; i < count; i++) {
-        if (strcmp(name, set[i]) == 0)
-            return true;
+    size_t declared_len = strlen(declared);
+    return strncmp(actual, declared, declared_len) == 0 &&
+           (actual[declared_len] == '\0' || actual[declared_len] == '$');
+}
+
+static bool path_is_canonical_stdlib_module(const char *path, const char *module_name) {
+    if (!path || !module_name)
+        return false;
+    char suffix[160];
+    int n = snprintf(suffix, sizeof(suffix), "stdlib/%s/%s.xr", module_name, module_name);
+    if (n > 0 && (size_t) n < sizeof(suffix) && path_has_suffix(path, suffix))
+        return true;
+    n = snprintf(suffix, sizeof(suffix), "<embedded stdlib>/%s/%s.xr", module_name, module_name);
+    return n > 0 && (size_t) n < sizeof(suffix) && path_has_suffix(path, suffix);
+}
+
+uint32_t xa_stdlib_type_capability_flags(const char *module_name, const char *declaration_name) {
+    if (!module_name || !declaration_name)
+        return XA_TYPE_CAP_NONE;
+    for (size_t i = 0;
+         i < sizeof(declared_type_capabilities) / sizeof(declared_type_capabilities[0]); i++) {
+        const XaDeclaredTypeCapabilitySpec *spec = &declared_type_capabilities[i];
+        if (strcmp(module_name, spec->module_name) == 0 &&
+            declaration_identity_matches(declaration_name, spec->declaration_name))
+            return spec->flags;
     }
-    return false;
+    return XA_TYPE_CAP_NONE;
 }
 
 uint32_t xa_declared_type_capability_flags(const char *file_path, const char *declaration_name) {
-    static const char *const sync_roots[] = {"Mutex", "RwLock", "Once", "Barrier", "Condvar"};
-    static const char *const sys_roots[] = {"ThreadLocal"};
-    const uint32_t sync_capability = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
-
-    if ((path_has_suffix(file_path, "stdlib/sync/sync.xr") ||
-         path_has_suffix(file_path, "<embedded stdlib>/sync/sync.xr")) &&
-        name_in_set(declaration_name, sync_roots, sizeof(sync_roots) / sizeof(sync_roots[0])))
-        return sync_capability;
-
-    if ((path_has_suffix(file_path, "stdlib/sys/sys.xr") ||
-         path_has_suffix(file_path, "<embedded stdlib>/sys/sys.xr")) &&
-        name_in_set(declaration_name, sys_roots, sizeof(sys_roots) / sizeof(sys_roots[0])))
-        return sync_capability;
-
+    if (!file_path || !declaration_name)
+        return XA_TYPE_CAP_NONE;
+    for (size_t i = 0;
+         i < sizeof(declared_type_capabilities) / sizeof(declared_type_capabilities[0]); i++) {
+        const XaDeclaredTypeCapabilitySpec *spec = &declared_type_capabilities[i];
+        if (declaration_identity_matches(declaration_name, spec->declaration_name) &&
+            path_is_canonical_stdlib_module(file_path, spec->module_name))
+            return spec->flags;
+    }
     return XA_TYPE_CAP_NONE;
 }
 

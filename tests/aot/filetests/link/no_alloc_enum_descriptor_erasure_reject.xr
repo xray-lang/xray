@@ -10,7 +10,6 @@ enum NoAllocState {
 
 type NoAllocVariant = EnumVariant<NoAllocHue> | EnumVariant<NoAllocState>
 
-@no_alloc
 fn xray_no_alloc_enum_descriptor_erasure_reject(useState: bool) -> NoAllocVariant {
     if (useState) {
         return NoAllocState.variants[0]

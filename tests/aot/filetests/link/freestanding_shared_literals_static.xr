@@ -3,7 +3,6 @@ const SCALE: float = 0.5
 const LETTER: rune = 'A'
 const NOTHING = null
 
-@c_export("xray_shared_literals")
 fn xray_shared_literals() -> int {
     var score = 0
     if (ENABLED) {

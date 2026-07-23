@@ -13,8 +13,6 @@ enum SendResult {
     Timeout
     Closed
 }
-
-@native
 class Channel<T> {
     capacity: int
     isClosed: bool

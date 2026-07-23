@@ -7,14 +7,12 @@ extern "C" {
     fn srand(seed: uint32) -> ()
     fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: uintsize, size: uintsize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>) -> Ptr<byte>
 
-    @link_name("labs")
     fn task208LabsA(x: intsize) -> intsize
 
-    @link_name("labs")
     fn task208LabsB(x: intsize) -> intsize
 }
 
-extern "C" dylib("task208_unused_extern_registry") {
+extern "C" {
     fn task208NeverLinked(x: float64) -> float64
 }
 

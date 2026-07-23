@@ -7,7 +7,6 @@ fn unused_coroutine_helper() -> int {
     return await task
 }
 
-@c_export("xray_entry")
 fn xray_entry() -> int32 {
     return 0
 }

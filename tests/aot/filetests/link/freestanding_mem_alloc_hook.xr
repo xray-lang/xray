@@ -1,6 +1,5 @@
 import mem
 
-@c_export("xray_alloc_hook_score")
 fn xray_alloc_hook_score(n: int) -> int {
     var a = mem.alloc(16)
     var s: Slice<byte> = a.asMutBytes()

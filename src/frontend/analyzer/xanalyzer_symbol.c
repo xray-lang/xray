@@ -220,8 +220,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         xr_free(links->param_effects);
     if (links->return_fn_param_effects)
         xr_free(links->return_fn_param_effects);
-    if (links->c_export_symbol)
-        xr_free((void *) links->c_export_symbol);
+    if (links->deprecated_message)
+        xr_free((void *) links->deprecated_message);
     if (links->type_param_names) {
         for (int i = 0; i < links->type_param_count; i++) {
             if (links->type_param_names[i])
@@ -919,9 +919,9 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->return_view = src->return_view;
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
+    dst->is_deprecated = src->is_deprecated;
+    dst->deprecated_message = src->deprecated_message ? xr_strdup(src->deprecated_message) : NULL;
     dst->is_extern = src->is_extern;
-    dst->is_c_export = src->is_c_export;
-    dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
     if (src_analyzer && dst_analyzer && src_analyzer != dst_analyzer) {
         dst->effect_id =
             xa_effect_db_import(dst_analyzer->effect_db, src_analyzer->effect_db, src->effect_id);
@@ -950,8 +950,6 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->alloc_reason_bits = src->alloc_reason_bits;
     dst->alloc_fingerprint = src->alloc_fingerprint;
     dst->alloc_effect_complete = src->alloc_effect_complete;
-    dst->has_no_alloc_contract = src->has_no_alloc_contract;
-    dst->has_no_throw_contract = src->has_no_throw_contract;
     for (int i = 0; i < dst->param_effect_count; i++) {
         dst->param_effects[i].callable_effects = dst->effect_id;
         dst->param_effects[i].memory_effects = dst->memory_effect_id;
@@ -974,6 +972,14 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->has_ct_value = src->has_ct_value;
     dst->ct_value = src->ct_value;
     dst->is_loop_variable = src->is_loop_variable;
+}
+
+void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present, const char *message) {
+    if (!links)
+        return;
+    xr_free((void *) links->deprecated_message);
+    links->deprecated_message = message ? xr_strdup(message) : NULL;
+    links->is_deprecated = present;
 }
 
 // Callback context for collecting symbols

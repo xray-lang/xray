@@ -1,0 +1,8 @@
+interface Action {
+    @no_throw
+    run() -> int
+}
+
+class Concrete implements Action {
+    run() -> int { return 1 }
+}

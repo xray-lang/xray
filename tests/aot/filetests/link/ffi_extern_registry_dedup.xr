@@ -1,8 +1,6 @@
 extern "C" {
-    @link_name("labs")
     fn task208LabsFirst(x: intsize) -> intsize
 
-    @link_name("labs")
     fn task208LabsSecond(x: intsize) -> intsize
 }
 

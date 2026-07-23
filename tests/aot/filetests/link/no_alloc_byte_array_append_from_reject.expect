@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_byte_array_append_from_reject'
+contains=contract 'xray_no_alloc_byte_array_append_from_reject' failed
 contains=xray_no_alloc_byte_array_append_from_reject
 not_contains=CRASH

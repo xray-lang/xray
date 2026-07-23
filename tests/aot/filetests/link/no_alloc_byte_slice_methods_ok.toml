@@ -1,0 +1,9 @@
+[package]
+name = "filetest-no_alloc_byte_slice_methods_ok"
+version = "1.0.0"
+license = "MIT"
+main = "no_alloc_byte_slice_methods_ok.xr"
+
+[[export.c]]
+xray = "xray_no_alloc_byte_slice_methods_ok"
+symbol = "xray_no_alloc_byte_slice_methods_ok"

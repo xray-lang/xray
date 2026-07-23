@@ -68,13 +68,18 @@ TEST(spec_find_command_toolchain) {
     ASSERT_STR_EQ(spec->subcommands[1].name, "doctor");
 }
 
-TEST(spec_find_command_fix) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("fix");
+TEST(spec_find_command_language_attributes) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("language");
     ASSERT_NOT_NULL(spec);
-    ASSERT_EQ_INT(spec->positional_min, 1);
-    ASSERT_EQ_INT(spec->positional_max, -1);
+    ASSERT_NOT_NULL(spec->subcommands);
+    ASSERT_EQ_INT(spec->subcommand_count, 1);
+    ASSERT_STR_EQ(spec->subcommands[0].name, "attributes");
     ASSERT_EQ_INT(xr_cli_option_count(spec->options), 1);
-    ASSERT_STR_EQ(spec->options[0].long_name, "annotate-no-throw");
+    ASSERT_STR_EQ(spec->options[0].long_name, "json");
+}
+
+TEST(spec_retired_fix_command_removed) {
+    ASSERT_NULL(xr_cli_find_command("fix"));
 }
 
 TEST(spec_find_command_unknown) {
@@ -728,7 +733,8 @@ RUN_TEST(spec_find_command_eval);
 RUN_TEST(spec_find_command_repl);
 RUN_TEST(spec_find_command_pkg);
 RUN_TEST(spec_find_command_toolchain);
-RUN_TEST(spec_find_command_fix);
+RUN_TEST(spec_find_command_language_attributes);
+RUN_TEST(spec_retired_fix_command_removed);
 RUN_TEST(spec_find_command_unknown);
 RUN_TEST(spec_aliases_removed);
 RUN_TEST(spec_option_count);

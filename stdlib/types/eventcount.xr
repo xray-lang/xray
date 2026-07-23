@@ -1,6 +1,4 @@
 // Built-in EventCount type; implemented by the runtime.
-
-@native
 class EventCount {
     epoch: int
     isClosed: bool

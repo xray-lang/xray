@@ -74,7 +74,6 @@ typedef struct ClassDeclNode {
     AstNode **methods;
     int method_count;
     bool explicit_final;       // User-visible final class contract; not inferred-final evidence
-    bool is_native;            // @native: C runtime provides implementation
     bool is_packed;            // struct-only: `packed struct`
     uint32_t explicit_align;   // struct-only: `struct S align(N)`, 0 = natural
     XrAttribute **attributes;  // Declaration attributes

@@ -1,8 +1,6 @@
 // Built-in Array<T> type — implementation in src/runtime/object/xarray_methods.c
-
-@native
 class Array<T> {
-    static withCapacity(capacity: int) -> Array<T> @may_alloc
+    static withCapacity(capacity: int) -> Array<T>
     capacity: int
     // @receiver_write
     push(value: T)

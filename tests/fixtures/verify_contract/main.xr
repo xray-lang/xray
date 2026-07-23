@@ -1,0 +1,10 @@
+export fn pure(value: int) -> int {
+    return value + 1
+}
+
+export fn allocates(value: int) -> int {
+    var values = [value]
+    return len(values)
+}
+
+print(pure(41))

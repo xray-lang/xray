@@ -618,9 +618,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
 
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
                 XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-                int len =
-                    snprintf(hover_buf, sizeof(hover_buf), "```xray\n%sfn %s(",
-                             links && links->has_no_alloc_contract ? "@no_alloc\n" : "", sym->name);
+                int len = snprintf(hover_buf, sizeof(hover_buf), "```xray\nfn %s(", sym->name);
                 if (links && links->param_count > 0) {
                     for (int p = 0; p < links->param_count; p++) {
                         if (p > 0)
@@ -641,35 +639,10 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
                                            : type_str;
                 len += snprintf(hover_buf + len, sizeof(hover_buf) - len, "): %s\n```\n\n%s",
                                 ret_type, sym->is_exported ? "(exported function)" : "(function)");
-                if (links && links->has_no_alloc_contract) {
-                    const XaAllocationSummary *allocation =
-                        xa_allocation_db_get(analyzer->allocation_db, links->alloc_effect_id);
-                    if (allocation && allocation->state == XA_ALLOC_PROVEN_NONE) {
-                        snprintf(hover_buf + len, sizeof(hover_buf) - len,
-                                 "\n\nAllocation contract: proven no heap allocation.");
-                    } else if (allocation && allocation->state == XA_ALLOC_MAY) {
-                        if (allocation->callee_name) {
-                            snprintf(hover_buf + len, sizeof(hover_buf) - len,
-                                     "\n\nAllocation contract violation: allocates via call '%s'; "
-                                     "%s '%s'.",
-                                     allocation->callee_name,
-                                     allocation->cause_kind ? allocation->cause_kind : "operation",
-                                     allocation->cause_detail ? allocation->cause_detail
-                                                              : "unknown");
-                        } else {
-                            snprintf(hover_buf + len, sizeof(hover_buf) - len,
-                                     "\n\nAllocation contract violation: allocates via %s '%s'.",
-                                     allocation->cause_kind ? allocation->cause_kind : "operation",
-                                     allocation->cause_detail ? allocation->cause_detail
-                                                              : "unknown");
-                        }
-                    } else {
-                        snprintf(hover_buf + len, sizeof(hover_buf) - len,
-                                 "\n\nAllocation contract violation: cannot be proven%s%s.",
-                                 allocation && allocation->cause_detail ? "; " : "",
-                                 allocation && allocation->cause_detail ? allocation->cause_detail
-                                                                        : "");
-                    }
+                if (links && links->is_deprecated) {
+                    len += snprintf(hover_buf + len, sizeof(hover_buf) - (size_t) len,
+                                    "\n\nDeprecated%s%s.", links->deprecated_message ? ": " : "",
+                                    links->deprecated_message ? links->deprecated_message : "");
                 }
             } else if (sym->kind == XA_SYM_CLASS) {
                 snprintf(hover_buf, sizeof(hover_buf),

@@ -7,39 +7,33 @@
 // (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while
 // VM-only methods fail AOT codegen with an explicit "unsupported AOT method"
 // error (never a silent null).
-
-@native
 enum Utf8Error {
     InvalidUtf8
 }
-
-@native
 enum StringSliceError {
     InvalidByteRange
 }
-
-@native
 class string {
-    static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8) @may_alloc
-    static fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow @may_alloc
-    static fromRune(value: rune) -> string @nothrow @may_alloc
-    static join(parts: Array<string>, separator?: string) -> string @nothrow @may_alloc
-    contains(search: string) -> bool @nothrow @no_alloc
-    indexOf(search: string, start?: int) -> int @nothrow @no_alloc
-    lastIndexOf(search: string) -> int @nothrow @no_alloc
-    slice(start: int, end?: int) -> string @may_alloc
-    sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange) @may_alloc
-    toString() -> string @nothrow @no_alloc
-    split(separator: string, limit?: int) -> Array<string> @nothrow @may_alloc
-    replace(search: string, replacement: string) -> string @nothrow @may_alloc
-    replaceAll(search: string, replacement: string) -> string @nothrow @may_alloc
-    repeat(count: int) -> string @nothrow @may_alloc
-    startsWith(search: string) -> bool @nothrow @no_alloc
-    endsWith(search: string) -> bool @nothrow @no_alloc
+    static fromUtf8(bytes: Slice<byte>) -> string
+    static fromUtf8Lossy(bytes: Slice<byte>) -> string
+    static fromRune(value: rune) -> string
+    static join(parts: Array<string>, separator?: string) -> string
+    contains(search: string) -> bool
+    indexOf(search: string, start?: int) -> int
+    lastIndexOf(search: string) -> int
+    slice(start: int, end?: int) -> string
+    sliceBytes(start: int, end: int) -> string
+    toString() -> string
+    split(separator: string, limit?: int) -> Array<string>
+    replace(search: string, replacement: string) -> string
+    replaceAll(search: string, replacement: string) -> string
+    repeat(count: int) -> string
+    startsWith(search: string) -> bool
+    endsWith(search: string) -> bool
     // Owned UTF-8 byte bridge.
-    copyBytes() -> Array<byte> @nothrow @may_alloc
+    copyBytes() -> Array<byte>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
-    bytes() -> Slice<byte> @no_alloc
-    runes() -> Iterator<rune> @nothrow @may_alloc
+    bytes() -> Slice<byte>
+    runes() -> Iterator<rune>
 }

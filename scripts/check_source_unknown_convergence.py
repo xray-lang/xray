@@ -325,7 +325,11 @@ def scan_file(root: Path, path: Path) -> list[Hit]:
         return hits
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except UnicodeDecodeError:
+    except (UnicodeDecodeError, FileNotFoundError):
+        # A tracked path may be deliberately deleted in the current worktree
+        # during a clean-slate surface cutover. `git ls-files` still reports it
+        # until the deletion is committed; inventories must scan the worktree
+        # that will be committed, not fail on the stale index entry.
         return hits
     for lineno, line in enumerate(lines, 1):
         for category in classify_line(rel_path, line):

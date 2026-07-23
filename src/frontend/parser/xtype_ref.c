@@ -354,10 +354,6 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             break;
 
         case XR_TREF_FUNCTION: {
-            if (t->no_throw)
-                tref_append(buf, pos, cap, "@no_throw ");
-            if (t->no_suspend)
-                tref_append(buf, pos, cap, "@no_suspend ");
             tref_append(buf, pos, cap, "(");
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;
             for (int i = 0; i < nparam; i++) {

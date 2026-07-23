@@ -1,9 +1,7 @@
-@no_throw
 fn addOne(value: int) -> int {
     return value + 1
 }
 
-@c_export("xray_add_one")
 fn xray_add_one(value: int) -> int {
     return addOne(value)
 }

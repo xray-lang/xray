@@ -1,5 +1,4 @@
 extern "C" {
-    @naked
     fn xray_naked_stub()
 }
 

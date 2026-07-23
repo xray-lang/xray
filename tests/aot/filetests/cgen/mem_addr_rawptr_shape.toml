@@ -1,0 +1,9 @@
+[package]
+name = "filetest-mem-addr-rawptr-shape"
+version = "1.0.0"
+license = "MIT"
+main = "mem_addr_rawptr_shape.xr"
+
+[[export.c]]
+xray = "xray_mem_addr_roundtrip"
+symbol = "xray_mem_addr_roundtrip"

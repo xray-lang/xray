@@ -1,0 +1,35 @@
+[package]
+name = "filetest-ffi-extern-registry-dedup"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_extern_registry_dedup.xr"
+
+[native]
+name = "system-libc"
+version = "1"
+license = "platform"
+source = "platform C library"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "libc"
+kind = "platform"
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve audited platform C symbols"
+
+[[native.symbol]]
+xray = "task208LabsFirst"
+native = "labs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "task208LabsSecond"
+native = "labs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"

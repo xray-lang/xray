@@ -1,24 +1,22 @@
 // Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c
-
-@native
 class Set<T: Hashable> {
     // @receiver_write
-    add(value: T) @may_alloc
-    contains(value: T) -> bool @no_alloc
+    add(value: T)
+    contains(value: T) -> bool
     // @receiver_write
-    delete(value: T) -> bool @no_alloc
+    delete(value: T) -> bool
     // @receiver_write
-    clear() @no_alloc
-    values() -> Array<T> @may_alloc
-    forEach(fn: (value: T) -> ()) -> () @no_alloc
-    union(other: Set<T>) -> Set<T> @may_alloc
-    intersection(other: Set<T>) -> Set<T> @may_alloc
-    difference(other: Set<T>) -> Set<T> @may_alloc
-    symmetricDifference(other: Set<T>) -> Set<T> @may_alloc
-    isSubset(other: Set<T>) -> bool @no_alloc
-    isSuperset(other: Set<T>) -> bool @no_alloc
-    toArray() -> Array<T> @may_alloc
+    clear()
+    values() -> Array<T>
+    forEach(fn: (value: T) -> ()) -> ()
+    union(other: Set<T>) -> Set<T>
+    intersection(other: Set<T>) -> Set<T>
+    difference(other: Set<T>) -> Set<T>
+    symmetricDifference(other: Set<T>) -> Set<T>
+    isSubset(other: Set<T>) -> bool
+    isSuperset(other: Set<T>) -> bool
+    toArray() -> Array<T>
     // Iteration protocol — yields each element T (used by for-in).
-    iterator() -> Iterator<T> @may_alloc
-    toString() -> string @may_alloc
+    iterator() -> Iterator<T>
+    toString() -> string
 }

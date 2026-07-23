@@ -1,0 +1,5 @@
+[package]
+name = "filetest-no_alloc_generated_handle_return_reject"
+version = "1.0.0"
+license = "MIT"
+main = "no_alloc_generated_handle_return_reject.xr"

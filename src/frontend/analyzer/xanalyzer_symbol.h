@@ -233,9 +233,9 @@ struct XaSymbolLinks {
     bool return_fn_effect_scanned;
     bool return_fn_effect_scan_in_progress;
     struct AstNode *function_decl_node;
-    bool is_extern;    // extern-block foreign function (FFI): calls require unsafe { }
-    bool is_c_export;  // @c_export AOT C ABI wrapper
-    const char *c_export_symbol;
+    bool is_deprecated;
+    const char *deprecated_message;
+    bool is_extern;        // extern-block foreign function (FFI): calls require unsafe { }
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
     XaMemoryEffectId memory_effect_id;  // Canonical root-relative memory effect summary id
     // Error-effect "may-throw" bit (task 216), derived from the effect summary
@@ -253,11 +253,6 @@ struct XaSymbolLinks {
     XaAllocReasonSet alloc_reason_bits;
     uint64_t alloc_fingerprint;
     bool alloc_effect_complete;
-    bool has_no_alloc_contract;
-    // @no_throw assertion (task 216): the definition asserts it raises no error;
-    // the analyzer verifies the effect summary is complete with an empty escaping
-    // set after the effect-DB fixpoint, else it is a compile error.
-    bool has_no_throw_contract;
 
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.
@@ -511,6 +506,8 @@ XR_FUNC XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links
                                                             int *out_count);
 XR_FUNC void xa_symbol_links_copy_export_metadata(struct XaAnalyzer *dst_analyzer,
                                                   XaSymbolLinks *dst, const XaSymbolLinks *src);
+XR_FUNC void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present,
+                                            const char *message);
 
 // Type alias helpers
 XR_FUNC XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type);

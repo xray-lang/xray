@@ -83,9 +83,6 @@ struct Parser {
     int error_count;  // Number of errors collected
     int max_errors;   // Max errors before stopping (0 = unlimited)
 
-    // True while parsing a @native class body: methods have no body.
-    bool parsing_native_class;
-
     // True while parsing a bodyless function declaration inside an extern block.
     // (foreign implementation), so no `{ }` block follows the signature.
     bool parsing_extern_fn;

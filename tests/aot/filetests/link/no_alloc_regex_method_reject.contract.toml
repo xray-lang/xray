@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_regex_find_text_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

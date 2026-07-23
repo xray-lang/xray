@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_mem_page_hook"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_mem_page_hook.xr"
+
+[[export.c]]
+xray = "xray_page_hook_score"
+symbol = "xray_page_hook_score"

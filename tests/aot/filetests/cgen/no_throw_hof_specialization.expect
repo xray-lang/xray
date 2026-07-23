@@ -1,0 +1,6 @@
+c_contains=int64_t xray_apply_pure(int64_t p0)
+c_contains=int64_t xray_apply_checked(int64_t p0)
+c_regex=static XRT_FN_PURE int64_t [A-Za-z0-9_]+_xray_apply_pure_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_contains=xrt_pending_error =
+c_contains=xrt_has_pending_error()
+c_not_contains=unsupported AOT indirect call

@@ -106,7 +106,6 @@ ExportSpec ::= Identifier ('as' Identifier)?
 
 ```xray @id=modules-export
 // 1. 声明自身携带 export 可见性
-@no_alloc
 export fn helper() { return }
 export final class MyClass {
     value: int
@@ -287,7 +286,6 @@ ExportSpec ::= Identifier ('as' Identifier)?
 
 ```xray @id=modules-export
 // 1. visibility belongs to the declaration
-@no_alloc
 export fn helper() { return }
 export final class MyClass {
     value: int

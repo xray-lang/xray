@@ -25,7 +25,6 @@
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_visitor.h"
-#include "../parser/xa_assertion_attr.h"
 #include "../parser/xtype_ref.h"
 #include "xa_effect_db.h"
 #include "xa_selection.h"
@@ -265,10 +264,6 @@ struct ErrorSetCtx {
     int function_expr_capture_capacity;
     AstNode *active_function_exprs[ERROR_SET_FUNCTION_EXPR_WALK_MAX];
     int active_function_expr_count;
-    bool collect_no_throw_lints;
-    AstNode **redundant_no_throw_tries;
-    int redundant_no_throw_try_count;
-    int redundant_no_throw_try_capacity;
     int callsite_inline_depth;
     FunctionValueTarget current_return_target;
     bool current_return_target_seen;
@@ -309,8 +304,6 @@ static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *s
 static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
-static bool es_function_has_no_throw_attr(AstNode *node);
-static void record_redundant_no_throw_try(ErrorSetCtx *ctx, AstNode *node);
 static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
                                       AstNode *function_expr);
@@ -3836,19 +3829,6 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     capture_catch_alias_state(ctx, &catch_alias_try_state);
                 ctx->function_value_control_depth--;
             }
-            if (ctx->collect_no_throw_lints && ctx->current_func &&
-                es_function_has_no_throw_attr(ctx->current_func->links.function_decl_node) &&
-                tc->catch_count > 0 && xa_effect_summary_is_nothrow(&try_summary)) {
-                bool has_panic_catch = false;
-                for (int i = 0; i < tc->catch_count; i++) {
-                    if (tc->catch_clauses[i] && tc->catch_clauses[i]->is_panic) {
-                        has_panic_catch = true;
-                        break;
-                    }
-                }
-                if (!has_panic_catch)
-                    record_redundant_no_throw_try(ctx, node);
-            }
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
@@ -4309,9 +4289,6 @@ typedef struct FuncEntry {
     XaSymbol *sym;
 } FuncEntry;
 
-static void es_report_no_throw_violation(XaAnalyzer *analyzer, AstNode *node, XaSymbol *sym,
-                                         const XaEffectSummary *summary);
-
 typedef struct FunctionExprList {
     AstNode **items;
     int count;
@@ -4334,8 +4311,8 @@ static void collect_function_expr_pre(AstNode *node, void *userdata) {
 /* Function expressions do not own a declaration symbol/effect-id, but their
  * function value still carries the task-216 bit. Infer the same complete/empty
  * conclusion after named-function fixpoint and publish it on the expression's
- * analyzed type. Stored and passed lambdas can then satisfy @no_throw without
- * relying on a syntactic special case. */
+ * analyzed type. Stored and passed lambdas can then satisfy inferred callable
+ * constraints without relying on syntax. */
 static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     if (!ctx || !node || node->type != AST_FUNCTION_EXPR)
         return;
@@ -4375,8 +4352,6 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     XrFnThrowEffect effect =
         xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
     xr_type_function_set_throw_effect(type, effect);
-    if (es_function_has_no_throw_attr(node) && effect != XR_FN_EFFECT_NO_THROW)
-        es_report_no_throw_violation(ctx->analyzer, node, NULL, &summary);
     xa_effect_summary_clear(&summary);
 
     ctx->current_summary = saved_summary;
@@ -4425,116 +4400,6 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
         for (int i = 0; i < node->as.class_decl.method_count; i++)
             collect_functions(analyzer, node->as.class_decl.methods[i], out, count, cap);
     }
-}
-
-/* ========== @no_throw Assertion (task 216) ========== */
-
-static bool es_function_has_no_throw_attr(AstNode *node) {
-    return xa_decl_has_attribute(node, ATTR_NO_THROW);
-}
-
-static void record_redundant_no_throw_try(ErrorSetCtx *ctx, AstNode *node) {
-    if (!ctx || !node)
-        return;
-    for (int i = 0; i < ctx->redundant_no_throw_try_count; i++) {
-        if (ctx->redundant_no_throw_tries[i] == node)
-            return;
-    }
-    if (ctx->redundant_no_throw_try_count >= ctx->redundant_no_throw_try_capacity) {
-        int new_capacity =
-            ctx->redundant_no_throw_try_capacity ? ctx->redundant_no_throw_try_capacity * 2 : 8;
-        XR_REALLOC_OR_ABORT(ctx->redundant_no_throw_tries,
-                            (size_t) new_capacity * sizeof(AstNode *),
-                            "redundant no-throw try lint grow");
-        ctx->redundant_no_throw_try_capacity = new_capacity;
-    }
-    ctx->redundant_no_throw_tries[ctx->redundant_no_throw_try_count++] = node;
-}
-
-static void emit_redundant_no_throw_try_lints(ErrorSetCtx *ctx) {
-    if (!ctx)
-        return;
-    for (int i = 0; i < ctx->redundant_no_throw_try_count; i++) {
-        AstNode *node = ctx->redundant_no_throw_tries[i];
-        XrLocation location = {.file = ctx->analyzer->current_file,
-                               .line = node ? (uint32_t) node->line : 0,
-                               .column = node ? (uint32_t) node->column : 0};
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_HINT, XR_ERR_ANALYZE,
-            "redundant try/catch in @no_throw function: the try body is already proven not to "
-            "throw",
-            &location);
-    }
-}
-
-static const char *es_function_decl_name(AstNode *node, XaSymbol *sym) {
-    if (node) {
-        if ((node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) &&
-            node->as.function_decl.name)
-            return node->as.function_decl.name;
-        if (node->type == AST_METHOD_DECL && node->as.method_decl.name)
-            return node->as.method_decl.name;
-    }
-    return (sym && sym->name) ? sym->name : "?";
-}
-
-static const char *es_unknown_reason_text(XaUnknownReasonSet reasons) {
-    if (reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH)
-        return "an open virtual dispatch target is not closed";
-    if (reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET)
-        return "an indirect call target is unknown";
-    if (reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING)
-        return "a native callee has no declared throw effect";
-    if (reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT)
-        return "an imported callee effect is missing";
-    if (reasons & XA_UNKNOWN_UNRESOLVED_CALLEE)
-        return "a callee effect is unresolved";
-    if (reasons & XA_UNKNOWN_ANALYSIS_LIMIT)
-        return "the effect analysis limit was reached";
-    if (reasons & XA_UNKNOWN_INVALID_PROGRAM)
-        return "the function contains prior semantic errors";
-    return "its escaping effect could not be proven empty";
-}
-
-/* Emit the definition-site @no_throw diagnostic (fail-closed): the summary must
- * be complete with an empty escaping set. Lists the escaping error enums and any
- * incompleteness reason so the author sees why the assertion failed. */
-static void es_report_no_throw_violation(XaAnalyzer *analyzer, AstNode *node, XaSymbol *sym,
-                                         const XaEffectSummary *summary) {
-    const char *name = es_function_decl_name(node, sym);
-    char errset[512];
-    size_t off = 0;
-    errset[0] = '\0';
-    if (summary) {
-        for (uint32_t i = 0; i < summary->escaping.count && off + 1 < sizeof(errset); i++) {
-            XrType *t = xa_effect_db_error_type_handle(analyzer->effect_db,
-                                                       summary->escaping.types[i].type_id);
-            const char *en = (t && XR_TYPE_IS_ENUM(t)) ? t->enum_type.enum_name : NULL;
-            if (!en)
-                continue;
-            int n = snprintf(errset + off, sizeof(errset) - off, "%s%s", off ? ", " : "", en);
-            if (n > 0)
-                off += (size_t) n;
-        }
-    }
-    bool incomplete = !summary || summary->completeness != XA_EFFECT_COMPLETE ||
-                      summary->unknown_reasons != XA_UNKNOWN_NONE;
-    char message[768];
-    if (off > 0 && incomplete) {
-        snprintf(message, sizeof(message),
-                 "@no_throw contract is not satisfied for '%s': may throw {%s}, and %s", name,
-                 errset, es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
-    } else if (off > 0) {
-        snprintf(message, sizeof(message),
-                 "@no_throw contract is not satisfied for '%s': may throw {%s}", name, errset);
-    } else {
-        snprintf(message, sizeof(message), "@no_throw contract cannot be proven for '%s': %s", name,
-                 es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
-    }
-    XrLocation location = {.file = sym ? sym->links.file_path : NULL,
-                           .line = node ? (uint32_t) node->line : 0,
-                           .column = 0};
-    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message, &location);
 }
 
 static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
@@ -4657,7 +4522,7 @@ static bool no_throw_expr_is_proven(ErrorSetCtx *ctx, AstNode *expr) {
 }
 
 static bool no_throw_tref_requires_constraint(const XrTypeRef *tref) {
-    return tref && tref->kind == XR_TREF_FUNCTION && tref->no_throw;
+    return tref && tref->kind == XR_TREF_FUNCTION && tref->requires_nothrow;
 }
 
 static void report_no_throw_value_constraint(ErrorSetCtx *ctx, AstNode *site, const char *slot_name,
@@ -4667,7 +4532,7 @@ static void report_no_throw_value_constraint(ErrorSetCtx *ctx, AstNode *site, co
     const char *argument_name = no_throw_argument_name(ctx, value);
     char message[512];
     snprintf(message, sizeof(message),
-             "@no_throw function constraint '%s' rejects value '%s': it may throw or cannot be "
+             "nothrow callable constraint '%s' rejects value '%s': it may throw or cannot be "
              "proven non-throwing",
              slot_name ? slot_name : "callback", argument_name);
     XrLocation location = {.file = ctx->analyzer->current_file,
@@ -4717,107 +4582,6 @@ static void validate_no_throw_value_constraints(ErrorSetCtx *ctx, AstNode *ast) 
         xa_ast_walk(ast, no_throw_constraint_scan_pre, NULL, ctx);
 }
 
-typedef struct NoThrowConstraintLint {
-    AstNode *declaration;
-    XrParamNode *parameter;
-    int parameter_index;
-    int observed_calls;
-    bool rejected_may_throw;
-} NoThrowConstraintLint;
-
-typedef struct NoThrowConstraintLintList {
-    ErrorSetCtx *ctx;
-    NoThrowConstraintLint *items;
-    int count;
-    int capacity;
-} NoThrowConstraintLintList;
-
-static const char *no_throw_constraint_decl_name(AstNode *node) {
-    if (!node)
-        return "<anonymous>";
-    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR)
-        return node->as.function_decl.name ? node->as.function_decl.name : "<anonymous>";
-    if (node->type == AST_METHOD_DECL)
-        return node->as.method_decl.name ? node->as.method_decl.name : "<method>";
-    return "<function>";
-}
-
-static void collect_no_throw_constraint_lint_pre(AstNode *node, void *userdata) {
-    NoThrowConstraintLintList *list = (NoThrowConstraintLintList *) userdata;
-    if (!list || !node ||
-        (node->type != AST_FUNCTION_DECL && node->type != AST_FUNCTION_EXPR &&
-         node->type != AST_METHOD_DECL))
-        return;
-    const char *name = no_throw_constraint_decl_name(node);
-    if (name && strchr(name, '$'))
-        return; /* inferred monomorphized callback qualification, not source syntax */
-    int param_count = 0;
-    XrParamNode **params = no_throw_decl_params(node, &param_count);
-    for (int i = 0; params && i < param_count; i++) {
-        XrParamNode *param = params[i];
-        if (!param || !no_throw_tref_requires_constraint(param->type))
-            continue;
-        if (list->count >= list->capacity) {
-            int new_capacity = list->capacity ? list->capacity * 2 : 8;
-            XR_REALLOC_OR_ABORT(list->items, (size_t) new_capacity * sizeof(NoThrowConstraintLint),
-                                "no-throw constraint lint grow");
-            list->capacity = new_capacity;
-        }
-        NoThrowConstraintLint *entry = &list->items[list->count++];
-        memset(entry, 0, sizeof(*entry));
-        entry->declaration = node;
-        entry->parameter = param;
-        entry->parameter_index = i;
-    }
-}
-
-static void observe_no_throw_constraint_calls_pre(AstNode *node, void *userdata) {
-    NoThrowConstraintLintList *list = (NoThrowConstraintLintList *) userdata;
-    if (!list || !list->ctx || !node || node->type != AST_CALL_EXPR)
-        return;
-    AstNode *declaration = no_throw_call_target_decl(list->ctx, node->as.call_expr.callee);
-    if (!declaration)
-        return;
-    for (int i = 0; i < list->count; i++) {
-        NoThrowConstraintLint *entry = &list->items[i];
-        if (entry->declaration != declaration ||
-            entry->parameter_index >= node->as.call_expr.arg_count)
-            continue;
-        entry->observed_calls++;
-        AstNode *argument = node->as.call_expr.arguments[entry->parameter_index];
-        if (!no_throw_expr_is_proven(list->ctx, argument))
-            entry->rejected_may_throw = true;
-    }
-}
-
-static void emit_no_throw_constraint_lints(ErrorSetCtx *ctx, AstNode *ast) {
-    if (!ctx || !ast)
-        return;
-    NoThrowConstraintLintList list = {.ctx = ctx};
-    xa_ast_walk(ast, collect_no_throw_constraint_lint_pre, NULL, &list);
-    xa_ast_walk(ast, observe_no_throw_constraint_calls_pre, NULL, &list);
-    for (int i = 0; i < list.count; i++) {
-        NoThrowConstraintLint *entry = &list.items[i];
-        if (entry->rejected_may_throw)
-            continue;
-        char message[512];
-        snprintf(message, sizeof(message),
-                 "@no_throw constraint '%s' on '%s' has not rejected any may-throw value in %d "
-                 "observed call%s",
-                 entry->parameter && entry->parameter->name ? entry->parameter->name : "callback",
-                 no_throw_constraint_decl_name(entry->declaration), entry->observed_calls,
-                 entry->observed_calls == 1 ? "" : "s");
-        XrLocation location = {
-            .file = ctx->analyzer->current_file,
-            .line = entry->parameter ? (uint32_t) entry->parameter->line : 0,
-            .column = entry->parameter ? (uint32_t) entry->parameter->column : 0,
-        };
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_HINT, XR_ERR_ANALYZE, message,
-                                   &location);
-    }
-    xr_free(list.items);
-}
-
 /* ========== Public Entry Point ========== */
 
 void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
@@ -4853,16 +4617,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
             break;
     }
 
-    /* Revisit asserted functions once with the stable fixpoint solely to
-     * collect redundant try/catch hints. This does not publish a second
-     * semantic truth; it reads the same finalized callee summaries. */
-    ctx.collect_no_throw_lints = true;
-    for (int i = 0; i < func_count; i++) {
-        if (es_function_has_no_throw_attr(funcs[i].node))
-            infer_function_error_set(&ctx, funcs[i].node, funcs[i].sym);
-    }
-    ctx.collect_no_throw_lints = false;
-
     /* Phase 3: publish the typed throw-effect bit (task 216). After the fixpoint
      * each function symbol's interned summary is authoritative. Derive the bit
      * fail-closed — NO_THROW only when the summary is complete AND its escaping
@@ -4881,13 +4635,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
         sym->links.throw_effect = effect;
         if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION)
             xr_type_function_set_throw_effect(sym->links.type, effect);
-        /* @no_throw assertion: verify the definition is provably nothrow
-         * (fail-closed — incomplete or non-empty escaping set is an error). */
-        if (es_function_has_no_throw_attr(funcs[i].node)) {
-            sym->links.has_no_throw_contract = true;
-            if (effect != XR_FN_EFFECT_NO_THROW)
-                es_report_no_throw_violation(analyzer, funcs[i].node, sym, summary);
-        }
     }
 
     /* Anonymous function values carry the same bit even though they do not
@@ -4898,14 +4645,11 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 
     publish_specialized_param_throw_effects(&ctx);
     validate_no_throw_value_constraints(&ctx, ast);
-    emit_no_throw_constraint_lints(&ctx, ast);
-    emit_redundant_no_throw_try_lints(&ctx);
 
 cleanup:
     xr_free(function_exprs.items);
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
     xr_free(ctx.specialized_param_targets);
-    xr_free(ctx.redundant_no_throw_tries);
     clear_function_expr_captures(&ctx);
 }

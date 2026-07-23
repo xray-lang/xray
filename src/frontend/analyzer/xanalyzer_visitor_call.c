@@ -32,6 +32,7 @@
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_graph.h"
+#include "../../module/xnative_package.h"
 #include "../../base/xchecks.h"
 #include "../../base/xconstants.h"
 #include "../../base/xfileio.h"
@@ -61,6 +62,7 @@ static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *cal
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 static bool xa_type_is_pod_span_elem(XrType *type);
+static bool xa_type_layout_has_flexible_tail(const XrType *type);
 
 static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !ctx->analyzer || !sym)
@@ -397,7 +399,7 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || !arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
         xa_check_call_arg_access_authorization(ctx, node, call, arg, i, i, param_mode);
-        if (!xa_typecheck_assignable(resolved, arg_type)) {
+        if (!xa_call_arg_type_assignable(resolved, arg_type, param_mode)) {
             XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
             char msg[256];
             snprintf(msg, sizeof(msg),
@@ -2828,6 +2830,319 @@ static bool xa_mem_with_slice_mut_call(XaInferContext *ctx, CallExprNode *call) 
            xa_call_object_is_module(ctx, ma->object, "mem");
 }
 
+static bool xa_mem_assume_initialized_call(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "assumeInitialized") == 0 &&
+           xa_call_object_is_module(ctx, ma->object, "mem");
+}
+
+static AstNode *xa_ffi_output_unwrap_expr(AstNode *node) {
+    node = xa_call_unwrap_grouping(node);
+    if (node && node->type == AST_UNSAFE_EXPR) {
+        node = node->as.unsafe_expr.operand;
+        if (node && node->type == AST_BLOCK && node->as.block.count > 0) {
+            node = node->as.block.statements[node->as.block.count - 1];
+            if (node && node->type == AST_EXPR_STMT)
+                node = node->as.expr_stmt;
+        }
+        node = xa_call_unwrap_grouping(node);
+    }
+    return node;
+}
+
+static bool xa_ffi_output_type_query_matches(XaInferContext *ctx, AstNode *node, const char *member,
+                                             XrType *target) {
+    node = xa_ffi_output_unwrap_expr(node);
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 0 ||
+        call->type_arg_count != 1 || !call->type_args || !call->type_args[0])
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, member) != 0 ||
+        !xa_call_object_is_module(ctx, ma->object, "mem"))
+        return false;
+    XrType *queried = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    return queried && target && xr_type_equals(queried, target);
+}
+
+static bool xa_ffi_output_allocation_matches(XaInferContext *ctx, AstNode *initializer,
+                                             XrType *target) {
+    AstNode *node = xa_ffi_output_unwrap_expr(initializer);
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 2 ||
+        !call->arguments || !call->arguments[0] || !call->arguments[1])
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "allocAligned") == 0 &&
+           xa_call_object_is_module(ctx, ma->object, "mem") &&
+           xa_ffi_output_type_query_matches(ctx, call->arguments[0], "sizeOf", target) &&
+           xa_ffi_output_type_query_matches(ctx, call->arguments[1], "alignOf", target);
+}
+
+static bool xa_ffi_output_is_buffer_borrow(AstNode *node, uint32_t symbol_id,
+                                           const char *symbol_name) {
+    node = xa_ffi_output_unwrap_expr(node);
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    if (call->arg_count != 0 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    AstNode *object = xa_call_unwrap_grouping(ma->object);
+    return ma->name && strcmp(ma->name, "borrowPtr") == 0 && object &&
+           object->type == AST_VARIABLE &&
+           ((symbol_id && object->as.variable.symbol_id == symbol_id) ||
+            (!symbol_id && symbol_name && object->as.variable.name &&
+             strcmp(symbol_name, object->as.variable.name) == 0));
+}
+
+static const XrNativeParamContract *xa_ffi_output_param_contract(const XrNativeSymbol *symbol,
+                                                                 int slot) {
+    if (!symbol || !symbol->contract.complete || slot < 0)
+        return NULL;
+    for (uint32_t i = 0; i < symbol->contract.param_count; i++) {
+        const XrNativeParamContract *param = &symbol->contract.params[i];
+        if (param->index == (uint32_t) slot)
+            return param;
+    }
+    return NULL;
+}
+
+static const XrNativeSymbol *xa_ffi_output_native_call(XaInferContext *ctx, AstNode *expr,
+                                                       uint32_t buffer_symbol_id,
+                                                       const char *buffer_name) {
+    AstNode *node = xa_ffi_output_unwrap_expr(expr);
+    if (!node || node->type != AST_CALL_EXPR)
+        return NULL;
+    CallExprNode *call = &node->as.call_expr;
+    const char *callee_name = NULL;
+    if (call->callee && call->callee->type == AST_VARIABLE) {
+        callee_name = call->callee->as.variable.name;
+    } else if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        callee_name = call->callee->as.member_access.name;
+    }
+    const XrNativePackagePlan *plan = xr_compiler_session_native_package_plan(
+        ctx && ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+    if (!plan || !plan->valid || plan->audit_mode != XR_NATIVE_AUDIT_SHIPPING)
+        return NULL;
+    const XrNativeSymbol *symbol = xr_native_package_find_symbol(plan, callee_name);
+    if (!symbol || !symbol->contract.complete)
+        return NULL;
+    for (int i = 0; i < call->arg_count; i++) {
+        if (!xa_ffi_output_is_buffer_borrow(call->arguments ? call->arguments[i] : NULL,
+                                            buffer_symbol_id, buffer_name))
+            continue;
+        const XrNativeParamContract *param = xa_ffi_output_param_contract(symbol, i);
+        if (param && param->output == XR_NATIVE_OUTPUT_COMPLETE &&
+            (param->access == XR_NATIVE_ACCESS_WRITE ||
+             param->access == XR_NATIVE_ACCESS_READWRITE) &&
+            param->escape == XR_NATIVE_ESCAPE_NOESCAPE)
+            return symbol;
+    }
+    return NULL;
+}
+
+static bool xa_ffi_output_zero_literal(AstNode *node) {
+    node = xa_call_unwrap_grouping(node);
+    return node && node->type == AST_LITERAL_INT && node->as.literal.int_bits == 0;
+}
+
+static bool xa_ffi_output_status_variable(AstNode *node, uint32_t symbol_id,
+                                          const char *symbol_name) {
+    node = xa_call_unwrap_grouping(node);
+    return node && node->type == AST_VARIABLE &&
+           ((symbol_id && node->as.variable.symbol_id == symbol_id) ||
+            (!symbol_id && symbol_name && node->as.variable.name &&
+             strcmp(symbol_name, node->as.variable.name) == 0));
+}
+
+static bool xa_ffi_output_success_guard(AstNode *stmt, uint32_t status_symbol_id,
+                                        const char *status_name) {
+    if (!stmt || stmt->type != AST_IF_STMT || !stmt->as.if_stmt.condition)
+        return false;
+    AstNode *condition = xa_call_unwrap_grouping(stmt->as.if_stmt.condition);
+    if (!condition || (condition->type != AST_BINARY_NE && condition->type != AST_BINARY_EQ))
+        return false;
+    AstNode *left = condition->as.binary.left;
+    AstNode *right = condition->as.binary.right;
+    bool comparison = (xa_ffi_output_status_variable(left, status_symbol_id, status_name) &&
+                       xa_ffi_output_zero_literal(right)) ||
+                      (xa_ffi_output_status_variable(right, status_symbol_id, status_name) &&
+                       xa_ffi_output_zero_literal(left));
+    if (!comparison)
+        return false;
+    if (condition->type == AST_BINARY_NE)
+        return stmt->as.if_stmt.then_branch &&
+               !xa_statement_can_fall_through(stmt->as.if_stmt.then_branch);
+    return stmt->as.if_stmt.else_branch &&
+           !xa_statement_can_fall_through(stmt->as.if_stmt.else_branch);
+}
+
+typedef struct XaFfiBufferUseScan {
+    uint32_t symbol_id;
+    const char *name;
+    bool found;
+} XaFfiBufferUseScan;
+
+static void xa_ffi_buffer_use_scan_pre(AstNode *node, void *userdata) {
+    XaFfiBufferUseScan *scan = (XaFfiBufferUseScan *) userdata;
+    if (!scan || scan->found || !node || node->type != AST_VARIABLE)
+        return;
+    if ((scan->symbol_id && node->as.variable.symbol_id == scan->symbol_id) ||
+        (!scan->symbol_id && scan->name && node->as.variable.name &&
+         strcmp(scan->name, node->as.variable.name) == 0))
+        scan->found = true;
+}
+
+static bool xa_ffi_output_statement_uses_buffer(AstNode *stmt, uint32_t symbol_id,
+                                                const char *name) {
+    XaFfiBufferUseScan scan = {.symbol_id = symbol_id, .name = name};
+    xa_ast_walk(stmt, xa_ffi_buffer_use_scan_pre, NULL, &scan);
+    return scan.found;
+}
+
+static bool xa_ffi_output_proof(XaInferContext *ctx, XaSymbol *buffer, XrType *target) {
+    if (!ctx || !buffer || !target || !ctx->current_block_node || ctx->current_block_stmt_index < 0)
+        return false;
+    AstNode **statements = NULL;
+    int count = 0;
+    if (ctx->current_block_node->type == AST_BLOCK) {
+        statements = ctx->current_block_node->as.block.statements;
+        count = ctx->current_block_node->as.block.count;
+    } else if (ctx->current_block_node->type == AST_PROGRAM) {
+        statements = ctx->current_block_node->as.program.statements;
+        count = ctx->current_block_node->as.program.count;
+    }
+    int limit = ctx->current_block_stmt_index < count ? ctx->current_block_stmt_index : count;
+    bool allocation = false;
+    int output_index = -1;
+    uint32_t status_symbol_id = 0;
+    const char *status_name = NULL;
+    const XrNativeSymbol *native = NULL;
+    for (int i = 0; i < limit; i++) {
+        AstNode *stmt = statements ? statements[i] : NULL;
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_VAR_DECL) {
+            VarDeclNode *var = &stmt->as.var_decl;
+            bool is_buffer =
+                (buffer->id && var->symbol_id == buffer->id) ||
+                (!buffer->id && var->name && buffer->name && strcmp(var->name, buffer->name) == 0);
+            if (is_buffer) {
+                allocation = xa_ffi_output_allocation_matches(ctx, var->initializer, target);
+                output_index = -1;
+                native = NULL;
+                continue;
+            }
+            if (allocation && var->initializer) {
+                const XrNativeSymbol *candidate =
+                    xa_ffi_output_native_call(ctx, var->initializer, buffer->id, buffer->name);
+                if (candidate) {
+                    native = candidate;
+                    output_index = i;
+                    status_symbol_id = var->symbol_id;
+                    status_name = var->name;
+                }
+            }
+        } else if (allocation && stmt->type == AST_EXPR_STMT) {
+            const XrNativeSymbol *candidate =
+                xa_ffi_output_native_call(ctx, stmt->as.expr_stmt, buffer->id, buffer->name);
+            if (candidate) {
+                native = candidate;
+                output_index = i;
+                status_symbol_id = 0;
+                status_name = NULL;
+            }
+        }
+    }
+    if (!allocation || !native || output_index < 0 || !native->contract.failure)
+        return false;
+
+    bool success_proven = strcmp(native->contract.failure, "none") == 0;
+    for (int i = output_index + 1; i < limit; i++) {
+        AstNode *stmt = statements[i];
+        if (!success_proven && strcmp(native->contract.failure, "status_nonzero") == 0 &&
+            xa_ffi_output_success_guard(stmt, status_symbol_id, status_name)) {
+            success_proven = true;
+            continue;
+        }
+        if (xa_ffi_output_statement_uses_buffer(stmt, buffer->id, buffer->name))
+            return false;
+    }
+    return success_proven;
+}
+
+static XrType *xa_mem_assume_initialized_return_type(XaInferContext *ctx, AstNode *node,
+                                                     CallExprNode *call) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (ctx->unsafe_depth == 0)
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   "mem.assumeInitialized<T>() must be inside an unsafe block",
+                                   &loc);
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+            "mem.assumeInitialized<T>() expects exactly one explicit type argument", &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!target ||
+        !xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), target, &size,
+                                   &align) ||
+        !xr_type_all_bit_patterns_valid(target) || xa_type_layout_has_flexible_tail(target) ||
+        size == 0 || align == 0) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
+            "mem.assumeInitialized<T>() requires a fixed-layout, reference-free type whose "
+            "validity is closed by complete native output evidence",
+            &loc);
+        return target ? target : xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "mem.assumeInitialized<T>() expects one `move Buffer` argument",
+                                   &loc);
+        return target;
+    }
+    AstNode *move = xa_call_unwrap_grouping(call->arguments[0]);
+    if (!move || move->type != AST_MOVE_EXPR) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "mem.assumeInitialized<T>() must consume its Buffer with move",
+                                   &loc);
+        (void) xa_visit_infer_expr(ctx, call->arguments[0]);
+        return target;
+    }
+    AstNode *source = xa_call_unwrap_grouping(move->as.move_expr.expr);
+    XaSymbol *buffer = source && source->type == AST_VARIABLE
+                           ? xa_lookup_visible_symbol(ctx, source->as.variable.name)
+                           : NULL;
+    XrType *buffer_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+    if (!buffer || !buffer_type || !xr_type_is_named_class(buffer_type, "Buffer")) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "mem.assumeInitialized<T>() expects `move` of a mem.Buffer",
+                                   &loc);
+        return target;
+    }
+    if (!xa_ffi_output_proof(ctx, buffer, target)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "E-FFI-OUTPUT-EVIDENCE: typed materialization requires exact allocAligned(sizeOf<T>(), "
+            "alignOf<T>()) provenance, a shipping output=complete/noescape native contract, and "
+            "a dominating checked success path",
+            &loc);
+    }
+    return target;
+}
+
 typedef struct XaWithSliceMutRebindScan {
     uint32_t symbol_id;
     const char *name;
@@ -4072,6 +4387,16 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
 
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
     if (member_links && member_links->class_info) {
+        /* Module-member construction is an identity-preserving import edge.
+         * Publish the canonical module and its sealed type capabilities on the
+         * exported class symbol before constructing the instance.  This is
+         * needed for embedded stdlib graphs, whose class locations are not
+         * filesystem paths, and deliberately does not trust source spelling. */
+        if (!is_quoted) {
+            member_links->module_name = mod_name;
+            member_links->class_info->capability_flags |=
+                xa_stdlib_type_capability_flags(mod_name, ma->name);
+        }
         XrType *instance = xa_class_constructor_instance_type(
             ctx, callee, call, ma->name, member_links, member_links->class_info);
         if (instance && semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
@@ -4612,17 +4937,60 @@ static bool xa_class_name_matches_mono_base(const char *class_name, const char *
     return class_name[n] == '\0' || class_name[n] == '$';
 }
 
-static bool xa_type_allows_shared_interior_mutation(XaInferContext *ctx, XrType *type) {
-    const uint32_t required = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
-    if (xa_type_has_capabilities(type, required) || xa_type_is_sys_threadlocal(ctx, type))
-        return true;
+static XaSymbolLinks *xa_type_capability_class_links(XaInferContext *ctx, XrType *type) {
+    if (!ctx || !type)
+        return NULL;
     const char *class_name = xr_type_get_class_name(type);
     XaSymbol *class_sym = class_name ? xa_lookup_visible_class_symbol(ctx, class_name) : NULL;
-    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-    return class_links &&
-           ((class_links->type && xa_type_has_capabilities(class_links->type, required)) ||
-            (class_links->class_info &&
-             (class_links->class_info->capability_flags & required) == required));
+    if (!class_sym && class_name) {
+        const char *mono = strchr(class_name, '$');
+        if (mono && mono != class_name) {
+            char origin[160];
+            size_t n = (size_t) (mono - class_name);
+            if (n < sizeof(origin)) {
+                memcpy(origin, class_name, n);
+                origin[n] = '\0';
+                class_sym = xa_lookup_visible_class_symbol(ctx, origin);
+            }
+        }
+    }
+    return class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+}
+
+static bool xa_type_allows_capabilities(XaInferContext *ctx, XrType *type, uint32_t required) {
+    if (xa_type_has_capabilities(type, required))
+        return true;
+    XaSymbolLinks *class_links = xa_type_capability_class_links(ctx, type);
+    if (!class_links)
+        return false;
+    if ((class_links->type && xa_type_has_capabilities(class_links->type, required)) ||
+        (class_links->class_info &&
+         (class_links->class_info->capability_flags & required) == required))
+        return true;
+    const char *class_name = xr_type_get_class_name(type);
+    char origin[160];
+    const char *mono = class_name ? strchr(class_name, '$') : NULL;
+    if (mono && mono != class_name && (size_t) (mono - class_name) < sizeof(origin)) {
+        size_t n = (size_t) (mono - class_name);
+        memcpy(origin, class_name, n);
+        origin[n] = '\0';
+        class_name = origin;
+    }
+    uint32_t declared = xa_stdlib_type_capability_flags(class_links->module_name, class_name);
+    return (declared & required) == required;
+}
+
+static bool xa_type_allows_interior_mutation(XaInferContext *ctx, XrType *type) {
+    if (type && type->semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN)
+        return true;
+    return xa_type_allows_capabilities(ctx, type, XA_TYPE_CAP_INTERIOR_MUTABLE) ||
+           xa_type_is_sys_threadlocal(ctx, type);
+}
+
+static bool xa_type_allows_shared_interior_mutation(XaInferContext *ctx, XrType *type) {
+    const uint32_t required = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
+    return xa_type_allows_capabilities(ctx, type, required) ||
+           xa_type_is_sys_threadlocal(ctx, type);
 }
 
 static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *call_node,
@@ -5136,6 +5504,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
     if (xa_mem_slice_call(ctx, call))
         return xa_mem_slice_return_type(ctx, node, call);
+    if (xa_mem_assume_initialized_call(ctx, call))
+        return xa_mem_assume_initialized_return_type(ctx, node, call);
     if (xa_mem_with_slice_mut_call(ctx, call))
         return xa_mem_with_slice_mut_return_type(ctx, node, call);
     const char *mem_access = xa_mem_access_member(ctx, call);
@@ -5428,9 +5798,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (read_param && method_name) {
             bool call_mutates_receiver =
                 xa_call_mutates_receiver(ctx, callee_obj_type, method_name);
-            bool sync_interior_mutation =
-                xa_type_allows_shared_interior_mutation(ctx, callee_obj_type);
-            if (call_mutates_receiver && !sync_interior_mutation) {
+            bool interior_mutation = xa_type_allows_interior_mutation(ctx, callee_obj_type);
+            if (call_mutates_receiver && !interior_mutation) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
@@ -5446,17 +5815,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
-            bool sync_interior_mutation =
-                xa_type_allows_shared_interior_mutation(ctx, callee_obj_type) ||
-                (root && root->links.storage_domain == XR_STORAGE_SYNC_SHARED);
+            bool interior_mutation = xa_type_allows_interior_mutation(ctx, callee_obj_type) ||
+                                     (root && root->links.storage_domain == XR_STORAGE_SYNC_SHARED);
             bool shared_receiver = xa_symbol_has_shared_provenance(root);
             bool shared_interior_mutation =
                 shared_receiver && (xa_type_allows_shared_interior_mutation(ctx, callee_obj_type) ||
                                     xa_type_allows_shared_interior_mutation(ctx, root->links.type));
-            if (!sync_interior_mutation &&
-                ((root &&
-                  (root->is_readonly_binding || (shared_receiver && !shared_interior_mutation))) ||
-                 readonly_receiver)) {
+            if (!interior_mutation && ((root && (root->is_readonly_binding ||
+                                                 (shared_receiver && !shared_interior_mutation))) ||
+                                       readonly_receiver)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
@@ -6028,7 +6395,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
                 bool null_err =
                     xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
-                if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
+                if (!null_err && !xa_call_arg_type_assignable(param_type, arg_type, param_mode) &&
                     !xr_is_json_coercion(param_type, arg_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
@@ -6138,7 +6505,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
             bool null_err =
                 xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
-            if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
+            if (!null_err && !xa_call_arg_type_assignable(param_type, arg_type, param_mode) &&
                 !xr_is_json_coercion(param_type, arg_type)) {
                 char msg[512];
                 if (xr_type_is_enum_metadata_named(arg_type, XR_ENUM_VARIANT_TYPE_NAME) &&

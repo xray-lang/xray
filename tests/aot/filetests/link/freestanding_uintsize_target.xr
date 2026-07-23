@@ -1,18 +1,15 @@
 import mem
 
-@c_export("xray_uintsize_roundtrip")
 fn xray_uintsize_roundtrip(addr: uintsize) -> uintsize {
     var local: uintsize = addr
     return local + 1
 }
 
-@c_export("xray_intsize_roundtrip")
 fn xray_intsize_roundtrip(delta: intsize) -> intsize {
     var local: intsize = delta
     return local - 1
 }
 
-@c_export("xray_uintsize_layout")
 fn xray_uintsize_layout() -> int {
     return mem.sizeOf<uintsize>() + mem.alignOf<uintsize>() +
         mem.sizeOf<intsize>() + mem.alignOf<intsize>()

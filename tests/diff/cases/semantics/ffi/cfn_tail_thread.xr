@@ -6,12 +6,13 @@ extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
 type Op = CFn<(int, MutPtr<int32>, int) -> int>
 
 fn opLoop(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    var n = unsafe { stack[0] }
+    var cursor = stack
+    var n = unsafe { cursor[0] }
     if (n <= 0) {
         return OPS[1](pc, stack, sp)
     }
-    unsafe { stack[0] = n - 1 }
-    return OPS[0](pc, stack, sp)
+    unsafe { cursor[0] = n - 1 }
+    return OPS[0](pc, cursor, sp)
 }
 
 fn opReturn(pc: int, stack: MutPtr<int32>, sp: int) -> int {

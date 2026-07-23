@@ -721,7 +721,7 @@ TEST(parser_class_decl) {
 
 TEST(parser_direct_visibility_owns_declaration) {
     setup();
-    AstNode *program = parse_ok("@no_alloc\n"
+    AstNode *program = parse_ok("@deprecated(\"use hash64\")\n"
                                 "export fn hash() -> int { return 1 }\n"
                                 "export final class FinalBox {}\n"
                                 "export struct Word { value: uint32 }\n");
@@ -731,7 +731,8 @@ TEST(parser_direct_visibility_owns_declaration) {
     ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
     ASSERT_TRUE(fn->is_exported);
     ASSERT_EQ_INT(fn->as.function_decl.attr_count, 1);
-    ASSERT_EQ_INT(fn->as.function_decl.attributes[0]->kind, ATTR_NO_ALLOC);
+    ASSERT_EQ_INT(fn->as.function_decl.attributes[0]->kind, ATTR_DEPRECATED);
+    ASSERT_STR_EQ(fn->as.function_decl.attributes[0]->str_arg, "use hash64");
 
     AstNode *cls = program->as.program.statements[1];
     ASSERT_EQ_INT(cls->type, AST_CLASS_DECL);
@@ -744,10 +745,10 @@ TEST(parser_direct_visibility_owns_declaration) {
     teardown();
 }
 
-TEST(parser_method_no_alloc_attribute) {
+TEST(parser_method_deprecated_attribute) {
     setup();
     AstNode *program = parse_ok("struct Word {\n"
-                                "  @no_alloc\n"
+                                "  @deprecated(\"use rotateLeft\")\n"
                                 "  rotate(n: int) -> uint32 { return 0 }\n"
                                 "}\n");
     AstNode *st = program->as.program.statements[0];
@@ -755,7 +756,8 @@ TEST(parser_method_no_alloc_attribute) {
     ASSERT_EQ_INT(st->as.struct_decl.method_count, 1);
     MethodDeclNode *method = &st->as.struct_decl.methods[0]->as.method_decl;
     ASSERT_EQ_INT(method->attr_count, 1);
-    ASSERT_EQ_INT(method->attributes[0]->kind, ATTR_NO_ALLOC);
+    ASSERT_EQ_INT(method->attributes[0]->kind, ATTR_DEPRECATED);
+    ASSERT_STR_EQ(method->attributes[0]->str_arg, "use rotateLeft");
     teardown();
 }
 
@@ -790,7 +792,7 @@ TEST(parser_enum_static_method) {
     AstNode *stmt = parse_first("enum Color {\n"
                                 "  Red,\n"
                                 "  Green\n"
-                                "  @no_alloc\n"
+                                "  @deprecated\n"
                                 "  static fn fromInt(v: int) -> Color {\n"
                                 "    return Color.Red\n"
                                 "  }\n"
@@ -808,7 +810,7 @@ TEST(parser_enum_static_method) {
     ASSERT(factory->as.method_decl.is_static);
     ASSERT_STR_EQ(factory->as.method_decl.name, "fromInt");
     ASSERT_EQ_INT(factory->as.method_decl.attr_count, 1);
-    ASSERT_EQ_INT(factory->as.method_decl.attributes[0]->kind, ATTR_NO_ALLOC);
+    ASSERT_EQ_INT(factory->as.method_decl.attributes[0]->kind, ATTR_DEPRECATED);
     ASSERT_EQ_INT(label->type, AST_METHOD_DECL);
     ASSERT(!label->as.method_decl.is_static);
     ASSERT_STR_EQ(label->as.method_decl.name, "label");
@@ -1289,7 +1291,7 @@ int main(void) {
     // Classes
     RUN_TEST(parser_class_decl);
     RUN_TEST(parser_direct_visibility_owns_declaration);
-    RUN_TEST(parser_method_no_alloc_attribute);
+    RUN_TEST(parser_method_deprecated_attribute);
     RUN_TEST(parser_rejects_posthoc_local_export);
     RUN_TEST(parser_reexport_preserves_module_identity_kind);
     RUN_TEST(parser_enum_static_method);

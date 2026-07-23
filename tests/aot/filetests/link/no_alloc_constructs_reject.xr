@@ -1,29 +1,23 @@
-@no_alloc
 fn xray_no_alloc_byte_array_constructor_reject() -> Array<byte> {
     return Array<byte>(4)
 }
 
-@no_alloc
 fn xray_no_alloc_map_literal_reject() -> Map<string, int> {
     return #{"a": 1}
 }
 
-@no_alloc
 fn xray_no_alloc_set_literal_reject() -> Set<int> {
     return #[1, 2]
 }
 
-@no_alloc
 fn xray_no_alloc_json_literal_reject() -> Json {
     return { answer: 42 }
 }
 
-@no_alloc
 fn xray_no_alloc_copy_builtin_reject(values: Array<int>) -> Array<int> {
     return copy(values)
 }
 
-@no_alloc
 fn xray_no_alloc_atomic_constructor_reject() -> Atomic<int> {
     return Atomic(1)
 }

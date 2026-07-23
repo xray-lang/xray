@@ -1,10 +1,10 @@
 import sys
 
-fn passThread(t: Thread<int>) -> Thread<int> {
+fn passThread(t: move Thread<int>) -> Thread<int> {
     return t
 }
 
-fn joinThread(t: Thread<int>) -> int {
+fn joinThread(t: move Thread<int>) -> int {
     return t.join()
 }
 
@@ -12,7 +12,8 @@ fn run() {
     var t = sys.Thread.spawn(fn() -> int {
         return 42
     })
-    print(joinThread(passThread(t)))
+    var forwarded = passThread(move t)
+    print(joinThread(move forwarded))
 }
 
 run()

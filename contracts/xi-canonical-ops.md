@@ -1,6 +1,6 @@
 # Xi canonical operation contract
 
-Status: frozen by task 220.
+Status: re-frozen by task 237.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, and operand ownership are generated from it.
@@ -13,8 +13,11 @@ Status: frozen by task 220.
    to the same Xi meaning unless this contract changes.
 5. Changes migrate generated-file sync tests, Xi verifier/optimizer tests,
    backend differential cases, and any affected AOT shape evidence.
+6. Raw storage becoming a typed value is represented by an explicit canonical
+   Xi operation with initialization evidence. It must not be reconstructed from
+   a cast, helper spelling, or backend pattern.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def d1dd57ba0ac2807dff0b5f88ead185d321e27b0f4bd813eafe5fd3559ee68fd9
-anchor-sha256: xisa/xi/lowering.def eda366f279b32588277877704ce4c203dbfc726f059824bb37d2501f801c8087
+anchor-sha256: xisa/xi/ops.def 033150dadde24cbb4ef91df3d741807b1f79843d36db9c6159f3c52f798ce33a
+anchor-sha256: xisa/xi/lowering.def 2d6c3d382c90e6d77fbfa02a5a932d4d2320ee35e81207a7bedfef9c8aa9a0a9

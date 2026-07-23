@@ -1,5 +1,5 @@
 /*
- * test_xrd_effect_metadata.c - Unit tests for canonical .xrd effect contracts
+ * test_xrd_effect_metadata.c - XRD signatures never carry textual effects
  */
 
 #include "xanalyzer_xrd.h"
@@ -32,7 +32,7 @@ static int tests_failed = 0;
     } while (0)
 
 static bool write_temp_xrd(char path[128], const char *source) {
-    strcpy(path, "/tmp/xray_xrd_effect_XXXXXX.xrd");
+    strcpy(path, "/tmp/xray_xrd_signature_XXXXXX.xrd");
     int fd = xr_test_mkstemps(path, 4);
     if (fd < 0)
         return false;
@@ -51,13 +51,11 @@ static const XaBuiltinMember *find_member(const XaBuiltinMember *members, int co
     return NULL;
 }
 
-TEST(parses_and_normalizes_effect_contracts) {
-    const char *source = "export fn readText(path: string): string "
-                         "@errors(IoError.PermissionDenied, IoError.NotFound) @may_alloc\n"
-                         "export fn now(): int @no_alloc @nothrow\n"
-                         "export fn unknown(): int\n"
+TEST(parses_signature_only_and_fails_closed) {
+    const char *source = "export fn readText(path: string): string\n"
+                         "export fn now(): int\n"
                          "type NativeBox = { const id: int }\n"
-                         "fn NativeBox.run(): int @errors(RunError.Failed) @no_alloc\n";
+                         "fn NativeBox.run(): int\n";
     char path[128];
     ASSERT(write_temp_xrd(path, source));
 
@@ -68,68 +66,51 @@ TEST(parses_and_normalizes_effect_contracts) {
     const XaBuiltinMember *read_text =
         find_member(module->functions, module->function_count, "readText");
     const XaBuiltinMember *now = find_member(module->functions, module->function_count, "now");
-    const XaBuiltinMember *unknown =
-        find_member(module->functions, module->function_count, "unknown");
     ASSERT(read_text != NULL);
     ASSERT(strcmp(read_text->signature, "(path: string): string") == 0);
-    ASSERT(read_text->effect_contract.kind == XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT(read_text->effect_contract.error_count == 2);
-    ASSERT(strcmp(read_text->effect_contract.errors[0], "IoError.NotFound") == 0);
-    ASSERT(strcmp(read_text->effect_contract.errors[1], "IoError.PermissionDenied") == 0);
-    ASSERT(read_text->allocation_contract == XA_ALLOCATION_CONTRACT_MAY_HEAP);
+    ASSERT(read_text->effect_contract.kind == XA_EFFECT_CONTRACT_MISSING);
+    ASSERT(read_text->allocation_contract == XA_ALLOCATION_CONTRACT_MISSING);
     ASSERT(now != NULL);
-    ASSERT(strcmp(now->signature, "(): int") == 0);
-    ASSERT(now->effect_contract.kind == XA_EFFECT_CONTRACT_NOTHROW);
-    ASSERT(now->allocation_contract == XA_ALLOCATION_CONTRACT_NO_HEAP);
-    ASSERT(unknown != NULL);
-    ASSERT(unknown->effect_contract.kind == XA_EFFECT_CONTRACT_MISSING);
-    ASSERT(unknown->allocation_contract == XA_ALLOCATION_CONTRACT_MISSING);
+    ASSERT(now->effect_contract.kind == XA_EFFECT_CONTRACT_MISSING);
+    ASSERT(now->allocation_contract == XA_ALLOCATION_CONTRACT_MISSING);
 
     ASSERT(module->handle_count == 1);
     const XaBuiltinMember *run =
         find_member(module->handles[0].methods, module->handles[0].method_count, "run");
     ASSERT(run != NULL);
-    ASSERT(strcmp(run->signature, "(): int") == 0);
-    ASSERT(run->effect_contract.kind == XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT(run->effect_contract.error_count == 1);
-    ASSERT(strcmp(run->effect_contract.errors[0], "RunError.Failed") == 0);
-    ASSERT(run->allocation_contract == XA_ALLOCATION_CONTRACT_NO_HEAP);
+    ASSERT(run->effect_contract.kind == XA_EFFECT_CONTRACT_MISSING);
+    ASSERT(run->allocation_contract == XA_ALLOCATION_CONTRACT_MISSING);
 
     xa_xrd_cleanup();
     xr_test_unlink(path);
 }
 
-TEST(rejects_unknown_effect_metadata) {
-    char path[128];
-    ASSERT(write_temp_xrd(path, "export fn bad(): int @throws(IoError)\n"));
-    ASSERT(xa_xrd_load_file(path) == NULL);
-    ASSERT(strstr(xa_xrd_last_error(), "unknown effect metadata") != NULL);
-    xr_test_unlink(path);
-}
-
-TEST(rejects_duplicate_error_entries) {
-    char path[128];
-    ASSERT(
-        write_temp_xrd(path, "export fn bad(): int @errors(IoError.NotFound, IoError.NotFound)\n"));
-    ASSERT(xa_xrd_load_file(path) == NULL);
-    ASSERT(strstr(xa_xrd_last_error(), "duplicate error") != NULL);
-    xr_test_unlink(path);
-}
-
-TEST(rejects_conflicting_allocation_metadata) {
-    char path[128];
-    ASSERT(write_temp_xrd(path, "export fn bad(): int @no_alloc @may_alloc\n"));
-    ASSERT(xa_xrd_load_file(path) == NULL);
-    ASSERT(strstr(xa_xrd_last_error(), "conflicting allocation metadata") != NULL);
-    xr_test_unlink(path);
+TEST(rejects_every_textual_metadata_suffix) {
+    static const char *const suffixes[] = {
+        "@"
+        "nothrow",
+        "@"
+        "errors(IoError.NotFound)",
+        "@"
+        "no_alloc",
+        "@"
+        "may_alloc",
+    };
+    for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
+        char source[256];
+        snprintf(source, sizeof(source), "export fn bad(): int %s\n", suffixes[i]);
+        char path[128];
+        ASSERT(write_temp_xrd(path, source));
+        ASSERT(xa_xrd_load_file(path) == NULL);
+        ASSERT(strstr(xa_xrd_last_error(), "XRD textual metadata is not supported") != NULL);
+        xr_test_unlink(path);
+    }
 }
 
 int main(void) {
-    printf("Running .xrd effect metadata tests...\n");
-    RUN_TEST(parses_and_normalizes_effect_contracts);
-    RUN_TEST(rejects_unknown_effect_metadata);
-    RUN_TEST(rejects_duplicate_error_entries);
-    RUN_TEST(rejects_conflicting_allocation_metadata);
+    printf("Running XRD signature-only contract tests...\n");
+    RUN_TEST(parses_signature_only_and_fails_closed);
+    RUN_TEST(rejects_every_textual_metadata_suffix);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

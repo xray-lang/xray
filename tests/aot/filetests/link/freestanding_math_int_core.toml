@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_math_int_core"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_math_int_core.xr"
+
+[[export.c]]
+xray = "xray_math_int_core"
+symbol = "xray_math_int_core"

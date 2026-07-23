@@ -1,8 +1,7 @@
-@no_alloc
-fn xray_no_alloc_set_add_reject(values: Set<int>, value: int) -> int {
+fn xray_no_alloc_set_add_reject(values: ref Set<int>, value: int) -> int {
     values.add(value)
     return len(values)
 }
 
 var values: Set<int> = #[]
-print(xray_no_alloc_set_add_reject(values, 5))
+print(xray_no_alloc_set_add_reject(ref values, 5))

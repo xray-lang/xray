@@ -2780,6 +2780,18 @@ module mem {
     allocation: "no_heap"
   }
 
+  fn assumeInitialized {
+    signature: "(buffer: Buffer): any"
+    doc: "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T"
+    vm: "mem_assume_initialized_intrinsic"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: false
+    layer: "core"
+    allocation: "no_heap"
+  }
+
   const PROT_NONE {
     signature: ": int"
     doc: "No access protection for mem.pageAlloc/pageProtect"
@@ -3219,6 +3231,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn dial {
@@ -3232,6 +3245,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn listen {
@@ -3244,6 +3258,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn listen {
@@ -3256,6 +3271,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn accept {
@@ -3269,6 +3285,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn read {

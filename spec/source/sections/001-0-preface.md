@@ -34,7 +34,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 | **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
 | **运行模式** | 字节码 VM 与 `xray build --native` AOT 两条路径；当前没有 JIT，跨后端语义由差分测试守门 |
 | **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
-| **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 编译期/derive 元数据 + 泛型单态化 |
+| **元编程** | 注解（`@test` / `@deprecated` / `@derive`）+ 编译期元数据 + 泛型单态化 |
 | **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
 
 设计参考来源：TypeScript（类型推断 + nullable）、Go（结构化并发 + Channel）、Rust（所有权语义的轻量版 move）、Swift（协议 + 可空链）。**Xray 不是其中任何一者的克隆**。
@@ -113,7 +113,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
 | **Execution** | Bytecode VM and the `xray build --native` AOT path; there is currently no JIT, and differential tests guard cross-backend semantics |
 | **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
-| **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + compile-time/derive metadata + monomorphized generics |
+| **Metaprogramming** | Attributes (`@test` / `@deprecated` / `@derive`) + compile-time metadata + monomorphized generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
 
 Design influences: TypeScript (type inference + nullable), Go (structured concurrency + Channel), Rust (a lightweight take on ownership/`move`), Swift (protocols + optional chaining). **Xray is not a clone of any of them.**

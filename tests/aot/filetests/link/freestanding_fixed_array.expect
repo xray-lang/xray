@@ -27,7 +27,6 @@ c_contains=for (int64_t _i = 0; _i < _s.length; _i++)
 c_contains=memmove(_dst.data, _src.data
 c_contains=Slice.copyFrom(src) byte length overflow
 c_contains=Slice.asArray<byte>() byte length overflow
-c_contains=_out.elem_type = XR_ELEM_U8
 c_contains=Slice.compare(other) byte length overflow
 c_contains=xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS
 c_not_contains=xrt_index_get(

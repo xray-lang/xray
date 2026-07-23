@@ -108,7 +108,6 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         func->allocation_fingerprint = links->alloc_fingerprint;
         func->allocation_effect_complete = true;
     }
-    func->has_no_alloc_contract = links && links->has_no_alloc_contract;
     if (links && links->return_storage_known && !links->return_storage_mixed) {
         func->return_storage_domain = links->return_storage_domain;
         func->return_storage_known = true;
@@ -1635,46 +1634,16 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
                                    func_node->line > 0 ? (uint32_t) func_node->line : 0);
 
-    /* FFI: extern "C" functions are bodyless foreign declarations. Record
-     * the C symbol + optional dylib; the body below stays empty and a trivial
-     * zero return is synthesized so the IR is well-formed (codegen replaces it
-     * with `extern Ret sym(...)` and direct calls). */
-    if (fdecl->attributes) {
-        for (int i = 0; i < fdecl->attr_count; i++) {
-            XrAttribute *a = fdecl->attributes[i];
-            if (!a)
-                continue;
-            if (a->kind == ATTR_LINK_NAME) {
-                l.func->extern_symbol = arena_strdup(l.func, a->str_arg);
-            } else if (a->kind == ATTR_C_EXPORT) {
-                l.func->c_export = true;
-                l.func->c_export_symbol =
-                    arena_strdup(l.func, a->str_arg ? a->str_arg : fdecl->name);
-            } else if (a->kind == ATTR_SECTION) {
-                l.func->aot_section = arena_strdup(l.func, a->str_arg);
-            } else if (a->kind == ATTR_WEAK) {
-                l.func->aot_weak = true;
-            } else if (a->kind == ATTR_USED) {
-                l.func->aot_used = true;
-            } else if (a->kind == ATTR_NAKED) {
-                l.func->aot_naked = true;
-            } else if (a->kind == ATTR_INTERRUPT) {
-                l.func->aot_interrupt_abi = arena_strdup(l.func, a->str_arg);
-            } else if (a->kind == ATTR_ZERO_COST) {
-                /* task 217 P3: AOT shape contract; the allow mask (exempted
-                 * residue categories) rides in derive_flags. Verified after
-                 * codegen, before link. */
-                l.func->has_zero_cost_contract = true;
-                l.func->zero_cost_allow_mask = a->derive_flags;
-            }
-        }
-    }
+    /* FFI/linkage identity comes only from typed package plans. */
+    const XrNativePackagePlan *native_plan =
+        xr_compiler_session_native_package_plan(analyzer->compiler_session);
     l.func->is_extern = fdecl->is_extern;
+    l.func->export_plan = xr_native_package_find_export(native_plan, fdecl->name);
+    l.func->link_plan = xr_native_package_find_link_symbol(native_plan, fdecl->name);
+    l.func->entry_plan = xr_native_package_find_entry(native_plan, fdecl->name);
     if (l.func->is_extern && !l.func->extern_symbol)
         l.func->extern_symbol = l.func->name;
     if (l.func->is_extern) {
-        const XrNativePackagePlan *native_plan =
-            xr_compiler_session_native_package_plan(analyzer->compiler_session);
         const XrNativeSymbol *native_symbol =
             xr_native_package_find_symbol(native_plan, fdecl->name);
         if (native_symbol) {
@@ -1781,11 +1750,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_braun_write(&l, self_var, entry, self);
     }
 
-    /* Propagate @test / @before_each / etc. attributes to XiFunc */
+    /* Propagate test-runner metadata only; production metadata is erased. */
     if (fdecl->attr_count > 0 && fdecl->attributes) {
         for (int i = 0; i < fdecl->attr_count; i++) {
             XrAttribute *a = fdecl->attributes[i];
-            if (a && a->kind != ATTR_NONE) {
+            if (a && (a->kind == ATTR_TEST || a->kind == ATTR_TEST_SKIP ||
+                      a->kind == ATTR_TEST_TIMEOUT || a->kind == ATTR_BEFORE_EACH ||
+                      a->kind == ATTR_AFTER_EACH || a->kind == ATTR_BEFORE_ALL ||
+                      a->kind == ATTR_AFTER_ALL)) {
                 l.func->test_attr = (uint8_t) a->kind;
                 l.func->test_timeout = a->timeout;
                 break;
@@ -1899,31 +1871,6 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
 
 static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
-}
-
-static XrAttribute *prescan_var_attr(const VarDeclNode *var, AttributeKind kind) {
-    if (!var || !var->attributes)
-        return NULL;
-    for (int i = 0; i < var->attr_count; i++) {
-        if (var->attributes[i] && var->attributes[i]->kind == kind)
-            return var->attributes[i];
-    }
-    return NULL;
-}
-
-static void prescan_apply_static_data_attrs(XiLower *l, const VarDeclNode *var,
-                                            XiConstLiteral *lit) {
-    if (!l || !var || !lit)
-        return;
-    XrAttribute *section = prescan_var_attr(var, ATTR_SECTION);
-    XrAttribute *weak = prescan_var_attr(var, ATTR_WEAK);
-    XrAttribute *used = prescan_var_attr(var, ATTR_USED);
-    if (section && section->str_arg && section->str_arg[0])
-        lit->data_section = arena_strdup(l->func, section->str_arg);
-    if (weak)
-        lit->data_weak = true;
-    if (used)
-        lit->data_used = true;
 }
 
 typedef struct PrescanSlotMeta {
@@ -2087,7 +2034,6 @@ static bool module_static_initializer_from_decl(XiLower *l, AstNode *s, struct X
     const_literal_normalize_for_static_slot_type(&lit, type);
     if (s->type == AST_VAR_DECL) {
         lit.data_mutable = true;
-        prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
     }
     switch (lit.kind) {
         case XI_CONST_LITERAL_INT:
@@ -2132,6 +2078,20 @@ static bool shared_default_initializer_from_type(struct XrType *type, XiConstLit
         default:
             return false;
     }
+}
+
+static void prescan_apply_link_symbol_plan(XiLower *l, const char *name, XiConstLiteral *literal) {
+    if (!l || !l->analyzer || !name || !literal || literal->kind == XI_CONST_LITERAL_NONE)
+        return;
+    const XrNativePackagePlan *native_plan =
+        xr_compiler_session_native_package_plan(l->analyzer->compiler_session);
+    const XrLinkSymbolPlan *link_plan = xr_native_package_find_link_symbol(native_plan, name);
+    if (!link_plan)
+        return;
+    if (link_plan->section)
+        literal->data_section = arena_strdup(l->func, link_plan->section);
+    literal->data_used = link_plan->used;
+    literal->data_weak = link_plan->weak;
 }
 
 static XrCtValue *copy_ct_value_to_func(XiFunc *func, const XrCtValue *src) {
@@ -2425,23 +2385,24 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                                 : NULL;
             XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
             if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
-                prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             } else if (links && links->has_ct_value &&
                        const_literal_from_ct_value(l, &links->ct_value, type, &lit)) {
-                prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             }
+            prescan_apply_link_symbol_plan(l, name, &slot_meta.const_literals[next_shared]);
         } else if (s && s->type == AST_VAR_DECL && s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (module_static_initializer_from_decl(l, s, type, &lit))
                 slot_meta.shared_initializers[next_shared] = lit;
+            prescan_apply_link_symbol_plan(l, name, &slot_meta.shared_initializers[next_shared]);
         } else if (s && s->type == AST_VAR_DECL && !s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (shared_default_initializer_from_type(type, &lit)) {
                 lit.data_mutable = true;
                 slot_meta.shared_initializers[next_shared] = lit;
             }
+            prescan_apply_link_symbol_plan(l, name, &slot_meta.shared_initializers[next_shared]);
         }
         if (is_exported)
             slot_meta.export_names[next_shared] = name;

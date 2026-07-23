@@ -1,0 +1,19 @@
+[package]
+name = "filetest-freestanding_kernel_shape"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_kernel_shape.xr"
+
+[[export.c]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+
+[[link.symbol]]
+xray = "MULTIBOOT"
+section = "__DATA,.xray_multiboot"
+used = true
+
+[[link.symbol]]
+xray = "kernel_entry"
+section = "__TEXT,.xray_boot"
+used = true

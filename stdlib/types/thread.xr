@@ -7,8 +7,6 @@
 // use the normal native-type tables. Do not add a constructor or static call
 // here; doing so would reintroduce the old Thread<T>(body) surface and bypass
 // the go-like capture/move checks enforced by sys.Thread.spawn.
-
-@native
 class Thread<T> {
     done: bool
     join() -> T

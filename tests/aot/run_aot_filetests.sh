@@ -118,6 +118,15 @@ if [ -z "$XRAY" ]; then
     fi
 fi
 
+case "$XRAY" in
+    /*) ;;
+    *)
+        if [ -e "$XRAY" ]; then
+            XRAY="$(cd "$(dirname "$XRAY")" && pwd)/$(basename "$XRAY")"
+        fi
+        ;;
+esac
+
 FILETEST_CACHE="${XRAY_AOT_FILETEST_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-filetest-dumps" "$XRAY")}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_filetests.XXXXXX")" || {
@@ -446,6 +455,13 @@ run_dump_command() {
     "$XRAY" "${build_args[@]}" >"$out_dump" 2>&1
 }
 
+run_verify_command() {
+    local project="$1"
+    local contract="$2"
+    local output="$3"
+    (cd "$project" && "$XRAY" verify --contract "$(basename "$contract")") >"$output" 2>&1
+}
+
 # Sanitizer builds inject -fsanitize=* and their runtime, which is fundamentally
 # incompatible with the freestanding profile's -nostdlib / -ffreestanding link
 # shape: the sanitizer flags override/drop them, so a filetest that positively
@@ -465,7 +481,7 @@ run_one() {
     local xr_file="$2"
     local case_key="${3:-}"
     local test_name base dump c_out expect extra_args expected_status rel safe args_key
-    local cache_dir cached_dump cached_c tmp_dump tmp_c c_check
+    local cache_dir cached_dump cached_c tmp_dump tmp_c c_check manifest contract build_source project
 
     base="$(basename "$xr_file" .xr)"
     test_name="$(rel_path "$xr_file")"
@@ -474,6 +490,23 @@ run_one() {
     expect="${xr_file%.xr}.expect"
     extra_args="$(expect_args "$expect")"
     expected_status="$(expect_status "$expect")"
+    manifest="${xr_file%.xr}.toml"
+    contract="${xr_file%.xr}.contract.toml"
+    build_source="$xr_file"
+    if [ -f "$manifest" ]; then
+        project="$WORK/projects/${mode}_${base}"
+        mkdir -p "$project"
+        cp "$(dirname "$xr_file")"/*.xr "$project/"
+        for asset in "$(dirname "$xr_file")"/*.S; do
+            [ -f "$asset" ] || continue
+            cp "$asset" "$project/"
+        done
+        cp "$manifest" "$project/xray.toml"
+        if [ -f "$contract" ]; then
+            cp "$contract" "$project/$(basename "$contract")"
+        fi
+        build_source="$project/$(basename "$xr_file")"
+    fi
 
     printf '  %-9s %-48s' "$mode" "$test_name"
 
@@ -495,7 +528,17 @@ run_one() {
 
     if [ "$expected_status" = "fail" ]; then
         rm -f "$dump" "$c_out"
-        if run_dump_command "$c_out" "$dump" "$xr_file" "$extra_args"; then
+        if [ -f "$contract" ]; then
+            if run_verify_command "$project" "$contract" "$dump"; then
+                echo "FAIL (contract verification unexpectedly succeeded)"
+                show_excerpt "$dump"
+                FAIL=$((FAIL + 1))
+                return 1
+            fi
+            check_expect "$expect" "$dump" "$c_out"
+            return $?
+        fi
+        if run_dump_command "$c_out" "$dump" "$build_source" "$extra_args"; then
             echo "FAIL (dump command unexpectedly succeeded)"
             show_excerpt "$dump"
             FAIL=$((FAIL + 1))
@@ -508,6 +551,15 @@ run_one() {
         fi
         check_expect "$expect" "$dump" "$c_check"
         return $?
+    fi
+
+    if [ -f "$contract" ]; then
+        if ! run_verify_command "$project" "$contract" "$WORK/${mode}_${base}.verify"; then
+            echo "FAIL (contract verification failed)"
+            show_excerpt "$WORK/${mode}_${base}.verify"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
     fi
 
     rel="$(rel_path "$xr_file")"
@@ -544,7 +596,7 @@ run_one() {
                 xray_test_unlock_dir "$cache_dir.lock"
             else
                 rm -f "$tmp_dump" "$tmp_c"
-                if run_dump_command "$tmp_c" "$tmp_dump" "$xr_file" "$extra_args"; then
+                if run_dump_command "$tmp_c" "$tmp_dump" "$build_source" "$extra_args"; then
                     mv "$tmp_dump" "$cached_dump"
                     mv "$tmp_c" "$cached_c"
                     cp "$cached_dump" "$dump"
@@ -560,7 +612,7 @@ run_one() {
                     return 1
                 fi
             fi
-        elif ! run_dump_command "$c_out" "$dump" "$xr_file" "$extra_args"; then
+        elif ! run_dump_command "$c_out" "$dump" "$build_source" "$extra_args"; then
             echo "FAIL (dump command failed)"
             show_excerpt "$dump"
             FAIL=$((FAIL + 1))

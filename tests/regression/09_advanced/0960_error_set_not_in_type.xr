@@ -1,6 +1,6 @@
 // 126-P3 / 216: the concrete error_set is analyzer metadata, not part of
 // function type identity. Task 216 adds only a typed throw-effect bit and the
-// opt-in @no_throw constraint; it does not put enum/variant sets back into the
+// build-time no-throw contract; it does not put enum/variant sets back into the
 // type. Functions with the same signature but different inferred error sets
 // therefore still unify in a may-throw `(int) -> int` array.
 

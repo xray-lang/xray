@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_float_tofixed_reject(value: float) -> string {
     return value.toFixed(2)
 }

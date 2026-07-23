@@ -119,7 +119,7 @@ typedef struct {
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool has_evidence_cache_manifest;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT]; /* phase payload dumps */
-    char *c_export_header; /* public @c_export C declarations (malloc'd) */
+    char *c_export_header; /* public manifest-selected C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
     int total_compiled;           /* number of functions successfully transpiled */
     int total_aot;                /* total AOT-eligible functions found */

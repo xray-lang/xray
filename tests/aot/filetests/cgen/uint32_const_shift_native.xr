@@ -1,4 +1,3 @@
-@c_export("xray_rotl32")
 fn rotl32(x: uint32) -> uint32 {
     return (x << 13) | (x >> 19)
 }

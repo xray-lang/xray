@@ -20,6 +20,7 @@
 
 #include "xanalyzer_escape.h"
 #include "xanalyzer.h"
+#include "xanalyzer_capability.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/xerror.h"
@@ -197,6 +198,16 @@ static AstNode *ea_lookup_bound_fn(EaContext *ctx, const char *name) {
     return NULL;
 }
 
+static XrType *ea_entry_type(EaContext *ctx, const EaVarEntry *entry) {
+    if (!ctx || !ctx->analyzer || !entry || !entry->decl_node ||
+        (entry->decl_node->type != AST_VAR_DECL && entry->decl_node->type != AST_CONST_DECL))
+        return NULL;
+    uint32_t symbol_id = entry->decl_node->as.var_decl.symbol_id;
+    XaSymbol *symbol =
+        symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id) : NULL;
+    return symbol ? xa_analyzer_get_type(ctx->analyzer, symbol) : NULL;
+}
+
 /*
  * Check if a name exists in the current function scope (including params).
  * Used to distinguish local variables from captured outer variables.
@@ -260,6 +271,18 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                     return;
                 }
                 if (entry->is_const_binding) {
+                    XrType *type = ea_entry_type(ctx, entry);
+                    const uint32_t interior = XA_TYPE_CAP_INTERIOR_MUTABLE;
+                    const uint32_t sync = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
+                    if (xa_type_has_capabilities(type, interior) &&
+                        !xa_type_has_capabilities(type, sync)) {
+                        ea_emit_error(
+                            ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                            "go closure cannot capture non-shareable interior-mutable const '%s'\n"
+                            "hint: keep it execution-local, transfer one owner explicitly, or "
+                            "route shared state through Channel/Atomic/Mutex",
+                            name);
+                    }
                     return;
                 }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,

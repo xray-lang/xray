@@ -1,30 +1,25 @@
-@c_export("xray_builtin_string_reject")
 fn xray_builtin_string_reject(x: int) -> int {
     var s = string(x)
     print(s)
     return 0
 }
 
-@c_export("xray_builtin_typename_reject")
 fn xray_builtin_typename_reject(x: int) -> int {
     var s = typeName(x)
     print(s)
     return 0
 }
 
-@c_export("xray_builtin_copy_reject")
 fn xray_builtin_copy_reject(x: int) -> int {
     var y = copy(x)
     return y
 }
 
-@c_export("xray_builtin_char_reject")
 fn xray_builtin_char_reject(x: int) -> int {
     var c = rune(x)
     return c as int
 }
 
-@c_export("xray_builtin_chr_dump_reject")
 fn xray_builtin_chr_dump_reject() -> int {
     var s = chr(65)
     dump(s)

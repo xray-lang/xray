@@ -9,7 +9,6 @@ var DRIFT: float = -0.25
 var WORD: intsize = -5
 var COUNT: uintsize = 8
 
-@c_export("xray_top_var_static")
 fn xray_top_var_static() -> int {
     COUNTER = COUNTER + 2
     if (ENABLED && OFFSET == -3 && DRIFT == -0.25 && WORD == -5 && COUNT == 8) {

@@ -5,13 +5,11 @@ struct XrayMemHeader {
     value: uint32
 }
 
-@c_export("xray_mem_addr_roundtrip")
 fn xray_mem_addr_roundtrip(addr: int) -> int {
     var p = mem.mutPtr<byte>(addr)
     return mem.addr(p)
 }
 
-@c_export("xray_mem_layout_constants")
 fn xray_mem_layout_constants() -> int {
     var size = mem.sizeOf<XrayMemHeader>()
     var align = mem.alignOf<XrayMemHeader>()
@@ -19,20 +17,17 @@ fn xray_mem_layout_constants() -> int {
     return size + align + off
 }
 
-@c_export("xray_mem_typed_from_address")
 fn xray_mem_typed_from_address(addr: int) -> int {
     var p = mem.mutPtr<uint32>(addr)
     return mem.addr(p)
 }
 
-@c_export("xray_mem_typed_addr_null")
 fn xray_mem_typed_addr_null() -> int {
     var p = Ptr<uint32>.null()
     var q = MutPtr<uint64>.null()
     return mem.addr(p) + mem.addr(q)
 }
 
-@c_export("xray_mem_bits")
 fn xray_mem_bits(x: int, n: int) -> int {
     // Bit/wrapping intrinsics are int methods (task 153); the freestanding
     // cgen lowers them straight to the shared cores already inlined in
@@ -42,7 +37,6 @@ fn xray_mem_bits(x: int, n: int) -> int {
         x.wrappingSub(n) + x.wrappingMul(n)
 }
 
-@c_export("xray_mem_bulk")
 fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
     var d = mem.mutPtr<byte>(dst)
     var s = mem.mutPtr<byte>(src)
@@ -52,7 +46,6 @@ fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
     return mem.compare(d, s, n)
 }
 
-@c_export("xray_mem_mmio_shape")
 fn xray_mem_mmio_shape(addr: int) -> int {
     var p = mem.mutPtr<byte>(addr)
     mem.prefetch(p, 1)

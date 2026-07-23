@@ -12,6 +12,7 @@
 #include "../base/xfileio.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_crypto_core.h"
+#include "../runtime/value/xstruct_layout.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -20,6 +21,8 @@
 
 #define XR_NATIVE_FNV_OFFSET UINT64_C(1469598103934665603)
 #define XR_NATIVE_FNV_PRIME UINT64_C(1099511628211)
+
+static bool native_valid_c_identifier(const char *name);
 
 static uint64_t native_hash_bytes(uint64_t hash, const void *data, size_t len) {
     const unsigned char *bytes = (const unsigned char *) data;
@@ -449,6 +452,17 @@ static bool native_parse_units(XrNativePackagePlan *plan, XrTomlValue *native) {
             if (!unit->output)
                 return false;
         }
+        if ((unit->kind == XR_NATIVE_UNIT_C || unit->kind == XR_NATIVE_UNIT_ASM) &&
+            (!unit->output || !unit->output[0]))
+            return native_fail(plan, "E-NATIVE-SCHEMA: %s requires an explicit derived output path",
+                               where);
+        if ((unit->kind == XR_NATIVE_UNIT_OBJECT || unit->kind == XR_NATIVE_UNIT_STATIC_LIBRARY ||
+             unit->kind == XR_NATIVE_UNIT_DYNAMIC_LIBRARY) &&
+            unit->source_count != 1)
+            return native_fail(plan,
+                               "E-NATIVE-SCHEMA: %s prebuilt unit requires exactly one audited "
+                               "source artifact",
+                               where);
         if (unit->kind == XR_NATIVE_UNIT_C &&
             (!unit->language_standard || (strcmp(unit->language_standard, "c11") != 0 &&
                                           strcmp(unit->language_standard, "c17") != 0 &&
@@ -467,6 +481,25 @@ static bool native_parse_units(XrNativePackagePlan *plan, XrTomlValue *native) {
         if (!unit->warning_policy || (strcmp(unit->warning_policy, "strict") != 0 &&
                                       strcmp(unit->warning_policy, "system") != 0))
             return native_fail(plan, "E-NATIVE-FLAG: %s.warnings must be strict or system", where);
+        if (unit->cpu_feature && strcmp(unit->cpu_feature, "baseline") != 0)
+            return native_fail(
+                plan, "E-NATIVE-FLAG: %s.cpu_feature must be the sealed value baseline", where);
+        {
+            uint64_t fingerprint = unit->fingerprint ? unit->fingerprint : XR_NATIVE_FNV_OFFSET;
+            fingerprint = native_hash_bytes(fingerprint, &unit->kind, sizeof(unit->kind));
+            for (uint32_t di = 0; di < unit->include_dir_count; di++)
+                fingerprint = native_hash_text(fingerprint, unit->include_dirs[di]);
+            for (uint32_t di = 0; di < unit->define_count; di++)
+                fingerprint = native_hash_text(fingerprint, unit->defines[di]);
+            for (uint32_t li = 0; li < unit->system_link_count; li++)
+                fingerprint = native_hash_text(fingerprint, unit->system_links[li]);
+            fingerprint = native_hash_text(fingerprint, unit->language_standard);
+            fingerprint = native_hash_text(fingerprint, unit->optimization);
+            fingerprint = native_hash_text(fingerprint, unit->visibility);
+            fingerprint = native_hash_text(fingerprint, unit->warning_policy);
+            fingerprint = native_hash_text(fingerprint, unit->cpu_feature);
+            unit->fingerprint = fingerprint ? fingerprint : 1;
+        }
     }
     return true;
 }
@@ -756,10 +789,6 @@ static bool native_parse_symbols(XrNativePackagePlan *plan, XrTomlValue *native)
             if (strcmp(plan->symbols[j].xray_name, symbol->xray_name) == 0)
                 return native_fail(plan, "E-NATIVE-SCHEMA: duplicate Xray symbol '%s'",
                                    symbol->xray_name);
-            if (strcmp(plan->symbols[j].native_name, symbol->native_name) == 0 &&
-                plan->symbols[j].unit == symbol->unit)
-                return native_fail(plan, "E-NATIVE-SCHEMA: duplicate native symbol '%s'",
-                                   symbol->native_name);
         }
         XrTomlValue *contract = xtoml_get_table(table, "contract");
         if (!contract) {
@@ -801,7 +830,7 @@ static bool native_parse_layouts(XrNativePackagePlan *plan, XrTomlValue *native)
         layout->xray_type = native_dup_string(table, "xray_type");
         layout->c_type = native_dup_string(table, "c_type");
         const char *header = xtoml_get_string(table, "header");
-        if (!layout->xray_type || !layout->c_type || !header)
+        if (!layout->xray_type || !native_valid_c_identifier(layout->c_type) || !header)
             return native_fail(plan, "E-NATIVE-LAYOUT: %s requires xray_type/c_type/header", where);
         char header_where[80];
         snprintf(header_where, sizeof(header_where), "%s.header", where);
@@ -871,6 +900,16 @@ static bool native_valid_target_triple(const char *triple) {
     return strstr(triple, "..") == NULL;
 }
 
+static bool native_valid_c_identifier(const char *name) {
+    if (!name || !name[0] || !(isalpha((unsigned char) name[0]) || name[0] == '_'))
+        return false;
+    for (const unsigned char *p = (const unsigned char *) name + 1; *p; p++) {
+        if (!isalnum(*p) && *p != '_')
+            return false;
+    }
+    return true;
+}
+
 static bool native_parse_targets(XrNativePackagePlan *plan, XrTomlValue *native) {
     static const char *const keys[] = {
         "profile", "visibility", "cpu_feature", "system_links", "vm",
@@ -911,6 +950,9 @@ static bool native_parse_targets(XrNativePackagePlan *plan, XrTomlValue *native)
             strcmp(target->visibility, "default") != 0)
             return native_fail(plan, "E-NATIVE-TARGET: %s.visibility must be hidden or default",
                                where);
+        if (target->cpu_feature && strcmp(target->cpu_feature, "baseline") != 0)
+            return native_fail(
+                plan, "E-NATIVE-TARGET: %s.cpu_feature must be the sealed value baseline", where);
         if (!native_parse_string_array(plan, table, "system_links", false, &target->system_links,
                                        &target->system_link_count, where))
             return false;
@@ -932,6 +974,148 @@ static bool native_parse_targets(XrNativePackagePlan *plan, XrTomlValue *native)
     return true;
 }
 
+static bool native_parse_exports(XrNativePackagePlan *plan, XrTomlValue *root) {
+    static const char *const keys[] = {"xray", "symbol", "visibility", "header"};
+    XrTomlValue *group = xtoml_get_table(root, "export");
+    XrTomlValue *array = group ? xtoml_get_array(group, "c") : NULL;
+    if (!array)
+        return true;
+    int count = xtoml_array_len(array);
+    if (count <= 0)
+        return native_fail(plan, "E-EXPORT-SCHEMA: export.c cannot be empty");
+    plan->exports = (XrCExportPlan *) xr_calloc((size_t) count, sizeof(XrCExportPlan));
+    if (!plan->exports)
+        return native_fail(plan, "E-NATIVE-RESOURCE: cannot allocate C export plans");
+    plan->export_count = (uint32_t) count;
+    for (int i = 0; i < count; i++) {
+        char where[64];
+        snprintf(where, sizeof(where), "export.c[%d]", i);
+        XrTomlValue *table = xtoml_array_get(array, i);
+        XrCExportPlan *item = &plan->exports[i];
+        if (!native_validate_keys(plan, table, where, keys, sizeof(keys) / sizeof(keys[0])))
+            return false;
+        item->xray_name = native_dup_string(table, "xray");
+        item->symbol = native_dup_string(table, "symbol");
+        item->visibility = native_dup_string(table, "visibility");
+        item->header = xtoml_get_bool_or(table, "header", false);
+        if (!item->xray_name || !item->xray_name[0] || !native_valid_c_identifier(item->symbol))
+            return native_fail(plan, "E-EXPORT-SCHEMA: %s requires xray and C identifier symbol",
+                               where);
+        if (item->visibility && strcmp(item->visibility, "default") != 0 &&
+            strcmp(item->visibility, "hidden") != 0)
+            return native_fail(plan, "E-EXPORT-SCHEMA: %s.visibility must be default or hidden",
+                               where);
+        for (int j = 0; j < i; j++) {
+            if (strcmp(plan->exports[j].xray_name, item->xray_name) == 0 ||
+                strcmp(plan->exports[j].symbol, item->symbol) == 0)
+                return native_fail(plan, "E-EXPORT-SCHEMA: duplicate export '%s'", item->xray_name);
+        }
+    }
+    return true;
+}
+
+static bool native_parse_link_symbols(XrNativePackagePlan *plan, XrTomlValue *root) {
+    static const char *const keys[] = {"xray", "section", "used", "weak"};
+    XrTomlValue *group = xtoml_get_table(root, "link");
+    XrTomlValue *array = group ? xtoml_get_array(group, "symbol") : NULL;
+    if (!array)
+        return true;
+    int count = xtoml_array_len(array);
+    if (count <= 0)
+        return native_fail(plan, "E-LINK-SCHEMA: link.symbol cannot be empty");
+    plan->link_symbols = (XrLinkSymbolPlan *) xr_calloc((size_t) count, sizeof(XrLinkSymbolPlan));
+    if (!plan->link_symbols)
+        return native_fail(plan, "E-NATIVE-RESOURCE: cannot allocate link symbol plans");
+    plan->link_symbol_count = (uint32_t) count;
+    for (int i = 0; i < count; i++) {
+        char where[64];
+        snprintf(where, sizeof(where), "link.symbol[%d]", i);
+        XrTomlValue *table = xtoml_array_get(array, i);
+        XrLinkSymbolPlan *item = &plan->link_symbols[i];
+        if (!native_validate_keys(plan, table, where, keys, sizeof(keys) / sizeof(keys[0])))
+            return false;
+        item->xray_name = native_dup_string(table, "xray");
+        item->section = native_dup_string(table, "section");
+        item->used = xtoml_get_bool_or(table, "used", false);
+        item->weak = xtoml_get_bool_or(table, "weak", false);
+        if (!item->xray_name || !item->xray_name[0])
+            return native_fail(plan, "E-LINK-SCHEMA: %s requires non-empty xray", where);
+        if (item->section && !item->section[0])
+            return native_fail(plan, "E-LINK-SCHEMA: %s.section cannot be empty", where);
+        if (!item->section && !item->used && !item->weak)
+            return native_fail(plan, "E-LINK-SCHEMA: %s requires section, used=true, or weak=true",
+                               where);
+        for (int j = 0; j < i; j++)
+            if (strcmp(plan->link_symbols[j].xray_name, item->xray_name) == 0)
+                return native_fail(plan, "E-LINK-SCHEMA: duplicate link symbol '%s'",
+                                   item->xray_name);
+    }
+    return true;
+}
+
+static XrFreestandingEntryKind native_entry_kind(const char *kind) {
+    if (!kind)
+        return 0;
+    if (strcmp(kind, "start") == 0)
+        return XR_FREESTANDING_ENTRY_START;
+    if (strcmp(kind, "interrupt") == 0)
+        return XR_FREESTANDING_ENTRY_INTERRUPT;
+    if (strcmp(kind, "naked-stub") == 0)
+        return XR_FREESTANDING_ENTRY_NAKED_STUB;
+    return 0;
+}
+
+static bool native_parse_entries(XrNativePackagePlan *plan, XrTomlValue *root) {
+    static const char *const keys[] = {"xray", "symbol", "kind", "abi", "section", "stub"};
+    XrTomlValue *group = xtoml_get_table(root, "freestanding");
+    XrTomlValue *array = group ? xtoml_get_array(group, "entry") : NULL;
+    if (!array)
+        return true;
+    int count = xtoml_array_len(array);
+    if (count <= 0)
+        return native_fail(plan, "E-ENTRY-SCHEMA: freestanding.entry cannot be empty");
+    plan->entries =
+        (XrFreestandingEntryPlan *) xr_calloc((size_t) count, sizeof(XrFreestandingEntryPlan));
+    if (!plan->entries)
+        return native_fail(plan, "E-NATIVE-RESOURCE: cannot allocate freestanding entry plans");
+    plan->entry_count = (uint32_t) count;
+    for (int i = 0; i < count; i++) {
+        char where[72];
+        snprintf(where, sizeof(where), "freestanding.entry[%d]", i);
+        XrTomlValue *table = xtoml_array_get(array, i);
+        XrFreestandingEntryPlan *item = &plan->entries[i];
+        if (!native_validate_keys(plan, table, where, keys, sizeof(keys) / sizeof(keys[0])))
+            return false;
+        item->xray_name = native_dup_string(table, "xray");
+        item->symbol = native_dup_string(table, "symbol");
+        item->kind = native_entry_kind(xtoml_get_string(table, "kind"));
+        item->abi = native_dup_string(table, "abi");
+        item->section = native_dup_string(table, "section");
+        const char *stub = xtoml_get_string(table, "stub");
+        if (stub) {
+            char stub_where[96];
+            snprintf(stub_where, sizeof(stub_where), "%s.stub", where);
+            item->stub = native_resolve_existing_path(plan, stub, stub_where);
+            if (!item->stub)
+                return false;
+        }
+        if (!item->xray_name || !item->xray_name[0] || !native_valid_c_identifier(item->symbol) ||
+            !item->kind || !item->section || !item->section[0])
+            return native_fail(plan, "E-ENTRY-SCHEMA: %s requires xray/symbol/kind/section", where);
+        if (item->kind == XR_FREESTANDING_ENTRY_INTERRUPT && (!item->abi || !item->abi[0]))
+            return native_fail(plan, "E-ENTRY-SCHEMA: %s interrupt requires abi", where);
+        if ((item->kind == XR_FREESTANDING_ENTRY_NAKED_STUB ||
+             item->kind == XR_FREESTANDING_ENTRY_INTERRUPT) &&
+            !item->stub)
+            return native_fail(plan, "E-ENTRY-SCHEMA: %s requires an audited stub", where);
+        for (int j = 0; j < i; j++)
+            if (strcmp(plan->entries[j].xray_name, item->xray_name) == 0 ||
+                strcmp(plan->entries[j].symbol, item->symbol) == 0)
+                return native_fail(plan, "E-ENTRY-SCHEMA: duplicate entry '%s'", item->xray_name);
+    }
+    return true;
+}
+
 XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
                                                   const char *project_root) {
     static const char *const native_keys[] = {
@@ -941,7 +1125,10 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
     if (!toml_root || !project_root)
         return NULL;
     XrTomlValue *native = xtoml_get_table(toml_root, "native");
-    if (!native)
+    bool has_export = xtoml_get_table(toml_root, "export") != NULL;
+    bool has_link = xtoml_get_table(toml_root, "link") != NULL;
+    bool has_entry = xtoml_get_table(toml_root, "freestanding") != NULL;
+    if (!native && !has_export && !has_link && !has_entry)
         return NULL;
     XrNativePackagePlan *plan = (XrNativePackagePlan *) xr_calloc(1, sizeof(XrNativePackagePlan));
     if (!plan)
@@ -950,30 +1137,43 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
     if (!plan->root)
         plan->root = xr_strdup(project_root);
     plan->valid = true;
-    if (!native_validate_keys(plan, native, "native", native_keys,
-                              sizeof(native_keys) / sizeof(native_keys[0])))
-        return plan;
-    plan->name = native_dup_string(native, "name");
-    plan->version = native_dup_string(native, "version");
-    plan->license = native_dup_string(native, "license");
-    plan->source = native_dup_string(native, "source");
-    if (!plan->name || !plan->version || !plan->license || !plan->source ||
-        !native_parse_audit(plan, xtoml_get_string(native, "audit_mode")) ||
-        !native_parse_vm_policy(plan, xtoml_get_string(native, "vm"))) {
-        if (!plan->error)
-            native_fail(
-                plan, "E-NATIVE-SCHEMA: native requires name/version/license/source/audit_mode/vm");
-        return plan;
+    if (native) {
+        if (!native_validate_keys(plan, native, "native", native_keys,
+                                  sizeof(native_keys) / sizeof(native_keys[0])))
+            return plan;
+        plan->name = native_dup_string(native, "name");
+        plan->version = native_dup_string(native, "version");
+        plan->license = native_dup_string(native, "license");
+        plan->source = native_dup_string(native, "source");
+        if (!plan->name || !plan->version || !plan->license || !plan->source ||
+            !native_parse_audit(plan, xtoml_get_string(native, "audit_mode")) ||
+            !native_parse_vm_policy(plan, xtoml_get_string(native, "vm"))) {
+            if (!plan->error)
+                native_fail(plan, "E-NATIVE-SCHEMA: native requires "
+                                  "name/version/license/source/audit_mode/vm");
+            return plan;
+        }
+        if (!native_parse_units(plan, native) || !native_parse_symbols(plan, native) ||
+            !native_parse_layouts(plan, native) || !native_parse_capabilities(plan, native) ||
+            !native_parse_targets(plan, native))
+            return plan;
+        if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING &&
+            (plan->unit_count == 0 || plan->symbol_count == 0)) {
+            native_fail(plan,
+                        "E-NATIVE-SCHEMA: shipping native package requires units and symbols");
+            return plan;
+        }
+    } else {
+        plan->name = xr_strdup("project");
+        plan->version = xr_strdup("0");
+        plan->license = xr_strdup("project");
+        plan->source = xr_strdup("project");
+        plan->audit_mode = XR_NATIVE_AUDIT_NONE;
+        plan->vm_policy = XR_NATIVE_VM_UNSUPPORTED;
     }
-    if (!native_parse_units(plan, native) || !native_parse_symbols(plan, native) ||
-        !native_parse_layouts(plan, native) || !native_parse_capabilities(plan, native) ||
-        !native_parse_targets(plan, native))
+    if (!native_parse_exports(plan, toml_root) || !native_parse_link_symbols(plan, toml_root) ||
+        !native_parse_entries(plan, toml_root))
         return plan;
-    if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING &&
-        (plan->unit_count == 0 || plan->symbol_count == 0)) {
-        native_fail(plan, "E-NATIVE-SCHEMA: shipping native package requires units and symbols");
-        return plan;
-    }
     uint64_t fingerprint = XR_NATIVE_FNV_OFFSET;
     fingerprint = native_hash_text(fingerprint, plan->name);
     fingerprint = native_hash_text(fingerprint, plan->version);
@@ -999,6 +1199,30 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
             fingerprint = native_hash_text(fingerprint, plan->targets[i].system_links[j]);
         fingerprint = native_hash_bytes(fingerprint, &plan->targets[i].vm_policy,
                                         sizeof(plan->targets[i].vm_policy));
+    }
+    for (uint32_t i = 0; i < plan->export_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].symbol);
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].visibility);
+        fingerprint = native_hash_bytes(fingerprint, &plan->exports[i].header,
+                                        sizeof(plan->exports[i].header));
+    }
+    for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].section);
+        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].used,
+                                        sizeof(plan->link_symbols[i].used));
+        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].weak,
+                                        sizeof(plan->link_symbols[i].weak));
+    }
+    for (uint32_t i = 0; i < plan->entry_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].symbol);
+        fingerprint =
+            native_hash_bytes(fingerprint, &plan->entries[i].kind, sizeof(plan->entries[i].kind));
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].abi);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].section);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].stub);
     }
     plan->fingerprint = fingerprint ? fingerprint : 1;
     return plan;
@@ -1062,6 +1286,8 @@ void xr_native_package_plan_free(XrNativePackagePlan *plan) {
         xr_free(plan->layouts[i].xray_type);
         xr_free(plan->layouts[i].c_type);
         xr_free(plan->layouts[i].header);
+        native_free_string_array(plan->layouts[i].field_names, plan->layouts[i].field_count);
+        xr_free(plan->layouts[i].field_offsets);
     }
     xr_free(plan->layouts);
     for (uint32_t i = 0; i < plan->capability_count; i++) {
@@ -1079,6 +1305,25 @@ void xr_native_package_plan_free(XrNativePackagePlan *plan) {
         native_free_string_array(plan->targets[i].system_links, plan->targets[i].system_link_count);
     }
     xr_free(plan->targets);
+    for (uint32_t i = 0; i < plan->export_count; i++) {
+        xr_free(plan->exports[i].xray_name);
+        xr_free(plan->exports[i].symbol);
+        xr_free(plan->exports[i].visibility);
+    }
+    xr_free(plan->exports);
+    for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
+        xr_free(plan->link_symbols[i].xray_name);
+        xr_free(plan->link_symbols[i].section);
+    }
+    xr_free(plan->link_symbols);
+    for (uint32_t i = 0; i < plan->entry_count; i++) {
+        xr_free(plan->entries[i].xray_name);
+        xr_free(plan->entries[i].symbol);
+        xr_free(plan->entries[i].abi);
+        xr_free(plan->entries[i].section);
+        xr_free(plan->entries[i].stub);
+    }
+    xr_free(plan->entries);
     xr_free(plan);
 }
 
@@ -1115,21 +1360,140 @@ const XrNativeSymbol *xr_native_package_find_symbol(const XrNativePackagePlan *p
     return short_match;
 }
 
+static bool native_plan_name_matches(const char *declared, const char *requested) {
+    if (!declared || !requested)
+        return false;
+    if (strcmp(declared, requested) == 0)
+        return true;
+    const char *dot = strrchr(declared, '.');
+    return dot && strcmp(dot + 1, requested) == 0;
+}
+
+const XrCExportPlan *xr_native_package_find_export(const XrNativePackagePlan *plan,
+                                                   const char *xray_name) {
+    const XrCExportPlan *found = NULL;
+    if (!plan || !xray_name)
+        return NULL;
+    for (uint32_t i = 0; i < plan->export_count; i++) {
+        if (!native_plan_name_matches(plan->exports[i].xray_name, xray_name))
+            continue;
+        if (found)
+            return NULL;
+        found = &plan->exports[i];
+    }
+    return found;
+}
+
+const XrLinkSymbolPlan *xr_native_package_find_link_symbol(const XrNativePackagePlan *plan,
+                                                           const char *xray_name) {
+    const XrLinkSymbolPlan *found = NULL;
+    if (!plan || !xray_name)
+        return NULL;
+    for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
+        if (!native_plan_name_matches(plan->link_symbols[i].xray_name, xray_name))
+            continue;
+        if (found)
+            return NULL;
+        found = &plan->link_symbols[i];
+    }
+    return found;
+}
+
+const XrFreestandingEntryPlan *xr_native_package_find_entry(const XrNativePackagePlan *plan,
+                                                            const char *xray_name) {
+    const XrFreestandingEntryPlan *found = NULL;
+    if (!plan || !xray_name)
+        return NULL;
+    for (uint32_t i = 0; i < plan->entry_count; i++) {
+        if (!native_plan_name_matches(plan->entries[i].xray_name, xray_name))
+            continue;
+        if (found)
+            return NULL;
+        found = &plan->entries[i];
+    }
+    return found;
+}
+
 const char *xr_native_symbol_library(const XrNativeSymbol *symbol) {
-    return symbol && symbol->unit ? symbol->unit->output : NULL;
+    if (!symbol || !symbol->unit)
+        return NULL;
+    if (symbol->unit->output && symbol->unit->output[0])
+        return symbol->unit->output;
+    if (symbol->unit->kind == XR_NATIVE_UNIT_PLATFORM && symbol->unit->system_link_count == 1)
+        return symbol->unit->system_links[0];
+    if ((symbol->unit->kind == XR_NATIVE_UNIT_OBJECT ||
+         symbol->unit->kind == XR_NATIVE_UNIT_STATIC_LIBRARY ||
+         symbol->unit->kind == XR_NATIVE_UNIT_DYNAMIC_LIBRARY) &&
+        symbol->unit->source_count == 1)
+        return symbol->unit->sources[0];
+    return NULL;
+}
+
+bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,
+                                      const XrAggregateLayout *layout) {
+    bool matched = false;
+    if (!plan || !xray_type || !layout)
+        return false;
+    for (uint32_t i = 0; i < plan->layout_count; i++) {
+        XrNativeLayoutAssertion *assertion = &plan->layouts[i];
+        const char *short_name = assertion->xray_type ? strrchr(assertion->xray_type, '.') : NULL;
+        short_name = short_name ? short_name + 1 : assertion->xray_type;
+        if (!assertion->xray_type ||
+            (strcmp(assertion->xray_type, xray_type) != 0 && strcmp(short_name, xray_type) != 0))
+            continue;
+        native_free_string_array(assertion->field_names, assertion->field_count);
+        xr_free(assertion->field_offsets);
+        assertion->field_names = NULL;
+        assertion->field_offsets = NULL;
+        assertion->field_count = layout->field_count;
+        if (layout->field_count > 0) {
+            assertion->field_names =
+                (char **) xr_calloc((size_t) layout->field_count, sizeof(char *));
+            assertion->field_offsets =
+                (uint32_t *) xr_calloc((size_t) layout->field_count, sizeof(uint32_t));
+            if (!assertion->field_names || !assertion->field_offsets) {
+                native_free_string_array(assertion->field_names, assertion->field_count);
+                xr_free(assertion->field_offsets);
+                assertion->field_names = NULL;
+                assertion->field_offsets = NULL;
+                assertion->field_count = 0;
+                assertion->resolved = false;
+                return false;
+            }
+            for (uint32_t fi = 0; fi < layout->field_count; fi++) {
+                assertion->field_names[fi] = xr_strdup(
+                    layout->field_names && layout->field_names[fi] ? layout->field_names[fi] : "");
+                assertion->field_offsets[fi] = layout->fields[fi].offset;
+                if (!assertion->field_names[fi])
+                    return false;
+            }
+        }
+        assertion->expected_size = layout->total_size;
+        assertion->expected_align = layout->alignment;
+        assertion->resolved = true;
+        matched = true;
+    }
+    return matched;
 }
 
 bool xr_native_package_validate_symbol_arity(const XrNativePackagePlan *plan, const char *xray_name,
                                              uint32_t arity, char *errbuf, size_t errbuf_len) {
     const XrNativeSymbol *symbol = xr_native_package_find_symbol(plan, xray_name);
     if (!symbol) {
+        /* Export/link/entry-only manifests do not seal the process C symbol
+         * namespace. A present [native] table does: exploratory entries may
+         * omit detailed contracts, but every mapped name is still explicit. */
+        if (!plan || plan->audit_mode == XR_NATIVE_AUDIT_NONE)
+            return true;
         if (errbuf && errbuf_len)
             snprintf(errbuf, errbuf_len,
                      "E-NATIVE-UNDECLARED-SYMBOL: extern '%s' is absent from NativePackagePlan",
                      xray_name ? xray_name : "?");
         return false;
     }
-    if (!symbol->contract.complete || symbol->contract.param_count != arity) {
+    if (!symbol->contract.complete)
+        return true;
+    if (symbol->contract.param_count != arity) {
         if (errbuf && errbuf_len)
             snprintf(errbuf, errbuf_len,
                      "E-NATIVE-CONTRACT: extern '%s' has arity %u but its contract describes %u",
@@ -1234,4 +1598,20 @@ void xr_native_package_explain(const XrNativePackagePlan *plan, FILE *out) {
                                                                    : "unsupported",
                 target->cpu_feature ? target->cpu_feature : "baseline");
     }
+    for (uint32_t i = 0; i < plan->export_count; i++)
+        fprintf(out, "export.c %s -> %s visibility=%s header=%s\n", plan->exports[i].xray_name,
+                plan->exports[i].symbol,
+                plan->exports[i].visibility ? plan->exports[i].visibility : "default",
+                plan->exports[i].header ? "yes" : "no");
+    for (uint32_t i = 0; i < plan->link_symbol_count; i++)
+        fprintf(out, "link.symbol %s section=%s used=%s weak=%s\n", plan->link_symbols[i].xray_name,
+                plan->link_symbols[i].section ? plan->link_symbols[i].section : "none",
+                plan->link_symbols[i].used ? "yes" : "no",
+                plan->link_symbols[i].weak ? "yes" : "no");
+    for (uint32_t i = 0; i < plan->entry_count; i++)
+        fprintf(out, "freestanding.entry %s -> %s kind=%u abi=%s section=%s stub=%s\n",
+                plan->entries[i].xray_name, plan->entries[i].symbol,
+                (unsigned) plan->entries[i].kind,
+                plan->entries[i].abi ? plan->entries[i].abi : "none", plan->entries[i].section,
+                plan->entries[i].stub ? plan->entries[i].stub : "none");
 }

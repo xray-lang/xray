@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "asserted_calc"
+scope = "semantic"
+requires = ["no_throw"]

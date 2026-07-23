@@ -1,0 +1,13 @@
+[package]
+name = "filetest-freestanding_byte_array_static_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_byte_array_static_reject.xr"
+
+[[export.c]]
+xray = "xray_byte_array_capacity_reject"
+symbol = "xray_byte_array_capacity_reject"
+
+[[export.c]]
+xray = "xray_byte_array_from_string_reject"
+symbol = "xray_byte_array_from_string_reject"

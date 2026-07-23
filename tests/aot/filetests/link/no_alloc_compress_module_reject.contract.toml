@@ -1,0 +1,16 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_compress_gzip_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_compress_is_gzip_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_compress_is_zlib_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

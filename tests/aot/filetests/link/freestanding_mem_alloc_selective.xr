@@ -1,7 +1,6 @@
 import mem
 import { allocZeroed } from "mem"
 
-@c_export("xray_alloc_selective_score")
 fn xray_alloc_selective_score(n: int) -> int {
     var b = allocZeroed(n)
     var view: Slice<byte> = b.asMutBytes()

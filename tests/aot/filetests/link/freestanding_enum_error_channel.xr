@@ -9,7 +9,6 @@ fn mayFail(n: int) -> int {
     return n + 10
 }
 
-@c_export("xray_enum_error_channel")
 fn xray_enum_error_channel(n: int) -> int {
     var out = 0
     try {

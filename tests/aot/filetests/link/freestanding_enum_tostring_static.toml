@@ -1,0 +1,13 @@
+[package]
+name = "filetest-freestanding_enum_tostring_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_enum_tostring_static.xr"
+
+[[export.c]]
+xray = "xrayEnumToStringStatic"
+symbol = "xray_enum_tostring_static"
+
+[[export.c]]
+xray = "xrayPreludeEnumToStringStatic"
+symbol = "xray_prelude_enum_tostring_static"

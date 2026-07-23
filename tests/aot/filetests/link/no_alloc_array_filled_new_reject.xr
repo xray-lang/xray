@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_array_filled_new_reject() -> int {
     var xs = Array<int>(16, 0)
     return len(xs)

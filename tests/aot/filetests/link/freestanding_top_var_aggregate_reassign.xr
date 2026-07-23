@@ -5,7 +5,6 @@ struct CounterState {
 
 var STATE = CounterState{value: 1, limit: 10}
 
-@c_export("xray_top_var_aggregate_reassign")
 fn xray_top_var_aggregate_reassign() -> int {
     STATE = CounterState{value: STATE.value + 2, limit: 20}
     return STATE.value + STATE.limit

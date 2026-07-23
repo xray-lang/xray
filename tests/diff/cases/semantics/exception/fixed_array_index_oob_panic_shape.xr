@@ -24,14 +24,14 @@ fn show_direct_write(i: int) {
     }
 }
 
-fn write_view(view: [int; 4], i: int) {
+fn write_view(view: ref [int; 4], i: int) {
     view[i] = 9
 }
 
 fn show_view_write(i: int) {
     var buf = Buf{data: [1, 2, 3, 4]}
     try {
-        write_view(buf.data, i)
+        write_view(ref buf.data, i)
         print(buf.data[0])
     } catch panic (p) {
         print(p.message)

@@ -1,8 +1,6 @@
-// Imported extern layout used by the task-208 bytecode CLI roundtrip gate.
-extern "C" {
-    export packed struct BytecodeHeader {
-        tag: uint8
-        length: uintsize
-        delta: intsize
-    }
+// Imported native-layout value used by the bytecode CLI roundtrip gate.
+export packed struct BytecodeHeader {
+    tag: uint8
+    length: uintsize
+    delta: intsize
 }

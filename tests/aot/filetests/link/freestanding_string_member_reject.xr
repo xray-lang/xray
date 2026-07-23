@@ -1,23 +1,19 @@
-@c_export("xray_string_to_bytes_reject")
 fn xray_string_to_bytes_reject() -> int {
     var s = "abc"
     var b = s.copyBytes()
     return len(b)
 }
 
-@c_export("xray_string_bytes_reject")
 fn xray_string_bytes_reject() -> int {
     var s = "abc"
     return len(s.bytes())
 }
 
-@c_export("xray_string_index_reject")
 fn xray_string_index_reject() -> int {
     var s = "abc"
     return s[0] as int
 }
 
-@c_export("xray_string_slice_reject")
 fn xray_string_slice_reject() -> int {
     var s = "abc"
     var part = s[0:1]

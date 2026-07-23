@@ -1,8 +1,9 @@
 struct Pair { a: int; b: int }
 
 fn bump(p: Pair) -> int {
-    p.a = p.a + 10
-    return p.a + p.b
+    var local = copy(p)
+    local.a = local.a + 10
+    return local.a + local.b
 }
 
 var p = Pair{a: 1, b: 2}

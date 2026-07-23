@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_write_hook"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_write_hook.xr"
+
+[[export.c]]
+xray = "xray_print_score"
+symbol = "xray_print_score"

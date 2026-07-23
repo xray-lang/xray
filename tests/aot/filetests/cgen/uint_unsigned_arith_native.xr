@@ -1,10 +1,8 @@
-@c_export("xray_hash32")
 fn hash32(seq: uint32) -> uint32 {
     var prime: uint32 = 2654435761
     return seq * prime
 }
 
-@c_export("xray_compound32")
 fn compound32(acc: uint32, input: uint32) -> uint32 {
     var hash = acc
     var prime: uint32 = 2246822519
@@ -13,7 +11,6 @@ fn compound32(acc: uint32, input: uint32) -> uint32 {
     return hash
 }
 
-@c_export("xray_mix64")
 fn mix64(seq: uint64) -> uint64 {
     var prime: uint64 = 889523592379
     return (seq + prime) * prime

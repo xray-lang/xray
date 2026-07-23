@@ -1,0 +1,14 @@
+[package]
+name = "filetest-freestanding_top_var_scalar_attrs"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_top_var_scalar_attrs.xr"
+
+[[export.c]]
+xray = "xrayTopVarScalarAttrs"
+symbol = "xray_top_var_scalar_attrs"
+
+[[link.symbol]]
+xray = "COUNTER"
+section = "__DATA,.xr_count"
+used = true

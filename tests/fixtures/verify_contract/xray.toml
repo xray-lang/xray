@@ -1,0 +1,5 @@
+[package]
+name = "verify-contract-fixture"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"

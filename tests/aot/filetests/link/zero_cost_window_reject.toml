@@ -1,0 +1,5 @@
+[package]
+name = "filetest-zero_cost_window_reject"
+version = "1.0.0"
+license = "MIT"
+main = "zero_cost_window_reject.xr"

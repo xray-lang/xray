@@ -3,7 +3,6 @@ enum FsStatus {
     Done
 }
 
-@c_export("xray_enum_tostring_static")
 fn xrayEnumToStringStatic(flag: int) -> int {
     var s = FsStatus.Ready
     if (flag != 0) {
@@ -13,7 +12,6 @@ fn xrayEnumToStringStatic(flag: int) -> int {
     return s.ordinal
 }
 
-@c_export("xray_prelude_enum_tostring_static")
 fn xrayPreludeEnumToStringStatic(flag: int) -> int {
     var e = Endian.LE
     if (flag != 0) {

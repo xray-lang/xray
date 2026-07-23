@@ -1,0 +1,12 @@
+[package]
+name = "filetest-naked-hosted-reject"
+version = "1.0.0"
+license = "MIT"
+main = "naked_hosted_reject.xr"
+
+[[freestanding.entry]]
+xray = "xray_naked_stub"
+symbol = "xray_naked_stub"
+kind = "naked-stub"
+section = "__TEXT,.xray_naked"
+stub = "freestanding_entry_stub.S"

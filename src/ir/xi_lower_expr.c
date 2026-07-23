@@ -1593,6 +1593,40 @@ static XiValue *lower_mem_slice_call(XiLower *l, AstNode *node, CallExprNode *ca
     return v;
 }
 
+static XiValue *lower_mem_assume_initialized_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                  const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "assumeInitialized") != 0 ||
+        call->arg_count != 1 || call->type_arg_count != 1 || !call->arguments ||
+        !call->arguments[0])
+        return NULL;
+    XrType *target = xi_lower_node_type(l, node);
+    if (!target || XR_TYPE_IS_UNKNOWN(target))
+        return NULL;
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!xr_type_has_static_layout(xa_analyzer_target_data_layout(l->analyzer), target, &size,
+                                   &align) ||
+        size == 0 || align == 0 || align > UINT16_MAX)
+        return NULL;
+    XiValue *buffer = xi_lower_expr(l, call->arguments[0]);
+    if (!buffer)
+        return NULL;
+    const XrAggregateLayout *layout = xi_lower_type_struct_layout(l, target);
+    uint8_t code =
+        layout ? XI_BUFFER_MATERIALIZE_AGGREGATE : xr_ffi_type_from_xrtype(target, false);
+    if (!layout && !xr_ffi_type_is_memory_scalar(code))
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BUFFER_MATERIALIZE, target, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = buffer;
+    v->aux_int = XI_BUFFER_MATERIALIZE_AUX(code, size, align);
+    v->aux = (void *) layout;
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
 static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExprNode *call,
                                               const char *member) {
     if (!l || !node || !call || !member || strcmp(member, "withSliceMut") != 0 ||
@@ -5889,6 +5923,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *slice = lower_mem_slice_call(l, node, call, ma->name);
             if (slice)
                 return slice;
+            XiValue *materialized = lower_mem_assume_initialized_call(l, node, call, ma->name);
+            if (materialized)
+                return materialized;
             XiValue *with_slice_mut = lower_mem_with_slice_mut_call(l, node, call, ma->name);
             if (with_slice_mut)
                 return with_slice_mut;
@@ -5952,6 +5989,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *slice = lower_mem_slice_call(l, node, call, ma->name);
             if (slice)
                 return slice;
+            XiValue *materialized = lower_mem_assume_initialized_call(l, node, call, ma->name);
+            if (materialized)
+                return materialized;
             XiValue *with_slice_mut = lower_mem_with_slice_mut_call(l, node, call, ma->name);
             if (with_slice_mut)
                 return with_slice_mut;

@@ -4,7 +4,7 @@ import "../../fixtures/shared_mutation_reexport_all" as mut
 @test
 fn test_shared_provenance_reexported_readonly_function_value_param() {
     const bytes = Array<byte>(2, 5)
-    var view: Slice<byte> = bytes[:]
+    const view: Slice<byte> = bytes[:]
     const f = readFirst
     assert_eq(f(view), 7)
 }
@@ -12,7 +12,7 @@ fn test_shared_provenance_reexported_readonly_function_value_param() {
 @test
 fn test_shared_provenance_star_reexported_readonly_function_value_param() {
     const bytes = Array<byte>(3, 6)
-    var view: Slice<byte> = bytes[:]
+    const view: Slice<byte> = bytes[:]
     const f = mut.readFirst
     assert_eq(f(view), 9)
 }

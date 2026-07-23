@@ -1,11 +1,9 @@
-@c_export("xray_fixed_array_sum")
 fn xray_fixed_array_sum() -> int {
     var xs: [int; 3] = [1, 2, 3]
     xs[1] = 5
     return xs[0] + xs[1] + xs[2]
 }
 
-@c_export("xray_fixed_array_span")
 fn xray_fixed_array_span(i: int) -> int {
     var xs: [int; 3] = [10, 20, 30]
     var view: Slice<int> = xs[:]
@@ -13,7 +11,6 @@ fn xray_fixed_array_span(i: int) -> int {
     return view[i]
 }
 
-@c_export("xray_fixed_array_byte_slice")
 fn xray_fixed_array_byte_slice(i: int) -> int {
     var xs: [byte; 3] = [10, 20, 30]
     var view: Slice<byte> = xs[:]
@@ -21,7 +18,6 @@ fn xray_fixed_array_byte_slice(i: int) -> int {
     return xs[i] as int
 }
 
-@c_export("xray_fixed_array_byte_slice_load_store")
 fn xray_fixed_array_byte_slice_load_store(pos: int) -> int {
     var xs: [byte; 8] = [0, 0, 0, 0, 0, 0, 0, 0]
     var view: Slice<byte> = xs[:]
@@ -29,7 +25,6 @@ fn xray_fixed_array_byte_slice_load_store(pos: int) -> int {
     return int(view.load<uint16>(pos, Endian.LE))
 }
 
-@c_export("xray_fixed_array_byte_slice_wide_ints")
 fn xray_fixed_array_byte_slice_wide_ints(pos: int) -> int {
     var xs: [byte; 32] = [
         0, 0, 0, 0, 0, 0, 0, 0,
@@ -51,7 +46,6 @@ fn xray_fixed_array_byte_slice_wide_ints(pos: int) -> int {
     return int(a) + int(b) + int(c) + int(d) + int(e)
 }
 
-@c_export("xray_fixed_array_byte_slice_wide_floats")
 fn xray_fixed_array_byte_slice_wide_floats(pos: int) -> float64 {
     var xs: [byte; 16] = [
         0, 0, 0, 0, 0, 0, 0, 0,
@@ -65,7 +59,6 @@ fn xray_fixed_array_byte_slice_wide_floats(pos: int) -> float64 {
     return (a as float64) + b
 }
 
-@c_export("xray_fixed_array_byte_slice_bulk")
 fn xray_fixed_array_byte_slice_bulk() -> int {
     var dstBytes: [byte; 8] = [0, 0, 0, 0, 0, 0, 0, 0]
     var srcBytes: [byte; 4] = [7, 7, 7, 7]
@@ -79,7 +72,6 @@ fn xray_fixed_array_byte_slice_bulk() -> int {
     return check.compare(src) + check.commonPrefix(src)
 }
 
-@c_export("xray_fixed_array_span_bulk")
 fn xray_fixed_array_span_bulk() -> int {
     var dstWords: [uint32; 4] = [0, 0, 0, 0]
     var srcWords: [uint32; 2] = [11, 22]

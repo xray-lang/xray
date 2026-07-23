@@ -16,7 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
-#include "../parser/xa_assertion_attr.h"
+#include "../parser/xattribute_registry.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_derive_flags.h"
 #include <string.h>
@@ -24,35 +24,6 @@
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     if (!ctx || !attr)
         return;
-    /* Assertion attributes (@no_alloc/@no_throw/...) spell themselves from the
-     * shared registry so the formatter needs no per-attribute branch. */
-    const XaAssertionAttrInfo *assertion = xa_assertion_attr_by_kind(attr->kind);
-    if (assertion) {
-        xfmt_write_char(ctx, '@');
-        xfmt_write_str(ctx, assertion->name);
-        if (attr->kind == ATTR_ZERO_COST && attr->derive_flags != 0) {
-            static const struct {
-                uint32_t bit;
-                const char *name;
-            } categories[] = {
-                {XA_ZERO_COST_ALLOW_RUNTIME, "runtime"}, {XA_ZERO_COST_ALLOW_ALLOC, "alloc"},
-                {XA_ZERO_COST_ALLOW_ERROR, "error"},     {XA_ZERO_COST_ALLOW_BOUNDS, "bounds"},
-                {XA_ZERO_COST_ALLOW_BOX, "box"},         {XA_ZERO_COST_ALLOW_LANES, "lanes"},
-            };
-            bool first = true;
-            xfmt_write_str(ctx, "(allow: ");
-            for (size_t i = 0; i < sizeof(categories) / sizeof(categories[0]); i++) {
-                if ((attr->derive_flags & categories[i].bit) == 0)
-                    continue;
-                if (!first)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, categories[i].name);
-                first = false;
-            }
-            xfmt_write_char(ctx, ')');
-        }
-        return;
-    }
     switch (attr->kind) {
         case ATTR_TEST:
             xfmt_write_str(ctx, "@test");
@@ -64,67 +35,21 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             xfmt_write_fmt(ctx, "@test(timeout: %d)", attr->timeout);
             break;
         case ATTR_BEFORE_EACH:
-            xfmt_write_str(ctx, "@before_each");
-            break;
         case ATTR_AFTER_EACH:
-            xfmt_write_str(ctx, "@after_each");
-            break;
         case ATTR_BEFORE_ALL:
-            xfmt_write_str(ctx, "@before_all");
+        case ATTR_AFTER_ALL: {
+            const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attr->kind);
+            xfmt_write_char(ctx, '@');
+            xfmt_write_str(ctx, info ? info->spelling : "unknown");
             break;
-        case ATTR_AFTER_ALL:
-            xfmt_write_str(ctx, "@after_all");
-            break;
-        case ATTR_NATIVE:
-            xfmt_write_str(ctx, "@native");
-            break;
-        case ATTR_INTRINSIC:
-            xfmt_write_str(ctx, "@intrinsic(");
-            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
-                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
-            xfmt_write_char(ctx, ')');
-            break;
+        }
         case ATTR_DEPRECATED:
             xfmt_write_str(ctx, "@deprecated");
-            break;
-        case ATTR_EXTERN:
-        case ATTR_DYLIB:
-        case ATTR_LINK:
-            /* Emitted only by xfmt_emit_function_decl as canonical extern
-             * block syntax.  They are internal AST metadata, not attributes. */
-            break;
-        case ATTR_LINK_NAME:
-            xfmt_write_str(ctx, "@link_name(");
-            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
-                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
-            xfmt_write_char(ctx, ')');
-            break;
-        case ATTR_C_EXPORT:
-            xfmt_write_str(ctx, "@c_export(");
-            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
-                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
-            xfmt_write_char(ctx, ')');
-            break;
-        case ATTR_SECTION:
-            xfmt_write_str(ctx, "@section(");
-            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
-                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
-            xfmt_write_char(ctx, ')');
-            break;
-        case ATTR_WEAK:
-            xfmt_write_str(ctx, "@weak");
-            break;
-        case ATTR_USED:
-            xfmt_write_str(ctx, "@used");
-            break;
-        case ATTR_NAKED:
-            xfmt_write_str(ctx, "@naked");
-            break;
-        case ATTR_INTERRUPT:
-            xfmt_write_str(ctx, "@interrupt(");
-            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
-                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
-            xfmt_write_char(ctx, ')');
+            if (attr->str_arg) {
+                xfmt_write_char(ctx, '(');
+                xfmt_emit_escaped_inline_string(ctx, attr->str_arg, (int) strlen(attr->str_arg));
+                xfmt_write_char(ctx, ')');
+            }
             break;
         case ATTR_DERIVE: {
             bool first = true;

@@ -115,7 +115,7 @@ def case_dir_key(case_file: Path) -> str:
             return cached
 
     chunks: list[str] = []
-    for pattern in ("*.xr", "*.args", "*.xr.expected"):
+    for pattern in ("*.xr", "*.args", "*.xr.expected", "*.toml"):
         for file in sorted(directory.glob(pattern)):
             if not file.is_file():
                 continue

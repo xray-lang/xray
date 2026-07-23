@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_enum_method_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_enum_method_static.xr"
+
+[[export.c]]
+xray = "xray_enum_method_static"
+symbol = "xray_enum_method_static"

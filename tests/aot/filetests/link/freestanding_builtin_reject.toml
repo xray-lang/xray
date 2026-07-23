@@ -1,0 +1,25 @@
+[package]
+name = "filetest-freestanding_builtin_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_builtin_reject.xr"
+
+[[export.c]]
+xray = "xray_builtin_string_reject"
+symbol = "xray_builtin_string_reject"
+
+[[export.c]]
+xray = "xray_builtin_typename_reject"
+symbol = "xray_builtin_typename_reject"
+
+[[export.c]]
+xray = "xray_builtin_copy_reject"
+symbol = "xray_builtin_copy_reject"
+
+[[export.c]]
+xray = "xray_builtin_char_reject"
+symbol = "xray_builtin_char_reject"
+
+[[export.c]]
+xray = "xray_builtin_chr_dump_reject"
+symbol = "xray_builtin_chr_dump_reject"

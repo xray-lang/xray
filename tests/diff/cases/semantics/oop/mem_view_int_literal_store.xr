@@ -1,36 +1,32 @@
-// Regression: an int literal stored into a uint64 extern-struct field through a
-// mem.withSliceMut, when the store helper is inlined, must keep the field's ABI width.
+// Regression: an int literal stored into a uint64 struct field through a
+// scoped mem.withSliceMut view, when the store helper is inlined, must keep
+// the field's ABI width.
 // The inliner substituted the I64-typed literal for the uint64 parameter, so the
 // resulting PTR_STORE failed verification (value maps to I64, slot expects U64)
 // and AOT could not build. VM and AOT must agree.
 import mem
 
-extern "C" {
-    struct Slot {
-        ptr: uint64
-    }
+struct Slot {
+    ptr: uint64
 }
 
 // Small enough to be inlined; the literal argument replaces the uint64 param.
-fn storeSlot(base: MutPtr<uint8>, val: uint64) {
-    var guard = base
-    unsafe {
-        mem.withSliceMut<Slot>(base, 1, ref guard, fn(slots: ref Slice<Slot>) {
-            slots[0].ptr = val
-        })
-    }
+fn storeSlot(slots: ref Slice<Slot>, val: uint64) {
+    slots[0].ptr = val
 }
 
 fn main() {
     var a = Array<uint8>(8)
     a.fill(255)
     var p = unsafe { a.mutPtr() }
-    storeSlot(p, 0)                 // I64 literal 0 into uint64 field (inlined)
-    var v0 = unsafe { mem.slice<Slot>(p, 1, a) }
-    print(v0[0].ptr)               // 0
-    storeSlot(p, 4096)             // non-zero literal
-    var v1 = unsafe { mem.slice<Slot>(p, 1, a) }
-    print(v1[0].ptr)               // 4096
+    unsafe {
+        mem.withSliceMut<Slot>(p, 1, ref p, fn(slots: ref Slice<Slot>) {
+            storeSlot(ref slots, 0)       // I64 literal 0 into uint64 field (inlined)
+            print(slots[0].ptr)           // 0
+            storeSlot(ref slots, 4096)    // non-zero literal
+            print(slots[0].ptr)           // 4096
+        })
+    }
 }
 
 main()

@@ -1,7 +1,6 @@
 import math
 import { min, max, clamp } from "math"
 
-@c_export("xray_math_int_core")
 fn xray_math_int_core(a: int, b: int) -> int {
     var lo = min(a, b, 5)
     var hi = math.max(a, b, 10)

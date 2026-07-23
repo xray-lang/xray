@@ -164,7 +164,7 @@ summary_package_payload_hit_rate_benchmark|covered|package_import_warm|tests/ben
 cross_package_summary_reuse|covered|xg_global_evidence_import_package_payload|src/analysis|Immutable package evidence reuse has an explicit global-payload import API with module identity validation and row-family id remap.
 storage_provenance|covered|storage-plan|tests/unit/analysis|Module slots carry verified owner, mutability, address identity, recursive safety flags, and materialization action.
 capture_storage_action|covered|module_capture->action|tests/unit/analysis|Closed captures lower to one verified inline/copy/module-readonly/shared/reject action.
-module_init_plan|covered|module_init_plans\[0\]\.allocation_owner|tests/unit/analysis|Each module init carries a verified module allocation owner and non-suspend contract.
+module_init_plan|covered|module_init_plans\[0\]\.allocation_domain|tests/unit/analysis|Each module init carries a verified allocation domain and non-suspend contract.
 entry_reachability|covered|entry_plan\.reachable_body_count|tests/unit/analysis|Entry requirements are derived by closed-world traversal from the executable root and exclude unreachable bodies.
 root_representation|covered|XR_ROOT_DESCRIPTOR|tests/unit/analysis|Root plan distinguishes elided, descriptor-only spawn, and resumable suspension representations.
 target_capability_provider|covered|provider|tests/unit/analysis|Freestanding requirements are verified against versioned target provider capability and hook sets.

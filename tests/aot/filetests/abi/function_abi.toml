@@ -1,0 +1,13 @@
+[package]
+name = "filetest-function-abi"
+version = "1.0.0"
+license = "MIT"
+main = "function_abi.xr"
+
+[[link.symbol]]
+xray = "echo_text"
+used = true
+
+[[link.symbol]]
+xray = "same_items"
+used = true

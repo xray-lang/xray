@@ -415,6 +415,8 @@
       "R[A] = strict Slice window R[B], start=R[C], count=R[C+1], slot=R[C+2]")                    \
     _(SLICE_FROM_PTR, FMT_ABC, KOP_ABC_BIN,                                                        \
       "R[A] = raw pointer Slice R[B], count=R[C], metadata/slot=R[C+1..C+5]")                      \
+    _(BUFFER_MATERIALIZE, FMT_ABC, KOP_ABC_BIN,                                                    \
+      "R[A] = consume Buffer R[B] using exact layout metadata R[C..C+4]")                          \
     _(DIV_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] / R[C]  (statically-unsigned divide)")     \
     _(MOD_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] % R[C]  (statically-unsigned modulo)")     \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")

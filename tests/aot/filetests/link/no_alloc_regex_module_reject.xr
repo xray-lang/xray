@@ -2,7 +2,6 @@ import regex
 
 var xray_no_alloc_regex_digits = regex.compile("(\\d+)")
 
-@no_alloc
 fn xray_no_alloc_regex_is_valid_reject(pattern: string) -> bool {
     return regex.isValid(pattern)
 }

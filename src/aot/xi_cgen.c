@@ -43,6 +43,7 @@
 #include "../ir/xi_value_query.h"
 #include "../ir/xi_coro_analyze.h"
 #include "../base/xdefs.h"
+#include "../module/xnative_package.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -669,7 +670,7 @@ struct XiCgenCtx {
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenStats stats;
     /* Per-function abstraction-cost residue records (task 217 P2).  Grown as
-     * each body is emitted; consumed by --dump-residue and @zero_cost verify.
+     * each body is emitted; consumed by --dump-residue and contract verification.
      * want_residue gates the per-function C capture (off = no overhead). */
     bool want_residue;
     XiFuncResidue *func_residues;
@@ -2402,8 +2403,8 @@ static void cg_report_imported_static_const_requires_weak(const XiCgenCtx *ctx,
     const char *module_name = module && module->name ? module->name : "?";
     const char *slot_name = cg_module_const_slot_name(module, slot);
     fprintf(stderr,
-            "[xi_cgen] ERROR: freestanding imported static const '%s.%s' requires @weak for "
-            "cross-module data access\n",
+            "[xi_cgen] ERROR: freestanding imported static const '%s.%s' requires a weak "
+            "link-symbol plan for cross-module data access\n",
             module_name, slot_name && slot_name[0] ? slot_name : "?");
     (void) ctx;
 }
@@ -6734,7 +6735,7 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
 
     /* A leaf proven allocation-free by the whole-program effect summary has no
      * hidden allocation slow path and is a substantially safer inlining
-     * candidate than an arbitrary helper.  An explicit @no_alloc contract is
+     * candidate than an arbitrary helper. An external no-allocation contract is
      * useful as a verifier promise, but must not be required for optimization:
      * inferred proof carries the same semantic fact.
      * Native-vector Xi ops additionally represent whole-lane instructions,
@@ -7413,8 +7414,8 @@ static void cg_record_ir_conversion_stats(XiCgenCtx *ctx, const XiFunc *f) {
  * C text — rather than re-deriving the emitter's elision decisions from the IR —
  * is the same methodology the port shape gate uses, so the counts reflect
  * exactly what lands in the C unit: a bounds/error/view check the emitter proved
- * away is simply not present to be counted.  (@zero_cost verifies before the C
- * compiler runs, so this is a pre-clang, and therefore conservative, view.) */
+ * away is simply not present to be counted. This is a pre-clang, conservative
+ * backend-shape view consumed by `xray verify --contract`. */
 
 static XiFuncResidue *cg_residue_begin(XiCgenCtx *ctx, const XiFunc *f) {
     if (ctx->nfunc_residues == ctx->func_residues_cap) {
@@ -7430,8 +7431,6 @@ static XiFuncResidue *cg_residue_begin(XiCgenCtx *ctx, const XiFunc *f) {
     memset(r, 0, sizeof(*r));
     r->func_name = f->name ? f->name : "?";
     r->source_file = (ctx->module && ctx->module->path) ? ctx->module->path : f->source_file;
-    r->has_zero_cost = f->has_zero_cost_contract;
-    r->zero_cost_allow_mask = f->zero_cost_allow_mask;
     return r;
 }
 
@@ -8036,30 +8035,23 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
 }
 
 static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
-    return f && !f->c_export &&
-           (f->aot_section || f->aot_used || f->aot_naked ||
-            (f->aot_interrupt_abi && f->aot_interrupt_abi[0]));
+    return f && !f->export_plan && (f->link_plan || f->entry_plan);
 }
 
 static void emit_aot_symbol_attrs(FILE *out, const XiFunc *f, bool c_export_wrapper) {
     if (!f)
         return;
-    if (f->aot_section) {
+    const char *section =
+        f->link_plan ? f->link_plan->section : (f->entry_plan ? f->entry_plan->section : NULL);
+    if (section) {
         fprintf(out, "XRT_ATTR_SECTION(");
-        emit_c_string_literal(out, f->aot_section);
+        emit_c_string_literal(out, section);
         fprintf(out, ") ");
     }
-    if (c_export_wrapper && f->aot_weak)
+    if (c_export_wrapper && f->link_plan && f->link_plan->weak)
         fprintf(out, "XRT_ATTR_WEAK ");
-    if (f->aot_used)
+    if ((f->link_plan && f->link_plan->used) || f->entry_plan)
         fprintf(out, "XRT_ATTR_USED ");
-    if (f->aot_naked)
-        fprintf(out, "XRT_ATTR_NAKED ");
-    if (f->aot_interrupt_abi && f->aot_interrupt_abi[0]) {
-        fprintf(out, "XRT_ATTR_INTERRUPT(");
-        emit_c_string_literal(out, f->aot_interrupt_abi);
-        fprintf(out, ") ");
-    }
 }
 
 static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -8307,8 +8299,8 @@ static void emit_c_export_param_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *
 }
 
 static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
-    if (!f || !f->c_export || !f->c_export_symbol || !f->c_export_symbol[0] || f->is_extern ||
-        !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
+    if (!f || !f->export_plan || !f->export_plan->symbol || !f->export_plan->symbol[0] ||
+        f->is_extern || !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
         cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
     return cg_c_export_xray_func_signature_supported(ctx, f);
@@ -8319,7 +8311,7 @@ static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc
     if (with_attrs)
         emit_aot_symbol_attrs(out, f, true);
     emit_c_export_return_c_type(ctx, out, f, prefix);
-    fprintf(out, " %s(", f->c_export_symbol);
+    fprintf(out, " %s(", f->export_plan->symbol);
     if (f->nparams == 0) {
         fprintf(out, "void");
     } else {
@@ -8365,7 +8357,7 @@ static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc 
                                                    CgCExportStructTypedef *items, int *count) {
     if (!f)
         return;
-    if (f->c_export && cg_func_can_have_c_export_stub(ctx, f)) {
+    if (f->export_plan && f->export_plan->header && cg_func_can_have_c_export_stub(ctx, f)) {
         const char *prefix = cg_c_export_func_prefix(ctx, f);
         const XaotFuncPlan *plan = cg_func_plan(ctx, f);
         if (plan && cg_c_export_abi_slot_is_struct_aggregate(&plan->abi.ret)) {
@@ -8389,10 +8381,10 @@ static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc 
 static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f, uint32_t *count) {
     if (!f)
         return;
-    if (f->c_export) {
+    if (f->export_plan && f->export_plan->header) {
         if (!cg_func_can_have_c_export_stub(ctx, f)) {
             fprintf(stderr,
-                    "[xi_cgen] ERROR: @c_export function '%s' must be a top-level "
+                    "[xi_cgen] ERROR: export.c function '%s' must be a top-level "
                     "noncapturing non-coroutine function with a supported C ABI signature\n",
                     f->name ? f->name : "<anonymous>");
             ctx->error = true;
@@ -8444,7 +8436,7 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
         emit_c_export_header_func(ctx, out, modules[i]->init, &count);
     }
     if (count == 0)
-        fprintf(out, "/* No @c_export symbols. */\n");
+        fprintf(out, "/* No export.c header symbols. */\n");
 
     fprintf(out, "\n#ifdef __cplusplus\n}\n#endif\n\n");
     fprintf(out, "#endif /* %s */\n", header_guard);
@@ -8484,11 +8476,11 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
     XrRep ret_rep;
     XrRep c_ret_rep;
 
-    if (!f || !f->c_export)
+    if (!f || !f->export_plan)
         return;
     if (!cg_func_can_have_c_export_stub(ctx, f)) {
         fprintf(stderr,
-                "[xi_cgen] ERROR: @c_export function '%s' must be a top-level noncapturing "
+                "[xi_cgen] ERROR: export.c function '%s' must be a top-level noncapturing "
                 "non-coroutine function with a supported C ABI signature\n",
                 f->name ? f->name : "<anonymous>");
         ctx->error = true;
@@ -8812,8 +8804,7 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
         return false;
     if (mod && mod->init == f)
         return true;
-    if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
-        (f->aot_interrupt_abi && f->aot_interrupt_abi[0]))
+    if (f->export_plan || f->link_plan || f->entry_plan)
         return true;
     /* Shared-library class descriptors are open-world ABI tables. Executable
      * class members remain closed-world and are retained by actual constructor,

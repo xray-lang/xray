@@ -1,0 +1,11 @@
+[package]
+name = "manifest-export-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"
+
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true

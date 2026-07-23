@@ -1,9 +1,9 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_pure_stdlib_call_reject'
+contains=contract 'xray_no_alloc_pure_stdlib_call_reject' failed
 contains=xray_no_alloc_pure_stdlib_call_reject
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_pure_stdlib_scalar_call_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_pure_stdlib_namespace_alias_call_reject'
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_pure_stdlib_selective_call_reject'
+contains=contract 'xray_no_alloc_pure_stdlib_scalar_call_reject' failed
+contains=contract 'xray_no_alloc_pure_stdlib_namespace_alias_call_reject' failed
+contains=contract 'xray_no_alloc_pure_stdlib_selective_call_reject' failed
 not_contains=unresolved AOT import
 not_contains=unsupported AOT indirect call
 not_contains=CRASH

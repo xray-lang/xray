@@ -194,6 +194,7 @@
     X(BYTE_SLICE_REPEAT, xi_emit_byte_slice_repeat) \
     X(SLICE_WINDOW, xi_emit_span_window) \
     X(SLICE_FROM_PTR, xi_emit_slice_from_ptr) \
+    X(BUFFER_MATERIALIZE, xi_emit_buffer_materialize) \
     X(SLICE_AS_BYTES, xi_emit_span_as_bytes) \
     X(SLICE_FILL, xi_emit_span_fill) \
     X(SLICE_COPY, xi_emit_span_copy) \

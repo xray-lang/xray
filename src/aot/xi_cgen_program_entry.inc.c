@@ -478,7 +478,7 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
 }
 
 /* Shared-library init: --shared exports a C ABI library, so loading it executes
- * the complete module graph before any @c_export wrapper can run. This is the
+ * the complete module graph before any manifest export wrapper can run. This is the
  * library equivalent of main's ordered module-init sequence: both initialized
  * globals and explicit top-level side effects retain normal Xray semantics. */
 static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n,

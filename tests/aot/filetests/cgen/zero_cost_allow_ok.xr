@@ -1,7 +1,5 @@
-// Task 217 P3: @zero_cost(allow: ...) exempts named residue categories, so a
-// function that keeps a bounds branch still compiles when bounds are allowed.
-// The default (no allow list) would reject this via error[E0655] (R4).
-@zero_cost(allow: bounds)
+// A build contract may explicitly allow a named residue category. This body
+// intentionally keeps a bounds branch so the verifier can exercise that path.
 fn zeroCostAllowBounds(data: Slice<int>, i: int) -> int {
     if (i <= 0) {
         return 0
@@ -9,7 +7,6 @@ fn zeroCostAllowBounds(data: Slice<int>, i: int) -> int {
     return data[i] + zeroCostAllowBounds(data, i - 1)
 }
 
-@c_export("zc_allow_sum")
 fn zc_allow_sum(a: int) -> int {
     var d = [1, 2, 3, 4]
     return zeroCostAllowBounds(d[:], 3)

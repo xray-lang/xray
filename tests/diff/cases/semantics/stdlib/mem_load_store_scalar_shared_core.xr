@@ -1,13 +1,6 @@
 // anchor: mem-load-store-scalar-raw-core
 import mem
 
-fn dynamicRoundTrip(p: MutPtr<uint8>, offset: int, endian: Endian) -> uint32 {
-    unsafe {
-        mem.store<uint32>(p, offset, 270544960, endian)
-        return mem.load<uint32>(p, offset, endian)
-    }
-}
-
 fn run() {
     var buffer = mem.allocZeroed(96)
     var p = unsafe {
@@ -42,8 +35,12 @@ fn run() {
         var loadedMut: MutPtr<uint8> = mem.load<MutPtr<uint8>>(p, 64)
         print(loadedMut == p)
     }
-    print(int(dynamicRoundTrip(p, 72, Endian.LE)))
-    print(int(dynamicRoundTrip(p, 76, Endian.BE)))
+    unsafe {
+        mem.store<uint32>(p, 72, 270544960, Endian.LE)
+        print(int(mem.load<uint32>(p, 72, Endian.LE)))
+        mem.store<uint32>(p, 76, 270544960, Endian.BE)
+        print(int(mem.load<uint32>(p, 76, Endian.BE)))
+    }
 }
 
 run()

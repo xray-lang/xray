@@ -1,0 +1,17 @@
+[package]
+name = "filetest-freestanding_math_allowlist"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_math_allowlist.xr"
+
+[[export.c]]
+xray = "xray_math_allowlist_constants"
+symbol = "xray_math_allowlist_constants"
+
+[[export.c]]
+xray = "xray_math_allowlist_max_int"
+symbol = "xray_math_allowlist_max_int"
+
+[[export.c]]
+xray = "xray_math_allowlist_int_core"
+symbol = "xray_math_allowlist_int_core"

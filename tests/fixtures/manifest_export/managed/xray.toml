@@ -1,0 +1,9 @@
+[package]
+name = "managed-export-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"
+
+[[export.c]]
+xray = "length"
+symbol = "xr_managed_length"

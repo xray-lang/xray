@@ -3,11 +3,8 @@ struct CounterState {
     limit: int
 }
 
-@section("__DATA,.xr_state")
-@used
 var STATE = CounterState{value: 1, limit: 10}
 
-@c_export("xray_top_var_aggregate_attrs")
 fn xray_top_var_aggregate_attrs() -> int {
     STATE.value = STATE.value + 2
     return STATE.value + STATE.limit

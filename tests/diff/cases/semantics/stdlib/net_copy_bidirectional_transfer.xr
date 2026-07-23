@@ -1,19 +1,21 @@
 import net
 import { CopyBidirectionalResult } from net
 
-fn bridgeOnce(listener: NetListener) -> CopyBidirectionalResult {
+fn bridgeOnce(listener: move NetListener) -> CopyBidirectionalResult {
     var a = net.accept(listener)!
     var b = net.accept(listener)!
     var result = net.copyBidirectional(a, b)
     net.close(a)
     net.close(b)
+    net.close(listener)
     return result
 }
 
 var listener = net.listen(0, 2)!
-var bridge = go bridgeOnce(listener)
-var left = net.dial("127.0.0.1", listener.port(), 1000)!
-var right = net.dial("127.0.0.1", listener.port(), 1000)!
+const port = listener.port()
+var bridge = go bridgeOnce(move listener)
+var left = net.dial("127.0.0.1", port, 1000)!
+var right = net.dial("127.0.0.1", port, 1000)!
 
 net.write(left, "left")
 net.write(right, "right")
@@ -29,4 +31,3 @@ print(result.bToA)
 
 net.close(left)
 net.close(right)
-net.close(listener)

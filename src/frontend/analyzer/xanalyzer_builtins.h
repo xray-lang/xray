@@ -20,6 +20,11 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../base/xdefs.h"
 
+typedef enum XaBuiltinReturnOwnership {
+    XA_BUILTIN_RETURN_UNKNOWN = 0,
+    XA_BUILTIN_RETURN_FRESH,
+} XaBuiltinReturnOwnership;
+
 // Built-in member info
 typedef struct XaBuiltinMember {
     const char *name;
@@ -33,6 +38,7 @@ typedef struct XaBuiltinMember {
     XaEffectContract effect_contract;  // bodyless error contract; zero means missing/incomplete
     XaAllocationContractKind allocation_contract;  // explicit bodyless allocation contract
     bool mutates_receiver;  // native declaration manifest proof; never inferred from spelling
+    XaBuiltinReturnOwnership return_ownership;  // sealed caller ownership result contract
 } XaBuiltinMember;
 
 // Built-in type info
@@ -186,6 +192,8 @@ XR_FUNC const XaEffectContract *xa_builtin_get_module_func_effect_contract(const
                                                                            const char *func_name);
 XR_FUNC XaAllocationContractKind
 xa_builtin_get_module_func_allocation_contract(const char *module_name, const char *func_name);
+XR_FUNC XaBuiltinReturnOwnership
+xa_builtin_get_module_func_return_ownership(const char *module_name, const char *func_name);
 
 // Check if a module function is registered as yieldable in stdlib metadata.
 XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name);

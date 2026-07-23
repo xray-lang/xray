@@ -1,4 +1,3 @@
-@c_export("xray_catch_panic_reject")
 fn xray_catch_panic_reject(n: int) -> int {
     var out = 0
     try {

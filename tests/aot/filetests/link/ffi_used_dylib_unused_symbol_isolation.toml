@@ -1,0 +1,52 @@
+[package]
+name = "filetest-ffi_used_dylib_unused_symbol_isolation"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_used_dylib_unused_symbol_isolation.xr"
+
+[native]
+name = "ffi-ffi_used_dylib_unused_symbol_isolation"
+version = "1"
+license = "test"
+source = "AOT FFI manifest fixture"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "library-0"
+kind = "platform"
+system_links = ["m"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "cos"
+native = "cos"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.symbol]]
+xray = "xrayffi_missing_from_used_math"
+native = "xrayffi_missing_from_used_math"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.unit]]
+name = "library-1"
+kind = "platform"
+system_links = ["xrayffi_unused_task190_mixed"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_unused_side_dylib"
+native = "xrayffi_unused_side_dylib"
+kind = "function"
+calling_convention = "c"
+unit = "library-1"

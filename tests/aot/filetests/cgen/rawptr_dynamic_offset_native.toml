@@ -1,0 +1,9 @@
+[package]
+name = "filetest-rawptr-dynamic-offset-native"
+version = "1.0.0"
+license = "MIT"
+main = "rawptr_dynamic_offset_native.xr"
+
+[[export.c]]
+xray = "storeOffset"
+symbol = "xray_store_offset"

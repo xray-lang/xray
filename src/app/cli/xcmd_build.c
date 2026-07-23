@@ -1383,6 +1383,22 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --profile %s requires --native\n", build_profile_name(profile));
         CMD_BUILD_RETURN(2);
     }
+    if (project && project->native_plan && profile != XR_CLI_BUILD_PROFILE_FREESTANDING &&
+        project->native_plan->entry_count > 0) {
+        fprintf(stderr,
+                "Error: freestanding.entry is only supported by the freestanding AOT profile\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (project && project->native_plan && profile == XR_CLI_BUILD_PROFILE_HOSTED) {
+        for (uint32_t i = 0; i < project->native_plan->link_symbol_count; i++) {
+            if (!project->native_plan->link_symbols[i].section)
+                continue;
+            fprintf(stderr,
+                    "Error: link.symbol section policy is only supported by the freestanding "
+                    "AOT profile\n");
+            CMD_BUILD_RETURN(2);
+        }
+    }
     if (xr_cli_opt_present(&inv->options, "type-names") && !native_mode) {
         fprintf(stderr, "Error: --type-names requires --native\n");
         CMD_BUILD_RETURN(2);
@@ -2076,6 +2092,351 @@ static void xaot_dirname(const char *path, char *out, size_t out_sz) {
     out[len] = '\0';
 }
 
+static const char *xaot_native_unit_opt_flag(const XrNativeUnit *unit) {
+    if (unit && unit->optimization && strcmp(unit->optimization, "size") == 0)
+        return "-Os";
+    if (unit && unit->optimization && strcmp(unit->optimization, "release") == 0)
+        return "-O2";
+    return "-O0";
+}
+
+static bool xaot_cli_build_native_unit_compile_command(const XrCliToolchainPlan *plan,
+                                                       const XrCliBuildTarget *target,
+                                                       const XrNativeUnit *unit, const char *source,
+                                                       const char *object, const char *sysroot,
+                                                       XaotCliLinkCommand *cmd, char *err,
+                                                       size_t err_size) {
+    if (!plan || !target || !unit || !source || !object || !cmd) {
+        snprintf(err, err_size, "missing native unit compile command input");
+        return false;
+    }
+    memset(cmd, 0, sizeof(*cmd));
+    cmd->program = plan->program;
+    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
+        return false;
+    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
+        if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size) ||
+            !xaot_cli_link_add_zig_target(cmd, target, err, err_size))
+            return false;
+    }
+    if (!xaot_cli_link_add_arg(cmd, xaot_native_unit_opt_flag(unit), err, err_size) ||
+        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
+        !xaot_cli_link_add_arg(cmd, "-c", err, err_size))
+        return false;
+    if (unit->kind == XR_NATIVE_UNIT_C) {
+        if (!xaot_cli_link_add_prefixed(cmd, "-std=", unit->language_standard, err, err_size) ||
+            !xaot_cli_link_add_prefixed(cmd, "-fvisibility=", unit->visibility, err, err_size))
+            return false;
+    }
+    if (unit->warning_policy && strcmp(unit->warning_policy, "strict") == 0 &&
+        (!xaot_cli_link_add_arg(cmd, "-Wall", err, err_size) ||
+         !xaot_cli_link_add_arg(cmd, "-Wextra", err, err_size) ||
+         !xaot_cli_link_add_arg(cmd, "-Werror", err, err_size)))
+        return false;
+    for (uint32_t i = 0; i < unit->include_dir_count; i++) {
+        if (!xaot_cli_link_add_prefixed(cmd, "-I", unit->include_dirs[i], err, err_size))
+            return false;
+    }
+    for (uint32_t i = 0; i < unit->define_count; i++) {
+        if (!xaot_cli_link_add_prefixed(cmd, "-D", unit->defines[i], err, err_size))
+            return false;
+    }
+    if (sysroot && sysroot[0] &&
+        !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
+        return false;
+    if (!target->is_native && !xaot_cli_link_add_target_metadata_flags(cmd, target, err, err_size))
+        return false;
+    return xaot_cli_link_add_arg(cmd, source, err, err_size) &&
+           xaot_cli_link_add_arg(cmd, "-o", err, err_size) &&
+           xaot_cli_link_add_arg(cmd, object, err, err_size);
+}
+
+static int xaot_invoke_native_unit_compile(const XrCliToolchainPlan *plan,
+                                           const XrCliBuildTarget *target, const XrNativeUnit *unit,
+                                           const char *source, const char *object,
+                                           const char *sysroot, bool dump_command, bool dry_run) {
+    char err[512];
+    XaotCliLinkCommand cmd;
+    if (!xaot_cli_build_native_unit_compile_command(plan, target, unit, source, object, sysroot,
+                                                    &cmd, err, sizeof(err))) {
+        fprintf(stderr, "Error: %s\n", err);
+        return 1;
+    }
+    if (dump_command)
+        xaot_cli_print_command("Native compile command", &cmd);
+    if (dry_run)
+        return 0;
+    XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+    int code = -1;
+    if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0 || code != 0) {
+        fprintf(stderr, "Error: native unit '%s' compilation failed for '%s'\n",
+                unit->name ? unit->name : "?", source);
+        return 1;
+    }
+    return 0;
+}
+
+static int xaot_combine_native_unit_objects(const XrCliToolchainPlan *plan,
+                                            const XrCliBuildTarget *target,
+                                            const XrNativeUnit *unit, const char *const *objects,
+                                            uint32_t object_count, const char *output,
+                                            bool dump_command, bool dry_run) {
+    char err[512];
+    XaotCliLinkCommand cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.program = plan->program;
+    if (!xaot_cli_link_add_arg(&cmd, plan->program, err, sizeof(err)))
+        goto command_error;
+    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG &&
+        (!xaot_cli_link_add_arg(&cmd, "cc", err, sizeof(err)) ||
+         !xaot_cli_link_add_zig_target(&cmd, target, err, sizeof(err))))
+        goto command_error;
+    if (!xaot_cli_link_add_arg(&cmd, "-r", err, sizeof(err)) ||
+        !xaot_cli_link_add_arg(&cmd, "-o", err, sizeof(err)) ||
+        !xaot_cli_link_add_arg(&cmd, output, err, sizeof(err)))
+        goto command_error;
+    for (uint32_t i = 0; i < object_count; i++) {
+        if (!xaot_cli_link_add_arg(&cmd, objects[i], err, sizeof(err)))
+            goto command_error;
+    }
+    if (dump_command)
+        xaot_cli_print_command("Native combine command", &cmd);
+    if (dry_run)
+        return 0;
+    {
+        XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
+        int code = -1;
+        if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0 || code != 0) {
+            fprintf(stderr, "Error: cannot combine native unit '%s' objects\n",
+                    unit->name ? unit->name : "?");
+            return 1;
+        }
+    }
+    return 0;
+
+command_error:
+    fprintf(stderr, "Error: %s\n", err);
+    return 1;
+}
+
+static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t source_index,
+                                             const XrCliBuildTarget *target,
+                                             const XrCliToolchainPlan *plan, const char *sysroot) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h = xaot_hash_fold_str(h, "xray-native-unit-object-v1");
+    h = xaot_hash_fold(h, &unit->fingerprint, sizeof(unit->fingerprint));
+    h = xaot_hash_fold(h, &source_index, sizeof(source_index));
+    h = xaot_hash_fold_str(h, target ? target->name : NULL);
+    h = xaot_hash_fold_str(h, target ? target->zig_triple : NULL);
+    h = xaot_hash_fold_str(h, target ? target->cpu : NULL);
+    h = xaot_hash_fold_str(h, plan ? plan->program : NULL);
+    if (plan)
+        h = xaot_hash_fold(h, &plan->kind, sizeof(plan->kind));
+    return xaot_hash_fold_str(h, sysroot);
+}
+
+static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
+                                       XaotLinkManifest *link_manifest,
+                                       const XrCliToolchainPlan *toolchain_plan,
+                                       const XrCliBuildTarget *target, const char *cache_dir,
+                                       const char *sysroot, bool verbose, bool rebuild,
+                                       bool dump_command, bool dry_run) {
+    char native_cache[XR_PATH_MAX];
+    if (!native_plan)
+        return 0;
+    if (snprintf(native_cache, sizeof(native_cache), "%s/native", cache_dir) < 0 ||
+        xaot_mkdir_p(native_cache) != 0) {
+        fprintf(stderr, "Error: cannot create native unit cache in '%s'\n", cache_dir);
+        return 1;
+    }
+    for (uint32_t ui = 0; ui < native_plan->unit_count; ui++) {
+        const XrNativeUnit *unit = &native_plan->units[ui];
+        /* Platform libraries are selected through reachable native.symbol
+         * entries and already appear in the XAOT feature/link manifest.
+         * Adding every declared platform unit here would retain libraries for
+         * unused foreign declarations. */
+        for (uint32_t li = 0; unit->kind != XR_NATIVE_UNIT_PLATFORM && li < unit->system_link_count;
+             li++) {
+            if (!xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_SYSTEM_LIB,
+                                               unit->system_links[li])) {
+                fprintf(stderr, "Error: cannot record native system link '%s'\n",
+                        unit->system_links[li]);
+                return 1;
+            }
+        }
+        if (unit->kind != XR_NATIVE_UNIT_C && unit->kind != XR_NATIVE_UNIT_ASM)
+            continue;
+        const char **objects =
+            (const char **) xr_calloc((size_t) unit->source_count, sizeof(char *));
+        char (*object_paths)[XR_PATH_MAX] =
+            (char (*)[XR_PATH_MAX]) xr_calloc((size_t) unit->source_count, XR_PATH_MAX);
+        if (!objects || !object_paths) {
+            xr_free(objects);
+            xr_free(object_paths);
+            return 1;
+        }
+        int ret = 0;
+        for (uint32_t si = 0; si < unit->source_count; si++) {
+            uint64_t key = xaot_native_object_cache_key(unit, si, target, toolchain_plan, sysroot);
+            char tmp[XR_PATH_MAX];
+            snprintf(object_paths[si], XR_PATH_MAX, "%s/%016llx.o", native_cache,
+                     (unsigned long long) key);
+            objects[si] = object_paths[si];
+            if (!rebuild && xr_fs_is_file(object_paths[si])) {
+                if (verbose)
+                    printf("[xi-native] native cache hit: %s[%u] (%016llx)\n", unit->name, si,
+                           (unsigned long long) key);
+                continue;
+            }
+            snprintf(tmp, sizeof(tmp), "%s/%016llx.%d.o.tmp", native_cache,
+                     (unsigned long long) key, (int) xr_proc_self_pid());
+            if (verbose)
+                printf("[xi-native] compiling native unit: %s[%u] (%016llx)\n", unit->name, si,
+                       (unsigned long long) key);
+            ret = xaot_invoke_native_unit_compile(toolchain_plan, target, unit, unit->sources[si],
+                                                  tmp, sysroot, dump_command, dry_run);
+            if (ret == 0 && !dry_run && xr_fs_rename(tmp, object_paths[si]) != 0) {
+                fprintf(stderr, "Error: cannot install cached native object '%s'\n",
+                        object_paths[si]);
+                xr_fs_remove(tmp);
+                ret = 1;
+            }
+            if (ret != 0)
+                break;
+        }
+        if (ret == 0 && !dry_run) {
+            char output_dir[XR_PATH_MAX];
+            char tmp_output[XR_PATH_MAX];
+            xaot_dirname(unit->output, output_dir, sizeof(output_dir));
+            if (xaot_mkdir_p(output_dir) != 0) {
+                fprintf(stderr, "Error: cannot create native output directory '%s'\n", output_dir);
+                ret = 1;
+            } else {
+                snprintf(tmp_output, sizeof(tmp_output), "%s.%d.tmp", unit->output,
+                         (int) xr_proc_self_pid());
+                if (unit->source_count == 1) {
+                    if (xaot_copy_file(objects[0], tmp_output, 0644) != 0)
+                        ret = 1;
+                } else {
+                    ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
+                                                           unit->source_count, tmp_output,
+                                                           dump_command, false);
+                }
+                if (ret == 0 && xr_fs_rename(tmp_output, unit->output) != 0) {
+                    fprintf(stderr, "Error: cannot install native unit output '%s'\n",
+                            unit->output);
+                    xr_fs_remove(tmp_output);
+                    ret = 1;
+                }
+            }
+        } else if (ret == 0 && dry_run && unit->source_count > 1) {
+            ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
+                                                   unit->source_count, unit->output, dump_command,
+                                                   true);
+        }
+        xr_free(objects);
+        xr_free(object_paths);
+        if (ret != 0)
+            return ret;
+    }
+    for (uint32_t ti = 0; ti < native_plan->target_count; ti++) {
+        const XrNativeTargetPlan *native_target = &native_plan->targets[ti];
+        const char *actual =
+            target && target->zig_triple ? target->zig_triple : (target ? target->name : NULL);
+        if (actual && strcmp(native_target->triple, actual) != 0)
+            continue;
+        for (uint32_t li = 0; li < native_target->system_link_count; li++) {
+            if (!xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_SYSTEM_LIB,
+                                               native_target->system_links[li]))
+                return 1;
+        }
+    }
+    return 0;
+}
+
+static void xaot_write_c_string_literal(FILE *out, const char *text) {
+    fputc('"', out);
+    for (const unsigned char *p = (const unsigned char *) (text ? text : ""); *p; p++) {
+        if (*p == '"' || *p == '\\')
+            fputc('\\', out);
+        fputc((int) *p, out);
+    }
+    fputc('"', out);
+}
+
+static int xaot_verify_native_layouts(const XrNativePackagePlan *native_plan,
+                                      const XrCliToolchainPlan *toolchain_plan,
+                                      const XrCliBuildTarget *target, const char *cache_dir,
+                                      const char *sysroot, bool dump_command, bool dry_run) {
+    if (!native_plan || native_plan->layout_count == 0)
+        return 0;
+    for (uint32_t i = 0; i < native_plan->layout_count; i++) {
+        const XrNativeLayoutAssertion *layout = &native_plan->layouts[i];
+        char source[XR_PATH_MAX];
+        char object[XR_PATH_MAX];
+        XrNativeUnit probe_unit;
+        if (!layout->resolved) {
+            fprintf(stderr,
+                    "Error: E-NATIVE-LAYOUT: Xray type '%s' was not resolved to a fixed layout\n",
+                    layout->xray_type ? layout->xray_type : "?");
+            return 1;
+        }
+        snprintf(source, sizeof(source), "%s/layout-%u.%d.c", cache_dir, i,
+                 (int) xr_proc_self_pid());
+        snprintf(object, sizeof(object), "%s/layout-%u.%d.o", cache_dir, i,
+                 (int) xr_proc_self_pid());
+        if (!dry_run) {
+            FILE *f = fopen(source, "w");
+            if (!f) {
+                fprintf(stderr, "Error: cannot create native layout probe '%s'\n", source);
+                return 1;
+            }
+            fputs("#include <stddef.h>\n#include ", f);
+            xaot_write_c_string_literal(f, layout->header);
+            fputs("\n", f);
+            if (layout->assert_size)
+                fprintf(f, "_Static_assert(sizeof(%s) == %u, \"Xray/C size mismatch for %s\");\n",
+                        layout->c_type, layout->expected_size, layout->c_type);
+            if (layout->assert_align)
+                fprintf(f,
+                        "_Static_assert(_Alignof(%s) == %u, \"Xray/C alignment mismatch for "
+                        "%s\");\n",
+                        layout->c_type, layout->expected_align, layout->c_type);
+            if (layout->assert_fields) {
+                for (uint32_t fi = 0; fi < layout->field_count; fi++)
+                    fprintf(f,
+                            "_Static_assert(offsetof(%s, %s) == %u, \"Xray/C field offset "
+                            "mismatch for %s.%s\");\n",
+                            layout->c_type, layout->field_names[fi], layout->field_offsets[fi],
+                            layout->c_type, layout->field_names[fi]);
+            }
+            if (fclose(f) != 0) {
+                xr_fs_remove(source);
+                return 1;
+            }
+        }
+        memset(&probe_unit, 0, sizeof(probe_unit));
+        probe_unit.name = layout->xray_type;
+        probe_unit.kind = XR_NATIVE_UNIT_C;
+        probe_unit.language_standard = "c11";
+        probe_unit.optimization = "none";
+        probe_unit.visibility = "hidden";
+        probe_unit.warning_policy = "strict";
+        int ret = xaot_invoke_native_unit_compile(toolchain_plan, target, &probe_unit, source,
+                                                  object, sysroot, dump_command, dry_run);
+        if (!dry_run) {
+            xr_fs_remove(source);
+            xr_fs_remove(object);
+        }
+        if (ret != 0) {
+            fprintf(stderr, "Error: E-NATIVE-LAYOUT: header proof failed for '%s' and '%s'\n",
+                    layout->xray_type, layout->c_type);
+            return ret;
+        }
+    }
+    return 0;
+}
+
 /* Resolve the object cache directory, then /aot/<target>.  Precedence:
  * --cache-dir flag, then $XRAY_CACHE_DIR, then <output dir>/.xray-cache.
  * Created on demand.  Returns 0 on success. */
@@ -2344,7 +2705,7 @@ static int xaot_write_c_export_header(const XaotBuildResult *result, const char 
         return 1;
     }
     fputs(result && result->c_export_header ? result->c_export_header
-                                            : "/* No @c_export symbols. */\n",
+                                            : "/* No manifest export symbols. */\n",
           f);
     if (fclose(f) != 0) {
         fprintf(stderr, "Error: failed to write '%s'\n", path);
@@ -2489,7 +2850,7 @@ static int cmd_build_native(
                                        : XAOT_BUILD_PROFILE_HOSTED;
     char cache_dir[XR_PATH_MAX];
     bool cache_dir_ready = false;
-    if (!c_only) {
+    if (!c_only || (native_package_plan && native_package_plan->layout_count > 0)) {
         if (xaot_resolve_cache_dir(output, target, cache_dir_arg, cache_dir, sizeof(cache_dir)) !=
             0) {
             fprintf(stderr, "Error: cannot create object cache directory '%s'\n", cache_dir);
@@ -2578,6 +2939,36 @@ static int cmd_build_native(
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;
+        }
+        for (uint32_t ui = 0; native_package_plan && ui < native_package_plan->unit_count; ui++) {
+            const XrNativeUnit *unit = &native_package_plan->units[ui];
+            if (unit->kind == XR_NATIVE_UNIT_PLATFORM)
+                continue;
+            for (uint32_t li = 0; li < unit->system_link_count; li++) {
+                if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_SYSTEM_LIB,
+                                                   unit->system_links[li])) {
+                    fprintf(stderr, "Error: failed to add native system link '%s'\n",
+                            unit->system_links[li]);
+                    xaot_build_result_free(&aot_result);
+                    return 1;
+                }
+            }
+        }
+        for (uint32_t ti = 0; native_package_plan && ti < native_package_plan->target_count; ti++) {
+            const XrNativeTargetPlan *native_target = &native_package_plan->targets[ti];
+            const char *actual =
+                target && target->zig_triple ? target->zig_triple : (target ? target->name : NULL);
+            if (actual && strcmp(native_target->triple, actual) != 0)
+                continue;
+            for (uint32_t li = 0; li < native_target->system_link_count; li++) {
+                if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_SYSTEM_LIB,
+                                                   native_target->system_links[li])) {
+                    fprintf(stderr, "Error: failed to add target system link '%s'\n",
+                            native_target->system_links[li]);
+                    xaot_build_result_free(&aot_result);
+                    return 1;
+                }
+            }
         }
         /* Whole-program LTO: compile each module to bitcode and let the linker
          * inline across modules.  The per-module bitcode stays content-addressed
@@ -2706,6 +3097,12 @@ static int cmd_build_native(
         return 1;
     }
 
+    if (xaot_verify_native_layouts(native_package_plan, toolchain_plan, target, cache_dir, sysroot,
+                                   dump_link_command || verbose, dry_run_link) != 0) {
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+
     /* --c-only emits one compilable amalgamated translation unit.  Put the
      * entry unit first so its XRT_IMPL definitions are seen before the shared
      * runtime headers' include guards; all remaining units then contribute
@@ -2761,6 +3158,13 @@ static int cmd_build_native(
         xaot_probe_evidence_cache_manifest(cache_dir, &aot_result.evidence_cache_manifest,
                                            aot_result.evidence_cache_payloads, verbose, rebuild,
                                            dry_run_link);
+    }
+
+    if (xaot_compile_native_package(native_package_plan, &aot_result.link_manifest, toolchain_plan,
+                                    target, cache_dir, sysroot, verbose, rebuild,
+                                    dump_link_command || verbose, dry_run_link) != 0) {
+        xaot_build_result_free(&aot_result);
+        return 1;
     }
 
     bool has_objcopy = target_config && objcopy_output && objcopy_output[0];

@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "addOne"
+scope = "semantic"
+requires = ["no_throw"]

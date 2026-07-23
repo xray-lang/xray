@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_enum_payload_error_channel"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_enum_payload_error_channel.xr"
+
+[[export.c]]
+xray = "xray_enum_payload_error"
+symbol = "xray_enum_payload_error"

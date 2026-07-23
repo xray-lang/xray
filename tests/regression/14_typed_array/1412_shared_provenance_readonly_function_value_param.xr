@@ -5,7 +5,7 @@ fn readFirst(view: Slice<byte>) -> int {
 @test
 fn test_shared_provenance_readonly_function_value_param() {
     const bytes = Array<byte>(2, 5)
-    var view: Slice<byte> = bytes[:]
+    const view: Slice<byte> = bytes[:]
     const f = readFirst
     assert_eq(f(view), 7)
 }

@@ -9,6 +9,7 @@
  */
 
 #include "xaot_bundle.h"
+#include "../module/xnative_package.h"
 #include "xaot_struct_name.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
@@ -4943,14 +4944,14 @@ static uint32_t xaot_extern_attributes(const XiFunc *func) {
     uint32_t attributes = 0;
     if (!func)
         return 0;
-    if (func->aot_naked)
-        attributes |= XAOT_EXTERN_ATTR_NAKED;
-    if (func->aot_interrupt_abi && func->aot_interrupt_abi[0])
-        attributes |= XAOT_EXTERN_ATTR_INTERRUPT;
-    if (func->aot_weak)
+    if (func->link_plan && func->link_plan->weak)
         attributes |= XAOT_EXTERN_ATTR_WEAK;
-    if (func->aot_used)
+    if ((func->link_plan && func->link_plan->used) || func->entry_plan)
         attributes |= XAOT_EXTERN_ATTR_USED;
+    if (func->entry_plan && func->entry_plan->kind == XR_FREESTANDING_ENTRY_NAKED_STUB)
+        attributes |= XAOT_EXTERN_ATTR_NAKED;
+    if (func->entry_plan && func->entry_plan->kind == XR_FREESTANDING_ENTRY_INTERRUPT)
+        attributes |= XAOT_EXTERN_ATTR_INTERRUPT;
     return attributes;
 }
 
@@ -4960,8 +4961,11 @@ static uint64_t xaot_extern_signature_hash(const XiFunc *func, const XaotFuncAbi
         func && func->extern_symbol ? func->extern_symbol : (func && func->name ? func->name : "");
     hash = xaot_extern_hash_text(hash, link_symbol);
     hash = xaot_extern_hash_text(hash, func ? func->extern_dylib : NULL);
-    hash = xaot_extern_hash_text(hash, func ? func->aot_section : NULL);
-    hash = xaot_extern_hash_text(hash, func ? func->aot_interrupt_abi : NULL);
+    hash = xaot_extern_hash_text(
+        hash, func && func->link_plan
+                  ? func->link_plan->section
+                  : (func && func->entry_plan ? func->entry_plan->section : NULL));
+    hash = xaot_extern_hash_text(hash, func && func->entry_plan ? func->entry_plan->abi : NULL);
     hash = xaot_extern_hash_u64(hash, XAOT_CALL_CONV_C);
     hash = xaot_extern_hash_u64(hash, xaot_extern_attributes(func));
     hash = xaot_extern_hash_u64(hash, func ? xaot_type_fingerprint(func->return_type) : 0);
@@ -4986,8 +4990,12 @@ static bool xaot_extern_decl_matches(const XaotExternDecl *decl, const XiFunc *f
     if (!decl || !func || !abi || decl->signature_hash != signature_hash ||
         !xaot_extern_text_equal(decl->link_symbol, link_symbol) ||
         !xaot_extern_text_equal(decl->library, func->extern_dylib) ||
-        !xaot_extern_text_equal(decl->section, func->aot_section) ||
-        !xaot_extern_text_equal(decl->interrupt_abi, func->aot_interrupt_abi) ||
+        !xaot_extern_text_equal(decl->section,
+                                func->link_plan
+                                    ? func->link_plan->section
+                                    : (func->entry_plan ? func->entry_plan->section : NULL)) ||
+        !xaot_extern_text_equal(decl->interrupt_abi,
+                                func->entry_plan ? func->entry_plan->abi : NULL) ||
         decl->call_conv != XAOT_CALL_CONV_C || decl->attributes != xaot_extern_attributes(func) ||
         decl->nparams != func->nparams ||
         !xaot_extern_type_equal(decl->ret_type, func->return_type) ||
@@ -5159,8 +5167,9 @@ XR_FUNC bool xaot_bundle_register_extern_decl(XaotBundle *bundle, XiFunc *func,
     decl->source_name = func->name;
     decl->link_symbol = link_symbol;
     decl->library = func->extern_dylib;
-    decl->section = func->aot_section;
-    decl->interrupt_abi = func->aot_interrupt_abi;
+    decl->section = func->link_plan ? func->link_plan->section
+                                    : (func->entry_plan ? func->entry_plan->section : NULL);
+    decl->interrupt_abi = func->entry_plan ? func->entry_plan->abi : NULL;
     decl->ret = func_plan->abi.ret;
     decl->ret_type = func->return_type;
     decl->nparams = func->nparams;

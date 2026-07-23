@@ -25,7 +25,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "effect-semantics.md",
         (
-            "src/frontend/analyzer/xa_assertion_attr.def",
+            "src/app/cli/xcmd_verify.c",
             "src/frontend/analyzer/xa_effect_db.c",
             "src/frontend/analyzer/xa_effect_db.h",
             "src/frontend/analyzer/xa_memory_effect_db.c",
@@ -41,7 +41,7 @@ CONTRACT_SPECS = (
             "src/ir/xi.h",
             "src/ir/xi_lower.c",
             "src/runtime/value/xtype.h",
-            "tests/aot/run_no_throw_contract_tests.sh",
+            "tests/cli/run_verify_contract_tests.sh",
             "tests/unit/analyzer/test_analyzer.c",
             "tests/unit/analyzer/test_effect_db.c",
             "tests/unit/ir/test_xi_lower.c",
@@ -49,7 +49,12 @@ CONTRACT_SPECS = (
     ),
     ContractSpec(
         "zero-cost-residue.md",
-        ("src/aot/xi_cgen.h", "src/aot/xi_cgen.c", "src/aot/xi_cgen_ctx_impl.inc.c"),
+        (
+            "src/aot/xi_cgen.h",
+            "src/aot/xi_cgen.c",
+            "src/aot/xi_cgen_ctx_impl.inc.c",
+            "src/app/cli/xcmd_verify.c",
+        ),
     ),
     ContractSpec("rc-contract.md", ("src/ir/xi_arc_verify.c",)),
     ContractSpec(

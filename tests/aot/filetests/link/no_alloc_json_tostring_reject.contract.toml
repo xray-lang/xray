@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_json_tostring_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

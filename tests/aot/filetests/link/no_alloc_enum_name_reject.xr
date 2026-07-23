@@ -3,7 +3,6 @@ enum Color {
     Blue,
 }
 
-@no_alloc
 fn xray_no_alloc_enum_name_reject(value: Color) -> string {
     return value.name
 }

@@ -1,7 +1,7 @@
-extern "C" dylib("xrayffi_smoke") {
+extern "C" {
     fn xrayffi_noarg() -> int32
 }
-extern "C" dylib("xrayffi_unused") {
+extern "C" {
     fn xrayffi_unused_float(x: float64) -> float64
 }
 

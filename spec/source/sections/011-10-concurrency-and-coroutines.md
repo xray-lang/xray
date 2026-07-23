@@ -61,7 +61,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 const 值和受验证同步句柄可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。它不得捕获任何外层 `var`，即使只读也不允许；已发布的 `const` 值和受验证同步句柄可以按能力捕获。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -77,6 +77,7 @@ var task = go fn(x: int) -> int {
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
+- 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 
 ### 10.3 `await` — 等待结果
 
@@ -110,6 +111,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **语义**：
 
 - `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
+- 用户统一写 `await task`，不写 `await (move task)`。若 `T` 是 unique mutable result，编译器把该 await 证明为 Task 的单次 terminal take；第二次 await 或随后再次使用该 single-owner task 是编译错误。若 `T` 是 const、同步共享或 inline-copy 结果，则按对应能力观察，不要求用户记另一套 await 语法。
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
 - 异常传播：
   - `await t` 重抛 t 抛出的异常。
@@ -451,7 +453,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
 
-runtime capability 只从 executable entry、共享库导出和 `@c_export` 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
+runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
 <!-- /xr-spec:cn -->
@@ -514,7 +516,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published const values, and verified synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. It may not capture any outer `var`, even for reads; published `const` values and verified synchronization handles may be captured according to their capabilities. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -530,6 +532,7 @@ var task = go fn(x: int) -> int {
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Execution-local heap values (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
+- An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 
 ### 10.3 `await` — wait for a result
 
@@ -563,6 +566,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **Semantics**:
 
 - `await` only applies to `Task<T>`; other types are a compile error.
+- Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - PanicInfo propagation:
   - `await t` rethrows the exception thrown by `t`.
@@ -904,7 +908,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
 
-Runtime capabilities propagate only from final artifact roots such as the executable entry, shared-library exports, and `@c_export` functions. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
+Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 
 A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entry plan. A freestanding target remains coroutine-runtime-free when reachable code needs only core. If reachable code needs task/frame allocation, submit, park/wake, timer, interrupt completion, or an executor pump, the target manifest must provide a versioned provider ABI and the required hooks; missing capabilities fail before generation or linking. The provider is a target/build contract and introduces no `async main`, `static main`, or freestanding-only source-language keyword.
 <!-- /xr-spec:en -->

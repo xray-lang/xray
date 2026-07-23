@@ -339,6 +339,11 @@ XR_FUNC bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrT
 // xr_type_assignable(); this helper only suppresses cascades after ErrorType exists.
 XR_FUNC bool xa_recovery_compatible(XrType *target, XrType *source);
 XR_FUNC bool xa_typecheck_assignable(XrType *target, XrType *source);
+// Call-boundary compatibility is mode-aware: a READ parameter borrows the
+// argument without restoring mutable authority, so a const argument may be
+// viewed through the parameter's declared non-const type. REF/MOVE remain
+// strict because they can mutate or consume the caller's storage.
+XR_FUNC bool xa_call_arg_type_assignable(XrType *target, XrType *source, XrParamMode mode);
 
 // API: Iterable/Iterator structural type checking
 // Check if type satisfies Iterator<T> (has hasNext(): bool and next(): T)

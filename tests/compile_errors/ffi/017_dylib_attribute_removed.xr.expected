@@ -1,1 +1,1 @@
-@dylib was removed; use extern "C" dylib("name") { ... }
+error: unknown attribute name

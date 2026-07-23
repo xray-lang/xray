@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_infinite_loop"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_infinite_loop.xr"
+
+[[export.c]]
+xray = "xray_spin"
+symbol = "xray_spin"

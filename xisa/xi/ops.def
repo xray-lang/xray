@@ -827,6 +827,16 @@
   :observable (slice-from-pointer)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.buffer.materialize
+  :class memory-read
+  :arity 1
+  :result-ownership owned
+  :own-use consume
+  :effects (side-effect may-throw memory-read)
+  :requires (unsafe-assumption exact-layout complete-native-output dominating-success)
+  :observable (buffer-materialize)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.slice.as.bytes
   :class memory-read
   :arity 1

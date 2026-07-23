@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_map_set_inplace_methods_ok(values: ref Map<int, int>, seen: ref Set<int>) -> int {
     var first = values.get(1) ?? 0
     var had_two = values.containsKey(2)

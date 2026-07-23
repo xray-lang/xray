@@ -1,24 +1,22 @@
 // Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c
-
-@native
 class Map<K: Hashable, V> {
-    get(key: K) -> V? @no_alloc
+    get(key: K) -> V?
     // @receiver_write
-    set(key: K, value: V) @may_alloc
-    containsKey(key: K) -> bool @no_alloc
-    containsValue(value: V) -> bool @no_alloc
+    set(key: K, value: V)
+    containsKey(key: K) -> bool
+    containsValue(value: V) -> bool
     // @receiver_write
-    delete(key: K) -> bool @no_alloc
+    delete(key: K) -> bool
     // @receiver_write
-    clear() @no_alloc
-    keys() -> Array<K> @may_alloc
-    values() -> Array<V> @may_alloc
-    entries() -> Array<(K, V)> @may_alloc
-    forEach(fn: (key: K, value: V) -> ()) -> () @no_alloc
+    clear()
+    keys() -> Array<K>
+    values() -> Array<V>
+    entries() -> Array<(K, V)>
+    forEach(fn: (key: K, value: V) -> ()) -> ()
     // Iteration protocol — iterator() yields each key K (used by
     // single-variable `for (k in m)`); entriesIterator() yields each
     // (key, value) tuple (used by `for (k, v in m)`).
-    iterator() -> Iterator<K> @may_alloc
-    entriesIterator() -> Iterator<(K, V)> @may_alloc
-    toString() -> string @may_alloc
+    iterator() -> Iterator<K>
+    entriesIterator() -> Iterator<(K, V)>
+    toString() -> string
 }

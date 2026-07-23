@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_string_entries_iterator_reject(value: string) -> bool {
     return value.runes().hasNext()
 }

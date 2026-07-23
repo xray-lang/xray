@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_no_alloc_call_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_no_alloc_call_reject.xr"
+
+[[export.c]]
+xray = "xray_no_alloc_call_reject"
+symbol = "xray_no_alloc_call_reject"

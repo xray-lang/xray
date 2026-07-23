@@ -1,21 +1,12 @@
-@section("__DATA,.xray_table")
-@weak
-@used
 const TABLE: [int; 4] = comptime [2, 4, 6, 8]
 const BYTES: [byte; 4] = comptime [1, 3, 5, 7]
 const WEIGHTS: [float; 3] = comptime [1.5, 2.5, 3.5]
 
-@section("__DATA,.xray_matrix")
-@weak
-@used
 const MATRIX: [[byte; 4]; 2] = comptime [
     [1, 2, 3, 4],
     [5, 6, 7, 8],
 ]
 
-@section("__DATA,.xray_cube")
-@weak
-@used
 const CUBE: [[[int; 2]; 2]; 2] = comptime [
     [[1, 2], [3, 4]],
     [[5, 6], [7, 8]],
@@ -26,8 +17,6 @@ struct Header {
     flags: int
 }
 
-@section("__DATA,.xray_header")
-@weak
 const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[3]}
 
 struct PlainHeader {
@@ -56,36 +45,21 @@ struct Outer {
 
 const OUTER = comptime Outer{inner: Inner{code: TABLE[2], flag: true}, base: PACKET.base}
 
-@section("__DATA,.xray_groups")
-@weak
-@used
 const GROUPS: [Outer; 2] = comptime [
     Outer{inner: Inner{code: TABLE[0], flag: true}, base: TABLE[1]},
     Outer{inner: Inner{code: TABLE[2], flag: false}, base: TABLE[3]},
 ]
 
-@section("__DATA,.xray_pair")
-@weak
-@used
 const PAIR = comptime (HEADER.magic, TABLE[2], WEIGHTS[1])
-@section("__DATA,.xray_pair_rows")
-@weak
-@used
 const PAIR_ROWS: [(int, int); 2] = comptime [
     (TABLE[0], TABLE[1]),
     (TABLE[2], TABLE[3]),
 ]
 const LABEL = comptime "score"
-@section("__DATA,.xray_lmat")
-@weak
-@used
 const LABEL_MATRIX: [[string; 2]; 2] = comptime [
     ["level", LABEL],
     ["bonus", "done"],
 ]
-@section("__DATA,.xray_lcube")
-@weak
-@used
 const LABEL_CUBE: [[[string; 2]; 2]; 2] = comptime [
     [["level", LABEL], ["bonus", "done"]],
     [["red", "green"], ["blue", "white"]],
@@ -93,9 +67,6 @@ const LABEL_CUBE: [[[string; 2]; 2]; 2] = comptime [
 const LABELED = comptime (LABEL, TABLE[0])
 const NESTED = comptime ((TABLE[0], LABEL), (WEIGHTS[2], TABLE[3]))
 const LABELS: [string; 2] = comptime ["level", LABEL]
-@section("__DATA,.xray_ltuple")
-@weak
-@used
 const LABELED_ROWS: [(string, int); 2] = comptime [
     (LABEL, TABLE[0]),
     ("done", TABLE[1]),
@@ -120,9 +91,6 @@ struct Entry {
     flag: bool
 }
 
-@section("__DATA,.xray_entries")
-@weak
-@used
 const ENTRIES: [Entry; 2] = comptime [
     Entry{code: TABLE[0], flag: true},
     Entry{code: TABLE[2], flag: false},
@@ -133,9 +101,6 @@ struct Row {
     weight: int
 }
 
-@section("__DATA,.xray_rows")
-@weak
-@used
 const ROWS: [Row; 2] = comptime [
     Row{samples: [1, 2, 3, 4], weight: TABLE[0]},
     Row{samples: [5, 6, 7, 8], weight: TABLE[1]},
@@ -146,9 +111,6 @@ struct LabelRow {
     code: int
 }
 
-@section("__DATA,.xray_label_rows")
-@weak
-@used
 const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["hot", LABEL], code: TABLE[0]},
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
@@ -164,9 +126,6 @@ struct LabelGroup {
     base: int
 }
 
-@section("__DATA,.xray_lgroups")
-@weak
-@used
 const LABEL_GROUPS: [LabelGroup; 2] = comptime [
     LabelGroup{inner: LabelInner{label: LABEL, code: TABLE[0]}, base: TABLE[1]},
     LabelGroup{inner: LabelInner{label: "done", code: TABLE[2]}, base: TABLE[3]},
@@ -203,17 +162,11 @@ union U32Bytes {
 const BITS = comptime I32Bits{i: -1}
 const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 
-@section("__DATA,.xray_bit_rows")
-@weak
-@used
 const BIT_ROWS: [I32Bits; 2] = comptime [
     I32Bits{i: -1},
     I32Bits{u: 42},
 ]
 
-@section("__DATA,.xray_word_rows")
-@weak
-@used
 const WORD_ROWS: [U32Bytes; 2] = comptime [
     U32Bytes{u: 0x01020304},
     U32Bytes{b: [8, 7, 6, 5]},
@@ -224,12 +177,8 @@ struct BitHolder {
     base: int
 }
 
-@weak
 const BIT_HOLDER = comptime BitHolder{bits: I32Bits{u: 33}, base: TABLE[0]}
 
-@section("__DATA,.xray_bit_groups")
-@weak
-@used
 const BIT_GROUPS: [BitHolder; 2] = comptime [
     BitHolder{bits: I32Bits{i: -1}, base: TABLE[0]},
     BitHolder{bits: I32Bits{u: 42}, base: TABLE[1]},
@@ -240,18 +189,13 @@ struct WordHolder {
     base: int
 }
 
-@weak
 const WORD_HOLDER = comptime WordHolder{word: U32Bytes{b: [9, 8, 7, 6]}, base: TABLE[1]}
 
-@section("__DATA,.xray_wgroups")
-@weak
-@used
 const WORD_GROUPS: [WordHolder; 2] = comptime [
     WordHolder{word: U32Bytes{u: 0x01020304}, base: TABLE[2]},
     WordHolder{word: U32Bytes{b: [8, 7, 6, 5]}, base: TABLE[3]},
 ]
 
-@c_export("xray_top_const_aggregate")
 fn xray_top_const_aggregate() -> int {
     const first = comptime TABLE[0]
     const magic = comptime HEADER.magic
@@ -259,194 +203,158 @@ fn xray_top_const_aggregate() -> int {
     return first + magic + flags
 }
 
-@c_export("xray_top_const_array_runtime")
 fn xray_top_const_array_runtime(i: int) -> int {
     return TABLE[i]
 }
 
-@c_export("xray_top_const_byte_runtime")
 fn xray_top_const_byte_runtime(i: int) -> int {
     return BYTES[i] as int
 }
 
-@c_export("xray_top_const_float_runtime")
 fn xray_top_const_float_runtime(i: int) -> float {
     return WEIGHTS[i]
 }
 
-@c_export("xray_top_const_matrix_runtime")
 fn xray_top_const_matrix_runtime(row: int, col: int) -> int {
     return MATRIX[row][col] as int
 }
 
-@c_export("xray_top_const_cube_runtime")
 fn xray_top_const_cube_runtime(i: int, j: int, k: int) -> int {
     return CUBE[i][j][k]
 }
 
-@c_export("xray_top_const_struct_runtime")
 fn xray_top_const_struct_runtime() -> int {
     return HEADER.magic + HEADER.flags
 }
 
-@c_export("xray_top_const_plain_struct_runtime")
 fn xray_top_const_plain_struct_runtime() -> int {
     return PLAIN_HEADER.magic + PLAIN_HEADER.flags
 }
 
-@c_export("xray_top_const_struct_array_runtime")
 fn xray_top_const_struct_array_runtime(i: int) -> int {
     return PACKET.bytes[i] as int + PACKET.base
 }
 
-@c_export("xray_top_const_nested_struct_runtime")
 fn xray_top_const_nested_struct_runtime() -> int {
     return OUTER.inner.code + OUTER.base
 }
 
-@c_export("xray_top_const_tuple_runtime")
 fn xray_top_const_tuple_runtime() -> int {
     return PAIR.0 + PAIR.1
 }
 
-@c_export("xray_top_const_tuple_float_runtime")
 fn xray_top_const_tuple_float_runtime() -> float {
     return PAIR.2
 }
 
-@c_export("xray_top_const_tuple_array_runtime")
 fn xray_top_const_tuple_array_runtime(i: int) -> int {
     return PAIR_ROWS[i].0 + PAIR_ROWS[i].1
 }
 
-@c_export("xray_top_const_nested_tuple_runtime")
 fn xray_top_const_nested_tuple_runtime() -> int {
     return NESTED.0.0 + NESTED.1.1
 }
 
-@c_export("xray_top_const_nested_tuple_float_runtime")
 fn xray_top_const_nested_tuple_float_runtime() -> float {
     return NESTED.1.0
 }
 
-@c_export("xray_top_const_string_print")
 fn xray_top_const_string_print() -> int {
     print(LABEL)
     return 1
 }
 
-@c_export("xray_top_const_tuple_string_print")
 fn xray_top_const_tuple_string_print() -> int {
     print(LABELED.0)
     return LABELED.1
 }
 
-@c_export("xray_top_const_tuple_array_string_print")
 fn xray_top_const_tuple_array_string_print(i: int) -> int {
     print(LABELED_ROWS[i].0)
     return LABELED_ROWS[i].1
 }
 
-@c_export("xray_top_const_nested_tuple_string_print")
 fn xray_top_const_nested_tuple_string_print() -> int {
     print(NESTED.0.1)
     return NESTED.0.0
 }
 
-@c_export("xray_top_const_struct_string_print")
 fn xray_top_const_struct_string_print() -> int {
     print(NAMED.label)
     return NAMED.code
 }
 
-@c_export("xray_top_const_string_array_print")
 fn xray_top_const_string_array_print(i: int) -> int {
     print(LABELS[i])
     return i
 }
 
-@c_export("xray_top_const_string_matrix_print")
 fn xray_top_const_string_matrix_print(row: int, col: int) -> int {
     print(LABEL_MATRIX[row][col])
     return row + col
 }
 
-@c_export("xray_top_const_string_cube_print")
 fn xray_top_const_string_cube_print(i: int, j: int, k: int) -> int {
     print(LABEL_CUBE[i][j][k])
     return i + j + k
 }
 
-@c_export("xray_top_const_struct_string_array_print")
 fn xray_top_const_struct_string_array_print(i: int) -> int {
     print(LABEL_BOX.labels[i])
     return LABEL_BOX.code
 }
 
-@c_export("xray_top_const_struct_array_field_runtime")
 fn xray_top_const_struct_array_field_runtime(i: int) -> int {
     return ENTRIES[i].code + (ENTRIES[i].flag ? 1 : 0)
 }
 
-@c_export("xray_top_const_struct_array_fixed_field_runtime")
 fn xray_top_const_struct_array_fixed_field_runtime(row: int, col: int) -> int {
     return ROWS[row].samples[col] as int + ROWS[row].weight
 }
 
-@c_export("xray_top_const_struct_array_string_fixed_field_print")
 fn xray_top_const_struct_array_string_fixed_field_print(row: int, col: int) -> int {
     print(LABEL_ROWS[row].labels[col])
     return LABEL_ROWS[row].code
 }
 
-@c_export("xray_top_const_struct_array_nested_field_runtime")
 fn xray_top_const_struct_array_nested_field_runtime(i: int) -> int {
     return GROUPS[i].inner.code + GROUPS[i].base
 }
 
-@c_export("xray_top_const_struct_array_nested_string_field_print")
 fn xray_top_const_struct_array_nested_string_field_print(i: int) -> int {
     print(LABEL_GROUPS[i].inner.label)
     return LABEL_GROUPS[i].inner.code + LABEL_GROUPS[i].base
 }
 
-@c_export("xray_top_const_packed_struct_runtime")
 fn xray_top_const_packed_struct_runtime() -> int {
     return PACKED.tag as int + PACKED.value as int
 }
 
-@c_export("xray_top_const_aligned_struct_runtime")
 fn xray_top_const_aligned_struct_runtime() -> int {
     return ALIGNED.value as int
 }
 
-@c_export("xray_top_const_packed_aligned_struct_runtime")
 fn xray_top_const_packed_aligned_struct_runtime() -> int {
     return PACKED_ALIGNED.tag as int + PACKED_ALIGNED.value as int
 }
 
-@c_export("xray_top_const_union_u32_runtime")
 fn xray_top_const_union_u32_runtime() -> int {
     return unsafe { BITS.u } as int
 }
 
-@c_export("xray_top_const_union_byte_runtime")
 fn xray_top_const_union_byte_runtime(i: int) -> int {
     return unsafe { WORD_BYTES.b }[i] as int
 }
 
-@c_export("xray_top_const_union_array_runtime")
 fn xray_top_const_union_array_runtime(i: int) -> int {
     return (unsafe { BIT_ROWS[i].u } as int) + (unsafe { WORD_ROWS[i].b }[i] as int)
 }
 
-@c_export("xray_top_const_struct_nested_union_runtime")
 fn xray_top_const_struct_nested_union_runtime(i: int) -> int {
     return (unsafe { BIT_HOLDER.bits.u } as int) + (unsafe { WORD_HOLDER.word.b }[i] as int) +
         BIT_HOLDER.base + WORD_HOLDER.base
 }
 
-@c_export("xray_top_const_struct_array_nested_union_runtime")
 fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
     return (unsafe { BIT_GROUPS[row].bits.u } as int) +
         (unsafe { WORD_GROUPS[row].word.b }[col] as int) +

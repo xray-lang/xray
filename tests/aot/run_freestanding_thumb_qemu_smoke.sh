@@ -72,9 +72,6 @@ import mem
 const UART0_DATA = 0x40004000
 const MPS2_LEDS = 0x40028000
 
-@section(".text.xray")
-@used
-@c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
     mem.volatileStore(mem.mutPtr<byte>(MPS2_LEDS), 0x5a, 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), int('M'.toUInt32()), 4)
@@ -85,6 +82,20 @@ fn kernel_entry() -> int32 {
     return 0
 }
 XR
+
+cat >"$WORK/xray.toml" <<'TOML'
+[package]
+name = "freestanding-thumb-qemu-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_thumb_uart.xr"
+
+[[freestanding.entry]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+kind = "start"
+section = ".text.xray"
+TOML
 
 LD="$WORK/freestanding_thumb.ld"
 cat >"$LD" <<'LD'
@@ -107,9 +118,9 @@ LD
 
 GEN_C="$WORK/freestanding_thumb_uart.c"
 BUILD_LOG="$WORK/build.log"
-if ! "$XRAY" build --native --profile freestanding --target thumbv7em-none-eabi \
+if ! (cd "$WORK" && "$XRAY" build --native --profile freestanding --target thumbv7em-none-eabi \
         --toolchain zig --zig "$ZIG" --c-only --rebuild \
-        --cache-dir "$WORK/build-cache" -o "$GEN_C" "$SRC" >"$BUILD_LOG" 2>&1; then
+        --cache-dir "$WORK/build-cache" -o "$GEN_C" "$SRC") >"$BUILD_LOG" 2>&1; then
     sed 's/^/  /' "$BUILD_LOG" >&2
     fail "freestanding Cortex-M C generation failed"
 fi

@@ -307,10 +307,7 @@ const char *xr_type_to_string(XrType *type) {
     if (XR_TYPE_IS_FUNCTION(type)) {
         char *ptr = buf;
         size_t remaining = TYPE_STR_BUF_SIZE;
-        const char *effect_prefix =
-            type->function.throw_effect == XR_FN_EFFECT_NO_THROW ? "@no_throw " : "";
-        int n = snprintf(ptr, remaining, "%s%sfn", effect_prefix,
-                         type->function.is_c_abi ? "CFn<" : "");
+        int n = snprintf(ptr, remaining, "%sfn", type->function.is_c_abi ? "CFn<" : "");
         ptr += n;
         remaining -= n;
 

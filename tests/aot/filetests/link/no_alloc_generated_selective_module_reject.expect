@@ -1,5 +1,5 @@
 status=fail
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_io_cwd_selective_reject'
+contains=contract 'xray_no_alloc_io_cwd_selective_reject' failed
 contains=xray_no_alloc_io_cwd_selective_reject
 not_contains=Return type mismatch
 not_contains=CRASH

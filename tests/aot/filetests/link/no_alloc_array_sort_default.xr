@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_array_sort_default(values: ref Array<int>) -> int {
     values.sort()
     return values[0]

@@ -1,0 +1,21 @@
+[package]
+name = "filetest-freestanding_string_member_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_string_member_reject.xr"
+
+[[export.c]]
+xray = "xray_string_to_bytes_reject"
+symbol = "xray_string_to_bytes_reject"
+
+[[export.c]]
+xray = "xray_string_bytes_reject"
+symbol = "xray_string_bytes_reject"
+
+[[export.c]]
+xray = "xray_string_index_reject"
+symbol = "xray_string_index_reject"
+
+[[export.c]]
+xray = "xray_string_slice_reject"
+symbol = "xray_string_slice_reject"

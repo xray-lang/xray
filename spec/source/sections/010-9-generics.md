@@ -139,7 +139,7 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 - 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
-**高阶函数的错误效应特化**：未带 `@no_throw` 的回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect bit 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。显式 `@no_throw (T) -> R` 参数是固定约束，而不是新的特化维度：传入 may-throw 或无法证明的函数值会在调用点被拒绝。
+**高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
 
 **当前缓项**：
 - 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
@@ -341,7 +341,7 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 - Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
-**Error-effect specialization for higher-order functions**: a callback parameter without `@no_throw` is effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect bit, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. An explicit `@no_throw (T) -> R` parameter is a fixed constraint rather than another specialization dimension: a may-throw or unprovable function value is rejected at the call site.
+**Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
 
 **Deferred features**:
 - Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.

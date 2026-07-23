@@ -1,0 +1,29 @@
+[package]
+name = "filetest-mem-load-store-rawptr-shape"
+version = "1.0.0"
+license = "MIT"
+main = "mem_load_store_rawptr_shape.xr"
+
+[[export.c]]
+xray = "xray_mem_u32_load_le"
+symbol = "xray_mem_u32_load_le"
+
+[[export.c]]
+xray = "xray_mem_u32_store_le"
+symbol = "xray_mem_u32_store_le"
+
+[[export.c]]
+xray = "xray_mem_u32_roundtrip"
+symbol = "xray_mem_u32_roundtrip"
+
+[[export.c]]
+xray = "xray_mem_f32_roundtrip"
+symbol = "xray_mem_f32_roundtrip"
+
+[[export.c]]
+xray = "xray_mem_ptr_roundtrip"
+symbol = "xray_mem_ptr_roundtrip"
+
+[[export.c]]
+xray = "xray_mem_u64_dynamic_endian"
+symbol = "xray_mem_u64_dynamic_endian"

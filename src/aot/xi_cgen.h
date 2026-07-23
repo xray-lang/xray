@@ -53,7 +53,7 @@ typedef struct XiCgenStats {
 } XiCgenStats;
 
 /* Per-function abstraction-cost residue categories (task 217 §3.3, R1–R6).
- * These are the shapes @zero_cost forbids in the generated AOT code; the
+ * These are the shapes external residue contracts can forbid in generated AOT code; the
  * enum order is the stable dump/diagnostic order and doubles as the allow-mask
  * bit index (1u << category). */
 typedef enum XiResidueCategory {
@@ -77,9 +77,8 @@ typedef struct XiResidueEntry {
 } XiResidueEntry;
 
 /* Per-function residue record.  func_name / source_file are borrowed from the
- * XiFunc / XiModule arena; residue records are produced and consumed
- * (--dump-residue + @zero_cost verify) within a single build, before IR/module
- * teardown, so the borrow never outlives its backing store. */
+ * XiFunc / XiModule arena; residue records are produced and consumed by
+ * --dump-residue and external contract verification within one build. */
 typedef struct XiFuncResidue {
     /* owned: XiFunc.name / XiModule.path arena; build-scoped, consumed pre-teardown */
     const char *func_name;
@@ -89,8 +88,6 @@ typedef struct XiFuncResidue {
     XiResidueEntry *entries;
     uint32_t nentries;
     uint32_t entries_cap;
-    bool has_zero_cost;            /* function carries @zero_cost */
-    uint32_t zero_cost_allow_mask; /* bitmask of exempted categories (1u<<category) */
 } XiFuncResidue;
 
 /* Stable short ("R1") and human labels for a residue category. */
@@ -128,12 +125,11 @@ XR_FUNC const XiFuncResidue *xi_cgen_func_residues(const XiCgenCtx *ctx, size_t 
  * NULL only on allocation failure. */
 XR_FUNC char *xi_cgen_residue_dump(const XiCgenCtx *ctx);
 
-/* Verify every @zero_cost function's residue against its allow mask (task 217
+/* Verify every contracted function's residue against its allow mask (task 217
  * P3).  Emits an error[E0655] diagnostic per violating function to stderr
  * (listing each forbidden residue category + missing evidence) and returns the
  * number of violating functions (0 = all contracts hold).  Requires residue
  * tracking to have been enabled before emission. */
-XR_FUNC int xi_cgen_verify_zero_cost(const XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()
@@ -162,7 +158,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, 
 XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int nmodules,
                                int mod_index, int entry_index);
 
-/* Emit a public C header for every @c_export wrapper in a bundle.  The header
+/* Emit a public C header for every manifest export wrapper in a bundle. The header
  * contains only C ABI declarations, not generated runtime internals. */
 XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
                                      int nmodules, const char *guard);

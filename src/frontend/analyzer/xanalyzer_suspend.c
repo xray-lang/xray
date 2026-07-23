@@ -5,18 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xanalyzer_suspend.c - Suspend effect inference and @no_suspend validation
+ * xanalyzer_suspend.c - Suspend effect inference
  *
  * The suspend-point set mirrors the task-212 body suspend effect
  * (XG_BODY_MAY_SUSPEND in src/analysis/xglobal_summary.c): await / yield /
  * select / scope-join, the blocking concurrency-handle methods, and time.sleep.
- * @no_suspend (and the implicit @interrupt / @c_export boundaries) assert that
- * a function body reaches none of these transitively.  The pass is fail-closed:
- * a dynamic call target or open virtual dispatch is treated as unproven.
+ * A dynamic call target or open virtual dispatch is treated as unproven. Strong
+ * requirements are checked later by the versioned external contract verifier.
  */
 
 #include "xanalyzer_suspend.h"
-#include "../parser/xa_assertion_attr.h"
 #include "../parser/xtype_ref.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
@@ -147,31 +145,6 @@ static const char *sus_function_name(AstNode *node, XaSymbol *symbol) {
     if (node->type == AST_METHOD_DECL && node->as.method_decl.name)
         return node->as.method_decl.name;
     return "?";
-}
-
-/* The effective @no_suspend requirement and the label used in diagnostics.
- * Explicit @no_suspend and the implicit @interrupt / @c_export boundaries all
- * route through the same fail-closed check (task 217 §3.2). */
-static const char *sus_required_label(AstNode *node) {
-    if (xa_decl_has_attribute(node, ATTR_NO_SUSPEND))
-        return "@no_suspend";
-    if (xa_decl_has_attribute(node, ATTR_INTERRUPT))
-        return "@interrupt";
-    if (xa_decl_has_attribute(node, ATTR_C_EXPORT))
-        return "@c_export";
-    return NULL;
-}
-
-static bool sus_function_requires_no_suspend(AstNode *node) {
-    return sus_required_label(node) != NULL;
-}
-
-/* Explicit @no_suspend is a user assertion and is fail-closed: an unprovable
- * (dynamic-target) body is rejected.  The implicit @interrupt / @c_export
- * boundaries only reject a *proven* suspend point, so pre-existing C-ABI
- * exports that call function values keep compiling. */
-static bool sus_requirement_is_explicit(AstNode *node) {
-    return xa_decl_has_attribute(node, ATTR_NO_SUSPEND);
 }
 
 static XaSuspendRow *sus_row_for_symbol(XaSuspendPass *pass, XaSymbol *symbol) {
@@ -334,45 +307,6 @@ static bool sus_symbol_has_body(XaSymbol *symbol) {
            sus_function_body(symbol->links.function_decl_node) != NULL;
 }
 
-static bool sus_decl_params(AstNode *node, XrParamNode ***out_params, int *out_count) {
-    if (!node)
-        return false;
-    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
-        *out_params = node->as.function_decl.params;
-        *out_count = node->as.function_decl.param_count;
-        return true;
-    }
-    if (node->type == AST_METHOD_DECL) {
-        *out_params = node->as.method_decl.params;
-        *out_count = node->as.method_decl.param_count;
-        return true;
-    }
-    return false;
-}
-
-/* A parameter whose annotation is `@no_suspend (...) -> R`. */
-static bool sus_param_type_is_no_suspend(const XrParamNode *param) {
-    return param && param->type && param->type->kind == XR_TREF_FUNCTION && param->type->no_suspend;
-}
-
-/* True when |param| is a @no_suspend-constrained callback of |fn_node|; calling
- * it is therefore proven non-suspending by its type constraint. */
-static bool sus_symbol_is_constrained_param(AstNode *fn_node, const XaSymbol *param) {
-    XrParamNode **params = NULL;
-    int count = 0;
-    if (!param || !sus_decl_params(fn_node, &params, &count))
-        return false;
-    for (int i = 0; i < count; i++) {
-        if (!params[i])
-            continue;
-        bool match = (params[i]->symbol_id && params[i]->symbol_id == param->id) ||
-                     (params[i]->name && param->name && strcmp(params[i]->name, param->name) == 0);
-        if (match)
-            return sus_param_type_is_no_suspend(params[i]);
-    }
-    return false;
-}
-
 static void sus_scan_symbol_call(XaSuspendScan *scan, XaSymbol *callee, AstNode *site,
                                  bool is_callback) {
     if (!scan || !scan->row || !site)
@@ -382,13 +316,8 @@ static void sus_scan_symbol_call(XaSuspendScan *scan, XaSymbol *callee, AstNode 
                         is_callback ? "dynamic callback" : "dynamic call", NULL);
         return;
     }
-    /* A function-valued parameter/local has no statically closed target,
-     * unless the parameter carries a `@no_suspend` callback constraint, which
-     * proves the call cannot suspend (task 217 §3.2). */
+    /* A function-valued parameter/local has no statically closed target. */
     if (callee->kind == XA_SYM_PARAMETER || callee->kind == XA_SYM_VARIABLE) {
-        if (callee->kind == XA_SYM_PARAMETER && scan->row &&
-            sus_symbol_is_constrained_param(scan->row->node, callee))
-            return;
         sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, site,
                         is_callback ? "dynamic callback" : "dynamic call", callee->name);
         return;
@@ -632,37 +561,6 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
     }
 }
 
-static void sus_validate_contract(XaSuspendPass *pass, XaSuspendRow *row) {
-    if (!pass || !row || !sus_function_requires_no_suspend(row->node) ||
-        row->result == XA_SUSPEND_NONE)
-        return;
-    /* Implicit boundaries tolerate incomplete evidence; only explicit
-     * @no_suspend is fail-closed on unprovable dynamic targets. */
-    if (row->result == XA_SUSPEND_INCOMPLETE && !sus_requirement_is_explicit(row->node))
-        return;
-    const char *label = sus_required_label(row->node);
-    const char *name = sus_function_name(row->node, row->symbol);
-    const XaSuspendCause *cause = &row->result_cause;
-    char message[768];
-    if (row->result == XA_SUSPEND_MAY) {
-        snprintf(message, sizeof(message),
-                 "%s contract is not satisfied for '%s': may suspend via %s '%s' at line %u", label,
-                 name, cause->kind ? cause->kind : "operation", cause->detail ? cause->detail : "?",
-                 cause->line);
-    } else {
-        snprintf(message, sizeof(message),
-                 "%s contract cannot be proven for '%s': %s '%s' has no statically known "
-                 "suspend evidence at line %u",
-                 label, name, cause->kind ? cause->kind : "call target",
-                 cause->detail ? cause->detail : "?", cause->line);
-    }
-    XrLocation location = {.file = row->symbol ? row->symbol->links.file_path : NULL,
-                           .line = cause->line ? cause->line : (uint32_t) row->node->line,
-                           .column = cause->column};
-    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
-                               &location);
-}
-
 /* Suspend conclusion for a function-valued call argument. */
 static XaSuspendState sus_argument_state(XaSuspendPass *pass, AstNode *expr,
                                          const char **out_name) {
@@ -698,26 +596,6 @@ static XaSuspendState sus_argument_state(XaSuspendPass *pass, AstNode *expr,
     return sus_symbol_has_body(symbol) ? XA_SUSPEND_INCOMPLETE : XA_SUSPEND_NONE;
 }
 
-static AstNode *sus_call_target_decl(XaSuspendPass *pass, AstNode *callee) {
-    callee = sus_identity_expr(callee);
-    if (!callee)
-        return NULL;
-    if (callee->type == AST_VARIABLE) {
-        XaSymbol *symbol = sus_variable_symbol(pass->analyzer, callee);
-        return symbol ? symbol->links.function_decl_node : NULL;
-    }
-    if (callee->type == AST_MEMBER_ACCESS) {
-        const XaSelection *selection =
-            xa_selection_table_get((XaSelectionTable *) pass->analyzer->selection_table, callee);
-        return selection && selection->target_symbol
-                   ? selection->target_symbol->links.function_decl_node
-                   : NULL;
-    }
-    return NULL;
-}
-
-/* Enforce `@no_suspend (...) -> R` callback parameters at a call site: the
- * function passed for such a parameter must be proven non-suspending. */
 static void sus_check_call_constraints(XaSuspendPass *pass, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     if (sus_call_is_mem_with_slice_mut(call)) {
@@ -743,37 +621,6 @@ static void sus_check_call_constraints(XaSuspendPass *pass, AstNode *node) {
         }
         return;
     }
-    AstNode *fn_decl = sus_call_target_decl(pass, call->callee);
-    XrParamNode **params = NULL;
-    int param_count = 0;
-    if (!fn_decl || !sus_decl_params(fn_decl, &params, &param_count))
-        return;
-    int limit = call->arg_count < param_count ? call->arg_count : param_count;
-    for (int i = 0; i < limit; i++) {
-        if (!sus_param_type_is_no_suspend(params[i]))
-            continue;
-        const char *arg_name = "callback";
-        XaSuspendState state = sus_argument_state(pass, call->arguments[i], &arg_name);
-        if (state == XA_SUSPEND_NONE)
-            continue;
-        const char *pname = params[i]->name ? params[i]->name : "callback";
-        AstNode *arg = call->arguments[i];
-        char message[512];
-        if (state == XA_SUSPEND_MAY)
-            snprintf(message, sizeof(message),
-                     "@no_suspend callback parameter '%s' rejects argument '%s': it may suspend",
-                     pname, arg_name);
-        else
-            snprintf(message, sizeof(message),
-                     "@no_suspend callback parameter '%s' rejects argument '%s': it cannot be "
-                     "proven non-suspending",
-                     pname, arg_name);
-        XrLocation location = {.file = pass->analyzer->current_file,
-                               .line = arg ? (uint32_t) arg->line : (uint32_t) node->line,
-                               .column = arg ? (uint32_t) arg->column : 0};
-        xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
-                                   &location);
-    }
 }
 
 static void sus_constraint_scan_pre(AstNode *node, void *userdata) {
@@ -792,8 +639,6 @@ void xa_verify_no_suspend(XaAnalyzer *analyzer, AstNode *ast) {
     for (int i = 0; i < pass.row_count; i++)
         sus_scan_function(&pass, &pass.rows[i]);
     sus_publish_summaries(&pass);
-    for (int i = 0; i < pass.row_count; i++)
-        sus_validate_contract(&pass, &pass.rows[i]);
     xa_ast_walk(ast, sus_constraint_scan_pre, NULL, &pass);
     for (int i = 0; i < pass.row_count; i++)
         xr_free(pass.rows[i].edges);

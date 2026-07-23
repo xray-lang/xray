@@ -71,9 +71,6 @@ import mem
 
 const UART0 = 0x10000000
 
-@section(".text.entry")
-@used
-@c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('R'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('V'.toUInt32()), 1)
@@ -83,6 +80,20 @@ fn kernel_entry() -> int32 {
     return 0
 }
 XR
+
+cat >"$WORK/xray.toml" <<'TOML'
+[package]
+name = "freestanding-riscv-qemu-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_riscv_uart.xr"
+
+[[freestanding.entry]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+kind = "start"
+section = ".text.entry"
+TOML
 
 LD="$WORK/freestanding_riscv.ld"
 cat >"$LD" <<'LD'
@@ -101,12 +112,12 @@ LD
 
 ELF="$WORK/freestanding_riscv.elf"
 BUILD_LOG="$WORK/build.log"
-if ! ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
+if ! (cd "$WORK" && ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
         ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
         "$XRAY" build --native --profile freestanding \
         --target riscv32imac-unknown-none-elf --toolchain zig --zig "$ZIG" \
         --linker-script "$LD" --keep-c --rebuild --dump-link-command \
-        --cache-dir "$WORK/build-cache" -o "$ELF" "$SRC" >"$BUILD_LOG" 2>&1; then
+        --cache-dir "$WORK/build-cache" -o "$ELF" "$SRC") >"$BUILD_LOG" 2>&1; then
     sed 's/^/  /' "$BUILD_LOG" >&2
     fail "freestanding RISC-V ELF build failed"
 fi

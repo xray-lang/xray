@@ -2,27 +2,22 @@ import regex
 
 var xray_no_alloc_regex_extra_digits = regex.compile("(\\d+)")
 
-@no_alloc
 fn xray_no_alloc_regex_find_reject(text: string) -> bool {
     return xray_no_alloc_regex_extra_digits.find(text) != null
 }
 
-@no_alloc
 fn xray_no_alloc_regex_find_group_reject(text: string) -> bool {
     return xray_no_alloc_regex_extra_digits.findGroup(text, 1) != null
 }
 
-@no_alloc
 fn xray_no_alloc_regex_find_all_reject(text: string) -> int {
     return len(xray_no_alloc_regex_extra_digits.findAll(text))
 }
 
-@no_alloc
 fn xray_no_alloc_regex_replace_reject(text: string) -> string {
     return xray_no_alloc_regex_extra_digits.replace(text, "n")
 }
 
-@no_alloc
 fn xray_no_alloc_regex_split_reject(text: string) -> int {
     return len(xray_no_alloc_regex_extra_digits.split(text))
 }

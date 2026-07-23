@@ -90,10 +90,7 @@ typedef struct XrTypeRef {
     uint8_t native_width;              /* XR_TREF_NW_* for INT_WIDTH /
                                           FLOAT_WIDTH; 0 otherwise         */
     bool extensible;                   /* OBJECT: has ... marker           */
-    bool no_suspend;                   /* FUNCTION: `@no_suspend (...) -> R`
-                                          callback constraint (task 217)    */
-    bool no_throw;                     /* FUNCTION: `@no_throw (...) -> R`
-                                          error-effect constraint (task 216) */
+    bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
     const char *name;                  /* NAMED / GENERIC: type name

@@ -1,0 +1,19 @@
+[package]
+name = "filetest-freestanding_top_var_weak_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_top_var_weak_static.xr"
+
+[[export.c]]
+xray = "xrayTopVarWeakStatic"
+symbol = "xray_top_var_weak_static"
+
+[[link.symbol]]
+xray = "STATE"
+section = "__DATA,.xr_weak_state"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "TICKS"
+weak = true

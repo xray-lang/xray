@@ -2542,6 +2542,19 @@ static uint32_t body_capabilities_for_type_ref(const XrTypeRef *type) {
     return body_capabilities_for_builtin_constructor(xr_tref_head_name(type));
 }
 
+static bool body_is_compiler_owned_native_member(uint32_t type_name_id, const char *member_name,
+                                                 bool member_is_static) {
+    if (type_name_id == 0 || !member_name)
+        return false;
+#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv)         \
+    if (member_is_static == (is_static) && type_name_id == hash_name32(type) &&                    \
+        strcmp(member_name, member) == 0)                                                          \
+        return true;
+#include "../frontend/analyzer/xa_native_member_contract.def"
+#undef XA_NATIVE_MEMBER_CONTRACT
+    return false;
+}
+
 static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
     uint32_t flags = 0;
     for (int i = 0; i < count; i++) {
@@ -2717,14 +2730,6 @@ static bool body_type_key_has_derive_kind(XgBodyCollect *bc, uint32_t type_key,
             return true;
     }
     return false;
-}
-
-static XrAttribute *attrs_find(XrAttribute **attrs, int count, AttributeKind kind) {
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == kind)
-            return attrs[i];
-    }
-    return NULL;
 }
 
 static bool body_member_receiver_is_module(const MemberAccessNode *member, const char *name) {
@@ -8478,6 +8483,10 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             } else {
                 bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                 bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+                if (body_is_compiler_owned_native_member(
+                        body_resolve_expr_nominal_name_id(bc, callee->as.member_access.object),
+                        callee->as.member_access.name, false))
+                    bc->capability_bits |= XG_CAP_NATIVE;
                 row.kind = XG_CALL_NATIVE;
                 row.method_id = (XgMethodId) method_name_id;
                 row.method_name_id = method_name_id;
@@ -9866,7 +9875,6 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
             row.allocation_fingerprint = pending->links->alloc_fingerprint;
             row.allocation_complete = 1;
         }
-        row.no_alloc_contract = pending->links->has_no_alloc_contract ? 1 : 0;
     }
     row.escape_bits = bc.escape_bits;
     row.capability_bits = bc.capability_bits;
@@ -9901,10 +9909,6 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XgDeclSummary decl;
     XgDeclId decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     XgFuncId func_id = producer_next_func_id(p);
-    XrAttribute *native_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NATIVE);
-    XrAttribute *c_export_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_C_EXPORT);
-    XrAttribute *naked_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NAKED);
-    XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
     decl.decl_id = decl_id;
@@ -9919,16 +9923,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     decl.storage_mutability = XR_STORAGE_READONLY;
     decl.address_identity = XR_ADDRESS_MODULE_STABLE;
     decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
-    if (native_attr)
-        decl.flags |= XG_DECL_NATIVE;
     if (fn->is_extern)
         decl.flags |= XG_DECL_EXTERN;
-    if (c_export_attr)
-        decl.flags |= XG_DECL_C_EXPORT;
-    if (naked_attr)
-        decl.flags |= XG_DECL_NAKED;
-    if (interrupt_attr)
-        decl.flags |= XG_DECL_INTERRUPT;
     if (fn->type_param_count > 0)
         decl.flags |= XG_DECL_GENERIC_TEMPLATE;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
@@ -10004,8 +10000,6 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     decl.storage_mutability = XR_STORAGE_READONLY;
     decl.address_identity = XR_ADDRESS_MODULE_STABLE;
     decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
-    if (cls->is_native)
-        decl.flags |= XG_DECL_NATIVE;
     if (cls->explicit_final)
         decl.flags |= XG_DECL_FINAL;
     if (derive_flags != 0)
@@ -10034,7 +10028,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_STATIC;
         if (m->is_constructor)
             method.flags |= XG_METHOD_CONSTRUCTOR;
-        if (cls->is_native || !m->body)
+        if (!m->body)
             method.flags |= XG_METHOD_NATIVE;
         if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
             method.flags |= XG_METHOD_GENERIC_TEMPLATE;
@@ -10090,8 +10084,6 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     }
     if (cls->explicit_final)
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
-    if (cls->is_native)
-        csum.flags |= XG_CLASS_NATIVE;
     if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
         csum.flags |= XG_CLASS_GENERIC_SKELETON;
     if (cls->is_monomorphized) {

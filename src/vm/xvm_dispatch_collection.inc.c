@@ -2587,3 +2587,51 @@ vmcase(OP_SLICE_FROM_PTR) {
                              writable ? 0 : XR_SLICE_VIEW_READONLY);
     vmbreak;
 }
+
+vmcase(OP_BUFFER_MATERIALIZE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3)) ||
+        !XR_IS_INT(R(c + 4))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "mem.assumeInitialized<T>() is missing compiler layout evidence");
+    }
+    int64_t raw_size = XR_TO_INT(R(c));
+    int64_t raw_align = XR_TO_INT(R(c + 1));
+    int64_t raw_code = XR_TO_INT(R(c + 2));
+    int64_t raw_slot = XR_TO_INT(R(c + 3));
+    uint64_t layout_key = (uint64_t) XR_TO_INT(R(c + 4));
+    if (raw_size <= 0 || raw_size > UINT32_MAX || raw_align <= 0 || raw_align > UINT16_MAX ||
+        raw_code < 0 || raw_code > UINT8_MAX || raw_slot < 0 || raw_slot > UINT16_MAX) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "mem.assumeInitialized<T>() has invalid compiler layout evidence");
+    }
+    uint32_t size = (uint32_t) raw_size;
+    size_t align = (size_t) raw_align;
+    uint8_t code = (uint8_t) raw_code;
+    XrAggregateLayout *layout =
+        layout_key ? xr_vm_struct_layout_lookup_stable_key(&isolate->vm, layout_key) : NULL;
+    if (code == UINT8_MAX) {
+        if (!layout || layout->total_size != size || !xr_aggregate_layout_is_headerless(layout)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "mem.assumeInitialized<T>() aggregate layout is unavailable");
+        }
+        uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+        uint8_t *dst = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint16_t) raw_slot * 16u;
+        if (!xr_mem_buffer_materialize(R(b), dst, size, align, layout)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "mem.assumeInitialized<T>() Buffer size/alignment evidence mismatch");
+        }
+        R(a) = xr_aggregate_ref(dst, layout_id);
+    } else {
+        _Alignas(max_align_t) uint8_t bytes[16] = {0};
+        if (size > sizeof(bytes) || !xr_ffi_type_is_memory_scalar(code) ||
+            !xr_mem_buffer_materialize(R(b), bytes, size, align, NULL)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "mem.assumeInitialized<T>() scalar layout evidence mismatch");
+        }
+        R(a) = xr_ffi_ptr_load((uintptr_t) bytes, code, XR_ENDIAN_NATIVE);
+    }
+    vmbreak;
+}

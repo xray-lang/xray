@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_enum_payload_value"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_enum_payload_value.xr"
+
+[[export.c]]
+xray = "xray_enum_payload_value"
+symbol = "xray_enum_payload_value"

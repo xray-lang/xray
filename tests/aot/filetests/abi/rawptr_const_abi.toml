@@ -1,0 +1,17 @@
+[package]
+name = "filetest-rawptr-const-abi"
+version = "1.0.0"
+license = "MIT"
+main = "rawptr_const_abi.xr"
+
+[[export.c]]
+xray = "raw_const"
+symbol = "xray_raw_const"
+
+[[export.c]]
+xray = "raw_mut"
+symbol = "xray_raw_mut"
+
+[[export.c]]
+xray = "raw_const_from_mut"
+symbol = "xray_raw_const_from_mut"

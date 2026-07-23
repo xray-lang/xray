@@ -1,0 +1,5 @@
+[package]
+name = "filetest-no_alloc_string_materialization_reject"
+version = "1.0.0"
+license = "MIT"
+main = "no_alloc_string_materialization_reject.xr"

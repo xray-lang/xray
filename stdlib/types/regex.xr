@@ -1,20 +1,16 @@
 // Built-in Regex type — implementation in stdlib/regex/xregex_binding.c
-
-@native
 class RegexMatch {
     start: int
     end: int
     text: string
     groups: Array<string>
 }
-
-@native
 class Regex {
-    test(text: string) -> bool @no_alloc
-    find(text: string) -> RegexMatch? @may_alloc
-    findText(text: string) -> string? @may_alloc
-    findGroup(text: string, index: int) -> string? @may_alloc
-    findAll(text: string, limit?: int) -> Array<RegexMatch> @may_alloc
-    replace(text: string, replacement: string) -> string @may_alloc
-    split(text: string, limit?: int) -> Array<string> @may_alloc
+    test(text: string) -> bool
+    find(text: string) -> RegexMatch?
+    findText(text: string) -> string?
+    findGroup(text: string, index: int) -> string?
+    findAll(text: string, limit?: int) -> Array<RegexMatch>
+    replace(text: string, replacement: string) -> string
+    split(text: string, limit?: int) -> Array<string>
 }

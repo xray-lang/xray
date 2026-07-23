@@ -5434,6 +5434,119 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             (unsigned) alignment, (unsigned) elem_size);
 }
 
+static bool xicgen_emit_buffer_materialize_fields(FILE *out, const XrAggregateLayout *layout,
+                                                  uint32_t base, unsigned depth,
+                                                  const char *destination) {
+    if (!out || !layout || depth > 16)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible || field->offset > layout->total_size ||
+            field->size > layout->total_size - field->offset)
+            return false;
+        uint32_t offset = base + field->offset;
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            if (!field->sub_layout || field->sub_layout->total_size != field->size ||
+                !xicgen_emit_buffer_materialize_fields(out, field->sub_layout, offset, depth + 1,
+                                                       destination))
+                return false;
+        } else {
+            fprintf(out,
+                    "memcpy(%s + UINT32_C(%u), "
+                    "(const uint8_t *)_xr_buf->data + UINT32_C(%u), UINT32_C(%u)); ",
+                    destination, offset, offset, field->size);
+        }
+    }
+    return true;
+}
+
+static const char *cg_ffi_pointee_c_type(XiCgenCtx *ctx, uint8_t code);
+static bool cg_ffi_code_is_float(uint8_t code);
+static uint8_t cg_ffi_code_width(XiCgenCtx *ctx, uint8_t code);
+
+static void xicgen_buffer_materialize(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix) {
+    (void) prefix;
+    if (!ctx || !out || !f || !v || v->nargs != 1 || !v->args[0]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    uint8_t code = XI_BUFFER_MATERIALIZE_CODE(v->aux_int);
+    uint32_t size = XI_BUFFER_MATERIALIZE_SIZE(v->aux_int);
+    uint16_t align = XI_BUFFER_MATERIALIZE_ALIGN(v->aux_int);
+    const XrAggregateLayout *layout = (const XrAggregateLayout *) v->aux;
+    const char *ctype = local_ctype_str_ctx(ctx, f, v);
+    if (!ctype || !ctype[0] || size == 0 || align == 0 ||
+        (code == XI_BUFFER_MATERIALIZE_AGGREGATE && !layout)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    fprintf(out, "({ XrValue _xr_buffer = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out,
+            "; xrt_buffer_object_t *_xr_buf = xrt_buffer_obj_ptr(_xr_buffer); "
+            "if (XR_UNLIKELY(!_xr_buf || _xr_buf->length != INT64_C(%u) || "
+            "_xr_buf->align != (size_t)UINT16_C(%u) || !_xr_buf->data || "
+            "((uintptr_t)_xr_buf->data %% (uintptr_t)UINT16_C(%u)) != 0)) "
+            "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+            "\"mem.assumeInitialized<T>() Buffer size/alignment evidence mismatch\"); ",
+            size, (unsigned) align, (unsigned) align);
+    if (code == XI_BUFFER_MATERIALIZE_AGGREGATE) {
+        XrRep destination_rep = cg_value_plan_storage_rep(ctx, v);
+        char aggregate_type[128];
+        const char *field_destination = "(uint8_t *)&_xr_out";
+        if (destination_rep == XR_REP_TAGGED) {
+            cg_struct_heap_type_name(aggregate_type, sizeof(aggregate_type), prefix, layout);
+            fprintf(out,
+                    "%s *_xr_out = (%s *)xrt_arc_alloc(sizeof(%s)); "
+                    "memset(_xr_out, 0, sizeof(%s)); ",
+                    aggregate_type, aggregate_type, aggregate_type, aggregate_type);
+            field_destination = "(uint8_t *)_xr_out";
+        } else {
+            fprintf(out, "%s _xr_out = {0}; ", ctype);
+        }
+        bool emitted = layout->total_size == size &&
+                       xicgen_emit_buffer_materialize_fields(out, layout, 0, 0, field_destination);
+        if (!emitted) {
+            cg_ctx_set_error(ctx);
+            fprintf(out, "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+                         "\"mem.assumeInitialized<T>() invalid aggregate field layout\"); ");
+        }
+        if (destination_rep == XR_REP_TAGGED)
+            fprintf(out,
+                    "xrt_release(_xr_buffer); xr_aggregate_ref(_xr_out, "
+                    "(uint16_t)sizeof(%s)); })",
+                    aggregate_type);
+        else
+            fprintf(out, "xrt_release(_xr_buffer); _xr_out; })");
+        return;
+    }
+
+    uint8_t width = cg_ffi_code_width(ctx, code);
+    XrRep from_rep = cg_ffi_code_is_float(code) ? XR_REP_F64 : XR_REP_I64;
+    if (cg_ffi_code_is_float(code)) {
+        if ((XrFFIType) code == XR_FFI_T_F32)
+            fprintf(out, "double _xr_scalar = (double)xr_raw_f32_from_bits("
+                         "xr_raw_load_u32_unaligned(_xr_buf->data)); ");
+        else
+            fprintf(out, "double _xr_scalar = xr_raw_f64_from_bits("
+                         "xr_raw_load_u64_unaligned(_xr_buf->data)); ");
+    } else {
+        fprintf(out,
+                "int64_t _xr_scalar = (int64_t)(%s)xr_raw_load_u%u_unaligned("
+                "_xr_buf->data); ",
+                cg_ffi_pointee_c_type(ctx, code), (unsigned) width * 8u);
+    }
+    fprintf(out, "xrt_release(_xr_buffer); ");
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "_xr_scalar");
+    emit_conversion_suffix(out, suffix);
+    fprintf(out, "; })");
+}
+
 static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) ctx;

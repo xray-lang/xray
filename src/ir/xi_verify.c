@@ -298,6 +298,40 @@ static void verify_ptr_memory_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
     }
 }
 
+static void verify_buffer_materialize_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                               const XiValue *v) {
+    if (ctx->failed || !v || v->op != XI_BUFFER_MATERIALIZE)
+        return;
+    if (v->nargs != 1)
+        return;
+    if (!v->args[0] || !v->args[0]->type || !xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+        verr(ctx, "func '%s': v%u BUFFER_MATERIALIZE in b%u does not consume Buffer", f->name,
+             v->id, blk->id);
+        return;
+    }
+    uint8_t code = XI_BUFFER_MATERIALIZE_CODE(v->aux_int);
+    uint32_t size = XI_BUFFER_MATERIALIZE_SIZE(v->aux_int);
+    uint16_t align = XI_BUFFER_MATERIALIZE_ALIGN(v->aux_int);
+    if (size == 0 || align == 0) {
+        verr(ctx, "func '%s': v%u BUFFER_MATERIALIZE in b%u has empty layout evidence", f->name,
+             v->id, blk->id);
+        return;
+    }
+    if (code == XI_BUFFER_MATERIALIZE_AGGREGATE) {
+        const XrAggregateLayout *layout = (const XrAggregateLayout *) v->aux;
+        if (!layout || layout->total_size != size || layout->alignment != align ||
+            !xr_aggregate_layout_is_headerless(layout))
+            verr(ctx,
+                 "func '%s': v%u BUFFER_MATERIALIZE in b%u has inconsistent aggregate evidence",
+                 f->name, v->id, blk->id);
+        return;
+    }
+    uint8_t result_code = xr_ffi_type_from_xrtype(v->type, false);
+    if (!xr_ffi_type_is_memory_scalar(code) || result_code != code || v->aux != NULL)
+        verr(ctx, "func '%s': v%u BUFFER_MATERIALIZE in b%u has inconsistent scalar evidence",
+             f->name, v->id, blk->id);
+}
+
 static bool verify_type_reject_error(VerifyCtx *ctx, const XiFunc *f, const char *owner,
                                      uint32_t owner_id, const XrType *type) {
     if (!xr_type_contains_error(type))
@@ -1155,158 +1189,140 @@ static bool verify_call_plan_receiver(VerifyCtx *ctx, const XiFunc *f, const XiV
     return true;
 }
 
+static bool verify_call_plan_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                   XiValue *v) {
+    const XiCallPlan *plan = v->call_plan;
+    bool call_op = v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT;
+    if (!plan) {
+        if (!call_op)
+            return true;
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            if (verify_is_call_bound_place(v->args[a])) {
+                verr(ctx,
+                     "func '%s': call v%u in b%u passes call-bound place v%u without a call plan",
+                     f->name, v->id, blk->id, v->args[a]->id);
+                return false;
+            }
+        }
+        return true;
+    }
+    if (!call_op) {
+        verr(ctx, "func '%s': non-call v%u %s in b%u carries a call plan", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (v->nargs < 1 || plan->nargs != (uint16_t) (v->nargs - 1)) {
+        verr(ctx, "func '%s': call v%u in b%u plan nargs=%u does not match call nargs=%u", f->name,
+             v->id, blk->id, (unsigned) plan->nargs, v->nargs > 0 ? (unsigned) (v->nargs - 1) : 0u);
+        return false;
+    }
+    if (!plan->verified || (!plan->has_receiver && plan->nargs == 0) ||
+        (plan->nargs > 0 && !plan->args)) {
+        verr(ctx, "func '%s': call v%u in b%u has an unverified or empty call plan", f->name, v->id,
+             blk->id);
+        return false;
+    }
+
+    bool saw_contract = false;
+    if (plan->has_receiver) {
+        if (!verify_call_plan_receiver(ctx, f, v, &plan->receiver))
+            return false;
+        saw_contract = true;
+    }
+    for (uint16_t a = 0; a < plan->nargs; a++) {
+        const XiCallArgPlan *arg_plan = &plan->args[a];
+        if (!xr_param_mode_is_valid(arg_plan->param_mode) ||
+            !xr_call_arg_access_is_valid(arg_plan->access)) {
+            verr(ctx, "func '%s': call v%u plan arg %u has invalid mode/access", f->name, v->id,
+                 (unsigned) a + 1);
+            return false;
+        }
+        if (!verify_arg_access_matches_mode(arg_plan->param_mode, arg_plan->access)) {
+            verr(ctx, "func '%s': call v%u plan arg %u mode=%s has incompatible access=%s", f->name,
+                 v->id, (unsigned) a + 1, xr_param_mode_label(arg_plan->param_mode),
+                 xr_call_arg_access_label(arg_plan->access));
+            return false;
+        }
+        if (arg_plan->param_mode == XR_PARAM_READ && !arg_plan->place) {
+            if (arg_plan->addressable || arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
+                arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
+                arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
+                arg_plan->origin_var_id != XI_NO_VAR_ID) {
+                verr(ctx, "func '%s': call v%u read arg %u has incomplete place metadata", f->name,
+                     v->id, (unsigned) a + 1);
+                return false;
+            }
+            continue;
+        }
+        saw_contract = true;
+        if (arg_plan->param_mode == XR_PARAM_MOVE) {
+            if (arg_plan->place || arg_plan->addressable ||
+                arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
+                arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
+                arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
+                arg_plan->origin_var_id != XI_NO_VAR_ID) {
+                verr(ctx, "func '%s': call v%u move arg %u carries ref-place metadata", f->name,
+                     v->id, (unsigned) a + 1);
+                return false;
+            }
+            if (arg_plan->access == XR_CALL_ARG_MOVE &&
+                !verify_call_arg_has_source_move(v->args[a + 1])) {
+                verr(ctx, "func '%s': call v%u move arg %u lacks source-move IR", f->name, v->id,
+                     (unsigned) a + 1);
+                return false;
+            }
+            continue;
+        }
+
+        XiValue *place = arg_plan->place;
+        if (!arg_plan->addressable || arg_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+            arg_plan->escape != XI_PLACE_ESCAPE_NONE || !place || place != v->args[a + 1] ||
+            !verify_is_call_bound_place(place)) {
+            verr(ctx, "func '%s': call v%u plan arg %u is not a nonescaping call-bound place",
+                 f->name, v->id, (unsigned) a + 1);
+            return false;
+        }
+        if (place->op == XI_LOCAL_ADDR) {
+            if (place->nargs != 1 || !place->args[0] ||
+                (arg_plan->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
+                 arg_plan->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
+                verr(ctx, "func '%s': call v%u plan arg %u has invalid local-place origin", f->name,
+                     v->id, (unsigned) a + 1);
+                return false;
+            }
+            bool source_var = arg_plan->origin == XI_PLACE_ORIGIN_STACK_LOCAL;
+            if (source_var != xi_var_id_is_valid(arg_plan->origin_var_id) ||
+                (source_var && arg_plan->origin_var_id >= f->source_var_count)) {
+                verr(ctx, "func '%s': call v%u plan arg %u has inconsistent local origin variable",
+                     f->name, v->id, (unsigned) a + 1);
+                return false;
+            }
+        } else if (arg_plan->origin != XI_PLACE_ORIGIN_PARAM ||
+                   !xi_var_id_is_valid(arg_plan->origin_var_id)) {
+            verr(ctx, "func '%s': call v%u plan arg %u has invalid parameter origin", f->name,
+                 v->id, (unsigned) a + 1);
+            return false;
+        }
+    }
+    if (!saw_contract) {
+        verr(ctx, "func '%s': call v%u in b%u has a call plan with no place/ref/move contract",
+             f->name, v->id, blk->id);
+        return false;
+    }
+    return true;
+}
+
 static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
-
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-            const XiCallPlan *plan = v->call_plan;
-            bool call_op =
-                v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT;
-            if (!plan) {
-                if (!call_op)
-                    continue;
-                for (uint16_t a = 0; a < v->nargs; a++) {
-                    if (verify_is_call_bound_place(v->args[a])) {
-                        verr(ctx,
-                             "func '%s': call v%u in b%u passes call-bound place v%u without "
-                             "a call plan",
-                             f->name, v->id, blk->id, v->args[a]->id);
-                        return;
-                    }
-                }
-                continue;
-            }
-            if (!call_op) {
-                verr(ctx, "func '%s': non-call v%u %s in b%u carries a call plan", f->name, v->id,
-                     xi_op_name(v->op), blk->id);
+            if (v && !verify_call_plan_value(ctx, f, blk, v))
                 return;
-            }
-            if (v->nargs < 1 || plan->nargs != (uint16_t) (v->nargs - 1)) {
-                verr(ctx, "func '%s': call v%u in b%u plan nargs=%u does not match call nargs=%u",
-                     f->name, v->id, blk->id, (unsigned) plan->nargs,
-                     v->nargs > 0 ? (unsigned) (v->nargs - 1) : 0u);
-                return;
-            }
-            if (!plan->verified || (!plan->has_receiver && plan->nargs == 0) ||
-                (plan->nargs > 0 && !plan->args)) {
-                verr(ctx, "func '%s': call v%u in b%u has an unverified or empty call plan",
-                     f->name, v->id, blk->id);
-                return;
-            }
-
-            bool saw_contract = false;
-            if (plan->has_receiver) {
-                const XiCallArgPlan *receiver = &plan->receiver;
-                if (!verify_call_plan_receiver(ctx, f, v, receiver))
-                    return;
-                saw_contract = true;
-            }
-            for (uint16_t a = 0; a < plan->nargs; a++) {
-                const XiCallArgPlan *arg_plan = &plan->args[a];
-                if (!xr_param_mode_is_valid(arg_plan->param_mode) ||
-                    !xr_call_arg_access_is_valid(arg_plan->access)) {
-                    verr(ctx, "func '%s': call v%u plan arg %u has invalid mode/access", f->name,
-                         v->id, (unsigned) a + 1);
-                    return;
-                }
-                if (!verify_arg_access_matches_mode(arg_plan->param_mode, arg_plan->access)) {
-                    verr(ctx, "func '%s': call v%u plan arg %u mode=%s has incompatible access=%s",
-                         f->name, v->id, (unsigned) a + 1,
-                         xr_param_mode_label(arg_plan->param_mode),
-                         xr_call_arg_access_label(arg_plan->access));
-                    return;
-                }
-
-                if (arg_plan->param_mode == XR_PARAM_READ) {
-                    if (!arg_plan->place) {
-                        if (arg_plan->addressable || arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
-                            arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
-                            arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
-                            arg_plan->origin_var_id != XI_NO_VAR_ID) {
-                            verr(ctx,
-                                 "func '%s': call v%u read arg %u has incomplete place metadata",
-                                 f->name, v->id, (unsigned) a + 1);
-                            return;
-                        }
-                        continue;
-                    }
-                    /* A read aggregate may carry a verified internal place
-                     * strategy.  It is still a semantic read argument: the
-                     * place is call-bound, nonescaping, and has no writeback. */
-                    saw_contract = true;
-                }
-
-                if (arg_plan->param_mode == XR_PARAM_MOVE) {
-                    saw_contract = true;
-                    if (arg_plan->place || arg_plan->addressable ||
-                        arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
-                        arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
-                        arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
-                        arg_plan->origin_var_id != XI_NO_VAR_ID) {
-                        verr(ctx, "func '%s': call v%u move arg %u carries ref-place metadata",
-                             f->name, v->id, (unsigned) a + 1);
-                        return;
-                    }
-                    if (arg_plan->access == XR_CALL_ARG_MOVE &&
-                        !verify_call_arg_has_source_move(v->args[a + 1])) {
-                        verr(ctx, "func '%s': call v%u move arg %u lacks source-move IR", f->name,
-                             v->id, (unsigned) a + 1);
-                        return;
-                    }
-                    continue;
-                }
-
-                saw_contract = true;
-
-                XiValue *place = arg_plan->place;
-                if (!arg_plan->addressable || arg_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
-                    arg_plan->escape != XI_PLACE_ESCAPE_NONE || !place || place != v->args[a + 1] ||
-                    !verify_is_call_bound_place(place)) {
-                    verr(ctx,
-                         "func '%s': call v%u plan arg %u is not a nonescaping call-bound "
-                         "addressable place",
-                         f->name, v->id, (unsigned) a + 1);
-                    return;
-                }
-
-                if (place->op == XI_LOCAL_ADDR) {
-                    if (place->nargs != 1 || !place->args[0] ||
-                        (arg_plan->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
-                         arg_plan->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
-                        verr(ctx, "func '%s': call v%u plan arg %u has invalid local-place origin",
-                             f->name, v->id, (unsigned) a + 1);
-                        return;
-                    }
-                    bool source_var = arg_plan->origin == XI_PLACE_ORIGIN_STACK_LOCAL;
-                    if (source_var != xi_var_id_is_valid(arg_plan->origin_var_id) ||
-                        (source_var && arg_plan->origin_var_id >= f->source_var_count)) {
-                        verr(ctx,
-                             "func '%s': call v%u plan arg %u has inconsistent local origin "
-                             "variable",
-                             f->name, v->id, (unsigned) a + 1);
-                        return;
-                    }
-                } else if (arg_plan->origin != XI_PLACE_ORIGIN_PARAM ||
-                           !xi_var_id_is_valid(arg_plan->origin_var_id)) {
-                    verr(ctx, "func '%s': call v%u plan arg %u has invalid parameter origin",
-                         f->name, v->id, (unsigned) a + 1);
-                    return;
-                }
-            }
-            if (!saw_contract) {
-                verr(ctx,
-                     "func '%s': call v%u in b%u has a call plan with no place/ref/move contract",
-                     f->name, v->id, blk->id);
-                return;
-            }
         }
     }
 }
@@ -2140,6 +2156,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
             }
             verify_value(&ctx, f, blk, blk->values[i]);
             verify_ptr_memory_contract(&ctx, f, blk, blk->values[i]);
+            verify_buffer_materialize_contract(&ctx, f, blk, blk->values[i]);
         }
 
         /* Phi nodes */

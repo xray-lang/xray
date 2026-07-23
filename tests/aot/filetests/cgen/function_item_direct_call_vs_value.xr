@@ -10,12 +10,10 @@ fn use_value(f: (int) -> int, x: int) -> int {
     return f(x)
 }
 
-@c_export("xray_item_call")
 fn xray_item_call(x: int) -> int {
     return inc_item(x)
 }
 
-@c_export("xray_value_call")
 fn xray_value_call(x: int) -> int {
     return use_value(inc_value, x)
 }

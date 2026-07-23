@@ -24,6 +24,8 @@ typedef enum XaTypeCapability {
 
 XR_FUNC uint32_t xa_type_capability_flags(const XrType *type);
 XR_FUNC bool xa_type_has_capabilities(const XrType *type, uint32_t required);
+XR_FUNC uint32_t xa_stdlib_type_capability_flags(const char *module_name,
+                                                 const char *declaration_name);
 XR_FUNC uint32_t xa_declared_type_capability_flags(const char *file_path,
                                                    const char *declaration_name);
 

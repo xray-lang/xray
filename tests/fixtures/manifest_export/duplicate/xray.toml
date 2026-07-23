@@ -1,0 +1,13 @@
+[package]
+name = "duplicate-export-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"
+
+[[export.c]]
+xray = "add"
+symbol = "xr_duplicate"
+
+[[export.c]]
+xray = "sub"
+symbol = "xr_duplicate"

@@ -1,4 +1,3 @@
-@c_export("xray_scalar_compare")
 fn xray_scalar_compare(a: float, b: float, x: int, y: int) -> int {
     var n = 0
     if (a < b) {

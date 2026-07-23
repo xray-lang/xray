@@ -1,6 +1,5 @@
 import { free } from "mem"
 
-@c_export("xray_bad_mem_free_selective")
 fn xray_bad_mem_free_selective(p: MutPtr<byte>) -> int {
     free(p)
     return 0

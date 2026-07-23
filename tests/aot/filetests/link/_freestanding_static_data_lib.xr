@@ -1,27 +1,16 @@
-@section("__DATA,.xr_imag")
-@weak
-@used
 export const MAGIC: int = 40
 
 export const OFFSET: int = 2
 
-@weak
 export const TABLE: [int; 4] = comptime [3, 5, 7, 11]
 
-@weak
 export const BYTES: [byte; 4] = comptime [1, 2, 4, 8]
 
-@section("__DATA,.xr_imatrix")
-@weak
-@used
 export const MATRIX: [[byte; 4]; 2] = comptime [
     [1, 3, 5, 7],
     [2, 4, 6, 8],
 ]
 
-@section("__DATA,.xr_icube")
-@weak
-@used
 export const CUBE: [[[int; 2]; 2]; 2] = comptime [
     [[1, 2], [3, 4]],
     [[5, 6], [7, 8]],
@@ -32,9 +21,6 @@ struct Header {
     flags: int
 }
 
-@section("__DATA,.xr_ihead")
-@weak
-@used
 export const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[2]}
 
 struct Packet {
@@ -42,7 +28,6 @@ struct Packet {
     base: int
 }
 
-@weak
 export const PACKET = comptime Packet{bytes: [9, 10, 11, 12], base: HEADER.flags}
 
 struct Inner {
@@ -54,12 +39,8 @@ struct Outer {
     base: int
 }
 
-@weak
 export const OUTER = comptime Outer{inner: Inner{code: TABLE[3]}, base: PACKET.base}
 
-@section("__DATA,.xr_igroup")
-@weak
-@used
 export const GROUPS: [Outer; 2] = comptime [
     Outer{inner: Inner{code: TABLE[0]}, base: TABLE[1]},
     Outer{inner: Inner{code: TABLE[2]}, base: TABLE[3]},
@@ -79,30 +60,21 @@ packed struct PackedAligned align(16) {
     value: uint32
 }
 
-@weak
 export const PACKED = comptime PackedPair{tag: 5, value: 37}
 
-@weak
 export const ALIGNED = comptime AlignedWord{value: 42}
 
-@weak
 export const PACKED_ALIGNED = comptime PackedAligned{tag: 6, value: 36}
 
-@weak
 export const PAIR = comptime (HEADER.magic, PACKET.base)
 
-@section("__DATA,.xr_ipair_rows")
-@weak
-@used
 export const PAIR_ROWS: [(int, int); 2] = comptime [
     (TABLE[0], TABLE[1]),
     (TABLE[2], TABLE[3]),
 ]
 
-@weak
 export const NESTED = comptime ((TABLE[0], HEADER.flags), (PACKET.base, TABLE[3]))
 
-@weak
 export const NESTED_LABEL = comptime ((TABLE[0], LABEL), ("done", TABLE[3]))
 
 union I32Bits {
@@ -115,23 +87,15 @@ union U32Bytes {
     b: [byte; 4]
 }
 
-@weak
 export const BITS = comptime I32Bits{i: -1}
 
-@weak
 export const WORD_BYTES = comptime U32Bytes{u: 0x01020304}
 
-@section("__DATA,.xr_ibrows")
-@weak
-@used
 export const BIT_ROWS: [I32Bits; 2] = comptime [
     I32Bits{i: -1},
     I32Bits{u: 42},
 ]
 
-@section("__DATA,.xr_iwrows")
-@weak
-@used
 export const WORD_ROWS: [U32Bytes; 2] = comptime [
     U32Bytes{u: 0x01020304},
     U32Bytes{b: [8, 7, 6, 5]},
@@ -142,12 +106,8 @@ struct BitHolder {
     base: int
 }
 
-@weak
 export const BIT_HOLDER = comptime BitHolder{bits: I32Bits{u: 33}, base: TABLE[0]}
 
-@section("__DATA,.xr_ibgroups")
-@weak
-@used
 export const BIT_GROUPS: [BitHolder; 2] = comptime [
     BitHolder{bits: I32Bits{i: -1}, base: TABLE[0]},
     BitHolder{bits: I32Bits{u: 42}, base: TABLE[1]},
@@ -158,43 +118,29 @@ struct WordHolder {
     base: int
 }
 
-@weak
 export const WORD_HOLDER = comptime WordHolder{word: U32Bytes{b: [9, 8, 7, 6]}, base: TABLE[1]}
 
-@section("__DATA,.xr_iwgroups")
-@weak
-@used
 export const WORD_GROUPS: [WordHolder; 2] = comptime [
     WordHolder{word: U32Bytes{u: 0x01020304}, base: TABLE[2]},
     WordHolder{word: U32Bytes{b: [8, 7, 6, 5]}, base: TABLE[3]},
 ]
 
-@weak
 export const LABEL = comptime "score"
 
-@weak
 export const ADDR_ONLY_BYTES: [byte; 2] = comptime [13, 21]
 
-@weak
 export const MAYBE_NONE = null
 
-@section("__DATA,.xr_ilmat")
-@weak
-@used
 export const LABEL_MATRIX: [[string; 2]; 2] = comptime [
     ["level", LABEL],
     ["bonus", "done"],
 ]
 
-@section("__DATA,.xr_ilcube")
-@weak
-@used
 export const LABEL_CUBE: [[[string; 2]; 2]; 2] = comptime [
     [["level", LABEL], ["bonus", "done"]],
     [["red", "green"], ["blue", "white"]],
 ]
 
-@weak
 export const LABELS: [string; 2] = comptime ["level", LABEL]
 
 struct Named {
@@ -202,15 +148,10 @@ struct Named {
     code: int
 }
 
-@weak
 export const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
 
-@weak
 export const LABELED = comptime (LABEL, TABLE[0])
 
-@section("__DATA,.xr_iltup")
-@weak
-@used
 export const LABELED_ROWS: [(string, int); 2] = comptime [
     (LABEL, TABLE[0]),
     ("done", TABLE[1]),
@@ -221,9 +162,6 @@ struct Entry {
     flag: bool
 }
 
-@section("__DATA,.xr_ient")
-@weak
-@used
 export const ENTRIES: [Entry; 2] = comptime [
     Entry{code: TABLE[0], flag: true},
     Entry{code: TABLE[2], flag: false},
@@ -234,9 +172,6 @@ struct Row {
     weight: int
 }
 
-@section("__DATA,.xr_irow")
-@weak
-@used
 export const ROWS: [Row; 2] = comptime [
     Row{samples: [2, 4, 6, 8], weight: TABLE[0]},
     Row{samples: [1, 3, 5, 7], weight: TABLE[1]},
@@ -247,9 +182,6 @@ struct LabelRow {
     code: int
 }
 
-@section("__DATA,.xr_ilrow")
-@weak
-@used
 export const LABEL_ROWS: [LabelRow; 2] = comptime [
     LabelRow{labels: ["hot", LABEL], code: TABLE[0]},
     LabelRow{labels: ["cold", "done"], code: TABLE[1]},
@@ -265,9 +197,6 @@ struct LabelGroup {
     base: int
 }
 
-@section("__DATA,.xr_ilgrp")
-@weak
-@used
 export const LABEL_GROUPS: [LabelGroup; 2] = comptime [
     LabelGroup{inner: LabelInner{label: LABEL, code: TABLE[0]}, base: TABLE[1]},
     LabelGroup{inner: LabelInner{label: "done", code: TABLE[2]}, base: TABLE[3]},
@@ -278,58 +207,44 @@ struct PlainHeader {
     flags: int
 }
 
-@weak
 export const PLAIN_HEADER = PlainHeader{magic: TABLE[0], flags: TABLE[1]}
 
-@weak
 export const PLAIN_PAIR = (TABLE[0], TABLE[1])
 
-@weak
 export const PLAIN_BYTES: [byte; 2] = [13, 21]
 
-@weak
 export const PLAIN_MATRIX: [[byte; 2]; 2] = [
     [13, 21],
     [34, 55],
 ]
 
-@weak
 export const PLAIN_CUBE: [[[int; 2]; 2]; 2] = [
     [[1, 2], [3, 4]],
     [[5, 6], [7, 8]],
 ]
 
-@weak
 export const PLAIN_BITS = I32Bits{u: 99}
 
-@weak
 export const PLAIN_WORD = U32Bytes{b: [1, 4, 9, 16]}
 
-@weak
 export const PLAIN_LABEL = "plain"
 
-@weak
 export const PLAIN_LABELED = (PLAIN_LABEL, TABLE[2])
 
-@weak
 export const PLAIN_NAMED = Named{label: PLAIN_LABEL, code: TABLE[3]}
 
-@weak
 export const PLAIN_NAMED_ROWS: [Named; 2] = [
     Named{label: PLAIN_LABEL, code: TABLE[0]},
     Named{label: LABEL, code: TABLE[1]},
 ]
 
-@weak
 export const PLAIN_LABELS: [string; 2] = [PLAIN_LABEL, LABEL]
 
-@weak
 export const PLAIN_LABEL_MATRIX: [[string; 2]; 2] = [
     [PLAIN_LABEL, LABEL],
     ["red", "blue"],
 ]
 
-@weak
 export const PLAIN_LABEL_CUBE: [[[string; 2]; 2]; 2] = [
     [[PLAIN_LABEL, LABEL], ["red", "blue"]],
     [["cyan", "magenta"], ["black", "white"]],

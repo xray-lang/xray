@@ -1,7 +1,7 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_int_tostring_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_int_tohex_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_float_tostring_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_bool_tostring_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_char_tostring_reject'
+contains=contract 'xray_no_alloc_int_tostring_reject' failed
+contains=contract 'xray_no_alloc_int_tohex_reject' failed
+contains=contract 'xray_no_alloc_float_tostring_reject' failed
+contains=contract 'xray_no_alloc_bool_tostring_reject' failed
+contains=contract 'xray_no_alloc_char_tostring_reject' failed
 not_contains=CRASH

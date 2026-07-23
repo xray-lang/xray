@@ -1,23 +1,21 @@
 // Built-in Atomic<T> type; implemented by the runtime.
-
-@native
 class Atomic<T> {
-    load(ordering?: Ordering) -> T @no_alloc
+    load(ordering?: Ordering) -> T
     // @receiver_write
-    store(value: T, ordering?: Ordering) @no_alloc
+    store(value: T, ordering?: Ordering)
     // @receiver_write
-    add(delta: T, ordering?: Ordering) @no_alloc
+    add(delta: T, ordering?: Ordering)
     // @receiver_write
-    sub(delta: T, ordering?: Ordering) @no_alloc
+    sub(delta: T, ordering?: Ordering)
     // @receiver_write
-    fetchAdd(delta: T, ordering?: Ordering) -> T @no_alloc
+    fetchAdd(delta: T, ordering?: Ordering) -> T
     // @receiver_write
-    fetchSub(delta: T, ordering?: Ordering) -> T @no_alloc
+    fetchSub(delta: T, ordering?: Ordering) -> T
     // @receiver_write
-    swap(value: T, ordering?: Ordering) -> T @no_alloc
+    swap(value: T, ordering?: Ordering) -> T
     // @receiver_write
-    compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool) @no_alloc
+    compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool)
     // @receiver_write
-    toggle(ordering?: Ordering) -> bool @no_alloc
-    toString() -> string @may_alloc
+    toggle(ordering?: Ordering) -> bool
+    toString() -> string
 }

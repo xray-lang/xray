@@ -1,0 +1,13 @@
+[package]
+name = "filetest-no-throw-hof-specialization"
+version = "1.0.0"
+license = "MIT"
+main = "no_throw_hof_specialization.xr"
+
+[[export.c]]
+xray = "xray_apply_pure"
+symbol = "xray_apply_pure"
+
+[[export.c]]
+xray = "xray_apply_checked"
+symbol = "xray_apply_checked"

@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_rawptr_null"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_rawptr_null.xr"
+
+[[export.c]]
+xray = "xray_rawptr_null_is_null"
+symbol = "xray_rawptr_null_is_null"

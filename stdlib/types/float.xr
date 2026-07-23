@@ -1,15 +1,13 @@
 // Built-in float type — implementation in src/runtime/value/xfloat_methods.c
-
-@native
 class float {
-    abs() -> float @nothrow @no_alloc
-    toString() -> string @nothrow @may_alloc
-    toFixed(decimals?: int) -> string @nothrow @may_alloc
-    toInt() -> int @nothrow @no_alloc
-    floor() -> int @nothrow @no_alloc
-    ceil() -> int @nothrow @no_alloc
-    round() -> int @nothrow @no_alloc
-    sqrt() -> float @nothrow @no_alloc
-    pow(exp: float) -> float @nothrow @no_alloc
-    isNaN() -> bool @nothrow @no_alloc
+    abs() -> float
+    toString() -> string
+    toFixed(decimals?: int) -> string
+    toInt() -> int
+    floor() -> int
+    ceil() -> int
+    round() -> int
+    sqrt() -> float
+    pow(exp: float) -> float
+    isNaN() -> bool
 }

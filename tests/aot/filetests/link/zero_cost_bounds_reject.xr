@@ -1,8 +1,7 @@
-// Task 217 P3 negative: a @zero_cost function whose index carries no range
+// Historical residue fixture: a function whose index carries no range
 // evidence (an unconstrained parameter) keeps a bounds-panic branch (R4) in the
 // generated C.  Recursion forces a standalone emission so the contract is
 // verified on the function body itself.
-@zero_cost
 fn zeroCostBoundsReject(data: Slice<int>, i: int) -> int {
     if (i <= 0) {
         return 0

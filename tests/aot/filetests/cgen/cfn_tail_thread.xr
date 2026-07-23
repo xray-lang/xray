@@ -19,7 +19,6 @@ fn opReturn(pc: int, stack: MutPtr<int32>, sp: int) -> int {
 
 const OPS: Array<Op> = [opConst, opReturn]
 
-@c_export("run_thread")
 fn run_thread() -> int32 {
     var stack = unsafe { malloc(64) }
     return OPS[0](0, stack, 0)

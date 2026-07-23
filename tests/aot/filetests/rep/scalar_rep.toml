@@ -1,0 +1,9 @@
+[package]
+name = "filetest-scalar-rep"
+version = "1.0.0"
+license = "MIT"
+main = "scalar_rep.xr"
+
+[[export.c]]
+xray = "narrow"
+symbol = "xray_narrow"

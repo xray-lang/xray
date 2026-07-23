@@ -1,4 +1,3 @@
-@c_export("xray_unchecked_mod")
 fn uncheckedMod(n: int, d: int) -> int {
     return n % d
 }

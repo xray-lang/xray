@@ -6,7 +6,7 @@ extern "C" {
     fn rand() -> int32
 }
 
-extern "C" dylib("xrayffi_unused_task190") {
+extern "C" {
     fn xrayffi_unused_float(x: float64) -> float64
 }
 

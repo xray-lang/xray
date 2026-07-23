@@ -1,0 +1,21 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_pure_stdlib_call_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_pure_stdlib_scalar_call_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_pure_stdlib_namespace_alias_call_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_pure_stdlib_selective_call_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

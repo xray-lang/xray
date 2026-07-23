@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_static_bytes_ptr"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_static_bytes_ptr.xr"
+
+[[export.c]]
+xray = "xray_static_bytes_ptr_addr"
+symbol = "xray_static_bytes_ptr_addr"

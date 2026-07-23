@@ -241,28 +241,7 @@ typedef enum {
     ATTR_AFTER_EACH,    // @after_each
     ATTR_BEFORE_ALL,    // @before_all
     ATTR_AFTER_ALL,     // @after_all
-    ATTR_NATIVE,        // @native — implementation provided by C runtime
     ATTR_DEPRECATED,    // @deprecated or @deprecated("message")
-    ATTR_EXTERN,        // internal extern-block ABI metadata, calling convention in str_arg
-    ATTR_DYLIB,         // internal extern-block dynamic-library metadata
-    ATTR_LINK,          // internal extern-block system-link metadata
-    ATTR_LINK_NAME,     // @link_name("symbol") — foreign C symbol for an extern declaration
-    ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
-    ATTR_SECTION,       // @section("name") — place AOT function/C export or static data in section
-    ATTR_WEAK,          // @weak — emit weak AOT C export or const static data symbol
-    ATTR_USED,          // @used — force AOT function/C export or static data emission
-    ATTR_NAKED,         // @naked — freestanding AOT naked extern symbol declaration
-    ATTR_INTERRUPT,     // @interrupt("abi") — freestanding AOT interrupt extern declaration
-    ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation
-    ATTR_NO_THROW,      // @no_throw — asserted non-throwing: body (incl. transitive calls)
-                        //             must be proven to raise no error (task 216)
-    ATTR_NO_SUSPEND,    // @no_suspend — asserted non-suspending: body (incl. transitive calls)
-                        //               must be proven to reach no suspend point (task 217)
-    ATTR_ZERO_COST,     // @zero_cost — AOT generated code must carry no forbidden abstraction-cost
-                        //              residue (task 217); verified at the AOT backend stage only.
-                        //              The VM is a semantics reference and never consumes it (it
-                        //              makes no shape promise); it changes no code generation.
-    ATTR_INTRINSIC,     // compiler-owned @intrinsic("canonical.id") declaration metadata
     ATTR_DERIVE,        // @derive(...) — opt-in generated capability metadata
 } AttributeKind;
 

@@ -3,15 +3,10 @@ struct CounterState {
     limit: int
 }
 
-@section("__DATA,.xr_weak_state")
-@weak
-@used
 var STATE = CounterState{value: 1, limit: 10}
 
-@weak
 var TICKS = 3
 
-@c_export("xray_top_var_weak_static")
 fn xrayTopVarWeakStatic(flag: int) -> int {
     if (flag != 0) {
         STATE.value = STATE.value + 2

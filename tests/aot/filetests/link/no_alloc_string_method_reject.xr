@@ -1,6 +1,5 @@
 import text
 
-@no_alloc
 fn xray_no_alloc_string_trim_reject(value: string) -> string {
     return text.trim(value)
 }

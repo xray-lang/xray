@@ -1,7 +1,6 @@
 import math
 import { random } from "math"
 
-@c_export("xray_math_call_reject")
 fn xray_math_call_reject(x: float) -> float {
     return math.sqrt(x) + random()
 }

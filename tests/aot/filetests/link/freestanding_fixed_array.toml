@@ -1,0 +1,37 @@
+[package]
+name = "filetest-freestanding_fixed_array"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_fixed_array.xr"
+
+[[export.c]]
+xray = "xray_fixed_array_sum"
+symbol = "xray_fixed_array_sum"
+
+[[export.c]]
+xray = "xray_fixed_array_span"
+symbol = "xray_fixed_array_span"
+
+[[export.c]]
+xray = "xray_fixed_array_byte_slice"
+symbol = "xray_fixed_array_byte_slice"
+
+[[export.c]]
+xray = "xray_fixed_array_byte_slice_load_store"
+symbol = "xray_fixed_array_byte_slice_load_store"
+
+[[export.c]]
+xray = "xray_fixed_array_byte_slice_wide_ints"
+symbol = "xray_fixed_array_byte_slice_wide_ints"
+
+[[export.c]]
+xray = "xray_fixed_array_byte_slice_wide_floats"
+symbol = "xray_fixed_array_byte_slice_wide_floats"
+
+[[export.c]]
+xray = "xray_fixed_array_byte_slice_bulk"
+symbol = "xray_fixed_array_byte_slice_bulk"
+
+[[export.c]]
+xray = "xray_fixed_array_span_bulk"
+symbol = "xray_fixed_array_span_bulk"

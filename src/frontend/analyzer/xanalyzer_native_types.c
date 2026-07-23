@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xanalyzer_native_types.c - Parse embedded .xr @native class declarations
+ * xanalyzer_native_types.c - Load sealed embedded builtin type declarations
  *
  * KEY CONCEPT:
  *   Builtin type interfaces (Array, Map, String, ...) are declared in
- *   stdlib/types/ using @native class syntax.  At build time a script
+ *   stdlib/types/ as signature-only schema. At build time a script
  *   embeds their source into C string literals (xnative_type_defs.inc.c).
  *   This module parses those strings once at startup and fills the
  *   builtin member tables used by the analyzer and LSP.
@@ -45,6 +45,22 @@
  * ===================================================================== */
 
 #define MAX_MEMBERS_PER_TYPE 64
+
+typedef struct NativeMemberContractEntry {
+    const char *type_name;
+    const char *member_name;
+    bool is_static;
+    XaAllocationContractKind allocation;
+    XaEffectContractKind effect;
+    const char *errors_csv;
+} NativeMemberContractEntry;
+
+static const NativeMemberContractEntry native_member_contracts[] = {
+#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv)         \
+    {type, member, is_static, allocation, effect, errors_csv},
+#include "xa_native_member_contract.def"
+#undef XA_NATIVE_MEMBER_CONTRACT
+};
 
 /* Skip ASCII whitespace, return pointer to first non-space. */
 static const char *skip_ws(const char *p) {
@@ -90,9 +106,52 @@ static void trim_trailing(char *s) {
     }
 }
 
-/* ========== Parse one @native class ========== */
+static const NativeMemberContractEntry *
+native_member_contract(const char *type_name, const char *member_name, bool is_static) {
+    for (size_t i = 0; i < sizeof(native_member_contracts) / sizeof(native_member_contracts[0]);
+         i++) {
+        const NativeMemberContractEntry *entry = &native_member_contracts[i];
+        if (entry->is_static == is_static && strcmp(entry->type_name, type_name) == 0 &&
+            strcmp(entry->member_name, member_name) == 0)
+            return entry;
+    }
+    return NULL;
+}
 
-/* Parse all members from an @native class source string.
+static void native_member_apply_contract(const char *type_name, XaBuiltinMember *member) {
+    const NativeMemberContractEntry *entry =
+        native_member_contract(type_name, member->name, member->is_static);
+    member->allocation_contract = entry ? entry->allocation : XA_ALLOCATION_CONTRACT_MISSING;
+    member->effect_contract.kind = entry ? entry->effect : XA_EFFECT_CONTRACT_MISSING;
+    if (!entry || entry->effect != XA_EFFECT_CONTRACT_ERRORS || !entry->errors_csv[0])
+        return;
+    uint32_t count = 1;
+    for (const char *p = entry->errors_csv; *p; p++) {
+        if (*p == ',')
+            count++;
+    }
+    member->effect_contract.errors = xr_calloc(count, sizeof(const char *));
+    XR_CHECK(member->effect_contract.errors != NULL,
+             "builtin member contract error-set allocation failed");
+    const char *cursor = entry->errors_csv;
+    while (*cursor) {
+        while (*cursor == ' ')
+            cursor++;
+        const char *end = strchr(cursor, ',');
+        if (!end)
+            end = cursor + strlen(cursor);
+        const char *trim = end;
+        while (trim > cursor && trim[-1] == ' ')
+            trim--;
+        member->effect_contract.errors[member->effect_contract.error_count++] =
+            dup_range(cursor, (int) (trim - cursor));
+        cursor = *end ? end + 1 : end;
+    }
+}
+
+/* ========== Parse one sealed builtin class ========== */
+
+/* Parse all members from a sealed builtin class source string.
  * Returns heap-allocated array of XaBuiltinMember (caller owns).
  * Sets *out_count. Sets *out_class_name to the class name (heap). */
 static XaBuiltinMember *parse_native_class(const char *source, char **out_class_name,
@@ -117,7 +176,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
     while (*p) {
         const char *line = skip_ws(p);
 
-        /* Skip @native annotation line */
+        /* Skip compiler-owned directive lines, if a future schema adds any. */
         if (*line == '@') {
             p = next_line(p);
             continue;
@@ -178,7 +237,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
             continue;
         }
 
-        XR_CHECK_BOUNDS(count, MAX_MEMBERS_PER_TYPE, "too many members in @native class");
+        XR_CHECK_BOUNDS(count, MAX_MEMBERS_PER_TYPE, "too many members in builtin class");
 
         bool is_static = false;
         if (strncmp(line, "static ", 7) == 0) {
@@ -234,20 +293,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
         char *signature = dup_range(sig_start, sig_len);
         trim_trailing(signature);
-        XaAllocationContractKind allocation_contract;
-        if (!xa_allocation_contract_parse_suffix(signature, &allocation_contract)) {
-            const char *err = xa_xrd_last_error();
-            xr_free(signature);
-            XR_CHECK_FMT(false, "invalid @native class allocation contract for %s: %s",
-                         member_name ? member_name : "?", err ? err : "unknown error");
-        }
-        XaEffectContract effect_contract;
-        if (!xa_effect_contract_parse_suffix(signature, &effect_contract)) {
-            const char *err = xa_xrd_last_error();
-            xr_free(signature);
-            XR_CHECK_FMT(false, "invalid @native class effect contract for %s: %s",
-                         member_name ? member_name : "?", err ? err : "unknown error");
-        }
         members[count].name = member_name;
         members[count].signature = signature;
         members[count].doc = "";
@@ -257,8 +302,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_lowered_only = next_member_lowered_only;
         members[count].mutates_receiver = next_member_mutates_receiver;
         members[count].is_yieldable = false;
-        members[count].effect_contract = effect_contract;
-        members[count].allocation_contract = allocation_contract;
+        native_member_apply_contract(*out_class_name, &members[count]);
         next_member_lowered_only = false;
         next_member_mutates_receiver = false;
         count++;
@@ -342,20 +386,28 @@ static XaBuiltinType native_builtin_types[XR_TID_COUNT];
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
 static atomic_bool native_types_initialized = false;
 
-/* Parse one .xr source; may contain multiple @native classes (e.g. enum.xr). */
+/* Parse one .xr source; it may contain multiple sealed builtin classes. */
+static const char *find_next_builtin_class(const char *source) {
+    for (const char *line = source; line && *line; line = next_line(line)) {
+        const char *trimmed = skip_ws(line);
+        if (strncmp(trimmed, "class ", 6) == 0)
+            return trimmed;
+    }
+    return NULL;
+}
+
 static void load_one_source(const char *source) {
     XR_DCHECK(source != NULL, "load_one_source: NULL source");
 
     const char *p = source;
     while (*p) {
-        /* Find next @native annotation */
-        const char *at = strstr(p, "@native");
-        if (!at)
+        const char *class_decl = find_next_builtin_class(p);
+        if (!class_decl)
             break;
 
         char *class_name = NULL;
         int member_count = 0;
-        XaBuiltinMember *members = parse_native_class(at, &class_name, &member_count);
+        XaBuiltinMember *members = parse_native_class(class_decl, &class_name, &member_count);
 
         if (class_name) {
             const char *display_name = NULL;
@@ -377,7 +429,7 @@ static void load_one_source(const char *source) {
                     xr_free(members);
                 }
             } else {
-                fprintf(stderr, "xray: warning: @native class '%s' has no XrTypeId mapping\n",
+                fprintf(stderr, "xray: warning: builtin class '%s' has no XrTypeId mapping\n",
                         class_name);
                 /* Free unused members */
                 if (members) {
@@ -393,7 +445,7 @@ static void load_one_source(const char *source) {
         }
 
         /* Advance past this class to find the next one */
-        const char *brace = strchr(at, '{');
+        const char *brace = strchr(class_decl, '{');
         if (brace) {
             /* Skip to closing brace */
             p = brace + 1;
@@ -615,7 +667,7 @@ XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
 
             XrClass *cls = xa_native_protocol_runtime_class(X, tid, mem);
             if (!cls) {
-                xr_log_warning("protocol", "@native class '%s' has no runtime method table for %s",
+                xr_log_warning("protocol", "native class '%s' has no runtime method table for %s",
                                bt->name ? bt->name : "?", mem->name ? mem->name : "?");
                 mismatches++;
                 continue;

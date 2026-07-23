@@ -1,6 +1,4 @@
 // Built-in Semaphore type; implemented by the runtime.
-
-@native
 class Semaphore {
     available: int
     isClosed: bool

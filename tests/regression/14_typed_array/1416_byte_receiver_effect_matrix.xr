@@ -29,7 +29,7 @@ fn test_byte_receiver_effect_matrix_var_owned_const_shared() {
     assert_eq(int(readonlyView.load<uint16>(0, Endian.LE)), 513)
 
     const frozen = copy(seed)
-    var sharedView: Slice<byte> = frozen[:]
+    const sharedView: Slice<byte> = frozen[:]
     assert_eq(len(sharedView), 3)
     assert_eq(sharedView[0], 1)
     assert_eq(int(sharedView.load<uint16>(1, Endian.LE)), 770)

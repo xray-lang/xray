@@ -1,0 +1,17 @@
+[package]
+name = "filetest-freestanding_uintsize_target"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_uintsize_target.xr"
+
+[[export.c]]
+xray = "xray_uintsize_roundtrip"
+symbol = "xray_uintsize_roundtrip"
+
+[[export.c]]
+xray = "xray_intsize_roundtrip"
+symbol = "xray_intsize_roundtrip"
+
+[[export.c]]
+xray = "xray_uintsize_layout"
+symbol = "xray_uintsize_layout"

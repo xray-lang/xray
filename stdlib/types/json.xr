@@ -1,25 +1,23 @@
 // Built-in Json type — implementation in src/runtime/object/xjson_methods.c
-
-@native
 class Json {
-    static parse(text: string) -> Json @may_alloc
-    static stringify<T>(value: T, indent?: int) -> string @may_alloc
-    static encode<T>(value: T) -> Json @may_alloc
-    static isValid(text: string, strict?: bool) -> bool @may_alloc
-    static tryParse(text: string) -> Json @may_alloc
-    static keys(obj: Json) -> Array<string> @may_alloc
-    static values(obj: Json) -> Array<Json> @may_alloc
-    static entries(obj: Json) -> Array<(string, Json)> @may_alloc
-    static containsKey(obj: Json, key: string) -> bool @no_alloc
-    static get<T>(obj: Json, key: string, default?: T) -> Json @no_alloc
+    static parse(text: string) -> Json
+    static stringify<T>(value: T, indent?: int) -> string
+    static encode<T>(value: T) -> Json
+    static isValid(text: string, strict?: bool) -> bool
+    static tryParse(text: string) -> Json
+    static keys(obj: Json) -> Array<string>
+    static values(obj: Json) -> Array<Json>
+    static entries(obj: Json) -> Array<(string, Json)>
+    static containsKey(obj: Json, key: string) -> bool
+    static get<T>(obj: Json, key: string, default?: T) -> Json
 
-    keys() -> Array<string> @may_alloc
-    values() -> Array<Json> @may_alloc
-    entries() -> Array<(string, Json)> @may_alloc
+    keys() -> Array<string>
+    values() -> Array<Json>
+    entries() -> Array<(string, Json)>
     // Iteration protocol — iterator() yields each field name (used by
     // single-variable `for (k in jsonObj)`); entriesIterator() yields
     // (fieldName, value) tuples (used by `for (k, v in jsonObj)`).
-    iterator() -> Iterator<string> @may_alloc
-    entriesIterator() -> Iterator<(string, Json)> @may_alloc
-    toString() -> string @may_alloc
+    iterator() -> Iterator<string>
+    entriesIterator() -> Iterator<(string, Json)>
+    toString() -> string
 }

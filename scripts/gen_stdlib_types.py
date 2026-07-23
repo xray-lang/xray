@@ -522,6 +522,7 @@ def load_def_module_methods():
             'vm_binding': entry.vm_binding,
             'effect': getattr(entry, 'effect', ''),
             'allocation': getattr(entry, 'allocation', ''),
+            'return_ownership': getattr(entry, 'return_ownership', ''),
         })
     return modules
 
@@ -907,6 +908,13 @@ def allocation_contract_init(member):
     return 'XA_ALLOCATION_CONTRACT_MISSING'
 
 
+def return_ownership_contract_init(member):
+    value = (member.get('return_ownership') or '').strip()
+    if value == 'fresh':
+        return 'XA_BUILTIN_RETURN_FRESH'
+    return 'XA_BUILTIN_RETURN_UNKNOWN'
+
+
 def generate_header(type_results, module_results):
     """Generate the embedded header file content."""
     lines = [
@@ -939,10 +947,11 @@ def generate_header(type_results, module_results):
             for m in methods:
                 is_method = "true" if '(' in m['signature'] else "false"
                 allocation = allocation_contract_init(m)
+                return_ownership = return_ownership_contract_init(m)
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                     f'"{c_string(m["doc"])}", {is_method}, false, false, false, false, '
-                    f'{{0}}, {allocation}}},')
+                    f'{{0}}, {allocation}, false, {return_ownership}}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -1076,18 +1085,21 @@ def generate_header(type_results, module_results):
                     else:
                         effect_init = effect_contract_init(m)
                     allocation = allocation_contract_init(m)
+                    return_ownership = return_ownership_contract_init(m)
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
                         f'{"true" if m.get("is_internal") else "false"}, false, '
-                        f'{is_yieldable}, {effect_init}, {allocation}}},')
+                        f'{is_yieldable}, {effect_init}, {allocation}, false, '
+                        f'{return_ownership}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
                             f'"{c_string(c["doc"])}", false, false, false, false, false, '
-                            f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING}},')
+                            f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING, false, '
+                            f'XA_BUILTIN_RETURN_UNKNOWN}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")

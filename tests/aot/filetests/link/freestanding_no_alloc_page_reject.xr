@@ -1,7 +1,5 @@
 import mem
 
-@no_alloc
-@c_export("xray_no_alloc_page_reject")
 fn xray_no_alloc_page_reject(n: int) -> int {
     var p = mem.pageAlloc(n)
     return mem.addr(p)

@@ -1,8 +1,8 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_byte_array_constructor_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_map_literal_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_set_literal_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_json_literal_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_copy_builtin_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_atomic_constructor_reject'
+contains=contract 'xray_no_alloc_byte_array_constructor_reject' failed
+contains=contract 'xray_no_alloc_map_literal_reject' failed
+contains=contract 'xray_no_alloc_set_literal_reject' failed
+contains=contract 'xray_no_alloc_json_literal_reject' failed
+contains=contract 'xray_no_alloc_copy_builtin_reject' failed
+contains=contract 'xray_no_alloc_atomic_constructor_reject' failed
 not_contains=CRASH

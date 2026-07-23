@@ -4,7 +4,6 @@ fn runtimeOnly() -> int {
 
 var COUNTER: int = runtimeOnly()
 
-@c_export("xray_top_var_reject")
 fn xray_top_var_reject() -> int {
     return COUNTER
 }

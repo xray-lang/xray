@@ -1,7 +1,5 @@
 // Built-in ResultGroup type; implemented by the runtime.
 // First VM prototype supports integer associative reduction.
-
-@native
 class ResultGroup {
     readyCount: int
     pendingCount: int

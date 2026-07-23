@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_json_scalar_methods_ok(value: Json) -> int {
     var score = len(value)
     if (Json.containsKey(value, "answer")) {

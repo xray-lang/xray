@@ -1,0 +1,13 @@
+version = 1
+
+[[function]]
+symbol = "provenWindowLength"
+scope = "backend"
+backend = "aot"
+target = "native"
+profile = "hosted"
+requires = ["no_runtime_heap"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "runtime_heap", "pending_error", "bounds_in_loop", "box", "lane_spill"]
+allow = []

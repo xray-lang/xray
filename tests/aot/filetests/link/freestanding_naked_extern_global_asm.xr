@@ -1,5 +1,4 @@
 extern "C" {
-    @naked
     fn xray_naked_stub()
 }
 
@@ -11,7 +10,6 @@ asm {
     ".byte 0"
 }
 
-@c_export("xray_call_naked_stub")
 fn call_naked_stub() {
     unsafe { xray_naked_stub() }
 }

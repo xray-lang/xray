@@ -1,0 +1,45 @@
+[package]
+name = "filetest-ffi_no_arg_prototype"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_no_arg_prototype.xr"
+
+[native]
+name = "ffi-ffi_no_arg_prototype"
+version = "1"
+license = "test"
+source = "AOT FFI manifest fixture"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "library-0"
+kind = "platform"
+system_links = ["xrayffi_smoke"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_noarg"
+native = "xrayffi_noarg"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.unit]]
+name = "library-1"
+kind = "platform"
+system_links = ["xrayffi_unused"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_unused_float"
+native = "xrayffi_unused_float"
+kind = "function"
+calling_convention = "c"
+unit = "library-1"

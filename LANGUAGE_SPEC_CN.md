@@ -63,7 +63,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 | **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
 | **运行模式** | 字节码 VM 与 `xray build --native` AOT 两条路径；当前没有 JIT，跨后端语义由差分测试守门 |
 | **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
-| **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 编译期/derive 元数据 + 泛型单态化 |
+| **元编程** | 注解（`@test` / `@deprecated` / `@derive`）+ 编译期元数据 + 泛型单态化 |
 | **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
 
 设计参考来源：TypeScript（类型推断 + nullable）、Go（结构化并发 + Channel）、Rust（所有权语义的轻量版 move）、Swift（协议 + 可空链）。**Xray 不是其中任何一者的克隆**。
@@ -717,7 +717,7 @@ unsafe {
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
-`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、extern layout 字段和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
+`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
@@ -2202,7 +2202,7 @@ ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
@@ -2353,14 +2353,12 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
-`extern "C"` 块声明共享 C ABI 的外部函数与原生聚合布局。可选库契约只参与外部函数的符号解析。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
 extern "C" {
     fn malloc(n: uintsize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-}
-extern "C" dylib("m") {
     fn cos(x: float64) -> float64
 }
 
@@ -2372,54 +2370,30 @@ unsafe {
 }
 ```
 
-同一语法也可声明由 C 拥有的 struct / union 布局；这些声明是布局身份，不是可构造的 xray 值类型：
+库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
+
+C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
 
 ```xray
 import mem
 
-extern "C" {
-    struct CHeader {
-        tag: uint8
-        count: uint32
-        next: MutPtr<byte>
-        samples: [uint16; 3]
-        payload: flex uint8
-    }
-
-    union CWord {
-        word: uint32
-        bytes: [uint8; 4]
-    }
+struct CHeader {
+    tag: uint8
+    count: uint32
 }
 
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
-print(mem.offsetOf<CHeader>("next"))
-```
-
-外部地址只能在 `unsafe` 中用 `mem.slice<T>(ptr, count, owner)` 投影为只读 `Slice<T>`。`owner` 把返回 Slice 的生命周期绑定到仍存活的 backing owner；投影不分配、不复制，也不创建 xray 对象。需要写外部内存时使用 `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`，可写 Slice 只能存在于 callback 动态作用域内：
-
-```xray
-var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
-print(headers[0].count)
-unsafe {
-    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
-        view[0].count = 4
-    })
-}
+print(mem.offsetOf<CHeader>("count"))
 ```
 
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
-- `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
 - extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
-- 需要从模块发布的外部函数或 layout 必须在 extern 块内直接写 `export fn`、`export struct`、`export union` 或 `export packed struct`；已删除的同模块 post-hoc `export { Name }` 不可用于补发布。
-- extern 块内可声明 `struct`、`union` 与 `packed struct`。布局字段只能使用 C ABI 标量、`Ptr<T>` / `MutPtr<T>`、标量定长数组，或另一个 extern layout；普通 xray struct、class、`string`、nullable 与其他 managed 类型均被拒绝。
-- extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
-- `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
-- extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
-- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.slice` / `mem.withSliceMut` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
-- extern layout 随 bytecode 确定性序列化，并绑定目标 ABI fingerprint。加载器必须拒绝 ABI 不匹配、残缺、越界、循环或带尾随垃圾的 layout payload，不能回退到宿主机布局。
+- 每个声明必须在 NativePackagePlan 中有唯一 symbol mapping 与完整 typed contract；shipping package 缺合同、hash、目标或来源信息时 fail closed。
+- C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
+- 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -2442,60 +2416,60 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 // zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
 ```
 
-#### 5.2.10 `@c_export` AOT C ABI 导出
+#### 5.2.10 Manifest C ABI 导出
 
-`@c_export("symbol")` 把一个模块级 xray 函数额外暴露为 AOT C ABI wrapper。它不改变 xray 源码内的普通函数调用语义；VM 执行该文件时仍把函数当作普通 xray 函数运行，AOT codegen 在生成的 native 产物中额外输出指定 C 符号。
+模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
 ```xray
-@c_export("xr_add_i32")
 fn add(a: int32, b: int32) -> int32 {
     return a + b
 }
 
-print(add(19, 23))        // xray 内部仍是普通函数调用
+print(add(19, 23))        // Xray 内部仍是普通函数调用
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
 ```
 
 规则：
-- `@c_export` 只能标注模块级 `fn` 声明；不能标注 class、struct、方法、匿名函数或嵌套函数。
-- `@c_export` 函数必须有 xray 函数体，不能同时是 extern 函数。
-- 字符串参数必须是非空 C identifier；该字符串就是导出的 C 符号名。
-- 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
+- `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
+- `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
-- 当前不导出 xray 管理值（如 `string`、class instance、Array/Map/Set、普通 closure）或 by-value aggregate；需要与 C 共享结构体内存时，先通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
-- `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
-- `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
+- 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
+- `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
+- export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
 
-#### 5.2.11 系统断言注解
+#### 5.2.11 推导 effect 与 `xray verify` 合同
 
-系统断言注解是**受检契约**，不是优化提示。编译器必须从对应证明源证明断言成立；证明失败或目标不确定时均 fail-closed，直接报编译错误。
+分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
 
-```xray
-@no_throw
-@no_suspend
-fn addOne(x: int) -> int {
-    return x + 1
-}
+```toml
+version = 1
 
-fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
-    return f(x)
-}
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
-@zero_cost
-fn hotAdd(x: int, y: int) -> int {
-    return x + y
-}
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
 ```
 
-| 注解 | 证明阶段 | 契约 |
-|--|--|--|
-| `@no_alloc` | analyzer | 函数及其传递调用不分配；不可证明即拒绝 |
-| `@no_throw` | analyzer error-effect | 函数不会通过值返回错误通道抛出；不引入 `throws` 声明。它也可前缀函数类型，约束回调值必须已证明 no-throw |
-| `@no_suspend` | analyzer suspend-effect | 函数不会挂起；它也可前缀函数类型。`@interrupt` 与同步 `@c_export` 边界隐含该约束 |
-| `@zero_cost` | AOT CGen | 生成形状不得残留 runtime helper、分配、error-check、bounds panic、boxing 或 lanes aggregate 往返 |
-
-裸 `@zero_cost` 禁止全部六类残留。确有契约化边界时，可显式豁免一部分：`@zero_cost(allow: bounds, box)`；可用类别仅为 `runtime`、`alloc`、`error`、`bounds`、`box`、`lanes`。该注解只约束 AOT 生成形状，不改变 VM 语义，也不保证耗时阈值。
-
-`@no_throw` 断言本身不制造优化机会：对已经推断为 no-throw 的直接调用，加或不加断言必须生成相同 C。性能来自分析得到的类型化 throw-effect bit，使 lowering 构造性地不生成无用的 error-check。未标注的函数值存入变量或字段时采用 may-throw 上界；只有显式 `@no_throw (...) -> R` 槽位才保留并强制 no-throw 约束。
+运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
 
 #### 完整可运行示例
 
@@ -3511,12 +3485,13 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
-**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参、初始化器与返回值（参见 §5.1.4 / §10.8）：
+**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参与初始化器（参见 §5.1.4 / §10.8）：
 
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `var dst = move src` / `const dst = move src` / `return move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner、const 能力或调用方。
+- `var dst = move src` / `const dst = move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner 或 const 能力。
+- 函数返回统一写 `return value`。返回边终结当前 continuation，编译器对 unique local 或 `move` 参数自动发布 owner-forward proof；`return move value` 不属于公开写法。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -3526,7 +3501,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 | Capture action | 适用值 | 边界行为 |
 |---|---|---|
-| inline value | 标量、不可变小值 | 直接复制位表示 |
+| inline value | 显式 go 实参中的标量、不可变小值 | 直接复制位表示 |
 | deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
 | move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
 | module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
@@ -3534,6 +3509,8 @@ print(len(big_buffer))    // 编译错误：move 后访问
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
 
 因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
+
+`go` 闭包还有一条更强、易记的表面规则：**不得捕获任何外层 `var`，无论闭包只读还是写入，也无论当前程序只启动一个还是多个协程。** 需要的数据必须作为 `go` 的显式实参传入，并在边界写清 `copy(...)`、`move` 或同步共享能力。多个协程共享可变状态只能通过 `Channel`、`Atomic`、`sync` 锁/句柄等受审计并发原语；直接捕获修改普通 `var` 是编译错误，`unsafe` 也不能放宽。
 
 ```xray
 var local = 0
@@ -3615,7 +3592,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
-- **`@no_throw` 是可选断言**：用户无需为普通函数声明错误效应；只有希望冻结 no-throw 契约或约束回调时才标注。未知或不完整证明按 may-throw 处理。
+- **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
 
 ### 8.1 值返回错误通道
@@ -3824,7 +3801,6 @@ try {
 `PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
 ```xray
-@native
 class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
@@ -4209,7 +4185,7 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 - 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
-**高阶函数的错误效应特化**：未带 `@no_throw` 的回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect bit 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。显式 `@no_throw (T) -> R` 参数是固定约束，而不是新的特化维度：传入 may-throw 或无法证明的函数值会在调用点被拒绝。
+**高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
 
 **当前缓项**：
 - 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
@@ -4327,7 +4303,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 const 值和受验证同步句柄可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。它不得捕获任何外层 `var`，即使只读也不允许；已发布的 `const` 值和受验证同步句柄可以按能力捕获。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -4343,6 +4319,7 @@ var task = go fn(x: int) -> int {
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
+- 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 
 ### 10.3 `await` — 等待结果
 
@@ -4376,6 +4353,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **语义**：
 
 - `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
+- 用户统一写 `await task`，不写 `await (move task)`。若 `T` 是 unique mutable result，编译器把该 await 证明为 Task 的单次 terminal take；第二次 await 或随后再次使用该 single-owner task 是编译错误。若 `T` 是 const、同步共享或 inline-copy 结果，则按对应能力观察，不要求用户记另一套 await 语法。
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
 - 异常传播：
   - `await t` 重抛 t 抛出的异常。
@@ -4717,7 +4695,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
 
-runtime capability 只从 executable entry、共享库导出和 `@c_export` 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
+runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
 
@@ -4823,7 +4801,6 @@ ExportSpec ::= Identifier ('as' Identifier)?
 
 ```xray
 // 1. 声明自身携带 export 可见性
-@no_alloc
 export fn helper() { return }
 export final class MyClass {
     value: int
@@ -4975,7 +4952,7 @@ fn test_async_fetch() {
 
 ### 12.5 注解（Attributes）总览
 
-xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attribute`。测试 runner 识别以下测试注解：
+xray 的公开注解来自唯一 attribute registry；可用 `xray language attributes` 查看。测试 runner 识别以下测试注解：
 
 | 注解 | 说明 |
 |---|---|
@@ -4983,7 +4960,7 @@ xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attrib
 | `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
 | `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
 
-其它注解包括：`@deprecated("...")`；内置声明专用的 `@native`；AOT/C ABI 的 `@c_export("sym")`、`@section("name")`、`@weak`、`@used`、`@naked`、`@interrupt("abi")`、`@no_alloc`；以及 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。外部 C 声明使用 `extern "C" ... {}` 块。
+其它公开注解只有 `@deprecated("...")` 和 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
 
 ```xray
 @test                                 // 标记测试
@@ -5342,7 +5319,7 @@ print(len(empty))           // 0
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径；unique mutable 结果由编译器自动执行单次 take，不使用 `await (move task)`。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -5598,7 +5575,6 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
 ```xray
-@native
 class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
@@ -5890,8 +5866,7 @@ ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
-FunctionEffect ::= '@no_throw' | '@no_suspend'
+FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -6086,17 +6061,13 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
-ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
-ExternDecl ::= ExternFnDecl | Visibility? ExternLayoutDecl
-ExternFnDecl ::= AttrList? Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
-ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
@@ -6144,9 +6115,11 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
-AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
-              // 例如 @c_export("sym")、@zero_cost(allow: bounds, box)
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

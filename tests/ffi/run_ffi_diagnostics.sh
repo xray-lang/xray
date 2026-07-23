@@ -1,7 +1,7 @@
 #!/bin/bash
 # FFI diagnostic regression tests.
 #
-# Locks user-facing error contracts for extern/dylib failures that are not
+# Locks user-facing error contracts for manifest-declared native failures that are not
 # compile errors: VM runtime resolution and AOT native link failures.
 
 set -u
@@ -93,11 +93,44 @@ fi
 MISSING_LIB="xray_missing_library_nope_zz"
 MISSING_SYMBOL="xray_missing_symbol_nope_zz"
 
-VM_MISSING_LIB_SRC="$WORK/vm_missing_lib.xr"
-cat > "$VM_MISSING_LIB_SRC" <<XR
-extern "C" dylib("$MISSING_LIB") { fn nope(x: int32) -> int32 }
+MISSING_LIB_DIR="$WORK/missing_lib"
+mkdir -p "$MISSING_LIB_DIR"
+VM_MISSING_LIB_SRC="$MISSING_LIB_DIR/main.xr"
+cat > "$VM_MISSING_LIB_SRC" <<'XR'
+extern "C" { fn nope(x: int32) -> int32 }
 print(unsafe { nope(1) })
 XR
+cat > "$MISSING_LIB_DIR/xray.toml" <<TOML
+[package]
+name = "ffi-missing-library"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"
+
+[native]
+name = "ffi-missing-library"
+version = "1"
+license = "test"
+source = "negative platform-library fixture"
+audit_mode = "exploratory"
+vm = "verified-dynamic"
+
+[[native.unit]]
+name = "missing"
+kind = "platform"
+system_links = ["$MISSING_LIB"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "prove missing-library diagnostics"
+
+[[native.symbol]]
+xray = "nope"
+native = "nope"
+kind = "function"
+calling_convention = "c"
+unit = "missing"
+TOML
 
 VM_LIB_TEXT="$(run_vm_case "$VM_MISSING_LIB_SRC" "$WORK/vm_missing_lib")"
 if printf '%s' "$VM_LIB_TEXT" | grep -Fq "this build has no libffi"; then
@@ -109,11 +142,43 @@ else
         "vm missing library: no misleading symbol error"
 fi
 
-VM_MISSING_SYMBOL_SRC="$WORK/vm_missing_symbol.xr"
+MISSING_SYMBOL_DIR="$WORK/missing_symbol"
+mkdir -p "$MISSING_SYMBOL_DIR"
+VM_MISSING_SYMBOL_SRC="$MISSING_SYMBOL_DIR/main.xr"
 cat > "$VM_MISSING_SYMBOL_SRC" <<XR
 extern "C" { fn $MISSING_SYMBOL(x: int32) -> int32 }
 print(unsafe { $MISSING_SYMBOL(1) })
 XR
+cat > "$MISSING_SYMBOL_DIR/xray.toml" <<TOML
+[package]
+name = "ffi-missing-symbol"
+version = "1.0.0"
+license = "MIT"
+main = "main.xr"
+
+[native]
+name = "ffi-missing-symbol"
+version = "1"
+license = "test"
+source = "negative process-symbol fixture"
+audit_mode = "exploratory"
+vm = "verified-dynamic"
+
+[[native.unit]]
+name = "process"
+kind = "platform"
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "prove missing-symbol diagnostics"
+
+[[native.symbol]]
+xray = "$MISSING_SYMBOL"
+native = "$MISSING_SYMBOL"
+kind = "function"
+calling_convention = "c"
+unit = "process"
+TOML
 
 VM_SYM_TEXT="$(run_vm_case "$VM_MISSING_SYMBOL_SRC" "$WORK/vm_missing_symbol")"
 if printf '%s' "$VM_SYM_TEXT" | grep -Fq "this build has no libffi"; then

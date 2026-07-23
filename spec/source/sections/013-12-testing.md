@@ -80,7 +80,7 @@ fn test_async_fetch() {
 
 ### 12.5 注解（Attributes）总览
 
-xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attribute`。测试 runner 识别以下测试注解：
+xray 的公开注解来自唯一 attribute registry；可用 `xray language attributes` 查看。测试 runner 识别以下测试注解：
 
 | 注解 | 说明 |
 |---|---|
@@ -88,7 +88,7 @@ xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attrib
 | `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
 | `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
 
-其它注解包括：`@deprecated("...")`；内置声明专用的 `@native`；AOT/C ABI 的 `@c_export("sym")`、`@section("name")`、`@weak`、`@used`、`@naked`、`@interrupt("abi")`、`@no_alloc`；以及 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。外部 C 声明使用 `extern "C" ... {}` 块。
+其它公开注解只有 `@deprecated("...")` 和 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
 
 ```xray @id=testing-attributes
 @test                                 // 标记测试
@@ -194,7 +194,7 @@ fn test_async_fetch() {
 
 ### 12.5 Attribute Overview
 
-Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_single_attribute`. The test runner recognizes:
+Public Xray attributes come from one registry, exposed by `xray language attributes`. The test runner recognizes:
 
 | Attribute | Description |
 |---|---|
@@ -202,7 +202,7 @@ Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_sing
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
-Other attributes include `@deprecated("...")`; builtin-declaration-only `@native`; AOT/C ABI attributes `@c_export("sym")`, `@section("name")`, `@weak`, `@used`, `@naked`, `@interrupt("abi")`, and `@no_alloc`; plus `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). External C declarations use an `extern "C" ... {}` block.
+The only other public attributes are `@deprecated("...")` and `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
 ```xray @id=testing-attributes
 @test                                 // mark as a test

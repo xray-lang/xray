@@ -1,12 +1,10 @@
 import math
 import { clamp } from "math"
 
-@c_export("xray_math_float_min_reject")
 fn xray_math_float_min_reject(x: float) -> float {
     return math.min(x, 1.0)
 }
 
-@c_export("xray_math_float_clamp_reject")
 fn xray_math_float_clamp_reject(x: float) -> float {
     return clamp(x, 0.0, 1.0)
 }

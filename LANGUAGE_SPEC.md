@@ -62,7 +62,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
 | **Execution** | Bytecode VM and the `xray build --native` AOT path; there is currently no JIT, and differential tests guard cross-backend semantics |
 | **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
-| **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + compile-time/derive metadata + monomorphized generics |
+| **Metaprogramming** | Attributes (`@test` / `@deprecated` / `@derive`) + compile-time metadata + monomorphized generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
 
 Design influences: TypeScript (type inference + nullable), Go (structured concurrency + Channel), Rust (a lightweight take on ownership/`move`), Swift (protocols + optional chaining). **Xray is not a clone of any of them.**
@@ -2209,7 +2209,7 @@ ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
@@ -2360,14 +2360,12 @@ greet()                   // must be called explicitly
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
-An `extern "C"` block declares external functions and native aggregate layouts that share a C ABI. An optional library contract participates only in external-function symbol resolution. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
 ```xray
 extern "C" {
     fn malloc(n: uintsize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-}
-extern "C" dylib("m") {
     fn cos(x: float64) -> float64
 }
 
@@ -2379,57 +2377,32 @@ unsafe {
 }
 ```
 
-The same syntax declares C-owned struct / union layouts. These declarations are layout identities, not constructible xray value types:
+Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
+
+C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
 
 ```xray
 import mem
 
-extern "C" {
-    struct CHeader {
-        tag: uint8
-        count: uint32
-        next: MutPtr<byte>
-        samples: [uint16; 3]
-        payload: flex uint8
-    }
-
-    union CWord {
-        word: uint32
-        bytes: [uint8; 4]
-    }
+struct CHeader {
+    tag: uint8
+    count: uint32
 }
 
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
-print(mem.offsetOf<CHeader>("next"))
-```
-
-Inside `unsafe`, an external address can only be projected with `mem.slice<T>(ptr, count, owner)` as a readonly `Slice<T>`. `owner` binds the returned Slice lifetime to a live backing owner. The projection allocates and copies nothing and creates no xray object. Writable foreign access uses `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`; its writable Slice exists only for the callback's dynamic scope:
-
-```xray
-var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
-print(headers[0].count)
-unsafe {
-    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
-        view[0].count = 4
-    })
-}
+print(mem.offsetOf<CHeader>("count"))
 ```
 
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
-- `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
-- Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
-- An external function or layout published by the module must use direct visibility inside the extern block: `export fn`, `export struct`, `export union`, or `export packed struct`. The removed same-module post-hoc `export { Name }` form cannot publish it afterward.
-- An extern block may declare `struct`, `union`, and `packed struct` layouts. Layout fields may contain only C ABI scalars, `Ptr<T>` / `MutPtr<T>`, fixed arrays of scalars, or another extern layout. Ordinary xray structs, classes, `string`, nullable types, and other managed types are rejected.
-- Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
-- `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
-- An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
-- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.slice` / `mem.withSliceMut`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
-- Extern layouts are serialized deterministically with bytecode and bound to a target-ABI fingerprint. The loader rejects ABI mismatches and truncated, out-of-range, cyclic, or trailing-garbage layout payloads; it never falls back to host layout.
-- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
-- C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
-- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.
+- Functions inside an extern block declare signatures only and cannot have `{ }` bodies.
+- Every declaration must have a unique symbol mapping and a complete typed contract in the NativePackagePlan. A shipping package with missing contract, hash, target, or provenance is rejected.
+- C output pointers write raw `Buffer` storage first. A success path may materialize `T` only with `unsafe { mem.assumeInitialized<T>(move buffer) }`, after exact size/alignment, complete output validity, success-path dominance, and header-layout evidence are proven. Partial or failed writes never produce `T`.
+- Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
+- Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
+- The aligned VM/AOT boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- C callbacks use `CFn<(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
 ```xray
 extern "C" {
@@ -2449,60 +2422,52 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 // zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
 ```
 
-#### 5.2.10 `@c_export` AOT C ABI Exports
+#### 5.2.10 Manifest C ABI Exports
 
-`@c_export("symbol")` additionally exposes a module-level xray function as an AOT C ABI wrapper. It does not change ordinary xray call semantics; the VM still runs the function as a normal xray function, while AOT codegen emits the requested C symbol in the generated native artifact.
+A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
 
 ```xray
-@c_export("xr_add_i32")
 fn add(a: int32, b: int32) -> int32 {
     return a + b
 }
-
-print(add(19, 23))        // still an ordinary xray call inside xray
 ```
 
-Rules:
-- `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
-- A `@c_export` function must have an xray function body and cannot also be an extern function.
-- The string argument must be a non-empty C identifier; that string is the exported C symbol name.
-- Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
-- Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
-- Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `Ptr<T>` / `MutPtr<T>`.
-- `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
-- `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
-
-#### 5.2.11 System Assertion Attributes
-
-System assertion attributes are **checked contracts**, not optimization hints. The compiler must prove each assertion from its designated evidence source; a failed or indeterminate proof is a compile error.
-
-```xray
-@no_throw
-@no_suspend
-fn addOne(x: int) -> int {
-    return x + 1
-}
-
-fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
-    return f(x)
-}
-
-@zero_cost
-fn hotAdd(x: int, y: int) -> int {
-    return x + y
-}
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
 ```
 
-| Attribute | Proof stage | Contract |
-|--|--|--|
-| `@no_alloc` | analyzer | The function and its transitive callees do not allocate; an unprovable case is rejected |
-| `@no_throw` | analyzer error effect | The function does not raise through the value-return error channel; this does not add a `throws` declaration. It may also prefix a function type, requiring a callback value proven no-throw |
-| `@no_suspend` | analyzer suspend effect | The function does not suspend; it may also prefix a function type. `@interrupt` and synchronous `@c_export` boundaries imply this constraint |
-| `@zero_cost` | AOT CGen | The generated shape contains no runtime-helper, allocation, error-check, bounds-panic, boxing, or lanes aggregate residue |
+The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
 
-A bare `@zero_cost` forbids all six residue categories. A contract boundary may explicitly exempt some categories, for example `@zero_cost(allow: bounds, box)`; the only category names are `runtime`, `alloc`, `error`, `bounds`, `box`, and `lanes`. The attribute constrains AOT output shape only: it does not change VM semantics and does not promise a timing threshold.
+#### 5.2.11 Inferred Effects and `xray verify` Contracts
 
-`@no_throw` itself creates no optimization opportunity: for a direct call already inferred no-throw, adding or removing the assertion must produce identical C. The optimization comes from the analyzer-owned typed throw-effect bit, which lets lowering constructively omit unnecessary error checks. An unannotated function value stored in a variable or field is widened to a may-throw upper bound; only an explicit `@no_throw (...) -> R` slot preserves and enforces the no-throw constraint.
+Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
 
 #### Worked Examples
 
@@ -3518,12 +3483,13 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // compile error: accessed after move
 ```
 
-**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments, initializers, and returns (see §5.1.4 / §10.8):
+**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments and initializers (see §5.1.4 / §10.8):
 
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `var dst = move src` / `const dst = move src` / `return move src`: transfer a verifier-proven unique local `var` root to a new owner, const capability, or caller.
+- `var dst = move src` / `const dst = move src`: transfer a verifier-proven unique local `var` root to a new owner or const capability.
+- Function returns are always written `return value`. The return edge terminates the current continuation, so the compiler automatically publishes owner-forward proof for a unique local or `move` parameter; `return move value` is not a public form.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -3533,7 +3499,7 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 
 | Capture action | Values | Boundary behavior |
 |---|---|---|
-| inline value | scalars and small immutable values | copy the bits directly |
+| inline value | scalars and small immutable values passed as explicit `go` arguments | copy the bits directly |
 | deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
 | move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
 | module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
@@ -3541,6 +3507,8 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
 
 Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
+
+`go` closures additionally follow one simple, stronger surface rule: **they may not capture any outer `var`, whether they only read it or mutate it, and whether the current program launches one coroutine or many.** Pass data as explicit `go` arguments and state `copy(...)`, `move`, or an audited synchronization capability at the boundary. Mutable state shared by multiple coroutines must flow through `Channel`, `Atomic`, or audited `sync` locks/handles. Directly capturing and modifying an ordinary `var` is a compile error, and `unsafe` does not relax this rule.
 
 ```xray
 var local = 0
@@ -3622,7 +3590,7 @@ Design principles:
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
-- **`@no_throw` is an optional assertion**: ordinary functions do not declare an error effect. Annotate only when freezing a no-throw contract or constraining a callback; unknown or incomplete evidence is treated as may-throw.
+- **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
 
 ### 8.1 Value-return error channel
@@ -3831,7 +3799,6 @@ try {
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
 ```xray
-@native
 class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
@@ -4220,7 +4187,7 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 - Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
-**Error-effect specialization for higher-order functions**: a callback parameter without `@no_throw` is effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect bit, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. An explicit `@no_throw (T) -> R` parameter is a fixed constraint rather than another specialization dimension: a may-throw or unprovable function value is rejected at the call site.
+**Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
 
 **Deferred features**:
 - Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.
@@ -4338,7 +4305,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published const values, and verified synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. It may not capture any outer `var`, even for reads; published `const` values and verified synchronization handles may be captured according to their capabilities. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -4354,6 +4321,7 @@ var task = go fn(x: int) -> int {
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Execution-local heap values (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
+- An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 
 ### 10.3 `await` — wait for a result
 
@@ -4387,6 +4355,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 **Semantics**:
 
 - `await` only applies to `Task<T>`; other types are a compile error.
+- Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - PanicInfo propagation:
   - `await t` rethrows the exception thrown by `t`.
@@ -4728,7 +4697,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
 
-Runtime capabilities propagate only from final artifact roots such as the executable entry, shared-library exports, and `@c_export` functions. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
+Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 
 A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entry plan. A freestanding target remains coroutine-runtime-free when reachable code needs only core. If reachable code needs task/frame allocation, submit, park/wake, timer, interrupt completion, or an executor pump, the target manifest must provide a versioned provider ABI and the required hooks; missing capabilities fail before generation or linking. The provider is a target/build contract and introduces no `async main`, `static main`, or freestanding-only source-language keyword.
 
@@ -4834,7 +4803,6 @@ ExportSpec ::= Identifier ('as' Identifier)?
 
 ```xray
 // 1. visibility belongs to the declaration
-@no_alloc
 export fn helper() { return }
 export final class MyClass {
     value: int
@@ -4988,7 +4956,7 @@ fn test_async_fetch() {
 
 ### 12.5 Attribute Overview
 
-Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_single_attribute`. The test runner recognizes:
+Public Xray attributes come from one registry, exposed by `xray language attributes`. The test runner recognizes:
 
 | Attribute | Description |
 |---|---|
@@ -4996,7 +4964,7 @@ Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_sing
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
-Other attributes include `@deprecated("...")`; builtin-declaration-only `@native`; AOT/C ABI attributes `@c_export("sym")`, `@section("name")`, `@weak`, `@used`, `@naked`, `@interrupt("abi")`, and `@no_alloc`; plus `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). External C declarations use an `extern "C" ... {}` block.
+The only other public attributes are `@deprecated("...")` and `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
 ```xray
 @test                                 // mark as a test
@@ -5355,7 +5323,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; a unique mutable result is taken once automatically, with no `await (move task)` form. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 
@@ -5611,7 +5579,6 @@ See `stdlib/os/` for details.
 The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
 ```xray
-@native
 class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
@@ -5903,8 +5870,7 @@ ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
-FunctionEffect ::= '@no_throw' | '@no_suspend'
+FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -6099,17 +6065,13 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
-ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
-ExternDecl ::= ExternFnDecl | Visibility? ExternLayoutDecl
-ExternFnDecl ::= AttrList? Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
-ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
@@ -6157,9 +6119,11 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
-AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
-              // e.g. @c_export("sym"), @zero_cost(allow: bounds, box)
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

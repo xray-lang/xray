@@ -1,0 +1,5 @@
+[package]
+name = "filetest-span-window-assert-bounds-plan"
+version = "1.0.0"
+license = "MIT"
+main = "span_window_assert_bounds_plan.xr"

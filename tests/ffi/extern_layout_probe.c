@@ -19,7 +19,6 @@ typedef struct M3FuncType {
     struct M3FuncType *next;
     uint16_t numRets;
     uint16_t numArgs;
-    uint8_t types[];
 } M3FuncType;
 
 typedef struct CHeader {
@@ -48,7 +47,6 @@ int main(void) {
     printf("%zu\n", offsetof(M3FuncType, next));
     printf("%zu\n", offsetof(M3FuncType, numRets));
     printf("%zu\n", offsetof(M3FuncType, numArgs));
-    printf("%zu\n", offsetof(M3FuncType, types));
     printf("%zu\n", sizeof(CHeader));
     printf("%zu\n", _Alignof(CHeader));
     printf("%zu\n", offsetof(CHeader, tag));

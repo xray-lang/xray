@@ -15,8 +15,6 @@ enum TaskStatus {
     Failed
     Cancelled
 }
-
-@native
 class Task<T> {
     done: bool
     status: TaskStatus

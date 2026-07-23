@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
     return value.toString()
 }

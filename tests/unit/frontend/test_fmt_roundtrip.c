@@ -346,14 +346,14 @@ TEST(arrow_return_type_emitted) {
 
 TEST(attribute_visibility_modifier_order_roundtrip) {
     setup();
-    const char *src = "@no_alloc\n"
+    const char *src = "@deprecated(\"use hash64\")\n"
                       "export fn hash() -> int { return 1 }\n"
                       "@derive(Clone)\n"
                       "export final class Box {}\n"
                       "export packed struct Word { value: uint32 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "@no_alloc\nexport fn hash"));
+    ASSERT_TRUE(contains(fmt1, "@deprecated(\"use hash64\")\nexport fn hash"));
     ASSERT_TRUE(contains(fmt1, "@derive(Clone)\nexport final class Box"));
     ASSERT_TRUE(contains(fmt1, "export packed struct Word"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
@@ -364,21 +364,21 @@ TEST(attribute_visibility_modifier_order_roundtrip) {
     teardown();
 }
 
-TEST(method_no_alloc_attribute_roundtrip) {
+TEST(method_deprecated_attribute_roundtrip) {
     setup();
     const char *src = "export struct Word {\n"
-                      "  @no_alloc\n"
+                      "  @deprecated(\"use rotateLeft\")\n"
                       "  rotate(n: int) -> uint32 { return 0 }\n"
                       "}\n"
                       "enum State {\n"
                       "  Ready\n"
-                      "  @no_alloc\n"
+                      "  @deprecated\n"
                       "  static fn initial() -> State { return State.Ready }\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "@no_alloc\n    rotate"));
-    ASSERT_TRUE(contains(fmt1, "@no_alloc\n    static fn initial"));
+    ASSERT_TRUE(contains(fmt1, "@deprecated(\"use rotateLeft\")\n    rotate"));
+    ASSERT_TRUE(contains(fmt1, "@deprecated\n    static fn initial"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -387,13 +387,13 @@ TEST(method_no_alloc_attribute_roundtrip) {
     teardown();
 }
 
-TEST(zero_cost_allow_categories_roundtrip) {
+TEST(deprecated_message_roundtrip) {
     setup();
-    const char *src = "@zero_cost(allow: lanes, bounds, runtime)\n"
+    const char *src = "@deprecated(\"use coldPath instead\")\n"
                       "fn hot() -> int { return 1 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "@zero_cost(allow: runtime, bounds, lanes)\nfn hot"));
+    ASSERT_TRUE(contains(fmt1, "@deprecated(\"use coldPath instead\")\nfn hot"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -453,28 +453,11 @@ TEST(parameter_modes_roundtrip) {
     teardown();
 }
 
-TEST(no_throw_function_type_roundtrip) {
+TEST(unknown_effect_attribute_rejected) {
     setup();
-    const char *src = "type Pure = @no_throw (int) -> int\n"
-                      "type PureSync = @no_throw @no_suspend (int) -> int\n"
-                      "fn apply(cb: @no_throw (int) -> int, value: int) -> int {\n"
-                      "    return cb(value)\n"
-                      "}\n"
-                      "interface PureMapper {\n"
-                      "    @no_throw\n"
-                      "    map(value: int) -> int\n"
-                      "}\n";
-    char *fmt1 = parse_and_format(src, "no-throw-type.xr");
-    ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "type Pure = @no_throw (int) -> int"));
-    ASSERT_TRUE(contains(fmt1, "type PureSync = @no_throw @no_suspend (int) -> int"));
-    ASSERT_TRUE(contains(fmt1, "cb: @no_throw (int) -> int"));
-    ASSERT_TRUE(contains(fmt1, "@no_throw\n    map(value: int) -> int"));
-    char *fmt2 = parse_and_format(fmt1, "no-throw-type-formatted.xr");
-    ASSERT_NOT_NULL(fmt2);
-    ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
+    const char *src = "@effect_claim\nfn pure(value: int) -> int { return value }\n";
+    char *out = parse_and_format(src, "retired-effect-attributes.xr");
+    ASSERT_NULL(out);
     teardown();
 }
 
@@ -938,11 +921,11 @@ RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
-RUN_TEST(method_no_alloc_attribute_roundtrip);
-RUN_TEST(zero_cost_allow_categories_roundtrip);
+RUN_TEST(method_deprecated_attribute_roundtrip);
+RUN_TEST(deprecated_message_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
-RUN_TEST(no_throw_function_type_roundtrip);
+RUN_TEST(unknown_effect_attribute_rejected);
 RUN_TEST(extern_block_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);
 

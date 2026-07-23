@@ -21,8 +21,14 @@
 
 struct XrVMRuntime;
 struct XrModule;
+struct XrAggregateLayout;
 
 XR_FUNC struct XrModule *xr_load_module_mem(struct XrVMRuntime *isolate);
 XR_FUNC int64_t xr_mem_buffer_length(XrValue value);
+/* Consume the byte payload after the compiler has proved complete native
+ * output. Aggregate padding is canonicalized to zero instead of being copied
+ * from foreign memory. */
+XR_FUNC bool xr_mem_buffer_materialize(XrValue value, void *dst, size_t size, size_t align,
+                                       const struct XrAggregateLayout *layout);
 
 #endif  // XR_STDLIB_MEM_H

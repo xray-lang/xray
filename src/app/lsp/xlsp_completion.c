@@ -25,6 +25,7 @@
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_types.h"
+#include "../../frontend/parser/xattribute_registry.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -480,6 +481,18 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 
     for (int i = 0; xr_keywords[i]; i++) {
         XrJsonValue *item = make_completion_item(xr_keywords[i], 14, "keyword");
+        xjson_object_set(item, "sortText", xjson_new_string("2"));
+        xjson_array_push(items, item);
+    }
+
+    for (size_t i = 0; i < xr_public_attribute_count(); i++) {
+        const XrPublicAttributeInfo *info = xr_public_attribute_at(i);
+        char label[64];
+        char detail[512];
+        snprintf(label, sizeof(label), "@%s", info->spelling);
+        snprintf(detail, sizeof(detail), "%s; targets: %s; arguments: %s", label, info->targets,
+                 info->arguments);
+        XrJsonValue *item = make_completion_item(label, 14, detail);
         xjson_object_set(item, "sortText", xjson_new_string("2"));
         xjson_array_push(items, item);
     }

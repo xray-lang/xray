@@ -96,6 +96,37 @@ static const char *xi_block_kind_name(uint16_t kind) {
 
 /* ========== Dump a Single Value ========== */
 
+static void dump_view_evidence(FILE *out, const XiValue *v) {
+    if (!v->view_evidence.complete)
+        return;
+    const char *origin = "unknown";
+    switch (v->view_evidence.origin) {
+        case XR_VIEW_RETURN_PARAM:
+            origin = "param";
+            break;
+        case XR_VIEW_RETURN_RECEIVER:
+            origin = "receiver";
+            break;
+        case XR_VIEW_RETURN_STATIC:
+            origin = "static";
+            break;
+        case XI_VIEW_ORIGIN_FOREIGN:
+            origin = "foreign";
+            break;
+        case XI_VIEW_ORIGIN_ALLOCATION:
+            origin = "allocation";
+            break;
+        default:
+            origin = "invalid";
+    }
+    fprintf(out, " view:%s", origin);
+    if (v->view_evidence.source_param >= 0)
+        fprintf(out, "(%d)", (int) v->view_evidence.source_param);
+    if (v->view_evidence.source_operand >= 0)
+        fprintf(out, " operand=%d root=v%u", (int) v->view_evidence.source_operand,
+                v->view_evidence.root_value_id);
+}
+
 static void dump_value(FILE *out, const XiValue *v) {
     if (!v)
         return;
@@ -225,34 +256,7 @@ static void dump_value(FILE *out, const XiValue *v) {
     if (v->line > 0)
         fprintf(out, " L%u", v->line);
 
-    if (v->view_evidence.complete) {
-        const char *origin = "unknown";
-        switch (v->view_evidence.origin) {
-            case XR_VIEW_RETURN_PARAM:
-                origin = "param";
-                break;
-            case XR_VIEW_RETURN_RECEIVER:
-                origin = "receiver";
-                break;
-            case XR_VIEW_RETURN_STATIC:
-                origin = "static";
-                break;
-            case XI_VIEW_ORIGIN_FOREIGN:
-                origin = "foreign";
-                break;
-            case XI_VIEW_ORIGIN_ALLOCATION:
-                origin = "allocation";
-                break;
-            default:
-                break;
-        }
-        fprintf(out, " view:%s", origin);
-        if (v->view_evidence.source_param >= 0)
-            fprintf(out, "(%d)", (int) v->view_evidence.source_param);
-        if (v->view_evidence.source_operand >= 0)
-            fprintf(out, " operand=%d root=v%u", (int) v->view_evidence.source_operand,
-                    v->view_evidence.root_value_id);
-    }
+    dump_view_evidence(out, v);
 
     fprintf(out, "\n");
 }

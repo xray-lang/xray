@@ -1,0 +1,9 @@
+[package]
+name = "filetest-cfn-optable"
+version = "1.0.0"
+license = "MIT"
+main = "cfn_optable.xr"
+
+[[export.c]]
+xray = "run_optable"
+symbol = "run_optable"

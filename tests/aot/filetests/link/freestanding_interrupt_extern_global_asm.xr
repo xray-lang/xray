@@ -1,5 +1,4 @@
 extern "C" {
-    @interrupt("irq")
     fn xray_timer_irq()
 }
 
@@ -11,7 +10,6 @@ asm {
     ".byte 0"
 }
 
-@c_export("xray_call_timer_irq")
 fn call_timer_irq() {
     unsafe { xray_timer_irq() }
 }

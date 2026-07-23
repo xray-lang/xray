@@ -1,0 +1,268 @@
+[package]
+name = "filetest-freestanding_top_const_aggregate"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_top_const_aggregate.xr"
+
+[[export.c]]
+xray = "xray_top_const_aggregate"
+symbol = "xray_top_const_aggregate"
+
+[[export.c]]
+xray = "xray_top_const_array_runtime"
+symbol = "xray_top_const_array_runtime"
+
+[[export.c]]
+xray = "xray_top_const_byte_runtime"
+symbol = "xray_top_const_byte_runtime"
+
+[[export.c]]
+xray = "xray_top_const_float_runtime"
+symbol = "xray_top_const_float_runtime"
+
+[[export.c]]
+xray = "xray_top_const_matrix_runtime"
+symbol = "xray_top_const_matrix_runtime"
+
+[[export.c]]
+xray = "xray_top_const_cube_runtime"
+symbol = "xray_top_const_cube_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_runtime"
+symbol = "xray_top_const_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_plain_struct_runtime"
+symbol = "xray_top_const_plain_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_runtime"
+symbol = "xray_top_const_struct_array_runtime"
+
+[[export.c]]
+xray = "xray_top_const_nested_struct_runtime"
+symbol = "xray_top_const_nested_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_tuple_runtime"
+symbol = "xray_top_const_tuple_runtime"
+
+[[export.c]]
+xray = "xray_top_const_tuple_float_runtime"
+symbol = "xray_top_const_tuple_float_runtime"
+
+[[export.c]]
+xray = "xray_top_const_tuple_array_runtime"
+symbol = "xray_top_const_tuple_array_runtime"
+
+[[export.c]]
+xray = "xray_top_const_nested_tuple_runtime"
+symbol = "xray_top_const_nested_tuple_runtime"
+
+[[export.c]]
+xray = "xray_top_const_nested_tuple_float_runtime"
+symbol = "xray_top_const_nested_tuple_float_runtime"
+
+[[export.c]]
+xray = "xray_top_const_string_print"
+symbol = "xray_top_const_string_print"
+
+[[export.c]]
+xray = "xray_top_const_tuple_string_print"
+symbol = "xray_top_const_tuple_string_print"
+
+[[export.c]]
+xray = "xray_top_const_tuple_array_string_print"
+symbol = "xray_top_const_tuple_array_string_print"
+
+[[export.c]]
+xray = "xray_top_const_nested_tuple_string_print"
+symbol = "xray_top_const_nested_tuple_string_print"
+
+[[export.c]]
+xray = "xray_top_const_struct_string_print"
+symbol = "xray_top_const_struct_string_print"
+
+[[export.c]]
+xray = "xray_top_const_string_array_print"
+symbol = "xray_top_const_string_array_print"
+
+[[export.c]]
+xray = "xray_top_const_string_matrix_print"
+symbol = "xray_top_const_string_matrix_print"
+
+[[export.c]]
+xray = "xray_top_const_string_cube_print"
+symbol = "xray_top_const_string_cube_print"
+
+[[export.c]]
+xray = "xray_top_const_struct_string_array_print"
+symbol = "xray_top_const_struct_string_array_print"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_field_runtime"
+symbol = "xray_top_const_struct_array_field_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_fixed_field_runtime"
+symbol = "xray_top_const_struct_array_fixed_field_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_string_fixed_field_print"
+symbol = "xray_top_const_struct_array_string_fixed_field_print"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_nested_field_runtime"
+symbol = "xray_top_const_struct_array_nested_field_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_nested_string_field_print"
+symbol = "xray_top_const_struct_array_nested_string_field_print"
+
+[[export.c]]
+xray = "xray_top_const_packed_struct_runtime"
+symbol = "xray_top_const_packed_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_aligned_struct_runtime"
+symbol = "xray_top_const_aligned_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_packed_aligned_struct_runtime"
+symbol = "xray_top_const_packed_aligned_struct_runtime"
+
+[[export.c]]
+xray = "xray_top_const_union_u32_runtime"
+symbol = "xray_top_const_union_u32_runtime"
+
+[[export.c]]
+xray = "xray_top_const_union_byte_runtime"
+symbol = "xray_top_const_union_byte_runtime"
+
+[[export.c]]
+xray = "xray_top_const_union_array_runtime"
+symbol = "xray_top_const_union_array_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_nested_union_runtime"
+symbol = "xray_top_const_struct_nested_union_runtime"
+
+[[export.c]]
+xray = "xray_top_const_struct_array_nested_union_runtime"
+symbol = "xray_top_const_struct_array_nested_union_runtime"
+
+[[link.symbol]]
+xray = "TABLE"
+section = "__DATA,.xray_table"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "MATRIX"
+section = "__DATA,.xray_matrix"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "CUBE"
+section = "__DATA,.xray_cube"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "HEADER"
+section = "__DATA,.xray_header"
+weak = true
+
+[[link.symbol]]
+xray = "GROUPS"
+section = "__DATA,.xray_groups"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "PAIR"
+section = "__DATA,.xray_pair"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "PAIR_ROWS"
+section = "__DATA,.xray_pair_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_MATRIX"
+section = "__DATA,.xray_lmat"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_CUBE"
+section = "__DATA,.xray_lcube"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABELED_ROWS"
+section = "__DATA,.xray_ltuple"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "ENTRIES"
+section = "__DATA,.xray_entries"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "ROWS"
+section = "__DATA,.xray_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_ROWS"
+section = "__DATA,.xray_label_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_GROUPS"
+section = "__DATA,.xray_lgroups"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "BIT_ROWS"
+section = "__DATA,.xray_bit_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "WORD_ROWS"
+section = "__DATA,.xray_word_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "BIT_HOLDER"
+weak = true
+
+[[link.symbol]]
+xray = "BIT_GROUPS"
+section = "__DATA,.xray_bit_groups"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "WORD_HOLDER"
+weak = true
+
+[[link.symbol]]
+xray = "WORD_GROUPS"
+section = "__DATA,.xray_wgroups"
+used = true
+weak = true

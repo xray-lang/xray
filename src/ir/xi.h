@@ -52,6 +52,9 @@ struct AstNode;
 struct XaAnalyzer;
 struct XiCoroPlan;
 struct XiEvidenceSet;
+struct XrCExportPlan;
+struct XrLinkSymbolPlan;
+struct XrFreestandingEntryPlan;
 
 /* ========== IR Stage ========== */
 
@@ -361,8 +364,9 @@ typedef enum {
     XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
     XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
     XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
-    XI_SLICE_REINTERPRET, /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
-    XI_SLICE_FROM_PTR,    /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; unsafe boundary */
+    XI_SLICE_REINTERPRET,  /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_FROM_PTR,     /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; unsafe boundary */
+    XI_BUFFER_MATERIALIZE, /* args[0]=moved Buffer; exact native-output proof is analyzer-owned */
     XI_BYTE_ARRAY_COPY_WITHIN,
     XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
                                 * args[3]=dst_off, args[4]=count */
@@ -617,6 +621,14 @@ typedef enum {
 } XiOp;
 
 #define XI_SLICE_FROM_PTR_AUX_MUTABLE (INT64_C(1) << 48)
+#define XI_BUFFER_MATERIALIZE_AGGREGATE UINT8_C(0xff)
+#define XI_BUFFER_MATERIALIZE_AUX(code, size, align)                                               \
+    ((int64_t) ((uint64_t) (uint8_t) (code) | ((uint64_t) (uint32_t) (size) << 8) |                \
+                ((uint64_t) (uint16_t) (align) << 40)))
+#define XI_BUFFER_MATERIALIZE_CODE(aux) ((uint8_t) ((uint64_t) (aux) & UINT64_C(0xff)))
+#define XI_BUFFER_MATERIALIZE_SIZE(aux)                                                            \
+    ((uint32_t) (((uint64_t) (aux) >> 8) & UINT64_C(0xffffffff)))
+#define XI_BUFFER_MATERIALIZE_ALIGN(aux) ((uint16_t) (((uint64_t) (aux) >> 40) & UINT64_C(0xffff)))
 
 static inline bool xi_op_is_identity_forward(uint16_t op) {
     return op == XI_SOURCE_MOVE || op == XI_OWNER_FORWARD;
@@ -1485,21 +1497,11 @@ typedef struct XiFunc {
     const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
     const char *extern_dylib;  /* extern-block dylib/link target, or NULL = default/process */
 
-    /* FFI export: top-level AOT function exposed as a C ABI wrapper. The
-     * internal Xray function keeps its normal hidden closure/context parameter;
-     * codegen emits a public wrapper named c_export_symbol with C scalar/raw
-     * pointer parameters and return value. */
-    bool c_export;
-    const char *c_export_symbol;
-
-    /* AOT linker/layout attributes. For @c_export functions these apply to
-     * the generated public C wrapper; otherwise they apply to the internal AOT
-     * function definition. */
-    const char *aot_section;
-    bool aot_weak;
-    bool aot_used;
-    bool aot_naked;
-    const char *aot_interrupt_abi;
+    /* Link-image policy is selected by typed manifest plans, never by source
+     * attributes or copied generic booleans. Plans are compiler-session owned. */
+    const struct XrCExportPlan *export_plan;
+    const struct XrLinkSymbolPlan *link_plan;
+    const struct XrFreestandingEntryPlan *entry_plan;
 
     /* Analyzer-owned allocation proof. Backends consume and verify this
      * publication; they never re-infer allocation semantics from Xi op names. */
@@ -1507,7 +1509,6 @@ typedef struct XiFunc {
     uint32_t allocation_reason_bits;
     uint64_t allocation_fingerprint;
     bool allocation_effect_complete;
-    bool has_no_alloc_contract;
 
     /* Canonical analyzer-owned return storage contract.  A known transferable
      * or shared return lets lowering materialize fresh aggregates directly in
@@ -1530,13 +1531,6 @@ typedef struct XiFunc {
     bool analyzer_memory_effect_complete;
     bool contains_unsafe_op;
     bool requires_unsafe_at_call;
-
-    /* Task 217 @zero_cost shape contract (verified at the AOT backend stage:
-     * the generated code must carry no forbidden residue category).  The allow
-     * mask exempts individual categories via `@zero_cost(allow: ...)`; a zeroed
-     * mask forbids every category. */
-    bool has_zero_cost_contract;
-    uint32_t zero_cost_allow_mask; /* bitmask of (1u << XiResidueCategory) */
 
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;

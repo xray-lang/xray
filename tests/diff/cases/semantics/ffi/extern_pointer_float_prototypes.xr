@@ -5,7 +5,7 @@ extern "C" {
     fn sinf(x: float32) -> float32
 }
 
-extern "C" dylib("xrayffi_unused_task190_next") {
+extern "C" {
     fn xrayffi_unused_float(x: float64) -> float64
 }
 

@@ -8,8 +8,6 @@
 // xr_register_panic_info_class in xclass_system.c; the constructor and toString
 // bodies are PRIMITIVE on the C side. This declaration exists for analyzer / LSP
 // awareness so the fields are visible from any module.
-
-@native
 class PanicInfo {
     message: string
     stack: Array<string>
@@ -17,5 +15,5 @@ class PanicInfo {
     code: int
     data: Json
     constructor(message: string = "", cause: PanicInfo? = null)
-    toString() -> string @may_alloc
+    toString() -> string
 }

@@ -1,6 +1,6 @@
-// 203 boundary: an `owned` source is transferred into a goroutine via `move`.
+// A unique source is transferred into a coroutine via an explicit `move` input.
 // Deterministic via await; output must match across VM/AOT.
-fn consume(data: Array<int>) -> int {
+fn consume(data: move Array<int>) -> int {
     return len(data)
 }
 

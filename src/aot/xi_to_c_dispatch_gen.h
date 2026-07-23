@@ -162,6 +162,7 @@
     X(BYTE_SLICE_REPEAT, "xi.byte.slice.repeat", xicgen_byte_slice_repeat) \
     X(SLICE_WINDOW, "xi.slice.window", xicgen_span_window) \
     X(SLICE_FROM_PTR, "xi.slice.from.ptr", xicgen_slice_from_ptr) \
+    X(BUFFER_MATERIALIZE, "xi.buffer.materialize", xicgen_buffer_materialize) \
     X(SLICE_AS_BYTES, "xi.slice.as.bytes", xicgen_span_as_bytes) \
     X(SLICE_FILL, "xi.slice.fill", xicgen_span_fill) \
     X(SLICE_COPY, "xi.slice.copy", xicgen_span_copy) \

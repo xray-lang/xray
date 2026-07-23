@@ -137,7 +137,7 @@ typedef struct XrFunctionParam {
 // allowed to raise into the error channel?" — kept strictly separate from the
 // error *set* (which enum variants), which stays inferred in XaEffectDatabase
 // and never enters the type system. The bit participates in code generation
-// (constructive ERR_CHECK emission), the @no_throw assertion, and HOF effect
+// (constructive ERR_CHECK emission), canonical no-throw constraints, and HOF effect
 // polymorphism.
 //
 // Storage default is fail-closed MAY_THROW: any function type produced without

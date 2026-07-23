@@ -8,7 +8,7 @@
  * xanalyzer_native_types.h - Load builtin type definitions from embedded .xr sources
  *
  * KEY CONCEPT:
- *   Native type declarations are written in Xray syntax (@native class)
+ *   Native type identities are supplied by the sealed compiler registry.
  *   and embedded at compile time. This module parses the embedded strings
  *   at startup to populate the builtin type tables used by the analyzer.
  */

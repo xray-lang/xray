@@ -1,6 +1,4 @@
 // Built-in WorkQueue<T> type; implemented by the runtime.
-
-@native
 class WorkQueue<T> {
     shardCount: int
     isClosed: bool

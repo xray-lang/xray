@@ -1,0 +1,5 @@
+[package]
+name = "filetest-no_alloc_range_query_methods_ok"
+version = "1.0.0"
+license = "MIT"
+main = "no_alloc_range_query_methods_ok.xr"

@@ -12,7 +12,6 @@ enum FsMode {
     }
 }
 
-@c_export("xray_enum_method_static")
 fn xray_enum_method_static(flag: int) -> int {
     var mode = FsMode.Boot
     if (flag == 1) {

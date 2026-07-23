@@ -1,1 +1,1 @@
-@extern was removed; use extern "C" { fn name(...) -> Type }
+error: unknown attribute name

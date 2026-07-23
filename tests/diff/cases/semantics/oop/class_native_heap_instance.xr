@@ -19,7 +19,7 @@ fn make(n: int) -> Counter {
     return Counter(n)
 }
 
-fn touch(c: Counter) -> int {
+fn touch(c: ref Counter) -> int {
     c.value = c.value + 1
     return c.get()
 }
@@ -27,5 +27,5 @@ fn touch(c: Counter) -> int {
 var c = make(2)
 print(c.bump(5))
 print(c.value)
-print(touch(c))
+print(touch(ref c))
 print(c.get())

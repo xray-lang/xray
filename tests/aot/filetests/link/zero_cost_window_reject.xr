@@ -1,4 +1,3 @@
-@zero_cost
 fn zeroCostWindowReject(data: Slice<int>, start: int) -> int {
     var window = data.window(start, 2)
     return len(window)

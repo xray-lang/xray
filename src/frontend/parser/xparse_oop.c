@@ -12,7 +12,6 @@
  */
 
 #include "xparse_internal.h"
-#include "xa_assertion_attr.h"
 #include "../../base/xchecks.h"
 #include "xast.h"
 #include "xtype_ref.h"
@@ -255,13 +254,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     int method_count = 0;
     int method_capacity = 0;
 
-    // Save and restore native flag — the flag is set by the caller
-    // (xr_parse_attributed_declaration) after this function returns,
-    // but we also need it during body parsing. Use a pre-set approach:
-    // the caller will set is_native on the returned node, but we need
-    // to propagate it into method parsing. We use parser->parsing_native_class.
-    bool saved_native = parser->parsing_native_class;
-
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery: skip to next valid token
         if (parser->panic_mode) {
@@ -334,7 +326,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         }
     }
 
-    parser->parsing_native_class = saved_native;
     parser->scope_depth--;
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end class body");
@@ -1056,15 +1047,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         return_type = xr_parse_type_annotation(parser);
     }
 
-    AstNode *body = NULL;
-    if (parser->parsing_native_class) {
-        // @native method has no Xray body, semicolon optional.
-        xr_parser_match(parser, TK_SEMICOLON);
-    } else {
-        // Normal method has body
-        xr_parser_consume(parser, TK_LBRACE, "expected '{' to start method body");
-        body = xr_parse_block(parser);
-    }
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to start method body");
+    AstNode *body = xr_parse_block(parser);
 
     // Create method declaration node
     AstNode *method_node = xr_ast_method_decl(
@@ -1076,10 +1060,6 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         // Normal method: end is body's closing brace.
         method_node->end_line = body->end_line;
         method_node->end_column = body->end_column;
-    } else {
-        // Native method: no body — span is the identifier token.
-        method_node->end_line = name_line;
-        method_node->end_column = name_column + (int) strlen(name);
     }
 
     method_node->as.method_decl.is_variadic = is_variadic;
@@ -1789,8 +1769,17 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery to avoid infinite loop
         if (parser->panic_mode) {
+            Token before_sync = parser->current;
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
+                break;
+            /* Top-level recovery tokens such as `class` may be left untouched
+             * by synchronize().  Inside an interface that means the closing
+             * brace was already skipped or is missing.  Stop the nested loop
+             * and let the outer declaration parser consume the token instead
+             * of repeatedly diagnosing the same byte offset forever. */
+            if (parser->current.start == before_sync.start &&
+                parser->current.type == before_sync.type)
                 break;
             continue;
         }
@@ -1850,8 +1839,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         XrAttribute *attribute = xr_parse_single_attribute(parser);
         if (!attribute)
             return NULL;
-        if (!xa_assertion_attr_allows_position(attribute->kind, XA_ASSERT_POS_METHOD)) {
-            xr_parser_error(parser, "only assertion attributes may annotate an interface method");
+        if (!xr_parser_validate_member_attr(parser, attribute)) {
             return NULL;
         }
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);

@@ -5,8 +5,6 @@ fn xray_no_alloc_helper_allocates(n: int) -> int {
     return len(b)
 }
 
-@no_alloc
-@c_export("xray_no_alloc_call_reject")
 fn xray_no_alloc_call_reject(n: int) -> int {
     return xray_no_alloc_helper_allocates(n) + 1
 }

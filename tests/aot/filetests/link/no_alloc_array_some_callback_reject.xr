@@ -4,7 +4,6 @@ fn xray_no_alloc_array_some_allocating_callback(value: int) -> bool {
     return len(scratch) > 0
 }
 
-@no_alloc
 fn xray_no_alloc_array_some_callback_reject(values: Array<int>) -> bool {
     return values.some(xray_no_alloc_array_some_allocating_callback)
 }

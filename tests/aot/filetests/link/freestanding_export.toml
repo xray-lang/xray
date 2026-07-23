@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_export"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_export.xr"
+
+[[export.c]]
+xray = "xray_add"
+symbol = "xray_add"

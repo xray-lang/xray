@@ -2,7 +2,6 @@ fn xray_no_alloc_map_filter_keep(value: int) -> bool {
     return value > 0
 }
 
-@no_alloc
 fn xray_no_alloc_map_filter_reject(values: Map<int, int>) -> int {
     return len(values.filter(xray_no_alloc_map_filter_keep))
 }

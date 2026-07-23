@@ -1,0 +1,13 @@
+[package]
+name = "filetest-rawptr-address-of-direct"
+version = "1.0.0"
+license = "MIT"
+main = "rawptr_address_of_direct.xr"
+
+[[export.c]]
+xray = "xray_rawptr_address_before"
+symbol = "xray_rawptr_address_before"
+
+[[export.c]]
+xray = "xray_rawmut_address"
+symbol = "xray_rawmut_address"

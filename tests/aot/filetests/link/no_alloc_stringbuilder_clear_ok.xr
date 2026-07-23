@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_stringbuilder_clear_ok(sb: ref StringBuilder) -> int {
     sb.clear()
     return len(sb)

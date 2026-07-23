@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_parallel_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_parallel_reject.xr"
+
+[[export.c]]
+xray = "xray_freestanding_parallel_reject"
+symbol = "xray_freestanding_parallel_reject"

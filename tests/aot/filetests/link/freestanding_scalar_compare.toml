@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_scalar_compare"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_scalar_compare.xr"
+
+[[export.c]]
+xray = "xray_scalar_compare"
+symbol = "xray_scalar_compare"

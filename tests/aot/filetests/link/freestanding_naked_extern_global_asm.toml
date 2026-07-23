@@ -1,0 +1,16 @@
+[package]
+name = "filetest-freestanding_naked_extern_global_asm"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_naked_extern_global_asm.xr"
+
+[[export.c]]
+xray = "call_naked_stub"
+symbol = "xray_call_naked_stub"
+
+[[freestanding.entry]]
+xray = "xray_naked_stub"
+symbol = "xray_naked_stub"
+kind = "naked-stub"
+section = "__TEXT,.xray_naked"
+stub = "freestanding_entry_stub.S"

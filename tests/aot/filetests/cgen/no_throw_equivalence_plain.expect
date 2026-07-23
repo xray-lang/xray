@@ -1,0 +1,3 @@
+c_contains=int64_t xray_add_one(int64_t p0)
+c_contains=(uint64_t)(v0) + (uint64_t)(v4)
+c_count=1:xrt_has_pending_error()

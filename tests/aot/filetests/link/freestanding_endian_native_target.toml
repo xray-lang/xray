@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_endian_native_target"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_endian_native_target.xr"
+
+[[export.c]]
+xray = "xray_native_endian_u16"
+symbol = "xray_native_endian_u16"

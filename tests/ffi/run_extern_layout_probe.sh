@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compare Xray extern-layout introspection with the host C compiler ABI.
+# Compare Xray ordinary-layout introspection with the host C compiler ABI.
 
 set -u
 
@@ -29,25 +29,25 @@ fi
 
 if ! "$CC_BIN" -std=c11 -Wall -Wextra -Werror \
     "$SCRIPT_DIR/extern_layout_probe.c" -o "$WORK/c_probe"; then
-    echo "FAIL: C extern-layout probe did not compile" >&2
+    echo "FAIL: C layout probe did not compile" >&2
     exit 1
 fi
 
 if ! "$WORK/c_probe" >"$WORK/c.out"; then
-    echo "FAIL: C extern-layout probe did not run" >&2
+    echo "FAIL: C layout probe did not run" >&2
     exit 1
 fi
 
 XRAY_SOURCE="$PROJECT_DIR/tests/diff/cases/semantics/ffi/extern_layout_introspection.xr"
 if ! "$XRAY" run "$XRAY_SOURCE" >"$WORK/xray.out" 2>"$WORK/xray.err"; then
-    echo "FAIL: Xray extern-layout probe did not run" >&2
+    echo "FAIL: Xray layout probe did not run" >&2
     sed 's/^/    /' "$WORK/xray.err" >&2
     exit 1
 fi
 
 if ! diff -u "$WORK/c.out" "$WORK/xray.out"; then
-    echo "FAIL: Xray extern layout differs from the host C ABI" >&2
+    echo "FAIL: Xray ordinary layout differs from the host C ABI" >&2
     exit 1
 fi
 
-echo "PASS: Xray extern layout matches the host C ABI"
+echo "PASS: Xray ordinary layout matches the host C ABI"

@@ -1,4 +1,3 @@
-@c_export("xray_rawptr_null_is_null")
 fn xray_rawptr_null_is_null() -> bool {
     var p = Ptr<byte>.null()
     return p.isNull()

@@ -37,6 +37,7 @@
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
+#include "../../src/runtime/value/xstruct_layout.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/shared/xr_sync_core.h"
 #include "../../src/os/os_mem.h"
@@ -169,6 +170,54 @@ static void mem_buffer_free_data(XrMemBufferBody *buf) {
     else
         free(buf->data);
     buf->data = NULL;
+}
+
+static bool mem_copy_initialized_layout(uint8_t *dst, const uint8_t *src,
+                                        const XrAggregateLayout *layout, unsigned depth) {
+    if (!dst || !src || !layout || depth > 16)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible || field->offset > layout->total_size ||
+            field->size > layout->total_size - field->offset)
+            return false;
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            if (!field->sub_layout || field->sub_layout->total_size != field->size ||
+                !mem_copy_initialized_layout(dst + field->offset, src + field->offset,
+                                             field->sub_layout, depth + 1))
+                return false;
+        } else {
+            memcpy(dst + field->offset, src + field->offset, field->size);
+        }
+    }
+    return true;
+}
+
+bool xr_mem_buffer_materialize(XrValue value, void *dst, size_t size, size_t align,
+                               const XrAggregateLayout *layout) {
+    if (!XR_IS_INSTANCE(value) || !dst || size == 0 || align == 0)
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
+        return false;
+    XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
+    if (!buf || buf->length != (int64_t) size || buf->align != align || !buf->data ||
+        ((uintptr_t) buf->data % align) != 0)
+        return false;
+
+    memset(dst, 0, size);
+    bool copied =
+        layout
+            ? (layout->total_size == size &&
+               mem_copy_initialized_layout((uint8_t *) dst, (const uint8_t *) buf->data, layout, 0))
+            : (memcpy(dst, buf->data, size), true);
+    if (!copied)
+        return false;
+
+    mem_buffer_free_data(buf);
+    buf->length = 0;
+    buf->align = 0;
+    return true;
 }
 
 static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed, size_t align) {
@@ -429,6 +478,16 @@ static XrValue mem_store_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc
 /* mem.slice<T> is lowered with static element layout and owner evidence before
  * bytecode/AOT emission. Dynamic invocation cannot carry those proofs. */
 static XrValue mem_slice_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
+/* mem.assumeInitialized<T> is compiler-only.  The analyzer publishes the
+ * exact layout plus a dominating complete-output proof and lowering consumes
+ * the Buffer in one backend operation; a dynamic call cannot carry either. */
+static XrValue mem_assume_initialized_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) args;
     (void) argc;

@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_shared_aggregate_reject"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_shared_aggregate_reject.xr"
+
+[[export.c]]
+xray = "xray_shared_aggregate_reject"
+symbol = "xray_shared_aggregate_reject"

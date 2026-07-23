@@ -1,0 +1,24 @@
+[package]
+name = "filetest-freestanding_symbol_attrs"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_symbol_attrs.xr"
+
+[[export.c]]
+xray = "boot_score"
+symbol = "xray_boot_score"
+
+[[export.c]]
+xray = "hook_score"
+symbol = "xray_hook_score"
+
+[[link.symbol]]
+xray = "boot_score"
+section = "__TEXT,.xray_boot"
+used = true
+
+[[link.symbol]]
+xray = "hook_score"
+section = "__TEXT,.xray_hook"
+used = true
+weak = true

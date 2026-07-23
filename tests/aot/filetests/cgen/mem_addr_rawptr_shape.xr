@@ -1,6 +1,5 @@
 import mem
 
-@c_export("xray_mem_addr_roundtrip")
 fn xray_mem_addr_roundtrip(p: MutPtr<uint32>, q: Ptr<uint64>) -> int {
     var a = mem.addr(p)
     var b = mem.addr(q)

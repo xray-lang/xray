@@ -1,7 +1,6 @@
-// Task 217 P3 negative: a @zero_cost function that heap-allocates and grows an
+// Historical residue fixture: a function that heap-allocates and grows an
 // array leaves runtime-helper (R1) and bounds (R4) residue in the generated C,
 // so the AOT backend must reject it with error[E0655].
-@zero_cost
 fn zeroCostAllocReject(n: int) -> int {
     var arr = [n, n, n]
     arr.push(n)

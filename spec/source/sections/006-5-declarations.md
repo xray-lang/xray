@@ -94,7 +94,7 @@ ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
@@ -245,14 +245,12 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
-`extern "C"` 块声明共享 C ABI 的外部函数与原生聚合布局。可选库契约只参与外部函数的符号解析。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
 extern "C" {
     fn malloc(n: uintsize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-}
-extern "C" dylib("m") {
     fn cos(x: float64) -> float64
 }
 
@@ -264,54 +262,30 @@ unsafe {
 }
 ```
 
-同一语法也可声明由 C 拥有的 struct / union 布局；这些声明是布局身份，不是可构造的 xray 值类型：
+库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
+
+C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
 
 ```xray
 import mem
 
-extern "C" {
-    struct CHeader {
-        tag: uint8
-        count: uint32
-        next: MutPtr<byte>
-        samples: [uint16; 3]
-        payload: flex uint8
-    }
-
-    union CWord {
-        word: uint32
-        bytes: [uint8; 4]
-    }
+struct CHeader {
+    tag: uint8
+    count: uint32
 }
 
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
-print(mem.offsetOf<CHeader>("next"))
-```
-
-外部地址只能在 `unsafe` 中用 `mem.slice<T>(ptr, count, owner)` 投影为只读 `Slice<T>`。`owner` 把返回 Slice 的生命周期绑定到仍存活的 backing owner；投影不分配、不复制，也不创建 xray 对象。需要写外部内存时使用 `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`，可写 Slice 只能存在于 callback 动态作用域内：
-
-```xray
-var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
-print(headers[0].count)
-unsafe {
-    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
-        view[0].count = 4
-    })
-}
+print(mem.offsetOf<CHeader>("count"))
 ```
 
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
-- `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
 - extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
-- 需要从模块发布的外部函数或 layout 必须在 extern 块内直接写 `export fn`、`export struct`、`export union` 或 `export packed struct`；已删除的同模块 post-hoc `export { Name }` 不可用于补发布。
-- extern 块内可声明 `struct`、`union` 与 `packed struct`。布局字段只能使用 C ABI 标量、`Ptr<T>` / `MutPtr<T>`、标量定长数组，或另一个 extern layout；普通 xray struct、class、`string`、nullable 与其他 managed 类型均被拒绝。
-- extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
-- `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
-- extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
-- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.slice` / `mem.withSliceMut` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
-- extern layout 随 bytecode 确定性序列化，并绑定目标 ABI fingerprint。加载器必须拒绝 ABI 不匹配、残缺、越界、循环或带尾随垃圾的 layout payload，不能回退到宿主机布局。
+- 每个声明必须在 NativePackagePlan 中有唯一 symbol mapping 与完整 typed contract；shipping package 缺合同、hash、目标或来源信息时 fail closed。
+- C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
+- 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -334,60 +308,60 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 // zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
 ```
 
-#### 5.2.10 `@c_export` AOT C ABI 导出
+#### 5.2.10 Manifest C ABI 导出
 
-`@c_export("symbol")` 把一个模块级 xray 函数额外暴露为 AOT C ABI wrapper。它不改变 xray 源码内的普通函数调用语义；VM 执行该文件时仍把函数当作普通 xray 函数运行，AOT codegen 在生成的 native 产物中额外输出指定 C 符号。
+模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
 ```xray
-@c_export("xr_add_i32")
 fn add(a: int32, b: int32) -> int32 {
     return a + b
 }
 
-print(add(19, 23))        // xray 内部仍是普通函数调用
+print(add(19, 23))        // Xray 内部仍是普通函数调用
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
 ```
 
 规则：
-- `@c_export` 只能标注模块级 `fn` 声明；不能标注 class、struct、方法、匿名函数或嵌套函数。
-- `@c_export` 函数必须有 xray 函数体，不能同时是 extern 函数。
-- 字符串参数必须是非空 C identifier；该字符串就是导出的 C 符号名。
-- 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
+- `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
+- `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
-- 当前不导出 xray 管理值（如 `string`、class instance、Array/Map/Set、普通 closure）或 by-value aggregate；需要与 C 共享结构体内存时，先通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
-- `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
-- `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
+- 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
+- `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
+- export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
 
-#### 5.2.11 系统断言注解
+#### 5.2.11 推导 effect 与 `xray verify` 合同
 
-系统断言注解是**受检契约**，不是优化提示。编译器必须从对应证明源证明断言成立；证明失败或目标不确定时均 fail-closed，直接报编译错误。
+分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
 
-```xray @id=decl-system-assertions
-@no_throw
-@no_suspend
-fn addOne(x: int) -> int {
-    return x + 1
-}
+```toml
+version = 1
 
-fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
-    return f(x)
-}
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
-@zero_cost
-fn hotAdd(x: int, y: int) -> int {
-    return x + y
-}
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
 ```
 
-| 注解 | 证明阶段 | 契约 |
-|--|--|--|
-| `@no_alloc` | analyzer | 函数及其传递调用不分配；不可证明即拒绝 |
-| `@no_throw` | analyzer error-effect | 函数不会通过值返回错误通道抛出；不引入 `throws` 声明。它也可前缀函数类型，约束回调值必须已证明 no-throw |
-| `@no_suspend` | analyzer suspend-effect | 函数不会挂起；它也可前缀函数类型。`@interrupt` 与同步 `@c_export` 边界隐含该约束 |
-| `@zero_cost` | AOT CGen | 生成形状不得残留 runtime helper、分配、error-check、bounds panic、boxing 或 lanes aggregate 往返 |
-
-裸 `@zero_cost` 禁止全部六类残留。确有契约化边界时，可显式豁免一部分：`@zero_cost(allow: bounds, box)`；可用类别仅为 `runtime`、`alloc`、`error`、`bounds`、`box`、`lanes`。该注解只约束 AOT 生成形状，不改变 VM 语义，也不保证耗时阈值。
-
-`@no_throw` 断言本身不制造优化机会：对已经推断为 no-throw 的直接调用，加或不加断言必须生成相同 C。性能来自分析得到的类型化 throw-effect bit，使 lowering 构造性地不生成无用的 error-check。未标注的函数值存入变量或字段时采用 may-throw 上界；只有显式 `@no_throw (...) -> R` 槽位才保留并强制 no-throw 约束。
+运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
 
 #### 完整可运行示例
 
@@ -1202,7 +1176,7 @@ ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
-ParamMode ::= 'in' | 'ref' | 'out'
+ParamMode ::= 'ref' | 'move'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
@@ -1353,14 +1327,12 @@ greet()                   // must be called explicitly
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
-An `extern "C"` block declares external functions and native aggregate layouts that share a C ABI. An optional library contract participates only in external-function symbol resolution. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
 ```xray
 extern "C" {
     fn malloc(n: uintsize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-}
-extern "C" dylib("m") {
     fn cos(x: float64) -> float64
 }
 
@@ -1372,57 +1344,32 @@ unsafe {
 }
 ```
 
-The same syntax declares C-owned struct / union layouts. These declarations are layout identities, not constructible xray value types:
+Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
+
+C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
 
 ```xray
 import mem
 
-extern "C" {
-    struct CHeader {
-        tag: uint8
-        count: uint32
-        next: MutPtr<byte>
-        samples: [uint16; 3]
-        payload: flex uint8
-    }
-
-    union CWord {
-        word: uint32
-        bytes: [uint8; 4]
-    }
+struct CHeader {
+    tag: uint8
+    count: uint32
 }
 
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
-print(mem.offsetOf<CHeader>("next"))
-```
-
-Inside `unsafe`, an external address can only be projected with `mem.slice<T>(ptr, count, owner)` as a readonly `Slice<T>`. `owner` binds the returned Slice lifetime to a live backing owner. The projection allocates and copies nothing and creates no xray object. Writable foreign access uses `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`; its writable Slice exists only for the callback's dynamic scope:
-
-```xray
-var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
-print(headers[0].count)
-unsafe {
-    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
-        view[0].count = 4
-    })
-}
+print(mem.offsetOf<CHeader>("count"))
 ```
 
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
-- `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
-- Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
-- An external function or layout published by the module must use direct visibility inside the extern block: `export fn`, `export struct`, `export union`, or `export packed struct`. The removed same-module post-hoc `export { Name }` form cannot publish it afterward.
-- An extern block may declare `struct`, `union`, and `packed struct` layouts. Layout fields may contain only C ABI scalars, `Ptr<T>` / `MutPtr<T>`, fixed arrays of scalars, or another extern layout. Ordinary xray structs, classes, `string`, nullable types, and other managed types are rejected.
-- Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
-- `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
-- An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
-- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.slice` / `mem.withSliceMut`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
-- Extern layouts are serialized deterministically with bytecode and bound to a target-ABI fingerprint. The loader rejects ABI mismatches and truncated, out-of-range, cyclic, or trailing-garbage layout payloads; it never falls back to host layout.
-- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
-- C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
-- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.
+- Functions inside an extern block declare signatures only and cannot have `{ }` bodies.
+- Every declaration must have a unique symbol mapping and a complete typed contract in the NativePackagePlan. A shipping package with missing contract, hash, target, or provenance is rejected.
+- C output pointers write raw `Buffer` storage first. A success path may materialize `T` only with `unsafe { mem.assumeInitialized<T>(move buffer) }`, after exact size/alignment, complete output validity, success-path dominance, and header-layout evidence are proven. Partial or failed writes never produce `T`.
+- Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
+- Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
+- The aligned VM/AOT boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- C callbacks use `CFn<(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
 ```xray
 extern "C" {
@@ -1442,60 +1389,52 @@ fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
 // zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
 ```
 
-#### 5.2.10 `@c_export` AOT C ABI Exports
+#### 5.2.10 Manifest C ABI Exports
 
-`@c_export("symbol")` additionally exposes a module-level xray function as an AOT C ABI wrapper. It does not change ordinary xray call semantics; the VM still runs the function as a normal xray function, while AOT codegen emits the requested C symbol in the generated native artifact.
+A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
 
 ```xray
-@c_export("xr_add_i32")
 fn add(a: int32, b: int32) -> int32 {
     return a + b
 }
-
-print(add(19, 23))        // still an ordinary xray call inside xray
 ```
 
-Rules:
-- `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
-- A `@c_export` function must have an xray function body and cannot also be an extern function.
-- The string argument must be a non-empty C identifier; that string is the exported C symbol name.
-- Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
-- Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
-- Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `Ptr<T>` / `MutPtr<T>`.
-- `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
-- `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
-
-#### 5.2.11 System Assertion Attributes
-
-System assertion attributes are **checked contracts**, not optimization hints. The compiler must prove each assertion from its designated evidence source; a failed or indeterminate proof is a compile error.
-
-```xray @id=decl-system-assertions
-@no_throw
-@no_suspend
-fn addOne(x: int) -> int {
-    return x + 1
-}
-
-fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
-    return f(x)
-}
-
-@zero_cost
-fn hotAdd(x: int, y: int) -> int {
-    return x + y
-}
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
 ```
 
-| Attribute | Proof stage | Contract |
-|--|--|--|
-| `@no_alloc` | analyzer | The function and its transitive callees do not allocate; an unprovable case is rejected |
-| `@no_throw` | analyzer error effect | The function does not raise through the value-return error channel; this does not add a `throws` declaration. It may also prefix a function type, requiring a callback value proven no-throw |
-| `@no_suspend` | analyzer suspend effect | The function does not suspend; it may also prefix a function type. `@interrupt` and synchronous `@c_export` boundaries imply this constraint |
-| `@zero_cost` | AOT CGen | The generated shape contains no runtime-helper, allocation, error-check, bounds-panic, boxing, or lanes aggregate residue |
+The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
 
-A bare `@zero_cost` forbids all six residue categories. A contract boundary may explicitly exempt some categories, for example `@zero_cost(allow: bounds, box)`; the only category names are `runtime`, `alloc`, `error`, `bounds`, `box`, and `lanes`. The attribute constrains AOT output shape only: it does not change VM semantics and does not promise a timing threshold.
+#### 5.2.11 Inferred Effects and `xray verify` Contracts
 
-`@no_throw` itself creates no optimization opportunity: for a direct call already inferred no-throw, adding or removing the assertion must produce identical C. The optimization comes from the analyzer-owned typed throw-effect bit, which lets lowering constructively omit unnecessary error checks. An unannotated function value stored in a variable or field is widened to a may-throw upper bound; only an explicit `@no_throw (...) -> R` slot preserves and enforces the no-throw constraint.
+Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
 
 #### Worked Examples
 

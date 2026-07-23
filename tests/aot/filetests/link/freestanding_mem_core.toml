@@ -1,0 +1,33 @@
+[package]
+name = "filetest-freestanding_mem_core"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_mem_core.xr"
+
+[[export.c]]
+xray = "xray_mem_addr_roundtrip"
+symbol = "xray_mem_addr_roundtrip"
+
+[[export.c]]
+xray = "xray_mem_layout_constants"
+symbol = "xray_mem_layout_constants"
+
+[[export.c]]
+xray = "xray_mem_typed_from_address"
+symbol = "xray_mem_typed_from_address"
+
+[[export.c]]
+xray = "xray_mem_typed_addr_null"
+symbol = "xray_mem_typed_addr_null"
+
+[[export.c]]
+xray = "xray_mem_bits"
+symbol = "xray_mem_bits"
+
+[[export.c]]
+xray = "xray_mem_bulk"
+symbol = "xray_mem_bulk"
+
+[[export.c]]
+xray = "xray_mem_mmio_shape"
+symbol = "xray_mem_mmio_shape"

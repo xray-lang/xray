@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_string_entries_reject(value: string) -> int {
     var count = 0
     for (_ in value) { count = count + 1 }

@@ -1,0 +1,21 @@
+import mem
+
+struct CValue {
+    value: int
+}
+
+extern "C" {
+    fn fill_i64(out: MutPtr<byte>) -> int32
+}
+
+fn main() {
+    var storage = mem.allocAligned(mem.sizeOf<CValue>(), mem.alignOf<CValue>())
+    var status = unsafe { fill_i64(storage.borrowPtr()) }
+    if (status != 0) {
+        return
+    }
+    var value = unsafe { mem.assumeInitialized<CValue>(move storage) }
+    print(value.value)
+}
+
+main()

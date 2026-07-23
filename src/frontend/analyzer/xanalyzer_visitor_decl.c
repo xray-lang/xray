@@ -54,6 +54,16 @@
 #include "../../module/xnative_package.h"
 #include "../../toolchain/xcompiler_session.h"
 
+static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
+    for (int i = 0; links && attrs && i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DEPRECATED) {
+            xa_symbol_links_set_deprecated(links, true, attrs[i]->str_arg);
+            return;
+        }
+    }
+    xa_symbol_links_set_deprecated(links, false, NULL);
+}
+
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (!elem || elem->is_nullable)
         return XR_NATIVE_VALUE;
@@ -67,86 +77,35 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
     return XR_NATIVE_VALUE;
 }
 
-static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
-    if (!fn || !fn->attributes)
-        return NULL;
-    for (int i = 0; i < fn->attr_count; i++) {
-        if (fn->attributes[i] && fn->attributes[i]->kind == kind)
-            return fn->attributes[i];
-    }
-    return NULL;
-}
-
 static const char *xa_intrinsic_owner_module(const XaInferContext *ctx) {
     if (!ctx || !ctx->analyzer)
         return NULL;
     return ctx->analyzer->current_module_is_stdlib ? ctx->analyzer->current_module_canonical : NULL;
 }
 
-static XrAttribute *xa_decl_intrinsic_attr(XrAttribute **attributes, int count) {
-    XrAttribute *result = NULL;
-    for (int i = 0; attributes && i < count; i++) {
-        if (!attributes[i] || attributes[i]->kind != ATTR_INTRINSIC)
-            continue;
-        if (result)
-            return (XrAttribute *) (uintptr_t) 1;
-        result = attributes[i];
-    }
-    return result;
-}
-
-static void xa_bind_declared_intrinsic(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,
+static void xa_bind_registry_intrinsic(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,
                                        const char *owner_name, const char *member_name,
-                                       bool is_static, int arity, XrAttribute **attributes,
-                                       int attribute_count) {
-    XrAttribute *attr = xa_decl_intrinsic_attr(attributes, attribute_count);
-    if (!attr)
+                                       bool is_static, int arity) {
+    const char *canonical_module = xa_intrinsic_owner_module(ctx);
+    if (!canonical_module || !member_name)
+        return;
+    char key[256];
+    int key_len = owner_name ? snprintf(key, sizeof(key), "%s.%s.%s", canonical_module, owner_name,
+                                        member_name)
+                             : snprintf(key, sizeof(key), "%s.%s", canonical_module, member_name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    if (!desc)
         return;
     XrLocation loc = {.file = ctx ? ctx->file_path : NULL,
                       .line = node ? node->line : 0,
                       .column = node ? node->column : 0};
-    if (attr == (XrAttribute *) (uintptr_t) 1) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "duplicate @intrinsic declaration metadata", &loc);
-        return;
-    }
-    const char *canonical_module = xa_intrinsic_owner_module(ctx);
-    if (!canonical_module) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@intrinsic is reserved for compiler-owned stdlib modules",
-                                   &loc);
-        return;
-    }
-    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(attr->str_arg);
-    if (!desc) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@intrinsic identity is not present in the canonical registry",
-                                   &loc);
-        return;
-    }
-    size_t module_len = strlen(canonical_module);
-    size_t key_len = strlen(desc->key);
-    bool module_matches = key_len > module_len &&
-                          strncmp(desc->key, canonical_module, module_len) == 0 &&
-                          desc->key[module_len] == '.';
-    const char *owner = module_matches ? desc->key + module_len + 1 : desc->key + key_len;
-    const char *owner_end = strchr(owner, '.');
-    bool owner_matches = owner_name
-                             ? owner_end && (size_t) (owner_end - owner) == strlen(owner_name) &&
-                                   strncmp(owner, owner_name, (size_t) (owner_end - owner)) == 0
-                             : owner_end == NULL;
-    const char *source_member = xa_intrinsic_source_member(desc);
-    if (!module_matches || !owner_matches || !member_name || !source_member ||
-        strcmp(source_member, member_name) != 0) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@intrinsic identity does not match its stdlib declaration",
-                                   &loc);
-        return;
-    }
     bool expects_static = (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0;
     if (expects_static != is_static || arity < desc->min_arity || arity > desc->max_arity) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@intrinsic declaration signature disagrees with registry",
+                                   "compiler-owned declaration signature disagrees with the "
+                                   "canonical intrinsic registry",
                                    &loc);
         return;
     }
@@ -169,21 +128,6 @@ static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
     ctx->expected_type = saved_expected;
 }
 
-static bool xa_c_symbol_is_identifier(const char *name) {
-    if (!name || !name[0])
-        return false;
-    char c = name[0];
-    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'))
-        return false;
-    for (const char *p = name + 1; *p; p++) {
-        c = *p;
-        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-              c == '_'))
-            return false;
-    }
-    return true;
-}
-
 static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
     switch (native_type) {
         case XR_NATIVE_I64:
@@ -204,34 +148,6 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
         default:
             return false;
     }
-}
-
-static bool xa_c_export_struct_layout_supported_depth(const XrAggregateLayout *layout, int depth) {
-    if (!layout || depth > 8 || layout->field_count == 0 || layout->field_count > XR_MAX_AGG_FIELDS)
-        return false;
-    for (uint16_t i = 0; i < layout->field_count; i++) {
-        const XrAggregateFieldLayout *field = &layout->fields[i];
-        if (field->is_flexible)
-            return false;
-        if (xa_c_export_native_scalar_supported(field->native_type))
-            continue;
-        if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
-            xa_c_export_native_scalar_supported(field->elem_native_type))
-            continue;
-        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
-            xa_c_export_struct_layout_supported_depth(field->sub_layout, depth + 1))
-            continue;
-        return false;
-    }
-    return true;
-}
-
-static bool xa_c_export_struct_type_supported(XrType *type) {
-    if (!type || type->is_nullable ||
-        (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
-        !type->instance.class_ref || !type->instance.class_ref->struct_layout)
-        return false;
-    return xa_c_export_struct_layout_supported_depth(type->instance.class_ref->struct_layout, 0);
 }
 
 static bool xa_native_lane_bitwise_reinterpretable(uint8_t native_type) {
@@ -272,25 +188,6 @@ static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout
     if (field->native_type == XR_NATIVE_ARRAY)
         return xa_native_lane_bitwise_reinterpretable(field->elem_native_type);
     return xa_native_lane_bitwise_reinterpretable(field->native_type);
-}
-
-static bool xa_c_export_type_supported(XrType *type, bool is_return) {
-    if (!type)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_UNIT:
-            return is_return;
-        case XR_KIND_BOOL:
-        case XR_KIND_FLOAT:
-        case XR_KIND_INT:
-        case XR_KIND_POINTER:
-            return true;
-        case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return xa_c_export_struct_type_supported(type);
-        default:
-            return false;
-    }
 }
 
 static void xa_validate_extern_cfn_callback_param_modes(XaInferContext *ctx, AstNode *node,
@@ -392,109 +289,6 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "extern function returns Xray function type; use CFn<...> for C function pointers",
             &loc);
-    }
-}
-
-static bool xa_validate_c_export_unique_symbol_in_scope(XaInferContext *ctx, AstNode *node,
-                                                        XaSymbol *sym, XrAttribute *attr,
-                                                        XaScope *scope) {
-    if (!scope)
-        return false;
-    int count = 0;
-    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
-    for (int i = 0; i < count; i++) {
-        XaSymbol *other = symbols[i];
-        if (!other || other == sym || other->kind != XA_SYM_FUNCTION)
-            continue;
-        XaSymbolLinks *other_links = xa_analyzer_get_links(ctx->analyzer, other);
-        if (!other_links || !other_links->is_c_export || !other_links->c_export_symbol)
-            continue;
-        if (strcmp(other_links->c_export_symbol, attr->str_arg) != 0)
-            continue;
-
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = node ? node->line : 0,
-                          .column = node ? node->column : 0};
-        char msg[256];
-        snprintf(msg, sizeof(msg), "duplicate @c_export symbol '%s' already used by function '%s'",
-                 attr->str_arg, other->name ? other->name : "?");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
-        if (symbols)
-            xr_free(symbols);
-        return true;
-    }
-    if (symbols)
-        xr_free(symbols);
-
-    for (int i = 0; i < scope->child_count; i++) {
-        XaScope *child = scope->children ? scope->children[i] : NULL;
-        if (!child || child->kind != XA_SCOPE_GLOBAL)
-            continue;
-        if (xa_validate_c_export_unique_symbol_in_scope(ctx, node, sym, attr, child))
-            return true;
-    }
-    return false;
-}
-
-static void xa_validate_c_export_unique_symbol(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
-                                               XrAttribute *attr) {
-    if (!ctx || !ctx->analyzer || !attr || !xa_c_symbol_is_identifier(attr->str_arg))
-        return;
-
-    xa_validate_c_export_unique_symbol_in_scope(ctx, node, sym, attr, ctx->analyzer->global_scope);
-}
-
-static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node,
-                                              const FunctionDeclNode *fn, XaSymbol *sym,
-                                              XrType **param_types, XrType *return_type,
-                                              XrAttribute *attr, bool is_extern) {
-    if (!ctx || !ctx->analyzer || !fn || !attr)
-        return;
-
-    XrLocation fn_loc = {
-        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
-
-    if (!xa_c_symbol_is_identifier(attr->str_arg)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@c_export requires a non-empty C identifier symbol name",
-                                   &fn_loc);
-    }
-
-    xa_validate_c_export_unique_symbol(ctx, node, sym, attr);
-
-    if (is_extern) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@c_export cannot be used on an extern function", &fn_loc);
-    }
-
-    if (!fn->body) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@c_export requires a function body", &fn_loc);
-    }
-
-    for (int i = 0; i < fn->param_count; i++) {
-        XrType *type = param_types ? param_types[i] : NULL;
-        if (xa_c_export_type_supported(type, false))
-            continue;
-        XrParamNode *param = fn->params ? fn->params[i] : NULL;
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = param ? param->line : fn_loc.line,
-                          .column = param ? param->column : fn_loc.column};
-        char msg[256];
-        snprintf(
-            msg, sizeof(msg), "C export function parameter '%s' uses unsupported C ABI type '%s'",
-            param && param->name ? param->name : "?", type ? xr_type_to_string(type) : "<unknown>");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
-    }
-
-    if (!xa_c_export_type_supported(return_type, true)) {
-        char msg[256];
-        snprintf(msg, sizeof(msg), "C export function returns unsupported C ABI type '%s'",
-                 return_type ? xr_type_to_string(return_type) : "<unknown>");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &fn_loc);
     }
 }
 
@@ -818,119 +612,6 @@ static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *ex
                     xa_summary_mark_owned_move_requirement(summary, call->arguments[i]);
             }
         }
-    }
-}
-
-static void xa_validate_aot_symbol_attrs(XaInferContext *ctx, AstNode *node,
-                                         XrAttribute *section_attr, XrAttribute *weak_attr,
-                                         XrAttribute *c_export_attr) {
-    if (!ctx || !ctx->analyzer)
-        return;
-
-    XrLocation loc = {
-        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
-
-    if (section_attr && (!section_attr->str_arg || section_attr->str_arg[0] == '\0')) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@section requires a non-empty section name", &loc);
-    }
-
-    if (weak_attr && !c_export_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@weak requires @c_export so the weak symbol has a stable C name", &loc);
-    }
-}
-
-static void xa_validate_aot_naked_attr(XaInferContext *ctx, AstNode *node, XrAttribute *naked_attr,
-                                       XrAttribute *extern_attr, XrAttribute *dylib_attr,
-                                       XrAttribute *c_export_attr) {
-    if (!ctx || !ctx->analyzer || !naked_attr)
-        return;
-
-    XrLocation loc = {
-        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
-
-    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@naked is only supported in freestanding AOT profile", &loc);
-        return;
-    }
-
-    if (!extern_attr) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@naked requires an extern \"C\" declaration with "
-                                   "implementation supplied by global asm or "
-                                   "target objects",
-                                   &loc);
-    }
-
-    if (c_export_attr) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@naked cannot be combined with @c_export; declare the C symbol "
-                                   "in an extern \"C\" block",
-                                   &loc);
-    }
-
-    if (dylib_attr) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@naked cannot be combined with an extern dylib target; "
-                                   "freestanding naked symbols are linked "
-                                   "statically",
-                                   &loc);
-    }
-}
-
-static void xa_validate_aot_interrupt_attr(XaInferContext *ctx, AstNode *node,
-                                           XrAttribute *interrupt_attr, XrAttribute *extern_attr,
-                                           XrAttribute *dylib_attr, XrAttribute *c_export_attr,
-                                           XrAttribute *naked_attr) {
-    if (!ctx || !ctx->analyzer || !interrupt_attr)
-        return;
-
-    XrLocation loc = {
-        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
-
-    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@interrupt is only supported in freestanding AOT profile",
-                                   &loc);
-        return;
-    }
-
-    if (!interrupt_attr->str_arg || interrupt_attr->str_arg[0] == '\0') {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@interrupt requires a non-empty ABI string", &loc);
-    }
-
-    if (!extern_attr) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@interrupt requires an extern \"C\" declaration with "
-                                   "implementation supplied by global asm or "
-                                   "target objects",
-                                   &loc);
-    }
-
-    if (c_export_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@interrupt cannot be combined with @c_export; declare the ISR symbol with "
-            "extern \"C\"",
-            &loc);
-    }
-
-    if (dylib_attr) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@interrupt cannot be combined with an extern dylib target; "
-                                   "freestanding interrupt symbols are linked "
-                                   "statically",
-                                   &loc);
-    }
-
-    if (naked_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@interrupt cannot be combined with @naked; use @naked for hand-written stubs", &loc);
     }
 }
 
@@ -2449,12 +2130,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     XrType *fn_type = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                            return_type, has_rest);
-    if (fn_type) {
-        if (xa_decl_has_attribute(node, ATTR_NO_THROW))
-            xr_type_function_set_throw_effect(fn_type, XR_FN_EFFECT_NO_THROW);
-        else if (fn->body)
-            xr_type_function_set_throw_effect(fn_type, XR_FN_EFFECT_POLY);
-    }
+    if (fn_type && fn->body)
+        xr_type_function_set_throw_effect(fn_type, XR_FN_EFFECT_POLY);
     xa_set_function_type_params_from_ast(ctx, fn_type, fn->type_params, fn->type_param_count);
 
     // Set min_params for default parameter support
@@ -2477,20 +2154,11 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->declared_type = fn_type;
     links->file_path = ctx->file_path;
     links->function_decl_node = node;
-    xa_bind_declared_intrinsic(ctx, node, sym, NULL, fn->name, false, fn->param_count,
-                               fn->attributes, fn->attr_count);
+    xa_publish_deprecated_attrs(links, fn->attributes, fn->attr_count);
+    xa_bind_registry_intrinsic(ctx, node, sym, NULL, fn->name, false, fn->param_count);
 
     // FFI: mark extern-block functions so call sites can require `unsafe { }`.
-    XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
-    XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
-    XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
-    XrAttribute *link_name_attr = xa_function_attr(fn, ATTR_LINK_NAME);
-    XrAttribute *naked_attr = xa_function_attr(fn, ATTR_NAKED);
-    XrAttribute *interrupt_attr = xa_function_attr(fn, ATTR_INTERRUPT);
     links->is_extern = fn->is_extern;
-    links->is_c_export = c_export_attr != NULL;
-    links->c_export_symbol =
-        c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
     if (links->is_extern) {
@@ -2508,29 +2176,6 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_ARG_TYPE, native_error, &native_loc);
         }
     }
-    if (link_name_attr) {
-        XrLocation link_name_loc = {.file = ctx->file_path,
-                                    .line = node ? node->line : 0,
-                                    .column = node ? node->column : 0};
-        if (!links->is_extern) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "@link_name is only valid on extern declarations",
-                                       &link_name_loc);
-        } else if (!xa_c_symbol_is_identifier(link_name_attr->str_arg)) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "@link_name requires a non-empty C identifier",
-                                       &link_name_loc);
-        }
-    }
-    if (c_export_attr)
-        xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
-                                          c_export_attr, links->is_extern);
-    xa_validate_aot_symbol_attrs(ctx, node, section_attr, weak_attr, c_export_attr);
-    xa_validate_aot_naked_attr(ctx, node, naked_attr, fn->is_extern ? naked_attr : NULL, NULL,
-                               c_export_attr);
-    xa_validate_aot_interrupt_attr(ctx, node, interrupt_attr, fn->is_extern ? interrupt_attr : NULL,
-                                   NULL, c_export_attr, naked_attr);
-
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
     xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
@@ -3099,7 +2744,7 @@ static void validate_class_field_default_initialization(XaInferContext *ctx, Ast
         return;
     if (node->type != AST_CLASS_DECL)
         return;
-    if (cls->is_native || class_has_bodyless_constructor(cls))
+    if (class_has_bodyless_constructor(cls))
         return;
 
     for (int i = 0; i < cls->field_count; i++) {
@@ -3187,6 +2832,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XaSymbol *msym = xa_symbol_new(im->name, XA_SYM_METHOD);
         msym->location.line = m->line;
         XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
+        xa_publish_deprecated_attrs(mlinks, im->attributes, im->attr_count);
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
@@ -3222,14 +2868,6 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
             }
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message, &loc);
-        }
-        if (mlinks->type) {
-            for (int j = 0; j < im->attr_count; j++) {
-                if (im->attributes[j] && im->attributes[j]->kind == ATTR_NO_THROW) {
-                    xr_type_function_set_throw_effect(mlinks->type, XR_FN_EFFECT_NO_THROW);
-                    break;
-                }
-            }
         }
         if (mlinks->type && im->params) {
             for (int j = 0; j < im->param_count; j++) {
@@ -3552,26 +3190,13 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                          : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
 
-    // @native class is reserved for builtin type declarations embedded at
-    // compile time.  User code cannot bind C implementations, so reject early.
-    if (cls->is_native) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line};
-        char msg[192];
-        snprintf(msg, sizeof(msg),
-                 "'@native %s' cannot be used in user code — it is reserved for builtin type "
-                 "declarations",
-                 decl_label);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
-        return;
-    }
-
     // A user class/struct whose name matches a builtin native handle type
     // (core.def `handle`, e.g. path.PathInfo) would silently shadow it: type
     // references resolve to the handle, and AOT lowers field access through
     // the handle/Json path against a class-instance layout — a guaranteed
     // crash (known_bugs 2026-07-02 gap C'). Reject the collision outright;
     // the long-term fix is module-scoped handle names (148 §1.1 T3.3).
-    if (cls->name && !cls->is_native) {
+    if (cls->name) {
         const char *handle_module = xa_builtin_find_handle_module(cls->name);
         if (handle_module) {
             char msg[256];
@@ -3599,6 +3224,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     sym->is_exported = node->is_exported;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    xa_publish_deprecated_attrs(links, cls->attributes, cls->attr_count);
     XrClassInfo *info = links ? links->class_info : NULL;
     const char *capability_name = cls->generic_origin_name ? cls->generic_origin_name : cls->name;
     /* The hoisting collector and direct declaration visitor can both reach the
@@ -4034,7 +3660,7 @@ skip_interfaces:
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "%s '%s' field '%s' has unsupported type — "
-                             "only int, float, bool, string, fixed arrays and other structs are "
+                             "only scalar values, raw pointers, fixed arrays and other structs are "
                              "supported",
                              diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -4081,6 +3707,11 @@ skip_interfaces:
                 xr_free(layout);
             } else {
                 info->struct_layout = layout;
+                XrNativePackagePlan *native_plan =
+                    (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
+                        ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+                if (native_plan)
+                    (void) xr_native_package_resolve_layout(native_plan, cls->name, layout);
             }
         } else {
             xr_free(layout->field_names);
@@ -4103,6 +3734,7 @@ skip_layout:
                 !md->is_static && xa_method_body_mutates_receiver(md->body, info);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
             XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+            xa_publish_deprecated_attrs(method_links, md->attributes, md->attr_count);
             XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
             XaSymbol *saved_signature_function =
                 signature_scope ? signature_scope->function_symbol : NULL;
@@ -4202,11 +3834,8 @@ skip_layout:
                                                        md->param_count, ret_type, md->is_variadic);
             if (method_type) {
                 method_type->function.min_params = md->required_count;
-                xr_type_function_set_throw_effect(method_type,
-                                                  xa_decl_has_attribute(method, ATTR_NO_THROW)
-                                                      ? XR_FN_EFFECT_NO_THROW
-                                                  : md->body ? XR_FN_EFFECT_POLY
-                                                             : XR_FN_EFFECT_MAY_THROW);
+                xr_type_function_set_throw_effect(method_type, md->body ? XR_FN_EFFECT_POLY
+                                                                        : XR_FN_EFFECT_MAY_THROW);
             }
 
             if (method_type && md->params) {
@@ -4270,9 +3899,8 @@ skip_layout:
 
             const char *intrinsic_owner_name =
                 cls->generic_origin_name ? cls->generic_origin_name : cls->name;
-            xa_bind_declared_intrinsic(ctx, method, method_sym, intrinsic_owner_name, md->name,
-                                       md->is_static, md->param_count, md->attributes,
-                                       md->attr_count);
+            xa_bind_registry_intrinsic(ctx, method, method_sym, intrinsic_owner_name, md->name,
+                                       md->is_static, md->param_count);
 
             xa_class_info_add_method(info, method_sym);
 

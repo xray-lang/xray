@@ -31,16 +31,12 @@ fn _referenceLaneCount(options: Options) -> int {
     }
     return 1
 }
-
-@intrinsic("parallel.forEach")
 export fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
     _checkOptions(options)
     for (offset in 0..range.count()) {
         body(range[offset])
     }
 }
-
-@intrinsic("parallel.map")
 export fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array<T> {
     _checkOptions(options)
     var out: Array<T> = []
@@ -49,8 +45,6 @@ export fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -
     }
     return out
 }
-
-@intrinsic("parallel.mapInto")
 export fn mapInto<T>(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()) {
     _checkOptions(options)
     output.clear()
@@ -58,8 +52,6 @@ export fn mapInto<T>(range: Range, output: ref Array<T>, body: (int) -> T, optio
         output.push(body(range[offset]))
     }
 }
-
-@intrinsic("parallel.reduce")
 export fn reduce<A>(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()) -> A {
     _checkOptions(options)
     var acc = initial
@@ -112,8 +104,6 @@ export class Plan<S> {
         var lane = offset % laneCount
         return this._states[lane]
     }
-
-    @intrinsic("parallel.Plan.forEach")
     forEach(range: Range, body: (S, int) -> ()) {
         this._begin()
         defer fn() {
@@ -123,8 +113,6 @@ export class Plan<S> {
             body(this._stateFor(offset), range[offset])
         }
     }
-
-    @intrinsic("parallel.Plan.map")
     map<T>(range: Range, body: (S, int) -> T) -> Array<T> {
         this._begin()
         defer fn() {
@@ -136,8 +124,6 @@ export class Plan<S> {
         }
         return out
     }
-
-    @intrinsic("parallel.Plan.mapInto")
     mapInto<T>(range: Range, output: ref Array<T>, body: (S, int) -> T) {
         this._begin()
         defer fn() {
@@ -148,8 +134,6 @@ export class Plan<S> {
             output.push(body(this._stateFor(offset), range[offset]))
         }
     }
-
-    @intrinsic("parallel.Plan.reduce")
     reduce<A>(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A) -> A {
         this._begin()
         defer fn() {

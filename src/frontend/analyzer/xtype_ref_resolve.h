@@ -47,8 +47,8 @@ XR_FUNC struct XrType *xr_tref_resolve_in_analyzer(struct XaAnalyzer *analyzer,
                                                    const struct XrTypeRef *tref);
 
 /* Resolve a declaration parameter type. A direct, unconstrained function type
- * in parameter position is effect-polymorphic (rethrows); @no_throw narrows it
- * to the concrete NO_THROW constraint. */
+ * in parameter position is effect-polymorphic (rethrows); a compiler-owned
+ * effect contract may narrow it to the concrete NO_THROW constraint. */
 XR_FUNC struct XrType *xr_tref_resolve_parameter_in_analyzer(struct XaAnalyzer *analyzer,
                                                              const struct XrTypeRef *tref);
 

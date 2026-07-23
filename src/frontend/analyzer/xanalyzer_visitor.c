@@ -39,6 +39,16 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links);
 
+static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
+    for (int i = 0; links && attrs && i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == ATTR_DEPRECATED) {
+            xa_symbol_links_set_deprecated(links, true, attrs[i]->str_arg);
+            return;
+        }
+    }
+    xa_symbol_links_set_deprecated(links, false, NULL);
+}
+
 static const char *object_shape_type_label_local(XrType *type) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.type_name)
         return type->object.type_name;
@@ -3014,10 +3024,8 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                                                ret_type, md->is_variadic);
     if (method_type) {
         method_type->function.min_params = md->required_count;
-        xr_type_function_set_throw_effect(method_type, xa_decl_has_attribute(method, ATTR_NO_THROW)
-                                                           ? XR_FN_EFFECT_NO_THROW
-                                                       : md->body ? XR_FN_EFFECT_POLY
-                                                                  : XR_FN_EFFECT_MAY_THROW);
+        xr_type_function_set_throw_effect(method_type,
+                                          md->body ? XR_FN_EFFECT_POLY : XR_FN_EFFECT_MAY_THROW);
     }
     if (method_type && md->params) {
         for (int i = 0; i < md->param_count; i++) {
@@ -3028,6 +3036,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     }
 
     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+    xa_publish_deprecated_attrs(method_links, md->attributes, md->attr_count);
     method_links->type = method_type;
     method_links->file_path = ctx->file_path;
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
@@ -3131,6 +3140,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     edecl->symbol_id = sym->id;
                 }
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+                xa_publish_deprecated_attrs(links, edecl->attributes, edecl->attr_count);
                 if (!links->type)
                     links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
@@ -7018,8 +7028,8 @@ static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer,
  *   Pass 1.5 -> Class inheritance linking
  *   Pass 2   -> Type inference and checking
  *   Pass 3   -> Error set inference (value-return error system)
- *   Pass 4   -> Allocation effect inference and @no_alloc validation
- *   Pass 5   -> Suspend effect validation (@no_suspend / @interrupt / @c_export)
+ *   Pass 4   -> Canonical allocation-effect inference
+ *   Pass 5   -> Suspend-effect validation for typed contracts and entry plans
  * ========================================================================== */
 
 void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
@@ -7056,7 +7066,7 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     xa_infer_error_sets(analyzer, ast);
 
     // Pass 3b: function definitions were provisionally POLY during structural
-    // interface checking. Enforce @no_throw covariance with the final bits.
+    // interface checking. Enforce canonical throw-effect covariance with the final bits.
     xa_validate_interface_throw_effects(ctx, ast);
 
     // Pass 4: Infer allocation effects from the typed, symbol-resolved AST.
@@ -7067,8 +7077,8 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // legality consumes this sidecar instead of method-name heuristics.
     xa_infer_memory_effects(analyzer, ast);
 
-    // Pass 5: Validate @no_suspend assertions (and the implicit @interrupt /
-    // @c_export boundaries) against the task-212 suspend effect. Fail-closed.
+    // Pass 5: Validate typed contracts and manifest entry/export boundaries
+    // against the canonical suspend effect. Fail closed.
     xa_verify_no_suspend(analyzer, ast);
 
     xa_validate_freestanding_payload_error_catches(analyzer, ast);

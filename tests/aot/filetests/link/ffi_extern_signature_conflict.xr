@@ -1,8 +1,6 @@
 extern "C" {
-    @link_name("labs")
     fn task208LabsInt(x: intsize) -> intsize
 
-    @link_name("labs")
     fn task208LabsFloat(x: float32) -> float32
 }
 

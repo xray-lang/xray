@@ -1,0 +1,17 @@
+[package]
+name = "filetest-uint-unsigned-arith-native"
+version = "1.0.0"
+license = "MIT"
+main = "uint_unsigned_arith_native.xr"
+
+[[export.c]]
+xray = "hash32"
+symbol = "xray_hash32"
+
+[[export.c]]
+xray = "compound32"
+symbol = "xray_compound32"
+
+[[export.c]]
+xray = "mix64"
+symbol = "xray_mix64"

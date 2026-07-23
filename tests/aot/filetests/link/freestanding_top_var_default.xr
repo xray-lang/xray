@@ -5,7 +5,6 @@ var MAYBE: int?
 var MAYBE_LABEL: string?
 var MAYBE_CHAR: rune?
 
-@c_export("xray_top_var_default")
 fn xray_top_var_default() -> int {
     COUNTER = COUNTER + 7
     if (SCALE == 0.0 && ENABLED == false && MAYBE == null && MAYBE_LABEL == null &&

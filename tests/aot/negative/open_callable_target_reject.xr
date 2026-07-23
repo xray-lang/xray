@@ -1,4 +1,3 @@
-@used
 fn invoke(callback: () -> int) -> int {
     return callback()
 }

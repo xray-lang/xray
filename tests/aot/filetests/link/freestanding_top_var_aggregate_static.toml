@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_top_var_aggregate_static"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_top_var_aggregate_static.xr"
+
+[[export.c]]
+xray = "xray_top_var_aggregate_static"
+symbol = "xray_top_var_aggregate_static"

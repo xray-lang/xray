@@ -1,67 +1,8 @@
-import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-// Condvar as a pure-Xray class composing the coroutine-aware Semaphore, with a
-// short non-suspendable Atomic spinlock guarding the waiter count (same shape as
-// RwLock's reader-count guard). This deliberately avoids EventCount, whose
-// worker-pool epoch model traps a general condvar at VM shutdown (task 147
-// §0.11): parking on a counting Semaphore is clean cross-coroutine in both VM
-// and AOT, so wait/signal/broadcast stay VM/AOT identical AND exit rc=0.
-//
-// Correctness of the semaphore-composed condvar relies on the standard contract:
-// callers re-check the predicate in a `while` loop, so a banked/stolen permit is
-// a within-contract spurious wakeup, never a lost update. The counting Semaphore
-// banks a signal that races ahead of the corresponding wait(), closing the
-// classic lost-wakeup window.
-
-class Condvar {
-    _mutex: Semaphore    // the monitor lock (yieldable acquire)
-    _wlock: Atomic<bool> // spinlock guarding _waiters; never held across a yield
-    _waiters: int
-    _sem: Semaphore      // counting parking spot; init 0
-
-    constructor() {
-        this._mutex = Semaphore(1)
-        this._wlock = Atomic<bool>(false)
-        this._waiters = 0
-        this._sem = Semaphore(0)
-    }
-
-    _lockWaiters() {
-        while (true) {
-            var (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
-            if (ok) { break }
-        }
-    }
-
-    lock() { this._mutex.acquire() }
-    unlock() { this._mutex.release() }
-
-    // Must be called holding the monitor lock. Atomically releases it, parks the
-    // coroutine, and re-acquires it before returning.
-    wait() {
-        this._lockWaiters()
-        this._waiters = this._waiters + 1
-        this._wlock.store(false, Ordering.Release)
-        this._mutex.release()
-        this._sem.acquire()
-        this._mutex.acquire()
-    }
-
-    signal() {
-        this._lockWaiters()
-        var wake = this._waiters > 0
-        if (wake) { this._waiters = this._waiters - 1 }
-        this._wlock.store(false, Ordering.Release)
-        if (wake) { this._sem.release(1) }
-    }
-
-    broadcast() {
-        this._lockWaiters()
-        var n = this._waiters
-        this._waiters = 0
-        this._wlock.store(false, Ordering.Release)
-        if (n > 0) { this._sem.release(n) }
-    }
-}
+import { Condvar, CountdownLatch } from sync
+// Exercise the canonical pure-Xray Condvar composition. Only declarations
+// owned by the sync module receive the compiler's audited sync-shareable
+// capability; a user class with the same spelling must not bypass go-capture
+// or deep-readonly checks.
 
 // --- Scenario 1: single-producer / single-consumer via signal ----------------
 // The consumer parks on the condvar until the producer publishes a value under

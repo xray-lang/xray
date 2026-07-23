@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_unreachable_coroutine"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_unreachable_coroutine.xr"
+
+[[export.c]]
+xray = "xray_entry"
+symbol = "xray_entry"

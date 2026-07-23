@@ -1,24 +1,19 @@
-@no_alloc
 fn xray_no_alloc_int_tostring_reject(value: int) -> string {
     return value.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_int_tohex_reject(value: int) -> string {
     return value.toHex()
 }
 
-@no_alloc
 fn xray_no_alloc_float_tostring_reject(value: float) -> string {
     return value.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_bool_tostring_reject(value: bool) -> string {
     return value.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_char_tostring_reject(value: rune) -> string {
     return value.toString()
 }

@@ -2,7 +2,6 @@ fn xray_no_alloc_map_map_bump(value: int) -> int {
     return value + 1
 }
 
-@no_alloc
 fn xray_no_alloc_map_map_reject(values: Map<int, int>) -> int {
     return len(values.map(xray_no_alloc_map_map_bump))
 }

@@ -1,0 +1,7 @@
+version = 1
+legacy_allow = true
+
+[[function]]
+symbol = "pure"
+scope = "semantic"
+requires = ["no_throw"]

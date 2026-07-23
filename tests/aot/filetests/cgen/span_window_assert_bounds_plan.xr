@@ -1,4 +1,3 @@
-@zero_cost
 fn provenWindowLength(values: Slice<uint64>, start: int) -> int {
     assert(start >= 0)
     assert(start <= len(values) - 2)

@@ -311,6 +311,9 @@ invoke_dispatch:;
 
         if (method && method->type == XMETHOD_YIELDABLE_PRIMITIVE &&
             method->as.yieldable_primitive) {
+            ci->cfunc_result_slot = (int16_t) a;
+            ci->has_cfunc_result = false;
+            savepc();
             XrValue result = xr_null();
             XrCFuncResult status =
                 method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
@@ -327,11 +330,9 @@ invoke_dispatch:;
                 vmbreak;
             }
             if (status == XR_CFUNC_BLOCKED) {
-                vm_suspend_replay_yielded(ci, pc);
                 return XR_VM_BLOCKED;
             }
             if (status == XR_CFUNC_YIELD) {
-                vm_suspend_replay_yielded(ci, pc);
                 return XR_VM_YIELD;
             }
             return XR_VM_RUNTIME_ERROR;
@@ -527,6 +528,9 @@ vmcase(OP_INVOKE_DIRECT) {
         vmbreak;
     }
     if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive) {
+        ci->cfunc_result_slot = (int16_t) a;
+        ci->has_cfunc_result = false;
+        savepc();
         XrValue result = xr_null();
         XrCFuncResult status =
             method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
@@ -543,11 +547,9 @@ vmcase(OP_INVOKE_DIRECT) {
             vmbreak;
         }
         if (status == XR_CFUNC_BLOCKED) {
-            vm_suspend_replay_yielded(ci, pc);
             return XR_VM_BLOCKED;
         }
         if (status == XR_CFUNC_YIELD) {
-            vm_suspend_replay_yielded(ci, pc);
             return XR_VM_YIELD;
         }
         return XR_VM_RUNTIME_ERROR;

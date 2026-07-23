@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc contract cannot be proven for 'xray_no_alloc_regex_is_valid_reject'
+contains=contract 'xray_no_alloc_regex_is_valid_reject' failed
 contains=xray_no_alloc_regex_is_valid_reject
 not_contains=CRASH

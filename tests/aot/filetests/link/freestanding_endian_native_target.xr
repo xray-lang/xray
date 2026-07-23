@@ -1,4 +1,3 @@
-@c_export("xray_native_endian_u16")
 fn xray_native_endian_u16() -> int {
     var bytes: [byte; 4] = [0, 0, 0, 0]
     var view: Slice<byte> = bytes[:]

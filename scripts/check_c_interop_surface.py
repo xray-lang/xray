@@ -134,13 +134,11 @@ LAYOUT_GATE_REQUIRED_FILES = {
     Path("tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr"),
     Path("tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr"),
     Path("tests/compile_errors/ffi/020_extern_layout_rejects_managed_field.xr"),
-    Path("tests/compile_errors/ffi/023_extern_layout_rejects_safe_struct_field.xr"),
-    Path("tests/compile_errors/ffi/025_extern_flex_must_be_last.xr"),
-    Path("tests/compile_errors/ffi/026_extern_union_rejects_flex.xr"),
     Path("tests/compile_errors/ffi/027_safe_struct_rejects_flex.xr"),
-    Path("tests/compile_errors/ffi/028_extern_flex_rejects_managed_element.xr"),
-    Path("tests/compile_errors/ffi/029_extern_flex_requires_prefix.xr"),
-    Path("tests/compile_errors/ffi/035_mem_view_flexible_tail_requires_length.xr"),
+    Path("tests/fixtures/native_output/main.xr"),
+    Path("tests/fixtures/native_output/native_output.h"),
+    Path("tests/fixtures/native_output/xray.toml"),
+    Path("tests/aot/run_native_output_boundary_tests.sh"),
 }
 
 LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {
@@ -326,7 +324,7 @@ def check_extern_gate(root: Path) -> list[str]:
 
 
 def check_layout_gate(root: Path) -> list[str]:
-    """Validate the task-190 layout/flexible-tail focused fixture set."""
+    """Validate ordinary native layout plus manifest layout-proof fixtures."""
     return check_manifest_gate(
         root,
         LAYOUT_GATE_REQUIRED_FILES,

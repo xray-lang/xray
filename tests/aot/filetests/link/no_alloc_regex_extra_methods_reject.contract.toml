@@ -1,0 +1,26 @@
+version = 1
+
+[[function]]
+symbol = "xray_no_alloc_regex_find_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_regex_find_group_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_regex_find_all_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_regex_replace_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "xray_no_alloc_regex_split_reject"
+scope = "semantic"
+requires = ["no_semantic_alloc"]

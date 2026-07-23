@@ -73,11 +73,6 @@ static const XrCliOptionSpec fmt_options[] = {
      "Omit trailing `,` when wrapping to multi-line (default: keep)"},
     XR_CLI_OPT_END};
 
-static const XrCliOptionSpec fix_options[] = {
-    {"annotate-no-throw", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Add @no_throw to named functions proven non-throwing"},
-    XR_CLI_OPT_END};
-
 static const XrCliOptionSpec compile_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: bytecode, c, header"},
@@ -105,7 +100,7 @@ static const XrCliOptionSpec build_options[] = {
     {"type-names", 0, XR_CLI_VALUE_STRING, false, false, "MODE",
      "AOT type-name profile: none, public, or all"},
     {"shared", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Build a native shared library for @c_export symbols"},
+     "Build a native shared library for manifest export symbols"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},
     {"toolchain", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
      "AOT toolchain: auto, host, zig, clang"},
@@ -125,7 +120,7 @@ static const XrCliOptionSpec build_options[] = {
     {"linker-script", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
      "Pass a linker script to the native linker"},
     {"c-header", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
-     "Emit a C header for @c_export symbols"},
+     "Emit a C header for manifest export symbols"},
     {"keep-c", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Keep generated temporary C source"},
     {"cache-dir", 0, XR_CLI_VALUE_STRING, false, false, "DIR",
      "AOT object cache directory (default <out>/.xray-cache or $XRAY_CACHE_DIR)"},
@@ -151,6 +146,10 @@ static const XrCliOptionSpec toolchain_options[] = {
     {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec language_options[] = {
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec pkg_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
@@ -158,6 +157,11 @@ static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 static const XrCliOptionSpec explain_options[] = {
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
     XR_CLI_OPT_END};
+
+static const XrCliOptionSpec verify_options[] = {{"contract", 0, XR_CLI_VALUE_STRING, true, false,
+                                                  "FILE",
+                                                  "Verify a versioned semantic/backend contract"},
+                                                 XR_CLI_OPT_END};
 
 #ifdef XR_HAS_LSP
 static const XrCliOptionSpec lsp_options[] = {
@@ -205,6 +209,11 @@ static const XrCliCommandSpec toolchain_subcommands[] = {
      NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
+static const XrCliCommandSpec language_subcommands[] = {
+    {"attributes", "List the complete public attribute registry", NULL, language_options, 0, 0,
+     false, false, NULL, NULL, 0},
+    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
+
 /* ========== Top-level Command Table ========== */
 
 static XrCliCommandSpec cli_commands[] = {
@@ -216,9 +225,6 @@ static XrCliCommandSpec cli_commands[] = {
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
-    {"fix", "Apply optional source annotations", NULL, fix_options, 1, -1, false, false, NULL, NULL,
-     0},
-
     /* Artifact commands */
     {"compile", "Compile to bytecode or C", NULL, compile_options, 1, 1, false, false, NULL, NULL,
      0},
@@ -226,8 +232,12 @@ static XrCliCommandSpec cli_commands[] = {
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
     {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
      toolchain_subcommands, 2},
+    {"language", "Inspect the public language surface", NULL, language_options, 0, -1, false, false,
+     NULL, language_subcommands, 1},
     {"explain", "Explain compiler evidence and native provenance", NULL, explain_options, 1, 2,
      false, false, NULL, NULL, 0},
+    {"verify", "Verify semantic and backend contracts", NULL, verify_options, 0, 0, false, false,
+     NULL, NULL, 0},
 
     /* Package management (has subcommands) */
     {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},

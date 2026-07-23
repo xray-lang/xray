@@ -77,18 +77,13 @@ typedef struct FixedBytesLiteralNode {
     XrLiteralSourceForm source_form;
 } FixedBytesLiteralNode;
 
-// Attribute node (test framework + FFI)
+// Public attribute node.
 typedef struct XrAttribute {
     AttributeKind kind;
     int timeout;
-    // String argument for attributes that carry one: extern ABI/library metadata,
-    // @c_export("name") (C symbol),
-    // @section("name") (AOT linker section),
-    // @intrinsic("canonical.id") (compiler-owned stdlib semantic identity).
-    // Arena-allocated, NUL-terminated; NULL when absent.
+    // Optional @deprecated message. Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
-    // Bitmask of XR_DERIVE_* for ATTR_DERIVE, or XA_ZERO_COST_ALLOW_* for
-    // ATTR_ZERO_COST (@zero_cost(allow: ...) exempted categories); 0 otherwise.
+    // Bitmask of XR_DERIVE_* for ATTR_DERIVE; 0 otherwise.
     uint32_t derive_flags;
 } XrAttribute;
 

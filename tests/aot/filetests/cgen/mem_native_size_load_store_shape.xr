@@ -1,13 +1,10 @@
 import mem
 
-extern "C" {
-    struct NativeSizePair {
-        length: uintsize
-        delta: intsize
-    }
+struct NativeSizePair {
+    length: uintsize
+    delta: intsize
 }
 
-@c_export("xray_native_size_fields")
 fn xray_native_size_fields(p: MutPtr<uint8>) -> intsize {
     var guard = p
     return unsafe {
@@ -20,7 +17,6 @@ fn xray_native_size_fields(p: MutPtr<uint8>) -> intsize {
     }
 }
 
-@c_export("xray_native_size_unaligned")
 fn xray_native_size_unaligned(p: MutPtr<uint8>) -> uintsize {
     unsafe {
         mem.store<uintsize>(p, 1, 91, Endian.LE)

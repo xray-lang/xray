@@ -8,7 +8,7 @@
  * xrt_core_freestanding.h - no-libc AOT prelude for --profile freestanding
  *
  * This header intentionally stays below hosted xrt.h.  It exposes the value
- * representation and scalar ABI helpers needed by freestanding @c_export
+ * representation and scalar ABI helpers needed by freestanding manifest exports
  * code without pulling in malloc, stdio, pthreads, setjmp, libm, or OS APIs.
  */
 

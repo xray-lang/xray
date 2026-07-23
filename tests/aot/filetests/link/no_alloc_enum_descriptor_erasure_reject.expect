@@ -1,4 +1,3 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_enum_descriptor_erasure_reject'
-contains=erased enum descriptor
+contains=contract 'xray_no_alloc_enum_descriptor_erasure_reject' failed
 not_contains=CRASH

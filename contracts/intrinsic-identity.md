@@ -1,6 +1,6 @@
 # Intrinsic identity contract
 
-Status: frozen by task 220.
+Status: re-frozen by task 237.
 
 1. Each compiler intrinsic has one canonical, stable numeric identity in the
    registry. The identity, not a spelling, import path, method name, or emitted
@@ -11,7 +11,10 @@ Status: frozen by task 220.
    canonical identity forward; they must not reconstruct it from strings.
 4. A registry change must migrate registry uniqueness tests, affected Xi/AOT
    filetests, backend differential cases, and dependent ports evidence.
+5. Boundary-only intrinsics such as `mem.assumeInitialized<T>` are sealed
+   compiler identities. A library declaration or same-spelled user function
+   cannot acquire their proof authority.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def ab653349e345d3cb35eec57593683e65f2aaef9b3c4efe656262dbd623019e7c
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def c06ab84cb944d3ebaa9950064333c80c3e818355efa528ff17dde8ea51cc0263

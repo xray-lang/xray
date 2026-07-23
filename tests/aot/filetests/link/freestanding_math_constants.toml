@@ -1,0 +1,13 @@
+[package]
+name = "filetest-freestanding_math_constants"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_math_constants.xr"
+
+[[export.c]]
+xray = "xray_math_pi"
+symbol = "xray_math_pi"
+
+[[export.c]]
+xray = "xray_math_max_int"
+symbol = "xray_math_max_int"

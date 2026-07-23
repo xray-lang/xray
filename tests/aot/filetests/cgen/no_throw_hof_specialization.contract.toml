@@ -1,0 +1,6 @@
+version = 1
+
+[[function]]
+symbol = "xray_apply_pure"
+scope = "semantic"
+requires = ["no_throw"]

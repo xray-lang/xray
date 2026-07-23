@@ -1,0 +1,1 @@
+go closure cannot capture non-shareable interior-mutable const 'plan'

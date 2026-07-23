@@ -1,10 +1,8 @@
-@no_alloc
 fn xray_no_alloc_view_slice_reject(values: Array<int>) -> Slice<int> {
     var view: Slice<int> = values[0:2]
     return view
 }
 
-@no_alloc
 fn xray_no_alloc_span_slice_ok(values: Array<int>) -> int {
     var view: Slice<int> = values[0:3]
     var tail: Slice<int> = view[1:3]

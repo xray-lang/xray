@@ -1,0 +1,60 @@
+[package]
+name = "filetest-ffi_pointer_float_prototypes"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_pointer_float_prototypes.xr"
+
+[native]
+name = "ffi-ffi_pointer_float_prototypes"
+version = "1"
+license = "test"
+source = "AOT FFI manifest fixture"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "library-0"
+kind = "platform"
+system_links = ["xrayffi_unused_task190_next"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_unused_float"
+native = "xrayffi_unused_float"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"
+
+[[native.unit]]
+name = "libc"
+kind = "platform"
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve process C symbols"
+
+[[native.unit]]
+name = "libm"
+kind = "platform"
+system_links = ["m"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable math symbols"
+
+[[native.symbol]]
+xray = "memchr"
+native = "memchr"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "sinf"
+native = "sinf"
+kind = "function"
+calling_convention = "c"
+unit = "libm"

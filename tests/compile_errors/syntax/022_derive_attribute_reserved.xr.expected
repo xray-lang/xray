@@ -1,1 +1,1 @@
-@derive can only annotate class, struct, or enum
+@derive cannot annotate this declaration; targets: class | struct | enum

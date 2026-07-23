@@ -1,0 +1,243 @@
+[package]
+name = "filetest-_freestanding_static_data_lib"
+version = "1.0.0"
+license = "MIT"
+main = "_freestanding_static_data_lib.xr"
+
+[[link.symbol]]
+xray = "MAGIC"
+section = "__DATA,.xr_imag"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "TABLE"
+weak = true
+
+[[link.symbol]]
+xray = "BYTES"
+weak = true
+
+[[link.symbol]]
+xray = "MATRIX"
+section = "__DATA,.xr_imatrix"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "CUBE"
+section = "__DATA,.xr_icube"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "HEADER"
+section = "__DATA,.xr_ihead"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "PACKET"
+weak = true
+
+[[link.symbol]]
+xray = "OUTER"
+weak = true
+
+[[link.symbol]]
+xray = "GROUPS"
+section = "__DATA,.xr_igroup"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "PACKED"
+weak = true
+
+[[link.symbol]]
+xray = "ALIGNED"
+weak = true
+
+[[link.symbol]]
+xray = "PACKED_ALIGNED"
+weak = true
+
+[[link.symbol]]
+xray = "PAIR"
+weak = true
+
+[[link.symbol]]
+xray = "PAIR_ROWS"
+section = "__DATA,.xr_ipair_rows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "NESTED"
+weak = true
+
+[[link.symbol]]
+xray = "NESTED_LABEL"
+weak = true
+
+[[link.symbol]]
+xray = "BITS"
+weak = true
+
+[[link.symbol]]
+xray = "WORD_BYTES"
+weak = true
+
+[[link.symbol]]
+xray = "BIT_ROWS"
+section = "__DATA,.xr_ibrows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "WORD_ROWS"
+section = "__DATA,.xr_iwrows"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "BIT_HOLDER"
+weak = true
+
+[[link.symbol]]
+xray = "BIT_GROUPS"
+section = "__DATA,.xr_ibgroups"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "WORD_HOLDER"
+weak = true
+
+[[link.symbol]]
+xray = "WORD_GROUPS"
+section = "__DATA,.xr_iwgroups"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL"
+weak = true
+
+[[link.symbol]]
+xray = "ADDR_ONLY_BYTES"
+weak = true
+
+[[link.symbol]]
+xray = "MAYBE_NONE"
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_MATRIX"
+section = "__DATA,.xr_ilmat"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_CUBE"
+section = "__DATA,.xr_ilcube"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABELS"
+weak = true
+
+[[link.symbol]]
+xray = "NAMED"
+weak = true
+
+[[link.symbol]]
+xray = "LABELED"
+weak = true
+
+[[link.symbol]]
+xray = "LABELED_ROWS"
+section = "__DATA,.xr_iltup"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "ENTRIES"
+section = "__DATA,.xr_ient"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "ROWS"
+section = "__DATA,.xr_irow"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_ROWS"
+section = "__DATA,.xr_ilrow"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "LABEL_GROUPS"
+section = "__DATA,.xr_ilgrp"
+used = true
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_HEADER"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_PAIR"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_BYTES"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_MATRIX"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_CUBE"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_BITS"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_WORD"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_LABEL"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_LABELED"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_NAMED"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_NAMED_ROWS"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_LABELS"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_LABEL_MATRIX"
+weak = true
+
+[[link.symbol]]
+xray = "PLAIN_LABEL_CUBE"
+weak = true

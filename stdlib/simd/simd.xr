@@ -1,24 +1,16 @@
 // simd — portable fixed-width integer vectors.
 //
 // These source bodies are the scalar semantic truth used by the VM and by
-// unsupported AOT targets. Compiler-owned @intrinsic identities map the same
+// unsupported AOT targets. Compiler-owned intrinsic identities map the same
 // operations to typed Xi vector ops without relying on paths or source names.
 export struct U8x16 align(16) {
     private _lanes: [byte; 16]
-
-    @no_alloc
     static fromLanes(lanes: [byte; 16]) -> U8x16 {
         return U8x16{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U8x16.splat")
-    @no_alloc
     static splat(value: byte) -> U8x16 {
         return U8x16{_lanes: [value; 16]}
     }
-
-    @intrinsic("simd.U8x16.load")
-    @no_alloc
     static load(data: Slice<byte>, offset: int = 0) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -28,9 +20,6 @@ export struct U8x16 align(16) {
         }
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.store")
-    @no_alloc
     store(output: ref Slice<byte>, offset: int = 0) {
         var i = 0
         while (i < 16) {
@@ -38,23 +27,14 @@ export struct U8x16 align(16) {
             i += 1
         }
     }
-
-    @intrinsic("simd.U8x16.extract")
-    @no_alloc
     extract(lane: int) -> byte {
         return this._lanes[lane]
     }
-
-    @intrinsic("simd.U8x16.replace")
-    @no_alloc
     replace(lane: int, value: byte) -> U8x16 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.bitAnd")
-    @no_alloc
     bitAnd(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -64,9 +44,6 @@ export struct U8x16 align(16) {
         }
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.bitOr")
-    @no_alloc
     bitOr(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -76,9 +53,6 @@ export struct U8x16 align(16) {
         }
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.bitXor")
-    @no_alloc
     bitXor(other: U8x16) -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -88,9 +62,6 @@ export struct U8x16 align(16) {
         }
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.bitNot")
-    @no_alloc
     bitNot() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -100,9 +71,6 @@ export struct U8x16 align(16) {
         }
         return U8x16{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x16.reinterpretU32")
-    @no_alloc
     reinterpretU32() -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -113,9 +81,6 @@ export struct U8x16 align(16) {
         }
         return U32x4.fromLanes(lanes)
     }
-
-    @intrinsic("simd.U8x16.reinterpretU64")
-    @no_alloc
     reinterpretU64() -> U64x2 {
         var lanes: [uint64; 2] = [0; 2]
         var i = 0
@@ -130,20 +95,12 @@ export struct U8x16 align(16) {
 
 export struct U32x4 align(16) {
     private _lanes: [uint32; 4]
-
-    @no_alloc
     static fromLanes(lanes: [uint32; 4]) -> U32x4 {
         return U32x4{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U32x4.splat")
-    @no_alloc
     static splat(value: uint32) -> U32x4 {
         return U32x4{_lanes: [value; 4]}
     }
-
-    @intrinsic("simd.U32x4.load")
-    @no_alloc
     static load(data: Slice<uint32>, offset: int = 0) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -153,9 +110,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.store")
-    @no_alloc
     store(output: ref Slice<uint32>, offset: int = 0) {
         var i = 0
         while (i < 4) {
@@ -163,23 +117,14 @@ export struct U32x4 align(16) {
             i += 1
         }
     }
-
-    @intrinsic("simd.U32x4.extract")
-    @no_alloc
     extract(lane: int) -> uint32 {
         return this._lanes[lane]
     }
-
-    @intrinsic("simd.U32x4.replace")
-    @no_alloc
     replace(lane: int, value: uint32) -> U32x4 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.add")
-    @no_alloc
     add(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -189,9 +134,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.sub")
-    @no_alloc
     sub(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -201,9 +143,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.mul")
-    @no_alloc
     mul(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -213,9 +152,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.bitAnd")
-    @no_alloc
     bitAnd(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -225,9 +161,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.bitOr")
-    @no_alloc
     bitOr(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -237,9 +170,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.bitXor")
-    @no_alloc
     bitXor(other: U32x4) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -249,9 +179,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.bitNot")
-    @no_alloc
     bitNot() -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -261,9 +188,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.shiftLeft")
-    @no_alloc
     shiftLeft(bits: int) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -273,9 +197,6 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.shiftRight")
-    @no_alloc
     shiftRight(bits: int) -> U32x4 {
         var lanes: [uint32; 4] = [0; 4]
         var i = 0
@@ -285,57 +206,30 @@ export struct U32x4 align(16) {
         }
         return U32x4{_lanes: lanes}
     }
-
-    @intrinsic("simd.U32x4.shuffle")
-    @no_alloc
     shuffle(i0: int, i1: int, i2: int, i3: int) -> U32x4 {
         return U32x4{_lanes: [this._lanes[i0], this._lanes[i1], this._lanes[i2], this._lanes[i3]]}
     }
-
-    @intrinsic("simd.U32x4.swapAdjacent")
-    @no_alloc
     swapAdjacent() -> U32x4 {
         return U32x4{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2]]}
     }
-
-    @intrinsic("simd.U32x4.widenMulEven")
-    @no_alloc
     widenMulEven(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64)])
     }
-
-    @intrinsic("simd.U32x4.widenMulOdd")
-    @no_alloc
     widenMulOdd(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[1] as uint64) * (other._lanes[1] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
     }
-
-    @intrinsic("simd.U32x4.unzipEven")
-    @no_alloc
     unzipEven(other: U32x4) -> U32x4 {
         return U32x4{_lanes: [this._lanes[0], this._lanes[2], other._lanes[0], other._lanes[2]]}
     }
-
-    @intrinsic("simd.U32x4.unzipOdd")
-    @no_alloc
     unzipOdd(other: U32x4) -> U32x4 {
         return U32x4{_lanes: [this._lanes[1], this._lanes[3], other._lanes[1], other._lanes[3]]}
     }
-
-    @intrinsic("simd.U32x4.widenMulLow")
-    @no_alloc
     widenMulLow(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[1] as uint64) * (other._lanes[1] as uint64)])
     }
-
-    @intrinsic("simd.U32x4.widenMulHigh")
-    @no_alloc
     widenMulHigh(other: U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
     }
-
-    @intrinsic("simd.U32x4.reinterpretU8")
-    @no_alloc
     reinterpretU8() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -350,9 +244,6 @@ export struct U32x4 align(16) {
         }
         return U8x16.fromLanes(lanes)
     }
-
-    @intrinsic("simd.U32x4.reinterpretU64")
-    @no_alloc
     reinterpretU64() -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) | ((this._lanes[1] as uint64) << 32), (this._lanes[2] as uint64) | ((this._lanes[3] as uint64) << 32)])
     }
@@ -360,125 +251,66 @@ export struct U32x4 align(16) {
 
 export struct U64x2 align(16) {
     private _lanes: [uint64; 2]
-
-    @no_alloc
     static fromLanes(lanes: [uint64; 2]) -> U64x2 {
         return U64x2{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U64x2.splat")
-    @no_alloc
     static splat(value: uint64) -> U64x2 {
         return U64x2{_lanes: [value; 2]}
     }
-
-    @intrinsic("simd.U64x2.load")
-    @no_alloc
     static load(data: Slice<uint64>, offset: int = 0) -> U64x2 {
         return U64x2{_lanes: [data[offset], data[offset + 1]]}
     }
-
-    @intrinsic("simd.U64x2.store")
-    @no_alloc
     store(output: ref Slice<uint64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
     }
-
-    @intrinsic("simd.U64x2.extract")
-    @no_alloc
     extract(lane: int) -> uint64 {
         return this._lanes[lane]
     }
-
-    @intrinsic("simd.U64x2.replace")
-    @no_alloc
     replace(lane: int, value: uint64) -> U64x2 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U64x2{_lanes: lanes}
     }
-
-    @intrinsic("simd.U64x2.add")
-    @no_alloc
     add(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.sub")
-    @no_alloc
     sub(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] - other._lanes[0], this._lanes[1] - other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.mul")
-    @no_alloc
     mul(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] * other._lanes[0], this._lanes[1] * other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.bitAnd")
-    @no_alloc
     bitAnd(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] & other._lanes[0], this._lanes[1] & other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.bitOr")
-    @no_alloc
     bitOr(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] | other._lanes[0], this._lanes[1] | other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.bitXor")
-    @no_alloc
     bitXor(other: U64x2) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] ^ other._lanes[0], this._lanes[1] ^ other._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.bitNot")
-    @no_alloc
     bitNot() -> U64x2 {
         return U64x2{_lanes: [~this._lanes[0], ~this._lanes[1]]}
     }
-
-    @intrinsic("simd.U64x2.shiftLeft")
-    @no_alloc
     shiftLeft(bits: int) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] << bits, this._lanes[1] << bits]}
     }
-
-    @intrinsic("simd.U64x2.shiftRight")
-    @no_alloc
     shiftRight(bits: int) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] >> bits, this._lanes[1] >> bits]}
     }
-
-    @intrinsic("simd.U64x2.swapLanes")
-    @no_alloc
     swapLanes() -> U64x2 {
         return U64x2{_lanes: [this._lanes[1], this._lanes[0]]}
     }
-
-    @intrinsic("simd.U64x2.shuffle")
-    @no_alloc
     shuffle(i0: int, i1: int) -> U64x2 {
         return U64x2{_lanes: [this._lanes[i0], this._lanes[i1]]}
     }
-
-    @intrinsic("simd.U64x2.reduceAdd")
-    @no_alloc
     reduceAdd() -> uint64 {
         return this._lanes[0] + this._lanes[1]
     }
-
-    @intrinsic("simd.U64x2.reinterpretU32")
-    @no_alloc
     reinterpretU32() -> U32x4 {
         return U32x4.fromLanes([(this._lanes[0] & 4294967295) as uint32, (this._lanes[0] >> 32) as uint32, (this._lanes[1] & 4294967295) as uint32, (this._lanes[1] >> 32) as uint32])
     }
-
-    @intrinsic("simd.U64x2.reinterpretU8")
-    @no_alloc
     reinterpretU8() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0
@@ -504,9 +336,6 @@ export struct U64x2 align(16) {
 // target plan so dead wide branches disappear before machine code emission.
 export struct Capabilities {
     private _marker: byte
-
-    @intrinsic("simd.Capabilities.nativeBytes")
-    @no_alloc
     static nativeBytes() -> int {
         return 16
     }
@@ -514,14 +343,9 @@ export struct Capabilities {
 
 export struct U8x32 align(32) {
     private _lanes: [byte; 32]
-
-    @no_alloc
     static fromLanes(lanes: [byte; 32]) -> U8x32 {
         return U8x32{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U8x32.load")
-    @no_alloc
     static load(data: Slice<byte>, offset: int = 0) -> U8x32 {
         var lanes: [byte; 32] = [0; 32]
         var i = 0
@@ -531,9 +355,6 @@ export struct U8x32 align(32) {
         }
         return U8x32{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x32.store")
-    @no_alloc
     store(output: ref Slice<byte>, offset: int = 0) {
         var i = 0
         while (i < 32) {
@@ -541,9 +362,6 @@ export struct U8x32 align(32) {
             i += 1
         }
     }
-
-    @intrinsic("simd.U8x32.bitXor")
-    @no_alloc
     bitXor(other: U8x32) -> U8x32 {
         var lanes: [byte; 32] = [0; 32]
         var i = 0
@@ -553,9 +371,6 @@ export struct U8x32 align(32) {
         }
         return U8x32{_lanes: lanes}
     }
-
-    @intrinsic("simd.U8x32.reinterpretU32")
-    @no_alloc
     reinterpretU32() -> U32x8 {
         var lanes: [uint32; 8] = [0; 8]
         var i = 0
@@ -566,9 +381,6 @@ export struct U8x32 align(32) {
         }
         return U32x8.fromLanes(lanes)
     }
-
-    @intrinsic("simd.U8x32.reinterpretU64")
-    @no_alloc
     reinterpretU64() -> U64x4 {
         var lanes: [uint64; 4] = [0; 4]
         var i = 0
@@ -583,20 +395,12 @@ export struct U8x32 align(32) {
 
 export struct U32x8 align(32) {
     private _lanes: [uint32; 8]
-
-    @no_alloc
     static fromLanes(lanes: [uint32; 8]) -> U32x8 {
         return U32x8{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U32x8.swapAdjacent")
-    @no_alloc
     swapAdjacent() -> U32x8 {
         return U32x8{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2], this._lanes[5], this._lanes[4], this._lanes[7], this._lanes[6]]}
     }
-
-    @intrinsic("simd.U32x8.widenMulEven")
-    @no_alloc
     widenMulEven(other: U32x8) -> U64x4 {
         return U64x4.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[4] as uint64) * (other._lanes[4] as uint64), (this._lanes[6] as uint64) * (other._lanes[6] as uint64)])
     }
@@ -604,41 +408,24 @@ export struct U32x8 align(32) {
 
 export struct U64x4 align(32) {
     private _lanes: [uint64; 4]
-
-    @no_alloc
     static fromLanes(lanes: [uint64; 4]) -> U64x4 {
         return U64x4{_lanes: copy(lanes)}
     }
-
-    @intrinsic("simd.U64x4.load")
-    @no_alloc
     static load(data: Slice<uint64>, offset: int = 0) -> U64x4 {
         return U64x4{_lanes: [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]}
     }
-
-    @intrinsic("simd.U64x4.store")
-    @no_alloc
     store(output: ref Slice<uint64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
         output[offset + 2] = this._lanes[2]
         output[offset + 3] = this._lanes[3]
     }
-
-    @intrinsic("simd.U64x4.add")
-    @no_alloc
     add(other: U64x4) -> U64x4 {
         return U64x4{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1], this._lanes[2] + other._lanes[2], this._lanes[3] + other._lanes[3]]}
     }
-
-    @intrinsic("simd.U64x4.reduceAdd")
-    @no_alloc
     reduceAdd() -> uint64 {
         return this._lanes[0] + this._lanes[1] + this._lanes[2] + this._lanes[3]
     }
-
-    @intrinsic("simd.U64x4.swapAdjacent")
-    @no_alloc
     swapAdjacent() -> U64x4 {
         return U64x4{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2]]}
     }

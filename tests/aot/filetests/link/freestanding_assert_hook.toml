@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding_assert_hook"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_assert_hook.xr"
+
+[[export.c]]
+xray = "xray_assert_hook_shape"
+symbol = "xray_assert_hook_shape"

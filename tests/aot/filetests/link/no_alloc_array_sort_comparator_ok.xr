@@ -2,7 +2,6 @@ fn xray_no_alloc_array_sort_desc(a: int, b: int) -> int {
     return b - a
 }
 
-@no_alloc
 fn xray_no_alloc_array_sort_comparator_ok(values: ref Array<int>) -> int {
     values.sort(xray_no_alloc_array_sort_desc)
     return values[0]

@@ -1,8 +1,7 @@
-@no_alloc
-fn xray_no_alloc_array_push_reject(xs: Array<int>, value: int) -> int {
+fn xray_no_alloc_array_push_reject(xs: ref Array<int>, value: int) -> int {
     xs.push(value)
     return len(xs)
 }
 
 var xs = Array<int>(0, 0)
-print(xray_no_alloc_array_push_reject(xs, 7))
+print(xray_no_alloc_array_push_reject(ref xs, 7))

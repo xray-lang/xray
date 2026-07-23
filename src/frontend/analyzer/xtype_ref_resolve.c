@@ -1255,7 +1255,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                                            : xr_type_new_unit(NULL);
             XrType *result =
                 xr_type_new_function(X, nparam > 0 ? params : NULL, nparam, ret, false);
-            if (result && t->no_throw)
+            if (result && t->requires_nothrow)
                 xr_type_function_set_throw_effect(result, XR_FN_EFFECT_NO_THROW);
             if (result && t->function_param_modes) {
                 for (int i = 0; i < nparam; i++)
@@ -1842,7 +1842,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 : xr_type_new_unit(NULL);
         XrType *result =
             xr_type_new_function(analyzer->isolate, nparam > 0 ? params : NULL, nparam, ret, false);
-        if (result && tref->no_throw)
+        if (result && tref->requires_nothrow)
             xr_type_function_set_throw_effect(result, XR_FN_EFFECT_NO_THROW);
         if (result && tref->function_param_modes) {
             for (int i = 0; i < nparam; i++)
@@ -1930,8 +1930,8 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
 XrType *xr_tref_resolve_parameter_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     XrType *type = xr_tref_resolve_in_analyzer(analyzer, tref);
     if (type && tref && tref->kind == XR_TREF_FUNCTION && type->kind == XR_KIND_FUNCTION) {
-        xr_type_function_set_throw_effect(type, tref->no_throw ? XR_FN_EFFECT_NO_THROW
-                                                               : XR_FN_EFFECT_POLY);
+        xr_type_function_set_throw_effect(type, tref->requires_nothrow ? XR_FN_EFFECT_NO_THROW
+                                                                       : XR_FN_EFFECT_POLY);
     }
     return type;
 }

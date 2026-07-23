@@ -74,17 +74,12 @@ struct MultibootHeader {
     checksum: uint32
 }
 
-@section("__DATA,.xray_multiboot")
-@used
 const MULTIBOOT = comptime MultibootHeader{
     magic: MULTIBOOT_MAGIC,
     flags: MULTIBOOT_FLAGS,
     checksum: 0 - (MULTIBOOT_MAGIC + MULTIBOOT_FLAGS),
 }
 
-@section("__TEXT,.xray_boot")
-@used
-@c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
     const vga = 0xb8000
     mem.volatileStore(mem.mutPtr<byte>(vga), int('X'.toUInt32()), 1)
@@ -95,6 +90,25 @@ fn kernel_entry() -> int32 {
     return MULTIBOOT.magic as int32
 }
 XR
+
+cat >"$WORK/xray.toml" <<'TOML'
+[package]
+name = "freestanding-qemu-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_qemu_io.xr"
+
+[[link.symbol]]
+xray = "MULTIBOOT"
+section = "__DATA,.xray_multiboot"
+used = true
+
+[[freestanding.entry]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+kind = "start"
+section = "__TEXT,.xray_boot"
+TOML
 
 LD="$WORK/freestanding_qemu.ld"
 cat >"$LD" <<'LD'
@@ -115,9 +129,9 @@ LD
 
 GEN_C="$WORK/freestanding_qemu.c"
 BUILD_LOG="$WORK/build.log"
-if ! "$XRAY" build --native --profile freestanding --target x86_64-linux-musl \
+if ! (cd "$WORK" && "$XRAY" build --native --profile freestanding --target x86_64-linux-musl \
         --toolchain zig --c-only --rebuild --cache-dir "$WORK/build-cache" \
-        -o "$GEN_C" "$SRC" >"$BUILD_LOG" 2>&1; then
+        -o "$GEN_C" "$SRC") >"$BUILD_LOG" 2>&1; then
     sed 's/^/  /' "$BUILD_LOG" >&2
     fail "freestanding QEMU C generation failed"
 fi

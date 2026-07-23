@@ -1,0 +1,197 @@
+[package]
+name = "backend-diff-ffi"
+version = "1.0.0"
+license = "MIT"
+
+[native]
+name = "backend-diff-platform-ffi"
+version = "1"
+license = "platform"
+source = "host C library and math library"
+audit_mode = "exploratory"
+vm = "verified-dynamic"
+
+[[native.unit]]
+name = "libc"
+kind = "platform"
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve process C symbols used by differential FFI fixtures"
+
+[[native.unit]]
+name = "libm"
+kind = "platform"
+system_links = ["m"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable host math symbols"
+
+[[native.symbol]]
+xray = "malloc"
+native = "malloc"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "free"
+native = "free"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "memcpy"
+native = "memcpy"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "memcmp"
+native = "memcmp"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "memchr"
+native = "memchr"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "strlen"
+native = "strlen"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "srand"
+native = "srand"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "rand"
+native = "rand"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "bsearch"
+native = "bsearch"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "abs"
+native = "abs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "labs"
+native = "labs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "llabs"
+native = "llabs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "task208LabsA"
+native = "labs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "task208LabsB"
+native = "labs"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "task208NeverLinked"
+native = "task208NeverLinked"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "xrayffi_unused_float"
+native = "xrayffi_unused_float"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "xrayffi_missing_from_used_math"
+native = "xrayffi_missing_from_used_math"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "xrayffi_unused_side_dylib"
+native = "xrayffi_unused_side_dylib"
+kind = "function"
+calling_convention = "c"
+unit = "libc"
+
+[[native.symbol]]
+xray = "sqrt"
+native = "sqrt"
+kind = "function"
+calling_convention = "c"
+unit = "libm"
+
+[[native.symbol]]
+xray = "pow"
+native = "pow"
+kind = "function"
+calling_convention = "c"
+unit = "libm"
+
+[[native.symbol]]
+xray = "cos"
+native = "cos"
+kind = "function"
+calling_convention = "c"
+unit = "libm"
+
+[[native.symbol]]
+xray = "sinf"
+native = "sinf"
+kind = "function"
+calling_convention = "c"
+unit = "libm"
+
+[[native.symbol]]
+xray = "fminf"
+native = "fminf"
+kind = "function"
+calling_convention = "c"
+unit = "libm"
+
+[[native.symbol]]
+xray = "fmax"
+native = "fmax"
+kind = "function"
+calling_convention = "c"
+unit = "libm"

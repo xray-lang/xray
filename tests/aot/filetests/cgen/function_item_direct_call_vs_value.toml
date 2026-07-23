@@ -1,0 +1,13 @@
+[package]
+name = "filetest-function-item-direct-call-vs-value"
+version = "1.0.0"
+license = "MIT"
+main = "function_item_direct_call_vs_value.xr"
+
+[[export.c]]
+xray = "xray_item_call"
+symbol = "xray_item_call"
+
+[[export.c]]
+xray = "xray_value_call"
+symbol = "xray_value_call"

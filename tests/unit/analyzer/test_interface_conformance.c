@@ -121,9 +121,8 @@ static void test_class_implements_all_methods_no_error(void) {
     ASSERT(n == 0);
 }
 
-static void test_no_throw_interface_accepts_pure_implementation(void) {
+static void test_interface_accepts_pure_implementation(void) {
     const char *src = "interface PureActionOk {\n"
-                      "    @no_throw\n"
                       "    run(value: int) -> int\n"
                       "}\n"
                       "class PureActionImpl implements PureActionOk {\n"
@@ -319,7 +318,7 @@ int main(void) {
 
     printf("User-defined interface conformance:\n");
     RUN_TEST(class_implements_all_methods_no_error);
-    RUN_TEST(no_throw_interface_accepts_pure_implementation);
+    RUN_TEST(interface_accepts_pure_implementation);
     RUN_TEST(class_missing_method_reports_error);
     RUN_TEST(class_missing_property_reports_error);
     RUN_TEST(class_property_as_getter_accepted);

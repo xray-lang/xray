@@ -1,4 +1,3 @@
-@c_export("xray_print_score")
 fn xray_print_score(n: int) -> int {
     print("score", n)
     return n + 1

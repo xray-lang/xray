@@ -5,12 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xanalyzer_allocation.c - Allocation effect inference and @no_alloc validation
+ * xanalyzer_allocation.c - Canonical allocation-effect inference
  */
 
 #include "xanalyzer_allocation.h"
 #include "xa_alloc_effect.h"
-#include "../parser/xa_assertion_attr.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
 #include "xanalyzer_ast_visitor.h"
@@ -126,10 +125,6 @@ static const char *alloc_function_name(AstNode *node, XaSymbol *symbol) {
     if (node->type == AST_METHOD_DECL && node->as.method_decl.name)
         return node->as.method_decl.name;
     return "?";
-}
-
-static bool alloc_function_has_contract(AstNode *node) {
-    return xa_decl_has_attribute(node, ATTR_NO_ALLOC);
 }
 
 static XaAllocFunctionRow *alloc_row_for_symbol(XaAllocPass *pass, XaSymbol *symbol) {
@@ -970,80 +965,8 @@ static void alloc_publish_summaries(XaAllocPass *pass) {
         row->symbol->links.alloc_reason_bits = row->result.reason_bits;
         row->symbol->links.alloc_fingerprint = row->result.stable_fingerprint;
         row->symbol->links.alloc_effect_complete = true;
-        row->symbol->links.has_no_alloc_contract = alloc_function_has_contract(row->node);
         alloc_publish_canonical_effect(pass, row);
     }
-}
-
-static const char *alloc_unknown_reason_text(XaAllocReasonSet reasons) {
-    if (reasons & XA_ALLOC_REASON_OPEN_DISPATCH)
-        return "open virtual dispatch target is not closed";
-    if (reasons & XA_ALLOC_REASON_NATIVE_CONTRACT_MISSING)
-        return "native or extern callee has no allocation contract";
-    if (reasons & XA_ALLOC_REASON_DYNAMIC_CALL)
-        return "indirect callback target is unknown";
-    if (reasons & XA_ALLOC_REASON_UNRESOLVED_CALLEE)
-        return "callee allocation effect is unresolved";
-    if (reasons & XA_ALLOC_REASON_INVALID_PROGRAM)
-        return "the function contains prior semantic errors";
-    return "allocation effect is incomplete";
-}
-
-static void alloc_validate_contract(XaAllocPass *pass, XaAllocFunctionRow *row) {
-    if (!pass || !row || !alloc_function_has_contract(row->node) ||
-        row->result.state == XA_ALLOC_PROVEN_NONE)
-        return;
-    const char *name = alloc_function_name(row->node, row->symbol);
-    char message[768];
-    if (row->result.state == XA_ALLOC_MAY) {
-        if ((row->result.reason_bits & (XA_ALLOC_REASON_CALLEE | XA_ALLOC_REASON_CALLBACK)) != 0) {
-            const char *callee = row->result.callee_name ? row->result.callee_name : "?";
-            const XaAllocationSummary *callee_summary = NULL;
-            const char *callee_file = NULL;
-            for (int i = 0; i < row->edge_count; i++) {
-                XaAllocEdge *edge = &row->edges[i];
-                if (!edge->callee || edge->callee->id != row->result.first_callee_symbol_id)
-                    continue;
-                XaAllocFunctionRow *callee_row = alloc_row_for_symbol(pass, edge->callee);
-                if (callee_row)
-                    callee_summary = &callee_row->result;
-                else if (edge->imported_effect_id != XA_ALLOC_EFFECT_NONE)
-                    callee_summary = xa_allocation_db_get(pass->analyzer->allocation_db,
-                                                          edge->imported_effect_id);
-                callee_file = edge->callee->links.file_path;
-                break;
-            }
-            if (callee_summary && callee_summary->state == XA_ALLOC_MAY) {
-                snprintf(message, sizeof(message),
-                         "@no_alloc contract is not satisfied for '%s': allocates via call '%s' "
-                         "at line %u\n  '%s' allocates via %s '%s' at %s:%u",
-                         name, callee, row->result.line, callee,
-                         callee_summary->cause_kind ? callee_summary->cause_kind : "operation",
-                         callee_summary->cause_detail ? callee_summary->cause_detail : "?",
-                         callee_file ? callee_file : "<unknown>", callee_summary->line);
-            } else {
-                snprintf(message, sizeof(message),
-                         "@no_alloc contract is not satisfied for '%s': allocates via call '%s' "
-                         "at line %u",
-                         name, callee, row->result.line);
-            }
-        } else {
-            snprintf(message, sizeof(message),
-                     "@no_alloc contract is not satisfied for '%s': allocates via %s '%s' at "
-                     "line %u",
-                     name, row->result.cause_kind ? row->result.cause_kind : "operation",
-                     row->result.cause_detail ? row->result.cause_detail : "?", row->result.line);
-        }
-    } else {
-        snprintf(message, sizeof(message),
-                 "@no_alloc contract cannot be proven for '%s': %s at line %u", name,
-                 alloc_unknown_reason_text(row->result.reason_bits), row->result.line);
-    }
-    XrLocation location = {.file = row->symbol->links.file_path,
-                           .line = row->result.line ? row->result.line : (uint32_t) row->node->line,
-                           .column = row->result.column};
-    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
-                               &location);
 }
 
 void xa_infer_allocation_effects(XaAnalyzer *analyzer, AstNode *ast) {
@@ -1056,8 +979,6 @@ void xa_infer_allocation_effects(XaAnalyzer *analyzer, AstNode *ast) {
     for (int i = 0; i < pass.row_count; i++)
         alloc_scan_function(&pass, &pass.rows[i]);
     alloc_publish_summaries(&pass);
-    for (int i = 0; i < pass.row_count; i++)
-        alloc_validate_contract(&pass, &pass.rows[i]);
     for (int i = 0; i < pass.row_count; i++)
         xr_free(pass.rows[i].edges);
     xr_free(pass.rows);

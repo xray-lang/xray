@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_stringbuilder_constructor_reject() -> int {
     var sb = StringBuilder()
     return len(sb)

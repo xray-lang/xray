@@ -182,6 +182,12 @@ typedef struct XrNativeLayoutAssertion {
     bool assert_size;
     bool assert_align;
     bool assert_fields;
+    bool resolved;
+    uint32_t expected_size;
+    uint32_t expected_align;
+    char **field_names;
+    uint32_t *field_offsets;
+    uint32_t field_count;
 } XrNativeLayoutAssertion;
 
 typedef struct XrNativeCapability {
@@ -202,6 +208,35 @@ typedef struct XrNativeTargetPlan {
     XrNativeVmPolicy vm_policy;
 } XrNativeTargetPlan;
 
+typedef struct XrCExportPlan {
+    char *xray_name;
+    char *symbol;
+    char *visibility;
+    bool header;
+} XrCExportPlan;
+
+typedef struct XrLinkSymbolPlan {
+    char *xray_name;
+    char *section;
+    bool used;
+    bool weak;
+} XrLinkSymbolPlan;
+
+typedef enum XrFreestandingEntryKind {
+    XR_FREESTANDING_ENTRY_START = 1,
+    XR_FREESTANDING_ENTRY_INTERRUPT,
+    XR_FREESTANDING_ENTRY_NAKED_STUB,
+} XrFreestandingEntryKind;
+
+typedef struct XrFreestandingEntryPlan {
+    char *xray_name;
+    char *symbol;
+    XrFreestandingEntryKind kind;
+    char *abi;
+    char *section;
+    char *stub;
+} XrFreestandingEntryPlan;
+
 typedef struct XrNativePackagePlan {
     char *root;
     char *name;
@@ -220,6 +255,12 @@ typedef struct XrNativePackagePlan {
     uint32_t capability_count;
     XrNativeTargetPlan *targets;
     uint32_t target_count;
+    XrCExportPlan *exports;
+    uint32_t export_count;
+    XrLinkSymbolPlan *link_symbols;
+    uint32_t link_symbol_count;
+    XrFreestandingEntryPlan *entries;
+    uint32_t entry_count;
     uint64_t fingerprint;
     bool valid;
     char *error;
@@ -237,7 +278,16 @@ XR_FUNC const XrNativeUnit *xr_native_package_find_unit(const XrNativePackagePla
  * final component (symbol).  Ambiguous short names fail closed. */
 XR_FUNC const XrNativeSymbol *xr_native_package_find_symbol(const XrNativePackagePlan *plan,
                                                             const char *xray_name);
+XR_FUNC const XrCExportPlan *xr_native_package_find_export(const XrNativePackagePlan *plan,
+                                                           const char *xray_name);
+XR_FUNC const XrLinkSymbolPlan *xr_native_package_find_link_symbol(const XrNativePackagePlan *plan,
+                                                                   const char *xray_name);
+XR_FUNC const XrFreestandingEntryPlan *xr_native_package_find_entry(const XrNativePackagePlan *plan,
+                                                                    const char *xray_name);
 XR_FUNC const char *xr_native_symbol_library(const XrNativeSymbol *symbol);
+struct XrAggregateLayout;
+XR_FUNC bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,
+                                              const struct XrAggregateLayout *layout);
 XR_FUNC bool xr_native_package_validate_symbol_arity(const XrNativePackagePlan *plan,
                                                      const char *xray_name, uint32_t arity,
                                                      char *errbuf, size_t errbuf_len);

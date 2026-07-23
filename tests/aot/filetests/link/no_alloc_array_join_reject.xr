@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_array_join_reject(xs: Array<int>) -> string {
     return xs.join(",")
 }

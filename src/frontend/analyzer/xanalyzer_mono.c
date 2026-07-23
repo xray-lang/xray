@@ -882,7 +882,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->method_count = src->method_count;
             dst->methods = clone_node_array(src->methods, src->method_count, map, mc, clone_ctx);
             dst->explicit_final = src->explicit_final;
-            dst->is_native = src->is_native;
             dst->is_packed = src->is_packed;
             dst->explicit_align = src->explicit_align;
             dst->attributes = src->attributes;
@@ -1371,9 +1370,9 @@ static bool mono_call_is_import_member_generic(const CallExprNode *call,
 }
 
 /* Compute the single aggregate effect argument for a generic HOF call.  Only
- * unqualified function parameters are effect-polymorphic: an explicit
- * `@no_throw` parameter is a fixed constraint and does not create another
- * body dimension. Unknown actuals choose MAY_THROW (fail closed). */
+ * unqualified function parameters are effect-polymorphic. A compiler-inferred
+ * fixed constraint does not create another body dimension. Unknown actuals
+ * choose MAY_THROW (fail closed). */
 static XaMonoThrowEffect mono_call_throw_effect(const XaGenericDecl *decl, const CallExprNode *call,
                                                 const XaMonoCollector *collector) {
     if (!decl || !decl->node || decl->node->type != AST_FUNCTION_DECL || !call)
@@ -1385,7 +1384,7 @@ static XaMonoThrowEffect mono_call_throw_effect(const XaGenericDecl *decl, const
     for (int i = 0; i < fn->param_count; i++) {
         const XrParamNode *param = fn->params ? fn->params[i] : NULL;
         const XrTypeRef *type = param ? param->type : NULL;
-        if (!type || type->kind != XR_TREF_FUNCTION || type->no_throw)
+        if (!type || type->kind != XR_TREF_FUNCTION || type->requires_nothrow)
             continue;
         has_poly_callback = true;
         if (i >= limit || !collector || !collector->analyzer) {
@@ -2092,7 +2091,7 @@ static void qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *ori
         XrParamNode *dst_param = dst->params ? dst->params[i] : NULL;
         const XrParamNode *src_param = src->params ? src->params[i] : NULL;
         if (!dst_param || !dst_param->type || !src_param || !src_param->type ||
-            src_param->type->kind != XR_TREF_FUNCTION || src_param->type->no_throw)
+            src_param->type->kind != XR_TREF_FUNCTION || src_param->type->requires_nothrow)
             continue;
         /* Type refs are otherwise immutable and may be shared with the origin.
          * Copy just this node before adding the inferred specialization bit. */
@@ -2100,7 +2099,7 @@ static void qualify_mono_hof_callback_params(AstNode *cloned, const AstNode *ori
         if (!qualified)
             continue;
         *qualified = *dst_param->type;
-        qualified->no_throw = true;
+        qualified->requires_nothrow = true;
         dst_param->type = qualified;
     }
 }

@@ -1,4 +1,3 @@
-@c_export("probe_endian_ordinal")
 fn probe_endian_ordinal(flag: int) -> int {
     var e = Endian.LE
     if (flag != 0) {
@@ -7,7 +6,6 @@ fn probe_endian_ordinal(flag: int) -> int {
     return e.ordinal
 }
 
-@c_export("probe_ordering_ordinal")
 fn probe_ordering_ordinal(flag: int) -> int {
     var o = Ordering.Relaxed
     if (flag != 0) {

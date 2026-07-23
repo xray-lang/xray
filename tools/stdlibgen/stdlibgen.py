@@ -93,6 +93,7 @@ class StdlibEntry:
     visibility: str
     effect: str
     allocation: str
+    return_ownership: str
     caps: tuple[str, ...]
 
     @property
@@ -458,6 +459,12 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported allocation contract for "
                     f"{current_module}.{current_name}: {allocation}"
                 )
+            return_ownership = str(props.get("return_ownership", ""))
+            if return_ownership not in {"", "fresh"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported return ownership contract for "
+                    f"{current_module}.{current_name}: {return_ownership}"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -481,6 +488,7 @@ def parse_def_metadata(
                     visibility=visibility,
                     effect=str(props.get("effect", "")),
                     allocation=allocation,
+                    return_ownership=return_ownership,
                     caps=caps,
                 )
             )

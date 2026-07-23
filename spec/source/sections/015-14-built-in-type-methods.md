@@ -254,7 +254,7 @@ print(len(empty))           // 0
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径；unique mutable 结果由编译器自动执行单次 take，不使用 `await (move task)`。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -531,7 +531,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; a unique mutable result is taken once automatically, with no `await (move task)` form. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 

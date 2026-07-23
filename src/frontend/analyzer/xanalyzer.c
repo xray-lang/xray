@@ -1155,6 +1155,22 @@ bool xa_typecheck_assignable(XrType *target, XrType *source) {
     return typecheck_source_precise_for_target(target, source);
 }
 
+bool xa_call_arg_type_assignable(XrType *target, XrType *source, XrParamMode mode) {
+    if (!target || !source)
+        return false;
+    if (xa_typecheck_assignable(target, source))
+        return true;
+    if (mode != XR_PARAM_READ || !source->is_const)
+        return false;
+
+    /* READ creates no mutable authority in the callee.  Strip only the
+     * expression's top-level readonly view for structural comparison; nested
+     * const qualifiers remain part of the type and are checked normally. */
+    XrType readable_source = *source;
+    readable_source.is_const = false;
+    return xa_typecheck_assignable(target, &readable_source);
+}
+
 bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, XrType *source,
                                   XrLocation *loc) {
     if (!analyzer || !target || !source)
@@ -1222,7 +1238,8 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
         if (param_slot < 0 || param_slot >= expected)
             continue;
         XrType *param_type = xr_type_function_param_type(func_type, param_slot);
-        if (!xa_typecheck_assignable(param_type, arg_types[i])) {
+        XrParamMode mode = xr_type_function_param_mode(func_type, param_slot);
+        if (!xa_call_arg_type_assignable(param_type, arg_types[i], mode)) {
             ok = false;
             char message[256];
             snprintf(message, sizeof(message),

@@ -1,6 +1,6 @@
 import sys
 
-const waitThread = fn(t: Thread<int>) -> int {
+const waitThread = fn(t: move Thread<int>) -> int {
     var v = t.join()
     print("top-fn-value joined " + string(v))
     return v
@@ -10,7 +10,7 @@ fn run() {
     var t = sys.Thread.spawn(fn() -> int {
         return 42
     })
-    print(waitThread(t))
+    print(waitThread(move t))
 }
 
 run()

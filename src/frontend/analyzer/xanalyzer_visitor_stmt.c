@@ -27,113 +27,9 @@ static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
 }
 
-static XrAttribute *xa_var_attr(const VarDeclNode *var, AttributeKind kind) {
-    if (!var || !var->attributes)
-        return NULL;
-    for (int i = 0; i < var->attr_count; i++) {
-        if (var->attributes[i] && var->attributes[i]->kind == kind)
-            return var->attributes[i];
-    }
-    return NULL;
-}
-
-static bool xa_var_has_static_data_attr(const VarDeclNode *var) {
-    return xa_var_attr(var, ATTR_SECTION) || xa_var_attr(var, ATTR_WEAK) ||
-           xa_var_attr(var, ATTR_USED);
-}
-
-static bool xa_type_supports_mutable_static_data_object(const XrType *type) {
-    if (!type)
-        return false;
-    if (!type->is_nullable) {
-        switch (type->kind) {
-            case XR_KIND_INT:
-                return type->native_width == XR_NATIVE_I64;
-            case XR_KIND_FLOAT:
-                return type->native_width != XR_NATIVE_F32;
-            case XR_KIND_BOOL:
-            case XR_KIND_RUNE:
-                return true;
-            default:
-                break;
-        }
-    }
-    switch (type->kind) {
-        case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return xa_type_has_fixed_layout_data_object(type);
-        default:
-            return false;
-    }
-}
-
 static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
                                                                VarDeclNode *var,
                                                                XrType *declared_type);
-
-static void xa_validate_static_data_attrs(XaInferContext *ctx, AstNode *node, VarDeclNode *var,
-                                          XaSymbolLinks *links, XrType *var_type) {
-    if (!ctx || !node || !var || !xa_var_has_static_data_attr(var))
-        return;
-
-    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used static data is currently only supported in freestanding profile",
-            &loc);
-        return;
-    }
-    XrAttribute *section = xa_var_attr(var, ATTR_SECTION);
-    if (section && (!section->str_arg || section->str_arg[0] == '\0')) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section requires a non-empty section name", &loc);
-        return;
-    }
-    if (!xa_is_module_level_scope(ctx->analyzer) ||
-        (node->type != AST_CONST_DECL && node->type != AST_VAR_DECL)) {
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "@section/@weak/@used can only annotate a module-level const "
-                                   "data declaration or mutable var static object",
-                                   &loc);
-        return;
-    }
-
-    if (node->type == AST_CONST_DECL) {
-        if (!links || !links->has_ct_value) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                       "@section/@weak/@used const data requires a compile-time "
-                                       "initializer",
-                                       &loc);
-            return;
-        }
-        if (!xa_type_supports_const_static_data_object(var_type)) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                "@section/@weak/@used const data currently requires a scalar, string, "
-                "fixed-array, tuple, struct, or union static object",
-                &loc);
-        }
-        return;
-    }
-
-    if (!var->initializer ||
-        !xa_freestanding_top_var_static_initializer_allowed(ctx, var, var_type)) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used mutable static data requires a compile-time "
-            "static initializer",
-            &loc);
-        return;
-    }
-    if (!xa_type_supports_mutable_static_data_object(var_type)) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-            "@section/@weak/@used mutable static data currently requires a scalar, "
-            "struct, or union static object",
-            &loc);
-    }
-}
 
 static bool xa_freestanding_top_const_aggregate_value_allowed(const XrCtValue *value,
                                                               bool allow_string_array_elements);
@@ -1556,6 +1452,22 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
                 return;
             xa_thread_lint_scan_helper_finalizer_call(states, expr, can_escape);
             CallExprNode *call = &expr->as.call_expr;
+            /* An explicit move argument transfers lifecycle responsibility out
+             * of the caller even when the callee is reached through a function
+             * value and has no name-based lint summary.  Local `var b = move a`
+             * is deliberately not treated this way: it remains an alias rename
+             * inside the same scope and must still be finalized. */
+            if (can_escape) {
+                for (int i = 0; i < call->arg_count; i++) {
+                    AstNode *arg = xa_thread_lint_unwrap_expr(call->arguments[i]);
+                    if (!arg || arg->type != AST_MOVE_EXPR)
+                        continue;
+                    XaThreadHandleLintState *state =
+                        xa_thread_lint_find_alias_source(states, arg->as.move_expr.expr);
+                    if (state)
+                        state->transferred = true;
+                }
+            }
             xa_thread_lint_scan_expr(states, call->callee, false, can_escape);
             xa_thread_lint_scan_expr_array(states, call->arguments, call->arg_count, false,
                                            can_escape);
@@ -7147,9 +7059,34 @@ static void xa_update_borrowed_alias_root(XaInferContext *ctx, XaSymbol *sym, As
 }
 
 static AstNode *xa_whole_binding_value(AstNode *value) {
-    while (value && (value->type == AST_GROUPING || value->type == AST_AS_EXPR))
-        value = value->type == AST_GROUPING ? value->as.grouping : value->as.as_expr.expr;
+    while (value && (value->type == AST_GROUPING || value->type == AST_AS_EXPR ||
+                     value->type == AST_FORCE_UNWRAP)) {
+        if (value->type == AST_GROUPING)
+            value = value->as.grouping;
+        else if (value->type == AST_AS_EXPR)
+            value = value->as.as_expr.expr;
+        else
+            value = value->as.unary.operand;
+    }
     return value;
+}
+
+static bool xa_call_is_compiler_fresh_factory(XaInferContext *ctx, AstNode *callee) {
+    callee = xa_whole_binding_value(callee);
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *member = &callee->as.member_access;
+    AstNode *object = xa_whole_binding_value(member->object);
+    if (!member->name || !object || object->type != AST_VARIABLE || !object->as.variable.name)
+        return false;
+    XaSymbol *module = xa_scope_lookup(ctx->analyzer->current_scope, object->as.variable.name);
+    if (!module || module->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, module);
+    const char *module_name = links && links->module_name ? links->module_name : NULL;
+    return module_name && module_name[0] != '.' && module_name[0] != '/' &&
+           xa_builtin_get_module_func_return_ownership(module_name, member->name) ==
+               XA_BUILTIN_RETURN_FRESH;
 }
 
 static XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value) {
@@ -7194,6 +7131,29 @@ static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
     if (!ctx || !value || value->type != AST_CALL_EXPR || !value->as.call_expr.callee)
         return false;
     AstNode *callee = xa_whole_binding_value(value->as.call_expr.callee);
+    if (callee && callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &callee->as.member_access;
+        AstNode *object = xa_whole_binding_value(member->object);
+        if (member->name && object && object->type == AST_VARIABLE && object->as.variable.name &&
+            strcmp(object->as.variable.name, "mem") == 0 &&
+            (strcmp(member->name, "alloc") == 0 || strcmp(member->name, "allocZeroed") == 0 ||
+             strcmp(member->name, "allocAligned") == 0))
+            return true;
+        if (xa_call_is_compiler_fresh_factory(ctx, callee))
+            return true;
+        /* Compiler-defined resource factories are fresh ownership roots too.
+         * They are not ordinary native calls with unknown provenance: the
+         * frontend and runtime jointly define the returned unique handle. */
+        if (member->name && strcmp(member->name, "spawn") == 0 && object &&
+            object->type == AST_MEMBER_ACCESS) {
+            MemberAccessNode *owner = &object->as.member_access;
+            AstNode *module = xa_whole_binding_value(owner->object);
+            if (owner->name && strcmp(owner->name, "Thread") == 0 && module &&
+                module->type == AST_VARIABLE && module->as.variable.name &&
+                strcmp(module->as.variable.name, "sys") == 0)
+                return true;
+        }
+    }
     if (!callee || callee->type != AST_VARIABLE)
         return false;
     const char *name = callee->as.variable.name;
@@ -8739,7 +8699,6 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    "comptime block local binding requires an initializer", &loc);
     }
-    xa_validate_static_data_attrs(ctx, node, var, links, var_type);
     links->assign_count = var->initializer ? 1 : 0;
 
     // Detect loop variable context

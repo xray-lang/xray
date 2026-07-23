@@ -103,12 +103,13 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
-**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参、初始化器与返回值（参见 §5.1.4 / §10.8）：
+**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参与初始化器（参见 §5.1.4 / §10.8）：
 
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `var dst = move src` / `const dst = move src` / `return move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner、const 能力或调用方。
+- `var dst = move src` / `const dst = move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner 或 const 能力。
+- 函数返回统一写 `return value`。返回边终结当前 continuation，编译器对 unique local 或 `move` 参数自动发布 owner-forward proof；`return move value` 不属于公开写法。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -118,7 +119,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 | Capture action | 适用值 | 边界行为 |
 |---|---|---|
-| inline value | 标量、不可变小值 | 直接复制位表示 |
+| inline value | 显式 go 实参中的标量、不可变小值 | 直接复制位表示 |
 | deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
 | move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
 | module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
@@ -126,6 +127,8 @@ print(len(big_buffer))    // 编译错误：move 后访问
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
 
 因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
+
+`go` 闭包还有一条更强、易记的表面规则：**不得捕获任何外层 `var`，无论闭包只读还是写入，也无论当前程序只启动一个还是多个协程。** 需要的数据必须作为 `go` 的显式实参传入，并在边界写清 `copy(...)`、`move` 或同步共享能力。多个协程共享可变状态只能通过 `Channel`、`Atomic`、`sync` 锁/句柄等受审计并发原语；直接捕获修改普通 `var` 是编译错误，`unsafe` 也不能放宽。
 
 ```xray
 var local = 0
@@ -288,12 +291,13 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // compile error: accessed after move
 ```
 
-**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments, initializers, and returns (see §5.1.4 / §10.8):
+**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments and initializers (see §5.1.4 / §10.8):
 
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `var dst = move src` / `const dst = move src` / `return move src`: transfer a verifier-proven unique local `var` root to a new owner, const capability, or caller.
+- `var dst = move src` / `const dst = move src`: transfer a verifier-proven unique local `var` root to a new owner or const capability.
+- Function returns are always written `return value`. The return edge terminates the current continuation, so the compiler automatically publishes owner-forward proof for a unique local or `move` parameter; `return move value` is not a public form.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -303,7 +307,7 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 
 | Capture action | Values | Boundary behavior |
 |---|---|---|
-| inline value | scalars and small immutable values | copy the bits directly |
+| inline value | scalars and small immutable values passed as explicit `go` arguments | copy the bits directly |
 | deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
 | move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
 | module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
@@ -311,6 +315,8 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
 
 Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
+
+`go` closures additionally follow one simple, stronger surface rule: **they may not capture any outer `var`, whether they only read it or mutate it, and whether the current program launches one coroutine or many.** Pass data as explicit `go` arguments and state `copy(...)`, `move`, or an audited synchronization capability at the boundary. Mutable state shared by multiple coroutines must flow through `Channel`, `Atomic`, or audited `sync` locks/handles. Directly capturing and modifying an ordinary `var` is a compile error, and `unsafe` does not relax this rule.
 
 ```xray
 var local = 0

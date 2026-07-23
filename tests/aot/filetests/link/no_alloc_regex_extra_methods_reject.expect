@@ -1,7 +1,7 @@
 status=fail
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_find_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_find_group_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_find_all_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_replace_reject'
-contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_split_reject'
+contains=contract 'xray_no_alloc_regex_find_reject' failed
+contains=contract 'xray_no_alloc_regex_find_group_reject' failed
+contains=contract 'xray_no_alloc_regex_find_all_reject' failed
+contains=contract 'xray_no_alloc_regex_replace_reject' failed
+contains=contract 'xray_no_alloc_regex_split_reject' failed
 not_contains=CRASH

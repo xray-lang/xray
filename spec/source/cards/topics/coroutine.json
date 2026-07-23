@@ -29,7 +29,7 @@
     },
     {
       "heading": "Common constraints",
-      "markdown": "`go { ... }` is a zero-argument block form and consumes the same provenance-based capture plan as other execution boundaries. Inline values, published const values, and audited synchronization handles may cross directly; pass execution-local graphs with explicit `copy(...)` / `move` arguments. `await all` is homogeneous: mixed `Task<int>` / `Task<string>` collections must be awaited individually or converted to a common result type."
+      "markdown": "`go { ... }` is a zero-argument block form. It may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with inline values, `copy(...)`, or `move`. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous."
     },
     {
       "heading": "Task handle",

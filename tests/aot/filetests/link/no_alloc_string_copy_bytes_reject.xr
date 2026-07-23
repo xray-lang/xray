@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_string_copy_bytes_reject(value: string) -> int {
     var bytes = value.copyBytes()
     return len(bytes)

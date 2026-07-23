@@ -23,7 +23,6 @@ fn regSetBits(base: int, offset: int, mask: int) -> int {
     return next
 }
 
-@c_export("xray_register_sample")
 fn xray_register_sample(base: int, value: int) -> int {
     var ctrl = MmioReg32{base: base, offset: 0}
     var status = MmioReg32{base: base, offset: 4}

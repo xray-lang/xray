@@ -1,4 +1,3 @@
-@c_export("xray_store_offset")
 fn storeOffset(p: MutPtr<uint8>, offset: int, value: uint8) -> uint8 {
     var target = p
     unsafe {

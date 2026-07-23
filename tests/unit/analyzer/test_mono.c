@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
+#include "../../../src/frontend/analyzer/xanalyzer_capability.h"
 #include "../../../src/frontend/parser/xtype_ref.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -72,6 +73,15 @@ TEST(mono_mangle_preserves_const_capability_identity) {
     ASSERT(strcmp(array_name, map_name) != 0);
     free(array_name);
     free(map_name);
+}
+
+TEST(monomorphized_stdlib_type_preserves_sealed_capabilities) {
+    const uint32_t expected = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
+    ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "Mutex"), expected);
+    ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "Mutex$i64"), expected);
+    ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "RwLock$str"), expected);
+    ASSERT_EQ(xa_stdlib_type_capability_flags("user_sync", "Mutex$i64"), XA_TYPE_CAP_NONE);
+    ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "MutexImpostor$i64"), XA_TYPE_CAP_NONE);
 }
 
 TEST(mono_mangle_null_name) {
@@ -304,6 +314,7 @@ int main(void) {
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
     RUN_TEST(mono_mangle_preserves_const_capability_identity);
+    RUN_TEST(monomorphized_stdlib_type_preserves_sealed_capabilities);
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);
 

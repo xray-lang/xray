@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_set_values_reject(values: Set<int>) -> int {
     return len(values.values())
 }

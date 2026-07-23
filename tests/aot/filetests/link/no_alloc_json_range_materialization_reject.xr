@@ -1,29 +1,23 @@
-@no_alloc
 fn xray_no_alloc_json_values_reject(value: Json) -> int {
     return len(value.values())
 }
 
-@no_alloc
 fn xray_no_alloc_json_entries_reject(value: Json) -> int {
     return len(value.entries())
 }
 
-@no_alloc
 fn xray_no_alloc_json_iterator_reject(value: Json) -> bool {
     return value.iterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_json_entries_iterator_reject(value: Json) -> bool {
     return value.entriesIterator().hasNext()
 }
 
-@no_alloc
 fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
     return value.toString()
 }
 
-@no_alloc
 fn xray_no_alloc_range_values_reject(value: Range) -> int {
     return len(value.values())
 }

@@ -1,4 +1,3 @@
-@c_export("xray_unchecked_div")
 fn uncheckedDiv(n: int, d: int) -> int {
     return n / d
 }

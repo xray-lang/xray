@@ -1,5 +1,4 @@
 extern "C" {
-    @interrupt("irq")
     fn xray_timer_irq()
 }
 

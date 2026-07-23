@@ -949,28 +949,30 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
            msg.head.keepAlive
 }
 
-fn _serveHttpConnection(conn: move NetConn) {
+fn _serveHttpConnection(conn: move NetConn?) {
+    if (conn == null) { return }
+    var live = conn!
     var raw = ""
     while (_serverRunning) {
         var headEnd = _responseHeadEnd(raw)
         if (headEnd >= 0) {
             var head = parseRequestHead(raw)
             if (head == null) {
-                _serverWriteAll(conn, _serverStatusResponse(400, "Bad Request", false))
-                net.close(conn)
+                _serverWriteAll(live, _serverStatusResponse(400, "Bad Request", false))
+                net.close(live)
                 return
             }
             if (head!.contentLength > HTTP_SERVER_MAX_BODY_BYTES) {
-                _serverWriteAll(conn, _serverStatusResponse(413, "Payload Too Large", false))
-                net.close(conn)
+                _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
+                net.close(live)
                 return
             }
 
             var msg = parseRequestText(raw, HTTP_SERVER_MAX_BODY_BYTES)
             if (msg != null) {
-                var keep = _serverDispatch(conn, msg!)
+                var keep = _serverDispatch(live, msg!)
                 if (!keep) {
-                    net.close(conn)
+                    net.close(live)
                     return
                 }
                 var rest = _byteSlice(raw, msg!.consumedBytes, len(raw.bytes()))
@@ -979,19 +981,25 @@ fn _serveHttpConnection(conn: move NetConn) {
             }
         }
         if (len(raw.bytes()) > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
-            _serverWriteAll(conn, _serverStatusResponse(413, "Payload Too Large", false))
-            net.close(conn)
+            _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
+            net.close(live)
             return
         }
 
-        var chunk = net.read(conn, HTTP_SERVER_READ_CHUNK_BYTES)
+        var chunk = net.read(live, HTTP_SERVER_READ_CHUNK_BYTES)
         if (chunk == null) {
-            net.close(conn)
+            net.close(live)
             return
         }
         raw = raw + chunk!
     }
-    net.close(conn)
+    net.close(live)
+}
+
+fn _spawnHttpConnection(conn: move NetConn?) -> bool {
+    if (conn == null) { return false }
+    go _serveHttpConnection(move conn)
+    return true
 }
 
 export fn listen(port: int) -> bool {
@@ -1003,12 +1011,7 @@ export fn listen(port: int) -> bool {
     _serverRunning = true
     while (_serverRunning) {
         net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-        var conn = net.accept(listener!)
-        if (conn != null) {
-            var accepted = conn!
-            go _serveHttpConnection(move accepted)
-            continue
-        }
+        if (_spawnHttpConnection(net.accept(listener!))) { continue }
         var err = net.lastError(listener!)
         if (!_serverRunning || err == "closed") { break }
         if (err == "timeout") { continue }

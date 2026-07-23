@@ -1529,9 +1529,8 @@ TEST(cgen_canonical_generic_function_body_is_executable) {
     xi_func_free(ir);
 }
 
-TEST(cgen_c_export_emits_public_c_abi_wrapper) {
-    const char *src = "@c_export(\"xr_add\")\n"
-                      "fn add(a: int32, b: int32) -> int32 {\n"
+TEST(cgen_plain_function_does_not_emit_public_c_abi_wrapper) {
+    const char *src = "fn add(a: int32, b: int32) -> int32 {\n"
                       "    return a + b\n"
                       "}\n"
                       "print(add(3, 4))\n";
@@ -1542,19 +1541,12 @@ TEST(cgen_c_export_emits_public_c_abi_wrapper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "@c_export scalar function should generate");
-    assert(contains(code, "\nint32_t xr_add(int32_t p0, int32_t p1);") &&
-           "@c_export should emit a public C ABI forward declaration");
-    assert(contains(code, "\nint32_t xr_add(int32_t p0, int32_t p1) {") &&
-           "@c_export should emit a public C ABI wrapper definition");
-    assert(!contains(code, "static int32_t xr_add(") &&
-           "@c_export wrapper must not be file-static");
-    assert(!contains(code, "xr_add(xrt_closure_t") &&
-           "@c_export wrapper must not expose Xray's hidden closure parameter");
-    assert(contains(code, "test_add_") && contains(code, "(NULL, (int64_t)p0, (int64_t)p1)") &&
-           "@c_export wrapper should call the internal Xray function with a NULL closure");
+    assert(!had_error && "plain scalar function should generate");
+    assert(!contains(code, "\nint32_t xr_add(int32_t p0, int32_t p1);") &&
+           "plain source functions must not create a public C ABI wrapper");
+    assert(contains(code, "test_add_") && "the internal Xray implementation must remain available");
 
-    printf("  Generated C export wrapper %zu bytes of C code\n", strlen(code));
+    printf("  Generated private function %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -8507,7 +8499,7 @@ int main(void) {
     run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
     run_cgen_canonical_generic_function_body_is_executable();
-    run_cgen_c_export_emits_public_c_abi_wrapper();
+    run_cgen_plain_function_does_not_emit_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();

@@ -5,82 +5,66 @@ import regex
 var xray_no_alloc_string_materialization_pattern = regex.compile("[a-z]+")
 var xray_no_alloc_string_materialization_translate: Map<string, string> = #{"a": "b"}
 
-@no_alloc
 fn xray_no_alloc_string_runes_reject(value: string) -> rune {
     return value.runes().nth(0)
 }
 
-@no_alloc
 fn xray_no_alloc_string_plus_reject(value: string) -> string {
     return value + "!"
 }
 
-@no_alloc
 fn xray_no_alloc_string_slice_reject(value: string) -> string {
     return value.slice(0, 1)
 }
 
-@no_alloc
 fn xray_no_alloc_string_lower_reject(value: string) -> string {
     return text.lower(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_upper_reject(value: string) -> string {
     return text.upper(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_trim_start_reject(value: string) -> string {
     return text.trimStart(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_trim_end_reject(value: string) -> string {
     return text.trimEnd(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_replace_reject(value: string) -> string {
     return value.replace("a", "b")
 }
 
-@no_alloc
 fn xray_no_alloc_string_replace_all_reject(value: string) -> string {
     return value.replaceAll("a", "b")
 }
 
-@no_alloc
 fn xray_no_alloc_string_split_reject(value: string) -> int {
     return len(value.split(","))
 }
 
-@no_alloc
 fn xray_no_alloc_string_repeat_reject(value: string) -> string {
     return value.repeat(2)
 }
 
-@no_alloc
 fn xray_no_alloc_string_reverse_reject(value: string) -> string {
     return text.reverseRunes(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_pad_start_reject(value: string) -> string {
     return text.padStart(value, 4, "0")
 }
 
-@no_alloc
 fn xray_no_alloc_string_pad_end_reject(value: string) -> string {
     return text.padEnd(value, 4, "0")
 }
 
-@no_alloc
 fn xray_no_alloc_string_match_reject(value: string) -> bool {
     return xray_no_alloc_string_materialization_pattern.test(value)
 }
 
-@no_alloc
 fn xray_no_alloc_string_translate_reject(value: string) -> string {
     return text.translate(value, xray_no_alloc_string_materialization_translate)
 }

@@ -16,7 +16,7 @@ class Token implements Hashable {
     }
 }
 
-fn passHashable<T: Hashable>(value: T) -> T {
+fn passHashable<T: Hashable>(value: move T) -> T {
     return value
 }
 
@@ -32,4 +32,4 @@ if (values.containsKey(token)) {
 var seen: Set<Token> = #[]
 seen.add(token)
 print(seen.contains(token))
-print(passHashable(token).value)
+print(passHashable(move token).value)

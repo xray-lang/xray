@@ -1,4 +1,4 @@
-extern "C" dylib("xrayffi_unused") {
+extern "C" {
     fn xrayffi_unused(x: int32) -> int32
 }
 

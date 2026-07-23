@@ -1,0 +1,13 @@
+[package]
+name = "filetest-mem-native-size-load-store-shape"
+version = "1.0.0"
+license = "MIT"
+main = "mem_native_size_load_store_shape.xr"
+
+[[export.c]]
+xray = "xray_native_size_fields"
+symbol = "xray_native_size_fields"
+
+[[export.c]]
+xray = "xray_native_size_unaligned"
+symbol = "xray_native_size_unaligned"

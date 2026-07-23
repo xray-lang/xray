@@ -1,0 +1,17 @@
+[package]
+name = "filetest-freestanding_interrupt_extern_global_asm"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_interrupt_extern_global_asm.xr"
+
+[[export.c]]
+xray = "call_timer_irq"
+symbol = "xray_call_timer_irq"
+
+[[freestanding.entry]]
+xray = "xray_timer_irq"
+symbol = "xray_timer_irq"
+kind = "interrupt"
+abi = "irq"
+section = "__TEXT,.xray_irq"
+stub = "freestanding_entry_stub.S"

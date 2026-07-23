@@ -1,4 +1,3 @@
-@no_alloc
 fn xray_no_alloc_json_keys_reject(value: Json) -> int {
     return len(value.keys())
 }

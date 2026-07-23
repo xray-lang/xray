@@ -1,0 +1,56 @@
+[package]
+name = "native-output-fixture"
+version = "1.0.0"
+license = "MIT"
+
+[native]
+name = "native-output-fixture"
+version = "1.0.0"
+license = "MIT"
+source = "in-tree compiler regression fixture"
+audit_mode = "shipping"
+vm = "unsupported"
+
+[[native.unit]]
+name = "native-output"
+kind = "c"
+sources = ["native_output.c"]
+source_hashes = ["1224b84a22e9b9c14478abc135536e04e15fc69b74d2380f841aee8e6105bc6d"]
+include_dirs = []
+defines = []
+system_links = []
+c_standard = "c11"
+optimization = "release"
+visibility = "hidden"
+warnings = "strict"
+output = "native_output.o"
+purpose = "complete output-parameter regression fixture"
+
+[[native.layout]]
+xray_type = "CValue"
+c_type = "CValue"
+header = "native_output.h"
+assert = { size = true, align = true, fields = true }
+
+[[native.symbol]]
+xray = "fill_i64"
+native = "xr_fixture_fill_i64"
+kind = "function"
+calling_convention = "c"
+unit = "native-output"
+
+[native.symbol.contract]
+params = [
+  { index = 0, access = "write", nullable = false, length_from = -1, escape = "noescape", ownership = "borrowed", output = "complete", descriptor_rebind = false, may_relocate = false, may_shorten = false, invalidates_views = false },
+]
+return = { ownership = "value", nullable = false, validity = "int32" }
+effects = ["foreign"]
+callbacks = []
+failure = "status_nonzero"
+allocation = "none"
+blocking = "never"
+suspend = "never"
+io = "none"
+sync = "none"
+panic = "never"
+error = "status"

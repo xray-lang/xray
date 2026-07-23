@@ -2,7 +2,6 @@ import regex
 
 var xray_no_alloc_digits = regex.compile("\\d+")
 
-@no_alloc
 fn xray_no_alloc_regex_find_text_reject(text: string) -> string? {
     return xray_no_alloc_digits.findText(text)
 }

@@ -1,0 +1,29 @@
+[package]
+name = "filetest-ffi_unused_dylib_pruned"
+version = "1.0.0"
+license = "MIT"
+main = "ffi_unused_dylib_pruned.xr"
+
+[native]
+name = "ffi-ffi_unused_dylib_pruned"
+version = "1"
+license = "test"
+source = "AOT FFI manifest fixture"
+audit_mode = "exploratory"
+vm = "unsupported"
+
+[[native.unit]]
+name = "library-0"
+kind = "platform"
+system_links = ["xrayffi_unused"]
+optimization = "none"
+visibility = "default"
+warnings = "system"
+purpose = "resolve reachable test platform symbols"
+
+[[native.symbol]]
+xray = "xrayffi_unused"
+native = "xrayffi_unused"
+kind = "function"
+calling_convention = "c"
+unit = "library-0"

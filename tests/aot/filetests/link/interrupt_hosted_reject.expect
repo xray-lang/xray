@@ -1,3 +1,3 @@
 status=fail
-contains=@interrupt is only supported in freestanding AOT profile
+contains=freestanding.entry is only supported by the freestanding AOT profile
 not_contains=CRASH

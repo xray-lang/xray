@@ -3082,6 +3082,19 @@ static bool stmt_freestanding_static_aggregate_is_erased(XiLower *l, AstNode *no
     return false;
 }
 
+static void stmt_write_decl_value(XiLower *l, int var_id, XiValue *init_val) {
+    xi_lower_braun_write(l, var_id, l->cur_block, init_val);
+    if (!l->is_program || l->shared_map[var_id] < 0)
+        return;
+    XiTopBinding binding = {
+        .slot = l->shared_map[var_id],
+        .name = l->vars[var_id].name,
+        .type = l->vars[var_id].type,
+    };
+    stmt_record_shared_function_value(l, binding.slot, init_val);
+    xi_lower_emit_top_store(l, binding, init_val);
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
@@ -3223,17 +3236,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val = copy;
         }
     }
-    xi_lower_braun_write(l, var_id, l->cur_block, init_val);
-
-    /* For program-level variables, also store into backing store */
-    if (l->is_program && l->shared_map[var_id] >= 0) {
-        XiTopBinding b;
-        b.slot = l->shared_map[var_id];
-        b.name = l->vars[var_id].name;
-        b.type = l->vars[var_id].type;
-        stmt_record_shared_function_value(l, b.slot, init_val);
-        xi_lower_emit_top_store(l, b, init_val);
-    }
+    stmt_write_decl_value(l, var_id, init_val);
 }
 
 static void lower_print(XiLower *l, AstNode *node) {
