@@ -1,0 +1,16 @@
+fn guardedWindowLength(values: Slice<byte>, start: int, count: int) -> int {
+    if (start < 0) {
+        return -1
+    }
+    if (count < 0) {
+        return -1
+    }
+    if (start > len(values) - count) {
+        return -1
+    }
+    var window: Slice<byte> = values.window(start, count)
+    return len(window)
+}
+
+var values: [byte; 4] = [11, 13, 17, 19]
+print(guardedWindowLength(values[:], 1, 2))

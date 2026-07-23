@@ -1,0 +1,6 @@
+export fn runeCodePoint(value: rune) -> u32 {
+    return value.toUInt32()
+}
+
+var code = runeCodePoint('R')
+print(code)

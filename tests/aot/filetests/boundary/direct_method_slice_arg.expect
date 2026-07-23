@@ -1,0 +1,2 @@
+c_regex=int64_t v[0-9]+ = direct_method_slice_arg_[0-9a-f]+_add_[0-9]+\(NULL, &xrt_shared_native_[0-9]+, v[0-9]+\);
+c_not_contains=xrt_span_to_value_ref

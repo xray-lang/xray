@@ -2833,7 +2833,8 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 XrDestructurePattern *elem = pat->as.array.elements[i];
                 if (!elem)
                     continue;
-                XiValue *val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, l->type_any, 1);
+                struct XrType *element_type = tuple_elem_type(l, src->type, i);
+                XiValue *val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, element_type, 1);
                 if (val) {
                     val->args[0] = src;
                     val->aux_int = i;
@@ -2918,7 +2919,8 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             /* Fall through: declaration-style binding (create fresh
              * local). Reached for destructure-decl PATTERN_IDENTIFIER
              * because the analyzer has not pre-bound the symbol. */
-            int new_var = xi_lower_var_create(l, sid, name, l->type_any);
+            struct XrType *binding_type = src->type ? src->type : l->type_any;
+            int new_var = xi_lower_var_create(l, sid, name, binding_type);
             xi_lower_braun_write(l, new_var, l->cur_block, src);
             break;
         }

@@ -1,0 +1,8 @@
+import { Outer } from "./_nested_class_field_lib"
+
+fn main() {
+    var outer = Outer(42)
+    print(outer.inner.value)
+}
+
+main()

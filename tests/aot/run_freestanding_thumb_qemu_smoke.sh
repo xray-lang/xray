@@ -61,6 +61,10 @@ cleanup() {
         kill "$QEMU_PID" >/dev/null 2>&1 || true
         wait "$QEMU_PID" >/dev/null 2>&1 || true
     fi
+    if [ "${XRAY_KEEP_TEST_TMP:-0}" = "1" ]; then
+        echo "kept freestanding Cortex-M smoke workdir: $WORK" >&2
+        return
+    fi
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -70,10 +74,13 @@ cat >"$SRC" <<'XR'
 import mem
 
 const UART0_DATA = 0x40004000
+const UART0_CTRL = 0x40004008
 const MPS2_LEDS = 0x40028000
 
 fn kernel_entry() -> i32 {
     mem.volatileStore(mem.mutPtr<byte>(MPS2_LEDS), 0x5a, 4)
+    // CMSDK APB UART reset leaves transmit disabled; enable TX explicitly.
+    mem.volatileStore(mem.mutPtr<byte>(UART0_CTRL), 0x01, 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), int('M'.toUInt32()), 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), int('4'.toUInt32()), 4)
     mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 10, 4)

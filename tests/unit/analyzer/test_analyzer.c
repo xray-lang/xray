@@ -1149,6 +1149,51 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     setup_pool();
 }
 
+TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "import mem\n"
+                         "fn loadU64(p: Ptr<byte>) -> u64 {\n"
+                         "  return unsafe { mem.load<u64>(p, 0, Endian.LE) }\n"
+                         "}\n"
+                         "fn storeU64(p: MutPtr<byte>, value: u64) {\n"
+                         "  unsafe { mem.store<u64>(p, 0, value, Endian.LE) }\n"
+                         "}\n"
+                         "fn isPresent(p: Ptr<byte>) -> bool { return !p.isNull() }\n"
+                         "fn exercise() -> u64 {\n"
+                         "  var data = Array<byte>(8)\n"
+                         "  var p = unsafe { data.mutPtr() }\n"
+                         "  storeU64(p, 7)\n"
+                         "  var read: Ptr<byte> = p\n"
+                         "  return loadU64(read)\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "mem_scalar_pointer_borrow.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "incomplete view-invalidation effects"));
+    ASSERT(!analyzer_diag_contains(a, "which invalidates views"));
+
+    const XaMemoryEffectSummary *load = analyzer_function_memory_effect_summary(a, "loadU64");
+    const XaMemoryEffectSummary *store = analyzer_function_memory_effect_summary(a, "storeU64");
+    const XaMemoryEffectSummary *present = analyzer_function_memory_effect_summary(a, "isPresent");
+    ASSERT(load && store && present);
+    ASSERT(xa_memory_effect_summary_is_complete(load));
+    ASSERT(xa_memory_effect_summary_is_complete(store));
+    ASSERT(load->root_count == 0);
+    ASSERT(xa_memory_effect_summary_is_complete(present));
+    ASSERT(present->root_count == 0);
+    const XaMemoryRootEffect *store_root = memory_effect_root(store, XA_MEMORY_ROOT_PARAM, 0);
+    ASSERT(store_root && store_root->write_count == 1);
+    ASSERT(store_root->invalidation == XA_MEMORY_NEVER_INVALIDATES);
+    ASSERT(store_root->relocation == XA_MEMORY_ADDRESS_STABLE);
+    ASSERT(store_root->shortening == XA_MEMORY_NEVER_SHORTENS);
+    ASSERT(!store_root->descriptor_rebind);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
     XaAnalyzer *source = xa_analyzer_new(g_session);
     XaAnalyzer *target = xa_analyzer_new(g_session);
@@ -6104,6 +6149,7 @@ int main(void) {
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
+    RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);

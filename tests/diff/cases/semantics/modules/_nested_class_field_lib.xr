@@ -1,0 +1,15 @@
+export class Inner {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+export class Outer {
+    inner: Inner
+
+    constructor(value: int) {
+        this.inner = Inner(value)
+    }
+}

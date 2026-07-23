@@ -24,6 +24,7 @@ static const char *const xr_cli_tc_supported_targets[] = {
     "native",
     "x86_64-unknown-none",
     "riscv32imac-unknown-none-elf",
+    "riscv64gc-unknown-none-elf",
     "thumbv7em-none-eabi",
     "x86_64-linux-musl",
     "aarch64-linux-musl",
@@ -94,6 +95,13 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
         return true;
     }
 
+    if (strcmp(name, "riscv64gc-unknown-none-elf") == 0) {
+        xr_cli_tc_set_target(out, "riscv64gc-unknown-none-elf", "riscv64-freestanding-none", NULL,
+                             "", XR_CLI_TARGET_ARCH_RISCV64, XR_CLI_TARGET_OS_NONE,
+                             XR_CLI_TARGET_ABI_NONE, XR_CLI_TARGET_ENDIAN_LITTLE, 64, false);
+        return true;
+    }
+
     if (strcmp(name, "thumbv7em-none-eabi") == 0) {
         xr_cli_tc_set_target(out, "thumbv7em-none-eabi", "thumb-freestanding-eabi", "cortex_m4", "",
                              XR_CLI_TARGET_ARCH_THUMBV7EM, XR_CLI_TARGET_OS_NONE,
@@ -124,7 +132,8 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
 
     xr_cli_tc_error(err, err_size,
                     "unsupported AOT target '%s' (supported: native, x86_64-unknown-none, "
-                    "riscv32imac-unknown-none-elf, thumbv7em-none-eabi, "
+                    "riscv32imac-unknown-none-elf, riscv64gc-unknown-none-elf, "
+                    "thumbv7em-none-eabi, "
                     "x86_64-linux-musl, aarch64-linux-musl, x86_64-windows-gnu, "
                     "aarch64-windows-gnu)",
                     name);

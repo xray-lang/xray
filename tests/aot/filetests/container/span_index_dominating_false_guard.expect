@@ -1,0 +1,2 @@
+regex=span-access [0-9]+ func=guardedRead value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_slice\+pod\+range\+no_clobber drop=bounds
+c_not_contains=xrt_index_oob(_idx, _s.length)

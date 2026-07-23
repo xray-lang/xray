@@ -86,6 +86,35 @@ typedef enum XaBuiltinMethodMemoryEffect {
 
 typedef uint32_t XaBuiltinMethodMemoryEffectSet;
 
+typedef struct XaBuiltinPointerMemorySpec {
+    const char *method_name;
+    XaBuiltinMethodMemoryEffectSet effects;
+} XaBuiltinPointerMemorySpec;
+
+static const XaBuiltinPointerMemorySpec xa_builtin_pointer_memory_specs[] = {
+    {"deref", XA_BUILTIN_MEMORY_STABLE_READ},
+    {"offset", XA_BUILTIN_MEMORY_STABLE_READ},
+    {"isNull", XA_BUILTIN_MEMORY_STABLE_READ},
+    {"copyFromNonOverlapping", XA_BUILTIN_MEMORY_WRITE},
+};
+
+static inline bool xa_builtin_pointer_memory_effect(const char *method_name,
+                                                    XaBuiltinMethodMemoryEffectSet *out_effects) {
+    if (!method_name)
+        return false;
+    for (size_t i = 0;
+         i < sizeof(xa_builtin_pointer_memory_specs) / sizeof(xa_builtin_pointer_memory_specs[0]);
+         i++) {
+        const XaBuiltinPointerMemorySpec *spec = &xa_builtin_pointer_memory_specs[i];
+        if (strcmp(spec->method_name, method_name) == 0) {
+            if (out_effects)
+                *out_effects = spec->effects;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Native stdlib classes that are not language receiver intrinsics still need
  * sealed root-relative invalidation contracts.  Keep those contracts in one
  * registry instead of teaching the analyzer method-name exceptions. */

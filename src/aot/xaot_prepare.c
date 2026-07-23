@@ -1722,6 +1722,50 @@ static bool prepare_array_control_proves_index_lt_len(const XaotBundle *bundle, 
     return true;
 }
 
+/* Slice descriptors are immutable values: once a branch establishes
+ * `index < len(slice)`, later calls may change the pointed-to bytes but cannot
+ * change that descriptor's length.  Accept the equivalent true/false branch
+ * spellings and carry the fact through dominance.  This deliberately remains
+ * exact-SSA (no alias or interval guessing) and is restricted to Slice so an
+ * Array mutation cannot invalidate the proof. */
+static bool prepare_slice_dominating_index_guard_bounds_proven(const XaotBundle *bundle,
+                                                               const XiFunc *func,
+                                                               const XiValue *array_value,
+                                                               const XiValue *index_value,
+                                                               const XiBlock *site) {
+    const XiValue *receiver = unwrap_identity_value(array_value);
+    if (!bundle || !func || !receiver || !receiver->type || receiver->type->kind != XR_KIND_SLICE ||
+        !index_value || !site)
+        return false;
+
+    xi_ensure_dominators((XiFunc *) func);
+    for (const XiBlock *guard = site->idom; guard; guard = guard->idom) {
+        if (guard->kind != XI_BLOCK_IF || !guard->succs[0] || !guard->succs[1])
+            continue;
+        bool true_path = xi_dominates(guard->succs[0], site);
+        bool false_path = xi_dominates(guard->succs[1], site);
+        if (true_path == false_path)
+            continue;
+
+        const XiValue *condition = unwrap_identity_value(guard->control);
+        if (!condition || condition->nargs < 2)
+            continue;
+        const XiValue *lhs = unwrap_identity_value(condition->args[0]);
+        const XiValue *rhs = unwrap_identity_value(condition->args[1]);
+        bool lhs_index = same_value(lhs, index_value);
+        bool rhs_index = same_value(rhs, index_value);
+        bool lhs_length = prepare_array_length_value_matches(bundle, func, lhs, receiver);
+        bool rhs_length = prepare_array_length_value_matches(bundle, func, rhs, receiver);
+
+        if ((true_path && condition->op == XI_LT && lhs_index && rhs_length) ||
+            (true_path && condition->op == XI_GT && lhs_length && rhs_index) ||
+            (false_path && condition->op == XI_GE && lhs_index && rhs_length) ||
+            (false_path && condition->op == XI_LE && lhs_length && rhs_index))
+            return true;
+    }
+    return false;
+}
+
 static bool prepare_array_block_has_no_side_effect_after(const XiBlock *blk, const XiValue *start) {
     bool seen = start == NULL;
     bool found = false;
@@ -1901,10 +1945,14 @@ static bool prepare_array_index_access_bounds_proven(const XaotBundle *bundle, c
         return false;
     const XiValue *array_value = value->args[0];
     const XiValue *index_value = value->args[1];
-    if (!prepare_array_value_known_nonnegative(index_value, NULL, 0)) {
+    if (!prepare_array_value_known_nonnegative(index_value, NULL, 0) &&
+        !xi_value_known_nonnegative_at(func, index_value, value->block)) {
         bounds_fail(fail_reason, XAOT_BOUNDS_UNPROVEN_INDEX_RANGE);
         return false;
     }
+    if (prepare_slice_dominating_index_guard_bounds_proven(bundle, func, array_value, index_value,
+                                                           value->block))
+        return true;
     if (!prepare_array_block_has_no_side_effect_before(value->block, value)) {
         bounds_fail(fail_reason, XAOT_BOUNDS_UNPROVEN_CLOBBER);
         return false;
@@ -2464,6 +2512,57 @@ static bool prepare_span_window_assert_bounds_proven(const XiFunc *func, const X
     return start_nonnegative && count_nonnegative && upper_proven;
 }
 
+/* A fail-closed branch is the ordinary-control-flow spelling of the same
+ * capability established by assert:
+ *
+ *     if (start < 0) return error
+ *     if (count < 0) return error
+ *     if (start > len(slice) - count) return error
+ *     slice.window(start, count)
+ *
+ * Only the exact surviving branch, exact SSA operands, and an immutable Slice
+ * descriptor are accepted.  This keeps the proof stable across intervening
+ * calls while avoiding source-level performance assertions. */
+static bool prepare_span_window_dominating_guard_bounds_proven(const XiFunc *func,
+                                                               const XiValue *window) {
+    if (!func || !window || window->op != XI_SLICE_WINDOW || window->nargs != 3 || !window->block)
+        return false;
+    const XiValue *source = unwrap_identity_value(window->args[0]);
+    const XiValue *start = window->args[1];
+    const XiValue *count = window->args[2];
+    if (!source || !source->type || source->type->kind != XR_KIND_SLICE)
+        return false;
+
+    bool start_nonnegative = prepare_array_value_known_nonnegative(start, NULL, 0) ||
+                             xi_value_known_nonnegative_at(func, start, window->block);
+    bool count_nonnegative = prepare_array_value_known_nonnegative(count, NULL, 0) ||
+                             xi_value_known_nonnegative_at(func, count, window->block);
+    bool upper_proven = false;
+
+    xi_ensure_dominators((XiFunc *) func);
+    for (const XiBlock *guard = window->block->idom;
+         guard && (!start_nonnegative || !count_nonnegative || !upper_proven);
+         guard = guard->idom) {
+        if (guard->kind != XI_BLOCK_IF || !guard->succs[0] || !guard->succs[1])
+            continue;
+        bool true_path = xi_dominates(guard->succs[0], window->block);
+        bool false_path = xi_dominates(guard->succs[1], window->block);
+        if (true_path == false_path)
+            continue;
+        bool truth = true_path;
+        if (!start_nonnegative)
+            start_nonnegative =
+                prepare_span_condition_proves_start_nonnegative(guard->control, start, truth);
+        if (!count_nonnegative)
+            count_nonnegative =
+                prepare_span_condition_proves_start_nonnegative(guard->control, count, truth);
+        if (!upper_proven)
+            upper_proven = prepare_span_condition_proves_window_upper(guard->control, source, start,
+                                                                      count, truth);
+    }
+    return start_nonnegative && count_nonnegative && upper_proven;
+}
+
 static const XiValue *prepare_span_access_receiver(const XiValue *value, uint8_t kind) {
     if (!value)
         return NULL;
@@ -2702,6 +2801,10 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             if (prepare_span_window_assert_bounds_proven(func, value)) {
                 evidence |= XAOT_SLICE_EV_RANGE_PROVEN | XAOT_SLICE_EV_NO_CLOBBER |
                             XAOT_SLICE_EV_ASSERT_GUARD;
+                drop |= XAOT_SLICE_DROP_BOUNDS;
+            } else if (prepare_span_window_dominating_guard_bounds_proven(func, value)) {
+                evidence |= XAOT_SLICE_EV_RANGE_PROVEN | XAOT_SLICE_EV_NO_CLOBBER |
+                            XAOT_SLICE_EV_DOMINATING_GUARD;
                 drop |= XAOT_SLICE_DROP_BOUNDS;
             } else {
                 reason = XAOT_SLICE_UNPROVEN_RANGE;
@@ -4479,6 +4582,15 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
                 if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 || !place ||
                     place->op != XI_LOCAL_ADDR || place->nargs != 1 || !place->args[0])
                     continue;
+                /* Preserve the complete borrowed-place C type on the address
+                 * value itself.  A ref Ptr<T> slot is `const void **`, while
+                 * the source pointer local is `const void *`; flattening the
+                 * XI_LOCAL_ADDR plan back to a generic raw pointer makes an
+                 * otherwise verified direct call rely on an incompatible C
+                 * pointer conversion. */
+                XaotValuePlan *place_plan = xaot_bundle_find_value_plan_mut(bundle, place);
+                if (place_plan)
+                    place_plan->rep = slot->rep;
                 if (value_rep_is_struct_aggregate(slot->pointee_rep)) {
                     bool changed = false;
                     prepare_mark_aggregate_value_rep(bundle, place->args[0], slot->pointee_rep,

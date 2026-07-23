@@ -329,6 +329,9 @@ enum {
      * Buffer.asBytes()).  This is positive evidence, distinct from merely
      * failing to prove writability. */
     XAOT_SLICE_EV_READONLY = 1u << 12,
+    /* A fail-closed if/return branch dominates the access and its surviving
+     * path establishes the same range relation as an assertion. */
+    XAOT_SLICE_EV_DOMINATING_GUARD = 1u << 13,
 };
 
 enum {

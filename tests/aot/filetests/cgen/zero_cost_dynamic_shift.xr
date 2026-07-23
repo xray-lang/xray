@@ -1,0 +1,7 @@
+fn shiftLane(value: u32, count: int) -> u32 {
+    return value << count
+}
+
+export fn callShift(value: u32, count: int) -> u32 {
+    return shiftLane(value, count)
+}

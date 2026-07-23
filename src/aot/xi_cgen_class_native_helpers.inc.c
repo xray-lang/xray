@@ -4774,7 +4774,12 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             return false;
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, mfunc, a));
+            /* Native-receiver methods still use the target's prepared ABI for
+             * every non-receiver argument. In particular Slice is an
+             * aggregate xr_span_t slot even though its scalar storage-rep
+             * fallback is tagged. Reuse the ordinary direct-call ABI emitter
+             * instead of boxing aggregates through XrValue. */
+            emit_value_as_direct_call_arg(ctx, out, f, v, mfunc, a, v->args[a]);
         }
         fprintf(out, ")");
         if (emit_ctor_stmt_expr)
@@ -5863,6 +5868,40 @@ static void cg_collect_native_classes_from_own_func(XiCgenCtx *ctx, FILE *out, c
     }
 }
 
+/* A cross-module field projection can expose a native class that is absent
+ * from every function signature.  For example, importing only Outer and then
+ * evaluating outer.inner.value requires Inner's native typedef in the caller
+ * TU even though Inner is neither imported by name nor passed across a call.
+ * Collect the receiver/result types of the actual field operations emitted by
+ * this unit; this keeps the declaration closure precise without pulling in
+ * unrelated exported classes. */
+static void cg_collect_native_classes_from_field_accesses(XiCgenCtx *ctx, FILE *out,
+                                                          const XiFunc *f, const char *own,
+                                                          const XiClassData **seen, int *nseen,
+                                                          int seen_cap) {
+    if (!f)
+        return;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_collect_native_classes_from_field_accesses(ctx, out, f->children[i], own, seen, nseen,
+                                                      seen_cap);
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || (value->op != XI_LOAD_FIELD && value->op != XI_STORE_FIELD))
+                continue;
+            cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, value->type),
+                                    own, seen, nseen, seen_cap);
+            if (value->nargs > 0 && value->args[0])
+                cg_collect_native_class(
+                    ctx, out, cg_class_native_data_for_abi_type(ctx, value->args[0]->type), own,
+                    seen, nseen, seen_cap);
+        }
+    }
+}
+
 /* Emit native typedefs for the cross-module classes a unit actually references,
  * derived from the imported functions it calls: the class owning an imported
  * constructor/method, plus any native class in an imported function's parameter
@@ -5889,6 +5928,9 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
     if (ctx->module && ctx->module->init)
         cg_collect_native_classes_from_own_func(ctx, out, ctx->module->init, own, seen, &nseen,
                                                 (int) (sizeof(seen) / sizeof(seen[0])));
+    if (ctx->module && ctx->module->init)
+        cg_collect_native_classes_from_field_accesses(
+            ctx, out, ctx->module->init, own, seen, &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
     for (int i = 0; i < ctx->n_xmod_refs; i++) {
         const XiFunc *f = ctx->xmod_ref_funcs[i];
         const char *prefix = ctx->xmod_ref_prefixes[i];

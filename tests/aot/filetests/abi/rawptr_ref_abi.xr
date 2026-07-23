@@ -1,0 +1,4 @@
+import { resetRawConst } from "./_rawptr_ref_abi_lib"
+
+var cursor = Ptr<byte>.null()
+print(resetRawConst(ref cursor))

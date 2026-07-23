@@ -8598,6 +8598,26 @@ static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *
     return false;
 }
 
+/* A rune is already carried as its Unicode scalar value in the native scalar
+ * representation.  Keep the lossless rune -> u32 projection out of tagged
+ * runtime method dispatch; freestanding profiles deliberately do not carry
+ * the hosted method table. */
+static bool xicgen_emit_rune_numeric_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                            const char *method, uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method || nargs != 0 || strcmp(method, "toUInt32") != 0)
+        return false;
+    const XiValue *recv = v->args[0];
+    if (!recv || !recv->type || recv->type->kind != XR_KIND_RUNE)
+        return false;
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    fprintf(out, "(uint32_t)(");
+    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 /* Direct scalar lowering for the remaining int arithmetic methods. Exact
  * width bit methods are canonical XI_BIT_* operations before C generation;
  * method-name dispatch here would discard their width contract. */
@@ -8738,6 +8758,8 @@ static bool xicgen_key_access_runtime_method_preflight(XiCgenCtx *ctx, FILE *out
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs,
                                        const XaotMethodDispatchPlan *dispatch_plan) {
+    if (xicgen_emit_rune_numeric_method(ctx, out, v, method, nargs))
+        return;
     if (xicgen_emit_int_numeric_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
@@ -11408,7 +11430,6 @@ static void xicgen_array_extend(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 
 static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     if (v->nargs == 0) {
@@ -11419,7 +11440,12 @@ static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (a > 0)
             fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+        /* Tuple storage is always tagged. Use the prepared value plan here:
+         * cg_rep() can describe an indexed fixed-width scalar as tagged even
+         * though AOT materialized it in a native C local. Bypassing the plan
+         * then places the raw integer bits into XrValue (notably for later
+         * tuple lanes), which reads back as null/zero. */
+        emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
     }
     fprintf(out, "})");
 }
@@ -11433,7 +11459,7 @@ static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     if (emit_static_tuple_get_expr(ctx, out, v))
         return;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
     fprintf(out, "xrt_tuple_get(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", %" PRId64 ")", v->aux_int);
@@ -11934,6 +11960,14 @@ static void xicgen_emit_byte_slice_operand(XiCgenCtx *ctx, FILE *out, const XiVa
 }
 
 static bool xicgen_emit_byte_slice_expr(XiCgenCtx *ctx, FILE *out, const XiValue *arg) {
+    /* A typed Slice value has already materialised and validated its span.
+     * Reuse that SSA value before considering source reconstruction; otherwise
+     * a named slice local used by a bulk operation repeats both slice-bound
+     * conversions and their guards in the same hot path. */
+    if (cg_span_value_u8_info(ctx, arg, NULL)) {
+        emit_span_ref_expr(out, arg);
+        return true;
+    }
     const XiValue *slice = xicgen_stack_slice_source_value(arg);
     if (slice && xicgen_slice_can_inline_bytes_common_prefix(ctx, slice)) {
         fprintf(out, "({ XrValue _xr_slice_start = ");
@@ -11945,10 +11979,6 @@ static bool xicgen_emit_byte_slice_expr(XiCgenCtx *ctx, FILE *out, const XiValue
                      "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG); xrt_span_from_span_slice(");
         emit_span_ref_expr(out, slice->args[0]);
         fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end), UINT16_C(1)); })");
-        return true;
-    }
-    if (cg_span_value_u8_info(ctx, arg, NULL)) {
-        emit_span_ref_expr(out, arg);
         return true;
     }
     return false;

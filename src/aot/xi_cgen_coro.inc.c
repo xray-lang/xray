@@ -3468,7 +3468,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_tuple_get_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
         }
         return;
     }

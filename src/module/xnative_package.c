@@ -1157,12 +1157,6 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
             !native_parse_layouts(plan, native) || !native_parse_capabilities(plan, native) ||
             !native_parse_targets(plan, native))
             return plan;
-        if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING &&
-            (plan->unit_count == 0 || plan->symbol_count == 0)) {
-            native_fail(plan,
-                        "E-NATIVE-SCHEMA: shipping native package requires units and symbols");
-            return plan;
-        }
     } else {
         plan->name = xr_strdup("project");
         plan->version = xr_strdup("0");
@@ -1174,6 +1168,12 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
     if (!native_parse_exports(plan, toml_root) || !native_parse_link_symbols(plan, toml_root) ||
         !native_parse_entries(plan, toml_root))
         return plan;
+    if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING &&
+        (plan->unit_count == 0 || (plan->symbol_count == 0 && plan->entry_count == 0))) {
+        native_fail(plan, "E-NATIVE-SCHEMA: shipping native package requires units and symbols or "
+                          "freestanding entries");
+        return plan;
+    }
     uint64_t fingerprint = XR_NATIVE_FNV_OFFSET;
     fingerprint = native_hash_text(fingerprint, plan->name);
     fingerprint = native_hash_text(fingerprint, plan->version);

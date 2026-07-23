@@ -1,0 +1,9 @@
+[package]
+name = "filetest-zero-cost-dynamic-shift"
+version = "1.0.0"
+license = "MIT"
+main = "zero_cost_dynamic_shift.xr"
+
+[[export.c]]
+xray = "callShift"
+symbol = "call_shift"

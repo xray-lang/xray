@@ -297,6 +297,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "little";
         return true;
     }
+    if (strcmp(name, "riscv64gc-unknown-none-elf") == 0) {
+        *arch = "riscv64";
+        *os = "none";
+        *abi = "none";
+        *object_format = "elf";
+        *triple = "riscv64gc-unknown-none-elf";
+        *pointer_bits = 64;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "thumbv7em-none-eabi") == 0) {
         *arch = "thumbv7em";
         *os = "none";

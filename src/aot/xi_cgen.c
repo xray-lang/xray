@@ -6752,12 +6752,17 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
         return false;
     /* Keep separate-compilation helpers inlineable when they are tiny, but do
      * not force arbitrary loops into large callers/coroutine resume functions.
-     * A bounded-size, proven-noalloc typed-vector kernel is the narrow
-     * exception: inlining the loop once exposes its lane induction/range facts
-     * without source duplication or forced unrolling. */
-    if (cg_func_has_backedge(f))
-        return proven_noalloc && vector_kernel &&
-               value_count <= CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT;
+     * A bounded-size, proven-noalloc leaf loop is the narrow exception:
+     * inlining it once exposes caller range/alias facts without source
+     * duplication or forced unrolling.  Vector kernels receive the wider
+     * budget because one lane operation expands to several Xi values. */
+    if (cg_func_has_backedge(f)) {
+        if (!proven_noalloc)
+            return false;
+        uint32_t loop_limit = vector_kernel ? CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT
+                                            : CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT;
+        return value_count <= loop_limit;
+    }
     if (value_count <= CG_FORCE_INLINE_VALUE_LIMIT)
         return true;
 
@@ -7523,6 +7528,11 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_shl",
         "xrt_shr",
         "xrt_sar",
+        /* canonical signed-width shift helpers are header-inline native
+         * operations (the source semantics mask the dynamic shift count) */
+        "xrt_i64_shl",
+        "xrt_i64_shr",
+        "xrt_i64_shr_u",
         "xrt_rotl",
         "xrt_rotr",
         "xrt_min",
@@ -7873,9 +7883,6 @@ typedef struct {
     CgMethodEntry *methods;
 } CgModuleScanSnapshot;
 
-static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner,
-                                             const XiFunc *target);
-
 /* Boxed-adapter discovery scans other modules' IR, but shared slots and method
  * tables are interpreted through the current CGen context.  Snapshot the
  * emitter context while a scanned module is made current. */
@@ -7952,26 +7959,6 @@ static void cg_module_scan_snapshot_restore(XiCgenCtx *ctx, CgModuleScanSnapshot
     if (snap->methods_cap > 0)
         memcpy(ctx->methods, snap->methods, (size_t) snap->methods_cap * sizeof(*ctx->methods));
     cg_module_scan_snapshot_free(snap);
-}
-
-static bool cg_func_body_has_static_func_use_in_owner_module(XiCgenCtx *ctx, const XiFunc *source,
-                                                             const XiFunc *target) {
-    if (!ctx || !source || !target)
-        return false;
-    const XiModule *owner = cg_module_for_func(ctx, source);
-    if (!owner || owner == ctx->module)
-        return cg_func_body_has_static_func_use(ctx, source, target);
-
-    CgModuleScanSnapshot snap;
-    if (!cg_module_scan_snapshot_save(ctx, &snap)) {
-        cg_module_scan_snapshot_free(&snap);
-        return false;
-    }
-    cg_init_from_module(ctx, (XiModule *) owner);
-    cg_register_imported_classes(ctx);
-    bool found = cg_func_body_has_static_func_use(ctx, source, target);
-    cg_module_scan_snapshot_restore(ctx, &snap);
-    return found;
 }
 
 static bool cg_func_has_native_receiver_boxed_use_in_module(XiCgenCtx *ctx, const XiModule *module,
@@ -8061,6 +8048,11 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
  * Placed between `static` and the return type on definitions and forward
  * declarations so clang/gcc can CSE / LICM across call sites. */
 static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    /* GCC/Clang ignore pure/const on a void-returning function and warn.
+     * Keep the semantic plan for verification, but do not emit a C attribute
+     * that cannot enable value-based CSE. */
+    if (!f || !f->return_type || f->return_type->kind == XR_KIND_UNIT)
+        return;
     const XaotFuncAttrPlan *plan = xaot_bundle_find_func_attr_plan(cg_ctx_aot_bundle(ctx), f);
     if (!plan)
         return;
@@ -8735,21 +8727,29 @@ static const XiFunc *cg_shared_function_slot_target_for_func(const XiCgenCtx *ct
     return cg_shared_function_slot_target((XiCgenCtx *) ctx, owner, slot);
 }
 
-static bool cg_value_is_static_func_ref(const XiCgenCtx *ctx, const XiFunc *owner,
-                                        const XiValue *value, const XiFunc *target) {
+static const XiFunc *cg_value_static_func_target(XiCgenCtx *ctx, const XiFunc *owner,
+                                                 const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || !target)
-        return false;
+    if (!ctx || !v)
+        return NULL;
     if ((v->op == XI_CLOSURE_NEW || (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) &&
-        v->aux == target)
-        return true;
-    if (v->op == XI_GET_SHARED &&
-        cg_shared_function_slot_target_for_func(ctx, owner, (int) v->aux_int) == target)
-        return true;
-    if (v->op == XI_IMPORT_REF && v->aux &&
-        cg_import_ref_targets_func((XiCgenCtx *) ctx, (const XiImportRef *) v->aux, target))
-        return true;
-    return false;
+        v->aux)
+        return (const XiFunc *) v->aux;
+    if (v->op == XI_GET_SHARED)
+        return cg_shared_function_slot_target_for_func(ctx, owner, (int) v->aux_int);
+    if (v->op == XI_IMPORT_REF && v->aux) {
+        const XiImportRef *ref = (const XiImportRef *) v->aux;
+        if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules &&
+            ref->resolved_shared_slot >= 0) {
+            const XiModule *mod = ctx->all_modules[ref->resolved_mod_index];
+            if (mod && mod->slot_funcs && ref->resolved_shared_slot < (int) mod->nslots &&
+                mod->slot_funcs[ref->resolved_shared_slot])
+                return mod->slot_funcs[ref->resolved_shared_slot];
+        }
+        CgStaticFunctionCall call = cg_resolve_import_function_call(ctx, ref);
+        return call.is_class_constructor ? NULL : call.func;
+    }
+    return NULL;
 }
 
 static bool cg_parallel_op_targets_func(const XiValue *user, const XiFunc *target) {
@@ -8839,97 +8839,6 @@ static bool cg_static_func_ref_use_requires_body(XiCgenCtx *ctx, const XiFunc *o
     return false;
 }
 
-static bool cg_func_body_has_static_func_use(XiCgenCtx *ctx, const XiFunc *owner,
-                                             const XiFunc *target) {
-    if (!ctx || !owner || !target)
-        return false;
-    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
-        const XiBlock *blk = owner->blocks[bi];
-        if (!blk)
-            continue;
-        if (cg_value_is_static_func_ref(ctx, owner, blk->control, target))
-            return true;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v)
-                continue;
-            if (cg_parallel_op_targets_func(v, target))
-                return true;
-            if (bundle &&
-                (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
-                xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL) == target)
-                return true;
-            if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1) {
-                CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
-                if (call.func == target)
-                    return true;
-                const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
-                if (class_name && cg_lookup_class_ctor_global(ctx, class_name, NULL) == target)
-                    return true;
-                const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
-                if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
-                    const XiClassData *cd = (const XiClassData *) callee->aux;
-                    for (const XiFunc *parent = owner; parent; parent = parent->parent_func) {
-                        if (cg_find_constructor(parent, cd) == target)
-                            return true;
-                    }
-                }
-            }
-            if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) {
-                const char *method = (const char *) v->aux;
-                if (method) {
-                    CgStaticFunctionCall module_call =
-                        cg_resolve_module_member_call(ctx, owner, v, method);
-                    if (module_call.func == target)
-                        return true;
-                }
-                if (method && strcmp(method, "constructor") == 0) {
-                    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
-                    if (class_name && cg_lookup_class_ctor_global(ctx, class_name, NULL) == target)
-                        return true;
-                }
-                if (method && v->nargs >= 1) {
-                    const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
-                    const XiModule *owner_mod = cg_module_for_func(ctx, owner);
-                    const XiClassData *receiver_class = NULL;
-                    if (receiver && receiver->op == XI_GET_SHARED && owner_mod &&
-                        owner_mod->slot_classes && receiver->aux_int >= 0 &&
-                        receiver->aux_int < owner_mod->nslots)
-                        receiver_class = owner_mod->slot_classes[receiver->aux_int];
-                    if (!receiver_class)
-                        receiver_class = cg_class_native_class_value_data(ctx, owner, receiver);
-                    if (receiver_class && receiver_class->methods && receiver_class->child_idx) {
-                        const XiModule *class_mod =
-                            cg_class_native_module_for_data(ctx, receiver_class);
-                        if (class_mod && class_mod->init) {
-                            for (uint16_t mi = 0; mi < receiver_class->nmethod; mi++) {
-                                const XiClassMethod *candidate = &receiver_class->methods[mi];
-                                if (!candidate->is_static || candidate->is_static_constructor ||
-                                    !candidate->name || strcmp(candidate->name, method) != 0)
-                                    continue;
-                                uint16_t child_idx = receiver_class->child_idx[mi];
-                                if (child_idx < class_mod->init->nchildren &&
-                                    class_mod->init->children[child_idx] == target)
-                                    return true;
-                            }
-                        }
-                    }
-                }
-                const char *method_prefix = NULL;
-                const XiFunc *class_method =
-                    cg_class_native_resolve_method_call(ctx, owner, v, &method_prefix);
-                if (class_method == target)
-                    return true;
-            }
-            if (cg_value_is_static_func_ref(ctx, owner, v, target) &&
-                cg_static_func_ref_use_requires_body(ctx, owner, v, target, 0))
-                return true;
-        }
-    }
-    return false;
-}
-
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth);
 
 static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
@@ -8952,9 +8861,6 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
      * emission remains an open-world boundary and keeps exports as roots. */
     return !ctx->emit_main && cg_func_is_module_export(ctx, f);
 }
-
-static bool cg_func_body_has_static_func_use_in_owner_module(XiCgenCtx *ctx, const XiFunc *source,
-                                                             const XiFunc *target);
 
 static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {
     if (!ctx || !f)
@@ -9032,6 +8938,137 @@ static void cg_func_reach_mark_generic_body_roots(XiCgenCtx *ctx) {
     }
 }
 
+static bool cg_func_reach_mark_edge(XiCgenCtx *ctx, const XiFunc *target) {
+    if (!ctx || !target ||
+        !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+        return false;
+    CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);
+    if (!memo || memo->reachable)
+        return false;
+    memo->reachable = true;
+    memo->state = 2;
+    return true;
+}
+
+static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, const XiValue *v) {
+    if (!ctx || !owner || !v)
+        return false;
+    bool changed = false;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+
+    if (v->op == XI_PAR_FOR && v->aux_kind == XI_AUX_KIND_PAR_FOR) {
+        const XiParallelForData *data = (const XiParallelForData *) v->aux;
+        changed |= cg_func_reach_mark_edge(ctx, data ? data->body_func : NULL);
+    } else if (v->op == XI_PAR_MAP && v->aux_kind == XI_AUX_KIND_PAR_MAP) {
+        const XiParallelMapData *data = (const XiParallelMapData *) v->aux;
+        changed |= cg_func_reach_mark_edge(ctx, data ? data->body_func : NULL);
+    } else if (v->op == XI_PAR_REDUCE && v->aux_kind == XI_AUX_KIND_PAR_REDUCE) {
+        const XiParallelReduceData *data = (const XiParallelReduceData *) v->aux;
+        changed |= cg_func_reach_mark_edge(ctx, data ? data->body_func : NULL);
+        changed |= cg_func_reach_mark_edge(ctx, data ? data->combine_func : NULL);
+    }
+
+    if (bundle && (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
+        changed |= cg_func_reach_mark_edge(
+            ctx, xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL));
+
+    if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1) {
+        CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
+        changed |= cg_func_reach_mark_edge(ctx, call.func);
+        const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+        if (class_name)
+            changed |=
+                cg_func_reach_mark_edge(ctx, cg_lookup_class_ctor_global(ctx, class_name, NULL));
+        const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+        if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
+            const XiClassData *cd = (const XiClassData *) callee->aux;
+            for (const XiFunc *parent = owner; parent; parent = parent->parent_func)
+                changed |= cg_func_reach_mark_edge(ctx, cg_find_constructor(parent, cd));
+        }
+    }
+
+    if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) {
+        const char *method = (const char *) v->aux;
+        if (method) {
+            CgStaticFunctionCall module_call = cg_resolve_module_member_call(ctx, owner, v, method);
+            changed |= cg_func_reach_mark_edge(ctx, module_call.func);
+        }
+        if (method && strcmp(method, "constructor") == 0) {
+            const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+            if (class_name)
+                changed |= cg_func_reach_mark_edge(
+                    ctx, cg_lookup_class_ctor_global(ctx, class_name, NULL));
+        }
+        if (method && v->nargs >= 1) {
+            const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
+            const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+            const XiClassData *receiver_class = NULL;
+            if (receiver && receiver->op == XI_GET_SHARED && owner_mod && owner_mod->slot_classes &&
+                receiver->aux_int >= 0 && receiver->aux_int < owner_mod->nslots)
+                receiver_class = owner_mod->slot_classes[receiver->aux_int];
+            if (!receiver_class)
+                receiver_class = cg_class_native_class_value_data(ctx, owner, receiver);
+            if (receiver_class && receiver_class->methods && receiver_class->child_idx) {
+                const XiModule *class_mod = cg_class_native_module_for_data(ctx, receiver_class);
+                if (class_mod && class_mod->init) {
+                    for (uint16_t mi = 0; mi < receiver_class->nmethod; mi++) {
+                        const XiClassMethod *candidate = &receiver_class->methods[mi];
+                        if (!candidate->is_static || candidate->is_static_constructor ||
+                            !candidate->name || strcmp(candidate->name, method) != 0)
+                            continue;
+                        uint16_t child_idx = receiver_class->child_idx[mi];
+                        if (child_idx < class_mod->init->nchildren)
+                            changed |=
+                                cg_func_reach_mark_edge(ctx, class_mod->init->children[child_idx]);
+                    }
+                }
+            }
+        }
+        changed |=
+            cg_func_reach_mark_edge(ctx, cg_class_native_resolve_method_call(ctx, owner, v, NULL));
+    }
+
+    const XiFunc *ref_target = cg_value_static_func_target(ctx, owner, v);
+    if (ref_target && cg_static_func_ref_use_requires_body(ctx, owner, v, ref_target, 0))
+        changed |= cg_func_reach_mark_edge(ctx, ref_target);
+    return changed;
+}
+
+static bool cg_func_reach_mark_body_edges(XiCgenCtx *ctx, const XiFunc *source) {
+    if (!ctx || !source)
+        return false;
+    bool changed = false;
+    for (uint32_t bi = 0; bi < source->nblocks; bi++) {
+        const XiBlock *block = source->blocks[bi];
+        if (!block)
+            continue;
+        changed |=
+            cg_func_reach_mark_edge(ctx, cg_value_static_func_target(ctx, source, block->control));
+        for (uint32_t vi = 0; vi < block->nvalues; vi++)
+            changed |= cg_func_reach_mark_value_edges(ctx, source, block->values[vi]);
+    }
+    return changed;
+}
+
+static bool cg_func_reach_mark_body_edges_in_owner_module(XiCgenCtx *ctx, const XiFunc *source) {
+    if (!ctx || !source)
+        return false;
+    const XiModule *owner = cg_module_for_func(ctx, source);
+    if (!owner || owner == ctx->module)
+        return cg_func_reach_mark_body_edges(ctx, source);
+
+    CgModuleScanSnapshot snap;
+    if (!cg_module_scan_snapshot_save(ctx, &snap)) {
+        cg_module_scan_snapshot_free(&snap);
+        return false;
+    }
+    cg_init_from_module(ctx, (XiModule *) owner);
+    cg_register_imported_classes(ctx);
+    bool changed = cg_func_reach_mark_body_edges(ctx, source);
+    cg_module_scan_snapshot_restore(ctx, &snap);
+    return changed;
+}
+
 /* Compute executable function reachability as a monotonic fixed point over the
  * resolved call/reference graph.  The previous per-target recursive query
  * cached provisional negative answers while callers were still in the
@@ -9063,23 +9100,10 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
          * discard its provisional cache on each fixed-point round. */
         ctx->nshared_slot_reach_memo = 0;
         for (int si = 0; si < ctx->nfunc_reach_memo; si++) {
-            CgFuncReachMemo *source = &ctx->func_reach_memo[si];
-            if (!source->reachable)
+            const XiFunc *source = ctx->func_reach_memo[si].func;
+            if (!ctx->func_reach_memo[si].reachable)
                 continue;
-            for (int ti = 0; ti < ctx->nfunc_reach_memo; ti++) {
-                CgFuncReachMemo *target = &ctx->func_reach_memo[ti];
-                if (target->reachable || source->func == target->func)
-                    continue;
-                if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx),
-                                                                 target->func))
-                    continue;
-                if (cg_func_body_has_static_func_use_in_owner_module(ctx, source->func,
-                                                                     target->func)) {
-                    target->reachable = true;
-                    target->state = 2;
-                    changed = true;
-                }
-            }
+            changed |= cg_func_reach_mark_body_edges_in_owner_module(ctx, source);
         }
     } while (changed);
 

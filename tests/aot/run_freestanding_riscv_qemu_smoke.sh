@@ -61,6 +61,10 @@ cleanup() {
         kill "$QEMU_PID" >/dev/null 2>&1 || true
         wait "$QEMU_PID" >/dev/null 2>&1 || true
     fi
+    if [ "${XRAY_KEEP_TEST_TMP:-0}" = "1" ]; then
+        echo "kept freestanding RISC-V smoke workdir: $WORK" >&2
+        return
+    fi
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -71,7 +75,19 @@ import mem
 
 const UART0 = 0x10000000
 
+fn uart_init() {
+    // 16550A power-on state is not a usable cross-version contract. Program a
+    // deterministic 8N1 configuration before observing the transmit port.
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 1), 0x00, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 3), 0x80, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 0), 0x03, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 1), 0x00, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 3), 0x03, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0 + 2), 0x07, 1)
+}
+
 fn kernel_entry() -> i32 {
+    uart_init()
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('R'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), int('V'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(UART0), 10, 1)
@@ -81,18 +97,54 @@ fn kernel_entry() -> i32 {
 }
 XR
 
-cat >"$WORK/xray.toml" <<'TOML'
+BOOT="$WORK/freestanding_riscv_start.S"
+cat >"$BOOT" <<'ASM'
+.section .text.start, "ax", @progbits
+.globl _start
+.type _start, @function
+_start:
+    la sp, _stack_top
+    call xray_kernel_entry
+1:
+    wfi
+    j 1b
+.size _start, . - _start
+ASM
+
+BOOT_SHA="$(shasum -a 256 "$BOOT" | awk '{print $1}')"
+
+cat >"$WORK/xray.toml" <<TOML
 [package]
 name = "freestanding-riscv-qemu-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_riscv_uart.xr"
 
+[native]
+name = "freestanding-riscv-start"
+version = "1.0.0"
+license = "MIT"
+source = "in-tree freestanding QEMU regression stub"
+audit_mode = "shipping"
+vm = "unsupported"
+
+[[native.unit]]
+name = "riscv-start"
+kind = "asm"
+sources = ["freestanding_riscv_start.S"]
+source_hashes = ["$BOOT_SHA"]
+optimization = "release"
+visibility = "hidden"
+warnings = "strict"
+output = "freestanding_riscv_start.o"
+purpose = "initialize the machine stack before entering Xray"
+
 [[freestanding.entry]]
 xray = "kernel_entry"
 symbol = "xray_kernel_entry"
 kind = "start"
 section = ".text.entry"
+stub = "freestanding_riscv_start.S"
 TOML
 
 LD="$WORK/freestanding_riscv.ld"
@@ -101,12 +153,12 @@ EXTERN(xray_kernel_entry)
 ENTRY(_start)
 SECTIONS {
   . = 0x80000000;
-  _start = xray_kernel_entry;
-  .text ALIGN(4) : { KEEP(*(".text.entry")) *(.text*) }
+  .text ALIGN(4) : { KEEP(*(.text.start)) KEEP(*(".text.entry")) *(.text*) }
   .rodata ALIGN(4) : { *(.rodata*) }
   .sdata ALIGN(4) : { *(.sdata*) }
   .data ALIGN(4) : { *(.data*) }
   .bss ALIGN(8) : { *(.bss*) *(COMMON) }
+  _stack_top = 0x87fff000;
 }
 LD
 

@@ -7494,6 +7494,7 @@ static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
         PRINT_BIT(XAOT_SLICE_EV_NO_CLOBBER, "no_clobber");
         PRINT_BIT(XAOT_SLICE_EV_ASSERT_GUARD, "assert_guard");
         PRINT_BIT(XAOT_SLICE_EV_READONLY, "readonly");
+        PRINT_BIT(XAOT_SLICE_EV_DOMINATING_GUARD, "dominating_guard");
     } else {
         PRINT_BIT(XAOT_SLICE_DROP_BOUNDS, "bounds");
         PRINT_BIT(XAOT_SLICE_DROP_READONLY, "readonly");

@@ -1,0 +1,8 @@
+export fn observeOnly(value: int) {
+    var next = value + 1
+    if (next < value) {
+        return
+    }
+}
+
+observeOnly(7)

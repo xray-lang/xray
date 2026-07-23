@@ -1,0 +1,9 @@
+// A Slice<byte> crosses the dynamic string namespace boundary as the
+// release Slice ABI, not as an owning Array<byte>.
+fn main() {
+    var bytes: Array<byte> = [98, 105, 110]
+    var view: Slice<byte> = bytes[:]
+    print(string.fromUtf8(view))
+}
+
+main()

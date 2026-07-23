@@ -1,0 +1,2 @@
+regex=fn-attr [0-9]+ func=observeOnly body=[0-9]+ attr=(const|pure) effect=0x[0-9a-f]+ escape=0x[0-9a-f]+ evidence=0x[0-9a-f]+
+c_not_regex=XRT_FN_(CONST|PURE) void void_func_attr_no_invalid_c_attribute_[0-9a-f]+_observeOnly_[0-9]+

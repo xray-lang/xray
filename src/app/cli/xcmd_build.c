@@ -2235,6 +2235,27 @@ static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t 
     return xaot_hash_fold_str(h, sysroot);
 }
 
+static bool xaot_native_unit_owns_stub(const XrNativeUnit *unit, const char *stub) {
+    if (!unit || !unit->sources || !stub)
+        return false;
+    for (uint32_t si = 0; si < unit->source_count; si++) {
+        if (unit->sources[si] && strcmp(unit->sources[si], stub) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xaot_native_unit_owns_entry_stub(const XrNativePackagePlan *plan,
+                                             const XrNativeUnit *unit) {
+    if (!plan)
+        return false;
+    for (uint32_t ei = 0; ei < plan->entry_count; ei++) {
+        if (xaot_native_unit_owns_stub(unit, plan->entries[ei].stub))
+            return true;
+    }
+    return false;
+}
+
 static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
                                        XaotLinkManifest *link_manifest,
                                        const XrCliToolchainPlan *toolchain_plan,
@@ -2338,6 +2359,29 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
         xr_free(object_paths);
         if (ret != 0)
             return ret;
+        /* Entry stubs are linker roots rather than calls reachable from Xi, so
+         * extern-symbol reachability cannot retain their native unit.  The
+         * explicit freestanding.entry.stub binding is the audited linkage
+         * edge; place that unit on the final link line exactly once. */
+        if (xaot_native_unit_owns_entry_stub(native_plan, unit) &&
+            !xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_LD_FLAG, unit->output)) {
+            fprintf(stderr, "Error: cannot retain freestanding entry stub unit '%s'\n",
+                    unit->name ? unit->name : "?");
+            return 1;
+        }
+    }
+    for (uint32_t ei = 0; ei < native_plan->entry_count; ei++) {
+        const XrFreestandingEntryPlan *entry = &native_plan->entries[ei];
+        bool found = entry->stub == NULL;
+        for (uint32_t ui = 0; !found && ui < native_plan->unit_count; ui++)
+            found = xaot_native_unit_owns_stub(&native_plan->units[ui], entry->stub);
+        if (!found) {
+            fprintf(stderr,
+                    "Error: E-ENTRY-STUB-UNIT: freestanding entry '%s' stub must be a source of "
+                    "an audited native unit\n",
+                    entry->xray_name ? entry->xray_name : "?");
+            return 1;
+        }
     }
     for (uint32_t ti = 0; ti < native_plan->target_count; ti++) {
         const XrNativeTargetPlan *native_target = &native_plan->targets[ti];

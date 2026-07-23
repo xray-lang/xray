@@ -1,0 +1,35 @@
+// Tuple destructuring must preserve each slot's exact scalar type in Xi.
+// If `hi` degrades to `any`, `>>=` uses signed arithmetic for a u64 value
+// with bit 63 set and silently corrupts the result.
+fn mul128(a: u64, b: u64) -> (u64, u64) {
+    return (a.mulHigh(b), a * b)
+}
+
+const POW10: [u64; 1] = [100000000000000000]
+
+// An indexed fixed-width scalar must also be boxed according to its prepared
+// AOT representation when stored in a non-leading tuple lane.
+fn indexedTriple() -> (u64, u64, u64) {
+    return (0, 10000000000000000, POW10[0])
+}
+
+enum TupleStatus {
+    Ok,
+    Invalid
+}
+
+fn enumAndByte() -> (TupleStatus, u8) {
+    return (TupleStatus.Invalid, 7)
+}
+
+var (hi, lo) = mul128(0xF120000000000000, 0x8D7EB76070A08AEC)
+hi >>= 11
+lo >>= 63
+print(hi)
+print(lo)
+var (_, mid, tail) = indexedTriple()
+print(mid)
+print(tail)
+var (status, byteValue) = enumAndByte()
+print(status == TupleStatus.Invalid)
+print(byteValue)

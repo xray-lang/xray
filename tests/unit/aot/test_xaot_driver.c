@@ -561,6 +561,43 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
     passed++;
 }
 
+static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-riscv64-layout-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path, "import mem\n"
+                     "struct TargetPair {\n"
+                     "    ptr: Ptr<byte>\n"
+                     "    size: usize\n"
+                     "}\n"
+                     "comptime {\n"
+                     "    compile_assert(mem.sizeOf<TargetPair>() == 16)\n"
+                     "    compile_assert(mem.alignOf<TargetPair>() == 8)\n"
+                     "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 8)\n"
+                     "}\n"
+                     "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, "riscv64gc-unknown-none-elf"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(strstr(result.plan_dump, "target-data-layout pointer=8/8") != NULL);
+    ASSERT_TRUE(result.n_sources == 1);
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static bool manifest_has_define(const XaotLinkManifest *manifest, const char *needle) {
     if (!manifest || !needle)
         return false;
@@ -803,6 +840,7 @@ int main(void) {
     test_driver_dumps_subject_bound_local_evidence();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();
+    test_driver_analyzes_riscv64_layout_with_selected_target();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();

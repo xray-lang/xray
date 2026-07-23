@@ -16,7 +16,7 @@ c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[
 c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, void \* \* p0\)
 c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, INT64_C\(41\)\)
 c_regex=xrt_shared\[[0-9]+\] = \(\{ XrValue _xsv = xrt_box_obj\(v[0-9]+\)
-c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, \(void \*\)\(v[0-9]+\)\)
+c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, v[0-9]+\)
 c_regex=tagged_boundary_[0-9a-f]+_bump_[0-9]+\(NULL, \(\(xrt_native_tagged_boundary_[0-9a-f]+_Counter\*\)v[0-9]+\)\)
 c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_setprop_name(

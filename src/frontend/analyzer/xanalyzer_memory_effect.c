@@ -383,6 +383,58 @@ static bool memory_call_has_visible_root(XaMemoryFunctionRow *row, CallExprNode 
     return false;
 }
 
+static bool memory_expr_is_module(XaMemoryPass *pass, AstNode *expr, const char *module_name) {
+    if (!pass || !pass->analyzer || !expr || expr->type != AST_VARIABLE || !module_name)
+        return false;
+    XaSymbol *symbol = memory_symbol_by_id(pass->analyzer, expr->as.variable.symbol_id);
+    if (!symbol && expr->as.variable.name)
+        symbol = xa_analyzer_lookup_deep(pass->analyzer, expr->as.variable.name);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(pass->analyzer, symbol) : NULL;
+    return symbol && symbol->kind == XA_SYM_MODULE && links && links->module_name &&
+           strcmp(links->module_name, module_name) == 0;
+}
+
+static bool memory_call_is_mem_intrinsic(XaMemoryPass *pass, const CallExprNode *call) {
+    if (!pass || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    static const char *const names[] = {
+        "sizeOf",       "alignOf",       "offsetOf",
+        "slice",        "withSliceMut",  "assumeInitialized",
+        "alloc",        "allocZeroed",   "allocAligned",
+        "pageAlloc",    "pageProtect",   "pageFree",
+        "ptr",          "mutPtr",        "addr",
+        "load",         "store",         "copy",
+        "move",         "set",           "compare",
+        "volatileLoad", "volatileStore",
+    };
+    if (!member->name)
+        return false;
+    bool known = false;
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (strcmp(member->name, names[i]) == 0) {
+            known = true;
+            break;
+        }
+    }
+    return known && memory_expr_is_module(pass, member->object, "mem");
+}
+
+static void memory_apply_mem_scalar_store(XaMemoryScan *scan, CallExprNode *call) {
+    if (!scan || !call || !memory_call_is_mem_intrinsic(scan->pass, call) || !call->callee ||
+        call->arg_count < 1 || !call->arguments)
+        return;
+    const char *name = call->callee->as.member_access.name;
+    if (strcmp(name, "store") != 0 && strcmp(name, "copy") != 0 && strcmp(name, "move") != 0 &&
+        strcmp(name, "set") != 0 && strcmp(name, "volatileStore") != 0 &&
+        strcmp(name, "withSliceMut") != 0)
+        return;
+    XaMemoryRootRef root;
+    if (memory_root_for_expr(scan->row, call->arguments[0], &root) &&
+        !xa_memory_effect_summary_add_write(scan->summary, root, XA_MEMORY_PLACE_PATH_WILDCARD))
+        memory_mark_failure(scan);
+}
+
 static XrCallArgAccess memory_call_arg_access(const CallExprNode *call, int index);
 
 static bool memory_dynamic_arg_is_stable_slice_read(XaMemoryPass *pass, CallExprNode *call,
@@ -421,6 +473,7 @@ static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, As
 
 static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+    memory_apply_mem_scalar_store(scan, call);
     AstNode *receiver = NULL;
     const XaBuiltinReceiverMethodSpec *builtin = NULL;
     bool named_contract = false;
@@ -433,9 +486,12 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
             memory_apply_builtin(scan, root, builtin);
         if (!builtin) {
             XaBuiltinMethodMemoryEffectSet effects = XA_BUILTIN_MEMORY_STABLE_READ;
-            named_contract = xa_builtin_named_receiver_memory_effect(
-                xr_type_get_class_name(receiver_type), call->callee->as.member_access.name,
-                &effects);
+            named_contract =
+                (receiver_type && XR_TYPE_IS_POINTER(receiver_type) &&
+                 xa_builtin_pointer_memory_effect(call->callee->as.member_access.name, &effects)) ||
+                xa_builtin_named_receiver_memory_effect(xr_type_get_class_name(receiver_type),
+                                                        call->callee->as.member_access.name,
+                                                        &effects);
             if (named_contract && memory_root_for_expr(scan->row, receiver, &root))
                 memory_apply_effect_set(scan, root, effects);
         }
@@ -445,6 +501,7 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     const XaMemoryEffectSummary *callee = memory_callee_summary(scan->pass, callee_symbol);
     bool compiler_builtin_function =
         (callee_symbol && callee_symbol->is_builtin && callee_symbol->kind == XA_SYM_FUNCTION) ||
+        memory_call_is_mem_intrinsic(scan->pass, call) ||
         (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
          strcmp(call->callee->as.variable.name, "len") == 0);
     if (callee) {

@@ -573,12 +573,29 @@ static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
-    if ((sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY) && XR_IS_ARRAY(arg0)) {
-        xrt_array_t *bytes = (xrt_array_t *) arg0.ptr;
-        if (!bytes || bytes->elem_type != XR_ELEM_U8)
+    if (sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY) {
+        const uint8_t *data = NULL;
+        size_t len = 0;
+        bool has_bytes = false;
+        if (XR_IS_ARRAY(arg0)) {
+            xrt_array_t *bytes = (xrt_array_t *) arg0.ptr;
+            if (bytes && bytes->elem_type == XR_ELEM_U8 && bytes->length >= 0) {
+                data = (const uint8_t *) bytes->data;
+                len = (size_t) bytes->length;
+                has_bytes = len == 0 || data != NULL;
+            }
+        } else if (arg0.tag == XR_TAG_AGG_REF && arg0.ext == 0 && arg0.heap_type == UINT16_MAX &&
+                   arg0.ptr) {
+            xr_span_t bytes = xrt_span_from_value_ref(arg0);
+            if (bytes.length >= 0 && (uint64_t) bytes.length <= (uint64_t) SIZE_MAX &&
+                (bytes.length == 0 || bytes.data != NULL)) {
+                data = (const uint8_t *) bytes.data;
+                len = (size_t) bytes.length;
+                has_bytes = true;
+            }
+        }
+        if (!has_bytes)
             return sym == XRT_SYM_FROM_UTF8 ? XR_NULL_VAL : xrt_str_alloc(0);
-        const uint8_t *data = (const uint8_t *) bytes->data;
-        size_t len = (size_t) bytes->length;
         XrUtf8ScanResult scan = xr_utf8_core_scan_strict(data, len);
         if (scan.error == XR_UTF8_OK) {
             XrValue out = xrt_str_alloc(len);
