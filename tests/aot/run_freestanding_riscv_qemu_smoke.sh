@@ -165,6 +165,20 @@ kind = "function"
 calling_convention = "c"
 unit = "riscv-start"
 
+[native.symbol.contract]
+params = []
+return = { ownership = "value", nullable = false, validity = "void" }
+effects = ["foreign"]
+callbacks = []
+failure = "none"
+allocation = "none"
+blocking = "never"
+suspend = "never"
+io = "none"
+sync = "none"
+panic = "never"
+error = "none"
+
 [[freestanding.entry]]
 xray = "kernel_entry"
 symbol = "xray_kernel_entry"

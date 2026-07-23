@@ -2537,7 +2537,7 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
          * explicit freestanding.entry.stub binding is the audited linkage
          * edge; place that unit on the final link line exactly once. */
         if (xaot_native_unit_owns_entry_stub(native_plan, unit) &&
-            !xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_LD_FLAG, unit->output)) {
+            !xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_NATIVE_INPUT, unit->output)) {
             fprintf(stderr, "Error: cannot retain freestanding entry stub unit '%s'\n",
                     unit->name ? unit->name : "?");
             return 1;
