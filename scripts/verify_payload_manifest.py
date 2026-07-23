@@ -108,6 +108,11 @@ def verify(root: Path, binary: Path | None) -> None:
     for entry in files:
         if not isinstance(entry, dict):
             fail("file inventory entry must be an object")
+        component = entry.get("component")
+        if component not in {"core", "sdk", "toolchain-integration", "zig"}:
+            fail(f"invalid component for payload entry: {entry.get('path')!r}")
+        if component not in components:
+            fail(f"payload entry references undeclared component: {entry.get('path')!r}")
         relative = safe_relative_path(entry.get("path"))
         relative_text = relative.as_posix()
         if relative_text <= previous:
@@ -129,10 +134,14 @@ def verify(root: Path, binary: Path | None) -> None:
             fail(f"payload path escapes root: {relative_text}")
 
         if entry.get("kind") == "symlink":
+            if set(entry) != {"path", "component", "kind", "target"}:
+                fail(f"invalid symlink inventory fields: {relative_text}")
             if not installed.is_symlink() or os.readlink(installed) != entry.get("target"):
                 fail(f"symlink mismatch: {relative_text}")
             safe_relative_path(entry.get("target"))
             continue
+        if set(entry) != {"path", "component", "size", "sha256", "mode"}:
+            fail(f"invalid regular-file inventory fields: {relative_text}")
         if not installed.is_file() or installed.is_symlink():
             fail(f"missing regular payload file: {relative_text}")
         if entry.get("size") != installed.stat().st_size:
