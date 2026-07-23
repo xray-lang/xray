@@ -173,6 +173,22 @@ static const XrCliOptionSpec info_options[] = {
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec self_options[] = {
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable delegation"},
+    XR_CLI_OPT_END};
+
+static const XrCliCommandSpec self_subcommands[] = {
+    {"update", "Update through the active installation provider", NULL, empty_options, 0, 0, false,
+     false, NULL, NULL, 0},
+    {"uninstall", "Uninstall through the active installation provider", NULL, empty_options, 0, 0,
+     false, false, NULL, NULL, 0},
+    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
+
+static const XrCliCommandSpec doctor_subcommands[] = {
+    {"installation", "Diagnose active installation ownership", NULL, empty_options, 0, 0, false,
+     false, NULL, NULL, 0},
+    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
+
 static const XrCliOptionSpec explain_options[] = {
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
     XR_CLI_OPT_END};
@@ -274,6 +290,10 @@ static XrCliCommandSpec cli_commands[] = {
     /* Utility commands */
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
      NULL, 0},
+    {"doctor", "Diagnose Xray installation state", NULL, info_options, 0, 1, false, false, NULL,
+     doctor_subcommands, 1},
+    {"self", "Update or uninstall through the active provider", NULL, self_options, 0, 1, false,
+     false, NULL, self_subcommands, 2},
     {"builtin-dump", "Dump analyzer builtin metadata", NULL, empty_options, 0, 0, false, true, NULL,
      NULL, 0},
     {"help", "Show help for a command", NULL, empty_options, 0, 1, false, false, NULL, NULL, 0},

@@ -31,6 +31,7 @@ typedef enum {
     XR_CLI_EXIT_USAGE = 2,
     XR_CLI_EXIT_UNAVAILABLE = 3,
     XR_CLI_EXIT_INTERNAL = 4,
+    XR_CLI_EXIT_DELEGATE = 13,
 } XrCliExitCode;
 
 /* Print a CLI error prefixed with the program/command name.

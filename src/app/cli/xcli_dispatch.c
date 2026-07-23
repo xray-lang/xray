@@ -80,6 +80,8 @@ XR_FUNC int cmd_pkg(const XrCliInvocation *inv);
 XR_FUNC int cmd_builtin_dump(const XrCliInvocation *inv);
 /* Defined below in this file */
 XR_FUNC int cmd_info(const XrCliInvocation *inv);
+XR_FUNC int cmd_self(const XrCliInvocation *inv);
+XR_FUNC int cmd_doctor(const XrCliInvocation *inv);
 XR_FUNC int cmd_help(const XrCliInvocation *inv);
 #ifdef XR_HAS_LSP
 XR_FUNC int cmd_lsp(const XrCliInvocation *inv);
@@ -109,6 +111,8 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("verify", cmd_verify);
     xr_cli_register_handler("pkg", cmd_pkg);
     xr_cli_register_handler("info", cmd_info);
+    xr_cli_register_handler("self", cmd_self);
+    xr_cli_register_handler("doctor", cmd_doctor);
     xr_cli_register_handler("builtin-dump", cmd_builtin_dump);
     xr_cli_register_handler("help", cmd_help);
 #ifdef XR_HAS_LSP

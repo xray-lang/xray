@@ -1145,7 +1145,21 @@ endif()
 # - WebSocket stdlib needs libcrypto (SHA1 for handshake) even without TLS
 # - Full TLS needs both libssl and libcrypto
 if(APPLE)
-    set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    # Respect a release/toolchain-provided root first, then cover both native
+    # Homebrew layouts for developer builds. Do not force the arm64 prefix on
+    # Intel builders.
+    if(NOT OPENSSL_ROOT_DIR)
+        foreach(_xray_openssl_root "/opt/homebrew/opt/openssl@3" "/usr/local/opt/openssl@3")
+            if(EXISTS "${_xray_openssl_root}")
+                set(OPENSSL_ROOT_DIR "${_xray_openssl_root}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    # Native packages cannot depend on a user's Homebrew prefix.  Link OpenSSL
+    # into the Xray executable; provider-specific AOT dependencies remain
+    # explicit in the generated link manifest.
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
 endif()
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)

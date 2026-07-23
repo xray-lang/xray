@@ -28,7 +28,7 @@ jobs:
           - os: ubuntu-24.04-arm
             name: linux-arm64
             artifact: xray-linux-arm64
-          - os: macos-latest
+          - os: macos-15
             name: macos-arm64
             artifact: xray-macos-arm64
           - os: macos-15-intel
@@ -56,6 +56,10 @@ jobs:
       if: runner.os == 'Linux'
       run: sudo apt-get update -qq && sudo apt-get install -y -qq clang
 
+    - name: Install release dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install openssl@3
+
     - name: Install pinned Zig
       uses: mlugg/setup-zig@v2
       with:
@@ -64,20 +68,26 @@ jobs:
     - name: Configure (Unix)
       if: runner.os != 'Windows'
       run: |
+        extra=()
+        if [ "$RUNNER_OS" = macOS ]; then
+          extra+=(
+            "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"
+            "-DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)"
+            "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-fatal_warnings"
+          )
+        fi
         cmake -B build \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
-          -DXRAY_BUNDLE_ZIG=ON \
-          -DXRAY_BUNDLED_ZIG="$(command -v zig)"
+          -DXRAY_BUNDLE_ZIG=OFF \
+          "${extra[@]}"
 
     - name: Configure (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $zig = (Get-Command zig).Source
         cmake -B build -DCMAKE_BUILD_TYPE=Release `
-          -DXRAY_BUNDLE_ZIG=ON `
-          "-DXRAY_BUNDLED_ZIG=$zig"
+          -DXRAY_BUNDLE_ZIG=OFF
 
     - name: Build
       run: cmake --build build --config Release
@@ -173,6 +183,14 @@ jobs:
           --binary dist/bin/xray \
           --payload dist/share/xray/install/payload-manifest.json \
           --tag "$XRAY_RELEASE_TAG"
+        if [ "$RUNNER_OS" = macOS ]; then
+          minos=$(otool -l dist/bin/xray | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')
+          test "$minos" = 15.0
+          if otool -L dist/bin/xray | grep -E '/(opt|usr/local)/(homebrew|Cellar|opt)/'; then
+            echo "release binary depends on a package-manager prefix" >&2
+            exit 1
+          fi
+        fi
 
     - name: Verify release identity and payload (Windows)
       if: runner.os == 'Windows'
@@ -189,7 +207,8 @@ jobs:
 
     # This is deliberately run from outside the checkout with all SDK path
     # overrides removed. It proves the release tree, not the development tree,
-    # owns native AOT compilation and bundled Zig discovery.
+    # owns native AOT compilation. Zig remains an external/managed component
+    # and is used explicitly only for cross-target gates.
     - name: Relocatable AOT smoke (Unix)
       if: runner.os != 'Windows'
       shell: bash
@@ -209,7 +228,7 @@ jobs:
         xray="$GITHUB_WORKSPACE/dist/bin/xray"
         unset XRAY_INCLUDE XRAY_LIB XRAY_STDLIB_PATH XRAY_ZIG
         "$xray" --version
-        "$xray" toolchain doctor
+        "$xray" toolchain probe --target native --provider host --refresh
         (cd "$smoke" && "$xray" build --native --dump-link-command runtime_time.xr -o runtime_time) \
           | tee "$smoke/native.log"
         test "$("$smoke/runtime_time")" = "7"
@@ -219,7 +238,7 @@ jobs:
           echo "release AOT command leaked the checkout path" >&2
           exit 1
         fi
-        (cd "$smoke" && "$xray" build --native --target x86_64-linux-musl cross.xr -o cross-linux)
+        (cd "$smoke" && "$xray" build --native --toolchain zig --zig "$(command -v zig)" --target x86_64-linux-musl cross.xr -o cross-linux)
         test -s "$smoke/cross-linux"
 
     - name: Relocatable AOT smoke (Windows)
@@ -277,6 +296,32 @@ jobs:
       run: |
         Compress-Archive -Path dist\* -DestinationPath ${{ matrix.artifact }}.zip
 
+    - name: Generate SBOM, checksums, and provenance (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        python3 scripts/generate_release_evidence.py \
+          --root dist \
+          --artifact ${{ matrix.artifact }}.tar.gz \
+          --output-prefix ${{ matrix.artifact }} \
+          --commit "$GITHUB_SHA" \
+          --builder "$GITHUB_WORKFLOW@$GITHUB_RUN_ID" \
+          --created "$(git show -s --format=%cI "$GITHUB_SHA")"
+
+    - name: Generate SBOM, checksums, and provenance (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $created = (git show -s --format=%cI $env:GITHUB_SHA).Trim()
+        python scripts\generate_release_evidence.py `
+          --root dist `
+          --artifact ${{ matrix.artifact }}.zip `
+          --output-prefix ${{ matrix.artifact }} `
+          --commit $env:GITHUB_SHA `
+          --builder "$env:GITHUB_WORKFLOW@$env:GITHUB_RUN_ID" `
+          --created $created
+        if ($LASTEXITCODE -ne 0) { throw 'release evidence generation failed' }
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
@@ -284,6 +329,9 @@ jobs:
         path: |
           ${{ matrix.artifact }}.tar.gz
           ${{ matrix.artifact }}.zip
+          ${{ matrix.artifact }}.spdx.json
+          ${{ matrix.artifact }}.provenance.json
+          ${{ matrix.artifact }}.sha256
 
   release:
     needs: build
@@ -406,7 +454,7 @@ jobs:
         for path in files:
             name = path.name
             if name in existing:
-                request("DELETE", f"{api}/repos/{repo}/releases/assets/{existing[name]}")
+                raise SystemExit(f"immutable release asset already exists: {name}")
             upload_url = f"https://uploads.github.com/repos/{repo}/releases/{release_id}/assets?name={urllib.parse.quote(name)}"
             content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
             status, body = request("POST", upload_url, path.read_bytes(), content_type)
