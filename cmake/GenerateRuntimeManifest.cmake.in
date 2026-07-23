@@ -1,0 +1,27 @@
+# GenerateRuntimeManifest.cmake - exact target/ABI/provider runtime artifact contract.
+
+set(_xray_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_xray_runtime_dir "${_xray_root}/lib/xray/aot/@XRAY_HOST_TARGET_ABI@")
+set(_xray_aot_core "${_xray_runtime_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@xray_aot_core@CMAKE_STATIC_LIBRARY_SUFFIX@")
+set(_xray_rt_coro "${_xray_runtime_dir}/@CMAKE_STATIC_LIBRARY_PREFIX@xray_rt_coro@CMAKE_STATIC_LIBRARY_SUFFIX@")
+
+# Component installs may run this script before or without XraySDK. Only publish
+# a manifest once the complete artifact set is present; a partial set is never
+# advertised as usable.
+if(EXISTS "${_xray_aot_core}" AND EXISTS "${_xray_rt_coro}")
+    file(SHA256 "${_xray_aot_core}" _xray_aot_core_sha256)
+    file(SHA256 "${_xray_rt_coro}" _xray_rt_coro_sha256)
+    file(WRITE "${_xray_runtime_dir}/manifest.json"
+"{\n"
+"  \"schema\":1,\n"
+"  \"sdkAbi\":1,\n"
+"  \"target\":\"@XRAY_HOST_TARGET_ABI@\",\n"
+"  \"objectFormat\":\"@XRAY_RUNTIME_OBJECT_FORMAT@\",\n"
+"  \"providers\":[@XRAY_RUNTIME_PROVIDERS_JSON@],\n"
+"  \"artifacts\":[\n"
+"    {\"id\":\"xray-aot-core-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@CMAKE_STATIC_LIBRARY_PREFIX@xray_aot_core@CMAKE_STATIC_LIBRARY_SUFFIX@\",\"sha256\":\"${_xray_aot_core_sha256}\"},\n"
+"    {\"id\":\"xray-rt-coro-@XRAY_HOST_TARGET_ABI@-v1\",\"kind\":\"static-library\",\"path\":\"@CMAKE_STATIC_LIBRARY_PREFIX@xray_rt_coro@CMAKE_STATIC_LIBRARY_SUFFIX@\",\"sha256\":\"${_xray_rt_coro_sha256}\"}\n"
+"  ],\n"
+"  \"systemLibraries\":[@XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON@]\n"
+"}\n")
+endif()

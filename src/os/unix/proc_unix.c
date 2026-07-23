@@ -134,6 +134,8 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
             }
             close(detached_pipe[1]);
         }
+        if (options && options->new_process_group && setpgid(0, 0) != 0)
+            _exit(127);
         // Child: exec, never returns on success.
         if (proc_dup_stdio(options) != 0) {
             _exit(127);
@@ -153,6 +155,8 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         // shell convention for "command not found".
         _exit(127);
     }
+    if (options && options->new_process_group)
+        (void) setpgid(pid, pid);
     if (detached) {
         close(detached_pipe[1]);
         int64_t detached_pid = (int64_t) XR_PROC_INVALID;
@@ -236,6 +240,12 @@ int xr_proc_kill(XrProcId pid, int signal) {
         return -1;
     }
     return kill((pid_t) pid, signal) == 0 ? 0 : -1;
+}
+
+int xr_proc_kill_tree(XrProcId pid, int signal) {
+    if (pid <= 0 || signal <= 0)
+        return -1;
+    return kill((pid_t) -pid, signal) == 0 ? 0 : -1;
 }
 
 int64_t xr_proc_self_pid(void) {

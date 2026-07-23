@@ -5,331 +5,414 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_cli_toolchain.c - Unit tests for AOT target/toolchain planning
+ * test_cli_toolchain.c - Toolchain model, discovery, and process tests
  */
 
 #include "../test_framework.h"
-#include "app/cli/xcli_toolchain.h"
+#include "app/toolchain/xtc_discovery.h"
+#include "app/toolchain/xtc_config.h"
+#include "app/toolchain/xtc_json.h"
+#include "app/toolchain/xtc_model.h"
+#include "app/toolchain/xtc_process.h"
+#include "app/toolchain/xtc_probe_cache.h"
+#include "base/xjson.h"
 
 #include <stdlib.h>
+#include <string.h>
 #ifndef _WIN32
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
 
-static void set_test_env(const char *name, const char *value) {
-#ifdef _WIN32
-    _putenv_s(name, value ? value : "");
-#else
-    if (value)
-        setenv(name, value, 1);
-    else
-        unsetenv(name);
-#endif
-}
-
-TEST(parse_native_target) {
-    XrCliBuildTarget target;
+TEST(parse_native_target_normalizes_abi) {
+    XrToolchainTarget target;
     char err[256];
 
-    ASSERT_TRUE(xr_cli_build_target_parse(NULL, &target, err, sizeof(err)));
+    ASSERT_TRUE(xtc_target_parse(NULL, &target, err, sizeof(err)));
     ASSERT_TRUE(target.is_native);
-    ASSERT_STR_EQ(target.name, "native");
-    ASSERT_NULL(target.zig_triple);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_NATIVE);
-    ASSERT_TRUE(target.pointer_bits == 32 || target.pointer_bits == 64);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
+    ASSERT_STR_EQ(target.requested_name, "native");
+    ASSERT_TRUE(strstr(target.name, "-apple-darwin") != NULL ||
+                strstr(target.name, "-linux-gnu") != NULL ||
+                strstr(target.name, "-windows-msvc") != NULL);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
 }
 
-TEST(list_supported_targets) {
+TEST(list_uses_canonical_targets_only) {
     size_t count = 0;
-    const char *const *targets = xr_cli_build_target_supported_names(&count);
+    const char *const *targets = xtc_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 9);
+    ASSERT_EQ_INT((int) count, 13);
     ASSERT_STR_EQ(targets[0], "native");
-    ASSERT_STR_EQ(targets[1], "x86_64-unknown-none");
-    ASSERT_STR_EQ(targets[2], "riscv32imac-unknown-none-elf");
-    ASSERT_STR_EQ(targets[3], "riscv64gc-unknown-none-elf");
-    ASSERT_STR_EQ(targets[4], "thumbv7em-none-eabi");
-    ASSERT_STR_EQ(targets[5], "x86_64-linux-musl");
-    ASSERT_STR_EQ(targets[8], "aarch64-windows-gnu");
-}
-
-TEST(parse_x86_64_none_target) {
-    XrCliBuildTarget target;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-unknown-none", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
-    ASSERT_STR_EQ(target.name, "x86_64-unknown-none");
-    ASSERT_STR_EQ(target.zig_triple, "x86_64-freestanding-none");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86_64);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
-    ASSERT_EQ_INT(target.pointer_bits, 64);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
+    ASSERT_STR_EQ(targets[1], "aarch64-apple-darwin");
+    ASSERT_STR_EQ(targets[3], "x86_64-linux-gnu");
+    ASSERT_STR_EQ(targets[10], "x86_64-freestanding-none");
+    ASSERT_STR_EQ(targets[12], "thumb-freestanding-eabi");
 }
 
 TEST(parse_linux_musl_target) {
-    XrCliBuildTarget target;
+    XrToolchainTarget target;
     char err[256];
 
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
     ASSERT_STR_EQ(target.name, "x86_64-linux-musl");
     ASSERT_STR_EQ(target.zig_triple, "x86_64-linux-musl");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86_64);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_LINUX);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_MUSL);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
-    ASSERT_EQ_INT(target.pointer_bits, 64);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_X86_64);
+    ASSERT_EQ_INT(target.os, XR_TOOLCHAIN_TARGET_OS_LINUX);
+    ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_MUSL);
+    ASSERT_EQ_INT(target.endian, XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE);
+    ASSERT_STR_EQ(xtc_target_default_output(&target), "a.out");
 }
 
-TEST(parse_riscv32_none_elf_target) {
-    XrCliBuildTarget target;
+TEST(parse_freestanding_targets) {
+    XrToolchainTarget target;
     char err[256];
 
-    ASSERT_TRUE(
-        xr_cli_build_target_parse("riscv32imac-unknown-none-elf", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
-    ASSERT_STR_EQ(target.name, "riscv32imac-unknown-none-elf");
-    ASSERT_STR_EQ(target.zig_triple, "riscv32-freestanding-none");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_RISCV32);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(xtc_target_parse("x86_64-freestanding-none", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.os, XR_TOOLCHAIN_TARGET_OS_NONE);
+    ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_NONE);
+    ASSERT_FALSE(xtc_target_is_hosted(&target));
+
+    ASSERT_TRUE(xtc_target_parse("riscv32-freestanding-none", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_RISCV32);
     ASSERT_EQ_INT(target.pointer_bits, 32);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
-}
 
-TEST(parse_riscv64_none_elf_target) {
-    XrCliBuildTarget target;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("riscv64gc-unknown-none-elf", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
-    ASSERT_STR_EQ(target.name, "riscv64gc-unknown-none-elf");
-    ASSERT_STR_EQ(target.zig_triple, "riscv64-freestanding-none");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_RISCV64);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_NONE);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
-    ASSERT_EQ_INT(target.pointer_bits, 64);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
-}
-
-TEST(parse_thumbv7em_none_eabi_target) {
-    XrCliBuildTarget target;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
-    ASSERT_STR_EQ(target.name, "thumbv7em-none-eabi");
-    ASSERT_STR_EQ(target.zig_triple, "thumb-freestanding-eabi");
+    ASSERT_TRUE(xtc_target_parse("thumb-freestanding-eabi", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_THUMB);
+    ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_EABI);
     ASSERT_STR_EQ(target.cpu, "cortex_m4");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_THUMBV7EM);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_NONE);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_EABI);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
-    ASSERT_EQ_INT(target.pointer_bits, 32);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.out");
 }
 
-TEST(parse_windows_gnu_target) {
-    XrCliBuildTarget target;
+TEST(reject_retired_target_aliases) {
+    XrToolchainTarget target;
     char err[256];
 
-    ASSERT_TRUE(xr_cli_build_target_parse("aarch64-windows-gnu", &target, err, sizeof(err)));
-    ASSERT_FALSE(target.is_native);
-    ASSERT_STR_EQ(target.name, "aarch64-windows-gnu");
-    ASSERT_STR_EQ(target.zig_triple, "aarch64-windows-gnu");
-    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_AARCH64);
-    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_WINDOWS);
-    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_GNU);
-    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
-    ASSERT_EQ_INT(target.pointer_bits, 64);
-    ASSERT_STR_EQ(xr_cli_build_target_default_output(&target), "a.exe");
+    ASSERT_FALSE(xtc_target_parse("x86_64-unknown-none", &target, err, sizeof(err)));
+    ASSERT_FALSE(xtc_target_parse("riscv32imac-unknown-none-elf", &target, err, sizeof(err)));
+    ASSERT_FALSE(xtc_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
 }
 
-TEST(reject_unknown_target) {
-    XrCliBuildTarget target;
+TEST(selector_and_provider_names_are_stable) {
+    XrToolchainSelector selector;
     char err[256];
 
-    ASSERT_FALSE(xr_cli_build_target_parse("sparc64-plan9", &target, err, sizeof(err)));
-}
-
-TEST(resolve_auto_toolchain) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_AUTO, &target, "cc", "/opt/zig", &plan,
-                                         err, sizeof(err)));
-    ASSERT_EQ_INT(plan.kind, XR_CLI_TOOLCHAIN_ZIG);
-    ASSERT_STR_EQ(plan.program, "/opt/zig");
-
-    ASSERT_TRUE(xr_cli_build_target_parse("native", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_AUTO, &target, "clang", NULL, &plan, err,
-                                         sizeof(err)));
-    ASSERT_EQ_INT(plan.kind, XR_CLI_TOOLCHAIN_HOST);
-    ASSERT_STR_EQ(plan.program, "clang");
-}
-
-TEST(resolve_env_zig_toolchain) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    char err[256];
-
-    set_test_env("XRAY_ZIG", "/opt/xray-test/zig");
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_AUTO, &target, "cc", NULL, &plan, err,
-                                         sizeof(err)));
-    ASSERT_EQ_INT(plan.kind, XR_CLI_TOOLCHAIN_ZIG);
-    ASSERT_STR_EQ(plan.program, "/opt/xray-test/zig");
-    set_test_env("XRAY_ZIG", NULL);
-}
-
-TEST(resolve_bundled_zig_toolchain) {
-#ifndef _WIN32
-    char root_template[] = "/tmp/xray_tc_bundle_XXXXXX";
-    char tools_dir[512];
-    char zig_dir[512];
-    char bin_dir[512];
-    char zig_path[512];
-    char xray_hint[512];
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    char err[256];
-    FILE *f;
-    char *root;
-
-    set_test_env("XRAY_ZIG", NULL);
-    root = mkdtemp(root_template);
-    ASSERT_NOT_NULL(root);
-    snprintf(tools_dir, sizeof(tools_dir), "%s/tools", root);
-    snprintf(zig_dir, sizeof(zig_dir), "%s/zig", tools_dir);
-    snprintf(bin_dir, sizeof(bin_dir), "%s/bin", zig_dir);
-    ASSERT_EQ_INT(mkdir(tools_dir, 0700), 0);
-    ASSERT_EQ_INT(mkdir(zig_dir, 0700), 0);
-    ASSERT_EQ_INT(mkdir(bin_dir, 0700), 0);
-    snprintf(zig_path, sizeof(zig_path), "%s/zig", bin_dir);
-    f = fopen(zig_path, "w");
-    ASSERT_NOT_NULL(f);
-    fclose(f);
-    ASSERT_EQ_INT(chmod(zig_path, 0700), 0);
-    snprintf(xray_hint, sizeof(xray_hint), "%s/xray", root);
-
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve_ex(XR_CLI_TOOLCHAIN_AUTO, &target, "cc", NULL, xray_hint,
-                                            &plan, err, sizeof(err)));
-    ASSERT_EQ_INT(plan.kind, XR_CLI_TOOLCHAIN_ZIG);
-    ASSERT_STR_EQ(plan.program, zig_path);
-
-    unlink(zig_path);
-    rmdir(bin_dir);
-    rmdir(zig_dir);
-    rmdir(tools_dir);
-    rmdir(root);
-#endif
-}
-
-TEST(reject_cross_host_toolchain) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_FALSE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_HOST, &target, "cc", NULL, &plan, err,
-                                          sizeof(err)));
-}
-
-TEST(reject_cross_clang_toolchain) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    char err[256];
-
-    ASSERT_TRUE(xr_cli_build_target_parse("aarch64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_FALSE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_CLANG, &target, "clang", NULL, &plan,
-                                          err, sizeof(err)));
+    ASSERT_TRUE(xtc_selector_parse("auto", &selector, err, sizeof(err)));
+    ASSERT_EQ_INT(selector, XR_TOOLCHAIN_SELECTOR_AUTO);
+    ASSERT_TRUE(xtc_selector_parse("host", &selector, err, sizeof(err)));
+    ASSERT_TRUE(xtc_selector_parse("clang", &selector, err, sizeof(err)));
+    ASSERT_TRUE(xtc_selector_parse("gcc", &selector, err, sizeof(err)));
+    ASSERT_TRUE(xtc_selector_parse("msvc", &selector, err, sizeof(err)));
+    ASSERT_TRUE(xtc_selector_parse("zig", &selector, err, sizeof(err)));
+    ASSERT_FALSE(xtc_selector_parse("cc", &selector, err, sizeof(err)));
+    ASSERT_FALSE(xtc_selector_parse("zig-cc", &selector, err, sizeof(err)));
+    ASSERT_STR_EQ(xtc_provider_name(XR_TOOLCHAIN_PROVIDER_APPLE_CLANG), "apple-clang");
+    ASSERT_STR_EQ(xtc_provider_name(XR_TOOLCHAIN_PROVIDER_LLVM_CLANG), "llvm-clang");
+    ASSERT_STR_EQ(xtc_reason_code_name(XR_TOOLCHAIN_REASON_LINK_PROBE_FAILED), "LINK_PROBE_FAILED");
 }
 
 TEST(find_missing_executable) {
     char out[256];
-
-    ASSERT_FALSE(xr_cli_toolchain_find_executable("/definitely/not/xray-zig", out, sizeof(out)));
+    ASSERT_FALSE(xtc_find_executable("/definitely/not/xray-provider", out, sizeof(out)));
 }
 
-TEST(build_zig_standalone_command) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    XrCliToolchainCommand cmd;
+TEST(cross_target_rejects_explicit_host_without_fallback) {
+    XrToolchainRequest request = {0};
+    XrToolchainCandidates candidates;
     char err[256];
 
-    ASSERT_TRUE(xr_cli_build_target_parse("x86_64-linux-musl", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_ZIG, &target, "cc", "/opt/zig", &plan,
-                                         err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_build_standalone(&plan, &target, "-O2", "app", "app.c",
-                                                  "/include/aot", "/include/runtime", NULL, false,
-                                                  &cmd, err, sizeof(err)));
-
-    ASSERT_STR_EQ(cmd.program, "/opt/zig");
-    ASSERT_STR_EQ(cmd.argv[0], "/opt/zig");
-    ASSERT_STR_EQ(cmd.argv[1], "cc");
-    ASSERT_STR_EQ(cmd.argv[2], "-target");
-    ASSERT_STR_EQ(cmd.argv[3], "x86_64-linux-musl");
-    ASSERT_STR_EQ(cmd.argv[4], "-O2");
-    ASSERT_STR_EQ(cmd.argv[5], "-o");
-    ASSERT_STR_EQ(cmd.argv[6], "app");
-    ASSERT_STR_EQ(cmd.argv[7], "app.c");
-    ASSERT_STR_EQ(cmd.argv[8], "-I/include/aot");
-    ASSERT_STR_EQ(cmd.argv[9], "-I/include/runtime");
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-musl", &request.target, err, sizeof(err)));
+    request.selector = XR_TOOLCHAIN_SELECTOR_HOST;
+    ASSERT_FALSE(xtc_discover_candidates(&request, &candidates, err, sizeof(err)));
 }
 
-TEST(build_thumb_standalone_command_uses_cpu) {
-    XrCliBuildTarget target;
-    XrCliToolchainPlan plan;
-    XrCliToolchainCommand cmd;
+#ifndef _WIN32
+static bool write_executable(const char *path, const char *content) {
+    FILE *file = fopen(path, "wb");
+    if (!file)
+        return false;
+    bool ok = fwrite(content, 1, strlen(content), file) == strlen(content) && fclose(file) == 0;
+    return ok && chmod(path, 0700) == 0;
+}
+#endif
+
+TEST(explicit_provider_has_no_fallback) {
+#ifndef _WIN32
+    char root_template[] = "/tmp/xray_xtc_explicit_XXXXXX";
+    char fake_clang[512];
     char err[256];
+    XrToolchainRequest request = {0};
+    XrToolchainSelection selection;
+    char *root = mkdtemp(root_template);
+    ASSERT_NOT_NULL(root);
+    snprintf(fake_clang, sizeof(fake_clang), "%s/fake-clang", root);
+    ASSERT_TRUE(write_executable(fake_clang, "#!/bin/sh\nprintf 'Apple clang version 99.1\\n'\n"));
+    ASSERT_TRUE(xtc_target_parse("native", &request.target, err, sizeof(err)));
+    request.selector = XR_TOOLCHAIN_SELECTOR_GCC;
+    request.cc = fake_clang;
+    ASSERT_FALSE(xtc_select_discovered(&request, &selection, err, sizeof(err)));
+    ASSERT_EQ_INT(selection.reason, XR_TOOLCHAIN_REASON_PROVIDER_EXPLICIT_NO_FALLBACK);
+    unlink(fake_clang);
+    rmdir(root);
+#endif
+}
 
-    ASSERT_TRUE(xr_cli_build_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_resolve(XR_CLI_TOOLCHAIN_ZIG, &target, "cc", "/opt/zig", &plan,
-                                         err, sizeof(err)));
-    ASSERT_TRUE(xr_cli_toolchain_build_standalone(&plan, &target, "-O2", "firmware.elf",
-                                                  "firmware.c", "/include/aot", "/include/runtime",
-                                                  NULL, false, &cmd, err, sizeof(err)));
+TEST(explicit_clang_is_classified_from_banner) {
+#ifndef _WIN32
+    char root_template[] = "/tmp/xray_xtc_clang_XXXXXX";
+    char fake_clang[512];
+    char err[256];
+    XrToolchainRequest request = {0};
+    XrToolchainSelection selection;
+    char canonical[512];
+    char *root = mkdtemp(root_template);
+    ASSERT_NOT_NULL(root);
+    snprintf(fake_clang, sizeof(fake_clang), "%s/fake-clang", root);
+    ASSERT_TRUE(write_executable(fake_clang, "#!/bin/sh\nprintf 'clang version 88.0.0\\n'\n"));
+    ASSERT_TRUE(xtc_target_parse("native", &request.target, err, sizeof(err)));
+    request.selector = XR_TOOLCHAIN_SELECTOR_CLANG;
+    request.cc = fake_clang;
+    ASSERT_TRUE(xtc_select_discovered(&request, &selection, err, sizeof(err)));
+    ASSERT_EQ_INT(selection.provider, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG);
+    ASSERT_EQ_INT(selection.readiness, XR_TOOLCHAIN_RUNNABLE);
+    ASSERT_TRUE(xtc_find_executable(fake_clang, canonical, sizeof(canonical)));
+    ASSERT_STR_EQ(selection.program, canonical);
+    unlink(fake_clang);
+    rmdir(root);
+#endif
+}
 
-    ASSERT_STR_EQ(cmd.argv[0], "/opt/zig");
-    ASSERT_STR_EQ(cmd.argv[1], "cc");
-    ASSERT_STR_EQ(cmd.argv[2], "-target");
-    ASSERT_STR_EQ(cmd.argv[3], "thumb-freestanding-eabi");
-    ASSERT_STR_EQ(cmd.argv[4], "-mcpu=cortex_m4");
-    ASSERT_STR_EQ(cmd.argv[5], "-O2");
+TEST(config_update_is_atomic_and_round_trips_escaped_paths) {
+#ifndef _WIN32
+    char root_template[] = "/tmp/xray_xtc_config_XXXXXX";
+    char config_path[512];
+    char lock_path[540];
+    char err[256];
+    const char *compiler = "/tmp/compiler-\"quoted\"-\\path";
+    XrToolchainConfig config;
+    bool exists = false;
+    char *root = mkdtemp(root_template);
+    ASSERT_NOT_NULL(root);
+    snprintf(config_path, sizeof(config_path), "%s/toolchains.toml", root);
+    snprintf(lock_path, sizeof(lock_path), "%s.lock", config_path);
+
+    ASSERT_TRUE(xtc_config_use(config_path, "native", XR_TOOLCHAIN_SELECTOR_CLANG, compiler, NULL,
+                               err, sizeof(err)));
+    ASSERT_TRUE(xtc_config_load(config_path, &config, &exists, err, sizeof(err)));
+    ASSERT_TRUE(exists);
+    ASSERT_TRUE(config.has_native);
+    ASSERT_EQ_INT(config.native.selector, XR_TOOLCHAIN_SELECTOR_CLANG);
+    ASSERT_STR_EQ(config.native.compiler, compiler);
+
+    ASSERT_TRUE(xtc_config_reset(config_path, "native", err, sizeof(err)));
+    ASSERT_TRUE(xtc_config_load(config_path, &config, &exists, err, sizeof(err)));
+    ASSERT_FALSE(config.has_native);
+    ASSERT_TRUE(xtc_config_reset(config_path, NULL, err, sizeof(err)));
+    ASSERT_FALSE(xtc_config_load(config_path, &config, &exists, err, sizeof(err)) && exists);
+    unlink(lock_path);
+    rmdir(root);
+#endif
+}
+
+TEST(config_corruption_is_preserved) {
+#ifndef _WIN32
+    char root_template[] = "/tmp/xray_xtc_corrupt_XXXXXX";
+    char config_path[512];
+    char lock_path[540];
+    char err[256];
+    char content[64] = {0};
+    char *root = mkdtemp(root_template);
+    ASSERT_NOT_NULL(root);
+    snprintf(config_path, sizeof(config_path), "%s/toolchains.toml", root);
+    snprintf(lock_path, sizeof(lock_path), "%s.lock", config_path);
+    ASSERT_TRUE(write_executable(config_path, "schema = [broken\n"));
+    ASSERT_FALSE(xtc_config_use(config_path, "native", XR_TOOLCHAIN_SELECTOR_HOST, NULL, NULL, err,
+                                sizeof(err)));
+    FILE *file = fopen(config_path, "rb");
+    ASSERT_NOT_NULL(file);
+    ASSERT_TRUE(fread(content, 1, sizeof(content) - 1, file) > 0);
+    fclose(file);
+    ASSERT_STR_EQ(content, "schema = [broken\n");
+    unlink(config_path);
+    unlink(lock_path);
+    rmdir(root);
+#endif
+}
+
+TEST(process_capture_and_output_limit) {
+#ifndef _WIN32
+    char shell[1200];
+    char err[256];
+    XrProcessSpec spec;
+    XrProcessResult result;
+    ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.argv[1] = "-c";
+    spec.argv[2] = "printf 123456789; printf abcdefghi >&2";
+    spec.argv[3] = NULL;
+    spec.output_limit = 5;
+    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    ASSERT_EQ_INT(result.exit_code, 0);
+    ASSERT_STR_EQ(result.stdout_data, "12345");
+    ASSERT_STR_EQ(result.stderr_data, "abcde");
+    ASSERT_TRUE(result.output_truncated);
+    xtc_process_result_free(&result);
+#endif
+}
+
+TEST(process_timeout_is_bounded) {
+#ifndef _WIN32
+    char shell[1200];
+    char err[256];
+    XrProcessSpec spec;
+    XrProcessResult result;
+    ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 30);
+    spec.argv[1] = "-c";
+    spec.argv[2] = "sleep 5";
+    spec.argv[3] = NULL;
+    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    ASSERT_TRUE(result.timed_out);
+    ASSERT_TRUE(result.duration_ms < 2000);
+    xtc_process_result_free(&result);
+#endif
+}
+
+TEST(probe_json_schema_v1_is_valid_and_escaped) {
+    XrToolchainProbeOptions options = {0};
+    XrToolchainProbeResult result = {0};
+    char err[256];
+    ASSERT_TRUE(xtc_target_parse("native", &options.request.target, err, sizeof(err)));
+    options.request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
+    options.profile = XR_TOOLCHAIN_PROFILE_HOSTED;
+    result.selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+    result.selection.ownership = XR_TOOLCHAIN_OWNERSHIP_EXTERNAL;
+    result.selection.program = result.selection.program_storage;
+    snprintf(result.selection.program_storage, sizeof(result.selection.program_storage), "%s",
+             "/tmp/clang with spaces");
+    snprintf(result.selection.version, sizeof(result.selection.version), "%s",
+             "clang \"test\"\nline");
+    snprintf(result.selection.runtime_artifact, sizeof(result.selection.runtime_artifact), "%s",
+             "xray-rt-coro-test-v1");
+    snprintf(result.selection.probe_fingerprint, sizeof(result.selection.probe_fingerprint), "%s",
+             "sha256:test");
+    snprintf(result.runtime.sdk_digest, sizeof(result.runtime.sdk_digest), "%s", "sha256:sdk");
+    result.selection.readiness = XR_TOOLCHAIN_READY;
+    result.c_compile = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.sdk_compile = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.runtime_link = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.native_run = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.cross = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
+    result.lto = XR_TOOLCHAIN_CAPABILITY_OK;
+    snprintf(result.cache, sizeof(result.cache), "%s", "miss");
+    result.diagnostic_count = 1;
+    result.diagnostics[0].code = XR_TOOLCHAIN_REASON_EXTERNAL_INSTALL_REQUIRED;
+    snprintf(result.diagnostics[0].stage, sizeof(result.diagnostics[0].stage), "%s", "discover");
+    snprintf(result.diagnostics[0].message, sizeof(result.diagnostics[0].message), "%s",
+             "install \"tools\"");
+
+    FILE *file = tmpfile();
+    ASSERT_NOT_NULL(file);
+    ASSERT_TRUE(xtc_probe_json_write(file, "native", &options, &result, true, "1.2.3", "abc"));
+    ASSERT_TRUE(fflush(file) == 0);
+    ASSERT_TRUE(fseek(file, 0, SEEK_END) == 0);
+    long length = ftell(file);
+    ASSERT_TRUE(length > 0);
+    ASSERT_TRUE(fseek(file, 0, SEEK_SET) == 0);
+    char *json = malloc((size_t) length + 1);
+    ASSERT_NOT_NULL(json);
+    ASSERT_EQ_INT((int) fread(json, 1, (size_t) length, file), (int) length);
+    json[length] = '\0';
+    fclose(file);
+
+    XrJsonValue *doc = xjson_parse(json, (size_t) length);
+    ASSERT_NOT_NULL(doc);
+    ASSERT_EQ_INT((int) xjson_get_int(doc, "schema"), 1);
+    XrJsonValue *selection = xjson_get_object(doc, "selection");
+    ASSERT_NOT_NULL(selection);
+    ASSERT_STR_EQ(xjson_get_string(selection, "provider"), "llvm-clang");
+    ASSERT_STR_EQ(xjson_get_string(selection, "version"), "clang \"test\"\nline");
+    ASSERT_TRUE(xjson_get_bool(selection, "ready"));
+    XrJsonValue *capabilities = xjson_get_object(doc, "capabilities");
+    ASSERT_NOT_NULL(capabilities);
+    ASSERT_STR_EQ(xjson_get_string(capabilities, "runtimeLink"), "ok");
+    xjson_free(doc);
+    free(json);
+}
+
+TEST(probe_cache_list_reports_recent_success) {
+#ifndef _WIN32
+    char root_template[] = "/tmp/xray_xtc_cache_XXXXXX";
+    char err[256];
+    XrToolchainProbeOptions options = {0};
+    XrToolchainProbeResult result = {0};
+    XrToolchainProbeCacheEntry entries[4];
+    size_t count = 0;
+    char *root = mkdtemp(root_template);
+    ASSERT_NOT_NULL(root);
+    ASSERT_TRUE(setenv("XDG_CACHE_HOME", root, 1) == 0);
+    ASSERT_TRUE(xtc_target_parse("native", &options.request.target, err, sizeof(err)));
+    options.request.selector = XR_TOOLCHAIN_SELECTOR_HOST;
+    options.profile = XR_TOOLCHAIN_PROFILE_HOSTED;
+    result.selection.readiness = XR_TOOLCHAIN_READY;
+    result.selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+    snprintf(result.selection.probe_fingerprint, sizeof(result.selection.probe_fingerprint), "%s",
+             "sha256:probe");
+    snprintf(result.selection.compiler_fingerprint, sizeof(result.selection.compiler_fingerprint),
+             "%s", "sha256:compiler");
+    snprintf(result.selection.runtime_artifact, sizeof(result.selection.runtime_artifact), "%s",
+             "xray-rt-coro-test-v1");
+    result.c_compile = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.sdk_compile = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.runtime_link = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.native_run = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.cross = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
+    result.lto = XR_TOOLCHAIN_CAPABILITY_OK;
+
+    ASSERT_TRUE(xtc_probe_cache_store(&options, &result, err, sizeof(err)));
+    ASSERT_TRUE(
+        xtc_probe_cache_list(options.request.target.name, entries, 4, &count, err, sizeof(err)));
+    ASSERT_EQ_INT((int) count, 1);
+    ASSERT_STR_EQ(entries[0].provider, "llvm-clang");
+    ASSERT_STR_EQ(entries[0].fingerprint, "sha256:probe");
+    ASSERT_TRUE(entries[0].ready);
+    ASSERT_TRUE(xtc_probe_cache_reset(NULL, err, sizeof(err)));
+    ASSERT_TRUE(unsetenv("XDG_CACHE_HOME") == 0);
+    char path[512];
+    snprintf(path, sizeof(path), "%s/xray/toolchain/probes", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/xray/toolchain", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/xray", root);
+    rmdir(path);
+    rmdir(root);
+#endif
 }
 
 TEST_MAIN_BEGIN()
-RUN_TEST_SUITE("AOT Target Parser");
-RUN_TEST(parse_native_target);
-RUN_TEST(list_supported_targets);
-RUN_TEST(parse_x86_64_none_target);
-RUN_TEST(parse_riscv32_none_elf_target);
-RUN_TEST(parse_riscv64_none_elf_target);
-RUN_TEST(parse_thumbv7em_none_eabi_target);
+RUN_TEST_SUITE("Toolchain model");
+RUN_TEST(parse_native_target_normalizes_abi);
+RUN_TEST(list_uses_canonical_targets_only);
 RUN_TEST(parse_linux_musl_target);
-RUN_TEST(parse_windows_gnu_target);
-RUN_TEST(reject_unknown_target);
+RUN_TEST(parse_freestanding_targets);
+RUN_TEST(reject_retired_target_aliases);
+RUN_TEST(selector_and_provider_names_are_stable);
 
-RUN_TEST_SUITE("AOT Toolchain Planner");
-RUN_TEST(resolve_auto_toolchain);
-RUN_TEST(resolve_env_zig_toolchain);
-RUN_TEST(resolve_bundled_zig_toolchain);
-RUN_TEST(reject_cross_host_toolchain);
-RUN_TEST(reject_cross_clang_toolchain);
+RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
-RUN_TEST(build_zig_standalone_command);
-RUN_TEST(build_thumb_standalone_command_uses_cpu);
+RUN_TEST(cross_target_rejects_explicit_host_without_fallback);
+RUN_TEST(explicit_provider_has_no_fallback);
+RUN_TEST(explicit_clang_is_classified_from_banner);
+
+RUN_TEST_SUITE("Toolchain config");
+RUN_TEST(config_update_is_atomic_and_round_trips_escaped_paths);
+RUN_TEST(config_corruption_is_preserved);
+
+RUN_TEST_SUITE("Toolchain process runner");
+RUN_TEST(process_capture_and_output_limit);
+RUN_TEST(process_timeout_is_bounded);
+
+RUN_TEST_SUITE("Toolchain JSON");
+RUN_TEST(probe_json_schema_v1_is_valid_and_escaped);
+RUN_TEST(probe_cache_list_reports_recent_success);
 TEST_MAIN_END()

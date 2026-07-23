@@ -96,9 +96,17 @@ if [ ! -x "$XRAY" ]; then
     exit 1
 fi
 
-mkdir -p "$PKG/bin" "$PKG/libexec/xray"
+if [ -f "$XRAY_DIR/cmake_install.cmake" ]; then
+    if ! cmake --install "$XRAY_DIR" --prefix "$PKG" >/dev/null; then
+        echo "FAIL: could not stage package layout from build tree"
+        exit 1
+    fi
+else
+    echo "SKIP: bundled Zig smoke requires a build-tree xray to stage Core+SDK"
+    exit 77
+fi
+mkdir -p "$PKG/libexec/xray"
 mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
-ln -s "$XRAY" "$PKG/bin/xray"
 ln -s "$ZIG_ROOT" "$PKG/libexec/xray/zig"
 
 cat > "$BASIC_SRC" <<'XR_EOF'
@@ -109,7 +117,7 @@ fn answer() -> int {
 answer()
 XR_EOF
 
-EXPECTED_ZIG="$PKG/bin/../libexec/xray/zig/zig"
+EXPECTED_ZIG="$ZIG_REAL"
 
 echo "=== AOT Bundled Zig Smoke ==="
 echo "Binary:       $XRAY"
@@ -119,7 +127,8 @@ echo "Expected Zig: $EXPECTED_ZIG"
 echo "Mode:         $([ "$REAL_BUILD" = "1" ] && printf 'real-link' || printf 'dry-run-link')"
 echo ""
 
-if ! run_with_bundled_env "$PKG/bin/xray" toolchain doctor >"$DOCTOR_LOG" 2>&1; then
+if ! run_with_bundled_env "$PKG/bin/xray" toolchain doctor --target x86_64-linux-musl \
+        --provider zig >"$DOCTOR_LOG" 2>&1; then
     echo "FAIL: bundled toolchain doctor failed"
     sed 's/^/    /' "$DOCTOR_LOG" | head -40
     exit 1

@@ -1,11 +1,11 @@
 contains=xaot-plan v0
 contains=  "target": {
-contains=    "name": "native"
-contains=    "arch": "native"
-contains=    "os": "native"
-contains=    "abi": "host"
-contains=    "object_format": "native"
-contains=    "triple": "native"
+regex=    "name": "(aarch64|x86_64)-(apple-darwin|linux-gnu|windows-msvc)"
+regex=    "arch": "(aarch64|x86_64)"
+regex=    "os": "(darwin|linux|windows)"
+regex=    "abi": "(darwin|gnu|msvc)"
+regex=    "object_format": "(macho|elf|coff)"
+regex=    "triple": "(aarch64|x86_64)-(apple-darwin|linux-gnu|windows-msvc)"
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_caps": ["coro", "timer"]
 contains="runtime_objects": ["xray_rt_coro"]

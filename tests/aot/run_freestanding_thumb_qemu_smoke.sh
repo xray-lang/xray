@@ -125,7 +125,7 @@ LD
 
 GEN_C="$WORK/freestanding_thumb_uart.c"
 BUILD_LOG="$WORK/build.log"
-if ! (cd "$WORK" && "$XRAY" build --native --profile freestanding --target thumbv7em-none-eabi \
+if ! (cd "$WORK" && "$XRAY" build --native --profile freestanding --target thumb-freestanding-eabi \
         --toolchain zig --zig "$ZIG" --c-only --rebuild \
         --cache-dir "$WORK/build-cache" -o "$GEN_C" "$SRC") >"$BUILD_LOG" 2>&1; then
     sed 's/^/  /' "$BUILD_LOG" >&2

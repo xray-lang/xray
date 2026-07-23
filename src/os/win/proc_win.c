@@ -351,7 +351,9 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
         free(cmdline);  // xr:allow-raw-alloc
         return XR_PROC_INVALID;
     }
-    DWORD create_flags = (options && options->detached) ? CREATE_NEW_PROCESS_GROUP : 0;
+    DWORD create_flags = (options && (options->detached || options->new_process_group))
+                             ? CREATE_NEW_PROCESS_GROUP
+                             : 0;
     BOOL ok =
         CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block, cwd, &si, &pi);
     proc_stdio_dup_close(&stdio_dup);
@@ -494,6 +496,12 @@ int xr_proc_kill(XrProcId pid, int signal) {
     BOOL ok = TerminateProcess(h, XR_PROC_KILLED_EXIT_CODE);
     CloseHandle(h);
     return ok ? 0 : -1;
+}
+
+int xr_proc_kill_tree(XrProcId pid, int signal) {
+    /* Windows process-tree cleanup is completed with the MSVC provider lane.
+     * Keep the API fail-closed to the tracked direct child in the meantime. */
+    return xr_proc_kill(pid, signal);
 }
 
 int64_t xr_proc_self_pid(void) {

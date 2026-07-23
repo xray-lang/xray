@@ -20,7 +20,10 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_toolchain.h"
+#include "../toolchain/xtc_config.h"
+#include "../toolchain/xtc_discovery.h"
+#include "../toolchain/xtc_model.h"
+#include "../toolchain/xtc_probe.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_vm.h"
@@ -341,7 +344,8 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     return 0;
 }
 
-static void resolve_aot_include_paths(const char *sysroot, char *aot_include, size_t aot_include_sz,
+static void resolve_aot_include_paths(const XrToolchainSelection *plan, const char *sysroot,
+                                      char *aot_include, size_t aot_include_sz,
                                       char *runtime_include, size_t runtime_include_sz) {
     const char *xray_include = getenv("XRAY_INCLUDE");
     char install_prefix[XR_PATH_MAX];
@@ -351,7 +355,12 @@ static void resolve_aot_include_paths(const char *sysroot, char *aot_include, si
     if (runtime_include && runtime_include_sz > 0)
         runtime_include[0] = '\0';
 
-    if (sysroot) {
+    if (!sysroot && plan && plan->private_aot_include[0] && plan->public_include[0]) {
+        if (aot_include && aot_include_sz > 0)
+            snprintf(aot_include, aot_include_sz, "%s", plan->private_aot_include);
+        if (runtime_include && runtime_include_sz > 0)
+            snprintf(runtime_include, runtime_include_sz, "%s", plan->public_include);
+    } else if (sysroot) {
         if (aot_include && aot_include_sz > 0)
             snprintf(aot_include, aot_include_sz, "%s/include/xray", sysroot);
         if (runtime_include && runtime_include_sz > 0)
@@ -437,6 +446,41 @@ static bool xaot_cli_link_add_runtime_object(XaotCliLinkCommand *cmd, const char
     return xaot_cli_link_add_prefixed(cmd, "-l", value, err, err_size);
 }
 
+static const char *xaot_verified_runtime_path(const XrToolchainSelection *plan,
+                                              const char *logical_name) {
+    const char *id_prefix = NULL;
+    if (!plan || !logical_name)
+        return NULL;
+    if (strcmp(logical_name, "xray_rt_coro") == 0)
+        id_prefix = "xray-rt-coro-";
+    else if (strcmp(logical_name, "xray_aot_core") == 0)
+        id_prefix = "xray-aot-core-";
+    else
+        return NULL;
+    size_t prefix_len = strlen(id_prefix);
+    for (size_t i = 0; i < plan->runtime_count; i++) {
+        if (strncmp(plan->runtime_ids[i], id_prefix, prefix_len) == 0)
+            return plan->runtime_paths[i];
+    }
+    return NULL;
+}
+
+static bool xaot_cli_link_add_verified_runtime(XaotCliLinkCommand *cmd,
+                                               const XrToolchainSelection *plan, const char *value,
+                                               char *err, size_t err_size) {
+    if (!value || !value[0])
+        return true;
+    if (strchr(value, '/') || strchr(value, '\\'))
+        return xaot_cli_link_add_runtime_object(cmd, value, err, err_size);
+    const char *path = xaot_verified_runtime_path(plan, value);
+    if (!path) {
+        snprintf(err, err_size,
+                 "verified runtime manifest has no exact artifact for logical object '%s'", value);
+        return false;
+    }
+    return xaot_cli_link_add_arg(cmd, path, err, err_size);
+}
+
 static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
     return value &&
            (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "regex.", 6) == 0 ||
@@ -478,7 +522,7 @@ static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
     return false;
 }
 
-static bool xaot_cli_link_ld_flag_supported(const XrCliBuildTarget *target, const char *flag) {
+static bool xaot_cli_link_ld_flag_supported(const XrToolchainTarget *target, const char *flag) {
     if (!target || !flag)
         return true;
     if (!target->is_native && strcmp(flag, "-Wl,-dead_strip") == 0)
@@ -487,10 +531,10 @@ static bool xaot_cli_link_ld_flag_supported(const XrCliBuildTarget *target, cons
 }
 
 static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
-                                              const XrCliBuildTarget *target, char *err,
+                                              const XrToolchainTarget *target, char *err,
                                               size_t err_size);
 
-static bool xaot_cli_link_add_zig_target(XaotCliLinkCommand *cmd, const XrCliBuildTarget *target,
+static bool xaot_cli_link_add_zig_target(XaotCliLinkCommand *cmd, const XrToolchainTarget *target,
                                          char *err, size_t err_size) {
     const char *triple = NULL;
 
@@ -511,6 +555,28 @@ static bool xaot_cli_link_add_zig_target(XaotCliLinkCommand *cmd, const XrCliBui
         !xaot_cli_link_add_arg(cmd, triple, err, err_size))
         return false;
     return target->is_native || xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size);
+}
+
+static bool xaot_cli_add_provider_driver_prefix(XaotCliLinkCommand *cmd,
+                                                const XrToolchainSelection *plan,
+                                                const XrToolchainTarget *target, char *err,
+                                                size_t err_size) {
+    if (!cmd || !plan || !plan->program) {
+        snprintf(err, err_size, "missing verified provider command input");
+        return false;
+    }
+    cmd->program = plan->program;
+    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
+        return false;
+    if (plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG) {
+        return xaot_cli_link_add_arg(cmd, "cc", err, err_size) &&
+               xaot_cli_link_add_zig_target(cmd, target, err, err_size);
+    }
+    if (plan->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG && plan->system_sdk[0]) {
+        return xaot_cli_link_add_arg(cmd, "-isysroot", err, err_size) &&
+               xaot_cli_link_add_arg(cmd, plan->system_sdk, err, err_size);
+    }
+    return true;
 }
 
 static void xaot_cli_manifest_remove_string(char ***items, uint32_t *count, const char *value) {
@@ -543,7 +609,7 @@ static void xaot_cli_manifest_clear_string_list(char ***items, uint32_t *count) 
 }
 
 static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
-                                                   const XrCliBuildTarget *target, char *err,
+                                                   const XrToolchainTarget *target, char *err,
                                                    size_t err_size) {
     if (!manifest || !target)
         return true;
@@ -617,7 +683,7 @@ static bool xaot_cli_add_linker_script(XaotLinkManifest *manifest, const char *s
 }
 
 static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
-                                               const XrCliBuildTarget *target, char *err,
+                                               const XrToolchainTarget *target, char *err,
                                                size_t err_size) {
     if (!manifest)
         return true;
@@ -722,7 +788,7 @@ static bool xaot_cli_target_config_has_objcopy(const XrTargetConfig *config) {
 }
 
 static bool xaot_cli_link_add_target_metadata_flags(XaotCliLinkCommand *cmd,
-                                                    const XrCliBuildTarget *target, char *err,
+                                                    const XrToolchainTarget *target, char *err,
                                                     size_t err_size) {
     char value[32];
 
@@ -733,15 +799,15 @@ static bool xaot_cli_link_add_target_metadata_flags(XaotCliLinkCommand *cmd,
     if (!xaot_cli_link_add_prefixed(cmd, "-DXR_AOT_TARGET_PTR_BITS=", value, err, err_size))
         return false;
 
-    if (target->endian == XR_CLI_TARGET_ENDIAN_LITTLE)
+    if (target->endian == XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE)
         return xaot_cli_link_add_arg(cmd, "-DXR_AOT_TARGET_LITTLE_ENDIAN=1", err, err_size);
-    if (target->endian == XR_CLI_TARGET_ENDIAN_BIG)
+    if (target->endian == XR_TOOLCHAIN_TARGET_ENDIAN_BIG)
         return xaot_cli_link_add_arg(cmd, "-DXR_AOT_TARGET_LITTLE_ENDIAN=0", err, err_size);
     return true;
 }
 
 static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
-                                              const XrCliBuildTarget *target, char *err,
+                                              const XrToolchainTarget *target, char *err,
                                               size_t err_size) {
     if (!cmd || !target || !target->cpu || !target->cpu[0])
         return true;
@@ -807,8 +873,8 @@ static int invoke_target_objcopy(const XrTargetConfig *config, const char *input
     return 0;
 }
 
-static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
-                                           const XrCliBuildTarget *target,
+static bool xaot_cli_build_compile_command(const XrToolchainSelection *plan,
+                                           const XrToolchainTarget *target,
                                            const XaotLinkManifest *manifest, const char *opt_flag,
                                            const char *c_file, const char *obj_file,
                                            const char *sysroot, XaotCliLinkCommand *cmd, char *err,
@@ -823,15 +889,8 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
     }
 
     memset(cmd, 0, sizeof(*cmd));
-    cmd->program = plan->program;
-    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
+    if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
-        if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size))
-            return false;
-        if (!xaot_cli_link_add_zig_target(cmd, target, err, err_size))
-            return false;
-    }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-c", err, err_size) ||
@@ -840,7 +899,7 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
         !xaot_cli_link_add_arg(cmd, obj_file, err, err_size))
         return false;
 
-    resolve_aot_include_paths(sysroot, aot_include, sizeof(aot_include), runtime_include,
+    resolve_aot_include_paths(plan, sysroot, aot_include, sizeof(aot_include), runtime_include,
                               sizeof(runtime_include));
     if (!xaot_cli_link_add_prefixed(cmd, "-I", aot_include, err, err_size) ||
         !xaot_cli_link_add_prefixed(cmd, "-I", runtime_include, err, err_size))
@@ -876,8 +935,8 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
     return true;
 }
 
-static int invoke_aot_manifest_compile(const XrCliToolchainPlan *plan,
-                                       const XrCliBuildTarget *target,
+static int invoke_aot_manifest_compile(const XrToolchainSelection *plan,
+                                       const XrToolchainTarget *target,
                                        const XaotLinkManifest *manifest, const char *opt_flag,
                                        const char *c_file, const char *obj_file,
                                        const char *sysroot, bool dump_command) {
@@ -896,7 +955,7 @@ static int invoke_aot_manifest_compile(const XrCliToolchainPlan *plan,
     XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start toolchain '%s'\n", cmd.program);
-        if (plan && plan->kind == XR_CLI_TOOLCHAIN_ZIG)
+        if (plan && plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG)
             fprintf(stderr, "Tip: install Zig, bundle Zig with xray, or set XRAY_ZIG/--zig\n");
         return 1;
     }
@@ -930,8 +989,8 @@ static const char *resolve_xray_lib_path(const char *sysroot, char *lib_path, si
 #endif
 }
 
-static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
-                                        const XrCliBuildTarget *target,
+static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
+                                        const XrToolchainTarget *target,
                                         const XaotLinkManifest *manifest, const char *opt_flag,
                                         const char *output_file, const char *const *inputs,
                                         int n_inputs, bool strip_symbols, bool shared_library,
@@ -939,7 +998,6 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
                                         size_t err_size) {
     char aot_include[600];
     char runtime_include[600];
-    char lib_path[512];
     bool needs_runtime;
     bool needs_aot_core;
     bool freestanding_profile;
@@ -965,23 +1023,15 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
                  target->name);
         return false;
     }
-    if (needs_runtime && plan->kind != XR_CLI_TOOLCHAIN_HOST &&
-        plan->kind != XR_CLI_TOOLCHAIN_ZIG) {
+    if (needs_runtime && !xtc_provider_uses_gnu_driver(plan->provider)) {
         snprintf(err, err_size,
                  "toolchain '%s' cannot consume runtime objects from AOT link manifest yet",
-                 xr_cli_toolchain_kind_name(plan->kind));
+                 xtc_provider_name(plan->provider));
         return false;
     }
     memset(cmd, 0, sizeof(*cmd));
-    cmd->program = plan->program;
-    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
+    if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
-        if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size))
-            return false;
-        if (!xaot_cli_link_add_zig_target(cmd, target, err, err_size))
-            return false;
-    }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size))
         return false;
@@ -1005,7 +1055,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
             return false;
     }
 
-    resolve_aot_include_paths(sysroot, aot_include, sizeof(aot_include), runtime_include,
+    resolve_aot_include_paths(plan, sysroot, aot_include, sizeof(aot_include), runtime_include,
                               sizeof(runtime_include));
     if (!xaot_cli_link_add_prefixed(cmd, "-I", aot_include, err, err_size) ||
         !xaot_cli_link_add_prefixed(cmd, "-I", runtime_include, err, err_size))
@@ -1037,20 +1087,24 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
             !xaot_cli_link_add_arg(cmd, "-fdata-sections", err, err_size))
             return false;
     }
-    if ((needs_runtime || needs_aot_core) &&
-        !xaot_cli_link_add_prefixed(
-            cmd, "-L", resolve_xray_lib_path(sysroot, lib_path, sizeof(lib_path)), err, err_size))
-        return false;
     for (i = 0; i < manifest->n_runtime_objects; i++) {
-        if (!xaot_cli_link_add_runtime_object(cmd, manifest->runtime_objects[i], err, err_size))
+        if (!xaot_cli_link_add_verified_runtime(cmd, plan, manifest->runtime_objects[i], err,
+                                                err_size))
             return false;
     }
     for (i = 0; i < manifest->n_stdlib_objects; i++) {
         if (!xaot_cli_link_add_stdlib_object(cmd, manifest->stdlib_objects[i], err, err_size))
             return false;
     }
-    if (needs_aot_core && !xaot_cli_link_add_runtime_object(cmd, "xray_aot_core", err, err_size))
+    if (needs_aot_core &&
+        !xaot_cli_link_add_verified_runtime(cmd, plan, "xray_aot_core", err, err_size))
         return false;
+    if (needs_runtime || needs_aot_core) {
+        for (i = 0; i < plan->system_library_count; i++) {
+            if (!xaot_cli_link_add_prefixed(cmd, "-l", plan->system_libraries[i], err, err_size))
+                return false;
+        }
+    }
     for (i = 0; i < manifest->n_system_libs; i++) {
         if (!xaot_cli_link_add_prefixed(cmd, "-l", manifest->system_libs[i], err, err_size))
             return false;
@@ -1081,7 +1135,8 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     return true;
 }
 
-static int invoke_aot_manifest_link(const XrCliToolchainPlan *plan, const XrCliBuildTarget *target,
+static int invoke_aot_manifest_link(const XrToolchainSelection *plan,
+                                    const XrToolchainTarget *target,
                                     const XaotLinkManifest *manifest, const char *opt_flag,
                                     const char *output_file, const char *const *inputs,
                                     int n_inputs, bool strip_symbols, bool shared_library,
@@ -1106,7 +1161,7 @@ static int invoke_aot_manifest_link(const XrCliToolchainPlan *plan, const XrCliB
     XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
     if (pid == XR_PROC_INVALID) {
         fprintf(stderr, "Error: failed to start toolchain '%s'\n", cmd.program);
-        if (plan && plan->kind == XR_CLI_TOOLCHAIN_ZIG)
+        if (plan && plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG)
             fprintf(stderr, "Tip: install Zig, bundle Zig with xray, or set XRAY_ZIG/--zig\n");
         return 1;
     }
@@ -1250,8 +1305,8 @@ static int cmd_build_native(
     const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
     bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
     bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrCliBuildTarget *target,
-    const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config,
+    bool lto, bool rc_guard, const XrToolchainTarget *target,
+    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
     const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
@@ -1279,6 +1334,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_link_manifest = xr_cli_opt_bool(&inv->options, "dump-link-manifest");
     bool dump_residue = xr_cli_opt_bool(&inv->options, "dump-residue");
     bool dump_link_command = xr_cli_opt_bool(&inv->options, "dump-link-command");
+    bool dump_toolchain_plan = xr_cli_opt_bool(&inv->options, "dump-toolchain-plan");
     bool dry_run_link = xr_cli_opt_bool(&inv->options, "dry-run-link");
     const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
@@ -1305,11 +1361,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *profile_arg;
     const char *linker_script;
     const char *objcopy_output;
-    XrCliBuildTarget target;
+    XrToolchainTarget target;
     XrCliBuildProfile profile;
     XiCgenTypeNameProfile type_name_profile;
-    XrCliToolchainKind toolchain_kind;
-    XrCliToolchainPlan toolchain_plan;
+    XrToolchainSelector toolchain_selector;
+    XrToolchainSelection toolchain_plan;
+    XrToolchainProbeResult toolchain_probe;
+    XrToolchainConfig user_toolchain_config;
+    char user_toolchain_config_path[XR_PATH_MAX];
     char parse_err[512];
     int rc;
 
@@ -1335,11 +1394,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             target_config = xr_project_find_target_config(project, target_arg);
     }
 
-    cc = build_config_string(&inv->options, "cc", target_config ? target_config->cc : NULL, "cc");
+    cc = build_config_string(&inv->options, "cc", target_config ? target_config->cc : NULL, NULL);
     sysroot = build_config_string(&inv->options, "sysroot",
                                   target_config ? target_config->sysroot : NULL, NULL);
     toolchain_arg = build_config_string(&inv->options, "toolchain",
-                                        target_config ? target_config->toolchain : NULL, "auto");
+                                        target_config ? target_config->toolchain : NULL, NULL);
     zig_path =
         build_config_string(&inv->options, "zig", target_config ? target_config->zig : NULL, NULL);
     profile_arg = build_config_string(&inv->options, "profile",
@@ -1361,10 +1420,33 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         objcopy_output = objcopy_output_from_config;
     }
 
-    if (!xr_cli_build_target_parse(target_arg, &target, parse_err, sizeof(parse_err))) {
+    if (!xtc_target_parse(target_arg, &target, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
+    if (!toolchain_arg) {
+        bool config_exists = false;
+        if (!xtc_config_path(user_toolchain_config_path, sizeof(user_toolchain_config_path),
+                             parse_err, sizeof(parse_err)) ||
+            !xtc_config_load(user_toolchain_config_path, &user_toolchain_config, &config_exists,
+                             parse_err, sizeof(parse_err))) {
+            fprintf(stderr, "Error: %s\n", parse_err);
+            CMD_BUILD_RETURN(1);
+        }
+        const XrToolchainPreference *preference =
+            xtc_config_find(&user_toolchain_config, target_arg);
+        if (preference) {
+            toolchain_arg = xtc_selector_name(preference->selector);
+            if ((!cc || !cc[0]) && !getenv("CC") && preference->compiler[0] &&
+                strcmp(preference->compiler, "auto") != 0)
+                cc = preference->compiler;
+            if ((!zig_path || !zig_path[0]) && !getenv("XRAY_ZIG") && preference->zig[0] &&
+                strcmp(preference->zig, "auto") != 0 && strcmp(preference->zig, "managed") != 0)
+                zig_path = preference->zig;
+        }
+    }
+    if (!toolchain_arg)
+        toolchain_arg = "auto";
     if (!build_profile_parse(profile_arg, &profile, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
@@ -1374,8 +1456,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
-    if (!xr_cli_toolchain_kind_parse(toolchain_arg, &toolchain_kind, parse_err,
-                                     sizeof(parse_err))) {
+    if (!xtc_selector_parse(toolchain_arg, &toolchain_selector, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
@@ -1428,6 +1509,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --dump-link-command requires --native\n");
         CMD_BUILD_RETURN(2);
     }
+    if (dump_toolchain_plan && !native_mode) {
+        fprintf(stderr, "Error: --dump-toolchain-plan requires --native\n");
+        CMD_BUILD_RETURN(2);
+    }
     if (dry_run_link && !native_mode) {
         fprintf(stderr, "Error: --dry-run-link requires --native\n");
         CMD_BUILD_RETURN(2);
@@ -1461,6 +1546,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     if (dry_run_link && c_only) {
         fprintf(stderr, "Error: --dry-run-link cannot be combined with --c-only\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (dump_toolchain_plan && c_only) {
+        fprintf(stderr, "Error: --dump-toolchain-plan cannot be combined with --c-only\n");
         CMD_BUILD_RETURN(2);
     }
     if (linker_script && c_only && xr_cli_opt_present(&inv->options, "linker-script")) {
@@ -1527,30 +1616,71 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                 target.name);
         CMD_BUILD_RETURN(2);
     }
-    if (!xr_cli_toolchain_resolve_ex(toolchain_kind, &target, cc, zig_path,
-                                     inv->ctx ? inv->ctx->program : NULL, &toolchain_plan,
-                                     parse_err, sizeof(parse_err))) {
-        fprintf(stderr, "Error: %s\n", parse_err);
+    if (cc && cc[0] && (toolchain_selector == XR_TOOLCHAIN_SELECTOR_ZIG)) {
+        fprintf(stderr, "Error: --cc cannot be used with --toolchain zig\n");
         CMD_BUILD_RETURN(2);
     }
-    if (shared_library && !c_only && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
+    if (zig_path && zig_path[0] && toolchain_selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
+        toolchain_selector != XR_TOOLCHAIN_SELECTOR_ZIG) {
+        fprintf(stderr, "Error: --zig can only be used with --toolchain auto or zig\n");
+        CMD_BUILD_RETURN(2);
+    }
+    memset(&toolchain_plan, 0, sizeof(toolchain_plan));
+    toolchain_plan.target = target;
+    if (!c_only) {
+        XrToolchainProbeOptions probe_options = {0};
+        probe_options.request.selector = toolchain_selector;
+        probe_options.request.target = target;
+        probe_options.request.cc = cc && cc[0] ? cc : getenv("CC");
+        probe_options.request.zig = zig_path;
+        probe_options.request.program_hint = inv->ctx ? inv->ctx->program : NULL;
+        probe_options.profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
+                                    ? XR_TOOLCHAIN_PROFILE_FREESTANDING
+                                    : XR_TOOLCHAIN_PROFILE_HOSTED;
+        memset(&toolchain_probe, 0, sizeof(toolchain_probe));
+        if (!xtc_probe(&probe_options, &toolchain_probe, parse_err, sizeof(parse_err))) {
+            fprintf(stderr, "Error: %s\n", parse_err);
+            for (size_t i = 0; i < toolchain_probe.diagnostic_count; i++)
+                fprintf(stderr, "  [%s] %s: %s\n",
+                        xtc_reason_code_name(toolchain_probe.diagnostics[i].code),
+                        toolchain_probe.diagnostics[i].stage,
+                        toolchain_probe.diagnostics[i].message);
+            CMD_BUILD_RETURN(3);
+        }
+        toolchain_plan = toolchain_probe.selection;
+        toolchain_plan.program = toolchain_plan.program_storage;
+    }
+    if (shared_library && !c_only && toolchain_plan.provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
         !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared currently requires the host toolchain\n");
+        fprintf(stderr, "Error: --shared currently requires a system provider\n");
         CMD_BUILD_RETURN(2);
     }
 
     if (!output_file)
         output_file = c_only ? "app.c"
                              : (shared_library ? default_shared_library_output()
-                                               : xr_cli_build_target_default_output(&target));
+                                               : xtc_target_default_output(&target));
 
     const char *opt_flag = make_opt_flag(opt_level, debug_symbols);
     const char *effective_cpu = cpu;
     bool effective_lto = lto;
     if (native_mode && target.is_native && opt_fast) {
-        effective_lto = true;
+        effective_lto = !c_only && toolchain_probe.lto == XR_TOOLCHAIN_CAPABILITY_OK;
         if (!effective_cpu || !effective_cpu[0])
             effective_cpu = "native";
+    }
+    if (lto && !c_only && toolchain_probe.lto != XR_TOOLCHAIN_CAPABILITY_OK) {
+        fprintf(stderr, "Error: selected provider does not satisfy the requested LTO capability\n");
+        CMD_BUILD_RETURN(3);
+    }
+    if (dump_toolchain_plan) {
+        printf("Toolchain plan: provider=%s ownership=%s target=%s compiler=%s "
+               "runtime=%s sdk=%s probe=%s cache=%s\n",
+               xtc_provider_name(toolchain_plan.provider),
+               xtc_ownership_name(toolchain_plan.ownership), target.name,
+               toolchain_plan.program ? toolchain_plan.program : "",
+               toolchain_plan.runtime_artifact, toolchain_plan.sdk_digest,
+               toolchain_plan.probe_fingerprint, toolchain_probe.cache);
     }
 
     if (native_mode) {
@@ -1563,8 +1693,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
-    rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
-                            debug_symbols, sysroot);
+    rc = cmd_build_bytecode(input_file, output_file, cc && cc[0] ? cc : "cc", opt_flag, c_only,
+                            strip_symbols, debug_symbols, sysroot);
     CMD_BUILD_RETURN(rc);
 #undef CMD_BUILD_RETURN
 }
@@ -1814,7 +1944,8 @@ static uint64_t xaot_aot_runtime_source_key(void) {
         return cached_key;
     h = XR_FNV64_OFFSET_BASIS;
     h = xaot_hash_fold_str(h, "xaot-aot-runtime-source-key-v1");
-    resolve_aot_include_paths(NULL, aot_dir, sizeof(aot_dir), include_dir, sizeof(include_dir));
+    resolve_aot_include_paths(NULL, NULL, aot_dir, sizeof(aot_dir), include_dir,
+                              sizeof(include_dir));
     h = xaot_hash_fold_source_path_list(h, "aot", aot_dir);
     snprintf(shared_dir, sizeof(shared_dir), "%s/../shared", aot_dir);
     h = xaot_hash_fold_source_path_list(h, "shared", shared_dir);
@@ -1860,6 +1991,7 @@ static void xaot_runtime_archive_path(const char *lib_dir, const char *name, cha
 }
 
 static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkManifest *manifest,
+                                                     const XrToolchainSelection *plan,
                                                      const char *sysroot) {
     char lib_dir[XR_PATH_MAX];
     char dep[XR_PATH_MAX];
@@ -1867,6 +1999,20 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
 
     if (!manifest)
         return h;
+
+    if (plan && plan->runtime_count > 0) {
+        h = xaot_hash_fold_str(h, plan->sdk_digest);
+        for (size_t i = 0; i < plan->runtime_count; i++) {
+            h = xaot_hash_fold_str(h, plan->runtime_ids[i]);
+            h = xaot_hash_fold_file_stat(h, plan->runtime_paths[i]);
+        }
+        for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
+            const char *value = manifest->stdlib_objects[i];
+            if (xaot_link_value_is_path(value))
+                h = xaot_hash_fold_file_stat(h, value);
+        }
+        return h;
+    }
 
     h = xaot_hash_fold_str(h, resolved_lib_dir);
     for (uint32_t i = 0; i < manifest->n_runtime_objects; i++) {
@@ -1895,8 +2041,8 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
  * preprocessor define / cc flag carried by the link manifest (which already
  * folds in sanitizer, cpu, and debug flags). */
 static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag,
-                                      const XrCliBuildTarget *target,
-                                      const XrCliToolchainPlan *plan,
+                                      const XrToolchainTarget *target,
+                                      const XrToolchainSelection *plan,
                                       const XaotLinkManifest *manifest, const char *sysroot) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     h = xaot_hash_fold_str(h, "xaot-obj-cache-v2");
@@ -1910,7 +2056,10 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     }
     if (plan) {
         h = xaot_hash_fold_str(h, plan->program);
-        h = xaot_hash_fold(h, &plan->kind, sizeof(plan->kind));
+        h = xaot_hash_fold(h, &plan->provider, sizeof(plan->provider));
+        h = xaot_hash_fold_str(h, plan->compiler_fingerprint);
+        h = xaot_hash_fold_str(h, plan->sdk_digest);
+        h = xaot_hash_fold_str(h, plan->probe_fingerprint);
     }
     h = xaot_hash_fold_str(h, sysroot);
     if (manifest) {
@@ -1924,8 +2073,8 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
 }
 
 static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const char *opt_flag,
-                                           const XrCliBuildTarget *target,
-                                           const XrCliToolchainPlan *plan, const char *sysroot,
+                                           const XrToolchainTarget *target,
+                                           const XrToolchainSelection *plan, const char *sysroot,
                                            bool strip_symbols, bool shared_library) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
 
@@ -1945,7 +2094,10 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     }
     if (plan) {
         h = xaot_hash_fold_str(h, plan->program);
-        h = xaot_hash_fold(h, &plan->kind, sizeof(plan->kind));
+        h = xaot_hash_fold(h, &plan->provider, sizeof(plan->provider));
+        h = xaot_hash_fold_str(h, plan->compiler_fingerprint);
+        h = xaot_hash_fold_str(h, plan->sdk_digest);
+        h = xaot_hash_fold_str(h, plan->probe_fingerprint);
     }
     h = xaot_hash_fold_str(h, sysroot);
     if (result) {
@@ -1959,7 +2111,7 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
         h = xaot_hash_fold_string_list(h, manifest->defines, manifest->n_defines);
         h = xaot_hash_fold_string_list(h, manifest->cc_flags, manifest->n_cc_flags);
         h = xaot_hash_fold_string_list(h, manifest->ld_flags, manifest->n_ld_flags);
-        h = xaot_hash_fold_link_dependency_stats(h, manifest, sysroot);
+        h = xaot_hash_fold_link_dependency_stats(h, manifest, plan, sysroot);
         h = xaot_hash_fold(h, &result->n_sources, sizeof(result->n_sources));
         for (int i = 0; i < result->n_sources; i++) {
             h = xaot_hash_fold_str(h, result->sources[i].name);
@@ -2100,8 +2252,8 @@ static const char *xaot_native_unit_opt_flag(const XrNativeUnit *unit) {
     return "-O0";
 }
 
-static bool xaot_cli_build_native_unit_compile_command(const XrCliToolchainPlan *plan,
-                                                       const XrCliBuildTarget *target,
+static bool xaot_cli_build_native_unit_compile_command(const XrToolchainSelection *plan,
+                                                       const XrToolchainTarget *target,
                                                        const XrNativeUnit *unit, const char *source,
                                                        const char *object, const char *sysroot,
                                                        XaotCliLinkCommand *cmd, char *err,
@@ -2111,14 +2263,8 @@ static bool xaot_cli_build_native_unit_compile_command(const XrCliToolchainPlan 
         return false;
     }
     memset(cmd, 0, sizeof(*cmd));
-    cmd->program = plan->program;
-    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
+    if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
-        if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size) ||
-            !xaot_cli_link_add_zig_target(cmd, target, err, err_size))
-            return false;
-    }
     if (!xaot_cli_link_add_arg(cmd, xaot_native_unit_opt_flag(unit), err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-c", err, err_size))
@@ -2151,10 +2297,11 @@ static bool xaot_cli_build_native_unit_compile_command(const XrCliToolchainPlan 
            xaot_cli_link_add_arg(cmd, object, err, err_size);
 }
 
-static int xaot_invoke_native_unit_compile(const XrCliToolchainPlan *plan,
-                                           const XrCliBuildTarget *target, const XrNativeUnit *unit,
-                                           const char *source, const char *object,
-                                           const char *sysroot, bool dump_command, bool dry_run) {
+static int xaot_invoke_native_unit_compile(const XrToolchainSelection *plan,
+                                           const XrToolchainTarget *target,
+                                           const XrNativeUnit *unit, const char *source,
+                                           const char *object, const char *sysroot,
+                                           bool dump_command, bool dry_run) {
     char err[512];
     XaotCliLinkCommand cmd;
     if (!xaot_cli_build_native_unit_compile_command(plan, target, unit, source, object, sysroot,
@@ -2176,20 +2323,15 @@ static int xaot_invoke_native_unit_compile(const XrCliToolchainPlan *plan,
     return 0;
 }
 
-static int xaot_combine_native_unit_objects(const XrCliToolchainPlan *plan,
-                                            const XrCliBuildTarget *target,
+static int xaot_combine_native_unit_objects(const XrToolchainSelection *plan,
+                                            const XrToolchainTarget *target,
                                             const XrNativeUnit *unit, const char *const *objects,
                                             uint32_t object_count, const char *output,
                                             bool dump_command, bool dry_run) {
     char err[512];
     XaotCliLinkCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.program = plan->program;
-    if (!xaot_cli_link_add_arg(&cmd, plan->program, err, sizeof(err)))
-        goto command_error;
-    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG &&
-        (!xaot_cli_link_add_arg(&cmd, "cc", err, sizeof(err)) ||
-         !xaot_cli_link_add_zig_target(&cmd, target, err, sizeof(err))))
+    if (!xaot_cli_add_provider_driver_prefix(&cmd, plan, target, err, sizeof(err)))
         goto command_error;
     if (!xaot_cli_link_add_arg(&cmd, "-r", err, sizeof(err)) ||
         !xaot_cli_link_add_arg(&cmd, "-o", err, sizeof(err)) ||
@@ -2220,8 +2362,9 @@ command_error:
 }
 
 static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t source_index,
-                                             const XrCliBuildTarget *target,
-                                             const XrCliToolchainPlan *plan, const char *sysroot) {
+                                             const XrToolchainTarget *target,
+                                             const XrToolchainSelection *plan,
+                                             const char *sysroot) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     h = xaot_hash_fold_str(h, "xray-native-unit-object-v1");
     h = xaot_hash_fold(h, &unit->fingerprint, sizeof(unit->fingerprint));
@@ -2231,7 +2374,7 @@ static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t 
     h = xaot_hash_fold_str(h, target ? target->cpu : NULL);
     h = xaot_hash_fold_str(h, plan ? plan->program : NULL);
     if (plan)
-        h = xaot_hash_fold(h, &plan->kind, sizeof(plan->kind));
+        h = xaot_hash_fold(h, &plan->provider, sizeof(plan->provider));
     return xaot_hash_fold_str(h, sysroot);
 }
 
@@ -2258,8 +2401,8 @@ static bool xaot_native_unit_owns_entry_stub(const XrNativePackagePlan *plan,
 
 static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
                                        XaotLinkManifest *link_manifest,
-                                       const XrCliToolchainPlan *toolchain_plan,
-                                       const XrCliBuildTarget *target, const char *cache_dir,
+                                       const XrToolchainSelection *toolchain_plan,
+                                       const XrToolchainTarget *target, const char *cache_dir,
                                        const char *sysroot, bool verbose, bool rebuild,
                                        bool dump_command, bool dry_run) {
     char native_cache[XR_PATH_MAX];
@@ -2409,8 +2552,8 @@ static void xaot_write_c_string_literal(FILE *out, const char *text) {
 }
 
 static int xaot_verify_native_layouts(const XrNativePackagePlan *native_plan,
-                                      const XrCliToolchainPlan *toolchain_plan,
-                                      const XrCliBuildTarget *target, const char *cache_dir,
+                                      const XrToolchainSelection *toolchain_plan,
+                                      const XrToolchainTarget *target, const char *cache_dir,
                                       const char *sysroot, bool dump_command, bool dry_run) {
     if (!native_plan || native_plan->layout_count == 0)
         return 0;
@@ -2484,7 +2627,7 @@ static int xaot_verify_native_layouts(const XrNativePackagePlan *native_plan,
 /* Resolve the object cache directory, then /aot/<target>.  Precedence:
  * --cache-dir flag, then $XRAY_CACHE_DIR, then <output dir>/.xray-cache.
  * Created on demand.  Returns 0 on success. */
-static int xaot_resolve_cache_dir(const char *output_file, const XrCliBuildTarget *target,
+static int xaot_resolve_cache_dir(const char *output_file, const XrToolchainTarget *target,
                                   const char *cache_dir_arg, char *out, size_t out_sz) {
     const char *env_cache = getenv("XRAY_CACHE_DIR");
     char base[XR_PATH_MAX];
@@ -2682,8 +2825,8 @@ static void xaot_probe_evidence_cache_manifest(const char *cache_dir,
 /* Compile one module's generated C to an object file, reusing a cached object
  * when the content hash already exists.  Fills `obj_out` with the object path
  * (which the caller then links).  Returns 0 on success. */
-static int xaot_compile_source_cached(const XrCliToolchainPlan *plan,
-                                      const XrCliBuildTarget *target,
+static int xaot_compile_source_cached(const XrToolchainSelection *plan,
+                                      const XrToolchainTarget *target,
                                       const XaotLinkManifest *manifest, const char *opt_flag,
                                       const XaotModuleSource *src, const char *cache_dir,
                                       const char *sysroot, bool dump_command, bool keep_c,
@@ -2824,7 +2967,7 @@ static uint32_t xaot_cli_provider_capability_by_name(const char *name) {
 
 static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
                                                  XrCliBuildProfile profile,
-                                                 const XrCliBuildTarget *target,
+                                                 const XrToolchainTarget *target,
                                                  XaotTargetCapabilityProvider *out,
                                                  bool *out_present, char *err, size_t err_size) {
     bool present = config && ((config->runtime_provider && config->runtime_provider[0]) ||
@@ -2881,8 +3024,8 @@ static int cmd_build_native(
     const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
     bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
     bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrCliBuildTarget *target,
-    const XrCliToolchainPlan *toolchain_plan, const XrTargetConfig *target_config,
+    bool lto, bool rc_guard, const XrToolchainTarget *target,
+    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
     const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
@@ -3031,21 +3174,10 @@ static int cmd_build_native(
          * size trade-off for -Os, but it adds a call/return to leaf routines
          * in speed profiles. Keep the release policy target/toolchain based;
          * no source function or package receives a special flag. */
-        bool clang_family = toolchain_plan && (toolchain_plan->kind == XR_CLI_TOOLCHAIN_CLANG ||
-                                               toolchain_plan->kind == XR_CLI_TOOLCHAIN_ZIG ||
-                                               (toolchain_plan->kind == XR_CLI_TOOLCHAIN_HOST &&
-                                                toolchain_plan->program &&
-                                                strstr(toolchain_plan->program, "clang") != NULL));
-#if defined(__APPLE__)
-        if (!clang_family && toolchain_plan && toolchain_plan->kind == XR_CLI_TOOLCHAIN_HOST &&
-            toolchain_plan->program) {
-            const char *host_cc = strrchr(toolchain_plan->program, '/');
-            host_cc = host_cc ? host_cc + 1 : toolchain_plan->program;
-            /* Apple's system `cc` driver is Clang even though its basename
-             * intentionally omits the implementation name. */
-            clang_family = strcmp(host_cc, "cc") == 0;
-        }
-#endif
+        bool clang_family =
+            toolchain_plan && (toolchain_plan->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG ||
+                               toolchain_plan->provider == XR_TOOLCHAIN_PROVIDER_LLVM_CLANG ||
+                               toolchain_plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG);
         const char *target_arch = aot_result.link_manifest.target.arch;
         bool aarch64_target = target_arch && (strcmp(target_arch, "aarch64") == 0 ||
                                               strcmp(target_arch, "arm64") == 0);
@@ -3154,12 +3286,6 @@ static int cmd_build_native(
         return 1;
     }
 
-    if (xaot_verify_native_layouts(native_package_plan, toolchain_plan, target, cache_dir, sysroot,
-                                   dump_link_command || verbose, dry_run_link) != 0) {
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
-
     /* --c-only emits one compilable amalgamated translation unit.  Put the
      * entry unit first so its XRT_IMPL definitions are seen before the shared
      * runtime headers' include guards; all remaining units then contribute
@@ -3199,6 +3325,12 @@ static int cmd_build_native(
         printf("Generated: %s\n", output);
         xaot_build_result_free(&aot_result);
         return 0;
+    }
+
+    if (xaot_verify_native_layouts(native_package_plan, toolchain_plan, target, cache_dir, sysroot,
+                                   dump_link_command || verbose, dry_run_link) != 0) {
+        xaot_build_result_free(&aot_result);
+        return 1;
     }
 
     (void) cc;

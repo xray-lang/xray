@@ -167,7 +167,7 @@ BUILD_LOG="$WORK/build.log"
 if ! (cd "$WORK" && ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}" \
         ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}" \
         "$XRAY" build --native --profile freestanding \
-        --target riscv32imac-unknown-none-elf --toolchain zig --zig "$ZIG" \
+        --target riscv32-freestanding-none --toolchain zig --zig "$ZIG" \
         --linker-script "$LD" --keep-c --rebuild --dump-link-command \
         --cache-dir "$WORK/build-cache" -o "$ELF" "$SRC") >"$BUILD_LOG" 2>&1; then
     sed 's/^/  /' "$BUILD_LOG" >&2

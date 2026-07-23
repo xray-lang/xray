@@ -12,6 +12,6 @@ c_contains=xr_aot_scope_exit(
 c_contains=runtime_cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER | XR_AOT_CAP_TASK | XR_AOT_CAP_OBJECTS;
 not_contains=xray_core
 not_contains=channel
-not_contains=timer
-not_contains=work_queue
-not_contains=result_group
+not_contains="timer"
+not_contains="work_queue"
+not_contains="result_group"

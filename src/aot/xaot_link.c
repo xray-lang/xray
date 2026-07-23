@@ -267,83 +267,38 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "native";
         return true;
     }
-    if (strcmp(name, "x86_64-linux-musl") == 0) {
-        *arch = "x86_64";
-        *os = "linux";
-        *abi = "musl";
-        *object_format = "elf";
-        *triple = "x86_64-linux-musl";
-        *pointer_bits = 64;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "x86_64-unknown-none") == 0) {
-        *arch = "x86_64";
-        *os = "none";
-        *abi = "none";
-        *object_format = "elf";
-        *triple = "x86_64-unknown-none";
-        *pointer_bits = 64;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "riscv32imac-unknown-none-elf") == 0) {
-        *arch = "riscv32";
-        *os = "none";
-        *abi = "none";
-        *object_format = "elf";
-        *triple = "riscv32imac-unknown-none-elf";
-        *pointer_bits = 32;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "riscv64gc-unknown-none-elf") == 0) {
-        *arch = "riscv64";
-        *os = "none";
-        *abi = "none";
-        *object_format = "elf";
-        *triple = "riscv64gc-unknown-none-elf";
-        *pointer_bits = 64;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "thumbv7em-none-eabi") == 0) {
-        *arch = "thumbv7em";
-        *os = "none";
-        *abi = "eabi";
-        *object_format = "elf";
-        *triple = "thumbv7em-none-eabi";
-        *pointer_bits = 32;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "aarch64-linux-musl") == 0) {
-        *arch = "aarch64";
-        *os = "linux";
-        *abi = "musl";
-        *object_format = "elf";
-        *triple = "aarch64-linux-musl";
-        *pointer_bits = 64;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "x86_64-windows-gnu") == 0) {
-        *arch = "x86_64";
-        *os = "windows";
-        *abi = "gnu";
-        *object_format = "coff";
-        *triple = "x86_64-windows-gnu";
-        *pointer_bits = 64;
-        *endian = "little";
-        return true;
-    }
-    if (strcmp(name, "aarch64-windows-gnu") == 0) {
-        *arch = "aarch64";
-        *os = "windows";
-        *abi = "gnu";
-        *object_format = "coff";
-        *triple = "aarch64-windows-gnu";
-        *pointer_bits = 64;
+    struct XrTargetProfileRecord {
+        const char *name;
+        const char *arch;
+        const char *os;
+        const char *abi;
+        const char *object_format;
+        uint16_t pointer_bits;
+    };
+    static const struct XrTargetProfileRecord records[] = {
+        {"aarch64-apple-darwin", "aarch64", "darwin", "darwin", "macho", 64},
+        {"x86_64-apple-darwin", "x86_64", "darwin", "darwin", "macho", 64},
+        {"x86_64-linux-gnu", "x86_64", "linux", "gnu", "elf", 64},
+        {"aarch64-linux-gnu", "aarch64", "linux", "gnu", "elf", 64},
+        {"x86_64-linux-musl", "x86_64", "linux", "musl", "elf", 64},
+        {"aarch64-linux-musl", "aarch64", "linux", "musl", "elf", 64},
+        {"x86_64-windows-msvc", "x86_64", "windows", "msvc", "coff", 64},
+        {"aarch64-windows-msvc", "aarch64", "windows", "msvc", "coff", 64},
+        {"x86_64-windows-gnu", "x86_64", "windows", "gnu", "coff", 64},
+        {"aarch64-windows-gnu", "aarch64", "windows", "gnu", "coff", 64},
+        {"x86_64-freestanding-none", "x86_64", "none", "none", "elf", 64},
+        {"riscv32-freestanding-none", "riscv32", "none", "none", "elf", 32},
+        {"thumb-freestanding-eabi", "thumb", "none", "eabi", "elf", 32},
+    };
+    for (size_t i = 0; i < sizeof(records) / sizeof(records[0]); i++) {
+        if (strcmp(name, records[i].name) != 0)
+            continue;
+        *arch = records[i].arch;
+        *os = records[i].os;
+        *abi = records[i].abi;
+        *object_format = records[i].object_format;
+        *triple = records[i].name;
+        *pointer_bits = records[i].pointer_bits;
         *endian = "little";
         return true;
     }

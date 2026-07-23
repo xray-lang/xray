@@ -8,4 +8,4 @@ regex="system_libs": \[[^]]*"pthread"
 contains="defines": ["XRT_IMPL"]
 not_contains=xray_core
 not_contains=channel
-not_contains=timer
+not_contains="timer"

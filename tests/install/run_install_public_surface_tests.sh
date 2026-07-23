@@ -18,6 +18,8 @@ PREFIX="$WORK/prefix"
 CORE_PREFIX="$WORK/core-prefix"
 PASS=0
 FAIL=0
+HOST_TARGET="$($BUILD_DIR/xray toolchain list --target native --json | \
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["normalizedTarget"])')"
 
 cleanup() {
     rm -rf "$WORK"
@@ -85,12 +87,13 @@ else
     print_log_tail "$core_install_log"
 fi
 expect_executable "$CORE_PREFIX/bin/xray" "Core installed xray executable"
-expect_file "$CORE_PREFIX/lib/libxray_vm_runtime.a" "Core installed VM runtime"
+expect_file "$CORE_PREFIX/lib/xray/vm/$HOST_TARGET/libxray_vm_runtime.a" "Core installed VM runtime"
 expect_file "$CORE_PREFIX/lib/xray/stdlib/path/path.xr" "Core installed stdlib"
 expect_file "$CORE_PREFIX/share/xray/install/install-marker.json" "Core installed marker"
 expect_file "$CORE_PREFIX/share/xray/install/payload-manifest.json" "Core payload manifest"
 expect_absent "$CORE_PREFIX/include/xray/xray.h" "Core excludes SDK headers"
-expect_absent "$CORE_PREFIX/lib/libxray_aot_core.a" "Core excludes AOT SDK archive"
+expect_absent "$CORE_PREFIX/lib/xray/aot/$HOST_TARGET/libxray_aot_core.a" \
+    "Core excludes AOT SDK archive"
 
 if python3 "$PROJECT_DIR/scripts/verify_payload_manifest.py" \
         --root "$CORE_PREFIX" --binary "$CORE_PREFIX/bin/xray"; then
@@ -138,9 +141,13 @@ else
 fi
 
 expect_executable "$PREFIX/bin/xray" "installed xray executable"
-expect_file "$PREFIX/lib/libxray_aot_core.a" "installed xray_aot_core archive"
-expect_file "$PREFIX/lib/libxray_rt_coro.a" "installed xray_rt_coro archive"
-expect_file "$PREFIX/lib/libxray_vm_runtime.a" "installed xray_vm_runtime archive"
+expect_file "$PREFIX/lib/xray/aot/$HOST_TARGET/libxray_aot_core.a" \
+    "installed xray_aot_core archive"
+expect_file "$PREFIX/lib/xray/aot/$HOST_TARGET/libxray_rt_coro.a" \
+    "installed xray_rt_coro archive"
+expect_file "$PREFIX/lib/xray/aot/$HOST_TARGET/manifest.json" "installed runtime manifest"
+expect_file "$PREFIX/lib/xray/vm/$HOST_TARGET/libxray_vm_runtime.a" \
+    "installed xray_vm_runtime archive"
 expect_file "$PREFIX/lib/xray/sdk/src/aot/xrt.h" "installed private AOT SDK"
 expect_file "$PREFIX/lib/xray/stdlib/path/path.xr" "installed stdlib source"
 expect_file "$PREFIX/share/xray/install/install-marker.json" "installed payload marker"
@@ -163,6 +170,7 @@ runtime_log="$WORK/runtime_time.log"
 runtime_bin="$WORK/runtime_time"
 cp "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" "$WORK/runtime_time.xr"
 if (cd "$WORK" && unset XRAY_INCLUDE XRAY_LIB XRAY_STDLIB_PATH && \
+        export XDG_CONFIG_HOME="$WORK/config" XDG_CACHE_HOME="$WORK/cache" && \
         "$PREFIX/bin/xray" build --native --dump-link-command \
         "$WORK/runtime_time.xr" -o "$runtime_bin") >"$runtime_log" 2>&1; then
     record_pass "installed xray builds runtime_time.xr"

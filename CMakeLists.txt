@@ -76,10 +76,34 @@ elseif(_XRAY_RELEASE_ARCH MATCHES "^(amd64|x86_64)$")
 endif()
 if(APPLE)
     set(XRAY_RELEASE_TARGET "macos-${_XRAY_RELEASE_ARCH}")
+    if(_XRAY_RELEASE_ARCH STREQUAL "arm64")
+        set(XRAY_HOST_TARGET_ABI "aarch64-apple-darwin")
+    else()
+        set(XRAY_HOST_TARGET_ABI "x86_64-apple-darwin")
+    endif()
+    set(XRAY_RUNTIME_OBJECT_FORMAT "macho")
+    set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"apple-clang\\\",\\\"llvm-clang\\\",\\\"zig\\\"")
+    set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON "\\\"m\\\",\\\"pthread\\\"")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(XRAY_RELEASE_TARGET "linux-${_XRAY_RELEASE_ARCH}")
+    if(_XRAY_RELEASE_ARCH STREQUAL "arm64")
+        set(XRAY_HOST_TARGET_ABI "aarch64-linux-gnu")
+    else()
+        set(XRAY_HOST_TARGET_ABI "x86_64-linux-gnu")
+    endif()
+    set(XRAY_RUNTIME_OBJECT_FORMAT "elf")
+    set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"llvm-clang\\\",\\\"gcc\\\",\\\"zig\\\"")
+    set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON "\\\"m\\\",\\\"pthread\\\"")
 elseif(WIN32)
     set(XRAY_RELEASE_TARGET "windows-${_XRAY_RELEASE_ARCH}")
+    if(_XRAY_RELEASE_ARCH STREQUAL "arm64")
+        set(XRAY_HOST_TARGET_ABI "aarch64-windows-msvc")
+    else()
+        set(XRAY_HOST_TARGET_ABI "x86_64-windows-msvc")
+    endif()
+    set(XRAY_RUNTIME_OBJECT_FORMAT "coff")
+    set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"msvc\\\"")
+    set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON "\\\"ws2_32\\\",\\\"synchronization\\\"")
 else()
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" _XRAY_RELEASE_OS)
     set(XRAY_RELEASE_TARGET "${_XRAY_RELEASE_OS}-${_XRAY_RELEASE_ARCH}")
@@ -619,6 +643,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/aot
     ${CMAKE_CURRENT_SOURCE_DIR}/src/api
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/dap
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp
@@ -704,6 +729,7 @@ list(REMOVE_ITEM AOT_SRC
     "src/aot/xrt_gen_iter.c")
 file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
+file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
 # Core modules (required): prelude (built-in type registry), time, math, log,
@@ -864,7 +890,7 @@ foreach(XRAY_SRC_LIST
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
         FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC TOOLCHAIN_SRC
-        VM_SRC IR_SRC MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC
+        VM_SRC IR_SRC MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC APP_TOOLCHAIN_SRC
         STDLIB_CORE_SRC STDLIB_SRC)
     xray_exclude_include_fragments(${XRAY_SRC_LIST})
 endforeach()
@@ -1009,6 +1035,9 @@ add_compile_definitions(
     XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot"
     XRT_SOURCE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
     XRT_BUILD_LIB_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    XTC_BUILD_HOST_TARGET="${XRAY_HOST_TARGET_ABI}"
+    XTC_STATIC_LIBRARY_PREFIX="${CMAKE_STATIC_LIBRARY_PREFIX}"
+    XTC_STATIC_LIBRARY_SUFFIX="${CMAKE_STATIC_LIBRARY_SUFFIX}"
 )
 
 
@@ -1179,12 +1208,13 @@ add_dependencies(xray_vm_runtime gen-stdlib-embedded-bytecodes)
 # ============================================================================
 
 # Base CLI source files
-set(XRAY_CLI_SOURCES ${NEW_CLI_SRC})
+set(XRAY_CLI_SOURCES ${NEW_CLI_SRC} ${APP_TOOLCHAIN_SRC})
 list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli/xcmd_builtin_dump.c)
 list(REMOVE_DUPLICATES XRAY_CLI_SOURCES)
 set(XRAY_CLI_INCLUDES
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain
 )
 
 # LSP optional module
@@ -2894,6 +2924,11 @@ configure_file(
     "${_XRAY_INSTALL_METADATA_DIR}/GeneratePayloadManifest.cmake"
     @ONLY
 )
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/GenerateRuntimeManifest.cmake.in"
+    "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
+    @ONLY
+)
 
 # Install executable
 install(TARGETS xray
@@ -2904,12 +2939,16 @@ install(TARGETS xray
 # Install public AOT runtime libraries. xray_core remains a build-tree-only
 # aggregate for the CLI and tests; it must not become a public install target.
 install(TARGETS xray_vm_runtime
-    ARCHIVE DESTINATION lib
+    ARCHIVE DESTINATION lib/xray/vm/${XRAY_HOST_TARGET_ABI}
     COMPONENT XrayCore
 )
 install(TARGETS xray_aot_core xray_rt_coro
-    ARCHIVE DESTINATION lib
+    ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
     COMPONENT XraySDK
+)
+
+install(SCRIPT "${_XRAY_INSTALL_METADATA_DIR}/GenerateRuntimeManifest.cmake"
+    ALL_COMPONENTS
 )
 
 # Install the public C API headers.

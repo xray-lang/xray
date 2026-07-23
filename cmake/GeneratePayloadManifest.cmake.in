@@ -21,6 +21,7 @@ function(_xray_component_for path output)
         set(_component "toolchain-integration")
     elseif(path MATCHES "^include/xray(/|$)" OR
            path MATCHES "^lib/(lib)?xray_(aot_core|rt_coro)" OR
+           path MATCHES "^lib/xray/aot/.+/(lib)?xray_(aot_core|rt_coro)" OR
            path MATCHES "^lib/xray/sdk(/|$)")
         set(_component "sdk")
     else()

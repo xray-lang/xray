@@ -63,9 +63,14 @@ TEST(spec_find_command_toolchain) {
     const XrCliCommandSpec *spec = xr_cli_find_command("toolchain");
     ASSERT_NOT_NULL(spec);
     ASSERT_NOT_NULL(spec->subcommands);
-    ASSERT_EQ_INT(spec->subcommand_count, 2);
+    ASSERT_EQ_INT(spec->subcommand_count, 7);
     ASSERT_STR_EQ(spec->subcommands[0].name, "list");
-    ASSERT_STR_EQ(spec->subcommands[1].name, "doctor");
+    ASSERT_STR_EQ(spec->subcommands[1].name, "detect");
+    ASSERT_STR_EQ(spec->subcommands[2].name, "probe");
+    ASSERT_STR_EQ(spec->subcommands[3].name, "doctor");
+    ASSERT_STR_EQ(spec->subcommands[4].name, "use");
+    ASSERT_STR_EQ(spec->subcommands[5].name, "reset");
+    ASSERT_STR_EQ(spec->subcommands[6].name, "config-path");
 }
 
 TEST(spec_find_command_language_attributes) {

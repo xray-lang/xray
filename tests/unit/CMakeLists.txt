@@ -655,12 +655,18 @@ add_test(NAME test_cli_spec COMMAND test_cli_spec)
 
 add_executable(test_cli_toolchain
     cli/test_cli_toolchain.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_toolchain.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_config.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_discovery.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_json.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_probe_cache.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_process.c
 )
 target_include_directories(test_cli_toolchain PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_SOURCE_DIR}/src/app/cli
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain
 )
+target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
 
 # ============================================================================

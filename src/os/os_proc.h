@@ -81,6 +81,10 @@ typedef struct XrProcSpawnOptions {
     // When true, the child is released from the wait/tryWait lifecycle. The
     // returned id remains informational; callers must not wait it.
     bool detached;
+    // Start the child as the leader of a new process group. This is used by
+    // bounded compiler/linker probes so timeout cleanup can terminate the
+    // complete subprocess tree without affecting the caller's group.
+    bool new_process_group;
 } XrProcSpawnOptions;
 
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
@@ -123,6 +127,11 @@ XR_FUNC XrProcWaitResult xr_proc_try_wait(XrProcId pid, int *exit_code);
 // reports such forced termination as -1, matching the POSIX signaled
 // path.
 XR_FUNC int xr_proc_kill(XrProcId pid, int signal);
+
+// Terminate the process group rooted at pid when the child was spawned with
+// new_process_group. Platforms without group support fall back to killing the
+// direct child until their native job-object implementation is available.
+XR_FUNC int xr_proc_kill_tree(XrProcId pid, int signal);
 
 // Current process id. Always succeeds.
 XR_FUNC int64_t xr_proc_self_pid(void);

@@ -103,7 +103,7 @@ static const XrCliOptionSpec build_options[] = {
      "Build a native shared library for manifest export symbols"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},
     {"toolchain", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
-     "AOT toolchain: auto, host, zig, clang"},
+     "AOT provider: auto, host, clang, gcc, msvc, or zig"},
     {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
     {"dump-xaot-plan", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT prepare plan"},
     {"dump-global-evidence", 0, XR_CLI_VALUE_NONE, false, false, NULL,
@@ -115,6 +115,8 @@ static const XrCliOptionSpec build_options[] = {
      "Dump per-function abstraction-cost residue (task 217)"},
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},
+    {"dump-toolchain-plan", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Dump verified provider, ABI, runtime artifact, and probe fingerprint"},
     {"dry-run-link", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Resolve the AOT link command without invoking the native toolchain"},
     {"linker-script", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
@@ -143,7 +145,18 @@ static const XrCliOptionSpec deps_options[] = {
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec toolchain_options[] = {
+    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "AOT target or native"},
+    {"provider", 0, XR_CLI_VALUE_STRING, false, false, "SELECTOR",
+     "Provider selector: auto, host, clang, gcc, msvc, or zig"},
+    {"profile", 0, XR_CLI_VALUE_STRING, false, false, "PROFILE",
+     "Capability profile: hosted or freestanding"},
+    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to system C compiler"},
     {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
+    {"no-run", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Skip native executable run stage"},
+    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Bypass cached probe result"},
+    {"keep-probe", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Keep the private probe directory for debugging"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit schema-v1 JSON"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec language_options[] = {
@@ -209,10 +222,20 @@ static const XrCliCommandSpec pkg_subcommands[] = {
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
 static const XrCliCommandSpec toolchain_subcommands[] = {
-    {"list", "List AOT toolchains and supported targets", NULL, empty_options, 0, 0, false, false,
-     NULL, NULL, 0},
-    {"doctor", "Validate AOT cross-target toolchain setup", NULL, empty_options, 0, 0, false, false,
-     NULL, NULL, 0},
+    {"list", "List providers, configuration, and cached status", NULL, empty_options, 0, 0, false,
+     false, NULL, NULL, 0},
+    {"detect", "Discover provider candidates and read their versions", NULL, empty_options, 0, 0,
+     false, false, NULL, NULL, 0},
+    {"probe", "Run compile, SDK, runtime-link, and native-run capability probes", NULL,
+     empty_options, 0, 0, false, false, NULL, NULL, 0},
+    {"doctor", "Select a provider and diagnose the first failing capability", NULL, empty_options,
+     0, 0, false, false, NULL, NULL, 0},
+    {"use", "Persist a user provider preference", NULL, empty_options, 1, 1, false, false, NULL,
+     NULL, 0},
+    {"reset", "Reset a user preference and related probe cache", NULL, empty_options, 0, 0, false,
+     false, NULL, NULL, 0},
+    {"config-path", "Print the user toolchain configuration path", NULL, empty_options, 0, 0, false,
+     false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
 static const XrCliCommandSpec language_subcommands[] = {
@@ -237,7 +260,7 @@ static XrCliCommandSpec cli_commands[] = {
     {"build", "Compile to binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
     {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
-     toolchain_subcommands, 2},
+     toolchain_subcommands, 7},
     {"language", "Inspect the public language surface", NULL, language_options, 0, -1, false, false,
      NULL, language_subcommands, 1},
     {"explain", "Explain compiler evidence and native provenance", NULL, explain_options, 1, 2,
