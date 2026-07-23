@@ -13,6 +13,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -120,6 +121,37 @@ static void test_use_policy(void) {
               "native net call borrows its connection handle");
     ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 2), false,
               "native net call borrows its string payload");
+
+    XiImportRef net_module_ref = {
+        .module_path = "net",
+        .member_name = NULL,
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = 0,
+    };
+    XiFunc *method_func = make_func("native_module_method_borrow", &t_int);
+    XiModule *module = xi_module_new("test.xr", "test", method_func);
+    ASSERT_TRUE(module != NULL, "allocate native module ownership fixture");
+    module->slot_imports = (XiImportRef **) xr_calloc(1, sizeof(XiImportRef *));
+    ASSERT_TRUE(module->slot_imports != NULL, "allocate native module slot map");
+    module->slot_imports[0] = &net_module_ref;
+    module->nslots = 1;
+    method_func->module = module;
+    XiValue *module_value = xi_value_new(method_func, method_func->entry, XI_GET_SHARED, &t_any, 0);
+    module_value->aux_int = 0;
+    XiValue *conn_value = xi_value_new(method_func, method_func->entry, XI_PARAM, &t_any, 0);
+    XiValue *payload_value = xi_value_new(method_func, method_func->entry, XI_PARAM, &t_str, 0);
+    XiValue *method_write =
+        xi_value_new(method_func, method_func->entry, XI_CALL_METHOD, &t_int, 3);
+    method_write->args[0] = module_value;
+    method_write->args[1] = conn_value;
+    method_write->args[2] = payload_value;
+    method_write->aux = (void *) "write";
+
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 1), false,
+              "shared-slot native module method borrows its connection handle");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 2), false,
+              "shared-slot native module method borrows its string payload");
+    xi_func_free(method_func);
 }
 
 /* ========== Test: dead value → drop at definition ========== */

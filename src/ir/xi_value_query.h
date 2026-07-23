@@ -42,6 +42,12 @@ XR_FUNC bool xi_value_type_is_semaphore(const XiValue *v);
 XR_FUNC bool xi_value_type_is_event_count(const XiValue *v);
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v);
 
+/* Resolve a direct or shared-slot import value to its canonical import
+ * identity.  This is the IR-level source of truth used by ownership analysis
+ * and backend lowering; callers must not recover module identity from names or
+ * duplicate shared-slot scans. */
+XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue *value);
+
 /* Numeric facts at a use site.
  * Uses existing range annotations when available and, if needed, dominating
  * branch guards on the path to 'site'. */

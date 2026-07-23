@@ -242,33 +242,33 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
     return false;
 }
 
-static const XiValue *own_unwrap_identity_value(const XiValue *value) {
-    while (value &&
-           (value->op == XI_BOX || value->op == XI_UNBOX || xi_copy_is_identity_alias(value) ||
-            xi_op_is_identity_forward(value->op)) &&
-           value->nargs >= 1)
-        value = value->args[0];
-    return value;
-}
-
-static bool native_module_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
-    if (!user || user->op != XI_CALL || arg_idx == 0 || user->nargs < 2 || !user->args[0])
-        return false;
-    const XiValue *callee = own_unwrap_identity_value(user->args[0]);
-    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
-        return false;
-    const XiImportRef *ref = (const XiImportRef *) callee->aux;
-    if (!ref->module_path || !ref->member_name ||
-        !xa_builtin_get_module_func_signature(ref->module_path, ref->member_name))
+static bool builtin_module_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if (!user || arg_idx == 0 || arg_idx >= user->nargs || !user->args[0])
         return false;
 
-    /* Native net functions inspect their arguments only for the duration of
-     * the call.  They neither retain nor release the Xray values: connection
-     * handles remain owned by the caller even after net.close(), while string
-     * and byte-buffer inputs are copied/read synchronously.  Model that ABI
-     * contract here so ARC does not move a caller parameter into the bodyless
-     * runtime call and infer a false owning signature for its wrapper. */
-    return strcmp(ref->module_path, "net") == 0;
+    const XiFunc *func = user->block ? user->block->func : NULL;
+    const XiImportRef *ref = xi_value_import_ref(func, user->args[0]);
+    if (!ref || !ref->module_path)
+        return false;
+
+    const char *member = NULL;
+    if (user->op == XI_CALL) {
+        member = ref->member_name;
+    } else if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+               !ref->member_name) {
+        member = (const char *) user->aux;
+    }
+    if (!member || !xa_builtin_get_module_func_signature(ref->module_path, member))
+        return false;
+
+    /* Bodyless builtin module functions use the source signature as their ABI
+     * contract.  The current manifest grammar contains only default READ
+     * parameters, so native helpers inspect arguments for the duration of the
+     * call and neither retain nor release them.  Keep this fail-closed behind
+     * the registered signature lookup: a future MOVE-capable builtin grammar
+     * must publish structured parameter modes here before it can transfer ARC
+     * ownership. */
+    return true;
 }
 
 static bool use_is_consuming(const XiValue *user, uint16_t arg_idx) {
@@ -330,7 +330,7 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
         return false;
     if (builtin_call_arg_is_borrowed(user, arg_idx))
         return false;
-    if (native_module_call_arg_is_borrowed(user, arg_idx))
+    if (builtin_module_call_arg_is_borrowed(user, arg_idx))
         return false;
     if (channel_send_method_payload_arg(user, arg_idx))
         return xi_chan_send_transfer_mode(user) == XR_TRANSFER_MOVE;

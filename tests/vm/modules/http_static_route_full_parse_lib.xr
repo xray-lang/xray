@@ -3,15 +3,13 @@ import { HttpRequest, HttpResponse } from http
 import net
 import time
 
-const PORT = 9196
-
-fn serveStaticRoutes(port: int, running: Atomic<bool>) {
+fn serveStaticRoutes(port: int, running: Atomic<bool>) -> bool {
     http.route("GET", "/plain", "hello static")
     http.route("GET", "/empty", "")
     http.routeHandler("POST", "/dynamic", fn(req: HttpRequest) -> HttpResponse {
         return http.textResponse(req.query.get("streaming") != null ? "handler:true" : "handler:false")
     })
-    http.listen(port, running)
+    return http.listen(port, running)
 }
 
 fn waitForServer(port: int) -> bool {
@@ -51,18 +49,17 @@ fn sendRaw(port: int, request: string) -> string {
 }
 
 export fn runHttpStaticRouteFullParse() {
-    var probe = net.listen(PORT, 1)
-    if (probe == null) {
-        return
-    }
+    var probe = net.listen(0, 1)
+    assert(probe != null)
+    const port = probe!.port()
     net.close(probe!)
 
     const running = Atomic(true)
-    go serveStaticRoutes(PORT, running)
-    assert(waitForServer(PORT))
+    var server = go serveStaticRoutes(port, running)
+    assert(waitForServer(port))
 
     var plain = sendRaw(
-        PORT,
+        port,
         "GET /plain HTTP/1.1\r\n" +
         "Host: 127.0.0.1\r\n" +
         "Connection: close\r\n\r\n"
@@ -71,7 +68,7 @@ export fn runHttpStaticRouteFullParse() {
     assert(plain.endsWith("\r\n\r\nhello static"))
 
     var empty = sendRaw(
-        PORT,
+        port,
         "GET /empty HTTP/1.1\r\n" +
         "Host: 127.0.0.1\r\n" +
         "Connection: close\r\n\r\n"
@@ -81,7 +78,7 @@ export fn runHttpStaticRouteFullParse() {
     assert(empty.endsWith("\r\n\r\n"))
 
     var dynamic = sendRaw(
-        PORT,
+        port,
         "POST /dynamic HTTP/1.1\r\n" +
         "Host: 127.0.0.1\r\n" +
         "Content-Length: 5\r\n" +
@@ -92,7 +89,7 @@ export fn runHttpStaticRouteFullParse() {
     assert(dynamic.contains("handler:false"))
 
     var oversized = sendRaw(
-        PORT,
+        port,
         "POST /dynamic HTTP/1.1\r\n" +
         "Host: 127.0.0.1\r\n" +
         "Content-Length: 1048577\r\n" +
@@ -103,4 +100,5 @@ export fn runHttpStaticRouteFullParse() {
     assert(!oversized.contains("handler:"))
 
     running.store(false)
+    assert(await server)
 }

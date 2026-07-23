@@ -10,6 +10,7 @@
 
 #include "xi_value_query.h"
 #include "xi_analysis.h"
+#include "xi_module.h"
 #include "xi_range.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
@@ -66,6 +67,53 @@ static const XiValue *xi_value_unwrap_identity(const XiValue *v) {
            v->nargs >= 1)
         v = v->args[0];
     return v;
+}
+
+static const XiImportRef *xi_shared_slot_import_ref_in_func(const XiFunc *func, int slot) {
+    if (!func || slot < 0)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_SET_SHARED || (int) value->aux_int != slot ||
+                value->nargs < 1)
+                continue;
+            const XiValue *source = xi_value_unwrap_identity(value->args[0]);
+            if (source && source->op == XI_IMPORT_REF && source->aux)
+                return (const XiImportRef *) source->aux;
+        }
+    }
+    return NULL;
+}
+
+static const XiImportRef *xi_shared_slot_import_ref(const XiFunc *func, int slot) {
+    if (!func || slot < 0)
+        return NULL;
+    if (func->module && slot < (int) func->module->nslots && func->module->slot_imports &&
+        func->module->slot_imports[slot])
+        return func->module->slot_imports[slot];
+    for (const XiFunc *current = func; current; current = current->parent_func) {
+        const XiImportRef *ref = xi_shared_slot_import_ref_in_func(current, slot);
+        if (ref)
+            return ref;
+    }
+    if (func->module && func->module->init && func->module->init != func)
+        return xi_shared_slot_import_ref_in_func(func->module->init, slot);
+    return NULL;
+}
+
+XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue *value) {
+    value = xi_value_unwrap_identity(value);
+    if (!value)
+        return NULL;
+    if (value->op == XI_IMPORT_REF && value->aux)
+        return (const XiImportRef *) value->aux;
+    if (value->op == XI_GET_SHARED)
+        return xi_shared_slot_import_ref(func, (int) value->aux_int);
+    return NULL;
 }
 
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v) {

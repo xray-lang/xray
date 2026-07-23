@@ -18,7 +18,7 @@
 
 #include "xi_backend.h"
 #include "xi_effect.h"
-#include "xi_module.h"
+#include "xi_value_query.h"
 #include "xi_vec_scalar_lower.h"
 #include "../runtime/value/xtype.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
@@ -32,66 +32,6 @@ static inline void rewrite_to_builtin(XiValue *v, const char *name) {
     v->op = XI_CALL_BUILTIN;
     v->aux = (void *) name;
     /* Keep existing aux_int (may carry flags/field_index) */
-}
-
-static const XiValue *backend_unwrap_identity_value(const XiValue *v) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
-            xi_op_is_identity_forward(v->op)) &&
-           v->nargs >= 1)
-        v = v->args[0];
-    return v;
-}
-
-static const XiImportRef *backend_value_import_ref(const XiValue *v) {
-    v = backend_unwrap_identity_value(v);
-    if (!v || v->op != XI_IMPORT_REF || !v->aux)
-        return NULL;
-    return (const XiImportRef *) v->aux;
-}
-
-static const XiImportRef *backend_shared_slot_import_ref_in_func(const XiFunc *f, int slot) {
-    if (!f || slot < 0)
-        return NULL;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
-                continue;
-            const XiImportRef *ref = backend_value_import_ref(v->args[0]);
-            if (ref)
-                return ref;
-        }
-    }
-    return NULL;
-}
-
-static const XiImportRef *backend_shared_slot_import_ref(const XiFunc *f, int slot) {
-    for (const XiFunc *cur = f; cur; cur = cur->parent_func) {
-        const XiImportRef *ref = backend_shared_slot_import_ref_in_func(cur, slot);
-        if (ref)
-            return ref;
-    }
-    if (f && f->module && f->module->init) {
-        const XiImportRef *ref = backend_shared_slot_import_ref_in_func(f->module->init, slot);
-        if (ref)
-            return ref;
-    }
-    return NULL;
-}
-
-static const XiImportRef *backend_import_ref_from_value(const XiFunc *f, const XiValue *v) {
-    v = backend_unwrap_identity_value(v);
-    if (!v)
-        return NULL;
-    if (v->op == XI_IMPORT_REF && v->aux)
-        return (const XiImportRef *) v->aux;
-    if (v->op == XI_GET_SHARED)
-        return backend_shared_slot_import_ref(f, (int) v->aux_int);
-    return NULL;
 }
 
 static bool backend_import_ref_is_module(const XiImportRef *ref, const char *module_name) {
@@ -183,14 +123,14 @@ static bool lower_math_import_call(XiFunc *f, XiValue *v) {
         return false;
 
     if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
-        const XiImportRef *recv_ref = backend_import_ref_from_value(f, v->args[0]);
+        const XiImportRef *recv_ref = xi_value_import_ref(f, v->args[0]);
         const char *method = (const char *) v->aux;
         if (backend_import_ref_is_module(recv_ref, "math"))
             return rewrite_call_drop_first_arg_to_math_builtin(f, v, method);
     }
 
     if (v->op == XI_CALL && v->nargs >= 1) {
-        const XiImportRef *callee_ref = backend_import_ref_from_value(f, v->args[0]);
+        const XiImportRef *callee_ref = xi_value_import_ref(f, v->args[0]);
         if (callee_ref && callee_ref->module_path && strcmp(callee_ref->module_path, "math") == 0 &&
             callee_ref->member_name)
             return rewrite_call_drop_first_arg_to_math_builtin(f, v, callee_ref->member_name);
