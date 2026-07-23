@@ -6,7 +6,7 @@ contains="stdlib_objects": []
 contains="stdlib_symbols": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
-contains="ld_flags": ["-nostdlib"]
+contains="standard_libraries": false
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=XRT_ATTR_SECTION("__DATA,.xray_multiboot") XRT_ATTR_USED
 c_contains=XRT_ATTR_SECTION("__TEXT,.xray_boot") XRT_ATTR_USED int32_t xray_kernel_entry

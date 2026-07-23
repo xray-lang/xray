@@ -6,12 +6,10 @@ contains="stdlib_objects": []
 contains="stdlib_symbols": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
-regex="cc_flags": \[
-contains=-ffreestanding
-contains=-fno-stack-protector
-contains=-fno-unwind-tables
-contains=-fno-asynchronous-unwind-tables
-contains="ld_flags": ["-nostdlib"]
+contains="freestanding": true
+contains="stack_protector": false
+contains="unwind_tables": false
+contains="standard_libraries": false
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=int64_t xray_add
 c_not_contains=#include "xrt.h"

@@ -50,14 +50,57 @@ typedef enum XaotLinkEntryKind {
     XAOT_LINK_RUNTIME_OBJECT,
     XAOT_LINK_STDLIB_OBJECT,
     XAOT_LINK_STDLIB_SYMBOL,
+    XAOT_LINK_NATIVE_INPUT,
     XAOT_LINK_SYSTEM_LIB,
     XAOT_LINK_DEFINE,
     XAOT_LINK_CC_FLAG,
     XAOT_LINK_LD_FLAG
 } XaotLinkEntryKind;
 
+/* Provider-neutral build intent.  These fields are facts about the requested
+ * artifact; provider adapters are solely responsible for translating them to
+ * GCC, Clang, Zig or MSVC argv. */
+typedef enum XaotOptimizationLevel {
+    XAOT_OPTIMIZATION_NONE = 0,
+    XAOT_OPTIMIZATION_BASIC,
+    XAOT_OPTIMIZATION_SIZE,
+    XAOT_OPTIMIZATION_RELEASE,
+    XAOT_OPTIMIZATION_SPEED,
+} XaotOptimizationLevel;
+
+typedef struct XaotCompileRequirements {
+    XaotOptimizationLevel optimization;
+    bool fp_contract_off;
+    bool debug_info;
+    bool frame_pointer;
+    bool lto;
+    bool pic;
+    bool function_sections;
+    bool data_sections;
+    bool freestanding;
+    bool stack_protector;
+    bool unwind_tables;
+    bool suppress_warnings;
+    bool disable_machine_outliner;
+    char cpu[128];
+} XaotCompileRequirements;
+
+typedef struct XaotLinkRequirements {
+    bool shared;
+    bool relocatable;
+    bool strip;
+    bool dead_strip;
+    bool lto;
+    bool standard_libraries;
+    char entry[128];
+    char linker_script[512];
+} XaotLinkRequirements;
+
 typedef struct XaotLinkManifest {
     XaotTarget target;
+
+    XaotCompileRequirements compile;
+    XaotLinkRequirements link;
 
     char **generated_c_files;
     uint32_t n_generated_c_files;
@@ -74,6 +117,11 @@ typedef struct XaotLinkManifest {
     char **stdlib_symbols;
     uint32_t n_stdlib_symbols;
 
+    /* Provider-neutral object/archive/shared-library paths supplied by the
+     * program or a native package. They are argv inputs, never raw flags. */
+    char **native_inputs;
+    uint32_t n_native_inputs;
+
     char **system_libs;
     uint32_t n_system_libs;
 
@@ -85,6 +133,10 @@ typedef struct XaotLinkManifest {
 
     char **ld_flags;
     uint32_t n_ld_flags;
+
+    /* Escape hatch only. Non-empty raw flags require an exact provider name;
+     * they are never inferred or translated for another provider. */
+    char raw_flag_provider[32];
 } XaotLinkManifest;
 
 XR_FUNC bool xaot_target_init(XaotTarget *target, const char *name);

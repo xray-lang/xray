@@ -53,6 +53,10 @@ static bool xaot_link_select_list(XaotLinkManifest *manifest, XaotLinkEntryKind 
             *out_items = &manifest->stdlib_symbols;
             *out_count = &manifest->n_stdlib_symbols;
             return true;
+        case XAOT_LINK_NATIVE_INPUT:
+            *out_items = &manifest->native_inputs;
+            *out_count = &manifest->n_native_inputs;
+            return true;
         case XAOT_LINK_SYSTEM_LIB:
             *out_items = &manifest->system_libs;
             *out_count = &manifest->n_system_libs;
@@ -99,6 +103,10 @@ static bool xaot_link_list_for_kind(const XaotLinkManifest *manifest, XaotLinkEn
         case XAOT_LINK_STDLIB_SYMBOL:
             *out_items = manifest->stdlib_symbols;
             *out_count = manifest->n_stdlib_symbols;
+            return true;
+        case XAOT_LINK_NATIVE_INPUT:
+            *out_items = manifest->native_inputs;
+            *out_count = manifest->n_native_inputs;
             return true;
         case XAOT_LINK_SYSTEM_LIB:
             *out_items = manifest->system_libs;
@@ -251,6 +259,67 @@ static bool xaot_json_write_target(FILE *out, const XaotTarget *target) {
     ok = ok && xaot_json_write_raw(out, features);
     ok = ok && xaot_json_write_raw(out, "\n");
     ok = ok && xaot_json_write_raw(out, "  },\n");
+    return ok;
+}
+
+static const char *xaot_optimization_name(XaotOptimizationLevel level) {
+    switch (level) {
+        case XAOT_OPTIMIZATION_NONE:
+            return "none";
+        case XAOT_OPTIMIZATION_BASIC:
+            return "basic";
+        case XAOT_OPTIMIZATION_SIZE:
+            return "size";
+        case XAOT_OPTIMIZATION_RELEASE:
+            return "release";
+        case XAOT_OPTIMIZATION_SPEED:
+            return "speed";
+    }
+    return "unknown";
+}
+
+static bool xaot_json_write_bool(FILE *out, const char *name, bool value, bool comma) {
+    return fprintf(out, "    \"%s\": %s%s\n", name, value ? "true" : "false", comma ? "," : "") >=
+           0;
+}
+
+static bool xaot_json_write_requirements(FILE *out, const XaotLinkManifest *manifest) {
+    bool ok = true;
+    ok = ok && xaot_json_write_raw(out, "  \"compile\": {\n    \"optimization\": ");
+    ok = ok && xaot_json_write_string(out, xaot_optimization_name(manifest->compile.optimization));
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok =
+        ok && xaot_json_write_bool(out, "fp_contract_off", manifest->compile.fp_contract_off, true);
+    ok = ok && xaot_json_write_bool(out, "debug_info", manifest->compile.debug_info, true);
+    ok = ok && xaot_json_write_bool(out, "frame_pointer", manifest->compile.frame_pointer, true);
+    ok = ok && xaot_json_write_bool(out, "lto", manifest->compile.lto, true);
+    ok = ok && xaot_json_write_bool(out, "pic", manifest->compile.pic, true);
+    ok = ok &&
+         xaot_json_write_bool(out, "function_sections", manifest->compile.function_sections, true);
+    ok = ok && xaot_json_write_bool(out, "data_sections", manifest->compile.data_sections, true);
+    ok = ok && xaot_json_write_bool(out, "freestanding", manifest->compile.freestanding, true);
+    ok =
+        ok && xaot_json_write_bool(out, "stack_protector", manifest->compile.stack_protector, true);
+    ok = ok && xaot_json_write_bool(out, "unwind_tables", manifest->compile.unwind_tables, true);
+    ok = ok &&
+         xaot_json_write_bool(out, "suppress_warnings", manifest->compile.suppress_warnings, true);
+    ok = ok && xaot_json_write_bool(out, "disable_machine_outliner",
+                                    manifest->compile.disable_machine_outliner, true);
+    ok = ok && xaot_json_write_raw(out, "    \"cpu\": ");
+    ok = ok && xaot_json_write_string(out, manifest->compile.cpu);
+    ok = ok && xaot_json_write_raw(out, "\n  },\n  \"link\": {\n");
+    ok = ok && xaot_json_write_bool(out, "shared", manifest->link.shared, true);
+    ok = ok && xaot_json_write_bool(out, "relocatable", manifest->link.relocatable, true);
+    ok = ok && xaot_json_write_bool(out, "strip", manifest->link.strip, true);
+    ok = ok && xaot_json_write_bool(out, "dead_strip", manifest->link.dead_strip, true);
+    ok = ok && xaot_json_write_bool(out, "lto", manifest->link.lto, true);
+    ok = ok &&
+         xaot_json_write_bool(out, "standard_libraries", manifest->link.standard_libraries, true);
+    ok = ok && xaot_json_write_raw(out, "    \"entry\": ");
+    ok = ok && xaot_json_write_string(out, manifest->link.entry);
+    ok = ok && xaot_json_write_raw(out, ",\n    \"linker_script\": ");
+    ok = ok && xaot_json_write_string(out, manifest->link.linker_script);
+    ok = ok && xaot_json_write_raw(out, "\n  },\n");
     return ok;
 }
 
@@ -526,6 +595,11 @@ XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarge
         return false;
     }
 
+    manifest->compile.fp_contract_off = true;
+    manifest->compile.stack_protector = true;
+    manifest->compile.unwind_tables = true;
+    manifest->link.standard_libraries = true;
+
     return true;
 }
 
@@ -539,6 +613,7 @@ XR_FUNC void xaot_link_manifest_free(XaotLinkManifest *manifest) {
     xaot_link_string_list_free(manifest->runtime_objects, manifest->n_runtime_objects);
     xaot_link_string_list_free(manifest->stdlib_objects, manifest->n_stdlib_objects);
     xaot_link_string_list_free(manifest->stdlib_symbols, manifest->n_stdlib_symbols);
+    xaot_link_string_list_free(manifest->native_inputs, manifest->n_native_inputs);
     xaot_link_string_list_free(manifest->system_libs, manifest->n_system_libs);
     xaot_link_string_list_free(manifest->defines, manifest->n_defines);
     xaot_link_string_list_free(manifest->cc_flags, manifest->n_cc_flags);
@@ -641,6 +716,7 @@ XR_FUNC char *xaot_link_manifest_dump_json(const XaotLinkManifest *manifest) {
     ok = true;
     ok = ok && xaot_json_write_raw(out, "{\n");
     ok = ok && xaot_json_write_target(out, &manifest->target);
+    ok = ok && xaot_json_write_requirements(out, manifest);
     ok = ok && xaot_json_write_string_array(out, "generated_c_files", manifest->generated_c_files,
                                             manifest->n_generated_c_files, true);
     ok = ok && xaot_json_write_string_array(out, "runtime_caps", manifest->runtime_caps,
@@ -651,13 +727,18 @@ XR_FUNC char *xaot_link_manifest_dump_json(const XaotLinkManifest *manifest) {
                                             manifest->n_stdlib_objects, true);
     ok = ok && xaot_json_write_string_array(out, "stdlib_symbols", manifest->stdlib_symbols,
                                             manifest->n_stdlib_symbols, true);
+    ok = ok && xaot_json_write_string_array(out, "native_inputs", manifest->native_inputs,
+                                            manifest->n_native_inputs, true);
     ok = ok && xaot_json_write_string_array(out, "system_libs", manifest->system_libs,
                                             manifest->n_system_libs, true);
     ok = ok &&
          xaot_json_write_string_array(out, "defines", manifest->defines, manifest->n_defines, true);
-    ok = ok && xaot_json_write_string_array(out, "cc_flags", manifest->cc_flags,
+    ok = ok && xaot_json_write_raw(out, "  \"raw_flag_provider\": ");
+    ok = ok && xaot_json_write_string(out, manifest->raw_flag_provider);
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_string_array(out, "provider_cc_flags", manifest->cc_flags,
                                             manifest->n_cc_flags, true);
-    ok = ok && xaot_json_write_string_array(out, "ld_flags", manifest->ld_flags,
+    ok = ok && xaot_json_write_string_array(out, "provider_ld_flags", manifest->ld_flags,
                                             manifest->n_ld_flags, false);
     ok = ok && xaot_json_write_raw(out, "}\n");
 

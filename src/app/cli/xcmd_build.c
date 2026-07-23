@@ -21,6 +21,7 @@
 #include "xcli_spec.h"
 #include "xcli_fs.h"
 #include "../toolchain/xtc_config.h"
+#include "../toolchain/xtc_command.h"
 #include "../toolchain/xtc_discovery.h"
 #include "../toolchain/xtc_model.h"
 #include "../toolchain/xtc_probe.h"
@@ -433,6 +434,23 @@ static bool xaot_cli_link_add_prefixed(XaotCliLinkCommand *cmd, const char *pref
     return xaot_cli_link_add_arg(cmd, cmd->owned[cmd->nowned++], err, err_size);
 }
 
+static bool xaot_cli_command_sink_add(void *context, const char *arg, char *err, size_t err_size) {
+    return xaot_cli_link_add_arg((XaotCliLinkCommand *) context, arg, err, err_size);
+}
+
+static bool xaot_cli_command_sink_add_joined(void *context, const char *prefix, const char *value,
+                                             char *err, size_t err_size) {
+    return xaot_cli_link_add_prefixed((XaotCliLinkCommand *) context, prefix, value, err, err_size);
+}
+
+static XrToolchainArgSink xaot_cli_command_sink(XaotCliLinkCommand *cmd) {
+    XrToolchainArgSink sink;
+    sink.context = cmd;
+    sink.add = xaot_cli_command_sink_add;
+    sink.add_joined = xaot_cli_command_sink_add_joined;
+    return sink;
+}
+
 static bool xaot_cli_link_add_runtime_object(XaotCliLinkCommand *cmd, const char *value, char *err,
                                              size_t err_size) {
     size_t len;
@@ -530,33 +548,6 @@ static bool xaot_cli_link_ld_flag_supported(const XrToolchainTarget *target, con
     return true;
 }
 
-static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
-                                              const XrToolchainTarget *target, char *err,
-                                              size_t err_size);
-
-static bool xaot_cli_link_add_zig_target(XaotCliLinkCommand *cmd, const XrToolchainTarget *target,
-                                         char *err, size_t err_size) {
-    const char *triple = NULL;
-
-    if (!target)
-        return true;
-    if (!target->is_native) {
-        triple = target->zig_triple;
-#if defined(XR_OS_WINDOWS)
-    } else {
-        /* Bundled Zig is self-contained for the GNU Windows ABI. Its default
-         * native MSVC ABI still requires separately installed MSVC SDK libs. */
-        triple = "x86_64-windows-gnu";
-#endif
-    }
-    if (!triple || !triple[0])
-        return true;
-    if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, triple, err, err_size))
-        return false;
-    return target->is_native || xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size);
-}
-
 static bool xaot_cli_add_provider_driver_prefix(XaotCliLinkCommand *cmd,
                                                 const XrToolchainSelection *plan,
                                                 const XrToolchainTarget *target, char *err,
@@ -566,36 +557,57 @@ static bool xaot_cli_add_provider_driver_prefix(XaotCliLinkCommand *cmd,
         return false;
     }
     cmd->program = plan->program;
-    if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
-        return false;
-    if (plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG) {
-        return xaot_cli_link_add_arg(cmd, "cc", err, err_size) &&
-               xaot_cli_link_add_zig_target(cmd, target, err, err_size);
-    }
-    if (plan->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG && plan->system_sdk[0]) {
-        return xaot_cli_link_add_arg(cmd, "-isysroot", err, err_size) &&
-               xaot_cli_link_add_arg(cmd, plan->system_sdk, err, err_size);
-    }
-    return true;
+    XrToolchainArgSink sink = xaot_cli_command_sink(cmd);
+    return xtc_command_emit_driver(plan, target, &sink, err, err_size);
 }
 
-static void xaot_cli_manifest_remove_string(char ***items, uint32_t *count, const char *value) {
-    uint32_t i;
-
-    if (!items || !*items || !count || !value)
-        return;
-    i = 0;
-    while (i < *count) {
-        if ((*items)[i] && strcmp((*items)[i], value) == 0) {
-            uint32_t j;
-            xr_free((*items)[i]);
-            for (j = i + 1; j < *count; j++)
-                (*items)[j - 1] = (*items)[j];
-            *count = *count - 1;
-            continue;
-        }
-        i++;
+static XrOptimizationLevel xaot_cli_optimization(XaotOptimizationLevel optimization) {
+    switch (optimization) {
+        case XAOT_OPTIMIZATION_NONE:
+            return XR_OPTIMIZATION_NONE;
+        case XAOT_OPTIMIZATION_BASIC:
+            return XR_OPTIMIZATION_BASIC;
+        case XAOT_OPTIMIZATION_SIZE:
+            return XR_OPTIMIZATION_SIZE;
+        case XAOT_OPTIMIZATION_RELEASE:
+            return XR_OPTIMIZATION_RELEASE;
+        case XAOT_OPTIMIZATION_SPEED:
+            return XR_OPTIMIZATION_SPEED;
     }
+    return XR_OPTIMIZATION_NONE;
+}
+
+static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest, XrNativeCompileSpec *compile,
+                                    XrNativeLinkSpec *link) {
+    memset(compile, 0, sizeof(*compile));
+    memset(link, 0, sizeof(*link));
+    compile->optimization = xaot_cli_optimization(manifest->compile.optimization);
+    compile->fp_contract =
+        manifest->compile.fp_contract_off ? XR_FP_CONTRACT_OFF : XR_FP_CONTRACT_DEFAULT;
+    compile->debug_info = manifest->compile.debug_info ? XR_DEBUG_INFO_FULL : XR_DEBUG_INFO_NONE;
+    compile->frame_pointer = manifest->compile.frame_pointer;
+    compile->lto = manifest->compile.lto;
+    compile->pic = manifest->compile.pic;
+    compile->function_sections = manifest->compile.function_sections;
+    compile->data_sections = manifest->compile.data_sections;
+    compile->warnings = manifest->compile.suppress_warnings ? XR_WARNING_POLICY_SUPPRESS
+                                                            : XR_WARNING_POLICY_DEFAULT;
+    compile->freestanding = manifest->compile.freestanding;
+    compile->disable_stack_protector = !manifest->compile.stack_protector;
+    compile->disable_unwind_tables = !manifest->compile.unwind_tables;
+    compile->disable_machine_outliner = manifest->compile.disable_machine_outliner;
+    compile->cpu = manifest->compile.cpu;
+    if ((manifest->target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0)
+        compile->simd = XR_NATIVE_SIMD_AVX2;
+
+    link->shared = manifest->link.shared;
+    link->relocatable = manifest->link.relocatable;
+    link->strip = manifest->link.strip;
+    link->dead_strip = manifest->link.dead_strip;
+    link->lto = manifest->link.lto;
+    link->no_standard_libraries = !manifest->link.standard_libraries;
+    link->entry = manifest->link.entry[0] ? manifest->link.entry : NULL;
+    link->linker_script = manifest->link.linker_script[0] ? manifest->link.linker_script : NULL;
 }
 
 static void xaot_cli_manifest_clear_string_list(char ***items, uint32_t *count) {
@@ -613,17 +625,11 @@ static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
                                                    size_t err_size) {
     if (!manifest || !target)
         return true;
-    if (target->is_native)
-        return true;
-
-    xaot_cli_manifest_remove_string(&manifest->ld_flags, &manifest->n_ld_flags, "-Wl,-dead_strip");
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections")) {
-        snprintf(err, err_size, "failed to normalize AOT link manifest for target '%s'",
-                 target->name);
-        return false;
-    }
+    manifest->compile.function_sections = true;
+    manifest->compile.data_sections = true;
+    manifest->link.dead_strip = true;
+    (void) err;
+    (void) err_size;
     return true;
 }
 
@@ -648,14 +654,11 @@ static bool xaot_cli_apply_freestanding_profile(XaotLinkManifest *manifest, char
     }
 
     xaot_cli_manifest_clear_string_list(&manifest->system_libs, &manifest->n_system_libs);
-    xaot_cli_manifest_remove_string(&manifest->ld_flags, &manifest->n_ld_flags, "-Wl,-dead_strip");
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffreestanding") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-stack-protector") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-unwind-tables") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG,
-                                       "-fno-asynchronous-unwind-tables") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-nostdlib")) {
+    manifest->compile.freestanding = true;
+    manifest->compile.stack_protector = false;
+    manifest->compile.unwind_tables = false;
+    manifest->link.standard_libraries = false;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1")) {
         snprintf(err, err_size, "failed to apply freestanding build profile");
         return false;
     }
@@ -664,31 +667,38 @@ static bool xaot_cli_apply_freestanding_profile(XaotLinkManifest *manifest, char
 
 static bool xaot_cli_add_linker_script(XaotLinkManifest *manifest, const char *script, char *err,
                                        size_t err_size) {
-    char flag[XR_PATH_MAX + 8];
     int written;
 
     if (!script || !script[0])
         return true;
 
-    written = snprintf(flag, sizeof(flag), "-Wl,-T,%s", script);
-    if (written < 0 || (size_t) written >= sizeof(flag)) {
+    written =
+        snprintf(manifest->link.linker_script, sizeof(manifest->link.linker_script), "%s", script);
+    if (written < 0 || (size_t) written >= sizeof(manifest->link.linker_script)) {
         snprintf(err, err_size, "linker script path is too long: %s", script);
-        return false;
-    }
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, flag)) {
-        snprintf(err, err_size, "failed to add linker script to AOT link manifest");
         return false;
     }
     return true;
 }
 
 static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
-                                               const XrToolchainTarget *target, char *err,
+                                               const XrToolchainTarget *target,
+                                               const XrToolchainSelection *selection, char *err,
                                                size_t err_size) {
     if (!manifest)
         return true;
+    (void) selection;
     if (target && !target->is_native)
         return true;
+#if (defined(XR_BUILD_ASAN) && XR_BUILD_ASAN) || (defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN) ||    \
+    (defined(XR_BUILD_TSAN) && XR_BUILD_TSAN) || (defined(XR_BUILD_MSAN) && XR_BUILD_MSAN)
+    if (!selection || !xtc_provider_uses_gnu_driver(selection->provider)) {
+        snprintf(err, err_size, "this instrumented Xray build requires a GNU-driver provider");
+        return false;
+    }
+    snprintf(manifest->raw_flag_provider, sizeof(manifest->raw_flag_provider), "%s",
+             xtc_provider_name(selection->provider));
+#endif
 #if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=address") ||
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
@@ -731,9 +741,9 @@ static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
 }
 
 static bool xaot_cli_add_build_debug_flags(XaotLinkManifest *manifest, char *err, size_t err_size) {
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-g") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_AOT_DEBUG_LOCALS=1")) {
+    manifest->compile.debug_info = true;
+    manifest->compile.frame_pointer = true;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_AOT_DEBUG_LOCALS=1")) {
         snprintf(err, err_size, "failed to add debug flags to AOT link manifest");
         return false;
     }
@@ -741,10 +751,30 @@ static bool xaot_cli_add_build_debug_flags(XaotLinkManifest *manifest, char *err
 }
 
 static bool xaot_cli_add_target_config_flags(XaotLinkManifest *manifest,
-                                             const XrTargetConfig *config, char *err,
+                                             const XrTargetConfig *config,
+                                             const XrToolchainSelection *selection, char *err,
                                              size_t err_size) {
     if (!manifest || !config)
         return true;
+    if (config->n_cc_flags == 0 && config->n_ld_flags == 0)
+        return true;
+    if (!selection || !config->toolchain || !config->toolchain[0] ||
+        strcmp(config->toolchain, "auto") == 0 || strcmp(config->toolchain, "host") == 0) {
+        snprintf(err, err_size,
+                 "raw target cc_flags/ld_flags require an explicit provider selector");
+        return false;
+    }
+    const char *provider = xtc_provider_name(selection->provider);
+    bool matches = strcmp(config->toolchain, provider) == 0 ||
+                   (strcmp(config->toolchain, "clang") == 0 &&
+                    (selection->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG ||
+                     selection->provider == XR_TOOLCHAIN_PROVIDER_LLVM_CLANG));
+    if (!matches) {
+        snprintf(err, err_size, "raw target flags are scoped to provider '%s', selected '%s'",
+                 config->toolchain, provider);
+        return false;
+    }
+    snprintf(manifest->raw_flag_provider, sizeof(manifest->raw_flag_provider), "%s", provider);
     for (int i = 0; i < config->n_cc_flags; i++) {
         const char *flag = config->cc_flags ? config->cc_flags[i] : NULL;
         if (flag && flag[0] && !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, flag)) {
@@ -804,14 +834,6 @@ static bool xaot_cli_link_add_target_metadata_flags(XaotCliLinkCommand *cmd,
     if (target->endian == XR_TOOLCHAIN_TARGET_ENDIAN_BIG)
         return xaot_cli_link_add_arg(cmd, "-DXR_AOT_TARGET_LITTLE_ENDIAN=0", err, err_size);
     return true;
-}
-
-static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
-                                              const XrToolchainTarget *target, char *err,
-                                              size_t err_size) {
-    if (!cmd || !target || !target->cpu || !target->cpu[0])
-        return true;
-    return xaot_cli_link_add_prefixed(cmd, "-mcpu=", target->cpu, err, err_size);
 }
 
 static bool xaot_cli_build_objcopy_command(const XrTargetConfig *config, const char *input_file,
@@ -881,32 +903,40 @@ static bool xaot_cli_build_compile_command(const XrToolchainSelection *plan,
                                            size_t err_size) {
     char aot_include[600];
     char runtime_include[600];
+    XrNativeCompileSpec compile_spec;
+    XrNativeLinkSpec unused_link_spec;
+    XrToolchainArgSink sink;
     uint32_t i;
 
     if (!plan || !target || !manifest || !c_file || !obj_file || !cmd) {
         snprintf(err, err_size, "missing AOT compile command input");
         return false;
     }
+    if ((manifest->n_cc_flags > 0 || manifest->n_ld_flags > 0) &&
+        (!manifest->raw_flag_provider[0] ||
+         strcmp(manifest->raw_flag_provider, xtc_provider_name(plan->provider)) != 0)) {
+        snprintf(err, err_size, "raw native flags are not scoped to selected provider '%s'",
+                 xtc_provider_name(plan->provider));
+        return false;
+    }
 
     memset(cmd, 0, sizeof(*cmd));
     if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-c", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, c_file, err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-o", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, obj_file, err, err_size))
+    (void) opt_flag;
+    sink = xaot_cli_command_sink(cmd);
+    xaot_cli_semantic_specs(manifest, &compile_spec, &unused_link_spec);
+    if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
+        !xtc_command_emit_compile_io(plan->provider, c_file, obj_file, &sink, err, err_size))
         return false;
 
     resolve_aot_include_paths(plan, sysroot, aot_include, sizeof(aot_include), runtime_include,
                               sizeof(runtime_include));
-    if (!xaot_cli_link_add_prefixed(cmd, "-I", aot_include, err, err_size) ||
-        !xaot_cli_link_add_prefixed(cmd, "-I", runtime_include, err, err_size))
+    if (!xtc_command_emit_include(plan->provider, aot_include, &sink, err, err_size) ||
+        !xtc_command_emit_include(plan->provider, runtime_include, &sink, err, err_size))
         return false;
 
-    if (sysroot && sysroot[0] &&
-        !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
+    if (!xtc_command_emit_sysroot(plan->provider, sysroot, &sink, err, err_size))
         return false;
 
     if (!target->is_native) {
@@ -916,22 +946,13 @@ static bool xaot_cli_build_compile_command(const XrToolchainSelection *plan,
     }
 
     for (i = 0; i < manifest->n_defines; i++) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-D", manifest->defines[i], err, err_size))
+        if (!xtc_command_emit_define(plan->provider, manifest->defines[i], &sink, err, err_size))
             return false;
     }
     for (i = 0; i < manifest->n_cc_flags; i++) {
         if (!xaot_cli_link_add_arg(cmd, manifest->cc_flags[i], err, err_size))
             return false;
     }
-    if (!target->is_native) {
-        if (!xaot_link_manifest_contains(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections") &&
-            !xaot_cli_link_add_arg(cmd, "-ffunction-sections", err, err_size))
-            return false;
-        if (!xaot_link_manifest_contains(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections") &&
-            !xaot_cli_link_add_arg(cmd, "-fdata-sections", err, err_size))
-            return false;
-    }
-
     return true;
 }
 
@@ -1001,6 +1022,9 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     bool needs_runtime;
     bool needs_aot_core;
     bool freestanding_profile;
+    XrNativeCompileSpec compile_spec;
+    XrNativeLinkSpec link_spec;
+    XrToolchainArgSink sink;
     uint32_t i;
     int in;
 
@@ -1010,6 +1034,13 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     }
     if (manifest->n_generated_c_files == 0) {
         snprintf(err, err_size, "AOT link manifest has no generated C input");
+        return false;
+    }
+    if ((manifest->n_cc_flags > 0 || manifest->n_ld_flags > 0) &&
+        (!manifest->raw_flag_provider[0] ||
+         strcmp(manifest->raw_flag_provider, xtc_provider_name(plan->provider)) != 0)) {
+        snprintf(err, err_size, "raw native flags are not scoped to selected provider '%s'",
+                 xtc_provider_name(plan->provider));
         return false;
     }
 
@@ -1032,23 +1063,14 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     memset(cmd, 0, sizeof(*cmd));
     if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size))
-        return false;
-    if (shared_library && freestanding_profile) {
-        if (!xaot_cli_link_add_arg(cmd, "-r", err, err_size))
-            return false;
-    } else if (shared_library) {
-#ifdef XR_OS_MACOS
-        if (!xaot_cli_link_add_arg(cmd, "-dynamiclib", err, err_size))
-            return false;
-#else
-        if (!xaot_cli_link_add_arg(cmd, "-shared", err, err_size))
-            return false;
-#endif
-    }
-    if (!xaot_cli_link_add_arg(cmd, "-o", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, output_file, err, err_size))
+    (void) opt_flag;
+    (void) strip_symbols;
+    (void) shared_library;
+    sink = xaot_cli_command_sink(cmd);
+    xaot_cli_semantic_specs(manifest, &compile_spec, &link_spec);
+    if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
+        !xtc_command_emit_link(plan, target, &link_spec, &sink, err, err_size) ||
+        !xtc_command_emit_link_output(plan->provider, output_file, &sink, err, err_size))
         return false;
     for (in = 0; in < n_inputs; in++) {
         if (!xaot_cli_link_add_arg(cmd, inputs[in], err, err_size))
@@ -1057,12 +1079,11 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
 
     resolve_aot_include_paths(plan, sysroot, aot_include, sizeof(aot_include), runtime_include,
                               sizeof(runtime_include));
-    if (!xaot_cli_link_add_prefixed(cmd, "-I", aot_include, err, err_size) ||
-        !xaot_cli_link_add_prefixed(cmd, "-I", runtime_include, err, err_size))
+    if (!xtc_command_emit_include(plan->provider, aot_include, &sink, err, err_size) ||
+        !xtc_command_emit_include(plan->provider, runtime_include, &sink, err, err_size))
         return false;
 
-    if (sysroot && sysroot[0] &&
-        !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
+    if (!xtc_command_emit_sysroot(plan->provider, sysroot, &sink, err, err_size))
         return false;
 
     if (!target->is_native) {
@@ -1072,19 +1093,11 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     }
 
     for (i = 0; i < manifest->n_defines; i++) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-D", manifest->defines[i], err, err_size))
+        if (!xtc_command_emit_define(plan->provider, manifest->defines[i], &sink, err, err_size))
             return false;
     }
     for (i = 0; i < manifest->n_cc_flags; i++) {
         if (!xaot_cli_link_add_arg(cmd, manifest->cc_flags[i], err, err_size))
-            return false;
-    }
-    if (!target->is_native) {
-        if (!xaot_link_manifest_contains(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections") &&
-            !xaot_cli_link_add_arg(cmd, "-ffunction-sections", err, err_size))
-            return false;
-        if (!xaot_link_manifest_contains(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections") &&
-            !xaot_cli_link_add_arg(cmd, "-fdata-sections", err, err_size))
             return false;
     }
     for (i = 0; i < manifest->n_runtime_objects; i++) {
@@ -1096,17 +1109,23 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
         if (!xaot_cli_link_add_stdlib_object(cmd, manifest->stdlib_objects[i], err, err_size))
             return false;
     }
+    for (i = 0; i < manifest->n_native_inputs; i++) {
+        if (!xaot_cli_link_add_arg(cmd, manifest->native_inputs[i], err, err_size))
+            return false;
+    }
     if (needs_aot_core &&
         !xaot_cli_link_add_verified_runtime(cmd, plan, "xray_aot_core", err, err_size))
         return false;
     if (needs_runtime || needs_aot_core) {
         for (i = 0; i < plan->system_library_count; i++) {
-            if (!xaot_cli_link_add_prefixed(cmd, "-l", plan->system_libraries[i], err, err_size))
+            if (!xtc_command_emit_system_library(plan->provider, plan->system_libraries[i], &sink,
+                                                 err, err_size))
                 return false;
         }
     }
     for (i = 0; i < manifest->n_system_libs; i++) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-l", manifest->system_libs[i], err, err_size))
+        if (!xtc_command_emit_system_library(plan->provider, manifest->system_libs[i], &sink, err,
+                                             err_size))
             return false;
     }
     for (i = 0; i < manifest->n_ld_flags; i++) {
@@ -1118,20 +1137,6 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
         if (!xaot_cli_link_add_arg(cmd, manifest->ld_flags[i], err, err_size))
             return false;
     }
-    if (!target->is_native && !(shared_library && freestanding_profile) &&
-        !xaot_link_manifest_contains(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections")) {
-        if (!xaot_cli_link_add_arg(cmd, "-Wl,--gc-sections", err, err_size))
-            return false;
-    }
-    if (strip_symbols && !xaot_link_manifest_contains(manifest, XAOT_LINK_LD_FLAG, "-Wl,-S")) {
-        if (!xaot_cli_link_add_arg(cmd, "-Wl,-S", err, err_size))
-            return false;
-    }
-    if (strip_symbols && !xaot_link_manifest_contains(manifest, XAOT_LINK_LD_FLAG, "-Wl,-x")) {
-        if (!xaot_cli_link_add_arg(cmd, "-Wl,-x", err, err_size))
-            return false;
-    }
-
     return true;
 }
 
@@ -1281,6 +1286,20 @@ static const char *make_opt_flag(const char *level, bool debug_symbols) {
     return "-O3";
 }
 
+static XaotOptimizationLevel make_semantic_opt_level(const char *level, bool debug_symbols) {
+    if (!level)
+        return debug_symbols ? XAOT_OPTIMIZATION_NONE : XAOT_OPTIMIZATION_SPEED;
+    if (strcmp(level, "0") == 0)
+        return XAOT_OPTIMIZATION_NONE;
+    if (strcmp(level, "1") == 0)
+        return XAOT_OPTIMIZATION_BASIC;
+    if (strcmp(level, "2") == 0)
+        return XAOT_OPTIMIZATION_RELEASE;
+    if (strcmp(level, "s") == 0)
+        return XAOT_OPTIMIZATION_SIZE;
+    return XAOT_OPTIMIZATION_SPEED;
+}
+
 static bool build_opt_level_is_fast(const char *level) {
     return level && strcmp(level, "fast") == 0;
 }
@@ -1298,16 +1317,18 @@ static const char *default_shared_library_output(void) {
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int cmd_build_native(
-    const char *input, const char *output, const char *cc, const char *opt_flag, const char *cpu,
-    XaotSimdMode simd_mode, bool c_only, bool strip, bool debug_symbols, bool shared_library,
-    XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
-    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrToolchainTarget *target,
-    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
+                 bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
+                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
+                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
+                 const XrTargetConfig *target_config,
+                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1662,6 +1683,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                                                : xtc_target_default_output(&target));
 
     const char *opt_flag = make_opt_flag(opt_level, debug_symbols);
+    XaotOptimizationLevel semantic_optimization = make_semantic_opt_level(opt_level, debug_symbols);
     const char *effective_cpu = cpu;
     bool effective_lto = lto;
     if (native_mode && target.is_native && opt_fast) {
@@ -1685,12 +1707,12 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
 
     if (native_mode) {
         rc = cmd_build_native(
-            input_file, output_file, cc, opt_flag, effective_cpu, simd_mode, c_only, strip_symbols,
-            debug_symbols, shared_library, profile, type_name_profile, sysroot, linker_script,
-            verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence, dump_link_manifest,
-            dump_residue, dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
-            effective_lto, rc_guard, &target, &toolchain_plan, target_config,
-            project ? project->native_plan : NULL, objcopy_output);
+            input_file, output_file, cc, opt_flag, semantic_optimization, effective_cpu, simd_mode,
+            c_only, strip_symbols, debug_symbols, shared_library, profile, type_name_profile,
+            sysroot, linker_script, verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence,
+            dump_link_manifest, dump_residue, dump_link_command, dry_run_link, c_header, keep_c,
+            cache_dir_arg, rebuild, effective_lto, rc_guard, &target, &toolchain_plan,
+            target_config, project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc && cc[0] ? cc : "cc", opt_flag, c_only,
@@ -2038,8 +2060,8 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
 
 /* Cache key = content hash of the generated C plus everything that changes the
  * resulting object: optimization level, target, toolchain, sysroot, and every
- * preprocessor define / cc flag carried by the link manifest (which already
- * folds in sanitizer, cpu, and debug flags). */
+ * semantic compile requirements plus every provider-scoped escape flag carried
+ * by the link manifest. */
 static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag,
                                       const XrToolchainTarget *target,
                                       const XrToolchainSelection *plan,
@@ -2063,6 +2085,7 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     }
     h = xaot_hash_fold_str(h, sysroot);
     if (manifest) {
+        h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
         for (uint32_t i = 0; i < manifest->n_defines; i++)
             h = xaot_hash_fold_str(h, manifest->defines[i]);
         for (uint32_t i = 0; i < manifest->n_cc_flags; i++)
@@ -2102,9 +2125,13 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     h = xaot_hash_fold_str(h, sysroot);
     if (result) {
         const XaotLinkManifest *manifest = &result->link_manifest;
+        h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
+        h = xaot_hash_fold(h, &manifest->link, sizeof(manifest->link));
+        h = xaot_hash_fold_str(h, manifest->raw_flag_provider);
         h = xaot_hash_fold_string_list(h, manifest->runtime_caps, manifest->n_runtime_caps);
         h = xaot_hash_fold_string_list(h, manifest->runtime_objects, manifest->n_runtime_objects);
         h = xaot_hash_fold_string_list(h, manifest->stdlib_objects, manifest->n_stdlib_objects);
+        h = xaot_hash_fold_string_list(h, manifest->native_inputs, manifest->n_native_inputs);
         h = xaot_hash_fold_string_list(h, manifest->generated_c_files,
                                        manifest->n_generated_c_files);
         h = xaot_hash_fold_string_list(h, manifest->system_libs, manifest->n_system_libs);
@@ -2244,12 +2271,12 @@ static void xaot_dirname(const char *path, char *out, size_t out_sz) {
     out[len] = '\0';
 }
 
-static const char *xaot_native_unit_opt_flag(const XrNativeUnit *unit) {
+static XrOptimizationLevel xaot_native_unit_optimization(const XrNativeUnit *unit) {
     if (unit && unit->optimization && strcmp(unit->optimization, "size") == 0)
-        return "-Os";
+        return XR_OPTIMIZATION_SIZE;
     if (unit && unit->optimization && strcmp(unit->optimization, "release") == 0)
-        return "-O2";
-    return "-O0";
+        return XR_OPTIMIZATION_RELEASE;
+    return XR_OPTIMIZATION_NONE;
 }
 
 static bool xaot_cli_build_native_unit_compile_command(const XrToolchainSelection *plan,
@@ -2265,36 +2292,33 @@ static bool xaot_cli_build_native_unit_compile_command(const XrToolchainSelectio
     memset(cmd, 0, sizeof(*cmd));
     if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
-    if (!xaot_cli_link_add_arg(cmd, xaot_native_unit_opt_flag(unit), err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
-        !xaot_cli_link_add_arg(cmd, "-c", err, err_size))
-        return false;
-    if (unit->kind == XR_NATIVE_UNIT_C) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-std=", unit->language_standard, err, err_size) ||
-            !xaot_cli_link_add_prefixed(cmd, "-fvisibility=", unit->visibility, err, err_size))
-            return false;
-    }
-    if (unit->warning_policy && strcmp(unit->warning_policy, "strict") == 0 &&
-        (!xaot_cli_link_add_arg(cmd, "-Wall", err, err_size) ||
-         !xaot_cli_link_add_arg(cmd, "-Wextra", err, err_size) ||
-         !xaot_cli_link_add_arg(cmd, "-Werror", err, err_size)))
+    XrToolchainArgSink sink = xaot_cli_command_sink(cmd);
+    XrNativeCompileSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.optimization = xaot_native_unit_optimization(unit);
+    spec.fp_contract = XR_FP_CONTRACT_OFF;
+    spec.language_standard = unit->kind == XR_NATIVE_UNIT_C ? unit->language_standard : NULL;
+    spec.visibility = unit->visibility && strcmp(unit->visibility, "hidden") == 0
+                          ? XR_VISIBILITY_HIDDEN
+                          : XR_VISIBILITY_DEFAULT;
+    spec.warnings = unit->warning_policy && strcmp(unit->warning_policy, "strict") == 0
+                        ? XR_WARNING_POLICY_STRICT
+                        : XR_WARNING_POLICY_DEFAULT;
+    if (!xtc_command_emit_compile(plan, &spec, &sink, err, err_size))
         return false;
     for (uint32_t i = 0; i < unit->include_dir_count; i++) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-I", unit->include_dirs[i], err, err_size))
+        if (!xtc_command_emit_include(plan->provider, unit->include_dirs[i], &sink, err, err_size))
             return false;
     }
     for (uint32_t i = 0; i < unit->define_count; i++) {
-        if (!xaot_cli_link_add_prefixed(cmd, "-D", unit->defines[i], err, err_size))
+        if (!xtc_command_emit_define(plan->provider, unit->defines[i], &sink, err, err_size))
             return false;
     }
-    if (sysroot && sysroot[0] &&
-        !xaot_cli_link_add_prefixed(cmd, "--sysroot=", sysroot, err, err_size))
+    if (!xtc_command_emit_sysroot(plan->provider, sysroot, &sink, err, err_size))
         return false;
     if (!target->is_native && !xaot_cli_link_add_target_metadata_flags(cmd, target, err, err_size))
         return false;
-    return xaot_cli_link_add_arg(cmd, source, err, err_size) &&
-           xaot_cli_link_add_arg(cmd, "-o", err, err_size) &&
-           xaot_cli_link_add_arg(cmd, object, err, err_size);
+    return xtc_command_emit_compile_io(plan->provider, source, object, &sink, err, err_size);
 }
 
 static int xaot_invoke_native_unit_compile(const XrToolchainSelection *plan,
@@ -2333,9 +2357,12 @@ static int xaot_combine_native_unit_objects(const XrToolchainSelection *plan,
     memset(&cmd, 0, sizeof(cmd));
     if (!xaot_cli_add_provider_driver_prefix(&cmd, plan, target, err, sizeof(err)))
         goto command_error;
-    if (!xaot_cli_link_add_arg(&cmd, "-r", err, sizeof(err)) ||
-        !xaot_cli_link_add_arg(&cmd, "-o", err, sizeof(err)) ||
-        !xaot_cli_link_add_arg(&cmd, output, err, sizeof(err)))
+    XrToolchainArgSink sink = xaot_cli_command_sink(&cmd);
+    XrNativeLinkSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.relocatable = true;
+    if (!xtc_command_emit_link(plan, target, &spec, &sink, err, sizeof(err)) ||
+        !xtc_command_emit_link_output(plan->provider, output, &sink, err, sizeof(err)))
         goto command_error;
     for (uint32_t i = 0; i < object_count; i++) {
         if (!xaot_cli_link_add_arg(&cmd, objects[i], err, sizeof(err)))
@@ -3017,16 +3044,18 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
     return true;
 }
 
-static int cmd_build_native(
-    const char *input, const char *output, const char *cc, const char *opt_flag, const char *cpu,
-    XaotSimdMode simd_mode, bool c_only, bool strip, bool debug_symbols, bool shared_library,
-    XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
-    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrToolchainTarget *target,
-    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
+                 bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
+                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
+                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
+                 const XrTargetConfig *target_config,
+                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
     XaotTargetCapabilityProvider capability_provider;
@@ -3088,23 +3117,32 @@ static int cmd_build_native(
         return rc;
     {
         char normalize_err[512];
+        aot_result.link_manifest.compile.optimization = optimization;
+        aot_result.link_manifest.link.strip = strip;
+        aot_result.link_manifest.link.shared =
+            shared_library && profile != XR_CLI_BUILD_PROFILE_FREESTANDING;
+        aot_result.link_manifest.link.relocatable =
+            shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
         if (!xaot_cli_normalize_manifest_for_target(&aot_result.link_manifest, target,
                                                     normalize_err, sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;
         }
-        if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, normalize_err,
-                                                sizeof(normalize_err))) {
+        /* --emit-c does not invoke a native provider, so it neither needs nor
+         * can scope provider-specific sanitizer argv. */
+        if (!c_only &&
+            !xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, toolchain_plan,
+                                                normalize_err, sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;
         }
         /* Task 219 --rc-guard: compile the generated C with the RC guard macro
          * so xrt_arc.h poisons released objects and aborts on use-after-release. */
-        if (rc_guard && !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                                       "-DXR_RC_GUARD")) {
-            fprintf(stderr, "Error: failed to add --rc-guard compile flag\n");
+        if (rc_guard && !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_DEFINE,
+                                                       "XR_RC_GUARD")) {
+            fprintf(stderr, "Error: failed to add --rc-guard compile definition\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }
@@ -3122,7 +3160,8 @@ static int cmd_build_native(
             return 1;
         }
         if (!xaot_cli_add_target_config_flags(&aot_result.link_manifest, target_config,
-                                              normalize_err, sizeof(normalize_err))) {
+                                              toolchain_plan, normalize_err,
+                                              sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;
@@ -3161,14 +3200,8 @@ static int cmd_build_native(
          * inline across modules.  The per-module bitcode stays content-addressed
          * (the cache key folds in cc flags), so only changed modules recompile
          * while every link re-runs cross-module optimization. */
-        if (lto && (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                                   "-flto") ||
-                    !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_LD_FLAG,
-                                                   "-flto"))) {
-            fprintf(stderr, "Error: failed to add LTO flags to AOT link manifest\n");
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
+        aot_result.link_manifest.compile.lto = lto;
+        aot_result.link_manifest.link.lto = lto;
         /* LLVM's AArch64 machine outliner can replace repeated constant setup
          * and hot scalar/vector kernels with local calls. That is a useful
          * size trade-off for -Os, but it adds a call/return to leaf routines
@@ -3185,19 +3218,9 @@ static int cmd_build_native(
         if (!aarch64_target && target && target->is_native)
             aarch64_target = true;
 #endif
-        if (clang_family && aarch64_target && strcmp(opt_flag, "-Os") != 0 &&
-            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                           "-mno-outline")) {
-            fprintf(stderr, "Error: failed to disable speed-hostile AArch64 outlining\n");
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
-        if (shared_library &&
-            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-fPIC")) {
-            fprintf(stderr, "Error: failed to add shared-library PIC flag to AOT link manifest\n");
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
+        aot_result.link_manifest.compile.disable_machine_outliner =
+            clang_family && aarch64_target && optimization != XAOT_OPTIMIZATION_SIZE;
+        aot_result.link_manifest.compile.pic = shared_library;
         if (debug_symbols && !xaot_cli_add_build_debug_flags(
                                  &aot_result.link_manifest, normalize_err, sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
@@ -3206,25 +3229,13 @@ static int cmd_build_native(
         }
     }
     if (cpu && cpu[0]) {
-        char cpu_flag[128];
-        /* ARM toolchains reject -march=native; -mcpu is the tuning knob there. */
-#if defined(XR_ARCH_ARM64) || defined(XR_ARCH_ARM)
-        snprintf(cpu_flag, sizeof(cpu_flag), "-mcpu=%s", cpu);
-#else
-        snprintf(cpu_flag, sizeof(cpu_flag), "-march=%s", cpu);
-#endif
-        if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                           cpu_flag)) {
-            fprintf(stderr, "Error: failed to record --cpu flag in AOT link manifest\n");
+        if (snprintf(aot_result.link_manifest.compile.cpu,
+                     sizeof(aot_result.link_manifest.compile.cpu), "%s", cpu) < 0 ||
+            strlen(cpu) >= sizeof(aot_result.link_manifest.compile.cpu)) {
+            fprintf(stderr, "Error: --cpu value is too long\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }
-    }
-    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx2")) {
-        fprintf(stderr, "Error: failed to record AVX2 target flag in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
     }
     if (shared_library && xaot_link_manifest_needs_runtime(&aot_result.link_manifest)) {
         fprintf(stderr, "Error: --shared does not support runtime-backed features yet; export "

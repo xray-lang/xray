@@ -1179,7 +1179,7 @@ static bool add_extern_dylib_manifest_entries(XaotLinkManifest *manifest,
         if (extern_dylib_is_link_name(dylib)) {
             if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, dylib))
                 return false;
-        } else if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, dylib)) {
+        } else if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_NATIVE_INPUT, dylib)) {
             return false;
         }
     }
@@ -1356,22 +1356,11 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
         goto done;
     fast_test = xaot_fast_test_build_enabled();
-    if (fast_test) {
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-w"))
-            goto done;
-    }
+    manifest->compile.suppress_warnings = fast_test;
     if (!fast_test || !xaot_fast_test_can_skip_size_link_flags(features)) {
-#ifdef XR_OS_MACOS
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,-dead_strip"))
-            goto done;
-#else
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections"))
-            goto done;
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections"))
-            goto done;
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections"))
-            goto done;
-#endif
+        manifest->compile.function_sections = true;
+        manifest->compile.data_sections = true;
+        manifest->link.dead_strip = true;
     }
 
     if (provider && provider->abi_version != 0) {

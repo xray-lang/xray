@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "app/toolchain/xtc_discovery.h"
+#include "app/toolchain/xtc_command.h"
 #include "app/toolchain/xtc_config.h"
 #include "app/toolchain/xtc_json.h"
 #include "app/toolchain/xtc_model.h"
@@ -17,13 +18,120 @@
 #include "app/toolchain/xtc_probe_cache.h"
 #include "base/xjson.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
-#include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+
+typedef struct CommandCapture {
+    char args[48][256];
+    size_t count;
+} CommandCapture;
+
+static bool command_capture_add(void *context, const char *arg, char *err, size_t err_size) {
+    CommandCapture *capture = context;
+    if (!capture || !arg || capture->count >= 48 || strlen(arg) >= sizeof(capture->args[0])) {
+        if (err && err_size)
+            snprintf(err, err_size, "capture overflow");
+        return false;
+    }
+    snprintf(capture->args[capture->count++], sizeof(capture->args[0]), "%s", arg);
+    return true;
+}
+
+static bool command_capture_joined(void *context, const char *prefix, const char *value, char *err,
+                                   size_t err_size) {
+    CommandCapture *capture = context;
+    if (!capture || capture->count >= 48 ||
+        snprintf(capture->args[capture->count], sizeof(capture->args[0]), "%s%s",
+                 prefix ? prefix : "", value ? value : "") >= (int) sizeof(capture->args[0])) {
+        if (err && err_size)
+            snprintf(err, err_size, "capture overflow");
+        return false;
+    }
+    capture->count++;
+    return true;
+}
+
+static bool command_capture_has(const CommandCapture *capture, const char *arg) {
+    for (size_t i = 0; capture && i < capture->count; i++) {
+        if (strcmp(capture->args[i], arg) == 0)
+            return true;
+    }
+    return false;
+}
+
+TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
+    XrToolchainSelection selection = {0};
+    XrNativeCompileSpec compile = {0};
+    XrNativeLinkSpec link = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+
+    selection.provider = XR_TOOLCHAIN_PROVIDER_GCC;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "/usr/bin/gcc");
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-gnu", &selection.target, err, sizeof(err)));
+    compile.optimization = XR_OPTIMIZATION_SPEED;
+    compile.fp_contract = XR_FP_CONTRACT_OFF;
+    compile.lto = true;
+    compile.pic = true;
+    compile.function_sections = true;
+    compile.data_sections = true;
+    compile.visibility = XR_VISIBILITY_HIDDEN;
+    compile.language_standard = "c11";
+    ASSERT_TRUE(xtc_command_emit_driver(&selection, &selection.target, &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/usr/bin/gcc"));
+    ASSERT_TRUE(command_capture_has(&capture, "-O3"));
+    ASSERT_TRUE(command_capture_has(&capture, "-ffp-contract=off"));
+    ASSERT_TRUE(command_capture_has(&capture, "-flto"));
+    ASSERT_TRUE(command_capture_has(&capture, "-fPIC"));
+    ASSERT_TRUE(command_capture_has(&capture, "-std=c11"));
+
+    memset(&capture, 0, sizeof(capture));
+    memset(&selection, 0, sizeof(selection));
+    selection.provider = XR_TOOLCHAIN_PROVIDER_MSVC;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "cl.exe");
+    ASSERT_TRUE(xtc_target_parse("x86_64-windows-msvc", &selection.target, err, sizeof(err)));
+    compile.pic = false;
+    compile.visibility = XR_VISIBILITY_DEFAULT;
+    link.shared = true;
+    link.dead_strip = true;
+    link.lto = true;
+    link.entry = "mainCRTStartup";
+    ASSERT_TRUE(xtc_command_emit_driver(&selection, &selection.target, &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(
+        xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/O2"));
+    ASSERT_TRUE(command_capture_has(&capture, "/fp:strict"));
+    ASSERT_TRUE(command_capture_has(&capture, "/GL"));
+    ASSERT_TRUE(command_capture_has(&capture, "/LD"));
+    ASSERT_TRUE(command_capture_has(&capture, "/LTCG"));
+    ASSERT_TRUE(command_capture_has(&capture, "/OPT:REF"));
+    ASSERT_TRUE(command_capture_has(&capture, "/ENTRY:mainCRTStartup"));
+    ASSERT_FALSE(command_capture_has(&capture, "-O2"));
+}
+
+TEST(msvc_command_plan_fails_closed_for_gnu_only_intent) {
+    XrToolchainSelection selection = {0};
+    XrNativeCompileSpec compile = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+    selection.provider = XR_TOOLCHAIN_PROVIDER_MSVC;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "cl.exe");
+    compile.pic = true;
+    ASSERT_FALSE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "unsupported by MSVC") != NULL);
+}
 
 TEST(parse_native_target_normalizes_abi) {
     XrToolchainTarget target;
@@ -397,6 +505,8 @@ RUN_TEST(parse_linux_musl_target);
 RUN_TEST(parse_freestanding_targets);
 RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
+RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
+RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
 
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);

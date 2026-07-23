@@ -6,7 +6,7 @@ contains="stdlib_objects": []
 contains="stdlib_symbols": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
-contains="ld_flags": ["-nostdlib"]
+contains="standard_libraries": false
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=xrt_mem_page_alloc_default(
 c_contains=xrt_mem_page_alloc(

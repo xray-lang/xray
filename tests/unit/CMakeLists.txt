@@ -655,6 +655,7 @@ add_test(NAME test_cli_spec COMMAND test_cli_spec)
 
 add_executable(test_cli_toolchain
     cli/test_cli_toolchain.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_command.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_config.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_discovery.c

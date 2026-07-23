@@ -17,5 +17,5 @@ contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL"]
-regex="cc_flags": \[
-regex="ld_flags": \[
+regex="provider_cc_flags": \[
+regex="provider_ld_flags": \[

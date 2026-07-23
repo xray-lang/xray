@@ -10,11 +10,11 @@ contains=    "triple": "aarch64-windows-gnu"
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
 contains="system_libs": ["ws2_32", "bcrypt", "api-ms-win-core-synch-l1-2-0"]
-regex="cc_flags": \[
-contains="-ffunction-sections"
-contains="-fdata-sections"
-regex="ld_flags": \[
-contains="-Wl,--gc-sections"
+regex="provider_cc_flags": \[
+contains="function_sections": true
+contains="data_sections": true
+regex="provider_ld_flags": \[
+contains="dead_strip": true
 not_contains="runtime_objects": ["xray_core"]
 not_contains=-Wl,-dead_strip
 not_contains=-fsanitize=

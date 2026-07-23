@@ -10,6 +10,7 @@
 
 #include "xtc_probe.h"
 
+#include "xtc_command.h"
 #include "xtc_process.h"
 #include "xtc_probe_cache.h"
 #include "../../os/os_fs.h"
@@ -134,28 +135,59 @@ static void xtc_probe_cleanup(const char *dir, const char *const *files, size_t 
 #endif
 }
 
-static bool xtc_probe_add_driver_prefix(const XrToolchainSelection *selection, XrProcessSpec *spec,
-                                        size_t *index, char cpu_flag[96]) {
-    if (!selection || !spec || !index || !selection->program)
+typedef struct XtcProbeCommand {
+    XrProcessSpec spec;
+    char owned[32][1400];
+    size_t index;
+    size_t owned_count;
+} XtcProbeCommand;
+
+static bool xtc_probe_command_add(void *context, const char *arg, char *err, size_t err_size) {
+    XtcProbeCommand *command = (XtcProbeCommand *) context;
+    if (!arg || !arg[0])
+        return true;
+    if (!command || command->index >= XTC_PROCESS_MAX_ARGS - 1) {
+        snprintf(err, err_size, "toolchain probe command has too many arguments");
         return false;
-    xtc_process_spec_init(spec, selection->program, 30000);
-    *index = 1;
-    if (selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG) {
-        spec->argv[(*index)++] = "cc";
-        if (!selection->target.is_native) {
-            spec->argv[(*index)++] = "-target";
-            spec->argv[(*index)++] = selection->target.zig_triple;
-            if (selection->target.cpu && selection->target.cpu[0]) {
-                snprintf(cpu_flag, 96, "-mcpu=%s", selection->target.cpu);
-                spec->argv[(*index)++] = cpu_flag;
-            }
-        }
-    } else if (selection->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG &&
-               selection->system_sdk[0]) {
-        spec->argv[(*index)++] = "-isysroot";
-        spec->argv[(*index)++] = selection->system_sdk;
     }
+    command->spec.argv[command->index++] = arg;
+    command->spec.argv[command->index] = NULL;
     return true;
+}
+
+static bool xtc_probe_command_add_joined(void *context, const char *prefix, const char *value,
+                                         char *err, size_t err_size) {
+    XtcProbeCommand *command = (XtcProbeCommand *) context;
+    if (!value || !value[0])
+        return true;
+    if (!command || command->owned_count >= 32) {
+        snprintf(err, err_size, "toolchain probe command has too many generated arguments");
+        return false;
+    }
+    int written =
+        snprintf(command->owned[command->owned_count], sizeof(command->owned[command->owned_count]),
+                 "%s%s", prefix ? prefix : "", value);
+    if (written < 0 || (size_t) written >= sizeof(command->owned[command->owned_count])) {
+        snprintf(err, err_size, "toolchain probe argument is too long");
+        return false;
+    }
+    return xtc_probe_command_add(command, command->owned[command->owned_count++], err, err_size);
+}
+
+static XrToolchainArgSink xtc_probe_command_sink(XtcProbeCommand *command) {
+    XrToolchainArgSink sink = {command, xtc_probe_command_add, xtc_probe_command_add_joined};
+    return sink;
+}
+
+static bool xtc_probe_command_init(const XrToolchainSelection *selection, XtcProbeCommand *command,
+                                   char *detail, size_t detail_size) {
+    if (!selection || !command || !selection->program)
+        return false;
+    memset(command, 0, sizeof(*command));
+    xtc_process_spec_init(&command->spec, selection->program, 30000);
+    command->index = 0;
+    XrToolchainArgSink sink = xtc_probe_command_sink(command);
+    return xtc_command_emit_driver(selection, &selection->target, &sink, detail, detail_size);
 }
 
 static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process, char *detail,
@@ -189,30 +221,29 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
 static bool xtc_probe_compile(const XrToolchainSelection *selection, const char *source,
                               const char *object, const XrRuntimeArtifactSet *sdk, bool include_sdk,
                               bool lto, char *detail, size_t detail_size) {
-    XrProcessSpec spec;
     XrProcessResult process;
-    char cpu_flag[96] = {0};
-    char public_flag[1400];
-    char private_flag[1400];
-    size_t index;
-    if (!xtc_probe_add_driver_prefix(selection, &spec, &index, cpu_flag))
+    XtcProbeCommand command;
+    if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
-    spec.argv[index++] = "-std=c11";
-    spec.argv[index++] = "-ffp-contract=off";
-    if (lto)
-        spec.argv[index++] = "-flto";
+    XrToolchainArgSink sink = xtc_probe_command_sink(&command);
+    XrNativeCompileSpec compile = {0};
+    compile.optimization = XR_OPTIMIZATION_NONE;
+    compile.fp_contract = XR_FP_CONTRACT_OFF;
+    compile.lto = lto;
+    compile.language_standard = "c11";
+    if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size))
+        return false;
     if (include_sdk) {
-        snprintf(public_flag, sizeof(public_flag), "-I%s", sdk->public_include);
-        snprintf(private_flag, sizeof(private_flag), "-I%s", sdk->private_aot_include);
-        spec.argv[index++] = public_flag;
-        spec.argv[index++] = private_flag;
+        if (!xtc_command_emit_include(selection->provider, sdk->public_include, &sink, detail,
+                                      detail_size) ||
+            !xtc_command_emit_include(selection->provider, sdk->private_aot_include, &sink, detail,
+                                      detail_size))
+            return false;
     }
-    spec.argv[index++] = "-c";
-    spec.argv[index++] = source;
-    spec.argv[index++] = "-o";
-    spec.argv[index++] = object;
-    spec.argv[index] = NULL;
-    bool ok = xtc_probe_run_process(&spec, &process, detail, detail_size);
+    if (!xtc_command_emit_compile_io(selection->provider, source, object, &sink, detail,
+                                     detail_size))
+        return false;
+    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
@@ -220,45 +251,52 @@ static bool xtc_probe_compile(const XrToolchainSelection *selection, const char 
 static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
                                    const XrRuntimeArtifactSet *runtime, const char *source,
                                    const char *executable, char *detail, size_t detail_size) {
-    XrProcessSpec spec;
     XrProcessResult process;
-    char cpu_flag[96] = {0};
-    char library_flags[XTC_RUNTIME_MAX_SYSTEM_LIBS][80];
-    size_t index;
-    if (!xtc_probe_add_driver_prefix(selection, &spec, &index, cpu_flag))
+    XtcProbeCommand command;
+    if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
-    spec.argv[index++] = "-std=c11";
-    spec.argv[index++] = "-ffp-contract=off";
-    spec.argv[index++] = source;
-    spec.argv[index++] = "-o";
-    spec.argv[index++] = executable;
+    XrToolchainArgSink sink = xtc_probe_command_sink(&command);
+    XrNativeCompileSpec compile = {0};
+    XrNativeLinkSpec link = {0};
+    compile.optimization = XR_OPTIMIZATION_NONE;
+    compile.fp_contract = XR_FP_CONTRACT_OFF;
+    compile.language_standard = "c11";
+    if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size) ||
+        !xtc_probe_command_add(&command, source, detail, detail_size) ||
+        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size) ||
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size))
+        return false;
     for (size_t i = 0; i < runtime->artifact_count; i++)
-        spec.argv[index++] = runtime->artifacts[i].path;
+        if (!xtc_probe_command_add(&command, runtime->artifacts[i].path, detail, detail_size))
+            return false;
     for (size_t i = 0; i < runtime->system_library_count; i++) {
-        snprintf(library_flags[i], sizeof(library_flags[i]), "-l%s", runtime->system_libraries[i]);
-        spec.argv[index++] = library_flags[i];
+        if (!xtc_command_emit_system_library(selection->provider, runtime->system_libraries[i],
+                                             &sink, detail, detail_size))
+            return false;
     }
-    spec.argv[index] = NULL;
-    bool ok = xtc_probe_run_process(&spec, &process, detail, detail_size);
+    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
 
 static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const char *source,
                                    const char *executable, char *detail, size_t detail_size) {
-    XrProcessSpec spec;
     XrProcessResult process;
-    char cpu_flag[96] = {0};
-    size_t index;
-    if (!xtc_probe_add_driver_prefix(selection, &spec, &index, cpu_flag))
+    XtcProbeCommand command;
+    if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
-    spec.argv[index++] = "-std=c11";
-    spec.argv[index++] = "-ffp-contract=off";
-    spec.argv[index++] = source;
-    spec.argv[index++] = "-o";
-    spec.argv[index++] = executable;
-    spec.argv[index] = NULL;
-    bool ok = xtc_probe_run_process(&spec, &process, detail, detail_size);
+    XrToolchainArgSink sink = xtc_probe_command_sink(&command);
+    XrNativeCompileSpec compile = {0};
+    XrNativeLinkSpec link = {0};
+    compile.optimization = XR_OPTIMIZATION_NONE;
+    compile.fp_contract = XR_FP_CONTRACT_OFF;
+    compile.language_standard = "c11";
+    if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size) ||
+        !xtc_probe_command_add(&command, source, detail, detail_size) ||
+        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size) ||
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size))
+        return false;
+    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
 }
@@ -275,12 +313,16 @@ static bool xtc_probe_run_executable(const char *executable, char *detail, size_
 
 static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char *detail,
                                      size_t detail_size) {
+    if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_MSVC)
+        return selection->target.abi == XR_TOOLCHAIN_TARGET_ABI_MSVC;
     XrProcessSpec spec;
     XrProcessResult process;
-    char cpu_flag[96] = {0};
     size_t index;
-    if (!xtc_probe_add_driver_prefix(selection, &spec, &index, cpu_flag))
+    XtcProbeCommand command;
+    if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
+    spec = command.spec;
+    index = command.index;
     spec.timeout_ms = 5000;
     spec.argv[index++] = "-dumpmachine";
     spec.argv[index] = NULL;
@@ -427,6 +469,18 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     snprintf(result->cache, sizeof(result->cache), "%s", "miss");
     result->selection.target = options->request.target;
     result->selection.provider = candidate->provider;
+#ifdef XR_OS_WINDOWS
+    /* Native Windows is provider-dependent: MSVC consumes the MSVC ABI while
+     * Zig's native fallback is deliberately Windows GNU. Never mix archives. */
+    if (candidate->provider == XR_TOOLCHAIN_PROVIDER_ZIG && options->request.target.is_native &&
+        options->request.target.abi == XR_TOOLCHAIN_TARGET_ABI_MSVC) {
+        const char *gnu_target = options->request.target.arch == XR_TOOLCHAIN_TARGET_ARCH_AARCH64
+                                     ? "aarch64-windows-gnu"
+                                     : "x86_64-windows-gnu";
+        if (!xtc_target_parse(gnu_target, &result->selection.target, err, err_size))
+            return false;
+    }
+#endif
     result->selection.ownership = candidate->ownership;
     result->selection.readiness = XR_TOOLCHAIN_DISCOVERED;
     result->selection.fallback_used =
