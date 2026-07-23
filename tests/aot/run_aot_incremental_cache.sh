@@ -32,6 +32,7 @@ export XRAY_AOT_FAST_TEST_BUILD
 JOBS=1
 PASS=0
 FAIL=0
+AOT_CACHE_TARGET=""
 
 trap 'rm -rf "$WORK"' EXIT
 
@@ -44,6 +45,17 @@ if [ ! -x "$XRAY" ]; then
     echo "FAIL: xray binary not executable: $XRAY"
     exit 1
 fi
+
+resolve_aot_cache_target() {
+    local target_json
+    target_json="$("$XRAY" toolchain list --target native --json 2>/dev/null || true)"
+    AOT_CACHE_TARGET="$(printf '%s\n' "$target_json" |
+        sed -n 's/.*"normalizedTarget":"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -z "$AOT_CACHE_TARGET" ]; then
+        echo "FAIL: cannot resolve normalized native AOT cache target"
+        return 1
+    fi
+}
 
 is_uint() {
     case "$1" in
@@ -212,8 +224,8 @@ expect_evidence_phase() {
 
 corrupt_evidence_phase() {
     local cache="$1" phase="$2" name="$3" file count
-    file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | head -n 1)"
-    count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
+    file="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | head -n 1)"
+    count="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
     if [ -n "$file" ] && [ "$count" = "1" ]; then
         printf 'tampered-cache\n' >"$file"
         record_pass "$name: corrupted $phase sidecar"
@@ -224,8 +236,8 @@ corrupt_evidence_phase() {
 
 corrupt_evidence_payload_phase() {
     local cache="$1" phase="$2" name="$3" file count
-    file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
-    count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
+    file="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
+    count="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
     if [ -n "$file" ] && [ "$count" = "1" ]; then
         printf 'tampered-payload\n' >"$file"
         record_pass "$name: corrupted $phase payload"
@@ -237,9 +249,9 @@ corrupt_evidence_payload_phase() {
 expect_evidence_sidecars() {
     local cache="$1" name="$2" phase manifest_count payload_count payload_file
     for phase in declarations semantic_graph body_summary global_evidence; do
-        manifest_count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
-        payload_count="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
-        payload_file="$(find "$cache/aot/native/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
+        manifest_count="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgcache' -type f 2>/dev/null | wc -l | tr -d ' ')"
+        payload_count="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | wc -l | tr -d ' ')"
+        payload_file="$(find "$cache/aot/$AOT_CACHE_TARGET/evidence/$phase" -name '*.xgpayload' -type f 2>/dev/null | head -n 1)"
         if [ "$manifest_count" = "1" ] && [ "$payload_count" = "1" ] &&
            grep -q '^xg-cache-payload v2 ' "$payload_file" &&
            grep -q '^xg-cache-request v1 ' "$payload_file"; then
@@ -571,6 +583,7 @@ run_groups_parallel() {
     done
 }
 
+resolve_aot_cache_target || exit 1
 configure_jobs "$REQUESTED_JOBS"
 echo "Jobs:   $JOBS"
 echo ""
