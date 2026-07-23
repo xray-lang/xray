@@ -581,7 +581,7 @@ static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
                      "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 8)\n"
                      "}\n"
                      "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
-    ASSERT_TRUE(xaot_target_init(&target, "riscv64gc-unknown-none-elf"));
+    ASSERT_TRUE(xaot_target_init(&target, "riscv64-freestanding-none"));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
     options.emit_plan_dump = true;

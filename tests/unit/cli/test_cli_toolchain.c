@@ -151,12 +151,13 @@ TEST(list_uses_canonical_targets_only) {
     const char *const *targets = xtc_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 13);
+    ASSERT_EQ_INT((int) count, 14);
     ASSERT_STR_EQ(targets[0], "native");
     ASSERT_STR_EQ(targets[1], "aarch64-apple-darwin");
     ASSERT_STR_EQ(targets[3], "x86_64-linux-gnu");
     ASSERT_STR_EQ(targets[10], "x86_64-freestanding-none");
-    ASSERT_STR_EQ(targets[12], "thumb-freestanding-eabi");
+    ASSERT_STR_EQ(targets[12], "riscv64-freestanding-none");
+    ASSERT_STR_EQ(targets[13], "thumb-freestanding-eabi");
 }
 
 TEST(parse_linux_musl_target) {
@@ -186,6 +187,10 @@ TEST(parse_freestanding_targets) {
     ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_RISCV32);
     ASSERT_EQ_INT(target.pointer_bits, 32);
 
+    ASSERT_TRUE(xtc_target_parse("riscv64-freestanding-none", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_RISCV64);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
+
     ASSERT_TRUE(xtc_target_parse("thumb-freestanding-eabi", &target, err, sizeof(err)));
     ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_THUMB);
     ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_EABI);
@@ -198,6 +203,7 @@ TEST(reject_retired_target_aliases) {
 
     ASSERT_FALSE(xtc_target_parse("x86_64-unknown-none", &target, err, sizeof(err)));
     ASSERT_FALSE(xtc_target_parse("riscv32imac-unknown-none-elf", &target, err, sizeof(err)));
+    ASSERT_FALSE(xtc_target_parse("riscv64gc-unknown-none-elf", &target, err, sizeof(err)));
     ASSERT_FALSE(xtc_target_parse("thumbv7em-none-eabi", &target, err, sizeof(err)));
 }
 

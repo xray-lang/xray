@@ -62,6 +62,9 @@ static const XtcTargetRecord xtc_targets[] = {
     {"riscv32-freestanding-none", "riscv32-freestanding-none", NULL, "",
      XR_TOOLCHAIN_TARGET_ARCH_RISCV32, XR_TOOLCHAIN_TARGET_OS_NONE, XR_TOOLCHAIN_TARGET_ABI_NONE,
      XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE, 32},
+    {"riscv64-freestanding-none", "riscv64-freestanding-none", NULL, "",
+     XR_TOOLCHAIN_TARGET_ARCH_RISCV64, XR_TOOLCHAIN_TARGET_OS_NONE, XR_TOOLCHAIN_TARGET_ABI_NONE,
+     XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE, 64},
     {"thumb-freestanding-eabi", "thumb-freestanding-eabi", "cortex_m4", "",
      XR_TOOLCHAIN_TARGET_ARCH_THUMB, XR_TOOLCHAIN_TARGET_OS_NONE, XR_TOOLCHAIN_TARGET_ABI_EABI,
      XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE, 32},
@@ -80,6 +83,7 @@ static const char *const xtc_target_names[] = {
     "aarch64-windows-gnu",
     "x86_64-freestanding-none",
     "riscv32-freestanding-none",
+    "riscv64-freestanding-none",
     "thumb-freestanding-eabi",
 };
 

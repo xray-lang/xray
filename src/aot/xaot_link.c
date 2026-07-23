@@ -357,6 +357,7 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         {"aarch64-windows-gnu", "aarch64", "windows", "gnu", "coff", 64},
         {"x86_64-freestanding-none", "x86_64", "none", "none", "elf", 64},
         {"riscv32-freestanding-none", "riscv32", "none", "none", "elf", 32},
+        {"riscv64-freestanding-none", "riscv64", "none", "none", "elf", 64},
         {"thumb-freestanding-eabi", "thumb", "none", "eabi", "elf", 32},
     };
     for (size_t i = 0; i < sizeof(records) / sizeof(records[0]); i++) {
