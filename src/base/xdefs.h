@@ -110,6 +110,7 @@ typedef int ssize_t;
 #ifdef XR_GCC_COMPAT
 #define XR_NORET __attribute__((noreturn))
 #define XR_AINLINE inline __attribute__((always_inline))
+#define XR_FORCEINLINE __attribute__((always_inline))
 #define XR_NOINLINE __attribute__((noinline))
 #define XR_UNUSED __attribute__((unused))
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -119,6 +120,7 @@ typedef int ssize_t;
 #elif defined(_MSC_VER)
 #define XR_NORET __declspec(noreturn)
 #define XR_AINLINE __forceinline
+#define XR_FORCEINLINE __forceinline
 #define XR_NOINLINE __declspec(noinline)
 #define XR_UNUSED
 #define XR_LIKELY(x) (x)
@@ -128,6 +130,7 @@ typedef int ssize_t;
 #else
 #define XR_NORET
 #define XR_AINLINE inline
+#define XR_FORCEINLINE
 #define XR_NOINLINE
 #define XR_UNUSED
 #define XR_LIKELY(x) (x)

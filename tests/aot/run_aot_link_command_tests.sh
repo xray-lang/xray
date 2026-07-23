@@ -179,6 +179,18 @@ if "$XRAY" build --native --dump-link-command --cache-dir "$CACHE" \
     else
         fail "core math binary executes with output 9.0"
     fi
+    if [ "$(uname -m 2>/dev/null)" = "arm64" ] && cc --version 2>/dev/null | grep -qi clang; then
+        expect_file_contains "$MATH_LOG" "-mno-outline" \
+            "AArch64 speed build disables the machine outliner"
+        MATH_SIZE_LOG="$WORK/core-math-size.log"
+        if "$XRAY" build --native -O s --dump-link-command --cache-dir "$CACHE-size" \
+                -o "$WORK/core-math-size" "$MATH_SRC" >"$MATH_SIZE_LOG" 2>&1; then
+            expect_file_not_contains "$MATH_SIZE_LOG" "-mno-outline" \
+                "AArch64 size build retains outlining policy"
+        else
+            fail "AArch64 size-policy probe links"
+        fi
+    fi
 else
     fail "core math native binary links"
     sed 's/^/      /' "$MATH_LOG" | sed -n '1,120p'

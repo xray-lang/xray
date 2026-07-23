@@ -1,0 +1,11 @@
+version = 1
+
+[[function]]
+symbol = "allocates"
+scope = "semantic"
+requires = ["no_semantic_alloc"]
+
+[[function]]
+symbol = "pure"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw"]

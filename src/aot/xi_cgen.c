@@ -1020,7 +1020,7 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
     if (cg_func_is_par_for_native_callback(f))
         return "static XR_AINLINE ";
     if (cg_func_needs_external_linkage(ctx, f, prefix))
-        return "";
+        return cg_func_should_force_inline(f) ? "XR_FORCEINLINE " : "";
     if (ctx && ctx->extern_linkage) {
         if (cg_func_contains_stack_array(f))
             return "static XR_NOINLINE ";
@@ -6697,7 +6697,13 @@ static bool cg_func_contains_stack_array(const XiFunc *f) {
                 return true;
             if (value->op == XI_FIXED_ARRAY_NEW)
                 return true;
-            if (value->op != XI_PARAM && value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
+            /* Module/global fixed arrays are references to already-materialized
+             * shared storage, not stack aggregates.  Treating their GET as a
+             * local array inflated small exported wrappers into no-inline
+             * boundaries and prevented LTO from specializing cross-module hot
+             * calls. */
+            if (value->op != XI_PARAM && value->op != XI_GET_SHARED && value->op != XI_GET_GLOBAL &&
+                value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
                 return true;
         }
     }
@@ -7506,6 +7512,11 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_span_length",
         "xrt_span_data",
         "xrt_value_native_type_size",
+        /* fixed-width byte Slice loads are header-inline raw operations; the
+         * checked branch, when present, is accounted as R4 below */
+        "xrt_byte_slice_load_u16_le_unchecked_raw",
+        "xrt_byte_slice_load_u32_le_unchecked_raw",
+        "xrt_byte_slice_load_u64_le_unchecked_raw",
         /* accounted in dedicated categories (kept out of R1 double-counting) */
         "xrt_has_pending_error",
         "xrt_index_oob",
@@ -7584,7 +7595,10 @@ static void cg_scan_function_residue(XiCgenCtx *ctx, const XiFunc *f, const char
                    line, "callee throw effect not proven absent");
 
     /* R4 bounds-panic branch. */
-    uint32_t r4 = cg_scan_count(body, "xrt_index_oob") + cg_scan_count(body, "xrt_fixed_index_oob");
+    uint32_t r4 = cg_scan_count(body, "xrt_index_oob") +
+                  cg_scan_count(body, "xrt_fixed_index_oob") +
+                  cg_scan_count(body, "XR_ERROR_CORE_BYTE_SLICE_LOAD_") +
+                  cg_scan_count(body, "XR_ERROR_CORE_BYTE_SLICE_STORE_");
     cg_residue_add(r, XI_RESIDUE_R4_BOUNDS_PANIC, r4, line,
                    "index lacks range evidence (window proof missing)");
 

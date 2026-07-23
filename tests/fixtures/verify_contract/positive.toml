@@ -4,3 +4,8 @@ version = 1
 symbol = "pure"
 scope = "semantic"
 requires = ["no_semantic_alloc", "no_throw", "no_suspend", "no_block", "no_panic", "no_abort"]
+
+[[function]]
+symbol = "privateWide"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]

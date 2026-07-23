@@ -2982,21 +2982,34 @@ static int cmd_build_native(
             xaot_build_result_free(&aot_result);
             return 1;
         }
-        /* LLVM's AArch64 machine outliner can replace hot explicit-vector
-         * kernels with local calls. Disable it only for bundles that actually
-         * carry explicit SIMD; scalar/runtime bundles retain outlining and its
-         * code-size benefit. This is a verified bundle property combined with
-         * target/toolchain policy, not a source-function special case. */
+        /* LLVM's AArch64 machine outliner can replace repeated constant setup
+         * and hot scalar/vector kernels with local calls. That is a useful
+         * size trade-off for -Os, but it adds a call/return to leaf routines
+         * in speed profiles. Keep the release policy target/toolchain based;
+         * no source function or package receives a special flag. */
         bool clang_family = toolchain_plan && (toolchain_plan->kind == XR_CLI_TOOLCHAIN_CLANG ||
                                                toolchain_plan->kind == XR_CLI_TOOLCHAIN_ZIG ||
                                                (toolchain_plan->kind == XR_CLI_TOOLCHAIN_HOST &&
                                                 toolchain_plan->program &&
                                                 strstr(toolchain_plan->program, "clang") != NULL));
+#if defined(__APPLE__)
+        if (!clang_family && toolchain_plan && toolchain_plan->kind == XR_CLI_TOOLCHAIN_HOST &&
+            toolchain_plan->program) {
+            const char *host_cc = strrchr(toolchain_plan->program, '/');
+            host_cc = host_cc ? host_cc + 1 : toolchain_plan->program;
+            /* Apple's system `cc` driver is Clang even though its basename
+             * intentionally omits the implementation name. */
+            clang_family = strcmp(host_cc, "cc") == 0;
+        }
+#endif
         const char *target_arch = aot_result.link_manifest.target.arch;
         bool aarch64_target = target_arch && (strcmp(target_arch, "aarch64") == 0 ||
                                               strcmp(target_arch, "arm64") == 0);
-        if (clang_family && aarch64_target && aot_result.has_explicit_vector_ops &&
-            strcmp(opt_flag, "-Os") != 0 &&
+#if defined(__aarch64__) || defined(__arm64__)
+        if (!aarch64_target && target && target->is_native)
+            aarch64_target = true;
+#endif
+        if (clang_family && aarch64_target && strcmp(opt_flag, "-Os") != 0 &&
             !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
                                            "-mno-outline")) {
             fprintf(stderr, "Error: failed to disable speed-hostile AArch64 outlining\n");

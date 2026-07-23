@@ -18,6 +18,13 @@ fi
 grep -q "contract 'allocates' failed" "$WORK/effect.err"
 grep -q 'effect summary' "$WORK/effect.err"
 
+if "$XRAY" verify --contract negative-order.toml >"$WORK/order.out" 2>"$WORK/order.err"; then
+    echo "ordered negative contract unexpectedly passed" >&2
+    exit 1
+fi
+grep -q 'symbol=pure scope=semantic' "$WORK/order.out"
+grep -q "contract 'allocates' failed" "$WORK/order.err"
+
 if "$XRAY" verify --contract negative-schema.toml >"$WORK/schema.out" 2>"$WORK/schema.err"; then
     echo "unknown contract key unexpectedly passed" >&2
     exit 1

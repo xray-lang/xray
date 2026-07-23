@@ -64,6 +64,15 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XR_AINLINE inline
 #endif
 #endif
+#ifndef XR_FORCEINLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_FORCEINLINE __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define XR_FORCEINLINE __forceinline
+#else
+#define XR_FORCEINLINE
+#endif
+#endif
 #ifndef XR_NOINLINE
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_NOINLINE __attribute__((noinline))

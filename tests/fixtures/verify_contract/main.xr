@@ -1,3 +1,5 @@
+import { callPrivateWide } from "./helper"
+
 export fn pure(value: int) -> int {
     return value + 1
 }
@@ -8,3 +10,4 @@ export fn allocates(value: int) -> int {
 }
 
 print(pure(41))
+print(callPrivateWide(41 as uint64))

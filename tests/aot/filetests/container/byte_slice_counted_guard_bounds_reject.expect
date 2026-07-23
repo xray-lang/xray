@@ -1,0 +1,2 @@
+regex=span-access [0-9]+ func=byte_slice_counted_guard_bounds_reject value=v[0-9]+ kind=byte_load evidence=recv_agg\+byte_slice\+pod\+endian_const drop=type\+helper
+c_contains=XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG

@@ -104,18 +104,66 @@ static const char *verify_final_component(const char *name) {
     return dot ? dot + 1 : name;
 }
 
+static XaScope *verify_file_scope(XaAnalyzer *analyzer, const char *source_path) {
+    if (!analyzer || !source_path)
+        return NULL;
+    for (XaFileEntry *entry = analyzer->files; entry; entry = entry->next)
+        if (entry->path && strcmp(entry->path, source_path) == 0)
+            return entry->file_scope;
+    return NULL;
+}
+
 static XaSymbol *verify_find_symbol(XrModuleGraph *graph, XaAnalyzer *analyzer,
                                     const char *subject) {
-    XaSymbol *short_match = NULL;
     if (!graph || !subject)
         return NULL;
+
+    /* An unqualified contract subject names a declaration, not an arbitrary
+     * re-export key. Resolve package declarations first so unrelated facade
+     * aliases with the same final component cannot make a unique private hot
+     * path appear ambiguous. Duplicate declarations still fail closed. */
+    if (!strchr(subject, '.')) {
+        XaSymbol *declared_match = NULL;
+        for (int mi = 0; mi < graph->spec_count; mi++) {
+            AstNode *root = graph->specs[mi].ast;
+            if (!root || root->type != AST_PROGRAM)
+                continue;
+            for (int si = 0; si < root->as.program.count; si++) {
+                AstNode *decl = root->as.program.statements[si];
+                if (!decl || decl->type != AST_FUNCTION_DECL || !decl->as.function_decl.name ||
+                    strcmp(decl->as.function_decl.name, subject) != 0)
+                    continue;
+                XaScope *file_scope = verify_file_scope(analyzer, graph->specs[mi].source_path);
+                XaSymbol *candidate = xa_scope_lookup_local(file_scope, subject);
+                if (!candidate || (declared_match && declared_match != candidate))
+                    return NULL;
+                declared_match = candidate;
+            }
+        }
+        if (declared_match)
+            return declared_match;
+    }
+
+    XaSymbol *exact_match = NULL;
     for (int i = 0; i < graph->spec_count; i++) {
         XrHashMap *exports = graph->specs[i].export_symbols;
         if (!exports)
             continue;
         XaSymbol *exact = (XaSymbol *) xr_hashmap_get(exports, subject);
-        if (exact)
-            return exact;
+        if (exact) {
+            if (exact_match && exact_match != exact)
+                return NULL;
+            exact_match = exact;
+        }
+    }
+    if (exact_match)
+        return exact_match;
+
+    XaSymbol *short_match = NULL;
+    for (int i = 0; i < graph->spec_count; i++) {
+        XrHashMap *exports = graph->specs[i].export_symbols;
+        if (!exports)
+            continue;
         for (uint32_t slot = 0; slot < exports->capacity; slot++) {
             XrHashMapEntry *entry = &exports->entries[slot];
             if (!entry->key || entry->value == XR_HASHMAP_TOMBSTONE)
@@ -129,26 +177,7 @@ static XaSymbol *verify_find_symbol(XrModuleGraph *graph, XaAnalyzer *analyzer,
     }
     if (short_match)
         return short_match;
-    XaSymbol *declared_match = NULL;
     const char *final_name = verify_final_component(subject);
-    for (int mi = 0; graph && mi < graph->spec_count; mi++) {
-        AstNode *root = graph->specs[mi].ast;
-        if (!root || root->type != AST_PROGRAM)
-            continue;
-        for (int si = 0; si < root->as.program.count; si++) {
-            AstNode *decl = root->as.program.statements[si];
-            if (!decl || decl->type != AST_FUNCTION_DECL || !decl->as.function_decl.name ||
-                strcmp(decl->as.function_decl.name, final_name) != 0)
-                continue;
-            XaSymbol *candidate = xa_scope_lookup_by_id(analyzer ? analyzer->global_scope : NULL,
-                                                        decl->as.function_decl.symbol_id);
-            if (!candidate || (declared_match && declared_match != candidate))
-                return NULL;
-            declared_match = candidate;
-        }
-    }
-    if (declared_match)
-        return declared_match;
     /* Package contracts also govern private hot paths. They are deliberately
      * not forced into the language's export surface merely to become
      * verifiable. Qualified cross-module names still resolve through the
@@ -458,6 +487,7 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
     }
     int failures = 0;
     for (int i = 0; i < xtoml_array_len(functions); i++) {
+        int item_failures = failures;
         XrTomlValue *item = xtoml_array_get(functions, i);
         const char *symbol_name = xtoml_get_string(item, "symbol");
         const char *scope = xtoml_get_string(item, "scope");
@@ -489,7 +519,7 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
         if (strcmp(scope, "backend") == 0 &&
             !verify_backend_contract(&state, item, symbol_name, requires))
             failures++;
-        if (failures == 0)
+        if (failures == item_failures)
             printf("verified symbol-id=%u symbol=%s scope=%s\n", symbol->id, symbol_name, scope);
     }
     verify_analysis_clear(&state);

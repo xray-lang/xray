@@ -1,0 +1,13 @@
+fn byte_slice_counted_guard_bounds_reject(bytes: Slice<byte>) -> uint32 {
+    var offset = 0
+    var total: uint32 = 0
+    while (offset <= len(bytes) - 16) {
+        // offset+13 plus a four-byte load extends one byte beyond the guard.
+        total += bytes.load<uint32>(offset + 13, Endian.LE)
+        offset += 16
+    }
+    return total
+}
+
+var rejectedBytes = Array<byte>(32, 0)
+print(byte_slice_counted_guard_bounds_reject(rejectedBytes[:]))

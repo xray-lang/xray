@@ -40,7 +40,11 @@ Status: re-frozen by task 237.
    summaries after ordinary analysis and optimization; a contract can reject a
    build but cannot change inference, storage, optimization, ABI, or generated
    code. Semantic requirements are checked dimension by dimension: an unrelated
-   unknown effect cannot erase a proven allocation/suspend/throw fact.
+   unknown effect cannot erase a proven allocation/suspend/throw fact. Contract
+   subjects resolve deterministically: qualified names use exact exports;
+   unqualified names first identify a unique package declaration in its file
+   scope, including private hot paths, and ambiguity fails closed. Each passing
+   item is reported independently even when an earlier item failed.
 9. Changing product membership, root substitution, completeness handling,
    resource-failure behavior, subtype direction, or assertion equivalence is a
    contract change.
@@ -62,8 +66,8 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c da3689ac8d93cc8696
 anchor-sha256: src/runtime/value/xtype.h 021d8fbf254a44aa8ba8776f4054314303043d04e51dddbeef0146b5de7a4685
 anchor-sha256: src/ir/xi.h 5a821575558dd97fe8a3dc474fc2567c4d2a93cda9d757377cef92b11e304f7a
 anchor-sha256: src/ir/xi_lower.c 85f777ba16d19ee4d8d84d8034104c2594bbcae30f421bc090d7cc503d87e49c
-anchor-sha256: src/app/cli/xcmd_verify.c d8e373d7b1d8023015b4afe6b1260b0f880c76e6759679f6376f20ad74a1effa
-anchor-sha256: tests/cli/run_verify_contract_tests.sh f9c80d60d50dac65eaa2b593de586b56078b907dc0a1e48ef61ce389ae21e3d1
+anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
+anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3
 anchor-sha256: tests/unit/analyzer/test_analyzer.c b8e9aba9a7e9b0962f44d0f23efa9d023c0950601394a615ac576ca0fdeff7cc
 anchor-sha256: tests/unit/analyzer/test_effect_db.c d444b5476930dcda7f57fc331faea237abecba18021ea28091c032cde3d4d865
 anchor-sha256: tests/unit/ir/test_xi_lower.c ee11c1c61f6c47ceb941e6300fa56d0b16a01e08d3865c7c003e054957bba285

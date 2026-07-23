@@ -11531,16 +11531,21 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     int64_t endian = XR_ENDIAN_NATIVE;
     if (le_unchecked_helper && xicgen_value_is_const_endian(v->args[2], &endian) &&
         endian == XR_ENDIAN_LE) {
+        bool drop_bounds =
+            cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_BOUNDS);
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out,
-                "; if (XR_UNLIKELY(!_s.data || _off < 0 || _s.length < INT64_C(%" PRId64 ") || "
-                "_off > _s.length - INT64_C(%" PRId64 "))) "
-                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); %s _v = (%s)%s(_s, _off); "
-                "(int64_t)_v; })",
-                byte_width, byte_width, bounds_message_expr, ctype, ctype, le_unchecked_helper);
+        if (!drop_bounds) {
+            fprintf(out,
+                    "; if (XR_UNLIKELY(!_s.data || _off < 0 || _s.length < INT64_C(%" PRId64
+                    ") || _off > _s.length - INT64_C(%" PRId64 "))) "
+                    "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s)",
+                    byte_width, byte_width, bounds_message_expr);
+        }
+        fprintf(out, "; %s _v = (%s)%s(_s, _off); (int64_t)_v; })", ctype, ctype,
+                le_unchecked_helper);
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }

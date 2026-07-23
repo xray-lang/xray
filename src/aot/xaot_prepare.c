@@ -1614,7 +1614,11 @@ static bool prepare_array_phi_arg_nonnegative(const XiValue *phi, const XiValue 
 static bool prepare_array_value_known_nonnegative(const XiValue *value, const XiValue *root,
                                                   uint8_t depth) {
     value = unwrap_identity_value(value);
-    if (!value || depth > 8)
+    /* Sequential strip/tail loops legitimately form a chain of non-negative
+     * induction phis (for example 32-byte, 8-byte, 4-byte, then byte tails).
+     * The root checks below still reject cycles; this limit is only a bounded
+     * walk guard and must not truncate those ordinary SSA chains. */
+    if (!value || depth > 32)
         return false;
     if (value == root && depth > 0)
         return false;
@@ -1741,6 +1745,126 @@ static bool prepare_array_block_has_no_side_effect_before(const XiBlock *blk,
             return true;
         if (value->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
             return false;
+    }
+    return false;
+}
+
+typedef struct PrepareAffineOffset {
+    const XiValue *base;
+    int64_t constant;
+} PrepareAffineOffset;
+
+static bool prepare_affine_add_constant(int64_t lhs, int64_t rhs, int64_t *out) {
+    if (!out || (rhs > 0 && lhs > INT64_MAX - rhs) || (rhs < 0 && lhs < INT64_MIN - rhs))
+        return false;
+    *out = lhs + rhs;
+    return true;
+}
+
+/* Decompose only the narrow affine forms emitted for Slice offsets and their
+ * guards. The dynamic base remains an exact SSA identity; this never widens a
+ * relational fact into an interval assumption. */
+static bool prepare_affine_offset(const XiValue *value, PrepareAffineOffset *out, uint8_t depth) {
+    const XiValue *current = unwrap_identity_value(value);
+    if (!current || !out || depth > 8)
+        return false;
+    if (current->op == XI_CONST && current->type && current->type->kind == XR_KIND_INT) {
+        out->base = NULL;
+        out->constant = current->aux_int;
+        return true;
+    }
+    if ((current->op == XI_ADD || current->op == XI_SUB) && current->nargs >= 2) {
+        PrepareAffineOffset lhs;
+        PrepareAffineOffset rhs;
+        if (prepare_affine_offset(current->args[0], &lhs, (uint8_t) (depth + 1)) &&
+            prepare_affine_offset(current->args[1], &rhs, (uint8_t) (depth + 1))) {
+            int64_t rhs_constant = rhs.constant;
+            if (current->op == XI_SUB) {
+                if (rhs.base || rhs_constant == INT64_MIN)
+                    goto non_affine;
+                rhs_constant = -rhs_constant;
+            }
+            if (lhs.base && rhs.base)
+                goto non_affine;
+            out->base = lhs.base ? lhs.base : rhs.base;
+            return prepare_affine_add_constant(lhs.constant, rhs_constant, &out->constant);
+        }
+    }
+
+non_affine:
+    out->base = current;
+    out->constant = 0;
+    return true;
+}
+
+static int64_t prepare_byte_access_width(const XiValue *value) {
+    if (!value)
+        return 0;
+    switch ((XiOp) value->op) {
+        case XI_BYTE_SLICE_LOAD_U16:
+        case XI_BYTE_SLICE_STORE_U16:
+            return 2;
+        case XI_BYTE_SLICE_LOAD_U32:
+        case XI_BYTE_SLICE_LOAD_F32:
+        case XI_BYTE_SLICE_STORE_U32:
+        case XI_BYTE_SLICE_STORE_F32:
+            return 4;
+        case XI_BYTE_SLICE_LOAD_U64:
+        case XI_BYTE_SLICE_LOAD_F64:
+        case XI_BYTE_SLICE_STORE_U64:
+        case XI_BYTE_SLICE_STORE_F64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+/* Prove a fixed-width byte access from a dominating relational guard:
+ *
+ *     while (i <= len(bytes) - stripe) {
+ *         bytes.load<T>(i + lane, ...)
+ *     }
+ *
+ * The same Slice receiver, the same affine loop base, non-negativity and
+ * lane+sizeof(T)<=stripe are all required. This removes only a redundant
+ * local bounds branch; malformed inputs still fail at the checked boundary. */
+static bool prepare_span_byte_guard_bounds_proven(const XaotBundle *bundle, const XiFunc *func,
+                                                  const XiValue *value) {
+    int64_t width = prepare_byte_access_width(value);
+    if (!bundle || !func || !value || width == 0 || value->nargs < 2 || !value->block)
+        return false;
+    const XiValue *receiver = unwrap_identity_value(value->args[0]);
+    const XiValue *offset = unwrap_identity_value(value->args[1]);
+    PrepareAffineOffset access;
+    if (!receiver || !offset || !prepare_array_value_known_nonnegative(offset, NULL, 0) ||
+        !prepare_affine_offset(offset, &access, 0) || !access.base)
+        return false;
+
+    xi_ensure_dominators((XiFunc *) func);
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *guard = func->blocks[bi];
+        if (!guard || guard->kind != XI_BLOCK_IF || !guard->succs[0] ||
+            !(guard->succs[0] == value->block || xi_dominates(guard->succs[0], value->block)))
+            continue;
+        const XiValue *condition = unwrap_identity_value(guard->control);
+        if (!condition || (condition->op != XI_LE && condition->op != XI_LT) ||
+            condition->nargs < 2)
+            continue;
+        PrepareAffineOffset lhs;
+        PrepareAffineOffset rhs;
+        if (!prepare_affine_offset(condition->args[0], &lhs, 0) ||
+            !prepare_affine_offset(condition->args[1], &rhs, 0) || !lhs.base || !rhs.base ||
+            !same_value(lhs.base, access.base) ||
+            !prepare_array_length_value_matches(bundle, func, rhs.base, receiver))
+            continue;
+        int64_t required = 0;
+        if (!prepare_affine_add_constant(access.constant, width, &required) ||
+            !prepare_affine_add_constant(required, rhs.constant, &required) ||
+            !prepare_affine_add_constant(required, -lhs.constant, &required))
+            continue;
+        /* lhs < rhs grants one additional integer unit compared with <=. */
+        if (required <= (condition->op == XI_LT ? 1 : 0))
+            return true;
     }
     return false;
 }
@@ -2426,6 +2550,10 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             if (prepare_value_is_const_endian(value->nargs >= 3 ? value->args[2] : NULL, &endian)) {
                 (void) endian;
                 evidence |= XAOT_SLICE_EV_ENDIAN_CONST;
+            }
+            if (prepare_span_byte_guard_bounds_proven(bundle, func, value)) {
+                evidence |= XAOT_SLICE_EV_RANGE_PROVEN | XAOT_SLICE_EV_NO_CLOBBER;
+                drop |= XAOT_SLICE_DROP_BOUNDS;
             }
             drop |= XAOT_SLICE_DROP_TYPE | XAOT_SLICE_DROP_HELPER;
             break;

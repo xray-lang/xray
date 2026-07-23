@@ -1,0 +1,4 @@
+regex=span-access [0-9]+ func=byte_slice_counted_guard_bounds value=v[0-9]+ kind=byte_load evidence=recv_agg\+byte_slice\+pod\+range\+endian_const\+no_clobber drop=bounds\+type\+helper
+regex=span-access [0-9]+ func=byte_slice_chained_tail_bounds value=v[0-9]+ kind=index_get evidence=recv_agg\+byte_slice\+pod\+range\+no_clobber drop=bounds
+c_contains=xrt_byte_slice_load_u32_le_unchecked_raw
+c_not_contains=XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG

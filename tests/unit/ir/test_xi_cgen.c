@@ -1552,11 +1552,12 @@ TEST(cgen_plain_function_does_not_emit_public_c_abi_wrapper) {
 }
 
 TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
-    const char *lib_src = "fn helper(x: int) -> int {\n"
+    const char *lib_src = "var bias: [int; 1] = [1]\n"
+                          "fn helper(x: int) -> int {\n"
                           "    return x + 1\n"
                           "}\n"
                           "export fn public(x: int) -> int {\n"
-                          "    return helper(x) + 1\n"
+                          "    return helper(x) + bias[0]\n"
                           "}\n"
                           "public(0)\n";
     const char *app_src = "print(0)\n";
@@ -1594,9 +1595,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     assert((contains(buf, "\nstatic XR_AINLINE int64_t lib_helper_") ||
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
-    assert((contains(buf, "\nint64_t lib_public_exp(") ||
-            contains(buf, "\nXRT_FN_CONST int64_t lib_public_exp(")) &&
-           "exported function should keep external stable C linkage");
+    assert((contains(buf, "\nXR_FORCEINLINE int64_t lib_public_exp(") ||
+            contains(buf, "\nXR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
+           "small exported function should keep external stable C linkage while exposing "
+           "its cross-module inline contract");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
            "exported function must not become file-static");
