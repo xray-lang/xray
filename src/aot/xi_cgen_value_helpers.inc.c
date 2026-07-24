@@ -797,6 +797,10 @@ static void emit_one_enum_native_typedef(XiCgenCtx *ctx, FILE *out, const XaotEn
     if (plan->type_arg_count == 0 && ed && ed->type_param_count > 0)
         return;
     const XiEnumMemberData *members = plan->members ? plan->members : (ed ? ed->members : NULL);
+    /* `--c-only` concatenates module units into one translation unit.  An
+     * imported compact enum is emitted in each unit that needs its native ABI,
+     * so guard the typedef and converters just like native struct typedefs. */
+    fprintf(out, "#ifndef XRT_TYPEDEF_%s\n#define XRT_TYPEDEF_%s 1\n", plan->c_type, plan->c_type);
     fprintf(out, "typedef struct %s { int64_t tag; union { ", plan->c_type);
     for (uint32_t mi = 0; ed && mi < ed->member_count; mi++) {
         const XiEnumMemberData *member = members ? &members[mi] : NULL;
@@ -856,6 +860,7 @@ static void emit_one_enum_native_typedef(XiCgenCtx *ctx, FILE *out, const XaotEn
     }
     fprintf(out,
             "default: out.member_name = NULL; out.payload_count = 0; break; } return out; }\n");
+    fprintf(out, "#endif\n");
 }
 
 static bool cg_enum_plan_rep_matches(XaotValueRep rep, const XaotEnumPlan *plan) {
