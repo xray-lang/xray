@@ -311,6 +311,13 @@ static XaAllocationContractKind alloc_builtin_method_contract(const XrType *rece
                                                               const char *method, bool is_static) {
     if (!receiver || !method)
         return XA_ALLOCATION_CONTRACT_MISSING;
+    XaBuiltinMethodAllocation pointer_allocation;
+    if (!is_static && receiver->kind == XR_KIND_POINTER &&
+        xa_builtin_pointer_allocation(method, &pointer_allocation)) {
+        return pointer_allocation == XA_BUILTIN_ALLOCATION_MAY_HEAP
+                   ? XA_ALLOCATION_CONTRACT_MAY_HEAP
+                   : XA_ALLOCATION_CONTRACT_NO_HEAP;
+    }
     XaAllocationContractKind contract =
         xa_builtin_get_type_member_allocation_contract((XrType *) receiver, method, is_static);
     if (contract != XA_ALLOCATION_CONTRACT_MISSING)

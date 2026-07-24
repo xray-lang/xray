@@ -86,16 +86,17 @@ typedef enum XaBuiltinMethodMemoryEffect {
 
 typedef uint32_t XaBuiltinMethodMemoryEffectSet;
 
-typedef struct XaBuiltinPointerMemorySpec {
+typedef struct XaBuiltinPointerMethodSpec {
     const char *method_name;
     XaBuiltinMethodMemoryEffectSet effects;
-} XaBuiltinPointerMemorySpec;
+    XaBuiltinMethodAllocation allocation;
+} XaBuiltinPointerMethodSpec;
 
-static const XaBuiltinPointerMemorySpec xa_builtin_pointer_memory_specs[] = {
-    {"deref", XA_BUILTIN_MEMORY_STABLE_READ},
-    {"offset", XA_BUILTIN_MEMORY_STABLE_READ},
-    {"isNull", XA_BUILTIN_MEMORY_STABLE_READ},
-    {"copyFromNonOverlapping", XA_BUILTIN_MEMORY_WRITE},
+static const XaBuiltinPointerMethodSpec xa_builtin_pointer_method_specs[] = {
+    {"deref", XA_BUILTIN_MEMORY_STABLE_READ, XA_BUILTIN_ALLOCATION_NO_HEAP},
+    {"offset", XA_BUILTIN_MEMORY_STABLE_READ, XA_BUILTIN_ALLOCATION_NO_HEAP},
+    {"isNull", XA_BUILTIN_MEMORY_STABLE_READ, XA_BUILTIN_ALLOCATION_NO_HEAP},
+    {"copyFromNonOverlapping", XA_BUILTIN_MEMORY_WRITE, XA_BUILTIN_ALLOCATION_NO_HEAP},
 };
 
 static inline bool xa_builtin_pointer_memory_effect(const char *method_name,
@@ -103,12 +104,29 @@ static inline bool xa_builtin_pointer_memory_effect(const char *method_name,
     if (!method_name)
         return false;
     for (size_t i = 0;
-         i < sizeof(xa_builtin_pointer_memory_specs) / sizeof(xa_builtin_pointer_memory_specs[0]);
+         i < sizeof(xa_builtin_pointer_method_specs) / sizeof(xa_builtin_pointer_method_specs[0]);
          i++) {
-        const XaBuiltinPointerMemorySpec *spec = &xa_builtin_pointer_memory_specs[i];
+        const XaBuiltinPointerMethodSpec *spec = &xa_builtin_pointer_method_specs[i];
         if (strcmp(spec->method_name, method_name) == 0) {
             if (out_effects)
                 *out_effects = spec->effects;
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline bool xa_builtin_pointer_allocation(const char *method_name,
+                                                 XaBuiltinMethodAllocation *out_allocation) {
+    if (!method_name)
+        return false;
+    for (size_t i = 0;
+         i < sizeof(xa_builtin_pointer_method_specs) / sizeof(xa_builtin_pointer_method_specs[0]);
+         i++) {
+        const XaBuiltinPointerMethodSpec *spec = &xa_builtin_pointer_method_specs[i];
+        if (strcmp(spec->method_name, method_name) == 0) {
+            if (out_allocation)
+                *out_allocation = spec->allocation;
             return true;
         }
     }
