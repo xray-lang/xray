@@ -1,0 +1,9 @@
+// Caller-side defaults retain declaration-module bindings even when the
+// referenced constant is intentionally private.
+import { PrivateConstDefault, defaultLimit } from "./_private_const_default"
+import "./_private_const_default" as defaults
+
+print(defaultLimit())
+print(defaultLimit(17))
+print(PrivateConstDefault.scale(4))
+print(defaults.PrivateConstDefault.scale(5))
