@@ -303,7 +303,10 @@ XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int li
 }
 
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_AGG_NEW && !xi_var_id_is_valid(v->var_id);
+    if (!v || xi_var_id_is_valid(v->var_id))
+        return false;
+    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
+           (v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE);
 }
 
 static void stmt_mark_value_clone_copy(XiValue *v) {

@@ -8,4 +8,5 @@ c_not_contains=xrt_fixed_index_oob(_idx, 4)
 c_not_contains=xrt_index_get(
 c_not_contains=xrt_index_set(
 c_not_contains=((xrt_array_t*)
+c_not_contains=xrt_value_clone_for_coro(v
 c_contains=((uint8_t*)
