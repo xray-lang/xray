@@ -2515,6 +2515,12 @@ static const XaotBulkPlan *cg_required_bulk_plan(XiCgenCtx *ctx, const XiFunc *f
     return plan;
 }
 
+/* The native-class effect walk is defined before the general dispatch helpers,
+ * but it must consume the same verified low-level lowering contracts when
+ * deciding whether a direct method can publish through xrt_pending_error. */
+static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current,
+                                           const XiValue *value, uint8_t depth);
+
 #include "xi_cgen_class_native_helpers.inc.c"
 
 #include "xi_cgen_array_helpers.inc.c"

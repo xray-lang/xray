@@ -807,7 +807,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
-        if (cg_div_mod_is_trusted_nothrow(f, v)) {
+        if (cg_div_mod_is_trusted_nothrow(ctx, f, v)) {
             fprintf(out, "(int64_t)((uint64_t)(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
             fprintf(out, ") %s (uint64_t)(", v->op == XI_DIV ? "/" : "%");
@@ -824,6 +824,14 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         return;
     }
+
+    /* Imported/local module constants can remain represented as tagged shared
+     * slots even though the bundle carries their exact integer literal.  Fold
+     * a nonzero divisor here before the generic tagged arithmetic path so a
+     * source-level `const` divisor lowers to native C division and cannot
+     * publish a pending divide-by-zero error. */
+    if (emit_native_const_div_mod_expr(ctx, out, f, v))
+        return;
 
     bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
     if (result_rep == XR_REP_TAGGED || any_tagged) {
@@ -872,7 +880,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_I64) {
-        if (!emit_native_unsigned_div_mod_expr(out, v) && !emit_native_const_div_mod_expr(out, v) &&
+        if (!emit_native_unsigned_div_mod_expr(out, v) &&
             !emit_native_positive_divisor_div_mod_expr(out, f, v)) {
             const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);
@@ -7623,7 +7631,8 @@ static CgAtomicI64DirectOp xicgen_atomic_i64_direct_op(const XiValue *v, XaIntri
 
 static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth);
 
-static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue *value) {
+static bool xicgen_value_is_nothrow_native_scalar(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
@@ -7644,7 +7653,7 @@ static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue
     if (op == XI_BNOT || op == XI_NEG)
         return v->nargs >= 1 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64;
     if (op == XI_DIV || op == XI_MOD)
-        return cg_div_mod_is_trusted_nothrow(f, v);
+        return cg_div_mod_is_trusted_nothrow(ctx, f, v);
     return false;
 }
 
@@ -7808,7 +7817,7 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return true;
     if (xicgen_span_access_plan_uses_direct_trap(ctx, v))
         return true;
-    if (xicgen_value_is_nothrow_native_scalar(current, v))
+    if (xicgen_value_is_nothrow_native_scalar(ctx, current, v))
         return true;
     if (xicgen_span_slice_is_nothrow(ctx, v))
         return true;
@@ -14330,7 +14339,7 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (value->op == XI_INDEX_SET && cg_array_index_access_bounds_proven(ctx, body, value))
                 continue;
-            if (cg_div_mod_is_trusted_nothrow(body, value))
+            if (cg_div_mod_is_trusted_nothrow(ctx, body, value))
                 continue;
             if (cg_byte_slice_load_trusted_nothrow(ctx, body, value))
                 continue;

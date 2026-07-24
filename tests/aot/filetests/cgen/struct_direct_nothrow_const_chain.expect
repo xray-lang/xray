@@ -1,0 +1,5 @@
+contains=method-dispatch
+c_contains=/ INT64_C(8)
+c_not_contains=xrt_div(
+c_count=2:xrt_has_pending_error()
+c_syntax=pass

@@ -5561,9 +5561,16 @@ static bool emit_class_shared_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, 
 
 static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth);
 
+/* Count one unit per callee edge.  The function walker and call resolver are
+ * mutually recursive, so incrementing in both would halve this fail-closed
+ * budget and reject ordinary helper chains after only four calls. */
+enum {
+    CG_CLASS_NATIVE_EFFECT_DEPTH_MAX = 8
+};
+
 static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call, uint8_t depth) {
-    if (!ctx || !current || !call || depth > 8)
+    if (!ctx || !current || !call || depth > CG_CLASS_NATIVE_EFFECT_DEPTH_MAX)
         return false;
     if (cg_class_native_map_method_call_is_direct(ctx, current, call))
         return true;
@@ -5589,11 +5596,30 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
-        !cg_class_func_uses_native_receiver(ctx, mfunc) ||
-        cg_class_native_func_has_error_flow(ctx, mfunc, (uint8_t) (depth + 1)))
+    const XaotMethodDispatchPlan *dispatch_plan =
+        xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), call);
+    const XiFunc *effect_target = mfunc;
+    if (dispatch_plan) {
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+        if (dispatch_plan->kind != XAOT_DISPATCH_DIRECT ||
+            !xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue))
+            return false;
+        const XaotDispatchTargetCase *target =
+            &bundle->dispatch_target_cases[dispatch_plan->target_start - 1];
+        effect_target = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+    }
+    if (!effect_target || cg_func_needs_aot_coro_ctx(ctx, effect_target) ||
+        cg_class_native_func_has_error_flow(ctx, effect_target, (uint8_t) (depth + 1)))
         return false;
-    CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
+    /* Struct methods and other statically resolved methods use the same direct
+     * call emitter as native-class methods, but they intentionally have no
+     * XaotClassNativeFunc receiver metadata.  Once dispatch is proven absent,
+     * their callee effect is sufficient; the class-only receiver-origin checks
+     * below do not apply to their typed parameter ABI. */
+    if (!cg_class_func_uses_native_receiver(ctx, effect_target))
+        return true;
+    CgClassNativeFunc target_info = cg_class_native_func(ctx, effect_target);
     const XiClassData *source_info = cg_class_native_instance_data(ctx, current, call->args[0]);
     return cg_class_native_instance_origin(ctx, current, call->args[0]) &&
            cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data);
@@ -5604,14 +5630,14 @@ static bool cg_class_native_call_is_nothrow_direct(XiCgenCtx *ctx, const XiFunc 
     return cg_class_native_call_is_nothrow_direct_depth(ctx, current, call, 0);
 }
 
-static bool cg_class_native_value_is_nothrow_lowlevel(const XiValue *value) {
+static bool cg_class_native_value_is_nothrow_lowlevel(XiCgenCtx *ctx, const XiFunc *current,
+                                                      const XiValue *value, uint8_t depth) {
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
-    switch (v->op) {
-        default:
-            return false;
-    }
+    if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT)
+        return false;
+    return xicgen_value_is_proven_nothrow(ctx, current, v, depth);
 }
 
 static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *current,
@@ -5619,7 +5645,7 @@ static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *curr
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     const XiValue *source = cg_class_native_prev_error_source_value(check);
-    return cg_class_native_value_is_nothrow_lowlevel(source) ||
+    return cg_class_native_value_is_nothrow_lowlevel(ctx, current, source, 0) ||
            cg_class_native_call_is_nothrow_direct(ctx, current, source);
 }
 
@@ -5648,7 +5674,7 @@ static bool cg_class_native_value_is_nothrow_native_scalar(const XiValue *v) {
 }
 
 static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth) {
-    if (!ctx || !f || depth > 8)
+    if (!ctx || !f || depth > CG_CLASS_NATIVE_EFFECT_DEPTH_MAX)
         return true;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -5666,11 +5692,11 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
             if (v->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
             if (v->flags & XI_FLAG_MAY_THROW) {
-                if (cg_class_native_value_is_nothrow_lowlevel(v))
+                if (cg_class_native_value_is_nothrow_lowlevel(ctx, f, v, (uint8_t) (depth + 1)))
                     continue;
                 if (cg_class_native_value_is_nothrow_native_scalar(v))
                     continue;
-                if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, (uint8_t) (depth + 1)))
+                if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, depth))
                     return true;
             }
         }

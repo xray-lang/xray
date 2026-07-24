@@ -23,13 +23,42 @@ static bool cg_const_int_value(const XiValue *value, int64_t *out) {
     return true;
 }
 
-static bool emit_native_const_div_mod_expr(FILE *out, const XiValue *v) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64)
+static bool cg_const_int_value_in_func(XiCgenCtx *ctx, const XiFunc *f, const XiValue *value,
+                                       int64_t *out) {
+    if (cg_const_int_value(value, out))
+        return true;
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!ctx || !f || !v || v->op != XI_GET_SHARED || v->aux_int < 0 || v->aux_int > UINT16_MAX ||
+        !out)
+        return false;
+    uint16_t slot = (uint16_t) v->aux_int;
+    for (const XiFunc *cur = f; cur; cur = cur->parent_func) {
+        if (!cur->shared_const_literals || slot >= cur->shared_const_literal_count ||
+            !cur->slot_owned_consts || slot >= cur->nshared || !cur->slot_owned_consts[slot])
+            continue;
+        const XiConstLiteral *lit = &cur->shared_const_literals[slot];
+        if (lit->kind == XI_CONST_LITERAL_INT) {
+            *out = lit->int_value;
+            return true;
+        }
+    }
+    const XiModule *module = cg_module_for_func(ctx, f);
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    if (!lit || lit->kind == XI_CONST_LITERAL_NONE)
+        lit = cg_import_slot_const_literal(ctx, f, slot, NULL, NULL);
+    if (!lit || lit->kind != XI_CONST_LITERAL_INT)
+        return false;
+    *out = lit->int_value;
+    return true;
+}
+
+static bool emit_native_const_div_mod_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64)
         return false;
 
     int64_t divisor = 0;
-    if (!cg_const_int_value(v->args[1], &divisor) || divisor == 0)
+    if (!cg_const_int_value_in_func(ctx, f, v->args[1], &divisor) || divisor == 0)
         return false;
 
     if (v->op == XI_DIV) {
@@ -109,14 +138,17 @@ static bool emit_native_unsigned_div_mod_expr(FILE *out, const XiValue *v) {
     return true;
 }
 
-static bool cg_div_mod_is_trusted_nothrow(const XiFunc *f, const XiValue *v) {
+static bool cg_div_mod_is_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+        cg_rep(v->args[0]) != XR_REP_I64)
         return false;
 
     int64_t divisor = 0;
-    if (cg_const_int_value(v->args[1], &divisor))
+    if (cg_const_int_value_in_func(ctx, f, v->args[1], &divisor))
         return divisor != 0;
+
+    if (cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
 
     return xi_value_known_positive_at(f, v->args[1], v->block);
 }
