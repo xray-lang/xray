@@ -1,0 +1,7 @@
+contains=name=bridgeValueState
+regex=value v[0-9]+ op=PTR_LOAD kind=aggregate rep=tagged c_type=xrt_struct_abi_[A-Za-z0-9_]+
+regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
+c_regex=xrt_struct_abi_[A-Za-z0-9_]+ v[0-9]+ = \(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\);
+c_regex=\(void\)\(\(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\) = v[0-9]+\);
+c_not_contains=xr_raw_load_ptr_unaligned(
+c_not_contains=xr_raw_store_ptr_unaligned(

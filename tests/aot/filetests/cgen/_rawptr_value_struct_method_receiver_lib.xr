@@ -1,0 +1,18 @@
+export struct State {
+    private value: u64
+    private tail: [byte; 4]
+
+    reset(value: u64) {
+        this.value = value
+        this.tail = [1, 2, 3, 4]
+    }
+
+    copyFrom(other: State) {
+        this.value = other.value
+        this.tail = other.tail
+    }
+
+    digest() -> u64 {
+        return this.value + this.tail[0] + this.tail[3]
+    }
+}

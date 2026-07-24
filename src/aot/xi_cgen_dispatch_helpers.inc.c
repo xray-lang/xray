@@ -13115,6 +13115,13 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_codegen_abort_expr(out);
         return;
     }
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    if (value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE && value_plan->rep.c_type) {
+        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "))");
+        return;
+    }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
     int64_t endian = XR_ENDIAN_NATIVE;
@@ -13158,6 +13165,16 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     if (!v || v->nargs != 3 || !v->args[0] || !v->args[1] || !v->args[2]) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    const XiValue *stored_value = cg_unwrap_identity_value(v->args[1]);
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, stored_value);
+    if (stored_value && value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
+        value_plan->rep.c_type) {
+        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")) = ");
+        emit_vref(out, stored_value);
         return;
     }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
