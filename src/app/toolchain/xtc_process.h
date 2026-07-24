@@ -45,6 +45,8 @@ XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
                                    uint32_t timeout_ms);
 XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, char *err,
                              size_t err_size);
+XR_FUNC void xtc_process_redact_output(const char *input, size_t input_size, char *output,
+                                       size_t output_size);
 XR_FUNC void xtc_process_result_free(XrProcessResult *result);
 
 #endif /* XTC_PROCESS_H */

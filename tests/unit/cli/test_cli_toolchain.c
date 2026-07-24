@@ -424,6 +424,19 @@ TEST(process_timeout_is_bounded) {
 #endif
 }
 
+TEST(process_diagnostic_redacts_secret_environment_values) {
+#ifndef _WIN32
+    const char *secret = "xray-super-secret-value";
+    char output[128];
+    ASSERT_EQ_INT(setenv("XRAY_TEST_SECRET_TOKEN", secret, 1), 0);
+    const char *input = "compiler failed: token=xray-super-secret-value";
+    xtc_process_redact_output(input, strlen(input), output, sizeof(output));
+    ASSERT_TRUE(strstr(output, secret) == NULL);
+    ASSERT_TRUE(strstr(output, "token=<redacted>") != NULL);
+    unsetenv("XRAY_TEST_SECRET_TOKEN");
+#endif
+}
+
 TEST(probe_json_schema_v1_is_valid_and_escaped) {
     XrToolchainProbeOptions options = {0};
     XrToolchainProbeResult result = {0};
@@ -560,6 +573,7 @@ RUN_TEST(config_corruption_is_preserved);
 RUN_TEST_SUITE("Toolchain process runner");
 RUN_TEST(process_capture_and_output_limit);
 RUN_TEST(process_timeout_is_bounded);
+RUN_TEST(process_diagnostic_redacts_secret_environment_values);
 
 RUN_TEST_SUITE("Toolchain JSON");
 RUN_TEST(probe_json_schema_v1_is_valid_and_escaped);

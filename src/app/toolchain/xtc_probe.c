@@ -211,8 +211,7 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
         if (len > detail_size - 1)
             len = detail_size - 1;
         if (len > 0) {
-            memcpy(detail, output, len);
-            detail[len] = '\0';
+            xtc_process_redact_output(output, len, detail, detail_size);
         } else {
             snprintf(detail, detail_size, "process exited with status %d", process->exit_code);
         }

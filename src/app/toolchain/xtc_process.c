@@ -14,9 +14,17 @@
 #include "../../os/os_proc.h"
 #include "../../os/os_time.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef XR_OS_WINDOWS
+#define xtc_environ _environ
+#else
+extern char **environ;
+#define xtc_environ environ
+#endif
 
 typedef struct XtcCapture {
     char *data;
@@ -30,6 +38,74 @@ typedef struct XtcCapture {
 static void xtc_process_error(char *err, size_t err_size, const char *message) {
     if (err && err_size > 0)
         snprintf(err, err_size, "%s", message);
+}
+
+static bool xtc_env_key_contains(const char *key, size_t key_size, const char *needle) {
+    size_t needle_size = strlen(needle);
+    if (!key || needle_size == 0 || key_size < needle_size)
+        return false;
+    for (size_t i = 0; i + needle_size <= key_size; i++) {
+        bool match = true;
+        for (size_t j = 0; j < needle_size; j++) {
+            if (toupper((unsigned char) key[i + j]) != toupper((unsigned char) needle[j])) {
+                match = false;
+                break;
+            }
+        }
+        if (match)
+            return true;
+    }
+    return false;
+}
+
+static bool xtc_env_key_is_secret(const char *key, size_t key_size) {
+    static const char *markers[] = {"TOKEN",      "SECRET",      "PASSWORD", "PASSWD",
+                                    "CREDENTIAL", "PRIVATE_KEY", "API_KEY"};
+    for (size_t i = 0; i < sizeof(markers) / sizeof(markers[0]); i++) {
+        if (xtc_env_key_contains(key, key_size, markers[i]))
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC void xtc_process_redact_output(const char *input, size_t input_size, char *output,
+                                       size_t output_size) {
+    static const char replacement[] = "<redacted>";
+    if (!output || output_size == 0)
+        return;
+    output[0] = '\0';
+    if (!input || input_size == 0)
+        return;
+    size_t in_pos = 0;
+    size_t out_pos = 0;
+    while (in_pos < input_size && out_pos + 1 < output_size) {
+        size_t secret_size = 0;
+        for (char **entry = xtc_environ; entry && *entry; entry++) {
+            const char *equals = strchr(*entry, '=');
+            if (!equals || !xtc_env_key_is_secret(*entry, (size_t) (equals - *entry)))
+                continue;
+            const char *value = equals + 1;
+            size_t value_size = strlen(value);
+            // Very short values create excessive false positives in ordinary
+            // compiler diagnostics and are not useful credentials.
+            if (value_size >= 4 && value_size <= input_size - in_pos &&
+                memcmp(input + in_pos, value, value_size) == 0) {
+                secret_size = value_size;
+                break;
+            }
+        }
+        if (secret_size > 0) {
+            size_t count = sizeof(replacement) - 1;
+            if (count > output_size - out_pos - 1)
+                count = output_size - out_pos - 1;
+            memcpy(output + out_pos, replacement, count);
+            out_pos += count;
+            in_pos += secret_size;
+            continue;
+        }
+        output[out_pos++] = input[in_pos++];
+    }
+    output[out_pos] = '\0';
 }
 
 static bool xtc_capture_init(XtcCapture *capture, size_t limit) {
