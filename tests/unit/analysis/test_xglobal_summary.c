@@ -7457,6 +7457,55 @@ TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics)
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls) {
+    setup_parser_session();
+    const char *source = "export fn cwdRaw() -> string { return __cwd() }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    spec.canonical = "io";
+    spec.source_path = "<embedded stdlib>/io/io.xr";
+    spec.kind = XR_MOD_STDLIB;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    const XgBodySummary *body = evidence_find_body_by_name(&ev, "cwdRaw");
+    ASSERT_NOT_NULL(body);
+    ASSERT_EQ_UINT(body->callsite_count, 1);
+    const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, body->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_NATIVE);
+    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("__cwd"));
+    ASSERT_TRUE((body->effect_bits & XG_BODY_MAY_CALL_NATIVE) != 0);
+    ASSERT_TRUE((body->escape_bits & XG_BODY_ESCAPE_NATIVE) != 0);
+    ASSERT_TRUE((body->capability_bits & XG_CAP_NATIVE) != 0);
+
+    uint32_t composed_effects = 0;
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, body, &composed_effects));
+    ASSERT_TRUE((composed_effects & XG_BODY_MAY_CALL_NATIVE) != 0);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_composes_recursive_direct_call_effects) {
     setup_parser_session();
     const char *source = "fn fib(n: int) -> int {\n"
@@ -18240,6 +18289,7 @@ RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics);
+RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);

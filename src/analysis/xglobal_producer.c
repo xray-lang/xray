@@ -2845,6 +2845,26 @@ static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg
     return false;
 }
 
+/* Stdlib script modules can call private native primitives as ordinary identifiers.
+ * Those declarations are injected into the analyzer scope from core.def and therefore
+ * have no AST declaration for the closed-world producer to register.  Preserve their
+ * analyzer-owned identity here so an effectful native call cannot be mistaken for an
+ * unresolved, effect-free function value. */
+static bool body_variable_is_stdlib_native_function(XgBodyCollect *bc,
+                                                    const VariableNode *variable) {
+    XaSymbol *symbol;
+    XaSymbolLinks *links;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
+        return false;
+    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, variable->symbol_id);
+    if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
+        return false;
+    links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
+    return links && links->function_decl_node == NULL && links->module_name &&
+           links->module_name[0] != '\0' && links->import_member_name &&
+           links->import_member_name[0] != '\0';
+}
+
 static XgClassId body_parent_class_id(XgBodyCollect *bc) {
     XgClassNameRow *row;
     if (!bc || bc->current_class_id == XG_NO_ID)
@@ -8451,6 +8471,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = callee_name_id;
             if (strcmp(callee_name, "typeName") == 0)
                 bc->metadata_use_bits |= XG_METADATA_TYPENAME;
+        } else if (body_variable_is_stdlib_native_function(bc, &callee->as.variable)) {
+            bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+            bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+            bc->capability_bits |= XG_CAP_NATIVE;
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
