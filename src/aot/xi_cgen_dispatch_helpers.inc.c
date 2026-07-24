@@ -13148,12 +13148,22 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
          * Treating that raw address as `void **` overwrote the first bytes with
          * a temporary array-ref pointer and left the rest of the destination
          * stale. */
-        fprintf(out, "xrt_fixed_array_copy((void *)(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, "), ");
         const XiValue *source = v->args[1];
         if (cg_fixed_array_value_clone_place_store(f, source) == v)
             source = source->args[0];
+        XrRep source_rep = cg_value_plan_storage_rep(ctx, source);
+        if (source->type && source->type->kind == XR_KIND_FIXED_ARRAY &&
+            (source_rep == XR_REP_PTR || source_rep == XR_REP_RAWPTR)) {
+            fprintf(out, "memmove((void *)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+            fprintf(out, "), (const void *)(");
+            emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
+            fprintf(out, "), sizeof(%s) * %u)", fixed.ctype, (unsigned) fixed.count);
+            return;
+        }
+        fprintf(out, "xrt_fixed_array_copy((void *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "), ");
         emit_value_as_rep_ctx(ctx, out, source, XR_REP_TAGGED);
         fprintf(out, ", %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
         return;
