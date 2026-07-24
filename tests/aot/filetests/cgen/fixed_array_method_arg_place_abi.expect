@@ -1,0 +1,5 @@
+contains=xaot-plan v0
+c_contains=uint32_t * p1
+c_not_contains=xrt_value_clone_for_coro(
+c_not_contains=xrt_index_get(
+c_not_contains=xrt_index_set(

@@ -2671,6 +2671,45 @@ TEST(rawptr_struct_method_receivers_mark_native_borrow_shape) {
     xi_func_free(f);
 }
 
+TEST(struct_method_fixed_array_args_preserve_caller_places) {
+    XiFunc *f = lower_source("struct Worker {\n"
+                             "    tag: u32\n"
+                             "    bump(acc: ref [u32; 4], x: u32) {\n"
+                             "        acc[0] = acc[0] + x\n"
+                             "    }\n"
+                             "    readPair(acc: [u32; 4]) -> u32 {\n"
+                             "        return acc[0] + acc[1]\n"
+                             "    }\n"
+                             "}\n"
+                             "fn exercise() -> u32 {\n"
+                             "    var worker = Worker{tag: 0}\n"
+                             "    var acc: [u32; 4] = [1, 2, 3, 4]\n"
+                             "    worker.bump(ref acc, 7)\n"
+                             "    return worker.readPair(acc)\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *bump = func_tree_find_method(exercise, "bump");
+    XiValue *read_pair = func_tree_find_method(exercise, "readPair");
+    assert(bump && bump->nargs == 3 && bump->call_plan && bump->call_plan->verified &&
+           bump->call_plan->nargs == 2 && bump->call_plan->args[0].param_mode == XR_PARAM_REF &&
+           bump->args[1] && bump->args[1]->op == XI_LOCAL_ADDR && bump->args[1]->args[0] &&
+           bump->args[1]->args[0]->op != XI_COPY &&
+           "method ref fixed-array arguments must borrow the caller place without cloning");
+    assert(read_pair && read_pair->nargs == 2 && read_pair->call_plan &&
+           read_pair->call_plan->verified && read_pair->call_plan->nargs == 1 &&
+           read_pair->call_plan->args[0].param_mode == XR_PARAM_READ && read_pair->args[1] &&
+           read_pair->args[1]->op == XI_LOCAL_ADDR && read_pair->args[1]->args[0] &&
+           read_pair->args[1]->args[0]->op != XI_COPY &&
+           "method read fixed-array arguments must use the internal read-place ABI directly");
+    assert(!func_tree_has_op(exercise, XI_COPY) &&
+           "method fixed-array call setup must not introduce deep value clones");
+
+    xi_func_free(f);
+}
+
 TEST(read_value_struct_param_uses_internal_call_place) {
     XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
                              "fn sum(p: Pair) -> int {\n"
@@ -2911,6 +2950,7 @@ int main(void) {
     run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
     run_rawptr_struct_method_receivers_mark_native_borrow_shape();
+    run_struct_method_fixed_array_args_preserve_caller_places();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_force_unwrap();

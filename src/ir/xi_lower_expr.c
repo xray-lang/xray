@@ -6048,11 +6048,48 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
+        /* Resolve the method's source-argument contract before lowering its
+         * arguments.  Value aggregates use ordinary read-copy semantics only
+         * for XR_PARAM_READ value slots; ref/move slots and the internal
+         * fixed-layout read-place ABI must keep the caller's original place.
+         *
+         * Ordinary function calls already establish this contract before
+         * lower_call_args_expand_spread().  Doing it later for methods caused
+         * e.g. `state.digestLong(ref acc)` to deep-clone a stack fixed array and
+         * then borrow the clone, adding allocation and hiding the native place
+         * from AOT while preserving only accidentally-correct copy-out
+         * semantics. */
+        XrParamMode stack_method_modes[64];
+        const XrParamMode *method_modes = NULL;
+        int method_pcount = 0;
+        XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+        if (method_type && method_type->kind == XR_KIND_FUNCTION) {
+            method_modes = lower_function_param_modes(
+                l, method_type, stack_method_modes,
+                (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
+        }
+        bool stack_method_read_places[64];
+        bool *method_read_places = NULL;
+        int method_read_place_count = method_pcount;
+        if (method_read_place_count > 0) {
+            method_read_places =
+                method_read_place_count <= (int) (sizeof(stack_method_read_places) /
+                                                  sizeof(stack_method_read_places[0]))
+                    ? stack_method_read_places
+                    : (bool *) xi_func_arena_alloc(
+                          l->func, (uint32_t) ((size_t) method_read_place_count * sizeof(bool)));
+            if (!method_read_places)
+                return NULL;
+            lower_collect_read_place_params(l, NULL, method_type, method_modes, method_pcount,
+                                            method_read_places, method_read_place_count);
+        }
+
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0, NULL, 0,
-                                           (int) node->line))
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, method_modes,
+                                           method_pcount, method_read_places,
+                                           method_read_place_count, (int) node->line))
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
@@ -6372,19 +6409,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return phi ? &phi->value : chan_recv;
         }
 
-        XrParamMode stack_method_modes[64];
-        const XrParamMode *method_modes = NULL;
-        int method_pcount = 0;
-        XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
-        if (method_type && method_type->kind == XR_KIND_FUNCTION) {
-            method_modes = lower_function_param_modes(
-                l, method_type, stack_method_modes,
-                (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
-        }
         XiCallWriteback *writebacks = NULL;
-        XiCallPlan *call_plan =
-            lower_build_call_plan(l, call, arg_vals, n, method_modes, method_pcount, NULL, 0,
-                                  method_type, &writebacks, (int) node->line);
+        XiCallPlan *call_plan = lower_build_call_plan(
+            l, call, arg_vals, n, method_modes, method_pcount, method_read_places,
+            method_read_place_count, method_type, &writebacks, (int) node->line);
         if (l->had_error)
             return NULL;
 
