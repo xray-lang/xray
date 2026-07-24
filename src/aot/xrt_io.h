@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <direct.h>
+#include <fcntl.h>
 #include <io.h>
 #include <sys/stat.h>
 #include <sys/utime.h>
@@ -54,6 +56,14 @@
 #endif
 
 #define XRT_IO_MAX_READ_BYTES ((long) INT32_MAX)
+
+static inline bool xrt_io_prepare_binary_stdin(void) {
+#if defined(XR_OS_WINDOWS)
+    return _setmode(_fileno(stdin), _O_BINARY) != -1;
+#else
+    return true;
+#endif
+}
 
 static inline void *xrt_io_core_alloc(void *ctx, size_t size) {
     (void) ctx;
@@ -842,6 +852,92 @@ static inline XrValue xrt_io_read_stdin(void) {
     XrValue out = xrt_io_str_slice(buf, len);
     XRT_FREE(buf);
     return out;
+}
+
+static inline XrValue xrt_io_stream_read_bytes(FILE *stream, int64_t max_bytes) {
+    if (!stream || max_bytes < 0 || max_bytes > INT32_MAX)
+        return XR_NULL_VAL;
+    XrValue out = xrt_array_new_typed_uninit(max_bytes, XR_ELEM_U8);
+    if (!XR_IS_ARRAY(out) || !out.ptr)
+        return XR_NULL_VAL;
+    xrt_array_t *arr = (xrt_array_t *) out.ptr;
+    if (max_bytes == 0)
+        return out;
+    size_t count = fread(arr->data, 1, (size_t) max_bytes, stream);
+    if (count == 0 && ferror(stream)) {
+        xrt_release(out);
+        return XR_NULL_VAL;
+    }
+    arr->length = (int64_t) count;
+    return out;
+}
+
+static inline XrValue xrt_io_read_stdin_bytes(void) {
+    if (!xrt_io_prepare_binary_stdin())
+        return XR_NULL_VAL;
+    clearerr(stdin);
+    size_t len = 0;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        stdin, xrt_io_file_read, xrt_io_file_error, xrt_io_core_alloc, xrt_io_core_realloc,
+        xrt_io_core_free, NULL, 4096, XRT_IO_MAX_READ_BYTES, &len);
+    if (!buf)
+        return XR_NULL_VAL;
+    XrValue out = xrt_array_new_typed_uninit((int64_t) len, XR_ELEM_U8);
+    if (!XR_IS_ARRAY(out) || !out.ptr) {
+        XRT_FREE(buf);
+        return XR_NULL_VAL;
+    }
+    xrt_array_t *arr = (xrt_array_t *) out.ptr;
+    if (len > 0)
+        memcpy(arr->data, buf, len);
+    arr->length = (int64_t) len;
+    XRT_FREE(buf);
+    return out;
+}
+
+static inline XrValue xrt_io_file_open(const char *path_data, int64_t path_len) {
+    char stack_path[512];
+    char *owned = NULL;
+    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
+    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
+    XRT_FREE(owned);
+    return XR_FROM_INT(file ? (int64_t) (uintptr_t) file : -1);
+}
+
+static inline XrValue xrt_io_read_handle_chunk(XrValue handle_value, XrValue max_bytes_value) {
+    if (!XR_IS_INT(handle_value) || !XR_IS_INT(max_bytes_value))
+        return XR_NULL_VAL;
+    int64_t handle = XR_TO_INT(handle_value);
+    int64_t max_bytes = XR_TO_INT(max_bytes_value);
+    FILE *stream = handle == 0 ? stdin : (FILE *) (uintptr_t) handle;
+    if (handle == 0 && !xrt_io_prepare_binary_stdin())
+        return XR_NULL_VAL;
+    return xrt_io_stream_read_bytes(stream, max_bytes);
+}
+
+static inline XrValue xrt_io_file_close(XrValue handle_value) {
+    if (!XR_IS_INT(handle_value))
+        return XR_FROM_BOOL(false);
+    int64_t handle = XR_TO_INT(handle_value);
+    if (handle <= 0)
+        return XR_FROM_BOOL(false);
+    return XR_FROM_BOOL(fclose((FILE *) (uintptr_t) handle) == 0);
+}
+
+static inline XrValue xrt_io_write_stream(FILE *stream, const char *data, int64_t len) {
+    if (!stream || len < 0)
+        return XR_FROM_BOOL(false);
+    bool ok = xr_io_core_write_all(stream, xrt_io_file_write, xrt_io_file_error, data ? data : "",
+                                   (size_t) len);
+    return XR_FROM_BOOL(ok && fflush(stream) == 0);
+}
+
+static inline XrValue xrt_io_write_stdout(const char *data, int64_t len) {
+    return xrt_io_write_stream(stdout, data, len);
+}
+
+static inline XrValue xrt_io_write_stderr(const char *data, int64_t len) {
+    return xrt_io_write_stream(stderr, data, len);
 }
 
 #endif  // XRT_IO_H

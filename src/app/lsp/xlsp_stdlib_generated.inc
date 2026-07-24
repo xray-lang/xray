@@ -206,6 +206,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"readFileBytes", XLSP_SYM_FUNCTION, "fn(path: Path): Array<byte>?", "Read entire file as byte array", NULL, 0},
     {"readLines", XLSP_SYM_FUNCTION, "fn(path: Path): Array<string>", "Read file as lines", NULL, 0},
     {"readStdin", XLSP_SYM_FUNCTION, "fn(): string?", "Read all data from standard input", NULL, 0},
+    {"readStdinBytes", XLSP_SYM_FUNCTION, "fn(): Array<byte>?", "Read all standard input as binary bytes", NULL, 0},
     {"remove", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Remove a file", NULL, 0},
     {"removeAll", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Remove directory recursively", NULL, 0},
     {"rename", XLSP_SYM_FUNCTION, "fn(old: Path, new: Path): bool", "Rename a file", NULL, 0},
@@ -214,6 +215,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"touch", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Create or update file timestamp", NULL, 0},
     {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, data: string): bool", "Write string to file", NULL, 0},
     {"writeFileBytes", XLSP_SYM_FUNCTION, "fn(path: Path, data: Array<byte>): bool", "Write byte array to file", NULL, 0},
+    {"writeStderr", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Write text to standard error without adding a newline", NULL, 0},
+    {"writeStdout", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Write text to standard output without adding a newline", NULL, 0},
     {"cwd", XLSP_SYM_FUNCTION, "fn(): Path", "the current working directory.", NULL, 0},
     {"tempDir", XLSP_SYM_FUNCTION, "fn(): Path?", "create a temporary directory and return its path.", NULL, 0},
     {"tempFile", XLSP_SYM_FUNCTION, "fn(): Path?", "create a temporary file and return its path.", NULL, 0},
@@ -222,8 +225,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"readDir", XLSP_SYM_FUNCTION, "fn(p: Path): Array<Path>", "the immediate entries of a directory.", NULL, 0},
     {"readDirRecursive", XLSP_SYM_FUNCTION, "fn(p: Path): Array<Path>", "every entry beneath a directory.", NULL, 0},
     {"FileStat", XLSP_SYM_CLASS, "type FileStat", "Native handle type", NULL, 0},
+    {"File", XLSP_SYM_CLASS, "type File", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 31
+#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 35
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {

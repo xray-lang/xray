@@ -1931,6 +1931,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
+        .name = "File",
+        .signature = "File",
+        .summary = "",
+    },
+    {
+        .name = "File.close",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "File.open",
+        .signature = "(path: Path): File?",
+        .summary = "",
+    },
+    {
+        .name = "File.read",
+        .signature = "(maxBytes: int = 131072): Array<byte>?",
+        .summary = "",
+    },
+    {
+        .name = "File.stdin",
+        .signature = "(): File",
+        .summary = "",
+    },
+    {
         .name = "FileStat",
         .signature = "FileStat",
         .summary = "Native handle type",
@@ -2076,6 +2101,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "Read all data from standard input",
     },
     {
+        .name = "readStdinBytes",
+        .signature = "(): Array<byte>?",
+        .summary = "Read all standard input as binary bytes",
+    },
+    {
         .name = "readlink",
         .signature = "(p: Path): Path?",
         .summary = "",
@@ -2134,6 +2164,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .name = "writeFileBytes",
         .signature = "(path: Path, data: Array<byte>): bool",
         .summary = "Write byte array to file",
+    },
+    {
+        .name = "writeStderr",
+        .signature = "(data: string): bool",
+        .summary = "Write text to standard error without adding a newline",
+    },
+    {
+        .name = "writeStdout",
+        .signature = "(data: string): bool",
+        .summary = "Write text to standard output without adding a newline",
     },
 };
 
@@ -3591,6 +3631,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     {
         .name = "Capabilities",
         .signature = "Capabilities",
+        .summary = "",
+    },
+    {
+        .name = "Capabilities.isAccelerated",
+        .signature = "(): bool",
         .summary = "",
     },
     {
@@ -7871,6 +7916,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `File` | `File` |  |\n"
+            "| `File.close` | `(): bool` |  |\n"
+            "| `File.open` | `(path: Path): File?` |  |\n"
+            "| `File.read` | `(maxBytes: int = 131072): Array<byte>?` |  |\n"
+            "| `File.stdin` | `(): File` |  |\n"
             "| `io.FileStat` | `FileStat` | Native handle type |\n"
             "| `io.FileStat.atime` | `const int` | Handle field |\n"
             "| `io.FileStat.ctime` | `const int` | Handle field |\n"
@@ -7900,6 +7950,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.readFileBytes` | `(path: Path): Array<byte>?` | Read entire file as byte array |\n"
             "| `io.readLines` | `(path: Path): Array<string>` | Read file as lines |\n"
             "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
+            "| `io.readStdinBytes` | `(): Array<byte>?` | Read all standard input as binary bytes |\n"
             "| `io.readlink` | `(p: Path): Path?` |  |\n"
             "| `io.realpath` | `(p: Path): Path?` |  |\n"
             "| `io.remove` | `(path: Path): bool` | Remove a file |\n"
@@ -7912,6 +7963,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.touch` | `(path: Path): bool` | Create or update file timestamp |\n"
             "| `io.writeFile` | `(path: Path, data: string): bool` | Write string to file |\n"
             "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` | Write byte array to file |\n"
+            "| `io.writeStderr` | `(data: string): bool` | Write text to standard error without adding a newline |\n"
+            "| `io.writeStdout` | `(data: string): bool` | Write text to standard output without adding a newline |\n"
             "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
@@ -8486,6 +8539,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Capabilities` | `Capabilities` |  |\n"
+            "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
             "| `Capabilities.nativeBytes` | `(): int` |  |\n"
             "| `U32x4` | `U32x4` |  |\n"
             "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n"

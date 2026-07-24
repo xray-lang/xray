@@ -40,8 +40,10 @@
 #include "../../src/os/os_dir.h"
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
 
 #ifdef XR_OS_WINDOWS
+#include <fcntl.h>
 #include <io.h>
 #include <direct.h>
 #include <sys/types.h>
@@ -65,6 +67,15 @@
 
 struct XrCoroutine;
 extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
+static void io_release_array(XrArray *arr);
+
+static bool io_prepare_binary_stdin(void) {
+#ifdef XR_OS_WINDOWS
+    return _setmode(_fileno(stdin), _O_BINARY) != -1;
+#else
+    return true;
+#endif
+}
 
 /* ========== File Read/Write ========== */
 
@@ -159,6 +170,94 @@ static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     XrString *str = xr_string_intern(X, buf, len, 0);
     xr_free(buf);
     return xr_string_value(str);
+}
+
+static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_bytes) {
+    if (!stream || max_bytes < 0 || max_bytes > INT32_MAX)
+        return xr_null();
+    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) max_bytes);
+    if (!arr)
+        return xr_null();
+    if (max_bytes == 0)
+        return xr_value_from_array(arr);
+    size_t count = fread(arr->data, 1, (size_t) max_bytes, stream);
+    if (count == 0 && ferror(stream)) {
+        io_release_array(arr);
+        return xr_null();
+    }
+    arr->length = (int32_t) count;
+    return xr_value_from_array(arr);
+}
+
+static XrValue io_readStdinBytes(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    if (!io_prepare_binary_stdin())
+        return xr_null();
+    size_t len = 0;
+    char *buf = xr_io_read_stdin_all(&len);
+    if (!buf)
+        return xr_null();
+    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) len);
+    if (!arr) {
+        xr_free(buf);
+        return xr_null();
+    }
+    if (len > 0)
+        memcpy(arr->data, buf, len);
+    arr->length = (int32_t) len;
+    xr_free(buf);
+    return xr_value_from_array(arr);
+}
+
+static XrValue io_fileOpen(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1)
+        return xr_int(-1);
+    const char *path = xrs_path_arg(args[0], NULL);
+    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
+    return xr_int(file ? (int64_t) (uintptr_t) file : -1);
+}
+
+static XrValue io_fileRead(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+        return xr_null();
+    int64_t handle = XR_TO_INT(args[0]);
+    FILE *stream = handle == 0 ? stdin : (FILE *) (uintptr_t) handle;
+    if (handle == 0 && !io_prepare_binary_stdin())
+        return xr_null();
+    return io_stream_read_bytes(X, stream, XR_TO_INT(args[1]));
+}
+
+static XrValue io_fileClose(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    int64_t handle = XR_TO_INT(args[0]);
+    if (handle <= 0)
+        return xr_bool(false);
+    return xr_bool(fclose((FILE *) (uintptr_t) handle) == 0);
+}
+
+static XrValue io_write_stream(XrValue *args, int argc, FILE *stream) {
+    if (argc < 1 || !stream)
+        return xr_bool(false);
+    size_t len = 0;
+    const char *data = xrs_string_arg(args[0], &len);
+    if (!data)
+        return xr_bool(false);
+    bool ok = xr_io_core_write_all(stream, io_file_write, io_file_error, data, len);
+    return xr_bool(ok && fflush(stream) == 0);
+}
+
+static XrValue io_writeStdout(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    return io_write_stream(args, argc, stdout);
+}
+
+static XrValue io_writeStderr(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    return io_write_stream(args, argc, stderr);
 }
 
 /* ========== io_uring async file I/O (Linux) ==========

@@ -367,7 +367,7 @@ layer = "L2"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/io/io.c"
-public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readFile", "readFileBytes", "readLines", "readStdin", "remove", "removeAll", "rename", "stat", "symlink", "touch", "writeFile", "writeFileBytes"]
+public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readFile", "readFileBytes", "readLines", "readStdin", "readStdinBytes", "remove", "removeAll", "rename", "stat", "symlink", "touch", "writeFile", "writeFileBytes", "writeStderr", "writeStdout"]
 perf_suite = "stdlib/io"
 
 [[module]]

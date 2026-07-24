@@ -6,8 +6,53 @@
 // `path.Path` class so the public `io` surface is typed in `Path`, matching the
 // VM byte-for-byte.  All non-path operations (chmod, stat, writeFile, exists, …)
 // stay direct C primitives and are not re-declared here.
-
 import { Path } from path
+
+// File is a synchronous read-only byte stream. It deliberately requires an
+// explicit close (normally `defer file.close()`): Xray does not expose a
+// deterministic finalizer contract, so native resources must not depend on GC.
+export final class File {
+    private _handle: int
+    private _open: bool
+    private _owned: bool
+
+    private constructor(handle: int, owned: bool) {
+        this._handle = handle
+        this._open = handle >= 0
+        this._owned = owned
+    }
+
+    static open(path: Path) -> File? {
+        var handle = __fileOpen(path)
+        if (handle < 0) {
+            return null
+        }
+        return File(handle, true)
+    }
+
+    static stdin() -> File {
+        return File(0, false)
+    }
+
+    read(maxBytes: int = 131072) -> Array<byte>? {
+        if (!this._open || maxBytes < 0) {
+            return null
+        }
+        return __fileRead(this._handle, maxBytes)
+    }
+
+    close() -> bool {
+        if (!this._open) {
+            return true
+        }
+        var ok = true
+        if (this._owned) {
+            ok = __fileClose(this._handle)
+        }
+        this._open = false
+        return ok
+    }
+}
 
 // cwd — the current working directory.
 export fn cwd() -> Path {
@@ -17,28 +62,36 @@ export fn cwd() -> Path {
 // tempDir — create a temporary directory and return its path.
 export fn tempDir() -> Path? {
     var raw = __tempDir()
-    if (raw == null) { return null }
+    if (raw == null) {
+        return null
+    }
     return Path(raw!)
 }
 
 // tempFile — create a temporary file and return its path.
 export fn tempFile() -> Path? {
     var raw = __tempFile()
-    if (raw == null) { return null }
+    if (raw == null) {
+        return null
+    }
     return Path(raw!)
 }
 
 // readlink — the target of a symbolic link.
 export fn readlink(p: Path) -> Path? {
     var raw = __readlink(p)
-    if (raw == null) { return null }
+    if (raw == null) {
+        return null
+    }
     return Path(raw!)
 }
 
 // realpath — the canonical absolute path.
 export fn realpath(p: Path) -> Path? {
     var raw = __realpath(p)
-    if (raw == null) { return null }
+    if (raw == null) {
+        return null
+    }
     return Path(raw!)
 }
 

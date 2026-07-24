@@ -1,0 +1,25 @@
+import io
+var temp = io.tempFile()
+print(temp != null)
+if (temp != null) {
+    print(io.writeFile(temp!, "abcdefghij"))
+    var file = io.File.open(temp!)
+    print(file != null)
+    if (file != null) {
+        var first = file!.read(4)
+        var second = file!.read(4)
+        var third = file!.read(4)
+        var eof = file!.read(4)
+        print(first != null && len(first!) == 4 && first![0] == 97 && first![3] == 100)
+        print(second != null && len(second!) == 4 && second![0] == 101 && second![3] == 104)
+        print(third != null && len(third!) == 2 && third![0] == 105 && third![1] == 106)
+        print(eof != null && len(eof!) == 0)
+        print(file!.close())
+        print(file!.close())
+        print(file!.read(1) == null)
+    }
+    print(io.remove(temp!))
+    print(io.File.open(temp!) == null)
+}
+io.writeStdout("raw")
+print("-stdout")

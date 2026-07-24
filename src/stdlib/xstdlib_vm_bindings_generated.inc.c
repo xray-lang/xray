@@ -75,6 +75,9 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "copyFile", io_copyFile);
     XRS_EXPORT(module, isolate, "__cwd", io_cwd);
     XRS_EXPORT(module, isolate, "exists", io_exists);
+    XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
+    XRS_EXPORT(module, isolate, "__fileOpen", io_fileOpen);
+    XRS_EXPORT(module, isolate, "__fileRead", io_fileRead);
     XRS_EXPORT(module, isolate, "fileSize", io_fileSize);
     XRS_EXPORT(module, isolate, "isDir", io_isDir);
     XRS_EXPORT(module, isolate, "isFile", io_isFile);
@@ -87,6 +90,7 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT_YIELDABLE(module, isolate, "readFileBytes", io_readFileBytes);
     XRS_EXPORT(module, isolate, "readLines", io_readLines);
     XRS_EXPORT(module, isolate, "readStdin", io_readStdin);
+    XRS_EXPORT(module, isolate, "readStdinBytes", io_readStdinBytes);
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     XRS_EXPORT(module, isolate, "__realpath", io_realpath);
     XRS_EXPORT(module, isolate, "remove", io_remove);
@@ -99,6 +103,8 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "touch", io_touch);
     XRS_EXPORT_YIELDABLE(module, isolate, "writeFile", io_writeFile);
     XRS_EXPORT_YIELDABLE(module, isolate, "writeFileBytes", io_writeFileBytes);
+    XRS_EXPORT(module, isolate, "writeStderr", io_writeStderr);
+    XRS_EXPORT(module, isolate, "writeStdout", io_writeStdout);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_IO */
 
