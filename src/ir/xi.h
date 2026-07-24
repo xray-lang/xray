@@ -139,6 +139,13 @@ typedef enum XiPlaceOrigin {
     XI_PLACE_ORIGIN_PROJECTION_TEMP = 3,
 } XiPlaceOrigin;
 
+/* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
+ * A raw-pointer aggregate load used directly as a value-struct method receiver
+ * still remains args[0] so the VM keeps its ordinary value/writeback semantics.
+ * This marker lets native backends borrow the PTR_LOAD source address directly
+ * instead of materializing an aggregate copy around the method call. */
+#define XI_LOCAL_ADDR_AUX_RAW_DEREF 1
+
 typedef enum XiPlaceLifetime {
     XI_PLACE_LIFETIME_NONE = 0,
     XI_PLACE_LIFETIME_CALL_BOUND = 1,

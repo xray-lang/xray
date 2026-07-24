@@ -7,3 +7,9 @@ fn bridgeValueState(destination: MutPtr<State>, source: MutPtr<State>, value: u6
         return destination.deref().digest()
     }
 }
+
+fn readValueState(source: Ptr<State>) -> u64 {
+    unsafe {
+        return source.deref().digest()
+    }
+}

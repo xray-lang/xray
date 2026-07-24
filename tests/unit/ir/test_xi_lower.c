@@ -2635,6 +2635,42 @@ TEST(struct_method_receivers_use_call_bound_places) {
     xi_func_free(f);
 }
 
+TEST(rawptr_struct_method_receivers_mark_native_borrow_shape) {
+    XiFunc *f = lower_source("struct State {\n"
+                             "    value: u64\n"
+                             "    reset(value: u64) { this.value = value }\n"
+                             "    digest() -> u64 { return this.value }\n"
+                             "}\n"
+                             "fn mutate(state: MutPtr<State>, value: u64) {\n"
+                             "    unsafe { state.deref().reset(value) }\n"
+                             "}\n"
+                             "fn read(state: Ptr<State>) -> u64 {\n"
+                             "    unsafe { return state.deref().digest() }\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiFunc *mutate = func_tree_find_func_name(f, "mutate");
+    XiFunc *read = func_tree_find_func_name(f, "read");
+    XiValue *reset = func_tree_find_method(mutate, "reset");
+    XiValue *digest = func_tree_find_method(read, "digest");
+    assert(reset && reset->call_plan && reset->call_plan->receiver.param_mode == XR_PARAM_REF);
+    assert(reset->args[0] && reset->args[0]->op == XI_LOCAL_ADDR &&
+           reset->args[0]->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF && reset->args[0]->args[0] &&
+           reset->args[0]->args[0]->op == XI_PTR_LOAD &&
+           "mutable raw dereference receiver should retain PTR_LOAD and mark native borrowing");
+    assert(func_tree_has_op(mutate, XI_PTR_STORE) &&
+           "shared Xi must retain mutable raw dereference writeback for VM semantics");
+    assert(digest && digest->call_plan && digest->call_plan->receiver.param_mode == XR_PARAM_READ);
+    assert(digest->args[0] && digest->args[0]->op == XI_LOCAL_ADDR &&
+           digest->args[0]->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF && digest->args[0]->args[0] &&
+           digest->args[0]->args[0]->op == XI_PTR_LOAD &&
+           "readonly raw dereference receiver should expose the same native borrow shape");
+    assert(!func_tree_has_op(read, XI_PTR_STORE) &&
+           "readonly raw dereference receiver must not synthesize a writeback");
+
+    xi_func_free(f);
+}
+
 TEST(read_value_struct_param_uses_internal_call_place) {
     XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
                              "fn sum(p: Pair) -> int {\n"
@@ -2874,6 +2910,7 @@ int main(void) {
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
+    run_rawptr_struct_method_receivers_mark_native_borrow_shape();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_force_unwrap();

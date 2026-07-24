@@ -4646,6 +4646,25 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
         place = l->vars[var_id].call_place;
         origin = XI_PLACE_ORIGIN_PARAM;
         origin_var_id = (XiVarId) var_id;
+    } else if (receiver->op == XI_PTR_LOAD && receiver->nargs >= 1 && receiver->args[0] &&
+               receiver->args[0]->type && XR_TYPE_IS_POINTER(receiver->args[0]->type) &&
+               (mode == XR_PARAM_READ || receiver->args[0]->type->ptr_is_mut)) {
+        /* Preserve the PTR_LOAD as the semantic source so the VM retains its
+         * value/writeback behavior. Native backends may recognize this exact
+         * call-bound shape and borrow the pointee address directly. */
+        place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, receiver->type, 1);
+        if (!place)
+            return NULL;
+        place->args[0] = receiver;
+        place->aux_int = XI_LOCAL_ADDR_AUX_RAW_DEREF;
+        place->line = (uint32_t) line;
+        if (mode == XR_PARAM_REF) {
+            writeback->source = receiver;
+            writeback->place = place;
+            writeback->top_binding = top_binding;
+            writeback->var_id = var_id;
+            writeback->projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+        }
     } else {
         place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, receiver->type, 1);
         if (!place)

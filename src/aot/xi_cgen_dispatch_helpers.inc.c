@@ -13066,6 +13066,17 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    if (v->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF) {
+        const XiValue *load = v->args[0];
+        if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "(void *)(");
+        emit_value_as_rep_ctx(ctx, out, load->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")");
+        return;
+    }
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {
         fprintf(out, "(void *)((xr_span_t[]){xrt_byte_slice_from_value(");
