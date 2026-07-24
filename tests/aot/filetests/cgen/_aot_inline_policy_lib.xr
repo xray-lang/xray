@@ -46,14 +46,30 @@ fn looping(n: int) -> int {
 }
 
 fn stackAggregate(index: int) -> int {
-    var lanes: [int; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
-    var acc = lanes[index & 7]
+    var lanes: [int; 32] = [1; 32]
+    var acc = lanes[index & 31]
     var i = 0
-    while (i < 8) {
+    while (i < 32) {
         acc = acc + lanes[i]
         i = i + 1
     }
     return acc
+}
+
+fn smallStackAccumulator(seed: u64) -> u64 {
+    var lanes: [u64; 8] = [seed; 8]
+    var i = 0
+    while (i < 8) {
+        lanes[i] = lanes[i] + (i as u64)
+        i += 1
+    }
+    var total: u64 = 0
+    i = 0
+    while (i < 8) {
+        total += lanes[i]
+        i += 1
+    }
+    return total
 }
 
 export fn runPolicy(n: int) -> int {
@@ -62,4 +78,8 @@ export fn runPolicy(n: int) -> int {
 
 export fn runVectorPolicy(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
     vectorStripe(acc, input, secret)
+}
+
+export fn runSmallStackPolicy(seed: u64) -> u64 {
+    return smallStackAccumulator(seed)
 }

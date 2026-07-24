@@ -1027,6 +1027,7 @@ static bool cg_func_stable_cname(const XiCgenCtx *ctx, const XiFunc *f, const ch
 static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f,
                                            const char *prefix);
 static bool cg_func_contains_stack_array(const XiFunc *f);
+static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_force_inline(const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
@@ -1045,7 +1046,7 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
     if (cg_func_needs_external_linkage(ctx, f, prefix))
         return cg_func_should_force_inline(f) ? "XRT_INTERNAL XR_FORCEINLINE " : "XRT_INTERNAL ";
     if (ctx && ctx->extern_linkage) {
-        if (cg_func_contains_stack_array(f))
+        if (cg_func_contains_stack_array(f) && !cg_func_stack_arrays_force_inline_safe(f))
             return "static XR_NOINLINE ";
         return cg_func_should_force_inline(f) ? "static XR_AINLINE " : "static ";
     }
@@ -6710,6 +6711,23 @@ static bool cg_func_contains_vector_op(const XiFunc *f) {
     return false;
 }
 
+static bool cg_value_materializes_stack_array(const XiValue *value) {
+    if (!value)
+        return false;
+    if ((value->op == XI_STACK_ALLOC && value->aux_int == XI_ARRAY_NEW) ||
+        value->op == XI_ARRAY_NEW || value->op == XI_FIXED_ARRAY_NEW)
+        return true;
+    /* Module/global arrays and borrowed field/parameter places reference
+     * already-materialized storage. Ownership bookkeeping also preserves the
+     * same storage; none of these operations introduces a caller-visible
+     * stack aggregate. */
+    if (value->op == XI_PARAM || value->op == XI_PLACE_LOAD || value->op == XI_AGG_GET ||
+        value->op == XI_GET_SHARED || value->op == XI_GET_GLOBAL || value->op == XI_RETAIN ||
+        value->op == XI_RELEASE || value->op == XI_OWNER_FORWARD)
+        return false;
+    return value->type && value->type->kind == XR_KIND_FIXED_ARRAY;
+}
+
 static bool cg_func_contains_stack_array(const XiFunc *f) {
     if (!f)
         return false;
@@ -6718,31 +6736,74 @@ static bool cg_func_contains_stack_array(const XiFunc *f) {
         if (!blk)
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *value = blk->values[vi];
-            if (!value)
-                continue;
-            if (value->op == XI_STACK_ALLOC && value->aux_int == XI_ARRAY_NEW)
-                return true;
-            if (value->op == XI_ARRAY_NEW)
-                return true;
-            if (value->op == XI_FIXED_ARRAY_NEW)
-                return true;
-            /* Module/global fixed arrays are references to already-materialized
-             * shared storage, not stack aggregates.  Treating their GET as a
-             * local array inflated small exported wrappers into no-inline
-             * boundaries and prevented LTO from specializing cross-module hot
-             * calls. */
-            /* Loading an existing `ref [T; N]` place yields a pointer to the
-             * caller-owned aggregate; it does not materialize a stack array in
-             * this function. Treating that PLACE_LOAD as local storage blocks
-             * otherwise small closed-world kernels from cross-module LTO. */
-            if (value->op != XI_PARAM && value->op != XI_PLACE_LOAD && value->op != XI_AGG_GET &&
-                value->op != XI_GET_SHARED && value->op != XI_GET_GLOBAL && value->type &&
-                value->type->kind == XR_KIND_FIXED_ARRAY)
+            if (cg_value_materializes_stack_array(blk->values[vi]))
                 return true;
         }
     }
     return false;
+}
+
+static uint8_t cg_fixed_width_native_size(uint8_t native) {
+    switch (native) {
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_F64:
+            return 8;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 4;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 2;
+        case XR_NATIVE_BOOL:
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f) {
+    enum {
+        CG_FORCE_INLINE_STACK_ARRAY_BYTE_LIMIT = 64
+    };
+    if (!f)
+        return false;
+    uint32_t total_bytes = 0;
+    bool found = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            if (!value)
+                continue;
+            if (!cg_value_materializes_stack_array(value))
+                continue;
+            /* Only a directly materialized, fixed-width scalar array is small
+             * enough to expose to a caller. Dynamic/tagged/nested arrays keep
+             * the hard no-inline boundary, as do fixed-array temporaries whose
+             * storage origin is not explicit at this Xi value. */
+            if (value->op != XI_FIXED_ARRAY_NEW)
+                return false;
+            uint8_t native = 0;
+            uint32_t count = 0;
+            if (!xicgen_fixed_array_new_info(value, &native, &count))
+                return false;
+            uint8_t lane_bytes = cg_fixed_width_native_size(native);
+            if (!lane_bytes || count > CG_FORCE_INLINE_STACK_ARRAY_BYTE_LIMIT / lane_bytes)
+                return false;
+            uint32_t bytes = count * lane_bytes;
+            if (bytes > CG_FORCE_INLINE_STACK_ARRAY_BYTE_LIMIT - total_bytes)
+                return false;
+            total_bytes += bytes;
+            found = true;
+        }
+    }
+    return found;
 }
 
 static bool cg_func_should_force_inline(const XiFunc *f) {
@@ -6757,11 +6818,13 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
     bool proven_noalloc =
         f->allocation_effect_complete && f->allocation_state == XA_ALLOC_PROVEN_NONE;
     bool vector_kernel = cg_func_contains_vector_op(f);
+    bool has_stack_array = cg_func_contains_stack_array(f);
+    bool small_fixed_stack = has_stack_array && cg_func_stack_arrays_force_inline_safe(f);
     /* A stack array is cheap inside its owner but inlining the owner into a
-     * dispatcher hoists the full frame/canary prologue onto unrelated hot
-     * branches. cg_func_linkage therefore emits an explicit noinline boundary;
-     * this predicate also keeps it out of the force-inline class. */
-    if (cg_func_contains_stack_array(f))
+     * dispatcher can hoist its frame/canary prologue onto unrelated hot
+     * branches. Keep the hard boundary except for one cache line of explicit,
+     * fixed-width scalar storage that a native optimizer can scalar-replace. */
+    if (has_stack_array && !small_fixed_stack)
         return false;
     /* Keep separate-compilation helpers inlineable when they are tiny, but do
      * not force arbitrary loops into large callers/coroutine resume functions.
@@ -6772,8 +6835,9 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
     if (cg_func_has_backedge(f)) {
         if (!proven_noalloc)
             return false;
-        uint32_t loop_limit = vector_kernel ? CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT
-                                            : CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT;
+        uint32_t loop_limit = (vector_kernel || small_fixed_stack)
+                                  ? CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT
+                                  : CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT;
         return value_count <= loop_limit;
     }
     if (value_count <= CG_FORCE_INLINE_VALUE_LIMIT)
