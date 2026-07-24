@@ -1,0 +1,16 @@
+struct Secret {
+    bytes: [byte; 4]
+}
+
+fn copyInto(destination: ref [byte; 4], secret: Secret) {
+    destination = secret.bytes
+}
+
+var destination: [byte; 4] = [0; 4]
+var secret = Secret{bytes: [11, 22, 33, 44]}
+copyInto(ref destination, secret)
+print("${destination[0]},${destination[1]},${destination[2]},${destination[3]}")
+
+// The assignment is a value copy, so later source mutation cannot alias it.
+secret.bytes[0] = 99
+print("${destination[0]},${destination[1]},${destination[2]},${destination[3]}")

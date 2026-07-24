@@ -13067,11 +13067,95 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     emit_conversion_suffix(out, conv_suffix);
 }
 
+/* Return the sole whole-array PLACE_STORE fed by a semantic fixed-array clone
+ * when the clone-to-store interval contains only ownership bookkeeping.  In
+ * that shape the destination copy itself is the value-semantics boundary, so
+ * materializing an intermediate owned Array would add a heap allocation
+ * without changing any observable snapshot. */
+static const XiValue *cg_fixed_array_value_clone_place_store(const XiFunc *f,
+                                                             const XiValue *value) {
+    if (!f || !value || value->op != XI_COPY || value->aux_int != XI_COPY_KIND_VALUE_CLONE ||
+        value->nargs != 1 || !value->args[0] || !value->type ||
+        value->type->kind != XR_KIND_FIXED_ARRAY || !value->block)
+        return NULL;
+
+    const XiValue *store = NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == value)
+            return NULL;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == value)
+                    return NULL;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == value)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                if (ai == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
+                    continue;
+                if (ai == 1 && user->op == XI_PLACE_STORE && user->nargs == 2 && user->args[0] &&
+                    user->args[0]->type && user->args[0]->type->kind == XR_KIND_FIXED_ARRAY &&
+                    !store) {
+                    store = user;
+                    continue;
+                }
+                return NULL;
+            }
+        }
+    }
+    if (!store || store->block != value->block)
+        return NULL;
+
+    bool between = false;
+    for (uint32_t vi = 0; vi < value->block->nvalues; vi++) {
+        const XiValue *current = value->block->values[vi];
+        if (current == value) {
+            between = true;
+            continue;
+        }
+        if (!between)
+            continue;
+        if (current == store)
+            return store;
+        if (current && (current->op == XI_RETAIN || current->op == XI_RELEASE) &&
+            current->nargs == 1 && current->args[0] == value)
+            continue;
+        return NULL;
+    }
+    return NULL;
+}
+
 static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     (void) prefix;
     if (!v || v->nargs != 2 || !v->args[0] || !v->args[1]) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    CgFixedArrayLaneInfo fixed;
+    if (cg_fixed_array_lane_info_from_type(v->args[0]->type, &fixed)) {
+        /* A `ref [T; N]` parameter uses the address of its first native lane
+         * as its borrowed-place ABI.  It is not a pointer-valued place: whole
+         * fixed-array assignment must copy the N lanes into caller storage.
+         * Treating that raw address as `void **` overwrote the first bytes with
+         * a temporary array-ref pointer and left the rest of the destination
+         * stale. */
+        fprintf(out, "xrt_fixed_array_copy((void *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "), ");
+        const XiValue *source = v->args[1];
+        if (cg_fixed_array_value_clone_place_store(f, source) == v)
+            source = source->args[0];
+        emit_value_as_rep_ctx(ctx, out, source, XR_REP_TAGGED);
+        fprintf(out, ", %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
         return;
     }
     XaotValueRep pointee_rep;

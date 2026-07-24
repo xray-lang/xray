@@ -6241,6 +6241,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
         return;
+    if (cg_fixed_array_value_clone_place_store(f, v))
+        return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v)) {
@@ -7056,6 +7058,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
         return true;
     if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_fixed_array_value_clone_place_store(f, v))
         return true;
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return true;
