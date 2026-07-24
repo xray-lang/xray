@@ -51,6 +51,9 @@ static const char xtc_probe_runtime_c[] =
     "int main(void) { uint8_t out[32]; xr_config_init((void *)0); "
     "xr_sha256((const uint8_t *)\"a\", 1, out); return out[0] == 0xca ? 0 : 1; }\n";
 
+#define XTC_PROBE_COMPILE_TIMEOUT_MS 30000u
+#define XTC_PROBE_CROSS_ZIG_TIMEOUT_MS 60000u
+
 static void xtc_probe_error(char *err, size_t err_size, const char *format, const char *arg) {
     if (!err || err_size == 0)
         return;
@@ -187,7 +190,14 @@ static bool xtc_probe_command_init(const XrToolchainSelection *selection, XtcPro
     if (!selection || !command || !selection->program)
         return false;
     memset(command, 0, sizeof(*command));
-    xtc_process_spec_init(&command->spec, selection->program, 30000);
+    // The first Zig invocation for a cold cross target may populate compiler
+    // and sysroot caches before it can link the probe. Keep the usual native
+    // bound tight, but give that bounded cold-start path one extra interval.
+    uint32_t timeout_ms =
+        selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG && !selection->target.is_native
+            ? XTC_PROBE_CROSS_ZIG_TIMEOUT_MS
+            : XTC_PROBE_COMPILE_TIMEOUT_MS;
+    xtc_process_spec_init(&command->spec, selection->program, timeout_ms);
     command->index = 0;
     XrToolchainArgSink sink = xtc_probe_command_sink(command);
     return xtc_command_emit_driver(selection, &selection->target, &sink, detail, detail_size);
