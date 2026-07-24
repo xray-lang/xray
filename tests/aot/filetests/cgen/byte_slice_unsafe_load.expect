@@ -1,0 +1,4 @@
+c_count=1:/* unchecked byte-Slice access */
+c_regex=XR_ASSUME\(_s.data && _off >= 0 && _s.length >= INT64_C\(8\) && _off <= _s.length - INT64_C\(8\)\)
+c_regex=if \(XR_UNLIKELY\(!_s.data \|\| _off < 0 \|\| _s.length < INT64_C\(8\)
+c_syntax=pass

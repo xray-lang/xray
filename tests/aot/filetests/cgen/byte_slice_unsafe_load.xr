@@ -1,0 +1,17 @@
+fn unsafeLoad64(bytes: Slice<byte>, offset: int) -> u64 {
+    return unsafe {
+        bytes.load<u64>(offset, Endian.LE)
+    }
+}
+
+fn safeLoad64(bytes: Slice<byte>, offset: int) -> u64 {
+    return bytes.load<u64>(offset, Endian.LE)
+}
+
+fn compareLoads() -> bool {
+    var storage: [byte; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var view: Slice<byte> = storage[:]
+    return unsafeLoad64(view, 0) == safeLoad64(view, 0)
+}
+
+print(compareLoads())

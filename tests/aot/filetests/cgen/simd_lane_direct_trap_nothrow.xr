@@ -1,0 +1,8 @@
+import { U64x2 } from simd
+
+fn replaceAndExtract(value: u64, lane: int) -> u64 {
+    var vector = U64x2.splat(value).replace(lane, 0 - value)
+    return vector.extract(lane)
+}
+
+print(replaceAndExtract(7, 1))

@@ -5211,7 +5211,7 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
 
 static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
                                             XaIntrinsicId intrinsic_id, XiValue *recv,
-                                            struct XrType *result_type) {
+                                            struct XrType *result_type, bool unchecked_access) {
     if (!call->type_args || !call->type_args[0] || call->type_arg_count != 1)
         return NULL;
 
@@ -5228,6 +5228,8 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
     target = xi_lower_type_or_any(l, target, "byte-slice type argument", node->line);
+    unchecked_access =
+        unchecked_access && byte_slice_typed_load && target && XR_TYPE_IS_INT(target);
     uint16_t byte_slice_op = lower_byte_slice_typed_op_for_target(target, byte_slice_typed_load);
     if (!byte_slice_op)
         return NULL;
@@ -5276,8 +5278,11 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
     }
     v->line = (uint32_t) node->line;
     v->xa_intrinsic_id = (uint32_t) intrinsic_id;
+    if (unchecked_access)
+        v->aux_int |= XI_ACCESS_UNCHECKED;
     v->flags = xi_op_default_effects((XiOp) v->op);
-    xi_lower_insert_err_check(l, node, true);
+    if (!unchecked_access)
+        xi_lower_insert_err_check(l, node, true);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -5619,8 +5624,9 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     if (!receiver)
         return NULL;
     if (typed_byte_slice)
-        return lower_byte_slice_typed_call(l, node, call, resolved->intrinsic_id, receiver,
-                                           xi_lower_node_type(l, node));
+        return lower_byte_slice_typed_call(
+            l, node, call, resolved->intrinsic_id, receiver, xi_lower_node_type(l, node),
+            (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0);
 
     XrParamMode stack_modes[64];
     const XrParamMode *param_modes = NULL;
@@ -5665,7 +5671,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         bool unchecked_access = (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0 &&
                                 (op == XI_VEC_LOAD || op == XI_VEC_STORE);
         if (unchecked_access)
-            value->aux_int |= XI_VEC_ACCESS_UNCHECKED;
+            value->aux_int |= XI_ACCESS_UNCHECKED;
     } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
         value->aux_int = receiver->type ? receiver->type->scalar_rep : 0;
     }
@@ -5696,7 +5702,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
     bool unchecked_vec_access =
-        desc->family == XA_INTRINSIC_FAMILY_SIMD && (value->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0;
+        desc->family == XA_INTRINSIC_FAMILY_SIMD && (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
     if (!unchecked_vec_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
                                   desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
                                   desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))

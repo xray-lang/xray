@@ -221,8 +221,12 @@ static void dump_value(FILE *out, const XiValue *v) {
                 (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? ",odd" : "",
                 (v->aux_int & XI_VEC_SHAPE_UNZIP) != 0 ? ",unzip" : "",
                 (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0 ? ",half" : "",
-                (v->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0 ? ",unchecked" : "");
+                (v->aux_int & XI_ACCESS_UNCHECKED) != 0 ? ",unchecked" : "");
     }
+    if ((v->op == XI_BYTE_SLICE_LOAD_U16 || v->op == XI_BYTE_SLICE_LOAD_U32 ||
+         v->op == XI_BYTE_SLICE_LOAD_U64) &&
+        (v->aux_int & XI_ACCESS_UNCHECKED) != 0)
+        fprintf(out, " [unchecked]");
     if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
     if (v->xg_record_merge_id != 0)

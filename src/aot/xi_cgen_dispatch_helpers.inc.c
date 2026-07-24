@@ -1416,7 +1416,7 @@ static const XiValue *xicgen_vec_proven_window(XiCgenCtx *ctx, const XiValue *v,
 
 static bool xicgen_vec_unchecked_access(const XiValue *v) {
     return v && (v->op == XI_VEC_LOAD || v->op == XI_VEC_STORE) &&
-           (v->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0;
+           (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
 }
 
 static void xicgen_emit_vec_window_offset(XiCgenCtx *ctx, FILE *out, const XiValue *window,
@@ -7642,12 +7642,13 @@ static bool xicgen_span_slice_is_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     return v && v->op == XI_SLICE && v->nargs >= 3 && cg_value_plan_is_span_aggregate(ctx, v);
 }
 
-/* Vector span loads/stores are semantically checked, but both the native-SIMD
- * and portable aggregate C emitters implement failure with xrt_index_oob(), a
- * noreturn trap/exception transfer.  They never communicate failure through
- * xrt_pending_error.  Treat that lowering contract as nothrow with respect to
- * Xi's pending-error channel so the ERR_CHECK mechanically inserted after the
- * intrinsic does not turn every vector access into a TLS load on the hot path.
+/* Vector span loads/stores and lane extract/replace are semantically checked,
+ * but both the native-SIMD and portable aggregate C emitters implement failure
+ * with xrt_index_oob()/xrt_fixed_index_oob(), a noreturn trap/exception
+ * transfer.  They never communicate failure through xrt_pending_error.  Treat
+ * that lowering contract as nothrow with respect to Xi's pending-error channel
+ * so the ERR_CHECK mechanically inserted after the intrinsic does not turn
+ * every vector operation into a TLS load on the hot path.
  *
  * Keep the predicate deliberately structural and fail closed: if the value is
  * not one of the exact span-backed shapes accepted by xicgen_vec(), the normal
@@ -7664,6 +7665,10 @@ static bool xicgen_vec_span_access_uses_direct_trap(XiCgenCtx *ctx, const XiValu
         return v->nargs == 3 && v->args[1] && v->args[1]->type &&
                v->args[1]->type->kind == XR_KIND_SLICE &&
                cg_value_plan_is_span_aggregate(ctx, v->args[1]);
+    if (v->op == XI_VEC_EXTRACT)
+        return v->nargs == 2;
+    if (v->op == XI_VEC_REPLACE)
+        return v->nargs == 3;
     return false;
 }
 
@@ -11616,13 +11621,21 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     int64_t endian = XR_ENDIAN_NATIVE;
     if (le_unchecked_helper && xicgen_value_is_const_endian(v->args[2], &endian) &&
         endian == XR_ENDIAN_LE) {
+        bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
         bool drop_bounds =
+            unchecked_access ||
             cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_BOUNDS);
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        if (!drop_bounds) {
+        if (unchecked_access) {
+            fprintf(out,
+                    "; /* unchecked byte-Slice access */ "
+                    "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                    ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                    byte_width, byte_width);
+        } else if (!drop_bounds) {
             fprintf(out,
                     "; if (XR_UNLIKELY(!_s.data || _off < 0 || _s.length < INT64_C(%" PRId64
                     ") || _off > _s.length - INT64_C(%" PRId64 "))) "
