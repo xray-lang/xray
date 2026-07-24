@@ -400,6 +400,8 @@ static bool dump_contains_imported_package_link_dep(const char *dump) {
 static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     XaotTarget x86 = {0};
     XaotTarget arm = {0};
+    XaotTarget x86_32 = {0};
+    XaotTarget powerpc64 = {0};
     XaotLinkManifest manifest = {0};
     XaotSimdMode parsed = XAOT_SIMD_AUTO;
     char err[192];
@@ -430,6 +432,19 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SCALAR, NULL, err, sizeof(err)));
     ASSERT_TRUE(arm.simd_features == 0);
 
+    ASSERT_TRUE(xaot_target_init(&x86_32, "i386-linux-musl"));
+    ASSERT_TRUE(x86_32.pointer_bits == 32);
+    ASSERT_TRUE(strcmp(x86_32.endian, "little") == 0);
+    ASSERT_TRUE(x86_32.data_layout.pointer.size == 4);
+    ASSERT_TRUE(x86_32.simd_features == 0);
+
+    ASSERT_TRUE(xaot_target_init(&powerpc64, "powerpc64-linux-musl"));
+    ASSERT_TRUE(powerpc64.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(powerpc64.endian, "big") == 0);
+    ASSERT_TRUE(powerpc64.data_layout.pointer.size == 8);
+    ASSERT_TRUE(powerpc64.data_layout.endian == XR_TARGET_ENDIAN_BIG);
+    ASSERT_TRUE(powerpc64.simd_features == 0);
+
     ASSERT_TRUE(xaot_link_manifest_init(&manifest, &x86));
     char *json = xaot_link_manifest_dump_json(&manifest);
     ASSERT_TRUE(json != NULL);
@@ -437,6 +452,8 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(strstr(json, "\"simd_features\": 6") != NULL);
     xr_free(json);
     xaot_link_manifest_free(&manifest);
+    xaot_target_free(&powerpc64);
+    xaot_target_free(&x86_32);
     xaot_target_free(&arm);
     xaot_target_free(&x86);
     passed++;

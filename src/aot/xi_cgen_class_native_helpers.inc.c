@@ -1376,6 +1376,8 @@ static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FI
     const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
     if (idx < 0 || !field || !cg_static_struct_native_scalar_supported(field->native_type))
         return false;
+    if (!cg_exact_place_rep_alias_safe(ctx, value, load))
+        return false;
     fprintf(out, "(void *)(&");
     emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, load, (uint16_t) idx);
     fprintf(out, ")");

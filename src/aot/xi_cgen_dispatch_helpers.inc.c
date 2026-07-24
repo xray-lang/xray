@@ -2260,9 +2260,39 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_vec_error(ctx, out, v, "reinterpret needs vector and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
-            fprintf(out, ", sizeof(_r._lanes)); _r; })");
+            if (!ctx || !ctx->target || ctx->target->data_layout.endian != XR_TARGET_ENDIAN_BIG) {
+                fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
+                xicgen_emit_vec_lanes(out, v->args[0]);
+                fprintf(out, ", sizeof(_r._lanes)); _r; })");
+                return;
+            }
+            /* Portable vector reinterpretation has an endian-neutral lane
+             * contract: byte zero is the least-significant byte of numeric
+             * lane zero. A C memcpy only implements that contract on
+             * little-endian targets. Rebuild numeric lanes explicitly on
+             * big-endian scalar targets; all trip counts are compile-time
+             * constants and fold into straight-line shifts. */
+            {
+                uint8_t input_native_type =
+                    xicgen_vec_value_native_type(ctx, v->args[0], native_type);
+                unsigned input_lane_bytes = input_native_type == XR_NATIVE_U8    ? 1u
+                                            : input_native_type == XR_NATIVE_U32 ? 4u
+                                                                                 : 8u;
+                unsigned output_lane_bytes = native_type == XR_NATIVE_U8    ? 1u
+                                             : native_type == XR_NATIVE_U32 ? 4u
+                                                                            : 8u;
+                fprintf(out,
+                        "({ %s _r; for (uint32_t _i = 0; _i < %uu; _i++) { "
+                        "uint64_t _lane = 0; for (uint32_t _b = 0; _b < %uu; _b++) { "
+                        "uint32_t _byte = _i * %uu + _b; uint64_t _src = (uint64_t)(",
+                        result_type, (unsigned) lanes, output_lane_bytes, output_lane_bytes);
+                xicgen_emit_vec_lanes(out, v->args[0]);
+                fprintf(out,
+                        "[_byte / %uu]); _lane |= ((_src >> ((_byte %% %uu) * 8u)) & "
+                        "UINT64_C(255)) << (_b * 8u); } _r._lanes[_i] = (%s)_lane; } "
+                        "_r; })",
+                        input_lane_bytes, input_lane_bytes, lane_type);
+            }
             return;
 
         case XI_VEC_SHUFFLE:

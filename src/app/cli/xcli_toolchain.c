@@ -26,8 +26,10 @@ static const char *const xr_cli_tc_supported_targets[] = {
     "riscv32imac-unknown-none-elf",
     "riscv64gc-unknown-none-elf",
     "thumbv7em-none-eabi",
+    "i386-linux-musl",
     "x86_64-linux-musl",
     "aarch64-linux-musl",
+    "powerpc64-linux-musl",
     "x86_64-windows-gnu",
     "aarch64-windows-gnu",
 };
@@ -81,6 +83,13 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
         return true;
     }
 
+    if (strcmp(name, "i386-linux-musl") == 0) {
+        xr_cli_tc_set_target(out, "i386-linux-musl", "x86-linux-musl", NULL, "",
+                             XR_CLI_TARGET_ARCH_X86, XR_CLI_TARGET_OS_LINUX, XR_CLI_TARGET_ABI_MUSL,
+                             XR_CLI_TARGET_ENDIAN_LITTLE, 32, false);
+        return true;
+    }
+
     if (strcmp(name, "x86_64-unknown-none") == 0) {
         xr_cli_tc_set_target(out, "x86_64-unknown-none", "x86_64-freestanding-none", NULL, "",
                              XR_CLI_TARGET_ARCH_X86_64, XR_CLI_TARGET_OS_NONE,
@@ -116,6 +125,13 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
         return true;
     }
 
+    if (strcmp(name, "powerpc64-linux-musl") == 0) {
+        xr_cli_tc_set_target(out, "powerpc64-linux-musl", "powerpc64-linux-musl", NULL, "",
+                             XR_CLI_TARGET_ARCH_POWERPC64, XR_CLI_TARGET_OS_LINUX,
+                             XR_CLI_TARGET_ABI_MUSL, XR_CLI_TARGET_ENDIAN_BIG, 64, false);
+        return true;
+    }
+
     if (strcmp(name, "x86_64-windows-gnu") == 0) {
         xr_cli_tc_set_target(out, "x86_64-windows-gnu", "x86_64-windows-gnu", NULL, ".exe",
                              XR_CLI_TARGET_ARCH_X86_64, XR_CLI_TARGET_OS_WINDOWS,
@@ -133,8 +149,9 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
     xr_cli_tc_error(err, err_size,
                     "unsupported AOT target '%s' (supported: native, x86_64-unknown-none, "
                     "riscv32imac-unknown-none-elf, riscv64gc-unknown-none-elf, "
-                    "thumbv7em-none-eabi, "
-                    "x86_64-linux-musl, aarch64-linux-musl, x86_64-windows-gnu, "
+                    "thumbv7em-none-eabi, i386-linux-musl, "
+                    "x86_64-linux-musl, aarch64-linux-musl, powerpc64-linux-musl, "
+                    "x86_64-windows-gnu, "
                     "aarch64-windows-gnu)",
                     name);
     return false;

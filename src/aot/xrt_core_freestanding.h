@@ -774,12 +774,24 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
     }
 }
 
-typedef struct {
+#if defined(_MSC_VER)
+#define XRT_SPAN_ALIGN __declspec(align(8))
+#else
+#define XRT_SPAN_ALIGN __attribute__((aligned(8)))
+#endif
+typedef struct XRT_SPAN_ALIGN {
     void *data;
+#if UINTPTR_MAX == UINT32_MAX
+    uint32_t _abi_padding;
+#endif
     int64_t length;
 } xr_span_t;
+#undef XRT_SPAN_ALIGN
 
 _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
+#if !defined(_MSC_VER)
+_Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
+#endif
 
 static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
     XrValue out = {0};

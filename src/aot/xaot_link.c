@@ -277,6 +277,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "little";
         return true;
     }
+    if (strcmp(name, "i386-linux-musl") == 0) {
+        *arch = "x86";
+        *os = "linux";
+        *abi = "musl";
+        *object_format = "elf";
+        *triple = "x86-linux-musl";
+        *pointer_bits = 32;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "x86_64-unknown-none") == 0) {
         *arch = "x86_64";
         *os = "none";
@@ -325,6 +335,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *triple = "aarch64-linux-musl";
         *pointer_bits = 64;
         *endian = "little";
+        return true;
+    }
+    if (strcmp(name, "powerpc64-linux-musl") == 0) {
+        *arch = "powerpc64";
+        *os = "linux";
+        *abi = "musl";
+        *object_format = "elf";
+        *triple = "powerpc64-linux-musl";
+        *pointer_bits = 64;
+        *endian = "big";
         return true;
     }
     if (strcmp(name, "x86_64-windows-gnu") == 0) {

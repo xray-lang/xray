@@ -154,8 +154,10 @@ mkdir -p "$WORK/logs"
 pids=""
 logs=""
 for target in \
+    i386-linux-musl \
     x86_64-linux-musl \
     aarch64-linux-musl \
+    powerpc64-linux-musl \
     x86_64-windows-gnu \
     aarch64-windows-gnu
 do

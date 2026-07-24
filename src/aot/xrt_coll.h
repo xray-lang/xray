@@ -571,12 +571,24 @@ static inline int64_t xrt_array_len(XrValue arr) {
 
 static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end);
 
-typedef struct {
+#if defined(_MSC_VER)
+#define XRT_SPAN_ALIGN __declspec(align(8))
+#else
+#define XRT_SPAN_ALIGN __attribute__((aligned(8)))
+#endif
+typedef struct XRT_SPAN_ALIGN {
     void *data;
+#if UINTPTR_MAX == UINT32_MAX
+    uint32_t _abi_padding;
+#endif
     int64_t length;
 } xr_span_t;
+#undef XRT_SPAN_ALIGN
 
 _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
+#if !defined(_MSC_VER)
+_Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
+#endif
 
 /* Box a frame-local Slice descriptor for a typed dynamic-call boundary.  Safe Xray code cannot
  * retain a Slice, so the aggregate reference is valid for the duration of the call and does not
