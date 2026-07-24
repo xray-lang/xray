@@ -24,6 +24,7 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/module/xnative_package.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
@@ -1595,10 +1596,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     assert((contains(buf, "\nstatic XR_AINLINE int64_t lib_helper_") ||
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
-    assert((contains(buf, "\nXR_FORCEINLINE int64_t lib_public_exp(") ||
-            contains(buf, "\nXR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
-           "small exported function should keep external stable C linkage while exposing "
-           "its cross-module inline contract");
+    assert((contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
+           "small module-ABI function should stay linkable across translation units while "
+           "remaining hidden and inlineable inside the final bundle");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
            "exported function must not become file-static");
@@ -1612,6 +1613,42 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     test_aot_plan_free(&plan);
     xi_func_free(lib_ir);
     xi_func_free(app_ir);
+}
+
+TEST(cgen_c_export_wrapper_keeps_default_visibility) {
+    const char *src = "fn bridge(x: int) -> int { return x + 1 }\n"
+                      "bridge(0)\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    assert(bridge != NULL && "bridge function should be lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_bridge_visible",
+        .visibility = "default",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "C-export wrapper should generate");
+    assert(contains(code, "\nint64_t xr_bridge_visible(int64_t p0)") &&
+           "the public C-export wrapper must retain default external visibility");
+    assert(!contains(code, "XRT_INTERNAL int64_t xr_bridge_visible(") &&
+           !contains(code, "XRT_INTERNAL XR_FORCEINLINE int64_t xr_bridge_visible(") &&
+           "internal implementation visibility must never leak onto the public wrapper");
+
+    xr_free(code);
+    xi_func_free(ir);
 }
 
 TEST(cgen_stats_tracks_native_abi) {
@@ -8502,6 +8539,7 @@ int main(void) {
     run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_plain_function_does_not_emit_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
+    run_cgen_c_export_wrapper_keeps_default_visibility();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();

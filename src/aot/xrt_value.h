@@ -57,6 +57,7 @@
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XRT_INTERNAL __attribute__((visibility("hidden")))
 #define XRT_COLD __attribute__((cold))
 #define XRT_NORETURN __attribute__((noreturn))
 /* Alignment promise for the optimizer. Only assert alignments that the
@@ -90,6 +91,7 @@
 #else
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #if defined(_MSC_VER)
 #define XRT_NORETURN __declspec(noreturn)

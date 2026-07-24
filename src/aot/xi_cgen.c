@@ -1043,7 +1043,7 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
     if (cg_func_is_par_for_native_callback(f))
         return "static XR_AINLINE ";
     if (cg_func_needs_external_linkage(ctx, f, prefix))
-        return cg_func_should_force_inline(f) ? "XR_FORCEINLINE " : "";
+        return cg_func_should_force_inline(f) ? "XRT_INTERNAL XR_FORCEINLINE " : "XRT_INTERNAL ";
     if (ctx && ctx->extern_linkage) {
         if (cg_func_contains_stack_array(f))
             return "static XR_NOINLINE ";
