@@ -6724,8 +6724,13 @@ static bool cg_func_contains_stack_array(const XiFunc *f) {
              * local array inflated small exported wrappers into no-inline
              * boundaries and prevented LTO from specializing cross-module hot
              * calls. */
-            if (value->op != XI_PARAM && value->op != XI_GET_SHARED && value->op != XI_GET_GLOBAL &&
-                value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
+            /* Loading an existing `ref [T; N]` place yields a pointer to the
+             * caller-owned aggregate; it does not materialize a stack array in
+             * this function. Treating that PLACE_LOAD as local storage blocks
+             * otherwise small closed-world kernels from cross-module LTO. */
+            if (value->op != XI_PARAM && value->op != XI_PLACE_LOAD && value->op != XI_GET_SHARED &&
+                value->op != XI_GET_GLOBAL && value->type &&
+                value->type->kind == XR_KIND_FIXED_ARRAY)
                 return true;
         }
     }
@@ -6735,7 +6740,7 @@ static bool cg_func_contains_stack_array(const XiFunc *f) {
 static bool cg_func_should_force_inline(const XiFunc *f) {
     enum {
         CG_FORCE_INLINE_VALUE_LIMIT = 48,
-        CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT = 128,
+        CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT = 192,
         CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT = 256
     };
     if (!f)

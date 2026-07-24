@@ -5662,6 +5662,10 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         value->aux_int = xi_vec_shape_encode(desc->shape_rule.result_native_type,
                                              desc->shape_rule.result_lanes) |
                          extra;
+        bool unchecked_access = (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0 &&
+                                (op == XI_VEC_LOAD || op == XI_VEC_STORE);
+        if (unchecked_access)
+            value->aux_int |= XI_VEC_ACCESS_UNCHECKED;
     } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
         value->aux_int = receiver->type ? receiver->type->scalar_rep : 0;
     }
@@ -5691,9 +5695,11 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
         xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
-    if (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
-        desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
-        desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
+    bool unchecked_vec_access =
+        desc->family == XA_INTRINSIC_FAMILY_SIMD && (value->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0;
+    if (!unchecked_vec_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
+                                  desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
+                                  desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))
         xi_lower_insert_err_check(l, node, true);
     return value;
 }

@@ -650,6 +650,10 @@ static inline bool xi_op_is_identity_forward(uint16_t op) {
 #define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
 #define XI_VEC_SHAPE_UNZIP (INT64_C(1) << 18)
 #define XI_VEC_SHAPE_CONTIGUOUS_HALF (INT64_C(1) << 19)
+/* The source explicitly placed this vector memory access in `unsafe {}` and
+ * therefore promises that the complete lane window is valid.  This bit is
+ * legal only on explicit XI_VEC_LOAD / XI_VEC_STORE values. */
+#define XI_VEC_ACCESS_UNCHECKED (INT64_C(1) << 20)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)

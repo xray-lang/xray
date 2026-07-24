@@ -1,0 +1,5 @@
+contains=function 1 name=localCopy module=0 depth=1 abi=native boundary=none params=1 ret=uint64_t/scalar/u64
+regex=value v[0-9]+ op=AGG_NEW kind=aggregate rep=tagged c_type=xrt_struct_abi_[A-Za-z0-9_]+
+c_not_contains=xrt_value_clone_for_coro(
+c_not_contains=xrt_arc_alloc(
+c_syntax=pass

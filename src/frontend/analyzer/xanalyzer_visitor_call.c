@@ -270,6 +270,8 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
         .target_symbol_id = target ? target->id : 0,
         .intrinsic_id = intrinsic_id,
         .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+        .flags =
+            ctx->unsafe_depth > 0 ? XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE : XA_RESOLVED_CALL_FLAG_NONE,
     };
     xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
                                &resolved);

@@ -231,6 +231,11 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid contiguous-half flag %u",
                              value->xa_intrinsic_id, has_half ? 1u : 0u);
+        bool has_unchecked_access = (value->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0;
+        if (has_unchecked_access && value->op != XI_VEC_LOAD && value->op != XI_VEC_STORE)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has unchecked non-memory vector op %u",
+                             value->xa_intrinsic_id, (unsigned) value->op);
     } else if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
         if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_REINTERPRET && value->aux_int == 0)
             return set_error(error, error_size,

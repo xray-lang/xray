@@ -3867,6 +3867,20 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
                 return false;
+            /* A local value-struct constructor is concrete even when it does
+             * not reach a native function boundary.  Seed its POD aggregate
+             * representation here so a semantic XI_COPY can become an
+             * independent C aggregate value and subsequent AGG_SET operations
+             * stay on the stack.  Previously only returns/arguments seeded
+             * this representation, so `var p = makePair(); p.x += 1` boxed p
+             * and routed the copy through xrt_value_clone_for_coro. */
+            if (blk->values[vi]->op == XI_AGG_NEW) {
+                XaotValueRep aggregate_rep =
+                    xaot_abi_native_value_rep(bundle, func, blk->values[vi]);
+                if (aggregate_rep.kind == XAOT_VALUE_AGGREGATE &&
+                    (aggregate_rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0)
+                    vp->rep = aggregate_rep;
+            }
             if (blk->values[vi]->xa_intrinsic_id != 0 && blk->values[vi]->op >= XI_VEC_LOAD &&
                 blk->values[vi]->op <= XI_VEC_REDUCE_ADD) {
                 XaotValueRep intrinsic_rep =

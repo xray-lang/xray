@@ -1,0 +1,5 @@
+args=--simd native
+regex=function [0-9]+ name=roundtrip module=1 depth=1 abi=native boundary=none params=0 ret=uint8_t/scalar/u8
+c_count=2:/* unchecked SIMD access */
+c_regex=XR_ASSUME\(_off >= 0 && _off <= _s.length - 16u\)
+c_syntax=pass

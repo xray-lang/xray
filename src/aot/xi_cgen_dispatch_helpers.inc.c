@@ -599,10 +599,18 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         xicgen_identity(ctx, out, f, v, prefix);
         return;
     }
-    if (cg_value_plan_is_aggregate(ctx, v) && cg_value_plan_is_aggregate(ctx, v->args[0]) &&
-        xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
-        xicgen_identity(ctx, out, f, v, prefix);
-        return;
+    if (cg_value_plan_is_aggregate(ctx, v) && cg_value_plan_is_aggregate(ctx, v->args[0])) {
+        /* Native value-struct representations contain only POD scalar,
+         * fixed-array, or nested-POD fields.  C assignment is therefore the
+         * exact independent value copy required by XI_COPY; it is not limited
+         * to identity aliases.  Compact ADTs retain their existing clone path
+         * because their payload ownership can be non-trivial. */
+        if ((cg_value_plan_is_struct_aggregate(ctx, v) &&
+             cg_value_plan_is_struct_aggregate(ctx, v->args[0])) ||
+            xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
+            xicgen_identity(ctx, out, f, v, prefix);
+            return;
+        }
     }
     if (cg_debug_boxed_adapter_enabled() && cg_value_plan_is_aggregate(ctx, v)) {
         const XaotValuePlan *vp = cg_value_plan(ctx, v);
@@ -1406,6 +1414,11 @@ static const XiValue *xicgen_vec_proven_window(XiCgenCtx *ctx, const XiValue *v,
     return window && window->op == XI_SLICE_WINDOW && window->nargs == 3 ? window : NULL;
 }
 
+static bool xicgen_vec_unchecked_access(const XiValue *v) {
+    return v && (v->op == XI_VEC_LOAD || v->op == XI_VEC_STORE) &&
+           (v->aux_int & XI_VEC_ACCESS_UNCHECKED) != 0;
+}
+
 static void xicgen_emit_vec_window_offset(XiCgenCtx *ctx, FILE *out, const XiValue *window,
                                           const XiValue *relative) {
     fprintf(out, "(");
@@ -1451,6 +1464,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 fprintf(out, "%s _r; ", result_type);
             const XiValue *proven_load_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked_load = xicgen_vec_unchecked_access(v);
             fprintf(out, "xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(proven_load_window ? proven_load_window->args[0]
                                                                       : v->args[0]));
@@ -1459,12 +1473,17 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 xicgen_emit_vec_window_offset(ctx, out, proven_load_window, v->args[1]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            if (!proven_load_window)
+            if (!proven_load_window && !unchecked_load)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_load)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; %s _v = ", vec_type);
             if (neon)
                 fprintf(out, "%s(((const %s *)_s.data) + _off)",
@@ -1493,6 +1512,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 return false;
             const XiValue *proven_store_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked_store = xicgen_vec_unchecked_access(v);
             fprintf(out, "({ xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(
                                proven_store_window ? proven_store_window->args[0] : v->args[1]));
@@ -1501,12 +1521,17 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 xicgen_emit_vec_window_offset(ctx, out, proven_store_window, v->args[2]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-            if (!proven_store_window)
+            if (!proven_store_window && !unchecked_store)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_store)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; %s _v = ", vec_type);
             xicgen_emit_vec_native_load(ctx, out, v->args[0], native_type, neon, wide);
             fprintf(out, "; ");
@@ -2030,6 +2055,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             const XiValue *proven_scalar_load_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked_scalar_load = xicgen_vec_unchecked_access(v);
             fprintf(out, "({ %s _r; xr_span_t _s = ", result_type);
             emit_vref(out, xicgen_vec_unwrap_value(proven_scalar_load_window
                                                        ? proven_scalar_load_window->args[0]
@@ -2039,12 +2065,17 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_emit_vec_window_offset(ctx, out, proven_scalar_load_window, v->args[1]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            if (!proven_scalar_load_window)
+            if (!proven_scalar_load_window && !unchecked_scalar_load)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_scalar_load)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out,
                     "; memcpy(_r._lanes, ((const %s *)_s.data) + _off, sizeof(_r._lanes)); "
                     "_r; })",
@@ -2058,6 +2089,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             const XiValue *proven_scalar_store_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked_scalar_store = xicgen_vec_unchecked_access(v);
             fprintf(out, "({ xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(proven_scalar_store_window
                                                        ? proven_scalar_store_window->args[0]
@@ -2067,12 +2099,17 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_emit_vec_window_offset(ctx, out, proven_scalar_store_window, v->args[2]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-            if (!proven_scalar_store_window)
+            if (!proven_scalar_store_window && !unchecked_scalar_store)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_scalar_store)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; memcpy(((%s *)_s.data) + _off, ", lane_type);
             xicgen_emit_vec_lanes(out, v->args[0]);
             fprintf(out, ", %uu); XR_NULL_VAL; })",
@@ -9719,11 +9756,12 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                                               v->aux_int))
         return;
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
-        char fname[128];
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
-        cg_struct_field_c_name(sl, v->aux_int, fname, sizeof(fname));
-        emit_vref(out, v->args[0]);
-        fprintf(out, ".%s", fname);
+        /* A locally inlined struct and a value-plan aggregate can describe the
+         * same AGG_NEW.  The lvalue helper resolves that storage identity to
+         * `_stN.field`; spelling `vN.field` directly would reference a C
+         * temporary that was intentionally elided. */
+        emit_struct_field_lvalue(ctx, out, f, sl, v->aux_int, v->args[0], prefix);
         return;
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
