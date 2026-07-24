@@ -150,7 +150,15 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
                      "internal error: static field index out of bounds");
         }
-        cls->static_field_values[static_field_idx] = value;
+        if (XR_IS_ARRAY_REF(value)) {
+            if (!vm_store_persistent_array_ref(isolate, &cls->static_field_values[static_field_idx],
+                                               value)) {
+                VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY,
+                         "failed to materialize fixed array static field");
+            }
+        } else {
+            cls->static_field_values[static_field_idx] = value;
+        }
         return XR_DISP_NEXT;
     }
 

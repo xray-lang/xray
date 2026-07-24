@@ -469,7 +469,8 @@ static XrAggregateLayout *stmt_type_struct_layout(XiLower *l, struct XrType *typ
 static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
     if (!type)
         return false;
-    return type->is_value_type || stmt_type_struct_layout(l, type) != NULL;
+    return type->kind == XR_KIND_FIXED_ARRAY || type->is_value_type ||
+           stmt_type_struct_layout(l, type) != NULL;
 }
 
 static XrClassInfo *stmt_class_info_for_type(XiLower *l, struct XrType *type) {
@@ -3219,7 +3220,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * loop-carried updates to the source corrupt the snapshot. */
     bool needs_copy =
         (xi_var_id_is_valid(init_val->var_id) && init_val->var_id != (XiVarId) var_id);
-    /* Value types (structs) always need deep copy on assignment regardless
+    /* Value types (structs and fixed arrays) always need a value copy regardless
      * of var_id — the source could be a shared variable, upvalue, or
      * function return whose identity must not leak into the new binding. */
     bool value_clone_copy =

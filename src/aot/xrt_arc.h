@@ -501,13 +501,13 @@ static inline void xrt_release(XrValue v) {
 
 static inline XrValue xrt_value_to_owned(XrValue v);
 
-static inline XrValue xrt_array_ref_to_owned(XrValue v) {
+/* Materialize an independent fixed-array value.  This differs from
+ * xrt_array_ref_to_owned(): an already-owned source must still get new outer
+ * storage for value-copy semantics.  Reference-valued lanes retain their
+ * elements rather than recursively cloning the referenced objects. */
+static inline XrValue xrt_array_ref_clone_value(XrValue v) {
     if (!XR_IS_ARRAY_REF(v) || !v.ptr)
         return v;
-    if ((v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0) {
-        xrt_retain(v);
-        return v;
-    }
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(v);
     uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(v);
     size_t elem_size = xrt_value_native_type_size(elem_type);
@@ -522,6 +522,16 @@ static inline XrValue xrt_array_ref_to_owned(XrValue v) {
         memcpy(dst, v.ptr, size);
     }
     return xr_array_ref_owned(dst, elem_type, elem_count);
+}
+
+static inline XrValue xrt_array_ref_to_owned(XrValue v) {
+    if (!XR_IS_ARRAY_REF(v) || !v.ptr)
+        return v;
+    if ((v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0) {
+        xrt_retain(v);
+        return v;
+    }
+    return xrt_array_ref_clone_value(v);
 }
 
 static inline void xrt_array_ref_release_owned(XrValue v) {

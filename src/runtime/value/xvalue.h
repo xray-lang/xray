@@ -217,6 +217,7 @@ _Static_assert(sizeof(XrSliceView) == 16, "VM Slice value must be data + length"
  * existing XrValue descriptor, never in the public Slice value body. */
 #define XR_AGG_REF_FLAG_ARRAY UINT8_C(0x80)
 #define XR_AGG_REF_FLAG_SLICE UINT8_C(0x40)
+#define XR_ARRAY_REF_PERSISTENT UINT8_C(0x20)
 #define XR_SLICE_VIEW_READONLY UINT8_C(0x20)
 #define XR_SLICE_VIEW_CONTAINS_REFS UINT8_C(0x10)
 
@@ -272,6 +273,8 @@ static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t
     return v;
 }
 #define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && ((v).flags & XR_AGG_REF_FLAG_ARRAY) != 0)
+#define XR_ARRAY_REF_IS_PERSISTENT(v)                                                              \
+    (XR_IS_ARRAY_REF(v) && ((v).flags & XR_ARRAY_REF_PERSISTENT) != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
 #define XR_ARRAY_REF_ELEM_COUNT(v) ((uint32_t) ((v).ext >> 8))
 

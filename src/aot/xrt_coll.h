@@ -5201,7 +5201,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (!val.ptr)
                 return val;
             if (XR_IS_ARRAY_REF(val))
-                return xrt_array_ref_to_owned(val);
+                return xrt_array_ref_clone_value(val);
             uint16_t storage_size = val.heap_type;
             uint32_t size = storage_size ? storage_size : *(uint32_t *) val.ptr;
             if (size == 0 || size > (16u * 1024u * 1024u))

@@ -280,6 +280,32 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
     memcpy(data, slot->ptr, bytes);
     data[bytes] = 0;
     slot->ptr = data;
+    slot->flags |= XR_ARRAY_REF_PERSISTENT;
+    return true;
+}
+
+bool vm_store_persistent_array_ref(XrVMRuntime *isolate, XrValue *destination, XrValue source) {
+    if (!isolate || !destination || !XR_IS_ARRAY_REF(source) || !source.ptr)
+        return false;
+
+    uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(source);
+    uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
+    uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
+    if (elem_size == 0 || elem_count == 0)
+        return false;
+
+    size_t bytes = (size_t) elem_size * (size_t) elem_count;
+    if (XR_ARRAY_REF_IS_PERSISTENT(*destination) && destination->ptr &&
+        XR_ARRAY_REF_ELEM_TYPE(*destination) == elem_type &&
+        XR_ARRAY_REF_ELEM_COUNT(*destination) == elem_count) {
+        memmove(destination->ptr, source.ptr, bytes);
+        return true;
+    }
+
+    XrValue persistent = source;
+    if (!vm_copy_array_ref_to_fixed_heap(isolate, &persistent))
+        return false;
+    *destination = persistent;
     return true;
 }
 

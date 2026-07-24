@@ -55,6 +55,13 @@ typedef enum {
     XR_DISP_FATAL,       /* Unrecoverable error; abort VM loop */
 } XrDispatchAction;
 
+/* Persist a frame-backed fixed-array value before storing it in a slot that
+ * can outlive the current frame. Existing persistent storage is reused when
+ * its element type and length match, preserving fixed-array value semantics
+ * without allocating on every field update. */
+XR_FUNC bool vm_store_persistent_array_ref(XrVMRuntime *isolate, XrValue *destination,
+                                           XrValue source);
+
 static inline uint8_t vm_channel_transfer_mode_before(const XrBcCallFrame *frame,
                                                       XrInstruction *pc_after_current) {
     if (!frame || !frame->closure || !frame->closure->proto || !pc_after_current)

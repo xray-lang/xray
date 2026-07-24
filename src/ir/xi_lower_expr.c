@@ -425,7 +425,8 @@ static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
 }
 
 static bool xi_lower_type_needs_value_clone(XiLower *l, struct XrType *type) {
-    return type && (type->is_value_type || xi_lower_type_struct_layout(l, type) != NULL);
+    return type && (type->kind == XR_KIND_FIXED_ARRAY || type->is_value_type ||
+                    xi_lower_type_struct_layout(l, type) != NULL);
 }
 
 XR_FUNC bool xi_lower_type_uses_read_place(XiLower *l, struct XrType *type) {
@@ -1149,7 +1150,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * the same physical register — corrupting loop-carried values
          * when the source variable is subsequently modified. */
         bool need_copy = (xi_var_id_is_valid(val->var_id) && val->var_id != (XiVarId) var_id);
-        /* Value types (structs) need independent storage on assignment. */
+        /* Value types (structs and fixed arrays) need independent storage on assignment. */
         bool value_clone_copy =
             xi_lower_value_needs_value_clone(l, val) && !xi_lower_value_is_fresh_value_struct(val);
         if (!need_copy && value_clone_copy)
