@@ -319,6 +319,25 @@ static const XiConstLiteral *xicgen_freestanding_const_slot_literal(XiCgenCtx *c
                : NULL;
 }
 
+/* A source-level top-level `const` is immutable in hosted and freestanding
+ * profiles alike. Imported scalar constants already retain their literal at
+ * use sites; do the same for constants owned by the current module instead of
+ * reloading and unboxing their compatibility shared slot on every access.
+ * Addressable scalar objects deliberately stay on the static-data path. */
+static const XiConstLiteral *xicgen_owned_scalar_const_slot_literal(XiCgenCtx *ctx, const XiFunc *f,
+                                                                    int64_t slot) {
+    const XiModule *module = cg_module_for_func(ctx, f);
+    const XiFunc *init = module ? module->init : NULL;
+    if (!init || slot < 0 || slot >= init->nshared || !init->slot_owned_consts ||
+        !init->slot_owned_consts[slot])
+        return NULL;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    return xicgen_const_literal_is_freestanding_scalar(lit) &&
+                   !cg_const_literal_is_static_scalar_object(lit)
+               ? lit
+               : NULL;
+}
+
 static const XiConstLiteral *xicgen_freestanding_erased_const_slot(XiCgenCtx *ctx, int64_t slot) {
     if (!ctx || !ctx->freestanding_profile || !ctx->module || !ctx->module->slot_const_literals ||
         slot < 0 || slot >= ctx->module->nslots)
@@ -2500,6 +2519,12 @@ static bool xicgen_value_is_elided_static_aggregate_access(XiCgenCtx *ctx, const
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
+    const XiConstLiteral *owned_lit =
+        xicgen_owned_scalar_const_slot_literal(ctx, f, v ? v->aux_int : -1);
+    if (owned_lit) {
+        xicgen_emit_const_slot_literal_as_value(ctx, out, v, owned_lit);
+        return;
+    }
     const XiConstLiteral *lit = xicgen_freestanding_const_slot_literal(ctx, v ? v->aux_int : -1);
     if (lit) {
         xicgen_emit_const_slot_literal_as_value(ctx, out, v, lit);

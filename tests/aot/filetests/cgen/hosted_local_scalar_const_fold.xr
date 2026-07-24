@@ -1,0 +1,10 @@
+const CAPACITY: int = 256
+
+fn remaining(used: int) -> int {
+    // Keep a separate codegen boundary so this tests GET_SHARED emission, not
+    // caller-side constant propagation.
+    var scratch: [byte; 128] = [0; 128]
+    return CAPACITY - used + (scratch[0] as int)
+}
+
+print(remaining(1))
