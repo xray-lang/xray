@@ -6730,8 +6730,8 @@ static bool cg_func_contains_stack_array(const XiFunc *f) {
              * caller-owned aggregate; it does not materialize a stack array in
              * this function. Treating that PLACE_LOAD as local storage blocks
              * otherwise small closed-world kernels from cross-module LTO. */
-            if (value->op != XI_PARAM && value->op != XI_PLACE_LOAD && value->op != XI_GET_SHARED &&
-                value->op != XI_GET_GLOBAL && value->type &&
+            if (value->op != XI_PARAM && value->op != XI_PLACE_LOAD && value->op != XI_AGG_GET &&
+                value->op != XI_GET_SHARED && value->op != XI_GET_GLOBAL && value->type &&
                 value->type->kind == XR_KIND_FIXED_ARRAY)
                 return true;
         }

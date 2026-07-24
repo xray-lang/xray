@@ -1,0 +1,3 @@
+c_regex=static uint64_t [A-Za-z0-9_]+_kernel_[0-9]+\(xrt_closure_t \*_cl, [A-Za-z0-9_]+ \* p0\)
+c_not_contains=XR_NOINLINE
+c_syntax=pass
