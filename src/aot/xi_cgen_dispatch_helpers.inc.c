@@ -12047,13 +12047,14 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
         return;
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk =
         cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<byte>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
         fprintf(out, "xrt_byte_slice_copy_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
@@ -12063,9 +12064,10 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         return;
     }
     bool inline_copy =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                   bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER);
+        unchecked_access ||
+        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
+                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
+              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER));
     if (bulk && !inline_copy) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
@@ -12083,14 +12085,19 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             emit_codegen_abort_expr(out);
         }
         fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
-                     "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
-                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG); ");
+        if (unchecked_access)
+            fprintf(out, "/* unchecked Slice.copyFrom access */ "
+                         "XR_ASSUME(_src.length >= 0 && _dst.length >= _src.length && "
+                         "(_src.length == 0 || (_dst.data && _src.data))); ");
+        else
+            fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
+                         "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
+                         "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                         "XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG); ");
         if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
             fprintf(out, "if (_src.length > 0) memcpy(_dst.data, _src.data, "
                          "(size_t)_src.length);");
-        else if (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE)
+        else if (unchecked_access || (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE))
             fprintf(out, "if (_src.length > 0) memmove(_dst.data, _src.data, "
                          "(size_t)_src.length);");
         else if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP)
@@ -12296,8 +12303,9 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                                const char *prefix) {
     (void) prefix;
     XR_DCHECK(v && v->nargs == 3, "xicgen_span_window: need source, start, and count");
-    bool bounds_proven =
-        cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_WINDOW, XAOT_SLICE_DROP_BOUNDS);
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    bool bounds_proven = unchecked_access || cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_WINDOW,
+                                                                XAOT_SLICE_DROP_BOUNDS);
     int64_t fixed_count = 0;
     bool has_fixed_count = (cg_const_int_value(v->args[2], &fixed_count) ||
                             xicgen_imported_int_const_value(ctx, f, v->args[2], &fixed_count)) &&
@@ -12313,6 +12321,8 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _start = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    if (unchecked_access)
+        fprintf(out, "; /* unchecked Slice.window access */ ");
     if (has_fixed_count) {
         fprintf(out, "; XR_ASSUME(_src.length >= 0); ");
         if (!bounds_proven)
@@ -12446,12 +12456,13 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_SLICE_COPY))
         return;
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
         CgArrayElemInfo helper_info;
         if (!cg_span_elem_info_from_value(ctx, v->args[0], &helper_info) || !helper_info.ctype) {
             cg_ctx_set_error(ctx);
@@ -12469,28 +12480,40 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     bool have_native_info =
         cg_span_elem_info_from_value(ctx, v->args[0], &info) && info.rep != XR_REP_TAGGED;
     bool inline_copy =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                   bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_HELPER);
+        unchecked_access ||
+        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
+                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
+              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_HELPER));
     if (inline_copy && have_native_info) {
         fprintf(out, "({ xr_span_t _dst = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; xr_span_t _src = ");
         emit_span_ref_expr(out, v->args[1]);
         fprintf(out, "; ");
-        fprintf(out,
-                "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
-                "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
-                "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"Slice.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
-                "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
-                "(int64_t)sizeof(%s); if (XR_UNLIKELY(_src_bytes > _dst_bytes || "
-                "(_src_bytes > 0 && (!_dst.data || !_src.data)))) xrt_throw_error("
-                "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.copyFrom(src) range out of bounds\"); ",
-                info.ctype, info.ctype, info.ctype, info.ctype);
+        if (unchecked_access)
+            fprintf(out,
+                    "/* unchecked Slice.copyFrom access */ "
+                    "XR_ASSUME(_dst.length >= 0 && _src.length >= 0 && _dst.length >= "
+                    "_src.length && _dst.length <= INT64_MAX / (int64_t)sizeof(%s) && "
+                    "_src.length <= INT64_MAX / (int64_t)sizeof(%s) && "
+                    "(_src.length == 0 || (_dst.data && _src.data))); int64_t _dst_bytes = "
+                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
+                    "(int64_t)sizeof(%s); ",
+                    info.ctype, info.ctype, info.ctype, info.ctype);
+        else
+            fprintf(out,
+                    "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
+                    "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
+                    "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                    "\"Slice.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
+                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
+                    "(int64_t)sizeof(%s); if (XR_UNLIKELY(_src_bytes > _dst_bytes || "
+                    "(_src_bytes > 0 && (!_dst.data || !_src.data)))) xrt_throw_error("
+                    "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.copyFrom(src) range out of bounds\"); ",
+                    info.ctype, info.ctype, info.ctype, info.ctype);
         if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
             fprintf(out, "if (_src_bytes > 0) memcpy(_dst.data, _src.data, (size_t)_src_bytes); ");
-        else if (!bulk || bulk->action == XAOT_BULK_INLINE_MEMMOVE)
+        else if (unchecked_access || !bulk || bulk->action == XAOT_BULK_INLINE_MEMMOVE)
             fprintf(out, "if (_src_bytes > 0) memmove(_dst.data, _src.data, (size_t)_src_bytes); ");
         else
             fprintf(out,

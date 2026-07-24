@@ -1,0 +1,13 @@
+fn unsafeWindow(bytes: Slice<byte>, start: int, count: int) -> int {
+    var window = unsafe {
+        bytes.window(start, count)
+    }
+    return len(window)
+}
+
+fn safeWindow(bytes: Slice<byte>, start: int, count: int) -> int {
+    return len(bytes.window(start, count))
+}
+
+var bytes: [byte; 4] = [1, 2, 3, 4]
+print(unsafeWindow(bytes[:], 1, 2) + safeWindow(bytes[:], 1, 2))

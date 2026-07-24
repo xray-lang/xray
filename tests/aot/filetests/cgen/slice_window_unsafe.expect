@@ -1,0 +1,3 @@
+c_count=1:/* unchecked Slice.window access */
+c_contains=if (XR_UNLIKELY(_src.length < 0 || _start < 0 || _count < 0
+c_syntax=pass

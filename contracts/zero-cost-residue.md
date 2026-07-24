@@ -19,12 +19,13 @@ bounds-panic branch remains; when the AOT plan proves the same Slice receiver,
 non-negative affine offset, dominating relational length guard, constant width,
 and no clobber, CGen consumes that evidence and emits the raw load/store without
 the redundant branch. The proof never changes the checked source boundary.
-An explicitly source-marked `unsafe` SIMD load/store or fixed-width integer
-byte-Slice load is a separate boundary: the analyzer records the unsafe scope
+An explicitly source-marked `unsafe` SIMD load/store, fixed-width integer
+byte-Slice load, strict `Slice.window` construction, or byte/POD
+`Slice.copyFrom` is a separate boundary: the analyzer records the unsafe scope
 on the resolved call, Xi preserves that fact, and native CGen may emit an
-unchecked memory access with an `XR_ASSUME` precondition and an audit marker.
-Safe calls remain checked unless ordinary AOT proof removes only a redundant
-branch.
+unchecked memory access, borrowed view, or bounded copy with an `XR_ASSUME`
+precondition and an audit marker. Safe calls remain checked unless ordinary AOT
+proof removes only a redundant branch.
 
 Small external-linkage leaf bodies may carry a force-inline hint so native LTO
 can specialize a cross-module caller. The hint does not remove the exported

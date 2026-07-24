@@ -181,6 +181,18 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
         return set_error(error, error_size, "canonical intrinsic id %u requires Xi op %u",
                          value->xa_intrinsic_id, (unsigned) expected);
 
+    bool has_unchecked_access = (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    if (has_unchecked_access) {
+        bool allowed = value->op == XI_VEC_LOAD || value->op == XI_VEC_STORE ||
+                       value->op == XI_BYTE_SLICE_LOAD_U16 || value->op == XI_BYTE_SLICE_LOAD_U32 ||
+                       value->op == XI_BYTE_SLICE_LOAD_U64 || value->op == XI_SLICE_WINDOW ||
+                       value->op == XI_BYTE_SLICE_COPY || value->op == XI_SLICE_COPY;
+        if (!allowed)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has unchecked unsupported op %u",
+                             value->xa_intrinsic_id, (unsigned) value->op);
+    }
+
     uint32_t min_nargs = (uint32_t) desc->min_arity + 1u;
     uint32_t max_nargs = (uint32_t) desc->max_arity + 1u;
     bool backend_static_arity = stage >= XI_STAGE_BACKEND &&
@@ -231,7 +243,6 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid contiguous-half flag %u",
                              value->xa_intrinsic_id, has_half ? 1u : 0u);
-        bool has_unchecked_access = (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
         if (has_unchecked_access && value->op != XI_VEC_LOAD && value->op != XI_VEC_STORE)
             return set_error(error, error_size,
                              "canonical intrinsic id %u has unchecked non-memory vector op %u",

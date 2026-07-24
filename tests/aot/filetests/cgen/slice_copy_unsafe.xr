@@ -1,0 +1,32 @@
+fn unsafeBytes(dst: ref Slice<byte>, src: Slice<byte>) {
+    unsafe {
+        dst.copyFrom(src)
+    }
+}
+
+fn safeBytes(dst: ref Slice<byte>, src: Slice<byte>) {
+    dst.copyFrom(src)
+}
+
+fn unsafeWords(dst: ref Slice<u64>, src: Slice<u64>) {
+    unsafe {
+        dst.copyFrom(src)
+    }
+}
+
+fn safeWords(dst: ref Slice<u64>, src: Slice<u64>) {
+    dst.copyFrom(src)
+}
+
+fn run() {
+    var bytes: [byte; 2] = [0, 0]
+    var words: [u64; 2] = [0, 0]
+    var byteView: Slice<byte> = bytes[:]
+    var wordView: Slice<u64> = words[:]
+    unsafeBytes(ref byteView, bytes[:])
+    safeBytes(ref byteView, bytes[:])
+    unsafeWords(ref wordView, words[:])
+    safeWords(ref wordView, words[:])
+}
+
+run()

@@ -5696,16 +5696,20 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
             value->aux = xi_lower_type_struct_layout(l, target);
         } else if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_GET) {
             value->aux_int = 1;
+        } else if ((desc->lowering == XA_INTRINSIC_LOWERING_SLICE_WINDOW ||
+                    desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY ||
+                    desc->lowering == XA_INTRINSIC_LOWERING_SLICE_COPY) &&
+                   (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0) {
+            value->aux_int |= XI_ACCESS_UNCHECKED;
         }
         XiSequenceEvidenceIds sequence_ids;
         lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
         xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
-    bool unchecked_vec_access =
-        desc->family == XA_INTRINSIC_FAMILY_SIMD && (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
-    if (!unchecked_vec_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
-                                  desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
-                                  desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))
+    bool unchecked_access = (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    if (!unchecked_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
+                              desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
+                              desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))
         xi_lower_insert_err_check(l, node, true);
     return value;
 }
