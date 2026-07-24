@@ -187,7 +187,10 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
     if (has_unchecked_access) {
         bool allowed = value->op == XI_VEC_LOAD || value->op == XI_VEC_STORE ||
                        value->op == XI_BYTE_SLICE_LOAD_U16 || value->op == XI_BYTE_SLICE_LOAD_U32 ||
-                       value->op == XI_BYTE_SLICE_LOAD_U64 || value->op == XI_SLICE_WINDOW ||
+                       value->op == XI_BYTE_SLICE_LOAD_U64 ||
+                       value->op == XI_BYTE_SLICE_STORE_U16 ||
+                       value->op == XI_BYTE_SLICE_STORE_U32 ||
+                       value->op == XI_BYTE_SLICE_STORE_U64 || value->op == XI_SLICE_WINDOW ||
                        value->op == XI_BYTE_SLICE_COPY || value->op == XI_SLICE_COPY;
         if (!allowed)
             return set_error(error, error_size,

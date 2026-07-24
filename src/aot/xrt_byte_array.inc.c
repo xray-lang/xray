@@ -487,6 +487,54 @@ static inline void xrt_byte_slice_store_f64_value(XrValue recv, XrValue off_valu
                                          xrt_endian_arg(endian_value));
 }
 
+static inline int64_t xrt_byte_slice_load_u16_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint16_t value = xr_raw_load_u16_unaligned(ptr);
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap16(value);
+    return (int64_t) value;
+}
+
+static inline int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint32_t value = xr_raw_load_u32_unaligned(ptr);
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap32(value);
+    return (int64_t) value;
+}
+
+static inline int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint64_t value = xr_raw_load_u64_unaligned(ptr);
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap64(value);
+    return (int64_t) value;
+}
+
+static inline void xrt_byte_slice_store_u16_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint16_t value, int64_t endian) {
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap16(value);
+    xr_raw_store_u16_unaligned((uint8_t *) span.data + off, value);
+}
+
+static inline void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint32_t value, int64_t endian) {
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap32(value);
+    xr_raw_store_u32_unaligned((uint8_t *) span.data + off, value);
+}
+
+static inline void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint64_t value, int64_t endian) {
+    if (!xr_array_core_endian_matches_host(endian))
+        value = xr_array_core_bswap64(value);
+    xr_raw_store_u64_unaligned((uint8_t *) span.data + off, value);
+}
+
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
     const uint8_t *ptr = (const uint8_t *) span.data + off;
     return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));

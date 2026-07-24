@@ -11628,8 +11628,8 @@ static void xicgen_byte_array_box_result(FILE *out, bool boxed) {
 
 static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                         const char *core_helper, const char *le_unchecked_helper,
-                                        const char *ctype, int64_t byte_width,
-                                        const char *bounds_message_expr) {
+                                        const char *unchecked_helper, const char *ctype,
+                                        int64_t byte_width, const char *bounds_message_expr) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
@@ -11638,13 +11638,12 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     (void) info;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    bool drop_bounds = unchecked_access || cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD,
+                                                              XAOT_SLICE_DROP_BOUNDS);
     int64_t endian = XR_ENDIAN_NATIVE;
-    if (le_unchecked_helper && xicgen_value_is_const_endian(v->args[2], &endian) &&
-        endian == XR_ENDIAN_LE) {
-        bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
-        bool drop_bounds =
-            unchecked_access ||
-            cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_BOUNDS);
+    bool const_endian = xicgen_value_is_const_endian(v->args[2], &endian);
+    if (le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
@@ -11664,6 +11663,24 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
         }
         fprintf(out, "; %s _v = (%s)%s(_s, _off); (int64_t)_v; })", ctype, ctype,
                 le_unchecked_helper);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (unchecked_helper && drop_bounds) {
+        fprintf(out, "({ xr_span_t _s = ");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, "; int64_t _off = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        if (unchecked_access) {
+            fprintf(out,
+                    "; /* unchecked byte-Slice access */ "
+                    "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                    ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                    byte_width, byte_width);
+        }
+        fprintf(out, "; %s _v = (%s)%s(_s, _off, ", ctype, ctype, unchecked_helper);
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
+        fprintf(out, "); (int64_t)_v; })");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -11710,7 +11727,8 @@ static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const X
 
 static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                          const char *checked_helper, const char *core_helper,
-                                         const char *value_ctype, const char *bounds_message_expr) {
+                                         const char *unchecked_helper, const char *value_ctype,
+                                         int64_t byte_width, const char *bounds_message_expr) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
@@ -11718,10 +11736,29 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
+        bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+        bool drop_bounds =
+            unchecked_access ||
+            cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_BOUNDS);
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        if (unchecked_helper && drop_bounds) {
+            if (unchecked_access) {
+                fprintf(out,
+                        "; /* unchecked byte-Slice access */ "
+                        "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                        ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                        byte_width, byte_width);
+            }
+            fprintf(out, "; %s(_s, _off, (%s)", unchecked_helper, value_ctype);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, ", ");
+            xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
+            fprintf(out, "); XR_NULL_VAL; })");
+            return true;
+        }
         fprintf(out, "; ");
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
@@ -11786,7 +11823,8 @@ static void xicgen_byte_slice_load_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u16",
-                                    "xrt_byte_slice_load_u16_le_unchecked_raw", "uint16_t", 2,
+                                    "xrt_byte_slice_load_u16_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u16_unchecked_raw", "uint16_t", 2,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11806,7 +11844,8 @@ static void xicgen_byte_slice_load_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u32",
-                                    "xrt_byte_slice_load_u32_le_unchecked_raw", "uint32_t", 4,
+                                    "xrt_byte_slice_load_u32_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u32_unchecked_raw", "uint32_t", 4,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11826,7 +11865,8 @@ static void xicgen_byte_slice_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u64",
-                                    "xrt_byte_slice_load_u64_le_unchecked_raw", "uint64_t", 8,
+                                    "xrt_byte_slice_load_u64_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u64_unchecked_raw", "uint64_t", 8,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11884,7 +11924,8 @@ static void xicgen_byte_slice_store_u16(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u16_checked_raw",
-                                     "xr_array_core_bytes_store_u16", "uint16_t",
+                                     "xr_array_core_bytes_store_u16",
+                                     "xrt_byte_slice_store_u16_unchecked_raw", "uint16_t", 2,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u16_value(");
@@ -11903,7 +11944,8 @@ static void xicgen_byte_slice_store_u32(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u32_checked_raw",
-                                     "xr_array_core_bytes_store_u32", "uint32_t",
+                                     "xr_array_core_bytes_store_u32",
+                                     "xrt_byte_slice_store_u32_unchecked_raw", "uint32_t", 4,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u32_value(");
@@ -11922,7 +11964,8 @@ static void xicgen_byte_slice_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u64_checked_raw",
-                                     "xr_array_core_bytes_store_u64", "uint64_t",
+                                     "xr_array_core_bytes_store_u64",
+                                     "xrt_byte_slice_store_u64_unchecked_raw", "uint64_t", 8,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u64_value(");

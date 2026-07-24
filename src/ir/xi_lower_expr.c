@@ -5248,8 +5248,7 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
     target = xi_lower_type_or_any(l, target, "byte-slice type argument", node->line);
-    unchecked_access =
-        unchecked_access && byte_slice_typed_load && target && XR_TYPE_IS_INT(target);
+    unchecked_access = unchecked_access && target && XR_TYPE_IS_INT(target);
     uint16_t byte_slice_op = lower_byte_slice_typed_op_for_target(target, byte_slice_typed_load);
     if (!byte_slice_op)
         return NULL;

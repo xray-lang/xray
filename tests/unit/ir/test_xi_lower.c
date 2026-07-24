@@ -769,6 +769,24 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     xi_func_free(f);
 }
 
+TEST(unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access) {
+    XiFunc *f = lower_source("fn copyNative(source: Slice<byte>, destination: ref Slice<byte>) {\n"
+                             "  unsafe {\n"
+                             "    var value = source.load<u64>(0, Endian.Native)\n"
+                             "    destination.store<u64>(0, value, Endian.Native)\n"
+                             "  }\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *load = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
+    XiValue *store = func_tree_find_op(f, XI_BYTE_SLICE_STORE_U64);
+    assert(load && (load->aux_int & XI_ACCESS_UNCHECKED) != 0 &&
+           "unsafe integer byte-slice load must keep its unchecked marker");
+    assert(store && (store->aux_int & XI_ACCESS_UNCHECKED) != 0 &&
+           "unsafe integer byte-slice store must keep its unchecked marker");
+    xi_func_free(f);
+}
+
 TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
     XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
                              "  var before = counter.load(Ordering.Relaxed)\n"
