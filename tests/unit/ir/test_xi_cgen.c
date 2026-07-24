@@ -1641,8 +1641,8 @@ TEST(cgen_c_export_wrapper_keeps_default_visibility) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && !had_error && "C-export wrapper should generate");
-    assert(contains(code, "\nint64_t xr_bridge_visible(int64_t p0)") &&
-           "the public C-export wrapper must retain default external visibility");
+    assert(contains(code, "\nXR_EXPORT_SYM int64_t xr_bridge_visible(int64_t p0)") &&
+           "the public C-export wrapper must carry explicit external visibility");
     assert(!contains(code, "XRT_INTERNAL int64_t xr_bridge_visible(") &&
            !contains(code, "XRT_INTERNAL XR_FORCEINLINE int64_t xr_bridge_visible(") &&
            "internal implementation visibility must never leak onto the public wrapper");

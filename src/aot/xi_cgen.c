@@ -8552,8 +8552,12 @@ static bool cg_func_can_have_entry_stub(XiCgenCtx *ctx, const XiFunc *f) {
 
 static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const char *prefix, bool with_attrs) {
-    if (with_attrs)
+    if (with_attrs) {
+        const char *visibility = f && f->export_plan ? f->export_plan->visibility : NULL;
+        fprintf(out, "%s ",
+                visibility && strcmp(visibility, "hidden") == 0 ? "XRT_INTERNAL" : "XR_EXPORT_SYM");
         emit_aot_symbol_attrs(out, f, true);
+    }
     emit_c_export_return_c_type(ctx, out, f, prefix);
     fprintf(out, " %s(", f->export_plan->symbol);
     if (f->nparams == 0) {
@@ -9855,7 +9859,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, ";\n");
     }
     if (cg_func_can_have_c_export_stub(ctx, f)) {
-        emit_c_export_stub_signature(ctx, out, f, prefix, false);
+        emit_c_export_stub_signature(ctx, out, f, prefix, true);
         fprintf(out, ";\n");
     }
     if (cg_func_can_have_entry_stub(ctx, f)) {

@@ -1,0 +1,7 @@
+export fn publicValue() -> int {
+    return 41
+}
+
+export fn hiddenValue() -> int {
+    return 42
+}

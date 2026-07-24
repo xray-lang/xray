@@ -22,10 +22,18 @@ emission, and native linking:
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
   storage before its address is taken.
+- T6: cross-target hosted time queries lower to target-owned header code, while
+  native builds retain the runtime's shared OS clock. A cross-target binary
+  must never consume the compiler host's AOT support archive merely to read
+  wall, monotonic, or process CPU time.
+- T7: shared-library format, suffix, link flags, and symbol visibility derive
+  from the selected target rather than the compiler host. A default C export
+  is externally visible; a hidden C export must not leak into the public image.
 
 The release evidence includes generated-C filetests plus executed i386 ILP32
 and PowerPC64 big-endian xxHash KATs. A compile-only cross artifact is not
-sufficient to claim platform support.
+sufficient to claim platform support. An exact PE export-set gate proves the
+Windows artifact and ABI shape, but not Windows execution support.
 
 ## Digest anchors
 
@@ -33,6 +41,9 @@ anchor-sha256: src/aot/xaot_link.c 666708eb8f9af5c3c5598a6b926108a4abfd7ffffc298
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 4ed015b3b02ea5cbf9c1cb9e970b2dbd4ee23515d56cf052df88eb1b176ae265
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c49d32d4fe21e880e1be3c92354f3376a2554f653a17713f1a37eb898a08e2ee
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
+anchor-sha256: src/aot/xi_cgen.c 949ada936e0c5ce416c0e558b07a42baadfaac91eb8596120878a285751dc58f
 anchor-sha256: src/aot/xrt_coll.h 9cb8e646bfabc64087e5358284f2691d85e785880c325181e81f95780549b6aa
 anchor-sha256: src/aot/xrt_core_freestanding.h e3b5b2ca46c5749096101fc86e7960feda4b3c273d342020b19e075bb80002c0
+anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
+anchor-sha256: src/app/cli/xcmd_build.c 65a5e17007a746aec20a10409ba2a236ca12abeb20bc2cca81896ba9fbb2f2b4
 anchor-sha256: src/app/cli/xcli_toolchain.c f26a954b090d3c2f9bc9c7fc51f2d8963859aaa6b3f5645616d6121d1c0359db

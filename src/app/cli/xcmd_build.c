@@ -450,6 +450,13 @@ static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
             strcmp(value, "time.micros") == 0 || strcmp(value, "time.clock") == 0);
 }
 
+static bool xaot_cli_stdlib_object_needs_aot_core_for_target(const char *value,
+                                                             const XrCliBuildTarget *target) {
+    if (target && !target->is_native && value && strncmp(value, "time.", 5) == 0)
+        return false;
+    return xaot_cli_stdlib_object_needs_aot_core(value);
+}
+
 static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,
                                             size_t err_size) {
     size_t len;
@@ -473,6 +480,21 @@ static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
     }
     for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
         if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_symbols[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool xaot_cli_manifest_needs_aot_core_for_target(const XaotLinkManifest *manifest,
+                                                        const XrCliBuildTarget *target) {
+    if (!manifest)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_objects[i], target))
+            return true;
+    }
+    for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_symbols[i], target))
             return true;
     }
     return false;
@@ -956,7 +978,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     }
 
     needs_runtime = xaot_link_manifest_needs_runtime(manifest);
-    needs_aot_core = xaot_cli_manifest_needs_aot_core(manifest);
+    needs_aot_core = xaot_cli_manifest_needs_aot_core_for_target(manifest, target);
     freestanding_profile =
         xaot_link_manifest_contains(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1");
     if (needs_runtime && !target->is_native) {
@@ -988,9 +1010,15 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     if (shared_library && freestanding_profile) {
         if (!xaot_cli_link_add_arg(cmd, "-r", err, err_size))
             return false;
+    } else if (shared_library && target && target->os == XR_CLI_TARGET_OS_WINDOWS) {
+        if (!xaot_cli_link_add_arg(cmd, "-shared", err, err_size))
+            return false;
     } else if (shared_library) {
 #ifdef XR_OS_MACOS
-        if (!xaot_cli_link_add_arg(cmd, "-dynamiclib", err, err_size))
+        if (target && target->is_native &&
+            !xaot_cli_link_add_arg(cmd, "-dynamiclib", err, err_size))
+            return false;
+        if (target && !target->is_native && !xaot_cli_link_add_arg(cmd, "-shared", err, err_size))
             return false;
 #else
         if (!xaot_cli_link_add_arg(cmd, "-shared", err, err_size))
@@ -1230,12 +1258,16 @@ static bool build_opt_level_is_fast(const char *level) {
     return level && strcmp(level, "fast") == 0;
 }
 
-static const char *default_shared_library_output(void) {
+static const char *default_shared_library_output(const XrCliBuildTarget *target) {
+    if (target && target->os == XR_CLI_TARGET_OS_WINDOWS)
+        return "xray_exports.dll";
 #ifdef XR_OS_MACOS
-    return "libxray_exports.dylib";
+    if (!target || target->is_native)
+        return "libxray_exports.dylib";
 #else
-    return "libxray_exports.so";
+    (void) target;
 #endif
+    return "libxray_exports.so";
 }
 
 /* ========== Build Sub-Modes (forward declarations) ========== */
@@ -1487,10 +1519,6 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     bool freestanding_shared_object =
         shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
-    if (shared_library && !c_only && !target.is_native && !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared currently requires native target\n");
-        CMD_BUILD_RETURN(2);
-    }
 #ifdef XR_OS_WINDOWS
     if (shared_library && !c_only && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
@@ -1534,14 +1562,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         CMD_BUILD_RETURN(2);
     }
     if (shared_library && !c_only && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
-        !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared currently requires the host toolchain\n");
+        toolchain_plan.kind != XR_CLI_TOOLCHAIN_ZIG && !freestanding_shared_object) {
+        fprintf(stderr, "Error: --shared requires the host or Zig toolchain\n");
         CMD_BUILD_RETURN(2);
     }
 
     if (!output_file)
         output_file = c_only ? "app.c"
-                             : (shared_library ? default_shared_library_output()
+                             : (shared_library ? default_shared_library_output(&target)
                                                : xr_cli_build_target_default_output(&target));
 
     const char *opt_flag = make_opt_flag(opt_level, debug_symbols);
@@ -3060,7 +3088,7 @@ static int cmd_build_native(
             xaot_build_result_free(&aot_result);
             return 1;
         }
-        if (shared_library &&
+        if (shared_library && (!target || target->os != XR_CLI_TARGET_OS_WINDOWS) &&
             !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-fPIC")) {
             fprintf(stderr, "Error: failed to add shared-library PIC flag to AOT link manifest\n");
             xaot_build_result_free(&aot_result);
