@@ -71,6 +71,7 @@ def main() -> int:
         ],
     }
     artifact_sha = digest(args.artifact)
+    manifest_sha = digest(manifest_path)
     provenance = {
         "_type": "https://in-toto.io/Statement/v1",
         "subject": [{"name": args.artifact.name, "digest": {"sha256": artifact_sha}}],
@@ -88,6 +89,27 @@ def main() -> int:
     )
     append_suffix(args.output_prefix, ".sha256").write_text(
         f"{artifact_sha}  {args.artifact.name}\n", encoding="utf-8"
+    )
+    release_metadata = {
+        "schema": 1,
+        "product": "xray-lang",
+        "version": manifest["version"],
+        "commit": manifest["commit"],
+        "dirty": manifest["dirty"],
+        "target": manifest["target"],
+        "buildProfile": manifest["buildProfile"],
+        "artifact": {
+            "name": args.artifact.name,
+            "size": args.artifact.stat().st_size,
+            "sha256": artifact_sha,
+        },
+        "payloadManifest": {
+            "path": "share/xray/install/payload-manifest.json",
+            "sha256": manifest_sha,
+        },
+    }
+    append_suffix(args.output_prefix, ".release.json").write_text(
+        json.dumps(release_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return 0
 

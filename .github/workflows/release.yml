@@ -332,6 +332,7 @@ jobs:
           ${{ matrix.artifact }}.spdx.json
           ${{ matrix.artifact }}.provenance.json
           ${{ matrix.artifact }}.sha256
+          ${{ matrix.artifact }}.release.json
 
   release:
     needs: build
@@ -460,6 +461,78 @@ jobs:
             status, body = request("POST", upload_url, path.read_bytes(), content_type)
             asset = json.loads(body)
             print(f'uploaded {asset["name"]}')
+        PY
+
+    - name: Dispatch exact release request to xray-installer
+      env:
+        GH_TOKEN: ${{ secrets.INSTALLER_DISPATCH_TOKEN }}
+        RELEASE_TAG: ${{ steps.resolve_tag.outputs.tag }}
+        COMMIT: ${{ github.sha }}
+      run: |
+        test -n "$GH_TOKEN"
+        python3 - <<'PY'
+        import json
+        import os
+        import pathlib
+        import urllib.request
+
+        tag = os.environ["RELEASE_TAG"]
+        commit = os.environ["COMMIT"]
+        metadata_files = sorted(pathlib.Path("artifacts").rglob("*.release.json"))
+        payloads = []
+        target_map = {
+            "macos-arm64": ("macos", "arm64"),
+            "macos-x86_64": ("macos", "x64"),
+            "linux-arm64": ("linux", "arm64"),
+            "linux-x86_64": ("linux", "x64"),
+        }
+        for path in metadata_files:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            target = value.get("target")
+            if target not in target_map:
+                continue
+            if value.get("schema") != 1 or value.get("commit") != commit or value.get("dirty") is not False:
+                raise SystemExit(f"invalid release metadata: {path}")
+            platform, arch = target_map[target]
+            artifact = value["artifact"]
+            payloads.append({
+                "platform": platform,
+                "arch": arch,
+                "target": target,
+                "url": f"https://github.com/xray-lang/xray/releases/download/{tag}/{artifact['name']}",
+                "size": artifact["size"],
+                "sha256": artifact["sha256"],
+                "payloadManifestSha256": value["payloadManifest"]["sha256"],
+            })
+        if len(payloads) != 4:
+            raise SystemExit(f"expected four non-Windows payloads, got {len(payloads)}")
+        versions = {json.loads(path.read_text(encoding="utf-8"))["version"] for path in metadata_files}
+        if len(versions) != 1:
+            raise SystemExit("release metadata versions disagree")
+        body = json.dumps({
+            "event_type": "xray-release-ready",
+            "client_payload": {
+                "schema": 1,
+                "version": versions.pop(),
+                "commit": commit,
+                "releaseTag": tag,
+                "payloads": sorted(payloads, key=lambda item: (item["platform"], item["arch"])),
+            },
+        }).encode()
+        request = urllib.request.Request(
+            "https://api.github.com/repos/xray-lang/xray-installer/dispatches",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request) as response:
+            if response.status != 204:
+                raise SystemExit(f"installer dispatch returned HTTP {response.status}")
         PY
 
     - name: Trigger VS Code extension publish

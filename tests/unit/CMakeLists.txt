@@ -136,6 +136,14 @@ add_test(
 set_tests_properties(test_grapheme_internal_boundary PROPERTIES
     LABELS "unicode;vm;task-199"
 )
+add_test(
+    NAME test_release_evidence_contract
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/release/test_release_evidence.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_release_evidence_contract PROPERTIES
+    LABELS "install;release;task-240"
+)
 
 # ============================================================================
 # symbol/ — Symbol table
