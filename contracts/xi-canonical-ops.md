@@ -19,5 +19,5 @@ Status: re-frozen by task 237.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 033150dadde24cbb4ef91df3d741807b1f79843d36db9c6159f3c52f798ce33a
-anchor-sha256: xisa/xi/lowering.def 2d6c3d382c90e6d77fbfa02a5a932d4d2320ee35e81207a7bedfef9c8aa9a0a9
+anchor-sha256: xisa/xi/ops.def 1ca3b042ac3fb5c215485789a3dcb44db819be95338beec650cae2a1b27f45ae
+anchor-sha256: xisa/xi/lowering.def 36640e0b68c307e86860b2ee22ff5f3f9e387bc5a67c26d4af7bfcae83e62dc0

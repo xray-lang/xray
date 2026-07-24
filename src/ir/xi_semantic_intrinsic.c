@@ -55,6 +55,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_VEC_REDUCE_ADD;
         case XA_INTRINSIC_LOWERING_TARGET_SIMD_BYTES:
             return XI_TARGET_SIMD_BYTES;
+        case XA_INTRINSIC_LOWERING_TARGET_SIMD_ACCELERATED:
+            return XI_TARGET_SIMD_ACCELERATED;
         case XA_INTRINSIC_LOWERING_BIT_ROTL:
             return XI_BIT_ROTL;
         case XA_INTRINSIC_LOWERING_BIT_ROTR:

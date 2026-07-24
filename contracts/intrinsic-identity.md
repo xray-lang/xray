@@ -17,4 +17,4 @@ Status: re-frozen by task 237.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def c06ab84cb944d3ebaa9950064333c80c3e818355efa528ff17dde8ea51cc0263
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def d55ba4d3dc2aaf3097aa7ccd04399842752f02edd0517eba173fd8f1ae6a82a7

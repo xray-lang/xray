@@ -257,6 +257,17 @@ static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         fprintf(out, "%d", bytes);
 }
 
+static void xicgen_target_simd_accelerated(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    bool accelerated = ctx && ctx->target && ctx->target->simd_features != 0;
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_BOOL(%s)", accelerated ? "true" : "false");
+    else
+        fprintf(out, "%s", accelerated ? "true" : "false");
+}
+
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
     if (!lit)
         return false;

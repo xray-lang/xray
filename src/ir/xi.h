@@ -217,6 +217,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
  *  XI_TARGET_SIMD_BYTES —                canonical target SIMD width query
+ *  XI_TARGET_SIMD_ACCELERATED —          canonical hardware-SIMD availability query
  *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
@@ -264,6 +265,7 @@ typedef enum {
     XI_TARGET_SIZEOF,
     XI_TARGET_ALIGNOF,
     XI_TARGET_SIMD_BYTES,
+    XI_TARGET_SIMD_ACCELERATED,
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,

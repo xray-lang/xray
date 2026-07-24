@@ -1,0 +1,3 @@
+import { Capabilities } from simd
+
+print(Capabilities.isAccelerated())

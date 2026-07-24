@@ -76,6 +76,8 @@ fn run() {
     xbytes.reinterpretU64().store(ref wideOutView)
     assert_eq(wideOut[0], 0)
     assert(Capabilities.nativeBytes() >= 16)
+    var accelerated = Capabilities.isAccelerated()
+    assert(accelerated || !accelerated)
     print("OK simd portable integer vectors")
 }
 

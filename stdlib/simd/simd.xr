@@ -339,6 +339,12 @@ export struct Capabilities {
     static nativeBytes() -> int {
         return 16
     }
+    // Whether the compile target lowers portable vector operations to a
+    // hardware SIMD family. The VM and --simd scalar preserve false as the
+    // portable semantic truth; AOT folds this query from its target plan.
+    static isAccelerated() -> bool {
+        return false
+    }
 }
 
 export struct U8x32 align(32) {
