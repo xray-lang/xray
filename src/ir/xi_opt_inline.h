@@ -30,12 +30,13 @@
 
 /* Callee-intrinsic cost factors. */
 typedef struct XiInlineCostModel {
-    uint32_t value_count;  /* total values (incl. phis) */
-    uint32_t call_count;   /* internal call instructions */
-    uint32_t branch_count; /* IF/switch blocks */
-    bool has_loop;         /* contains a back-edge */
-    bool calls_self;       /* recursive (must never inline) */
-    bool has_throw;        /* contains XI_THROW */
+    uint32_t value_count;     /* total values (incl. phis) */
+    uint32_t call_count;      /* internal call instructions */
+    uint32_t branch_count;    /* IF/switch blocks */
+    bool has_loop;            /* contains a back-edge */
+    bool calls_self;          /* recursive (must never inline) */
+    bool has_throw;           /* contains XI_THROW */
+    bool has_stack_aggregate; /* owns frame-resident fixed-array storage */
 } XiInlineCostModel;
 
 /* Call-site specific information (used to boost or penalize). */

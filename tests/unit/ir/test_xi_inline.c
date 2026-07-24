@@ -255,6 +255,26 @@ TEST(throw_never_inline) {
     ASSERT(b == -1000);
 }
 
+/* ========== Test: frame-resident aggregate is not hoisted into caller ========== */
+
+TEST(stack_aggregate_never_inline) {
+    XiInlineCostModel cost = {
+        .value_count = 8,
+        .call_count = 0,
+        .branch_count = 0,
+        .has_loop = false,
+        .calls_self = false,
+        .has_throw = false,
+        .has_stack_aggregate = true,
+    };
+    XiInlineCallSiteInfo site = {
+        .all_args_const = true,
+        .single_call_site = true,
+        .caller_size = 12,
+    };
+    ASSERT(xi_inline_benefit(&cost, &site) == -1000);
+}
+
 /* ========== Test: combined bonuses overcome borderline ========== */
 
 TEST(combined_bonuses) {
@@ -447,6 +467,7 @@ int main(void) {
     run_straightline_helper_ignores_large_caller_penalty();
     run_large_caller_penalizes_general_helper();
     run_throw_never_inline();
+    run_stack_aggregate_never_inline();
     run_combined_bonuses();
     run_budget_small_caller();
     run_budget_medium_caller();

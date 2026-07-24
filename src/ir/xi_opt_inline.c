@@ -145,6 +145,9 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                 v->op == XI_CALL_BUILTIN)
                 m.call_count++;
+            if (v->op == XI_FIXED_ARRAY_NEW ||
+                (v->op == XI_STACK_ALLOC && v->aux_int == XI_ARRAY_NEW))
+                m.has_stack_aggregate = true;
             if (v->op == XI_ERR_CHECK && inline_err_check_is_dead(callee, v, 0))
                 continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
@@ -206,6 +209,8 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
         return -1000; /* never inline recursion */
     if (cost->has_throw)
         return -1000; /* error flow and defers are call-boundary scoped */
+    if (cost->has_stack_aggregate)
+        return -1000; /* keep branch-local frame storage out of unrelated caller paths */
 
     if (inline_is_leaf_straightline(cost)) {
         int score = (int) XI_INLINE_MAX_COST - (int) cost->value_count + 1;
