@@ -23,6 +23,7 @@
 #   XR_ASAN_JOBS          parallel build/test jobs (default: 8)
 #   XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
 #   XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
+#   XR_ASAN_CTEST_SERIAL_REGEX subprocess tests kept out of the saturated parallel lane
 #   XR_ASAN_DIFF_REGEX    backend-diff subset regex (default: task190_.*_backend_diff)
 #   XR_ASAN_XXHASH_MAIN   path to the xxhash port entry (default: repo-relative sibling)
 #   XR_ASAN_BILI_MAIN     path to the committed bili-analysis-server fixture
@@ -41,9 +42,13 @@ CTEST_REGEX="${XR_ASAN_CTEST_REGEX:-^test_}"
 # *memory-safety* surface: they drive a full native AOT compile+link (assuming
 # the default `build/` cache layout) or run the compiler as a subprocess under
 # tight hardcoded timeouts, so they fail under ASan for environmental reasons
-# (slowdown, cache mismatch) rather than any memory bug. The ordinary ctest run
-# still covers VM/native ABI parity. The pure C unit tests remain in scope.
-CTEST_EXCLUDE="${XR_ASAN_CTEST_EXCLUDE:-native_error_abi|param_mode_diagnostics|param_contract}"
+# (slowdown, cache mismatch) rather than any memory bug. The toolchain unit test
+# also starts short-lived provider processes with the public 5s version-probe
+# bound; run it serially below so an 8-way ASan lane cannot consume that budget
+# through scheduler starvation. The ordinary ctest run still covers VM/native
+# ABI parity. The pure C unit tests remain in scope.
+CTEST_EXCLUDE="${XR_ASAN_CTEST_EXCLUDE:-native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain}"
+CTEST_SERIAL_REGEX="${XR_ASAN_CTEST_SERIAL_REGEX:-^test_cli_toolchain$}"
 # Fast backend-diff subset. The `layout`, `mem`, and `extern` task-190 case
 # sets are ASan-clean. The `extern` (FFI) set's earlier heap-buffer-overflow was
 # a test-case defect, not a compiler bug: extern_scalar_descriptor_matrix.xr
@@ -94,6 +99,14 @@ fi
 echo "== [asan_focused] running unit tests (regex: ${CTEST_REGEX}, exclude: ${CTEST_EXCLUDE})"
 ctest --test-dir "${ASAN_BUILD}" --output-on-failure -j"${JOBS}" \
     -R "${CTEST_REGEX}" -E "${CTEST_EXCLUDE}" --timeout 300
+
+echo "== [asan_focused] running subprocess-sensitive unit tests serially (regex: ${CTEST_SERIAL_REGEX})"
+if ctest --test-dir "${ASAN_BUILD}" -N -R "${CTEST_SERIAL_REGEX}" 2>/dev/null | grep -qE "Test +#"; then
+    ctest --test-dir "${ASAN_BUILD}" --output-on-failure -j1 \
+        -R "${CTEST_SERIAL_REGEX}" --timeout 300
+else
+    echo "== [asan_focused] no serial unit tests matched ${CTEST_SERIAL_REGEX}; skipping"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Fast backend-diff subset under ASan/UBSan.
