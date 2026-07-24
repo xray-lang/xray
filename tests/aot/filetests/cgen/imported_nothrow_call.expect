@@ -1,0 +1,2 @@
+c_contains=importedNothrow
+c_not_contains=importedNothrow_exp(NULL, v0); if (XR_UNLIKELY(xrt_has_pending_error()))

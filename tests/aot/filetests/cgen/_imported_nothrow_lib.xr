@@ -1,0 +1,7 @@
+export fn importedNothrow(value: u64) -> u64 {
+    // Keep a real call boundary: stack aggregates are deliberately not
+    // inlined into callers, while constant indices make this function pure.
+    var scratch: [u64; 32] = [0; 32]
+    scratch[0] = value
+    return scratch[0] + 1
+}
