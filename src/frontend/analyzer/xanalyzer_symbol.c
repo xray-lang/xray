@@ -975,6 +975,7 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->import_member_name = src->import_member_name;
     dst->file_path = src->file_path;
     dst->assign_count = src->assign_count;
+    dst->value_mutated = src->value_mutated;
     dst->is_const_foldable = src->is_const_foldable;
     dst->const_initializer = src->const_initializer;
     dst->has_ct_value = src->has_ct_value;

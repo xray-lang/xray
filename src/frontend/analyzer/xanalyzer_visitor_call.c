@@ -5835,6 +5835,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (method_name && callee_obj_type && !XR_TYPE_IS_SLICE(callee_obj_type) &&
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
+            if (root)
+                root->links.value_mutated = true;
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
             bool interior_mutation = xa_type_allows_interior_mutation(ctx, callee_obj_type) ||
                                      (root && root->links.storage_domain == XR_STORAGE_SYNC_SHARED);
@@ -6491,6 +6493,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                           sizeof(local_path), &path_precise);
             if (!arg_sym)
                 arg_sym = xa_call_root_variable_symbol(ctx, arg_node);
+            if (arg_sym && param_mode == XR_PARAM_REF)
+                arg_sym->links.value_mutated = true;
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
                 effective_arg_names[slot] = arg_sym->name;

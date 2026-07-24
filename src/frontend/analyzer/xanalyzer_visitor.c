@@ -5177,6 +5177,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (ca->object) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ca->object);
+                if (root)
+                    root->links.value_mutated = true;
                 bool readonly_object = xr_type_is_const(ca_obj_type);
                 if ((root &&
                      (root->is_readonly_binding || xa_symbol_has_shared_provenance(root))) ||
@@ -5200,6 +5202,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
+            if (readonly_root)
+                readonly_root->links.value_mutated = true;
             bool readonly_object = xr_type_is_const(obj_type);
             if ((readonly_root && (readonly_root->is_readonly_binding ||
                                    xa_symbol_has_shared_provenance(readonly_root))) ||
@@ -6197,6 +6201,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XaSymbol *owner = xa_span_borrow_owner_path_for_index_write(
                 ctx, is->array, is->index, value_expected, owner_path, sizeof(owner_path));
             if (owner) {
+                owner->links.value_mutated = true;
                 xa_check_active_span_borrow_owner_path_mutation(ctx, node, owner,
                                                                 owner_path[0] ? owner_path : NULL,
                                                                 "reassigning owner element");

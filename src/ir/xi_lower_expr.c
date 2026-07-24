@@ -4541,7 +4541,8 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
         XiValue *place = NULL;
         if (var_id >= 0 && l->vars[var_id].call_place) {
             place = l->vars[var_id].call_place;
-            arg_plan->origin = XI_PLACE_ORIGIN_PARAM;
+            arg_plan->origin =
+                place->op == XI_LOCAL_ADDR ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PARAM;
             arg_plan->origin_var_id = (XiVarId) var_id;
         } else {
             XiValue *source = arg_vals[i];
@@ -4644,7 +4645,7 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
     XiVarId origin_var_id = XI_NO_VAR_ID;
     if (var_id >= 0 && l->vars[var_id].call_place) {
         place = l->vars[var_id].call_place;
-        origin = XI_PLACE_ORIGIN_PARAM;
+        origin = place->op == XI_LOCAL_ADDR ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PARAM;
         origin_var_id = (XiVarId) var_id;
     } else if (receiver->op == XI_PTR_LOAD && receiver->nargs >= 1 && receiver->args[0] &&
                receiver->args[0]->type && XR_TYPE_IS_POINTER(receiver->args[0]->type) &&
