@@ -1,6 +1,6 @@
 # Xi canonical operation contract
 
-Status: re-frozen by task 237.
+Status: re-frozen after the xxHash runtime-SIMD dispatch work.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, and operand ownership are generated from it.
@@ -16,8 +16,12 @@ Status: re-frozen by task 237.
 6. Raw storage becoming a typed value is represented by an explicit canonical
    Xi operation with initialization evidence. It must not be reconstructed from
    a cast, helper spelling, or backend pattern.
+7. Runtime SIMD selection is represented by
+   `xi.target.simd.runtime-selected`; the operation reports compilation mode,
+   while `xi.target.simd.bytes` remains the runtime CPU/OS width query in a
+   dispatch build.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 1ca3b042ac3fb5c215485789a3dcb44db819be95338beec650cae2a1b27f45ae
-anchor-sha256: xisa/xi/lowering.def 36640e0b68c307e86860b2ee22ff5f3f9e387bc5a67c26d4af7bfcae83e62dc0
+anchor-sha256: xisa/xi/ops.def 1d645c14a6e99c1db7d515481ece3e12438537aa198dd2569858c26ed4ec3d2e
+anchor-sha256: xisa/xi/lowering.def 3f497bdba9f651908ba7d7e5d500eb82806b0861244638a282b737eb6893fdf9

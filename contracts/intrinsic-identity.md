@@ -1,6 +1,6 @@
 # Intrinsic identity contract
 
-Status: re-frozen by task 237.
+Status: re-frozen after the xxHash runtime-SIMD dispatch work.
 
 1. Each compiler intrinsic has one canonical, stable numeric identity in the
    registry. The identity, not a spelling, import path, method name, or emitted
@@ -14,7 +14,10 @@ Status: re-frozen by task 237.
 5. Boundary-only intrinsics such as `mem.assumeInitialized<T>` are sealed
    compiler identities. A library declaration or same-spelled user function
    cannot acquire their proof authority.
+6. Target-mode queries such as `simd.Capabilities.isRuntimeSelected()` have
+   their own stable identity; they are not inferred from `nativeBytes()` or
+   from a backend helper spelling.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def d55ba4d3dc2aaf3097aa7ccd04399842752f02edd0517eba173fd8f1ae6a82a7
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def a0989df695c13573eacb835c1f3fd1cae8704b2f9f7cf7e06976ee4563e66306

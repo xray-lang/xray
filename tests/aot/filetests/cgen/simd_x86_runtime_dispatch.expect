@@ -1,0 +1,12 @@
+args=--target x86_64-linux-musl --simd dispatch --dump-xaot-plan
+c_contains=xrt_target_runtime_simd_bytes()
+c_contains=XR_FROM_BOOL(true)
+c_contains=static XRT_TARGET_AVX2 uint64_t
+c_not_contains=XRT_TARGET_AVX2 XrValue
+c_regex=XRT_TARGET_AVX2 uint64_t simd_x86_runtime_dispatch_[0-9a-f]+_sumWideIsland_[0-9]+
+c_regex=XRT_TARGET_AVX2 uint64_t simd_x86_runtime_dispatch_[0-9a-f]+_wide_[0-9]+
+c_not_regex=XRT_TARGET_AVX2 uint64_t simd_x86_runtime_dispatch_[0-9a-f]+_run_[0-9]+
+c_not_regex=XRT_TARGET_AVX2 uint8_t simd_x86_runtime_dispatch_[0-9a-f]+_runtimeSelected_[0-9]+
+c_contains=_mm256_add_epi64(
+c_contains=_mm256_permute4x64_epi64(
+c_contains=_mm_add_epi64(

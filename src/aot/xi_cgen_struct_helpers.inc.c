@@ -2496,6 +2496,27 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     return true;
 }
 
+/* Borrow the stable storage behind `ref aggregate.field` directly. Shared Xi
+ * retains its projection temporary and copy-back for the VM, while the native
+ * backend uses the verified aggregate layout to avoid a scalar stack shuttle
+ * around the direct call. */
+static bool emit_struct_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *value, const char *prefix) {
+    const XiValue *field = value;
+    while (field && cg_is_identity_copy_or_move(field) && field->nargs >= 1)
+        field = field->args[0];
+    if (!field || field->op != XI_AGG_GET || field->nargs < 1 || !field->aux)
+        return false;
+    const XrAggregateLayout *layout = (const XrAggregateLayout *) field->aux;
+    const XrAggregateFieldLayout *field_layout = cg_struct_field(layout, field->aux_int);
+    if (!field_layout || !cg_static_struct_native_scalar_supported(field_layout->native_type))
+        return false;
+    fprintf(out, "(void *)(&");
+    emit_struct_field_lvalue(ctx, out, f, layout, field->aux_int, field->args[0], prefix);
+    fprintf(out, ")");
+    return true;
+}
+
 static void emit_struct_fallback_field_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XrAggregateLayout *sl, int64_t idx,
                                            const XiValue *object, const XrType *result_type,

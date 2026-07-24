@@ -1,0 +1,37 @@
+import { Capabilities, U64x2, U64x4 } from simd
+
+fn sumWide(values: U64x4) -> u64 {
+    return values.add(values.swapAdjacent()).reduceAdd()
+}
+
+fn sumWideIsland(values: U64x4) -> u64 {
+    return sumWide(values)
+}
+
+fn sumBaseline(values: U64x2) -> u64 {
+    return values.reduceAdd()
+}
+
+fn runtimeSelected() -> bool {
+    return Capabilities.isRuntimeSelected()
+}
+
+struct Runner {
+    marker: int
+
+    wide(values: U64x4) -> u64 {
+        return sumWideIsland(values)
+    }
+
+    run(wide: U64x4, baseline: U64x2) -> u64 {
+        if (runtimeSelected() && Capabilities.nativeBytes() >= 32) {
+            return this.wide(wide)
+        }
+        return sumBaseline(baseline)
+    }
+}
+
+var lanes4: [u64; 4] = [1, 2, 3, 4]
+var lanes2: [u64; 2] = [5, 6]
+var runner = Runner{marker: 0}
+print(runner.run(U64x4.fromLanes(lanes4), U64x2.fromLanes(lanes2)))

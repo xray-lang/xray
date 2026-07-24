@@ -1,0 +1,6 @@
+import { Capabilities } from simd
+
+@test
+fn test_runtime_selection_is_aot_dispatch_only() {
+    assert(!Capabilities.isRuntimeSelected())
+}

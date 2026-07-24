@@ -1359,6 +1359,29 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
     return true;
 }
 
+/* A writable scalar class-field projection already has stable native storage.
+ * XI keeps the projection temporary plus copy-back for shared VM semantics,
+ * but native direct calls may borrow the verified field address itself. This
+ * avoids a stack copy around `callee(ref this.field)` while preserving the
+ * same call-bound, nonescaping place contract. */
+static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out,
+                                                              const XiFunc *f,
+                                                              const XiValue *value) {
+    CgClassNativeFunc info = cg_class_native_func(ctx, f);
+    const XiValue *load = cg_unwrap_identity_value(value);
+    if (!info.layout || !load || load->op != XI_LOAD_FIELD || load->nargs < 1 ||
+        !cg_class_native_receiver_value(ctx, f, load->args[0]))
+        return false;
+    int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, load);
+    const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
+    if (idx < 0 || !field || !cg_static_struct_native_scalar_supported(field->native_type))
+        return false;
+    fprintf(out, "(void *)(&");
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, load, (uint16_t) idx);
+    fprintf(out, ")");
+    return true;
+}
+
 static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                               const XiValue *v) {
     if (!v || v->op != XI_LEN || v->nargs != 1)

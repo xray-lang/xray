@@ -459,6 +459,8 @@ XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out) {
         mode = XAOT_SIMD_SSE2;
     else if (strcmp(text, "avx2") == 0)
         mode = XAOT_SIMD_AVX2;
+    else if (strcmp(text, "dispatch") == 0)
+        mode = XAOT_SIMD_DISPATCH;
     else
         return false;
     if (out)
@@ -480,6 +482,8 @@ XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode) {
             return "sse2";
         case XAOT_SIMD_AVX2:
             return "avx2";
+        case XAOT_SIMD_DISPATCH:
+            return "dispatch";
         default:
             return "invalid";
     }
@@ -504,7 +508,7 @@ static const char *xaot_target_effective_arch(const XaotTarget *target) {
 
 XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, const char *cpu,
                                         char *err, size_t err_size) {
-    if (!target || mode < XAOT_SIMD_AUTO || mode > XAOT_SIMD_AVX2) {
+    if (!target || mode < XAOT_SIMD_AUTO || mode > XAOT_SIMD_DISPATCH) {
         xaot_simd_error(err, err_size, "invalid SIMD mode");
         return false;
     }
@@ -544,6 +548,13 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
         case XAOT_SIMD_AVX2:
             if (!x86_64) {
                 xaot_simd_error(err, err_size, "--simd avx2 requires an x86_64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;
+            break;
+        case XAOT_SIMD_DISPATCH:
+            if (!x86_64) {
+                xaot_simd_error(err, err_size, "--simd dispatch requires an x86_64 target");
                 return false;
             }
             features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;

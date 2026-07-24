@@ -1029,6 +1029,7 @@ static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f
 static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_force_inline(const XiFunc *f);
+static bool cg_func_requires_avx2_target(const XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
     return f && (f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64 ||
@@ -1041,6 +1042,11 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
 }
 
 static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
+    if (cg_func_requires_avx2_target(ctx, f)) {
+        if (cg_func_needs_external_linkage(ctx, f, prefix))
+            return "XRT_INTERNAL ";
+        return "static ";
+    }
     if (cg_func_is_par_for_native_callback(f))
         return "static XR_AINLINE ";
     if (cg_func_needs_external_linkage(ctx, f, prefix))
@@ -8141,6 +8147,118 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
         fprintf(out, "XRT_FN_PURE ");
 }
 
+static bool cg_func_has_runtime_simd_dispatch_local(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (block->values[vi] && (block->values[vi]->op == XI_TARGET_SIMD_BYTES ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_ACCELERATED ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_RUNTIME_SELECTED))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Resolve feature-propagation edges from the callee's owning module, never
+ * from the C unit currently being emitted. Forward declarations for imported
+ * functions are generated under a different current module than definitions;
+ * consulting ctx->imports there can otherwise assign different target attrs
+ * to the same symbol. */
+static const XiFunc *cg_target_resolve_static_call(const XiCgenCtx *ctx, const XiFunc *current,
+                                                   const XiValue *callee) {
+    callee = cg_unwrap_identity_value(callee);
+    if (!ctx || !callee)
+        return NULL;
+    if ((callee->op == XI_CLOSURE_NEW ||
+         (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)) &&
+        callee->aux)
+        return (const XiFunc *) callee->aux;
+    const XiImportRef *ref = NULL;
+    if (callee->op == XI_GET_SHARED) {
+        int slot = (int) callee->aux_int;
+        for (const XiFunc *owner = current; owner; owner = owner->parent_func) {
+            if (owner->shared_slot_funcs && slot >= 0 &&
+                slot < (int) owner->shared_slot_func_count && owner->shared_slot_funcs[slot]) {
+                return owner->shared_slot_funcs[slot];
+            }
+        }
+        const XiModule *owner_module = cg_module_for_func(ctx, current);
+        if (owner_module && owner_module->slot_funcs && slot >= 0 &&
+            slot < (int) owner_module->nslots && owner_module->slot_funcs[slot]) {
+            return owner_module->slot_funcs[slot];
+        }
+        const XiFunc *module_init = owner_module ? owner_module->init : current;
+        ref = cg_shared_slot_import_ref(module_init, slot);
+    } else if (callee->op == XI_IMPORT_REF && callee->aux) {
+        ref = (const XiImportRef *) callee->aux;
+    }
+    if (!ref || !ref->member_name)
+        return NULL;
+    return cg_resolve_module_export_static_call((XiCgenCtx *) ctx, ref, ref->member_name).func;
+}
+
+static bool cg_func_has_native_avx2_value(const XiCgenCtx *ctx, const XiFunc *f) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !f)
+        return false;
+    for (uint32_t i = 0; i < bundle->nvalue_plans; i++) {
+        const XaotValuePlan *plan = &bundle->value_plans[i];
+        if (plan->func == f && plan->rep.kind == XAOT_VALUE_VECTOR &&
+            plan->rep.vector_width_bytes == 32)
+            return true;
+    }
+    return false;
+}
+
+/* Propagate the target feature through direct calls until an explicit runtime
+ * width query. This lets a whole AVX2 loop absorb its leaf kernels while the
+ * query-owning dispatcher remains baseline SSE2. */
+static bool cg_func_requires_avx2_target_depth(const XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiFunc *origin, uint8_t depth) {
+    if (!ctx || !f || depth > 16 || cg_func_has_runtime_simd_dispatch_local(f))
+        return false;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle)
+        return false;
+    if (cg_func_has_native_avx2_value(ctx, f))
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL || value->nargs < 1)
+                continue;
+            const XiFunc *target = cg_target_resolve_static_call(ctx, f, value->args[0]);
+            if (!target || target == origin)
+                continue;
+            if (cg_func_requires_avx2_target_depth(ctx, target, origin, (uint8_t) (depth + 1)))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* In --simd dispatch mode, keep every AVX2 function or same-feature caller
+ * behind a target attribute. Baseline callers select it only after the runtime
+ * OS/CPU capability check; C may still inline within the matching island. */
+static bool cg_func_requires_avx2_target(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !ctx->target || ctx->target->simd_mode != XAOT_SIMD_DISPATCH || !f)
+        return false;
+    return cg_func_requires_avx2_target_depth(ctx, f, f, 0);
+}
+
+static void emit_func_target_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    if (cg_func_requires_avx2_target(ctx, f))
+        fprintf(out, "XRT_TARGET_AVX2 ");
+}
+
 static bool cg_func_attrs_apply_to_internal(const XiFunc *f) {
     return f && !f->export_plan && !f->entry_plan && f->link_plan;
 }
@@ -9417,6 +9535,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     fprintf(out, "%s", cg_func_linkage(ctx, f, prefix));
     if (cg_func_attrs_apply_to_internal(f))
         emit_aot_symbol_attrs(out, f, false);
+    emit_func_target_qualifier(ctx, out, f);
     emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
         fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
@@ -9716,6 +9835,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "%s", cg_func_linkage(ctx, f, prefix));
         if (cg_func_attrs_apply_to_internal(f))
             emit_aot_symbol_attrs(out, f, false);
+        emit_func_target_qualifier(ctx, out, f);
         emit_func_attr_qualifier(ctx, out, f);
         if (!emit_class_native_return_type(ctx, out, prefix, f))
             fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));

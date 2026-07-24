@@ -21,6 +21,7 @@ typedef enum XaotSimdMode {
     XAOT_SIMD_NEON,
     XAOT_SIMD_SSE2,
     XAOT_SIMD_AVX2,
+    XAOT_SIMD_DISPATCH,
 } XaotSimdMode;
 
 enum {

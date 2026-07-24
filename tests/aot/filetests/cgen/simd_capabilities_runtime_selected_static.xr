@@ -1,0 +1,2 @@
+import { Capabilities } from simd
+print(Capabilities.isRuntimeSelected())

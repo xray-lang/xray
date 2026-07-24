@@ -1721,6 +1721,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     /* --- Compile all modules through Xi IR pipeline --- */
     XiPipelineConfig cfg = xi_pipeline_aot_config();
+    cfg.preserve_wide_vector_boundaries =
+        options->target && options->target->simd_mode == XAOT_SIMD_DISPATCH;
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
     XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));

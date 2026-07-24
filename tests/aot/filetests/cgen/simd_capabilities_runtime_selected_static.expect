@@ -1,0 +1,4 @@
+args=--simd scalar
+c_contains=XR_FROM_BOOL(false)
+c_not_contains=xi.target.simd.runtime_selected
+c_syntax=pass

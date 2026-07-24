@@ -190,6 +190,83 @@ static bool inline_is_leaf_straightline(const XiInlineCostModel *cost) {
     return cost->call_count == 0 && cost->branch_count == 0 && !cost->has_loop;
 }
 
+static unsigned inline_vector_lane_bytes(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_U8:
+            return 1;
+        case XR_NATIVE_U32:
+            return 4;
+        case XR_NATIVE_U64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+static bool inline_func_has_runtime_simd_dispatch(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (block->values[vi] && (block->values[vi]->op == XI_TARGET_SIMD_BYTES ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_ACCELERATED ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_RUNTIME_SELECTED))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool inline_func_has_wide_vector_op(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op < XI_VEC_LOAD || value->op > XI_VEC_REDUCE_ADD ||
+                !xi_vec_shape_is_explicit(value->aux_int))
+                continue;
+            unsigned width = inline_vector_lane_bytes(xi_vec_shape_native_type(value->aux_int)) *
+                             (unsigned) xi_vec_shape_lanes(value->aux_int);
+            if (width > 16)
+                return true;
+        }
+    }
+    return false;
+}
+
+/* A dispatch query is an explicit baseline boundary. Away from such a query,
+ * propagate the required feature through direct calls so a wide kernel may
+ * inline into a larger same-feature loop without leaking into its dispatcher. */
+static bool inline_func_requires_wide_vector(const XiFunc *f, const XiFunc *origin, uint8_t depth) {
+    if (!f || depth > 16 || inline_func_has_runtime_simd_dispatch(f))
+        return false;
+    if (inline_func_has_wide_vector_op(f))
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL || value->nargs < 1)
+                continue;
+            const XiFunc *target = resolve_callee(f, value->args[0]);
+            if (!target || target == origin)
+                continue;
+            if (inline_func_requires_wide_vector(target, origin, (uint8_t) (depth + 1)))
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Benefit scoring:
  *   leaf straight-line helper:
  *     MAX_COST - value_count + 1       (call overhead dominates, even in large callers)
@@ -741,6 +818,10 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
             if (callee->is_vararg)
                 continue; /* Rest-Array construction needs a dedicated inline rewrite. */
+            if (f->preserve_wide_vector_boundaries &&
+                inline_func_requires_wide_vector(callee, callee, 0) &&
+                !inline_func_requires_wide_vector(f, f, 0))
+                continue; /* keep optional target-feature bodies out of the baseline caller */
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)

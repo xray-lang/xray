@@ -225,6 +225,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
  *  XI_TARGET_SIMD_BYTES —                canonical target SIMD width query
  *  XI_TARGET_SIMD_ACCELERATED —          canonical hardware-SIMD availability query
+ *  XI_TARGET_SIMD_RUNTIME_SELECTED —     runtime-vs-static SIMD selection query
  *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
@@ -273,6 +274,7 @@ typedef enum {
     XI_TARGET_ALIGNOF,
     XI_TARGET_SIMD_BYTES,
     XI_TARGET_SIMD_ACCELERATED,
+    XI_TARGET_SIMD_RUNTIME_SELECTED,
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,
@@ -1463,6 +1465,11 @@ typedef struct XiFunc {
 
     /* IR stage, monotonically non-decreasing across pipeline passes. */
     XiStage stage;
+
+    /* Target-feature dispatch builds preserve source function boundaries that
+     * own wide vector intrinsics.  The inline pass consumes this policy before
+     * target preparation so an AVX2 body cannot leak into its SSE2 caller. */
+    bool preserve_wide_vector_boundaries;
 
     /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;

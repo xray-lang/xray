@@ -22,6 +22,9 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 #include "xrt_callable.h"
 
 #ifdef memcpy
@@ -100,6 +103,11 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
+#if defined(__x86_64__) || defined(__i386__)
+#define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
+#else
+#define XRT_TARGET_AVX2
+#endif
 #if defined(__arm__) || defined(__thumb__)
 #define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
 #else
@@ -119,6 +127,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_TARGET_AVX2
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT __restrict
 #else
@@ -134,9 +143,47 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_TARGET_AVX2
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT
 #endif
+
+static inline int xrt_target_runtime_simd_bytes(void) {
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+    static _Atomic int cached_bytes = 0;
+    int cached = atomic_load_explicit(&cached_bytes, memory_order_relaxed);
+    if (cached != 0)
+        return cached;
+    unsigned eax, ebx, ecx, edx;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0u), "c"(0u));
+    if (eax < 7u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1u), "c"(0u));
+    if ((ecx & (1u << 27)) == 0 || (ecx & (1u << 28)) == 0)
+        goto baseline;
+    unsigned xcr0_lo, xcr0_hi;
+    __asm__ volatile("xgetbv" : "=a"(xcr0_lo), "=d"(xcr0_hi) : "c"(0u));
+    (void) xcr0_hi;
+    if ((xcr0_lo & 6u) != 6u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7u), "c"(0u));
+    cached = (ebx & (1u << 5)) != 0 ? 32 : 16;
+    atomic_store_explicit(&cached_bytes, cached, memory_order_relaxed);
+    return cached;
+baseline:
+    atomic_store_explicit(&cached_bytes, 16, memory_order_relaxed);
+    return 16;
+#elif (defined(_M_X64) || defined(_M_IX86)) && defined(_MSC_VER)
+    int regs[4];
+    __cpuid(regs, 1);
+    if ((regs[2] & (1 << 27)) == 0 || (regs[2] & (1 << 28)) == 0 || (_xgetbv(0) & 6) != 6)
+        return 16;
+    __cpuidex(regs, 7, 0);
+    return (regs[1] & (1 << 5)) != 0 ? 32 : 16;
+#else
+    return 16;
+#endif
+}
 
 #if defined(__APPLE__)
 #define XR_FFI_ASMNAME(s) "_" s

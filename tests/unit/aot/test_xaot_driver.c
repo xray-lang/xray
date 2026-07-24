@@ -414,6 +414,10 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(xaot_target_configure_simd(&x86, XAOT_SIMD_AVX2, "haswell", err, sizeof(err)));
     ASSERT_TRUE(x86.simd_features == (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2));
     ASSERT_TRUE(strcmp(x86.cpu, "haswell") == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("dispatch", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_DISPATCH);
+    ASSERT_TRUE(xaot_target_configure_simd(&x86, XAOT_SIMD_DISPATCH, NULL, err, sizeof(err)));
+    ASSERT_TRUE(x86.simd_features == (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2));
     ASSERT_TRUE(!xaot_target_configure_simd(&x86, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
     ASSERT_TRUE(strstr(err, "AArch64") != NULL);
 
@@ -421,13 +425,15 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_NEON);
     ASSERT_TRUE(!xaot_target_configure_simd(&arm, XAOT_SIMD_AVX2, NULL, err, sizeof(err)));
     ASSERT_TRUE(strstr(err, "x86_64") != NULL);
+    ASSERT_TRUE(!xaot_target_configure_simd(&arm, XAOT_SIMD_DISPATCH, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "x86_64") != NULL);
     ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SCALAR, NULL, err, sizeof(err)));
     ASSERT_TRUE(arm.simd_features == 0);
 
     ASSERT_TRUE(xaot_link_manifest_init(&manifest, &x86));
     char *json = xaot_link_manifest_dump_json(&manifest);
     ASSERT_TRUE(json != NULL);
-    ASSERT_TRUE(strstr(json, "\"simd_mode\": \"avx2\"") != NULL);
+    ASSERT_TRUE(strstr(json, "\"simd_mode\": \"dispatch\"") != NULL);
     ASSERT_TRUE(strstr(json, "\"simd_features\": 6") != NULL);
     xr_free(json);
     xaot_link_manifest_free(&manifest);

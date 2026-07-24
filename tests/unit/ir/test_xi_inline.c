@@ -391,6 +391,39 @@ TEST(inlines_top_level_shared_function_load) {
     xi_func_free(program);
 }
 
+TEST(preserves_wide_vector_target_feature_boundary) {
+    XiFunc *callee = make_func("wide_vector_callee", &stub_int);
+    XiFunc *caller = make_func("baseline_caller", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *lane = xi_const_int(callee, callee->entry, 1, &stub_int);
+    ASSERT(lane != NULL);
+    XiValue *wide = xi_value_new(callee, callee->entry, XI_VEC_SPLAT, &stub_int, 1);
+    ASSERT(wide != NULL);
+    wide->args[0] = lane;
+    wide->aux_int = xi_vec_shape_encode(XR_NATIVE_U64, 4);
+    xi_block_set_return(callee->entry, wide);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    XiValue *runtime_width =
+        xi_value_new(caller, caller->entry, XI_TARGET_SIMD_BYTES, &stub_int, 0);
+    ASSERT(runtime_width != NULL);
+    xi_block_set_return(caller->entry, call);
+    caller->preserve_wide_vector_boundaries = true;
+
+    XiPassChange chg = xi_opt_inline(caller);
+    ASSERT(!chg.cfg_changed && !chg.values_changed);
+    ASSERT(caller->entry->succs[0] == NULL);
+    ASSERT(caller->entry->nvalues == 3);
+    ASSERT(caller->entry->values[1] == call);
+    ASSERT(caller->entry->values[2] == runtime_width);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 TEST(inline_clone_reproves_evidence_for_new_subject_and_revision) {
     XiFunc *callee = make_func("proof_source", &stub_int);
     XiFunc *caller = make_func("proof_destination", &stub_int);
@@ -474,6 +507,7 @@ int main(void) {
     run_budget_large_caller();
     run_inlines_unannotated_callee_under_tbaa_invariant();
     run_inlines_top_level_shared_function_load();
+    run_preserves_wide_vector_target_feature_boundary();
     run_inline_clone_reproves_evidence_for_new_subject_and_revision();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

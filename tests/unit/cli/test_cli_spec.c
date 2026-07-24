@@ -388,12 +388,12 @@ TEST(parse_build_native_simd_mode) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"--native", "--simd", "avx2", "file.xr"};
+    char *argv[] = {"--native", "--simd", "dispatch", "file.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
     ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "simd", NULL), "avx2");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "simd", NULL), "dispatch");
     ASSERT_EQ_INT(inv.positional_count, 1);
 
     xr_cli_invocation_free(&inv);

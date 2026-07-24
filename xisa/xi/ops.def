@@ -64,6 +64,17 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.target.simd.runtime-selected
+  :class constant
+  :arity variadic
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.add
   :class arithmetic
   :arity 2

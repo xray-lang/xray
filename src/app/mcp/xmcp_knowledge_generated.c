@@ -3639,6 +3639,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "Capabilities.isRuntimeSelected",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
         .name = "Capabilities.nativeBytes",
         .signature = "(): int",
         .summary = "",
@@ -8540,6 +8545,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Capabilities` | `Capabilities` |  |\n"
             "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
+            "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n"
             "| `Capabilities.nativeBytes` | `(): int` |  |\n"
             "| `U32x4` | `U32x4` |  |\n"
             "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n"

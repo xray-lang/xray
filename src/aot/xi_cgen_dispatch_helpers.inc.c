@@ -249,6 +249,14 @@ static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                      const char *prefix) {
     (void) f;
     (void) prefix;
+    bool runtime_dispatch = ctx && ctx->target && ctx->target->simd_mode == XAOT_SIMD_DISPATCH;
+    if (runtime_dispatch) {
+        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+            fprintf(out, "XR_FROM_INT(xrt_target_runtime_simd_bytes())");
+        else
+            fprintf(out, "xrt_target_runtime_simd_bytes()");
+        return;
+    }
     int bytes =
         ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32 : 16;
     if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
@@ -266,6 +274,17 @@ static void xicgen_target_simd_accelerated(XiCgenCtx *ctx, FILE *out, const XiFu
         fprintf(out, "XR_FROM_BOOL(%s)", accelerated ? "true" : "false");
     else
         fprintf(out, "%s", accelerated ? "true" : "false");
+}
+
+static void xicgen_target_simd_runtime_selected(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    bool selected = ctx && ctx->target && ctx->target->simd_mode == XAOT_SIMD_DISPATCH;
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_BOOL(%s)", selected ? "true" : "false");
+    else
+        fprintf(out, "%s", selected ? "true" : "false");
 }
 
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
@@ -13129,6 +13148,9 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, ")");
         return;
     }
+    if (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix) ||
+        emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0]))
+        return;
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {
         fprintf(out, "(void *)((xr_span_t[]){xrt_byte_slice_from_value(");

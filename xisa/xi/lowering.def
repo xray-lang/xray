@@ -37,6 +37,12 @@
   :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
   :aot-c (driver xicgen_target_simd_accelerated))
 
+(lower xi.target.simd.runtime-selected
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
+  :aot-c (driver xicgen_target_simd_runtime_selected))
+
 (lower xi.copy
   :match ()
   :required-targets (vm-bytecode aot-c)

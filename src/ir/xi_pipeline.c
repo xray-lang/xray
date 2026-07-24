@@ -97,6 +97,14 @@ static void xi_set_source_file_recursive(XiFunc *f, const char *source_file) {
         xi_set_source_file_recursive(f->children[i], source_file);
 }
 
+static void xi_set_wide_vector_boundary_policy_recursive(XiFunc *f, bool preserve) {
+    if (!f)
+        return;
+    f->preserve_wide_vector_boundaries = preserve;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_set_wide_vector_boundary_policy_recursive(f->children[i], preserve);
+}
+
 static void xi_pipeline_set_error(XiPipelineResult *res, XiPipeStatus status, XiPipelineStage stage,
                                   XiVerifyCode code, const XiFunc *func, const XiValue *value,
                                   const char *pass_name, const char *detail) {
@@ -276,6 +284,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                               "lowering did not produce executable Xi IR");
         return res;
     }
+
+    xi_set_wide_vector_boundary_policy_recursive(ir, cfg->preserve_wide_vector_boundaries);
 
     char transition_error[512] = {0};
     void *program = xi_stage_adopt_raw(ir, transition_error, sizeof(transition_error));
