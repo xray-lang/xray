@@ -1063,6 +1063,15 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     }
     if (arg_plan && arg_plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
+            cg_value_rep_is_span_aggregate(arg_plan->rep)) {
+            /* A function whose result or control flow requires the tagged ABI
+             * still accepts a native Slice argument. Box the frame-local span
+             * descriptor for the duration of the direct call; safe Slice
+             * values cannot escape or be retained by the callee. */
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            return;
+        }
+        if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(arg_plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
             emit_adt_aggregate_as_base_expr(ctx, out, arg);

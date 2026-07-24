@@ -537,6 +537,13 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     (void) prefix;
     uint16_t param_idx = (uint16_t) v->aux_int;
     XrRep from_rep = cg_func_param_abi_rep(ctx, f, param_idx);
+    XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    if (param_value_rep.kind == XAOT_VALUE_TAGGED && value_plan &&
+        cg_value_rep_is_span_aggregate(value_plan->rep)) {
+        fprintf(out, "xrt_span_from_value_ref(p%u)", (unsigned) v->aux_int);
+        return;
+    }
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, to_rep);
     fprintf(out, "p%u", (unsigned) v->aux_int);
