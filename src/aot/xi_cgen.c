@@ -2527,6 +2527,7 @@ static const XaotBulkPlan *cg_required_bulk_plan(XiCgenCtx *ctx, const XiFunc *f
  * deciding whether a direct method can publish through xrt_pending_error. */
 static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current,
                                            const XiValue *value, uint8_t depth);
+static bool cg_const_int_value(const XiValue *value, int64_t *out);
 
 #include "xi_cgen_class_native_helpers.inc.c"
 
@@ -3095,7 +3096,7 @@ static bool cg_emit_imported_static_fixed_array_const_decl(XiCgenCtx *ctx, FILE 
     if (!ctx || !out || !module || !lit || !lit->data_weak)
         return false;
     CgFixedArrayLaneInfo info;
-    if (!cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, &info, NULL))
+    if (!cg_static_fixed_array_literal_in_module(ctx, module, slot, &info, NULL))
         return false;
     fprintf(out, "extern const %s ", info.ctype);
     cg_emit_static_fixed_array_name(ctx, out, module, slot);

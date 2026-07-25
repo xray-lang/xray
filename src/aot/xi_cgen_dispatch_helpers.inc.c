@@ -5497,11 +5497,16 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
 
     const XiValue *source = cg_unwrap_identity_value(v->args[0]);
     CgFixedArrayLaneInfo fixed;
+    const XiModule *static_module = NULL;
+    int64_t static_slot = -1;
     int64_t start = 0;
     int64_t end = 0;
-    if (!source || !cg_fixed_array_lane_info_from_value(source, &fixed) || !fixed.ctype ||
-        !cg_const_int_value(v->args[1], &start) || !cg_const_int_value(v->args[2], &end) ||
-        start != 0 || (end != INT64_MAX && end != (int64_t) fixed.count))
+    bool static_source =
+        cg_static_fixed_array_value_ex(ctx, source, &fixed, &static_slot, &static_module);
+    if (!source || (!static_source && !cg_fixed_array_lane_info_from_value(source, &fixed)) ||
+        !fixed.ctype || !cg_const_int_value(v->args[1], &start) ||
+        !cg_const_int_value(v->args[2], &end) || start != 0 ||
+        (end != INT64_MAX && end != (int64_t) fixed.count))
         return false;
 
     /* A full view of a fixed array has compile-time layout and range.  Keep
@@ -5509,7 +5514,10 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
      * only to feed xrt_span_from_array_slice would obscure both facts from C
      * optimization and introduce a spurious runtime boundary. */
     fprintf(out, "((xr_span_t){.data = (void *)(");
-    emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
+    if (static_source)
+        cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
+    else
+        emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
     fprintf(out, "), .length = INT64_C(%u)})", (unsigned) fixed.count);
     return true;
 }
@@ -12998,8 +13006,7 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
     }
 
     CgFixedArrayLaneInfo fixed_array_info;
-    if (cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, &fixed_array_info,
-                                                             NULL)) {
+    if (cg_static_fixed_array_literal_in_module(ctx, module, slot, &fixed_array_info, NULL)) {
         cg_emit_static_fixed_array_name(ctx, out, module, slot);
         return true;
     }

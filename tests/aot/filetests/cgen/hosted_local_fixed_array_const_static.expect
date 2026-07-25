@@ -1,0 +1,4 @@
+c_regex=static const uint8_t _xctarr_hosted_local_fixed_array_const_static_[0-9a-f]+_0\[8\] = \{\(uint8_t\)INT64_C\(11\), \(uint8_t\)INT64_C\(22\), \(uint8_t\)INT64_C\(33\), \(uint8_t\)INT64_C\(44\), \(uint8_t\)INT64_C\(55\), \(uint8_t\)INT64_C\(66\), \(uint8_t\)INT64_C\(77\), \(uint8_t\)INT64_C\(88\)\};
+c_contains=_xctarr_hosted_local_fixed_array_const_static_
+c_count=1:xrt_shared[0]
+c_syntax=pass

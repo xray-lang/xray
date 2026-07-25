@@ -1,6 +1,9 @@
 # Cross-target ABI contract
 
-Status: frozen by the xxHash v0.8.3 platform-parity gate.
+Status: re-frozen after hosted module-owned fixed arrays gained direct static
+data and full-slice lowering. Hosted imports retain the shared-slot ABI and
+freestanding imports retain their explicit weak-data contract; the 243-case
+link matrix and cross-target filetests were rerun.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -39,9 +42,9 @@ Windows artifact and ABI shape, but not Windows execution support.
 
 anchor-sha256: src/aot/xaot_link.c 666708eb8f9af5c3c5598a6b926108a4abfd7ffffc298052bf86dd1bb99a6e47
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 4ed015b3b02ea5cbf9c1cb9e970b2dbd4ee23515d56cf052df88eb1b176ae265
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c49d32d4fe21e880e1be3c92354f3376a2554f653a17713f1a37eb898a08e2ee
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 7df4968ceb641eeca11d48503d0714a464cd05b19452be96dd0ae2ed3cdfd54a
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
-anchor-sha256: src/aot/xi_cgen.c 949ada936e0c5ce416c0e558b07a42baadfaac91eb8596120878a285751dc58f
+anchor-sha256: src/aot/xi_cgen.c df1a19a34b3584cc4d64c9193cc8d7d2294229b1be76c11c7a447a9dce029fd0
 anchor-sha256: src/aot/xrt_coll.h 9cb8e646bfabc64087e5358284f2691d85e785880c325181e81f95780549b6aa
 anchor-sha256: src/aot/xrt_core_freestanding.h e3b5b2ca46c5749096101fc86e7960feda4b3c273d342020b19e075bb80002c0
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
