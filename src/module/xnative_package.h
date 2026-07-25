@@ -160,7 +160,7 @@ typedef struct XrNativeUnit {
     char *visibility;
     char *warning_policy;
     char *cpu_feature;
-    char *output; /* canonical derived artifact path, optional */
+    char *output; /* canonical declared artifact identity; build output is target/cache scoped */
     char *purpose;
     uint64_t fingerprint;
 } XrNativeUnit;

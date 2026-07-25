@@ -2225,49 +2225,6 @@ static int xaot_invoke_native_unit_compile(const XrCliToolchainPlan *plan,
     return 0;
 }
 
-static int xaot_combine_native_unit_objects(const XrCliToolchainPlan *plan,
-                                            const XrCliBuildTarget *target,
-                                            const XrNativeUnit *unit, const char *const *objects,
-                                            uint32_t object_count, const char *output,
-                                            bool dump_command, bool dry_run) {
-    char err[512];
-    XaotCliLinkCommand cmd;
-    memset(&cmd, 0, sizeof(cmd));
-    cmd.program = plan->program;
-    if (!xaot_cli_link_add_arg(&cmd, plan->program, err, sizeof(err)))
-        goto command_error;
-    if (plan->kind == XR_CLI_TOOLCHAIN_ZIG &&
-        (!xaot_cli_link_add_arg(&cmd, "cc", err, sizeof(err)) ||
-         !xaot_cli_link_add_zig_target(&cmd, target, err, sizeof(err))))
-        goto command_error;
-    if (!xaot_cli_link_add_arg(&cmd, "-r", err, sizeof(err)) ||
-        !xaot_cli_link_add_arg(&cmd, "-o", err, sizeof(err)) ||
-        !xaot_cli_link_add_arg(&cmd, output, err, sizeof(err)))
-        goto command_error;
-    for (uint32_t i = 0; i < object_count; i++) {
-        if (!xaot_cli_link_add_arg(&cmd, objects[i], err, sizeof(err)))
-            goto command_error;
-    }
-    if (dump_command)
-        xaot_cli_print_command("Native combine command", &cmd);
-    if (dry_run)
-        return 0;
-    {
-        XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
-        int code = -1;
-        if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0 || code != 0) {
-            fprintf(stderr, "Error: cannot combine native unit '%s' objects\n",
-                    unit->name ? unit->name : "?");
-            return 1;
-        }
-    }
-    return 0;
-
-command_error:
-    fprintf(stderr, "Error: %s\n", err);
-    return 1;
-}
-
 static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t source_index,
                                              const XrCliBuildTarget *target,
                                              const XrCliToolchainPlan *plan, const char *sysroot) {
@@ -2374,50 +2331,28 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
             if (ret != 0)
                 break;
         }
-        if (ret == 0 && !dry_run) {
-            char output_dir[XR_PATH_MAX];
-            char tmp_output[XR_PATH_MAX];
-            xaot_dirname(unit->output, output_dir, sizeof(output_dir));
-            if (xaot_mkdir_p(output_dir) != 0) {
-                fprintf(stderr, "Error: cannot create native output directory '%s'\n", output_dir);
+        bool retain_unit =
+            xaot_link_manifest_contains(link_manifest, XAOT_LINK_LD_FLAG, unit->output) ||
+            xaot_native_unit_owns_entry_stub(native_plan, unit);
+        xaot_cli_manifest_remove_string(&link_manifest->ld_flags, &link_manifest->n_ld_flags,
+                                        unit->output);
+        for (uint32_t si = 0; ret == 0 && retain_unit && si < unit->source_count; si++) {
+            if (!xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_LD_FLAG, objects[si])) {
+                fprintf(stderr, "Error: cannot isolate native unit link object '%s[%u]'\n",
+                        unit->name ? unit->name : "?", si);
                 ret = 1;
-            } else {
-                snprintf(tmp_output, sizeof(tmp_output), "%s.%d.tmp", unit->output,
-                         (int) xr_proc_self_pid());
-                if (unit->source_count == 1) {
-                    if (xaot_copy_file(objects[0], tmp_output, 0644) != 0)
-                        ret = 1;
-                } else {
-                    ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
-                                                           unit->source_count, tmp_output,
-                                                           dump_command, false);
-                }
-                if (ret == 0 && xr_fs_rename(tmp_output, unit->output) != 0) {
-                    fprintf(stderr, "Error: cannot install native unit output '%s'\n",
-                            unit->output);
-                    xr_fs_remove(tmp_output);
-                    ret = 1;
-                }
             }
-        } else if (ret == 0 && dry_run && unit->source_count > 1) {
-            ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
-                                                   unit->source_count, unit->output, dump_command,
-                                                   true);
         }
         xr_free(objects);
         xr_free(object_paths);
         if (ret != 0)
             return ret;
-        /* Entry stubs are linker roots rather than calls reachable from Xi, so
-         * extern-symbol reachability cannot retain their native unit.  The
-         * explicit freestanding.entry.stub binding is the audited linkage
-         * edge; place that unit on the final link line exactly once. */
-        if (xaot_native_unit_owns_entry_stub(native_plan, unit) &&
-            !xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_LD_FLAG, unit->output)) {
-            fprintf(stderr, "Error: cannot retain freestanding entry stub unit '%s'\n",
-                    unit->name ? unit->name : "?");
-            return 1;
-        }
+        /* The manifest spelling is a package-level identity.  Final linking
+         * uses each target/toolchain-keyed cache object directly.  This keeps
+         * multi-source units portable across Mach-O/ELF/COFF and prevents
+         * concurrent cross-target builds from sharing a package-tree object.
+         * Entry stubs are linker roots, so their audited unit is retained even
+         * when ordinary extern-symbol reachability does not mention it. */
     }
     for (uint32_t ei = 0; ei < native_plan->entry_count; ei++) {
         const XrFreestandingEntryPlan *entry = &native_plan->entries[ei];
