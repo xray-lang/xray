@@ -42,7 +42,7 @@ Windows artifact and ABI shape, but not Windows execution support.
 
 anchor-sha256: src/aot/xaot_link.c 666708eb8f9af5c3c5598a6b926108a4abfd7ffffc298052bf86dd1bb99a6e47
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 4ed015b3b02ea5cbf9c1cb9e970b2dbd4ee23515d56cf052df88eb1b176ae265
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 7df4968ceb641eeca11d48503d0714a464cd05b19452be96dd0ae2ed3cdfd54a
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2255d2f7fe0f736748aa406da59c0209364e3611ba98e08be2787c546c614a8e
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
 anchor-sha256: src/aot/xi_cgen.c df1a19a34b3584cc4d64c9193cc8d7d2294229b1be76c11c7a447a9dce029fd0
 anchor-sha256: src/aot/xrt_coll.h 9cb8e646bfabc64087e5358284f2691d85e785880c325181e81f95780549b6aa
