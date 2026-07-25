@@ -284,6 +284,13 @@ XR_FUNC const XrLinkSymbolPlan *xr_native_package_find_link_symbol(const XrNativ
                                                                    const char *xray_name);
 XR_FUNC const XrFreestandingEntryPlan *xr_native_package_find_entry(const XrNativePackagePlan *plan,
                                                                     const char *xray_name);
+/* Apply build-local C ABI shaping after a manifest has been validated. Prefixing
+ * affects public exports only; excluded symbols are removed from the export
+ * roots so ordinary AOT reachability can discard their implementation too. */
+XR_FUNC bool xr_native_package_configure_c_exports(XrNativePackagePlan *plan,
+                                                   const char *public_prefix,
+                                                   const char *exclude_csv, char *error,
+                                                   size_t error_size);
 XR_FUNC const char *xr_native_symbol_library(const XrNativeSymbol *symbol);
 struct XrAggregateLayout;
 XR_FUNC bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,

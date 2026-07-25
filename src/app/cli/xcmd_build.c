@@ -33,6 +33,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
 #include "../../os/os_dir.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -1313,6 +1314,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_link_command = xr_cli_opt_bool(&inv->options, "dump-link-command");
     bool dry_run_link = xr_cli_opt_bool(&inv->options, "dry-run-link");
     const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
+    const char *c_export_prefix = xr_cli_opt_string(&inv->options, "c-export-prefix", NULL);
+    const char *c_export_exclude = xr_cli_opt_string(&inv->options, "c-export-exclude", NULL);
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
@@ -1365,6 +1368,24 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         }
         if (project)
             target_config = xr_project_find_target_config(project, target_arg);
+    }
+
+    if ((c_export_prefix || c_export_exclude) && !native_mode) {
+        fprintf(stderr, "Error: --c-export-prefix/--c-export-exclude require --native\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (c_export_prefix || c_export_exclude) {
+        if (!project || !project->native_plan) {
+            fprintf(stderr,
+                    "Error: --c-export-prefix/--c-export-exclude require manifest C exports\n");
+            CMD_BUILD_RETURN(2);
+        }
+        if (!xr_native_package_configure_c_exports(project->native_plan, c_export_prefix,
+                                                   c_export_exclude, parse_err,
+                                                   sizeof(parse_err))) {
+            fprintf(stderr, "Error: %s\n", parse_err);
+            CMD_BUILD_RETURN(2);
+        }
     }
 
     cc = build_config_string(&inv->options, "cc", target_config ? target_config->cc : NULL, "cc");
@@ -2787,6 +2808,87 @@ static int xaot_write_c_export_header(const XaotBuildResult *result, const char 
     return 0;
 }
 
+/* Per-module C sources intentionally use compact file-static literal names.
+ * When --c-only combines those sources into one translation unit, give just
+ * those generated identifiers a module ordinal while leaving user string and
+ * character contents byte-for-byte unchanged. */
+static void xaot_write_amalgamated_unit(FILE *out, const char *source, int module_ordinal) {
+    enum {
+        XAOT_C_NORMAL = 0,
+        XAOT_C_STRING,
+        XAOT_C_CHAR,
+        XAOT_C_LINE_COMMENT,
+        XAOT_C_BLOCK_COMMENT,
+    } state = XAOT_C_NORMAL;
+    const char *p = source ? source : "";
+    while (*p) {
+        if (state == XAOT_C_NORMAL) {
+            if (p[0] == '/' && p[1] == '/') {
+                fputs("//", out);
+                p += 2;
+                state = XAOT_C_LINE_COMMENT;
+                continue;
+            }
+            if (p[0] == '/' && p[1] == '*') {
+                fputs("/*", out);
+                p += 2;
+                state = XAOT_C_BLOCK_COMMENT;
+                continue;
+            }
+            if (*p == '"') {
+                fputc(*p++, out);
+                state = XAOT_C_STRING;
+                continue;
+            }
+            if (*p == '\'') {
+                fputc(*p++, out);
+                state = XAOT_C_CHAR;
+                continue;
+            }
+            bool token_start = p == source || (!isalnum((unsigned char) p[-1]) && p[-1] != '_');
+            if (token_start && strncmp(p, "_xstr_", 6) == 0 && isdigit((unsigned char) p[6])) {
+                fprintf(out, "_xstr_m%d_", module_ordinal);
+                p += 6;
+                continue;
+            }
+            if (token_start && strncmp(p, "_xbytes_", 8) == 0 && isdigit((unsigned char) p[8])) {
+                fprintf(out, "_xbytes_m%d_", module_ordinal);
+                p += 8;
+                continue;
+            }
+            fputc(*p++, out);
+            continue;
+        }
+        if (state == XAOT_C_STRING || state == XAOT_C_CHAR) {
+            char quote = state == XAOT_C_STRING ? '"' : '\'';
+            if (*p == '\\' && p[1]) {
+                fputc(*p++, out);
+                fputc(*p++, out);
+                continue;
+            }
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == quote)
+                state = XAOT_C_NORMAL;
+            continue;
+        }
+        if (state == XAOT_C_LINE_COMMENT) {
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == '\n')
+                state = XAOT_C_NORMAL;
+            continue;
+        }
+        if (p[0] == '*' && p[1] == '/') {
+            fputs("*/", out);
+            p += 2;
+            state = XAOT_C_NORMAL;
+            continue;
+        }
+        fputc(*p++, out);
+    }
+}
+
 static bool xaot_cli_fast_test_build_enabled(void) {
     const char *flag = getenv("XRAY_AOT_FAST_TEST_BUILD");
     return flag && flag[0] && strcmp(flag, "0") != 0;
@@ -3212,7 +3314,7 @@ static int cmd_build_native(
                 fprintf(f, "/* ==== module: %s ==== */\n",
                         aot_result.sources[impl_source].name ? aot_result.sources[impl_source].name
                                                              : "?");
-            fputs(aot_result.sources[impl_source].c_source, f);
+            xaot_write_amalgamated_unit(f, aot_result.sources[impl_source].c_source, impl_source);
             fputc('\n', f);
         }
         for (int i = 0; i < n_sources; i++) {
@@ -3221,7 +3323,7 @@ static int cmd_build_native(
             if (n_sources > 1)
                 fprintf(f, "/* ==== module: %s ==== */\n",
                         aot_result.sources[i].name ? aot_result.sources[i].name : "?");
-            fputs(aot_result.sources[i].c_source, f);
+            xaot_write_amalgamated_unit(f, aot_result.sources[i].c_source, i);
             fputc('\n', f);
         }
         fclose(f);

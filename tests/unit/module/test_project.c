@@ -240,10 +240,45 @@ TEST(native_package_hash_mismatch_fails_closed) {
     teardown_tmpdir();
 }
 
+TEST(c_export_prefix_and_exclude_shape_manifest_roots) {
+    setup_tmpdir();
+    write_project_file("[project]\nname = \"exports\"\n"
+                       "[[export.c]]\nxray = \"add\"\nsymbol = \"xr_add\"\n"
+                       "visibility = \"default\"\nheader = true\n"
+                       "[[export.c]]\nxray = \"sub\"\nsymbol = \"xr_sub\"\n"
+                       "visibility = \"default\"\nheader = true\n"
+                       "[[export.c]]\nxray = \"helper\"\nsymbol = \"xr_helper\"\n"
+                       "visibility = \"hidden\"\n");
+    XrProject *project = xr_project_load(NULL, g_tmpdir);
+    ASSERT_NOT_NULL(project);
+    ASSERT_TRUE(project->initialized);
+    ASSERT_NOT_NULL(project->native_plan);
+    ASSERT_EQ_INT(project->native_plan->export_count, 3);
+    uint64_t original_fingerprint = project->native_plan->fingerprint;
+    char error[256];
+    ASSERT_FALSE(xr_native_package_configure_c_exports(project->native_plan, "NS_", "xr_missing",
+                                                       error, sizeof(error)));
+    ASSERT_TRUE(strstr(error, "unknown C export symbol") != NULL);
+    ASSERT_EQ_INT(project->native_plan->export_count, 3);
+
+    ASSERT_TRUE(xr_native_package_configure_c_exports(project->native_plan, "NS_", "xr_sub", error,
+                                                      sizeof(error)));
+    ASSERT_EQ_INT(project->native_plan->export_count, 2);
+    ASSERT_STR_EQ(project->native_plan->exports[0].symbol, "NS_xr_add");
+    ASSERT_STR_EQ(project->native_plan->exports[1].symbol, "xr_helper");
+    ASSERT_TRUE(project->native_plan->fingerprint != original_fingerprint);
+    ASSERT_NULL(xr_native_package_find_export(project->native_plan, "sub"));
+    ASSERT_NOT_NULL(xr_native_package_find_export(project->native_plan, "add"));
+
+    xr_project_free(project);
+    teardown_tmpdir();
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Project Configuration");
 RUN_TEST(load_target_config);
 RUN_TEST(load_verified_native_package_plan);
 RUN_TEST(native_package_hash_mismatch_fails_closed);
 RUN_TEST(native_package_unknown_target_policy_fails_closed);
+RUN_TEST(c_export_prefix_and_exclude_shape_manifest_roots);
 TEST_MAIN_END()

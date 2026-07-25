@@ -67,12 +67,19 @@ static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, con
     return NULL;
 }
 
-static void emit_class_native_type_name(FILE *out, const char *prefix, const char *class_name) {
+static void class_native_type_name(char *buf, size_t bufsz, const char *prefix,
+                                   const char *class_name) {
     char prefix_buf[128];
     char class_buf[128];
     sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix ? prefix : "mod");
     sanitize_c_ident_part(class_buf, sizeof(class_buf), class_name ? class_name : "Class");
-    fprintf(out, "xrt_native_%s_%s", prefix_buf, class_buf);
+    snprintf(buf, bufsz, "xrt_native_%s_%s", prefix_buf, class_buf);
+}
+
+static void emit_class_native_type_name(FILE *out, const char *prefix, const char *class_name) {
+    char name[288];
+    class_native_type_name(name, sizeof(name), prefix, class_name);
+    fputs(name, out);
 }
 
 static bool cg_class_native_data_matches(const XiClassData *a, const XiClassData *b) {

@@ -1,0 +1,16 @@
+export class Label {
+    text: string
+
+    constructor(text: string) {
+        this.text = text
+    }
+
+    length() -> int {
+        return len(this.text)
+    }
+}
+
+export fn helperLength() -> int {
+    var label = Label("helper")
+    return label.length()
+}

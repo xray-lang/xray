@@ -1,0 +1,4 @@
+import { Label, helperLength } from "./helper"
+
+var label = Label("main")
+print(label.length() + helperLength())

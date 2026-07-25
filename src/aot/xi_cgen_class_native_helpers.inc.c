@@ -5742,6 +5742,9 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
                                           const char *prefix) {
     if (!cd)
         return;
+    char native_type[288];
+    class_native_type_name(native_type, sizeof(native_type), prefix, cd->class_name);
+    fprintf(out, "#ifndef XRT_DEFINED_%s\n#define XRT_DEFINED_%s 1\n", native_type, native_type);
     if (!cd->instance_layout) {
         if ((cd->derive_flags & XR_DERIVE_CLONE) != 0) {
             fprintf(out, "XrValue ");
@@ -5749,6 +5752,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
             fprintf(out, "(XrValue src);\n");
         }
         emit_class_boxed_derived_eq_hash_callbacks(ctx, out, cd, prefix);
+        fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;
     }
     fprintf(out, "typedef struct ");
@@ -5796,8 +5800,10 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "};\n");
     }
     emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
-    if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
+    if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
+        fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;
+    }
     fprintf(out, "static void ");
     emit_class_native_dtor_name(out, prefix, cd);
     fprintf(out, "(void *obj) {\n");
@@ -5818,6 +5824,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, ");\n");
     }
     fprintf(out, "}\n");
+    fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
 }
 
 static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *module,
