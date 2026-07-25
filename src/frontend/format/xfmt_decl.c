@@ -37,7 +37,9 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
         case ATTR_BEFORE_EACH:
         case ATTR_AFTER_EACH:
         case ATTR_BEFORE_ALL:
-        case ATTR_AFTER_ALL: {
+        case ATTR_AFTER_ALL:
+        case ATTR_INLINE:
+        case ATTR_NOINLINE: {
             const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attr->kind);
             xfmt_write_char(ctx, '@');
             xfmt_write_str(ctx, info ? info->spelling : "unknown");

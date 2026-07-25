@@ -168,6 +168,7 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
 static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "fence", mem_fence);
     XRS_EXPORT(module, isolate, "prefetch", mem_prefetch);
+    XRS_EXPORT(module, isolate, "compilerGuard", mem_compiler_guard_u64);
     XRS_EXPORT(module, isolate, "cacheFlush", mem_cache_flush);
     XRS_EXPORT(module, isolate, "cacheInvalidate", mem_cache_invalidate);
     XRS_EXPORT(module, isolate, "nontemporalStore", mem_nontemporal_store);

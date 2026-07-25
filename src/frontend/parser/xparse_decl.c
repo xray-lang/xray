@@ -338,9 +338,13 @@ static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
 /* Kept as a parser-internal ABI name for the OOP parser. It now rejects any
  * repeated public attribute; removed assertion attributes never reach AST. */
 bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **attrs, int count) {
+    bool has_inline = false;
+    bool has_noinline = false;
     for (int i = 0; i < count; i++) {
         if (!attrs[i])
             continue;
+        has_inline = has_inline || attrs[i]->kind == ATTR_INLINE;
+        has_noinline = has_noinline || attrs[i]->kind == ATTR_NOINLINE;
         for (int j = 0; j < i; j++) {
             if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
                 const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attrs[i]->kind);
@@ -351,6 +355,10 @@ bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **at
                 return false;
             }
         }
+    }
+    if (has_inline && has_noinline) {
+        xr_parser_error(parser, "@inline and @noinline cannot annotate the same declaration");
+        return false;
     }
     return true;
 }

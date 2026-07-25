@@ -761,6 +761,31 @@ TEST(parser_method_deprecated_attribute) {
     teardown();
 }
 
+TEST(parser_inline_control_attributes_and_conflict) {
+    setup();
+    AstNode *program = parse_ok("@inline\n"
+                                "fn hot(value: int) -> int { return value }\n"
+                                "struct Worker {\n"
+                                "  @noinline\n"
+                                "  cold(value: int) -> int { return value }\n"
+                                "}\n");
+    AstNode *fn = program->as.program.statements[0];
+    ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
+    ASSERT_EQ_INT(fn->as.function_decl.attr_count, 1);
+    ASSERT_EQ_INT(fn->as.function_decl.attributes[0]->kind, ATTR_INLINE);
+
+    AstNode *st = program->as.program.statements[1];
+    ASSERT_EQ_INT(st->type, AST_STRUCT_DECL);
+    ASSERT_EQ_INT(st->as.struct_decl.method_count, 1);
+    MethodDeclNode *method = &st->as.struct_decl.methods[0]->as.method_decl;
+    ASSERT_EQ_INT(method->attr_count, 1);
+    ASSERT_EQ_INT(method->attributes[0]->kind, ATTR_NOINLINE);
+
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "@inline\n@noinline\nfn conflict() {}\n"));
+    teardown();
+}
+
 TEST(parser_rejects_posthoc_local_export) {
     setup();
     AstNode *program =
@@ -1327,6 +1352,7 @@ int main(void) {
     RUN_TEST(parser_class_decl);
     RUN_TEST(parser_direct_visibility_owns_declaration);
     RUN_TEST(parser_method_deprecated_attribute);
+    RUN_TEST(parser_inline_control_attributes_and_conflict);
     RUN_TEST(parser_rejects_posthoc_local_export);
     RUN_TEST(parser_reexport_preserves_module_identity_kind);
     RUN_TEST(parser_enum_static_method);

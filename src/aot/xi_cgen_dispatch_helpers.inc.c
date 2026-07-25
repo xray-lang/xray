@@ -6834,6 +6834,15 @@ static const XgBodySummary *xicgen_evidence_body_for_func(const XgGlobalEvidence
     return NULL;
 }
 
+static bool xicgen_global_evidence_proves_nothrow(XiCgenCtx *ctx, const XiFunc *func) {
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    const XgBodySummary *body = xicgen_evidence_body_for_func(ev, func);
+    uint32_t effects = 0;
+    if (!body || !xg_body_effects_compose_closed_world_calls(ev, body, &effects))
+        return false;
+    return (effects & (XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC)) == 0;
+}
+
 static bool xicgen_evidence_interface_extends_reaches(const XgGlobalEvidence *ev,
                                                       XgInterfaceId from, XgInterfaceId target,
                                                       uint32_t depth) {
@@ -7842,6 +7851,34 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     return false;
 }
 
+static bool xicgen_stdlib_call_is_declared_nothrow(XiCgenCtx *ctx, const XiFunc *current,
+                                                   const XiValue *call) {
+    const XiValue *v = cg_unwrap_identity_value(call);
+    const char *module = NULL;
+    const char *member = NULL;
+    if (!ctx || !current || !v)
+        return false;
+
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 && v->aux) {
+        module = cg_aot_stdlib_module_of_receiver(ctx, current, v->args[0]);
+        member = (const char *) v->aux;
+    } else if (v->op == XI_CALL && v->nargs >= 1) {
+        const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+        const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                     ? (const XiImportRef *) callee->aux
+                                     : cg_import_ref_for_value(ctx, current, callee);
+        if (ref) {
+            module = ref->module_path;
+            member = ref->member_name;
+        }
+    }
+    if (!module || !member)
+        return false;
+
+    const XaEffectContract *contract = xa_builtin_get_module_func_effect_contract(module, member);
+    return contract && contract->kind == XA_EFFECT_CONTRACT_NOTHROW;
+}
+
 static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *current,
                                                 const XiValue *call, uint8_t depth) {
     const XiValue *v = cg_unwrap_identity_value(call);
@@ -7860,6 +7897,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
         return true;
     if (xicgen_runtime_method_call_is_direct_nothrow(v))
         return true;
+    if (xicgen_stdlib_call_is_declared_nothrow(ctx, current, v))
+        return true;
     if (cg_class_native_call_is_nothrow_direct(ctx, current, v))
         return true;
 
@@ -7871,6 +7910,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
     if (!target || target == current || target->is_extern || direct.is_class_constructor ||
         cg_func_needs_aot_coro_ctx(ctx, target))
         return false;
+    if (xicgen_global_evidence_proves_nothrow(ctx, target))
+        return true;
     return !xicgen_func_has_error_flow(ctx, target, (uint8_t) (depth + 1));
 }
 

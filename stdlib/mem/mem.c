@@ -76,6 +76,14 @@ static XrValue mem_prefetch(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_null();
 }
 
+/* mem.compilerGuard(value) is semantically the identity function. Native AOT
+ * additionally places a compiler barrier on the scalar bits; the VM has no
+ * optimizing native scheduler to constrain, so returning the input is exact. */
+static XrValue mem_compiler_guard_u64(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    return argc >= 1 && XR_IS_INT(args[0]) ? args[0] : xr_int(0);
+}
+
 /*
  * Bulk memory ops (mem.copy/move/set/compare). In the VM a raw pointer is an
  * address-width int (see OP_PTR_LOAD), so decode it back to a void*. libc

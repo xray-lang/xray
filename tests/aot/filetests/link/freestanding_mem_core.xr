@@ -37,6 +37,10 @@ fn xray_mem_bits(x: int, n: int) -> int {
         x.wrappingSub(n) + x.wrappingMul(n)
 }
 
+fn xray_mem_compiler_guard(value: u64) -> u64 {
+    return mem.compilerGuard(value)
+}
+
 fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
     var d = mem.mutPtr<byte>(dst)
     var s = mem.mutPtr<byte>(src)

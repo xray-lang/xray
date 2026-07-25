@@ -402,6 +402,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 static const XaBuiltinMember g_gen_mem_functions[] = {
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"prefetch", "(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"compilerGuard", "(value: u64): u64", "Return value unchanged while creating a best-effort native compiler scheduling barrier", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"cacheFlush", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"cacheInvalidate", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"nontemporalStore", "(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -435,7 +436,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_MEM_FUNCTION_COUNT 33
+#define GEN_MEM_FUNCTION_COUNT 34
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

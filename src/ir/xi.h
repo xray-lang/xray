@@ -1512,6 +1512,8 @@ typedef struct XiFunc {
      * not executable.  Function-level generics instead keep a canonical
      * erased ABI and do not set this bit. */
     bool is_generic_template;
+    bool inline_hint;   /* source @inline; optimization-only, semantics-neutral */
+    bool noinline_hint; /* source @noinline; optimization-only, semantics-neutral */
 
     /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend

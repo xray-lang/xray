@@ -1750,10 +1750,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_braun_write(&l, self_var, entry, self);
     }
 
-    /* Propagate test-runner metadata only; production metadata is erased. */
+    /* Preserve production codegen hints and test-runner metadata. */
     if (fdecl->attr_count > 0 && fdecl->attributes) {
         for (int i = 0; i < fdecl->attr_count; i++) {
             XrAttribute *a = fdecl->attributes[i];
+            if (a && a->kind == ATTR_INLINE)
+                l.func->inline_hint = true;
+            if (a && a->kind == ATTR_NOINLINE)
+                l.func->noinline_hint = true;
             if (a && (a->kind == ATTR_TEST || a->kind == ATTR_TEST_SKIP ||
                       a->kind == ATTR_TEST_TIMEOUT || a->kind == ATTR_BEFORE_EACH ||
                       a->kind == ATTR_AFTER_EACH || a->kind == ATTR_BEFORE_ALL ||

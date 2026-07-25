@@ -4964,7 +4964,9 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
-The only other public attributes are `@deprecated("...")` and `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
+Other public attributes include `@deprecated("...")`, `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`), and the experimental native-codegen hints `@inline` / `@noinline`. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively requests expansion or preservation of a native call boundary. They are intended for low-level hot paths backed by real benchmarks and assembly-shape gates, not as a substitute for the compiler's general inlining policy.
+
+Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
 ```xray
 @test                                 // mark as a test
@@ -4978,6 +4980,12 @@ fn reset_fixture() { resetState() }
 
 @deprecated("use newAPI() instead")
 fn oldAPI() { return }
+
+@inline
+fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
+
+@noinline
+fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
 ```
 
 > `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.

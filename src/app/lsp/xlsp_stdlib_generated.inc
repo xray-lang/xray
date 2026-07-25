@@ -310,6 +310,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
+    {"compilerGuard", XLSP_SYM_FUNCTION, "fn(value: u64): u64", "Return value unchanged while creating a best-effort native compiler scheduling barrier", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
@@ -342,7 +343,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 33
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 34
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

@@ -2733,6 +2733,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
     },
     {
+        .name = "compilerGuard",
+        .signature = "(value: u64): u64",
+        .summary = "Return value unchanged while creating a best-effort native compiler scheduling barrier",
+    },
+    {
         .name = "copy",
         .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
@@ -7151,6 +7156,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "@deprecated(\"use newAPI() instead\")\n"
             "fn oldAPI() { return }\n"
+            "\n"
+            "@inline\n"
+            "fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }\n"
+            "\n"
+            "@noinline\n"
+            "fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n"
             "```\n"
             "\n"
             "### Run tests\n"
@@ -8160,6 +8171,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.compilerGuard` | `(value: u64): u64` | Return value unchanged while creating a best-effort native compiler scheduling barrier |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"

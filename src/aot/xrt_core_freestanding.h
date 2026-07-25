@@ -1760,6 +1760,14 @@ static inline XrValue xrt_mem_fence(XrValue ordering) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_mem_compiler_guard_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits));
+#endif
+    return XR_FROM_INT((int64_t) bits);
+}
+
 static inline XrValue xrt_mem_prefetch(XrValue ptr, XrValue rw) {
 #if defined(__GNUC__) || defined(__clang__)
     if (xrt_mem_int_arg(rw) != 0)

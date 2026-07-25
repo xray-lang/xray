@@ -1615,6 +1615,131 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     xi_func_free(app_ir);
 }
 
+TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
+    const char *lib_src = "fn path0(value: int) -> int { return value + 1 }\n"
+                          "fn path1(value: int) -> int { return value + 2 }\n"
+                          "fn path2(value: int) -> int { return value + 3 }\n"
+                          "export fn dispatch(tag: int, value: int) -> int {\n"
+                          "    var mixed = value ^ (tag << 1)\n"
+                          "    mixed = (mixed + 7) ^ (mixed >> 3)\n"
+                          "    mixed = mixed ^ tag\n"
+                          "    if (tag == 0) { return path0(mixed) }\n"
+                          "    if (tag == 1) { return path1(mixed) }\n"
+                          "    return path2(mixed)\n"
+                          "}\n"
+                          "dispatch(0, 0)\n";
+    const char *app_src = "print(0)\n";
+
+    XiFunc *lib_ir = compile_to_ir(lib_src);
+    XiFunc *app_ir = compile_to_ir(app_src);
+    TEST_REQUIRE(lib_ir != NULL && app_ir != NULL, "IR compilation failed");
+    TEST_REQUIRE(lib_ir->module != NULL && app_ir->module != NULL, "module metadata required");
+    lib_ir->module->name = "lib";
+    lib_ir->module->path = "lib.xr";
+    app_ir->module->name = "app";
+    app_ir->module->path = "app.xr";
+    XiModule *modules[] = {lib_ir->module, app_ir->module};
+
+    TEST_REQUIRE(test_prepare_backend_ir(lib_ir), "library backend preparation failed");
+    TEST_REQUIRE(test_prepare_backend_ir(app_ir), "app backend preparation failed");
+
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 2, 1);
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    xi_cgen_resolve_module_imports(ctx, modules, 2);
+
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "CGen output stream allocated");
+    xi_cgen_module_tu(ctx, mem, modules, 2, 0, 1);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0, "CGen output stream closed");
+    TEST_REQUIRE(code != NULL && !xi_cgen_has_error(ctx), "multi-module C generation succeeded");
+    TEST_REQUIRE(contains(code, "lib_dispatch_exp("), "dispatcher definition generated");
+    TEST_REQUIRE(!contains(code, "XR_FORCEINLINE int64_t lib_dispatch_exp(") &&
+                     !contains(code, "XR_FORCEINLINE XRT_FN_CONST int64_t lib_dispatch_exp("),
+                 "three-way call dispatcher must not be forced into every caller");
+    TEST_REQUIRE(contains(code, "XRT_INTERNAL int64_t lib_dispatch_exp(") ||
+                     contains(code, "XRT_INTERNAL XRT_FN_CONST int64_t lib_dispatch_exp("),
+                 "dispatcher keeps ordinary hidden cross-module linkage");
+
+    printf("  Generated native-inliner dispatcher boundary %zu bytes of C code\n", code_size);
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    xi_func_free(lib_ir);
+    xi_func_free(app_ir);
+}
+
+TEST(cgen_noinline_attribute_preserves_native_boundary) {
+    const char *src = "@noinline\n"
+                      "fn boundary(value: int) -> int { return value + 1 }\n"
+                      "print(boundary(41))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    XiFunc *boundary = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "boundary") == 0) {
+            boundary = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(boundary != NULL && boundary->noinline_hint,
+                 "@noinline must survive AST-to-Xi lowering");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "@noinline fixture should generate");
+    TEST_REQUIRE(contains(code, "static XR_NOINLINE int64_t test_boundary_") ||
+                     contains(code, "static XR_NOINLINE XRT_FN_CONST int64_t test_boundary_"),
+                 "@noinline must emit a native noinline function boundary");
+
+    printf("  Generated explicit noinline boundary %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_inline_attribute_forces_native_expansion) {
+    const char *src = "@inline\n"
+                      "fn expansion(value: int) -> int {\n"
+                      "    var scratch: [int; 4] = [value, 2, 3, 4]\n"
+                      "    var result = value\n"
+                      "    var i = 0\n"
+                      "    while (i < 64) {\n"
+                      "        result = (result * 33) ^ i\n"
+                      "        i += 1\n"
+                      "    }\n"
+                      "    return result + scratch[0]\n"
+                      "}\n"
+                      "print(expansion(7))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    XiFunc *expansion = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "expansion") == 0) {
+            expansion = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(expansion != NULL && expansion->inline_hint,
+                 "@inline must survive AST-to-Xi lowering");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "@inline fixture should generate");
+    TEST_REQUIRE(contains(code, "static XR_AINLINE int64_t test_expansion_") ||
+                     contains(code, "static XR_AINLINE XRT_FN_CONST int64_t test_expansion_"),
+                 "@inline must emit an always-inline native expansion boundary");
+
+    printf("  Generated explicit inline expansion %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_c_export_wrapper_keeps_default_visibility) {
     const char *src = "fn bridge(x: int) -> int { return x + 1 }\n"
                       "bridge(0)\n";
@@ -5575,6 +5700,117 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
     xi_func_free(ir);
 }
 
+TEST(cgen_declared_nothrow_stdlib_call_elides_pending_error_check) {
+    const char *src = "import mem\n"
+                      "fn guarded(value: u64) -> u64 {\n"
+                      "    return mem.compilerGuard(value)\n"
+                      "}\n"
+                      "print(guarded(123))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "declared nothrow stdlib call should generate");
+
+    const char *guarded = find_static_function_definition(code, "test_guarded_");
+    TEST_REQUIRE(guarded != NULL, "guarded function should be generated");
+    const char *guarded_end = next_static_after(guarded);
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_mem_compiler_guard_u64(") == 1,
+                 "compiler guard must use its direct AOT helper");
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_has_pending_error") == 0,
+                 "declared nothrow stdlib call must not poll the pending-error channel");
+
+    printf("  Generated declared no-throw stdlib call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
+    const char *src = "fn layer0(value: int) -> int { return value + 1 }\n"
+                      "fn layer1(value: int) -> int { return layer0(value) + 1 }\n"
+                      "fn layer2(value: int) -> int { return layer1(value) + 1 }\n"
+                      "fn layer3(value: int) -> int { return layer2(value) + 1 }\n"
+                      "fn layer4(value: int) -> int { return layer3(value) + 1 }\n"
+                      "fn layer5(value: int) -> int { return layer4(value) + 1 }\n"
+                      "fn layer6(value: int) -> int { return layer5(value) + 1 }\n"
+                      "fn layer7(value: int) -> int { return layer6(value) + 1 }\n"
+                      "fn layer8(value: int) -> int { return layer7(value) + 1 }\n"
+                      "fn layer9(value: int) -> int { return layer8(value) + 1 }\n"
+                      "fn caller(value: int) -> int {\n"
+                      "    var result = layer9(value)\n"
+                      "    return result + 1\n"
+                      "}\n"
+                      "print(caller(1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL && ir->module != NULL, "IR compilation failed");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "backend preparation failed");
+    ir->module->name = "test";
+    XiModule *modules[] = {ir->module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+
+    XiFunc *caller = NULL;
+    XiValue *caller_call = NULL;
+    for (uint16_t fi = 0; fi < ir->nchildren; fi++) {
+        XiFunc *func = ir->children[fi];
+        if (!func || !func->name)
+            continue;
+        if (strcmp(func->name, "caller") == 0)
+            caller = func;
+        if (strncmp(func->name, "layer", 5) != 0 && strcmp(func->name, "caller") != 0)
+            continue;
+        /* Model conservative imported-call flags after evidence production.
+         * The evidence still records the semantic, closed-world no-throw fact;
+         * a local recursive scan alone exceeds its fail-closed depth budget. */
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            XiBlock *block = func->blocks[bi];
+            if (!block)
+                continue;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                XiValue *value = block->values[vi];
+                if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL))
+                    continue;
+                value->flags |= XI_FLAG_MAY_THROW;
+                if (func == caller)
+                    caller_call = value;
+            }
+        }
+    }
+    TEST_REQUIRE(caller != NULL && caller_call != NULL, "caller direct call must survive lowering");
+
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1901, .frozen = true};
+    XiValue *check =
+        xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 1);
+    TEST_REQUIRE(check != NULL, "conservative error check inserted");
+    check->args[0] = caller_call;
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "CGen output stream allocated");
+    xi_cgen_program(ctx, mem, ir->module);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0, "CGen output stream closed");
+    TEST_REQUIRE(code != NULL && !xi_cgen_has_error(ctx), "closed-world fixture should generate");
+
+    const char *caller_def = find_static_function_definition(code, "test_caller_");
+    TEST_REQUIRE(caller_def != NULL, "caller function should be generated");
+    const char *caller_end = next_static_after(caller_def);
+    TEST_REQUIRE(count_between(caller_def, caller_end, "xrt_has_pending_error") == 0,
+                 "closed-world no-throw evidence must remove a conservative TLS error poll");
+
+    printf("  Generated closed-world no-throw call fixture %zu bytes of C code\n", code_size);
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    xi_func_free(ir);
+}
+
 TEST(cgen_defer_isolates_existing_pending_error) {
     const char *src = "enum E { Bad(code: int) }\n"
                       "fn run() -> int {\n"
@@ -8539,6 +8775,9 @@ int main(void) {
     run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_plain_function_does_not_emit_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
+    run_cgen_multimodule_branching_dispatcher_defers_to_native_inliner();
+    run_cgen_noinline_attribute_preserves_native_boundary();
+    run_cgen_inline_attribute_forces_native_expansion();
     run_cgen_c_export_wrapper_keeps_default_visibility();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
@@ -8627,6 +8866,8 @@ int main(void) {
     run_cgen_unsigned_const_shift_uses_native_op();
     run_cgen_unsigned_arith_uses_native_unsigned_expr();
     run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
+    run_cgen_declared_nothrow_stdlib_call_elides_pending_error_check();
+    run_cgen_uses_closed_world_effects_for_conservative_direct_call_checks();
     run_cgen_defer_isolates_existing_pending_error();
     run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();

@@ -1028,7 +1028,8 @@ static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f
                                            const char *prefix);
 static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
-static bool cg_func_should_force_inline(const XiFunc *f);
+static bool cg_func_should_noinline(const XiFunc *f);
+static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_func_requires_avx2_target(const XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
@@ -1041,7 +1042,7 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
                  f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_RANGE_I64);
 }
 
-static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
+static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
     if (cg_func_requires_avx2_target(ctx, f)) {
         if (cg_func_needs_external_linkage(ctx, f, prefix))
             return "XRT_INTERNAL ";
@@ -1049,13 +1050,25 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
     }
     if (cg_func_is_par_for_native_callback(f))
         return "static XR_AINLINE ";
-    if (cg_func_needs_external_linkage(ctx, f, prefix))
-        return cg_func_should_force_inline(f) ? "XRT_INTERNAL XR_FORCEINLINE " : "XRT_INTERNAL ";
+    if (cg_func_needs_external_linkage(ctx, f, prefix)) {
+        if (cg_func_should_noinline(f))
+            return "XRT_INTERNAL XR_NOINLINE ";
+        return cg_func_should_force_inline(ctx, f) ? "XRT_INTERNAL XR_FORCEINLINE "
+                                                   : "XRT_INTERNAL ";
+    }
     if (ctx && ctx->extern_linkage) {
+        if (cg_func_should_noinline(f))
+            return "static XR_NOINLINE ";
+        if (f && f->inline_hint)
+            return "static XR_AINLINE ";
         if (cg_func_contains_stack_array(f) && !cg_func_stack_arrays_force_inline_safe(f))
             return "static XR_NOINLINE ";
-        return cg_func_should_force_inline(f) ? "static XR_AINLINE " : "static ";
+        return cg_func_should_force_inline(ctx, f) ? "static XR_AINLINE " : "static ";
     }
+    if (cg_func_should_noinline(f))
+        return "static XR_NOINLINE ";
+    if (f && f->inline_hint)
+        return "static XR_AINLINE ";
     return cg_linkage(ctx);
 }
 
@@ -4154,6 +4167,8 @@ static const XaotTransferPlan *cg_required_transfer_plan(XiCgenCtx *ctx, const X
                                                          uint16_t transfer_index,
                                                          const XiValue *expected_value,
                                                          const char *context);
+static const char *cg_aot_stdlib_module_of_receiver(const XiCgenCtx *ctx, const XiFunc *f,
+                                                    const XiValue *recv);
 
 #include "xi_cgen_dispatch_helpers.inc.c"
 
@@ -6813,7 +6828,55 @@ static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f) {
     return found;
 }
 
-static bool cg_func_should_force_inline(const XiFunc *f) {
+static uint32_t cg_func_inlineable_call_block_count_up_to(XiCgenCtx *ctx, const XiFunc *f,
+                                                          uint32_t limit) {
+    if (!f || limit == 0)
+        return 0;
+    uint32_t call_blocks = 0;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL))
+                continue;
+            const XiFunc *target =
+                value->nargs > 0 && value->args
+                    ? cg_resolve_static_function_call(ctx, f, value->args[0]).func
+                    : NULL;
+            /* An explicit native boundary cannot be flattened transitively,
+             * so it does not contribute to the fanout hazard. Unresolved and
+             * ordinary direct targets remain conservatively counted. */
+            if (!target || !target->noinline_hint) {
+                if (++call_blocks >= limit)
+                    return call_blocks;
+                break;
+            }
+        }
+    }
+    return call_blocks;
+}
+
+static bool cg_func_has_branching_call_fanout(XiCgenCtx *ctx, const XiFunc *f) {
+    enum {
+        CG_NATIVE_INLINER_FANOUT_VALUE_MIN = 20,
+        CG_NATIVE_INLINER_FANOUT_VALUE_MAX = 48
+    };
+    if (!f || f->nblocks < 4 || !f->return_type || f->return_type->kind == XR_KIND_UNIT)
+        return false;
+    uint32_t value_count = cg_func_value_count(f);
+    if (value_count < CG_NATIVE_INLINER_FANOUT_VALUE_MIN ||
+        value_count > CG_NATIVE_INLINER_FANOUT_VALUE_MAX)
+        return false;
+    return cg_func_inlineable_call_block_count_up_to(ctx, f, 3) >= 3;
+}
+
+static bool cg_func_should_noinline(const XiFunc *f) {
+    return f && f->noinline_hint;
+}
+
+static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f) {
     enum {
         CG_FORCE_INLINE_VALUE_LIMIT = 48,
         CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT = 192,
@@ -6821,6 +6884,10 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
     };
     if (!f)
         return false;
+    if (cg_func_should_noinline(f))
+        return false;
+    if (f->inline_hint)
+        return true;
     uint32_t value_count = cg_func_value_count(f);
     bool proven_noalloc =
         f->allocation_effect_complete && f->allocation_state == XA_ALLOC_PROVEN_NONE;
@@ -6832,6 +6899,14 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
      * branches. Keep the hard boundary except for one cache line of explicit,
      * fixed-width scalar storage that a native optimizer can scalar-replace. */
     if (has_stack_array && !small_fixed_stack)
+        return false;
+    /* A small dispatcher can hide a large transitive body behind each branch.
+     * always_inline then flattens every target into an enclosing loop, where a
+     * native optimizer may create and update induction variables for branches
+     * that are not taken. Leave three-way call fanout to the native inliner;
+     * ordinary leaf wrappers and one/two-way fast paths retain the explicit
+     * force-inline policy below. */
+    if (cg_func_has_branching_call_fanout(ctx, f))
         return false;
     /* Keep separate-compilation helpers inlineable when they are tiny, but do
      * not force arbitrary loops into large callers/coroutine resume functions.

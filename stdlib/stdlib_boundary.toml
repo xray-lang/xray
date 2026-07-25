@@ -226,7 +226,7 @@ layer = "L1"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/mem/mem.c"
-public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addr", "alignOf", "alloc", "allocAligned", "allocZeroed", "assumeInitialized", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "load", "move", "mutPtr", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "ptr", "set", "sizeOf", "slice", "store", "volatileLoad", "volatileStore", "withSliceMut"]
+public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addr", "alignOf", "alloc", "allocAligned", "allocZeroed", "assumeInitialized", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "compilerGuard", "copy", "fence", "load", "move", "mutPtr", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "ptr", "set", "sizeOf", "slice", "store", "volatileLoad", "volatileStore", "withSliceMut"]
 perf_suite = "stdlib/mem"
 
 [[module]]

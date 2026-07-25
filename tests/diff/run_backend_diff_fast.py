@@ -132,11 +132,6 @@ def stable_cache_dir(suite: str, xray_bin: Path) -> Path:
     return root / suite / toolchain_key(xray_bin)
 
 
-def shared_cache_dir(suite: str) -> Path:
-    root = Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / "build" / ".xray-test-cache")))
-    return root / suite
-
-
 def lock_dir(path: Path) -> bool:
     timeout_raw = os.environ.get("XRAY_TEST_LOCK_TIMEOUT", "3000")
     timeout = int(timeout_raw) if is_uint(timeout_raw) else 3000
@@ -477,7 +472,9 @@ def main(argv: list[str]) -> int:
     auto_jobs = requested_jobs in ("", "auto")
     jobs = configure_jobs(requested_jobs)
     aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
-    aot_cache = Path(os.environ.get("XRAY_DIFF_CACHE_DIR", str(shared_cache_dir("aot-objects"))))
+    aot_cache = Path(
+        os.environ.get("XRAY_DIFF_CACHE_DIR", str(stable_cache_dir("aot-objects", xray) / f"O{aot_opt}"))
+    )
     aot_bin_cache = Path(
         os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(stable_cache_dir("backend-diff-bin", xray) / f"O{aot_opt}"))
     )

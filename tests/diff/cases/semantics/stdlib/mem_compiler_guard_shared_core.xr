@@ -1,0 +1,9 @@
+// mem.compilerGuard is an observable identity in every backend. Native AOT
+// additionally uses it as a best-effort scalar scheduling barrier.
+import mem
+
+var zero: u64 = 0
+var high: u64 = 18446744073709551615
+
+print(mem.compilerGuard(zero) == zero)
+print(mem.compilerGuard(high) == high)
