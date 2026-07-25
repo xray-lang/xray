@@ -1,6 +1,7 @@
 # Intrinsic identity contract
 
-Status: re-frozen after the xxHash runtime-SIMD dispatch work.
+Status: re-frozen after the xxHash AVX-512F work added stable 64-byte SIMD
+identities without reassigning the existing registry.
 
 1. Each compiler intrinsic has one canonical, stable numeric identity in the
    registry. The identity, not a spelling, import path, method name, or emitted
@@ -20,4 +21,4 @@ Status: re-frozen after the xxHash runtime-SIMD dispatch work.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def a0989df695c13573eacb835c1f3fd1cae8704b2f9f7cf7e06976ee4563e66306
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 7f4bbd7c81c8c63a811b4fab3cc4cc5b3095feb517f2344c777844fc93633d24

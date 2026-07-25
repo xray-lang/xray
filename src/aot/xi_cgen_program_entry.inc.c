@@ -248,7 +248,8 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
     }
     if ((simd_features & XAOT_SIMD_FEATURE_NEON) != 0)
         fprintf(out, "#include <arm_neon.h>\n\n");
-    else if ((simd_features & (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2)) != 0)
+    else if ((simd_features &
+              (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0)
         fprintf(out, "#include <immintrin.h>\n\n");
 }
 

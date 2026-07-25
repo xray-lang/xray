@@ -1,7 +1,8 @@
 # Xi canonical operation contract
 
 Status: re-frozen after the xxHash work made raw pointer-backed slices an
-explicit caller-proven unsafe view rather than a backend fallible operation.
+explicit caller-proven unsafe view and gave wide adjacent-lane shuffles a
+semantic Xi shape rather than an overflowing packed-lane encoding.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, and operand ownership are generated from it.
@@ -25,6 +26,10 @@ explicit caller-proven unsafe view rather than a backend fallible operation.
    assumptions. Once the analyzer accepts that boundary, the operation is
    non-throwing in VM and AOT; a backend must not recreate a pending-error or
    bounds check that contradicts the caller-proven contract.
+9. A named SIMD shuffle pattern such as adjacent-lane exchange is preserved as
+   a semantic Xi shape bit. Backends must not depend on packing every lane
+   index into `aux_int`; explicit arbitrary shuffle lists fail closed when the
+   canonical representation cannot carry their width.
 
 ## Digest anchors
 

@@ -207,7 +207,7 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
     if (!func_plan || func_plan->abi.kind == XAOT_ABI_CORO)
         return set_error(errbuf, errbuf_len, "AOT vector value plan crosses coroutine ABI");
     if (!lane_bytes || !rep->vector_lanes || rep->vector_width_bytes != width ||
-        (width != 16 && width != 32))
+        (width != 16 && width != 32 && width != 64))
         return set_error(errbuf, errbuf_len, "AOT vector value plan has invalid lane shape");
     if (!identity) {
         if (!xi_vec_shape_is_explicit(value->aux_int) ||
@@ -218,6 +218,11 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
     if (strcmp(rep->c_type, "__m256i") == 0) {
         if (width != 32 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_AVX2) == 0)
             return set_error(errbuf, errbuf_len, "AOT AVX2 vector plan lacks target evidence");
+        return true;
+    }
+    if (strcmp(rep->c_type, "__m512i") == 0) {
+        if (width != 64 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_AVX512) == 0)
+            return set_error(errbuf, errbuf_len, "AOT AVX-512 vector plan lacks target evidence");
         return true;
     }
     if (strcmp(rep->c_type, "__m128i") == 0) {

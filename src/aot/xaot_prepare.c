@@ -3934,6 +3934,8 @@ static const char *prepare_vector_native_c_type(uint32_t features, uint8_t nativ
         return "__m128i";
     if (width == 32 && (features & XAOT_SIMD_FEATURE_AVX2) != 0)
         return "__m256i";
+    if (width == 64 && (features & XAOT_SIMD_FEATURE_AVX512) != 0)
+        return "__m512i";
     return NULL;
 }
 
@@ -3946,6 +3948,7 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    bool avx512 = (features & XAOT_SIMD_FEATURE_AVX512) != 0;
     bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
     if (!prepare_vector_native_c_type(features, native_type, lanes))
         return false;
@@ -3981,11 +3984,15 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
                 return width == 16;
             if (!x86)
                 return false;
+            if (width == 64)
+                return avx512 && (value->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0 &&
+                       (native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64);
             return native_type != XR_NATIVE_U8 || avx2;
         case XI_VEC_WIDEN_MUL:
             if ((value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0)
                 return (neon || x86 || vsx) && native_type == XR_NATIVE_U64 && lanes == 2;
-            return native_type == XR_NATIVE_U64 && (lanes == 2 || (lanes == 4 && avx2));
+            return native_type == XR_NATIVE_U64 &&
+                   (lanes == 2 || (lanes == 4 && avx2) || (lanes == 8 && avx512));
         default:
             return false;
     }

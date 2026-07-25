@@ -111,8 +111,15 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_NAKED __attribute__((naked))
 #if defined(__x86_64__) || defined(__i386__)
 #define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
+#if defined(__clang__)
+#define XRT_TARGET_AVX512                                                                          \
+    __attribute__((target("avx512f,evex512"), __min_vector_width__(512), flatten))
+#else
+#define XRT_TARGET_AVX512 __attribute__((target("avx512f"), flatten))
+#endif
 #else
 #define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #endif
 #if defined(__arm__) || defined(__thumb__)
 #define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
@@ -134,6 +141,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
 #define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT __restrict
 #else
@@ -150,6 +158,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
 #define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT
 #endif
@@ -173,7 +182,9 @@ static inline int xrt_target_runtime_simd_bytes(void) {
     if ((xcr0_lo & 6u) != 6u)
         goto baseline;
     __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7u), "c"(0u));
-    cached = (ebx & (1u << 5)) != 0 ? 32 : 16;
+    cached = (ebx & (1u << 5)) != 0 && (ebx & (1u << 16)) != 0 && (xcr0_lo & 0xe6u) == 0xe6u ? 64
+             : (ebx & (1u << 5)) != 0                                                        ? 32
+                                                                                             : 16;
     atomic_store_explicit(&cached_bytes, cached, memory_order_relaxed);
     return cached;
 baseline:
@@ -182,10 +193,13 @@ baseline:
 #elif (defined(_M_X64) || defined(_M_IX86)) && defined(_MSC_VER)
     int regs[4];
     __cpuid(regs, 1);
-    if ((regs[2] & (1 << 27)) == 0 || (regs[2] & (1 << 28)) == 0 || (_xgetbv(0) & 6) != 6)
+    unsigned __int64 xcr0 = _xgetbv(0);
+    if ((regs[2] & (1 << 27)) == 0 || (regs[2] & (1 << 28)) == 0 || (xcr0 & 6) != 6)
         return 16;
     __cpuidex(regs, 7, 0);
-    return (regs[1] & (1 << 5)) != 0 ? 32 : 16;
+    return (regs[1] & (1 << 5)) != 0 && (regs[1] & (1 << 16)) != 0 && (xcr0 & 0xe6) == 0xe6 ? 64
+           : (regs[1] & (1 << 5)) != 0                                                      ? 32
+                                                                                            : 16;
 #else
     return 16;
 #endif

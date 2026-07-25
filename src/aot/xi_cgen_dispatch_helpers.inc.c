@@ -258,7 +258,9 @@ static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return;
     }
     int bytes =
-        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32 : 16;
+        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 ? 64
+        : ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32
+                                                                                           : 16;
     if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
         fprintf(out, "XR_FROM_INT(%d)", bytes);
     else
@@ -1434,8 +1436,10 @@ static bool xicgen_vec_widen_mul_is_adjacent_pair(const XiValue *value) {
         xi_vec_shape_native_type(rhs->aux_int) != XR_NATIVE_U32)
         return false;
     uint8_t lanes = xi_vec_shape_lanes(rhs->aux_int);
-    if (lanes != 4 && lanes != 8)
+    if (lanes != 4 && lanes != 8 && lanes != 16)
         return false;
+    if ((rhs->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0)
+        return true;
     for (uint8_t lane = 0; lane < lanes; lane++) {
         if (xicgen_vec_shuffle_lane(rhs, lane) != (uint8_t) (lane ^ 1u))
             return false;
@@ -1659,7 +1663,10 @@ static bool xicgen_emit_vec_vsx(XiCgenCtx *ctx, FILE *out, const XiValue *v, uin
             return true;
 
         case XI_VEC_SPLAT:
-            if (v->nargs != 1 ||
+            /* AVX-512F has 32/64-bit broadcasts, but the byte broadcast is
+             * AVX-512BW. Keep this backend fail-closed at the advertised F
+             * baseline if a future U8x64 API adds splat. */
+            if (v->nargs != 1 || native_type == XR_NATIVE_U8 ||
                 (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
                 return false;
             fprintf(out, "({ ");
@@ -1680,7 +1687,10 @@ static bool xicgen_emit_vec_vsx(XiCgenCtx *ctx, FILE *out, const XiValue *v, uin
         case XI_VEC_BIT_AND:
         case XI_VEC_BIT_OR:
         case XI_VEC_BIT_XOR: {
+            /* Byte add/sub require AVX-512BW; bitwise operations remain
+             * available because they are part of AVX-512F. */
             if (v->nargs != 2 ||
+                ((v->op == XI_VEC_ADD || v->op == XI_VEC_SUB) && native_type == XR_NATIVE_U8) ||
                 (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
                 return false;
             const char *op = v->op == XI_VEC_ADD       ? "+"
@@ -1861,7 +1871,228 @@ static bool xicgen_emit_vec_vsx(XiCgenCtx *ctx, FILE *out, const XiValue *v, uin
     }
 }
 
-/* Emit a target-selected 128-bit implementation.  Returning false is an
+static void xicgen_emit_vec_avx512_load(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
+        emit_vref(out, value);
+        return;
+    }
+    fprintf(out, "_mm512_loadu_si512((const void *)");
+    xicgen_emit_vec_lanes(ctx, out, value);
+    fprintf(out, ")");
+}
+
+static void xicgen_emit_vec_avx512_result(FILE *out, bool native_result, const char *result_type,
+                                          const char *value_name) {
+    if (native_result) {
+        fprintf(out, "%s; })", value_name);
+        return;
+    }
+    fprintf(out, "_mm512_storeu_si512((void *)_r._lanes, %s); _r; })", value_name);
+    (void) result_type;
+}
+
+/* AVX-512F deliberately has its own width path.  It cannot be modeled as a
+ * boolean extension of the 128/256-bit x86 lowering: shuffle controls and OS
+ * dispatch evidence are distinct, and xxHash relies on 32x32 -> 64 widening
+ * multiply without requiring AVX-512DQ. */
+static bool xicgen_emit_vec_avx512(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t lanes,
+                                   uint8_t native_type) {
+    const char *result_type = NULL;
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    bool native_result = xicgen_vec_result_native(ctx, v, &result_type);
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const XiValue *proven = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(proven ? proven->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (proven)
+                xicgen_emit_vec_window_offset(ctx, out, proven, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            if (!proven && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out,
+                    "; __m512i _v = _mm512_loadu_si512((const void *)(((const %s *)_s.data) + "
+                    "_off)); ",
+                    lane_type);
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *proven = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(proven ? proven->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (proven)
+                xicgen_emit_vec_window_offset(ctx, out, proven, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            if (!proven && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; __m512i _v = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; _mm512_storeu_si512((void *)(((%s *)_s.data) + _off), _v); "
+                    "XR_NULL_VAL; })",
+                    lane_type);
+            return true;
+        }
+
+        case XI_VEC_SPLAT:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _v = %s((%s)(",
+                    native_type == XR_NATIVE_U8    ? "_mm512_set1_epi8"
+                    : native_type == XR_NATIVE_U32 ? "_mm512_set1_epi32"
+                                                   : "_mm512_set1_epi64",
+                    lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ")); ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const char *op = v->op == XI_VEC_BIT_AND   ? "_mm512_and_si512"
+                             : v->op == XI_VEC_BIT_OR  ? "_mm512_or_si512"
+                             : v->op == XI_VEC_BIT_XOR ? "_mm512_xor_si512"
+                             : v->op == XI_VEC_ADD
+                                 ? (native_type == XR_NATIVE_U8    ? "_mm512_add_epi8"
+                                    : native_type == XR_NATIVE_U32 ? "_mm512_add_epi32"
+                                                                   : "_mm512_add_epi64")
+                                 : (native_type == XR_NATIVE_U8    ? "_mm512_sub_epi8"
+                                    : native_type == XR_NATIVE_U32 ? "_mm512_sub_epi32"
+                                                                   : "_mm512_sub_epi64");
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, ", _b = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[1]);
+            fprintf(out, "; __m512i _v = %s(_a, _b); ", op);
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; uint32_t _s = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") & 63u; __m512i _v = %s(_a, _mm_cvtsi64_si128((int64_t)_s)); ",
+                    v->op == XI_VEC_SHL ? "_mm512_sll_epi64" : "_mm512_srl_epi64");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_REINTERPRET:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _v = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_SHUFFLE:
+            if (v->nargs != 1 || (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) == 0 ||
+                (native_type != XR_NATIVE_U32 && native_type != XR_NATIVE_U64) ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; __m512i _v = _mm512_shuffle_epi32(_a, (_MM_PERM_ENUM)%s); ",
+                    native_type == XR_NATIVE_U32 ? "0xb1" : "0x4e");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_WIDEN_MUL: {
+            if (v->nargs != 2 || lanes != 8 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
+            bool odd = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            if (adjacent) {
+                fprintf(out, ", _b = _mm512_srli_epi64(_a, 32)");
+            } else {
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_avx512_load(ctx, out, v->args[1]);
+            }
+            if (odd)
+                fprintf(out, "; _a = _mm512_srli_epi64(_a, 32); _b = "
+                             "_mm512_srli_epi64(_b, 32)");
+            fprintf(out, "; __m512i _v = _mm512_mul_epu32(_a, _b); ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        default:
+            return false;
+    }
+}
+
+/* Emit a target-selected native-width implementation. Returning false is an
  * intentional per-operation scalar fallback, not target probing: the exact
  * feature set was resolved into XaotTarget before Xi C generation. */
 static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1872,6 +2103,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    bool avx512 = (features & XAOT_SIMD_FEATURE_AVX512) != 0;
     bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
     if (vsx)
         return xicgen_emit_vec_vsx(ctx, out, v, lanes, native_type);
@@ -1880,6 +2112,8 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 
     unsigned lane_bytes = native_type == XR_NATIVE_U8 ? 1u : native_type == XR_NATIVE_U32 ? 4u : 8u;
     unsigned vector_bytes = (unsigned) lanes * lane_bytes;
+    if (vector_bytes == 64u)
+        return x86 && avx512 ? xicgen_emit_vec_avx512(ctx, out, v, lanes, native_type) : false;
     bool wide = vector_bytes == 32u;
     if ((wide && (!x86 || !avx2)) || (!wide && vector_bytes != 16u))
         return false;
@@ -2473,7 +2707,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
     const uint8_t native_type = xi_vec_shape_native_type(v->aux_int);
     const char *lane_type = xicgen_vec_lane_ctype(native_type);
     const char *result_type = NULL;
-    if (!lane_type || lanes == 0 || lanes > 32) {
+    if (!lane_type || lanes == 0 || lanes > 64) {
         xicgen_vec_error(ctx, out, v, "unsupported lane type/count");
         return;
     }
@@ -2717,7 +2951,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             fprintf(out, "({ %s _r; ", result_type);
             for (uint8_t lane = 0; lane < lanes; lane++) {
                 uint8_t selected =
-                    (uint8_t) ((v->aux_int >> (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4)) & 0xf);
+                    (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0
+                        ? (uint8_t) (lane ^ 1u)
+                        : (uint8_t) ((v->aux_int >> (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4)) & 0xf);
                 if (selected >= lanes) {
                     xicgen_vec_error(ctx, out, v, "shuffle lane outside shape");
                     return;
@@ -2730,10 +2966,10 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             return;
 
         case XI_VEC_WIDEN_MUL:
-            if (v->nargs != 2 || (lanes != 2 && lanes != 4) || native_type != XR_NATIVE_U64 ||
+            if (v->nargs != 2 || (lanes != 2 && lanes != 4 && lanes != 8) ||
+                native_type != XR_NATIVE_U64 ||
                 !xicgen_vec_result_aggregate(ctx, v, &result_type)) {
-                xicgen_vec_error(ctx, out, v,
-                                 "widen-mul requires u32x4 -> u64x2 or u32x8 -> u64x4");
+                xicgen_vec_error(ctx, out, v, "widen-mul requires u32x4/8/16 -> u64x2/4/8");
                 return;
             }
             fprintf(out, "({ %s _r; ", result_type);

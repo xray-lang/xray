@@ -666,10 +666,14 @@ static inline bool xi_op_is_identity_forward(uint16_t op) {
  * therefore promises that the complete access window is valid.  This bit is
  * legal only on explicitly supported memory intrinsics. */
 #define XI_ACCESS_UNCHECKED (INT64_C(1) << 20)
+/* Semantic shuffle shapes must not depend on packing every lane into aux_int:
+ * 16-lane and wider vectors do not fit above XI_VEC_SHAPE_SHUFFLE_SHIFT. */
+#define XI_VEC_SHAPE_SWAP_ADJACENT (INT64_C(1) << 21)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
 #define XI_VEC_SHAPE_SHUFFLE_SHIFT 24
+#define XI_VEC_SHAPE_PACKED_SHUFFLE_LANES 8
 
 static inline int64_t xi_vec_shape_encode(uint8_t native_type, uint8_t lanes) {
     return XI_VEC_SHAPE_EXPLICIT | (int64_t) lanes |

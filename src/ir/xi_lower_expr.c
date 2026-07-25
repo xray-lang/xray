@@ -5616,6 +5616,10 @@ static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprN
         return false;
     uint8_t lanes = desc->shape_rule.input_lanes;
     if ((desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0) {
+        if (lanes > XI_VEC_SHAPE_PACKED_SHUFFLE_LANES) {
+            l->had_error = true;
+            return false;
+        }
         for (uint8_t lane = 0; lane < lanes; lane++) {
             int64_t selected = -1;
             const char *error = NULL;
@@ -5629,8 +5633,11 @@ static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprN
             *extra |= selected << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
         }
     } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_ADJACENT) != 0) {
-        for (uint8_t lane = 0; lane < lanes; lane++)
-            *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        *extra |= XI_VEC_SHAPE_SWAP_ADJACENT;
+        if (lanes <= XI_VEC_SHAPE_PACKED_SHUFFLE_LANES) {
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        }
     } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_LANES) != 0) {
         if (lanes != 2) {
             l->had_error = true;

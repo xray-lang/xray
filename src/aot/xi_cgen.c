@@ -1030,7 +1030,8 @@ static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_noinline(const XiFunc *f);
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f);
-static bool cg_func_requires_avx2_target(const XiCgenCtx *ctx, const XiFunc *f);
+static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
+                                               uint8_t width);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
     return f && (f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64 ||
@@ -1043,7 +1044,8 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
 }
 
 static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
-    if (cg_func_requires_avx2_target(ctx, f)) {
+    if (cg_func_requires_x86_vector_target(ctx, f, 64) ||
+        cg_func_requires_x86_vector_target(ctx, f, 32)) {
         if (cg_func_needs_external_linkage(ctx, f, prefix))
             return "XRT_INTERNAL ";
         return "static ";
@@ -8267,30 +8269,31 @@ static const XiFunc *cg_target_resolve_static_call(const XiCgenCtx *ctx, const X
     return cg_resolve_module_export_static_call((XiCgenCtx *) ctx, ref, ref->member_name).func;
 }
 
-static bool cg_func_has_native_avx2_value(const XiCgenCtx *ctx, const XiFunc *f) {
+static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *f, uint8_t width) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     if (!bundle || !f)
         return false;
     for (uint32_t i = 0; i < bundle->nvalue_plans; i++) {
         const XaotValuePlan *plan = &bundle->value_plans[i];
         if (plan->func == f && plan->rep.kind == XAOT_VALUE_VECTOR &&
-            plan->rep.vector_width_bytes == 32)
+            plan->rep.vector_width_bytes == width)
             return true;
     }
     return false;
 }
 
 /* Propagate the target feature through direct calls until an explicit runtime
- * width query. This lets a whole AVX2 loop absorb its leaf kernels while the
- * query-owning dispatcher remains baseline SSE2. */
-static bool cg_func_requires_avx2_target_depth(const XiCgenCtx *ctx, const XiFunc *f,
-                                               const XiFunc *origin, uint8_t depth) {
+ * width query. This lets a whole AVX2 or AVX-512 loop absorb its leaf kernels
+ * while the query-owning dispatcher remains baseline SSE2. */
+static bool cg_func_requires_x86_vector_target_depth(const XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiFunc *origin, uint8_t depth,
+                                                     uint8_t width) {
     if (!ctx || !f || depth > 16 || cg_func_has_runtime_simd_dispatch_local(f))
         return false;
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     if (!bundle)
         return false;
-    if (cg_func_has_native_avx2_value(ctx, f))
+    if (cg_func_has_native_vector_width(ctx, f, width))
         return true;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *block = f->blocks[bi];
@@ -8303,24 +8306,29 @@ static bool cg_func_requires_avx2_target_depth(const XiCgenCtx *ctx, const XiFun
             const XiFunc *target = cg_target_resolve_static_call(ctx, f, value->args[0]);
             if (!target || target == origin)
                 continue;
-            if (cg_func_requires_avx2_target_depth(ctx, target, origin, (uint8_t) (depth + 1)))
+            if (cg_func_requires_x86_vector_target_depth(ctx, target, origin, (uint8_t) (depth + 1),
+                                                         width))
                 return true;
         }
     }
     return false;
 }
 
-/* In --simd dispatch mode, keep every AVX2 function or same-feature caller
- * behind a target attribute. Baseline callers select it only after the runtime
- * OS/CPU capability check; C may still inline within the matching island. */
-static bool cg_func_requires_avx2_target(const XiCgenCtx *ctx, const XiFunc *f) {
+/* In --simd dispatch mode, keep every AVX2/AVX-512 function or same-feature
+ * caller behind its target attribute. Baseline callers select it only after
+ * the runtime OS/CPU capability check; C may still inline within a matching
+ * island. */
+static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
+                                               uint8_t width) {
     if (!ctx || !ctx->target || ctx->target->simd_mode != XAOT_SIMD_DISPATCH || !f)
         return false;
-    return cg_func_requires_avx2_target_depth(ctx, f, f, 0);
+    return cg_func_requires_x86_vector_target_depth(ctx, f, f, 0, width);
 }
 
 static void emit_func_target_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
-    if (cg_func_requires_avx2_target(ctx, f))
+    if (cg_func_requires_x86_vector_target(ctx, f, 64))
+        fprintf(out, "XRT_TARGET_AVX512 ");
+    else if (cg_func_requires_x86_vector_target(ctx, f, 32))
         fprintf(out, "XRT_TARGET_AVX2 ");
 }
 

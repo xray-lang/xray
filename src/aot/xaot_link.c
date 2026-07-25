@@ -489,6 +489,8 @@ XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out) {
         mode = XAOT_SIMD_SSE2;
     else if (strcmp(text, "avx2") == 0)
         mode = XAOT_SIMD_AVX2;
+    else if (strcmp(text, "avx512") == 0)
+        mode = XAOT_SIMD_AVX512;
     else if (strcmp(text, "vsx") == 0)
         mode = XAOT_SIMD_VSX;
     else if (strcmp(text, "dispatch") == 0)
@@ -514,6 +516,8 @@ XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode) {
             return "sse2";
         case XAOT_SIMD_AVX2:
             return "avx2";
+        case XAOT_SIMD_AVX512:
+            return "avx512";
         case XAOT_SIMD_VSX:
             return "vsx";
         case XAOT_SIMD_DISPATCH:
@@ -591,6 +595,13 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
             }
             features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;
             break;
+        case XAOT_SIMD_AVX512:
+            if (!x86_64) {
+                xaot_simd_error(err, err_size, "--simd avx512 requires an x86_64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512;
+            break;
         case XAOT_SIMD_VSX:
             if (!power64) {
                 xaot_simd_error(err, err_size, "--simd vsx requires a PowerPC64 target");
@@ -603,7 +614,7 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
                 xaot_simd_error(err, err_size, "--simd dispatch requires an x86_64 target");
                 return false;
             }
-            features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;
+            features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512;
             break;
     }
     char *cpu_copy = xr_strdup(cpu ? cpu : "");
