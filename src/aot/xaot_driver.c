@@ -216,7 +216,7 @@ static const char *xaot_freestanding_stdlib_module_suggestion(const char *module
         return "parallel uses the hosted CPU batch executor; freestanding code must use explicit "
                "raw loops or a platform-specific runtime";
     }
-    return "only prelude, math, and mem are in the initial freestanding allowlist";
+    return "only prelude, math, mem, and simd are in the freestanding allowlist";
 }
 
 static bool xaot_reject_freestanding_stdlib_graph(const XrModuleGraph *graph) {

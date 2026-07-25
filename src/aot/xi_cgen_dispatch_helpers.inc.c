@@ -11172,6 +11172,16 @@ static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
     return true;
 }
 
+static bool xicgen_fixed_array_stack_copy_info(const XiValue *v, uint8_t *native_out,
+                                               uint32_t *count_out) {
+    if (!v || v->nargs != 1 || !v->args[0])
+        return false;
+    bool value_clone = v->op == XI_COPY && xi_copy_is_value_clone(v);
+    bool explicit_copy =
+        v->op == XI_CALL_BUILTIN && v->aux && strcmp((const char *) v->aux, "copy") == 0;
+    return (value_clone || explicit_copy) && xicgen_fixed_array_new_info(v, native_out, count_out);
+}
+
 static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     (void) ctx;

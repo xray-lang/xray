@@ -1178,6 +1178,13 @@ static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                     continue;
                 if (v->op == XI_ARRAY_DATA_PTR && a == 0)
                     continue;
+                /* mem.slice(ptr, count, owner) carries its owner only as
+                 * lifetime evidence.  Static fixed arrays already have
+                 * program lifetime, and XI_SLICE_FROM_PTR emits no runtime
+                 * owner value, so the aggregate GET_SHARED can be replaced by
+                 * its emitted read-only C data symbol. */
+                if (v->op == XI_SLICE_FROM_PTR && a == 2 && v->nargs == 3)
+                    continue;
                 if (v->op == XI_INDEX_GET && a == 0)
                     continue;
                 if (v->op == XI_SLICE && a == 0 && v->nargs >= 3) {

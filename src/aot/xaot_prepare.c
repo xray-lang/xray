@@ -4481,12 +4481,17 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
                 continue;
             if (prepare_apply_freestanding_typed_catch_rep(bundle, value, changed))
                 continue;
+            /* ERR_SET/ERR_RETURN carry the thrown value, not the enclosing
+             * function's ordinary result.  A value-struct return can make the
+             * statement itself aggregate-shaped; resolve the error channel
+             * first so that shape is never propagated into a payload enum and
+             * forced back through the hosted boxed-error path. */
+            if (prepare_apply_error_channel_aggregate_rep(bundle, value, changed))
+                continue;
             if (value_rep_is_propagating_aggregate(vp->rep)) {
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
                 continue;
             }
-            if (prepare_apply_error_channel_aggregate_rep(bundle, value, changed))
-                continue;
             if (!prepare_parallel_reduce_aggregate_rep(bundle, value, &rep) &&
                 !prepare_identity_aggregate_rep(bundle, value, &rep))
                 continue;

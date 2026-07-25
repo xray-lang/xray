@@ -408,7 +408,7 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
     if (!module_name)
         return false;
     return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
-           strcmp(module_name, "mem") == 0;
+           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0;
 }
 
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
@@ -2855,7 +2855,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                  import->module_name ? import->module_name : "?");
         xa_freestanding_report_unavailable(
             ctx, node, feature,
-            "only prelude, math, and mem are in the initial freestanding allowlist");
+            "only prelude, math, mem, and simd are in the freestanding allowlist");
     }
 
     // For whole module import: import math or import math as m

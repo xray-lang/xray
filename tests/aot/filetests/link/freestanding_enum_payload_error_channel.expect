@@ -14,6 +14,7 @@ c_contains=_from_base(xrt_pending_enum_error)
 c_contains=.payload.raw[0]
 c_contains=xrt_has_pending_error()
 c_contains=xrt_enum_aggregate_make(
+c_contains=typedef struct xrt_struct_abi_
 c_not_contains=xrt_enum_aggregate_box
 c_not_contains=xrt_array_with_capacity
 c_not_contains=xrt_map_new

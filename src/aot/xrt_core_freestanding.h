@@ -95,6 +95,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XRT_INTERNAL __attribute__((visibility("hidden")))
 #define XRT_COLD __attribute__((cold))
 #define XRT_NORETURN __attribute__((noreturn))
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
@@ -130,6 +131,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #elif defined(_MSC_VER)
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #define XRT_NORETURN __declspec(noreturn)
 #define XR_ASSUME_ALIGNED(p, n) (p)
@@ -147,6 +149,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #else
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #define XRT_NORETURN
 #define XR_ASSUME_ALIGNED(p, n) (p)
@@ -530,6 +533,35 @@ typedef struct XrAotContext {
     void *vm_host;
     void *worker;
 } XrAotContext;
+
+/* Native value structs still receive stable, non-zero type identities during
+ * module initialization.  Freestanding code has no dynamic class table: the
+ * verified native path resolves constructors and methods statically, so only
+ * monotonic identity assignment is required here and no allocator is pulled
+ * into an otherwise no-heap binary. */
+typedef void (*XrtDestructor)(void *obj);
+typedef XrValue (*XrtMethodFn)(void);
+
+#ifdef XRT_IMPL
+XRT_INTERNAL uint16_t xrt_freestanding_type_count = 1;
+#else
+extern XRT_INTERNAL uint16_t xrt_freestanding_type_count;
+#endif
+
+static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vtable,
+                                             int vtable_size, XrtDestructor dtor,
+                                             uint32_t inst_size) {
+    (void) parent_id;
+    (void) vtable;
+    (void) vtable_size;
+    (void) dtor;
+    (void) inst_size;
+    if (XR_UNLIKELY(xrt_freestanding_type_count == UINT16_MAX)) {
+        XR_ASSUME(0);
+        return 0;
+    }
+    return xrt_freestanding_type_count++;
+}
 
 #if defined(XRAY_TARGET_RUNTIME_PROVIDER)
 #include "xrt_provider_abi.h"

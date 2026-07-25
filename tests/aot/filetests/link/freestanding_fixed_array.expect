@@ -8,7 +8,9 @@ c_contains=#include "xrt_core_freestanding.h"
 c_contains=[INT64_C(0)]
 c_contains=[INT64_C(1)] = (int64_t)
 c_contains=xr_span_t
+c_contains=memmove(_fa
 c_not_contains=xrt_span_from_array_slice
+c_not_contains=xrt_array_ref_to_owned
 c_contains=xr_array_core_bytes_store_u16
 c_contains=xr_array_core_bytes_store_u32
 c_contains=xr_array_core_bytes_store_u64

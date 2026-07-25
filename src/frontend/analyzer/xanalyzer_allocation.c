@@ -399,7 +399,7 @@ static XaAllocationContractKind alloc_intrinsic_contract(const char *name) {
     return XA_ALLOCATION_CONTRACT_MISSING;
 }
 
-static bool alloc_fixed_value_copy_is_no_heap(const XrType *type, int depth) {
+XR_FUNC bool xa_fixed_value_copy_is_no_heap(const XrType *type, int depth) {
     if (!type || type->is_nullable || depth > 8)
         return false;
     switch (type->kind) {
@@ -411,7 +411,7 @@ static bool alloc_fixed_value_copy_is_no_heap(const XrType *type, int depth) {
             return true;
         case XR_KIND_FIXED_ARRAY:
             return type->fixed_array.length >= 0 &&
-                   alloc_fixed_value_copy_is_no_heap(type->fixed_array.element_type, depth + 1);
+                   xa_fixed_value_copy_is_no_heap(type->fixed_array.element_type, depth + 1);
         default:
             return false;
     }
@@ -422,7 +422,7 @@ static bool alloc_copy_call_is_fixed_value(XaAllocScan *scan, const CallExprNode
     if (!scan || !call || !name || strcmp(name, "copy") != 0 || call->arg_count != 1)
         return false;
     const XrType *arg_type = xa_analyzer_get_node_type(scan->pass->analyzer, call->arguments[0]);
-    return alloc_fixed_value_copy_is_no_heap(arg_type, 0);
+    return xa_fixed_value_copy_is_no_heap(arg_type, 0);
 }
 
 static int alloc_hof_callback_index(const XrType *receiver, const char *method) {

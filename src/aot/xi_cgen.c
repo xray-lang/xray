@@ -1813,6 +1813,10 @@ static bool cg_static_function_value_use_is_direct_parallel_callback(const XiVal
     return false;
 }
 
+static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
+                                                           int slot, const XiFunc *target);
+static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
+
 static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                             const XiValue *value,
                                                             const XiFunc *target, int depth) {
@@ -1854,6 +1858,25 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                         if (ai != 0)
                             return false;
                         break;
+                    case XI_SET_SHARED: {
+                        if (ai != 0)
+                            return false;
+                        int slot = (int) user->aux_int;
+                        const XiModule *owner_mod = cg_module_for_func(ctx, owner);
+                        if (owner_mod && owner_mod->init &&
+                            !cg_shared_slot_has_reachable_get(ctx, owner_mod, slot))
+                            break;
+                        /* Imported bindings get a local shared slot, but that
+                         * slot intentionally has no local declaration entry in
+                         * shared_slot_funcs.  The IMPORT_REF already resolved
+                         * `target`; prove every local read is a direct call
+                         * against that target instead of requiring a duplicate
+                         * slot-to-function mapping. */
+                        if (!cg_shared_static_function_slot_uses_are_direct(ctx, owner, slot,
+                                                                            target))
+                            return false;
+                        break;
+                    }
                     case XI_PAR_FOR:
                     case XI_PAR_MAP:
                     case XI_PAR_REDUCE:
@@ -2003,18 +2026,7 @@ static bool cg_imported_static_function_uses_are_direct(XiCgenCtx *ctx, const Xi
 }
 
 static bool cg_imported_static_function_uses_are_direct_in_bundle(XiCgenCtx *ctx,
-                                                                  const XiFunc *target) {
-    if (!ctx || !target)
-        return false;
-    for (int i = 0; i < ctx->all_nmodules; i++) {
-        const XiModule *mod = ctx->all_modules ? ctx->all_modules[i] : NULL;
-        if (!mod || !mod->init)
-            continue;
-        if (!cg_imported_static_function_uses_are_direct(ctx, mod->init, target))
-            return false;
-    }
-    return true;
-}
+                                                                  const XiFunc *target);
 
 static bool cg_debug_boxed_adapter_enabled(void) {
     return getenv("XRAY_CGEN_DEBUG_BOXED") != NULL;
@@ -2068,6 +2080,10 @@ static bool cg_shared_static_function_set_is_elided(XiCgenCtx *ctx, const XiFunc
          !(arg->op == XI_STACK_ALLOC && arg->aux_int == XI_CLOSURE_NEW)) ||
         !arg->aux)
         return false;
+    const XiModule *owner_mod = cg_module_for_func(ctx, current);
+    if (owner_mod && owner_mod->init &&
+        !cg_shared_slot_has_reachable_get(ctx, owner_mod, (int) v->aux_int))
+        return true;
     return cg_shared_static_function_slot_can_elide(ctx, current, (int) v->aux_int,
                                                     (const XiFunc *) arg->aux);
 }
@@ -2156,8 +2172,6 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
                                          const XiValue *v, const char *prefix, bool in_coro);
 static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 #include "xi_cgen_abi_helpers.inc.c"
-
-static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
 
 static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
     XiCgenCtx *ctx, const XiFunc *owner, const XiValue *ref, const XiFunc *target, int depth) {
@@ -6333,6 +6347,38 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
+    uint8_t fixed_clone_native = 0;
+    uint32_t fixed_clone_count = 0;
+    if (xicgen_fixed_array_stack_copy_info(v, &fixed_clone_native, &fixed_clone_count)) {
+        CgFixedArrayLaneInfo source_info;
+        if (!cg_fixed_array_lane_info_from_value(v->args[0], &source_info)) {
+            fprintf(stderr, "[xi_cgen] ERROR: fixed-array clone v%u has no lane plan\n",
+                    (unsigned) v->id);
+            ctx->error = true;
+            return;
+        }
+        if (!ctx->pre_decl_all)
+            fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(fixed_clone_native), v->id,
+                    (unsigned) (fixed_clone_count > 0 ? fixed_clone_count : 1));
+        fprintf(out, "    memmove(_fa%u, ", v->id);
+        emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &source_info);
+        fprintf(out, ", sizeof(%s) * %u);\n", cg_struct_native_c_type(fixed_clone_native),
+                (unsigned) fixed_clone_count);
+        if (ctx->pre_decl_all) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        } else {
+            fprintf(out, "    XrValue ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
+        fprintf(out, "xr_array_ref(_fa%u, %u, %u);\n", v->id, (unsigned) fixed_clone_native,
+                (unsigned) fixed_clone_count);
+        emit_value_generated_line_reset(ctx, out, v);
+        return;
+    }
+
     if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
@@ -7595,6 +7641,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                         fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
                                 (unsigned) (count > 0 ? count : 1));
                     }
+                } else {
+                    uint8_t native = 0;
+                    uint32_t count = 0;
+                    if (xicgen_fixed_array_stack_copy_info(v, &native, &count))
+                        fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
+                                (unsigned) (count > 0 ? count : 1));
                 }
                 XrRep rep = cg_value_plan_storage_rep(ctx, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
@@ -8163,6 +8215,40 @@ static void cg_module_scan_snapshot_restore(XiCgenCtx *ctx, CgModuleScanSnapshot
     if (snap->methods_cap > 0)
         memcpy(ctx->methods, snap->methods, (size_t) snap->methods_cap * sizeof(*ctx->methods));
     cg_module_scan_snapshot_free(snap);
+}
+
+static bool cg_imported_static_function_uses_are_direct_in_module(XiCgenCtx *ctx,
+                                                                  const XiModule *module,
+                                                                  const XiFunc *target) {
+    if (!ctx || !module || !module->init || !target)
+        return false;
+    if (module == ctx->module)
+        return cg_imported_static_function_uses_are_direct(ctx, module->init, target);
+
+    CgModuleScanSnapshot snap;
+    if (!cg_module_scan_snapshot_save(ctx, &snap)) {
+        cg_module_scan_snapshot_free(&snap);
+        return false;
+    }
+    cg_init_from_module(ctx, (XiModule *) module);
+    cg_register_imported_classes(ctx);
+    bool direct = cg_imported_static_function_uses_are_direct(ctx, module->init, target);
+    cg_module_scan_snapshot_restore(ctx, &snap);
+    return direct;
+}
+
+static bool cg_imported_static_function_uses_are_direct_in_bundle(XiCgenCtx *ctx,
+                                                                  const XiFunc *target) {
+    if (!ctx || !target)
+        return false;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (!mod || !mod->init)
+            continue;
+        if (!cg_imported_static_function_uses_are_direct_in_module(ctx, mod, target))
+            return false;
+    }
+    return true;
 }
 
 static bool cg_func_has_native_receiver_boxed_use_in_module(XiCgenCtx *ctx, const XiModule *module,
@@ -9177,15 +9263,20 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
         return true;
     if (f->export_plan || f->link_plan || f->entry_plan)
         return true;
-    /* Shared-library class descriptors are open-world ABI tables. Executable
-     * class members remain closed-world and are retained by actual constructor,
-     * direct-call, or dispatch reachability below. */
-    if (cg_func_is_class_member(ctx, f))
+    /* Hosted shared-library class descriptors are open-world ABI tables.
+     * Freestanding images have no dynamic Xray module/class ABI: their public
+     * surface is the explicit C/link/entry manifest handled above, so language
+     * exports stay closed-world just like executable bodies. */
+    if (cg_func_is_class_member(ctx, f)) {
+        if (ctx->freestanding_profile)
+            return false;
         return !ctx->emit_main || cg_func_is_exported_class_member(ctx, f);
+    }
     /* Executables are closed-world: a language-level export is retained only
-     * when a reachable import/shared-slot read consumes it. Shared-library
-     * emission remains an open-world boundary and keeps exports as roots. */
-    return !ctx->emit_main && cg_func_is_module_export(ctx, f);
+     * when a reachable import/shared-slot read consumes it. Hosted shared
+     * libraries remain open-world; freestanding shared images expose only
+     * manifest-owned C/link/entry symbols and therefore remain closed-world. */
+    return !ctx->emit_main && !ctx->freestanding_profile && cg_func_is_module_export(ctx, f);
 }
 
 static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {

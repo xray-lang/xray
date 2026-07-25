@@ -4,6 +4,13 @@ fn xray_fixed_array_sum() -> int {
     return xs[0] + xs[1] + xs[2]
 }
 
+fn xray_fixed_array_copy() -> int {
+    var source: [int; 3] = [4, 5, 6]
+    var copied = copy(source)
+    copied[1] = 9
+    return source[1] + copied[1]
+}
+
 fn xray_fixed_array_span(i: int) -> int {
     var xs: [int; 3] = [10, 20, 30]
     var view: Slice<int> = xs[:]
@@ -84,3 +91,5 @@ fn xray_fixed_array_span_bulk() -> int {
     var pairs: Slice<u16> = asBytes.reinterpret<u16>()
     return window.compare(src) + int(pairs[2])
 }
+
+xray_fixed_array_copy()

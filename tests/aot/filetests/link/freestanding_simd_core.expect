@@ -1,0 +1,17 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains=name=xray_simd_reinterpret_core
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": []
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=xray_simd_u64_core
+c_contains=xray_simd_widen_core
+c_contains=xray_simd_static_secret_core
+c_contains=xr_span_t
+c_not_contains=xrt_closure_new
+c_not_contains=xrt_array_ref_to_owned
+c_not_contains=xrt_arc_alloc
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core

@@ -1,0 +1,13 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+c_contains=xray_freestanding_closed_world
+c_contains=liveAdd
+c_not_contains=unusedBytes
+c_not_contains=xrt_closure_new
+c_not_contains=xrt_array_ref_to_owned
+c_not_contains=xrt_arc_alloc
+c_not_contains=xrt_enum_aggregate_box
+c_not_contains=#include "xrt.h"
+not_contains=xray_rt_coro
+not_contains=xray_core
