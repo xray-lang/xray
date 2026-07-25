@@ -2472,24 +2472,13 @@ static void emit_block_terminator_generated_line_reset(XiCgenCtx *ctx, FILE *out
         emit_generated_line_reset(ctx, out);
 }
 
-static bool cg_block_is_return_like(const XiBlock *blk) {
-    return blk && (blk->kind == XI_BLOCK_RETURN || blk->kind == XI_BLOCK_UNREACHABLE);
-}
-
 static void emit_likely_condition_expr(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
-    if (blk && xi_copy_is_branch_hint(blk->control)) {
-        emit_condition_expr_ctx(ctx, out, blk->control);
-        return;
-    }
-    bool true_returns = cg_block_is_return_like(blk ? blk->succs[0] : NULL);
-    bool false_returns = cg_block_is_return_like(blk ? blk->succs[1] : NULL);
-    if (true_returns == false_returns) {
-        emit_condition_expr_ctx(ctx, out, blk->control);
-        return;
-    }
-    fprintf(out, "%s(", true_returns ? "XR_UNLIKELY" : "XR_LIKELY");
-    emit_condition_expr_ctx(ctx, out, blk->control);
-    fprintf(out, ")");
+    /* A return edge is not inherently cold: dispatch-heavy code commonly
+     * returns directly from every case. Guessing a branch probability from
+     * CFG shape mislabels those hot paths and can inhibit loop-invariant code
+     * motion after inlining. Preserve neutral C semantics unless the source
+     * explicitly used likely(...) or unlikely(...). */
+    emit_condition_expr_ctx(ctx, out, blk ? blk->control : NULL);
 }
 
 static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ctx, const XiFunc *f,
