@@ -13240,7 +13240,7 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
-    if (v->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF) {
+    if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
             emit_codegen_abort_expr(out);
@@ -13251,8 +13251,9 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, ")");
         return;
     }
-    if (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix) ||
-        emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0]))
+    if ((v->aux_int & XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION) != 0 &&
+        (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix) ||
+         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0])))
         return;
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {

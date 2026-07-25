@@ -140,11 +140,12 @@ typedef enum XiPlaceOrigin {
 } XiPlaceOrigin;
 
 /* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
- * A raw-pointer aggregate load used directly as a value-struct method receiver
- * still remains args[0] so the VM keeps its ordinary value/writeback semantics.
- * This marker lets native backends borrow the PTR_LOAD source address directly
- * instead of materializing an aggregate copy around the method call. */
+ * These flags permit native backends to borrow an underlying place only when
+ * lowering retained explicit source-place provenance.  In particular, a local
+ * initialized from a field is still a value copy even when its SSA value is a
+ * LOAD_FIELD; it must not be mistaken for `ref receiver.field`. */
 #define XI_LOCAL_ADDR_AUX_RAW_DEREF 1
+#define XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION 2
 
 typedef enum XiPlaceLifetime {
     XI_PLACE_LIFETIME_NONE = 0,

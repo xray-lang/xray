@@ -4562,6 +4562,8 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                 var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
                 arg_plan->origin_var_id = (XiVarId) var_id;
+            else if (!xi_top_binding_valid(top_binding))
+                place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
             if (mode == XR_PARAM_REF) {
                 /* `ref owner[a:b]` borrows the projected element range.  The
                  * analyzer only authorizes it when the callee's canonical
@@ -4675,7 +4677,8 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
         if (var_id >= 0) {
             origin = XI_PLACE_ORIGIN_STACK_LOCAL;
             origin_var_id = (XiVarId) var_id;
-        }
+        } else if (!xi_top_binding_valid(top_binding))
+            place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
         if (mode == XR_PARAM_REF) {
             writeback->source = receiver;
             writeback->place = place;
