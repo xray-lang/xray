@@ -55,6 +55,12 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_sync_core.h"
 #include "xrt_method_symbols.h"
 
+#if defined(__GNUC__) || defined(__clang__)
+typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
+typedef uint32_t xr_v4u32 __attribute__((vector_size(16)));
+typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
+#endif
+
 #ifndef XR_FUNC
 #define XR_FUNC extern
 #endif

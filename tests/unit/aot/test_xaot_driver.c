@@ -402,6 +402,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     XaotTarget arm = {0};
     XaotTarget x86_32 = {0};
     XaotTarget powerpc64 = {0};
+    XaotTarget powerpc64le = {0};
     XaotLinkManifest manifest = {0};
     XaotSimdMode parsed = XAOT_SIMD_AUTO;
     char err[192];
@@ -422,6 +423,14 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(x86.simd_features == (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2));
     ASSERT_TRUE(!xaot_target_configure_simd(&x86, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
     ASSERT_TRUE(strstr(err, "AArch64") != NULL);
+
+    ASSERT_TRUE(xaot_target_init(&powerpc64le, "powerpc64le-linux-musl"));
+    ASSERT_TRUE(powerpc64le.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(powerpc64le.endian, "little") == 0);
+    ASSERT_TRUE(powerpc64le.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(powerpc64le.simd_features == 0);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64le, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64le.simd_features == XAOT_SIMD_FEATURE_VSX);
 
     ASSERT_TRUE(xaot_target_init(&arm, "aarch64-linux-musl"));
     ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_NEON);
@@ -444,6 +453,14 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(powerpc64.data_layout.pointer.size == 8);
     ASSERT_TRUE(powerpc64.data_layout.endian == XR_TARGET_ENDIAN_BIG);
     ASSERT_TRUE(powerpc64.simd_features == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("vsx", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_VSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64.simd_features == XAOT_SIMD_FEATURE_VSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64, XAOT_SIMD_NATIVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64.simd_features == XAOT_SIMD_FEATURE_VSX);
+    ASSERT_TRUE(!xaot_target_configure_simd(&powerpc64, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "AArch64") != NULL);
 
     ASSERT_TRUE(xaot_link_manifest_init(&manifest, &x86));
     char *json = xaot_link_manifest_dump_json(&manifest);
@@ -452,6 +469,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(strstr(json, "\"simd_features\": 6") != NULL);
     xr_free(json);
     xaot_link_manifest_free(&manifest);
+    xaot_target_free(&powerpc64le);
     xaot_target_free(&powerpc64);
     xaot_target_free(&x86_32);
     xaot_target_free(&arm);

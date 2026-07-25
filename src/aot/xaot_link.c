@@ -347,6 +347,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "big";
         return true;
     }
+    if (strcmp(name, "powerpc64le-linux-musl") == 0) {
+        *arch = "powerpc64le";
+        *os = "linux";
+        *abi = "musl";
+        *object_format = "elf";
+        *triple = "powerpc64le-linux-musl";
+        *pointer_bits = 64;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "x86_64-windows-gnu") == 0) {
         *arch = "x86_64";
         *os = "windows";
@@ -479,6 +489,8 @@ XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out) {
         mode = XAOT_SIMD_SSE2;
     else if (strcmp(text, "avx2") == 0)
         mode = XAOT_SIMD_AVX2;
+    else if (strcmp(text, "vsx") == 0)
+        mode = XAOT_SIMD_VSX;
     else if (strcmp(text, "dispatch") == 0)
         mode = XAOT_SIMD_DISPATCH;
     else
@@ -502,6 +514,8 @@ XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode) {
             return "sse2";
         case XAOT_SIMD_AVX2:
             return "avx2";
+        case XAOT_SIMD_VSX:
+            return "vsx";
         case XAOT_SIMD_DISPATCH:
             return "dispatch";
         default:
@@ -521,6 +535,8 @@ static const char *xaot_target_effective_arch(const XaotTarget *target) {
     return "aarch64";
 #elif defined(XR_ARCH_X86_64)
     return "x86_64";
+#elif defined(XR_ARCH_POWERPC64)
+    return "powerpc64";
 #else
     return "unknown";
 #endif
@@ -535,6 +551,8 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
     const char *arch = xaot_target_effective_arch(target);
     bool arm64 = strcmp(arch, "aarch64") == 0 || strcmp(arch, "arm64") == 0;
     bool x86_64 = strcmp(arch, "x86_64") == 0 || strcmp(arch, "amd64") == 0;
+    bool power64 = strcmp(arch, "powerpc64") == 0 || strcmp(arch, "powerpc64le") == 0 ||
+                   strcmp(arch, "ppc64") == 0 || strcmp(arch, "ppc64le") == 0;
     uint32_t features = 0;
     switch (mode) {
         case XAOT_SIMD_AUTO:
@@ -543,9 +561,10 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
         case XAOT_SIMD_SCALAR:
             break;
         case XAOT_SIMD_NATIVE:
-            features = arm64    ? XAOT_SIMD_FEATURE_NEON
-                       : x86_64 ? XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2
-                                : 0;
+            features = arm64     ? XAOT_SIMD_FEATURE_NEON
+                       : x86_64  ? XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2
+                       : power64 ? XAOT_SIMD_FEATURE_VSX
+                                 : 0;
             if (features == 0) {
                 xaot_simd_error(err, err_size, "--simd native is unsupported for this target");
                 return false;
@@ -571,6 +590,13 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
                 return false;
             }
             features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;
+            break;
+        case XAOT_SIMD_VSX:
+            if (!power64) {
+                xaot_simd_error(err, err_size, "--simd vsx requires a PowerPC64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_VSX;
             break;
         case XAOT_SIMD_DISPATCH:
             if (!x86_64) {

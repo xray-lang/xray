@@ -41,6 +41,8 @@
 #define XR_ARCH_ARM64 1
 #elif defined(__arm__) || defined(_M_ARM)
 #define XR_ARCH_ARM 1
+#elif defined(__powerpc64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
+#define XR_ARCH_POWERPC64 1
 #elif defined(__riscv) && (__riscv_xlen == 64)
 #define XR_ARCH_RISCV64 1
 #endif  // ========== Compiler Detection ==========

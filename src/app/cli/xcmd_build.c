@@ -1561,7 +1561,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!xaot_simd_mode_parse(simd_arg, &simd_mode)) {
         fprintf(stderr,
                 "Error: invalid --simd mode '%s' (expected auto, scalar, native, neon, sse2, "
-                "avx2, or dispatch)\n",
+                "avx2, vsx, or dispatch)\n",
                 simd_arg ? simd_arg : "");
         CMD_BUILD_RETURN(2);
     }
@@ -3141,7 +3141,7 @@ static int cmd_build_native(
     if (cpu && cpu[0]) {
         char cpu_flag[128];
         /* ARM toolchains reject -march=native; -mcpu is the tuning knob there. */
-#if defined(XR_ARCH_ARM64) || defined(XR_ARCH_ARM)
+#if defined(XR_ARCH_ARM64) || defined(XR_ARCH_ARM) || defined(XR_ARCH_POWERPC64)
         snprintf(cpu_flag, sizeof(cpu_flag), "-mcpu=%s", cpu);
 #else
         snprintf(cpu_flag, sizeof(cpu_flag), "-march=%s", cpu);
@@ -3157,6 +3157,20 @@ static int cmd_build_native(
         (aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 &&
         !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx2")) {
         fprintf(stderr, "Error: failed to record AVX2 target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mvsx")) {
+        fprintf(stderr, "Error: failed to record VSX target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
+        (!cpu || !cpu[0]) &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                       "-mcpu=pwr8")) {
+        fprintf(stderr, "Error: failed to record Power8 VSX baseline in AOT link manifest\n");
         xaot_build_result_free(&aot_result);
         return 1;
     }

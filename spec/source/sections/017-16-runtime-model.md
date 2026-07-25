@@ -84,7 +84,7 @@ os.getcwd()               // 当前工作目录
 os.hostname()             // 主机名
 os.tmpdir()               // 临时目录
 os.platform               // 常量："darwin" / "linux" / "windows"
-os.arch                   // 常量："arm64" / "x64" / "x86"
+os.arch                   // 常量："arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep                    // 常量：路径分隔符
 os.eol                    // 常量：行尾
 os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
@@ -212,7 +212,7 @@ os.getcwd()               // current working directory
 os.hostname()             // host name
 os.tmpdir()               // temporary directory
 os.platform               // constant: "darwin" / "linux" / "windows"
-os.arch                   // constant: "arm64" / "x64" / "x86"
+os.arch                   // constant: "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep                    // constant: path separator
 os.eol                    // constant: end-of-line
 os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)

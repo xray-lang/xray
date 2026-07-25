@@ -1,8 +1,9 @@
 # Effect and assertion semantics contract
 
 Status: re-frozen after the xxHash parity work refined no-heap pointer effects,
-stable borrowed/mutated aggregate lowering, and pure target-mode queries;
-product membership and fail-closed semantics are unchanged.
+stable borrowed/mutated aggregate lowering, exact-integer intrinsic nothrow
+resolution, and closed struct-method collection. Product membership and
+fail-closed semantics are unchanged.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -57,7 +58,7 @@ anchor-sha256: src/frontend/analyzer/xa_effect_db.h 24f9175683e2d780e9a45f8f54e9
 anchor-sha256: src/frontend/analyzer/xa_effect_db.c 4c26c5da9762ceb45390900880c8590fb2ca712ccae3174f4b3673541b204111
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c a4ee09f3b37f5ad8c2e008d271d7ab3590203876801e27841a1fa152b8fef3ee
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 65212eecec23ddb73ded9b54e869f9c51feb99126e9cc3bb9053f98be7d27ba8
 anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d1a1edce91d6f098be5785563d6d32c12efe6852e6c3c5f4d225063ef5128ccb
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c 06e64d18fc91182ea07577202c8e42c189da7be0e4f9c62e7b2042056aa31e41
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 5d29c8ef7b4f1fcd938266b85a47fe95794a177a39f217203ca649e0e251d737
@@ -66,10 +67,10 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h b68c60f6af4d15
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 524f1a8f8da465bb40c4828394d4bf23c64eed33659c6decb8395eeab3c603ff
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 703174dd47d5bab2613b281aa4a6cd9591826e93ae1578c7e4b4b99d3895ca31
 anchor-sha256: src/runtime/value/xtype.h 8d160aa422b68e0b3c4ab080fe30385bd920d3106a36ca7445bfb0944d4504ff
-anchor-sha256: src/ir/xi.h 5990ba49d2c5f2f74ed242e3c20b06ccba24243154cf989f48d3d8283d152d57
+anchor-sha256: src/ir/xi.h 2dfdaf5597f6483e5aa86bffbf38b9ca6cf6a11d0e28a3eeef04e740b0604f51
 anchor-sha256: src/ir/xi_lower.c f49c7ddaad290f3fd6644ca7e1ed0228fbd59760430cf55602cc21b81e6c5f16
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
 anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3
 anchor-sha256: tests/unit/analyzer/test_analyzer.c f0c36c6dcf4e84e70b82d013ed7068f50975d0e0c70de8010e76c9893f449b21
 anchor-sha256: tests/unit/analyzer/test_effect_db.c d444b5476930dcda7f57fc331faea237abecba18021ea28091c032cde3d4d865
-anchor-sha256: tests/unit/ir/test_xi_lower.c 726055433065b3d0706444918dd05a559535614efa888da49081ceb417683fa5
+anchor-sha256: tests/unit/ir/test_xi_lower.c ef94011e6a1829503c067577a5b8acbeb44fd07c993d203321d1c8463ebd6967

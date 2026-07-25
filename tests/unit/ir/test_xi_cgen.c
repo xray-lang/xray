@@ -1348,8 +1348,12 @@ TEST(cgen_early_return_branch_stays_neutral_without_hint) {
     char *code = generate_c(ir, "test");
     assert(code != NULL);
 
-    assert(!contains(code, "if (XR_UNLIKELY(") &&
-           "an unhinted early-return branch must remain probability-neutral");
+    const char *guard = find_static_function_definition(code, "test_guard_");
+    TEST_REQUIRE(guard != NULL, "guard function should be generated");
+    const char *guard_end = next_static_after(guard);
+    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
+    TEST_REQUIRE(!hint || hint >= guard_end,
+                 "an unhinted early-return branch must remain probability-neutral");
 
     printf("  Generated neutral early-return branch %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -1373,8 +1377,12 @@ TEST(cgen_explicit_unlikely_early_return_preserves_hint) {
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
-    assert(contains(code, "XR_UNLIKELY(") &&
-           "an explicit unlikely(...) branch must retain its native hint");
+    const char *guard = find_static_function_definition(code, "test_guard_");
+    TEST_REQUIRE(guard != NULL, "guard function should be generated");
+    const char *guard_end = next_static_after(guard);
+    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
+    TEST_REQUIRE(hint && hint < guard_end,
+                 "an explicit unlikely(...) branch must retain its native hint");
 
     printf("  Generated explicit early-return branch hint %zu bytes of C code\n", strlen(code));
     xr_free(code);

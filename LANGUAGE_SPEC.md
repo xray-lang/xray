@@ -5572,7 +5572,7 @@ os.getcwd()               // current working directory
 os.hostname()             // host name
 os.tmpdir()               // temporary directory
 os.platform               // constant: "darwin" / "linux" / "windows"
-os.arch                   // constant: "arm64" / "x64" / "x86"
+os.arch                   // constant: "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
 os.sep                    // constant: path separator
 os.eol                    // constant: end-of-line
 os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)

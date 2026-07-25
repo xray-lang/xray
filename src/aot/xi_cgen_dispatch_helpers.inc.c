@@ -1255,8 +1255,29 @@ static const XiValue *xicgen_vec_unwrap_value(const XiValue *value) {
     return value;
 }
 
-static void xicgen_emit_vec_lanes(FILE *out, const XiValue *value) {
+static void xicgen_vec_error(XiCgenCtx *ctx, FILE *out, const XiValue *value, const char *detail);
+
+static void xicgen_emit_vec_lanes(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_TAGGED) {
+        const XrAggregateLayout *layout = cg_type_struct_layout(value ? value->type : NULL);
+        char field_name[128];
+        if (cg_struct_native_heap_supported(layout) && layout->field_count == 1) {
+            cg_struct_field_c_name(layout, 0, field_name, sizeof(field_name));
+            if (strcmp(field_name, "_lanes") == 0) {
+                char aggregate_type[128];
+                cg_struct_heap_type_name(aggregate_type, sizeof(aggregate_type), NULL, layout);
+                fprintf(out, "((const %s *)(const void *)(", aggregate_type);
+                emit_vref(out, value);
+                fprintf(out, ").ptr)->_lanes");
+                return;
+            }
+        }
+        xicgen_vec_error(ctx, out, value,
+                         "tagged vector input needs a fixed _lanes aggregate layout");
+        return;
+    }
     fprintf(out, "(");
     emit_vref(out, value);
     fprintf(out, ")._lanes");
@@ -1313,7 +1334,7 @@ static void xicgen_emit_vec_native_load(XiCgenCtx *ctx, FILE *out, const XiValue
         fprintf(out, "_mm256_loadu_si256((const __m256i *)(const void *)");
     else
         fprintf(out, "_mm_loadu_si128((const __m128i *)(const void *)");
-    xicgen_emit_vec_lanes(out, value);
+    xicgen_emit_vec_lanes(ctx, out, value);
     fprintf(out, ")");
 }
 
@@ -1346,6 +1367,20 @@ static uint8_t xicgen_vec_value_native_type(XiCgenCtx *ctx, const XiValue *value
     if (value && xi_vec_shape_is_explicit(value->aux_int))
         return xi_vec_shape_native_type(value->aux_int);
     return fallback;
+}
+
+static uint8_t xicgen_vec_input_native_type(XiCgenCtx *ctx, const XiValue *operation,
+                                            uint8_t fallback) {
+    if (operation && operation->xa_intrinsic_id != XA_INTRINSIC_NONE) {
+        const XaIntrinsicDesc *desc =
+            xa_intrinsic_by_id((XaIntrinsicId) operation->xa_intrinsic_id);
+        if (desc && desc->family == XA_INTRINSIC_FAMILY_SIMD &&
+            desc->shape_rule.input_native_type != 0)
+            return desc->shape_rule.input_native_type;
+    }
+    return operation && operation->nargs > 0
+               ? xicgen_vec_value_native_type(ctx, operation->args[0], fallback)
+               : fallback;
 }
 
 static const char *xicgen_vec_neon_reinterpret_name(uint8_t to, uint8_t from) {
@@ -1485,6 +1520,347 @@ static void xicgen_emit_vec_window_offset(XiCgenCtx *ctx, FILE *out, const XiVal
     fprintf(out, ")");
 }
 
+static const char *xicgen_vec_vsx_type(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8    ? "xr_v16u8"
+           : native_type == XR_NATIVE_U32 ? "xr_v4u32"
+                                          : "xr_v2u64";
+}
+
+static void xicgen_emit_vec_vsx_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                     uint8_t native_type) {
+    value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
+        emit_vref(out, value);
+        return;
+    }
+    fprintf(out, "({ %s _v; memcpy(&_v, ", xicgen_vec_vsx_type(native_type));
+    xicgen_emit_vec_lanes(ctx, out, value);
+    fprintf(out, ", sizeof(_v)); _v; })");
+}
+
+static void xicgen_emit_vec_vsx_result(FILE *out, bool native_result, const char *value_name) {
+    if (native_result) {
+        fprintf(out, "%s; })", value_name);
+    } else {
+        fprintf(out, "memcpy(_r._lanes, &%s, sizeof(%s)); _r; })", value_name, value_name);
+    }
+}
+
+/* Power VSX lowering uses Clang/GCC fixed-size vector types rather than
+ * endian-sensitive altivec syntax. memcpy provides unaligned, alias-safe
+ * loads/stores; operators and __builtin_shufflevector preserve Xi lane order
+ * on both ppc64 and ppc64le. */
+static bool xicgen_emit_vec_vsx(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t lanes,
+                                uint8_t native_type) {
+    const char *vec_type = xicgen_vec_vsx_type(native_type);
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    const char *result_type = NULL;
+    bool native_result = xicgen_vec_result_native(ctx, v, &result_type);
+    unsigned vector_bytes = (unsigned) lanes * (native_type == XR_NATIVE_U8    ? 1u
+                                                : native_type == XR_NATIVE_U32 ? 4u
+                                                                               : 8u);
+    if (vector_bytes != 16u)
+        return false;
+
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; %s _v; memcpy(&_v, ((const %s *)_s.data) + _off, sizeof(_v)); ",
+                    vec_type, lane_type);
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; %s _v = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; memcpy(((%s *)_s.data) + _off, &_v, sizeof(_v)); XR_NULL_VAL; })",
+                    lane_type);
+            return true;
+        }
+
+        case XI_VEC_EXTRACT:
+            if (v->nargs != 2)
+                return false;
+            fprintf(out, "({ %s _a = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; int64_t _lane = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "; ");
+            xicgen_emit_vec_range_check(out, "_lane", lanes);
+            fprintf(out, "_a[_lane]; })");
+            return true;
+
+        case XI_VEC_REPLACE:
+            if (v->nargs != 3 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _v = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; int64_t _lane = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "; ");
+            xicgen_emit_vec_range_check(out, "_lane", lanes);
+            fprintf(out, "_v[_lane] = (%s)(", lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, "); ");
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_SPLAT:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _x = (%s)(", lane_type, lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, "); %s _v = {", vec_type);
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                fprintf(out, "%s_x", lane ? ", " : "");
+            fprintf(out, "}; ");
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const char *op = v->op == XI_VEC_ADD       ? "+"
+                             : v->op == XI_VEC_SUB     ? "-"
+                             : v->op == XI_VEC_MUL     ? "*"
+                             : v->op == XI_VEC_BIT_AND ? "&"
+                             : v->op == XI_VEC_BIT_OR  ? "|"
+                                                       : "^";
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, ", _b = ");
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[1], native_type);
+            fprintf(out, "; %s _v = _a %s _b; ", vec_type, op);
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_BIT_NOT:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; %s _v = ~_a; ", vec_type);
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type == XR_NATIVE_U8 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; uint32_t _sn = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") & 63u; %s _s0 = (%s)_sn; %s _s = {", lane_type, lane_type, vec_type);
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                fprintf(out, "%s_s0", lane ? ", " : "");
+            fprintf(out, "}; %s _v = ", vec_type);
+            if (native_type == XR_NATIVE_U32)
+                fprintf(out, "_sn >= 32u ? (%s){0, 0, 0, 0} : ", vec_type);
+            fprintf(out, "_a %s _s; ", v->op == XI_VEC_SHL ? "<<" : ">>");
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_REINTERPRET: {
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            uint8_t input_type = xicgen_vec_input_native_type(ctx, v, native_type);
+            unsigned input_lane_bytes = input_type == XR_NATIVE_U8    ? 1u
+                                        : input_type == XR_NATIVE_U32 ? 4u
+                                                                      : 8u;
+            unsigned output_lane_bytes = native_type == XR_NATIVE_U8    ? 1u
+                                         : native_type == XR_NATIVE_U32 ? 4u
+                                                                        : 8u;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", xicgen_vec_vsx_type(input_type));
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], input_type);
+            if (ctx && ctx->target && ctx->target->data_layout.endian == XR_TARGET_ENDIAN_BIG &&
+                input_lane_bytes != output_lane_bytes) {
+                /* Xi reinterpretation concatenates the little-endian bytes of
+                 * each source lane and rebuilds destination lanes from that
+                 * byte stream.  On a big-endian VSX target, translate between
+                 * native lane storage and that endian-neutral stream with one
+                 * compile-time byte permutation. */
+                fprintf(out, "; xr_v16u8 _bytes; memcpy(&_bytes, &_a, sizeof(_bytes)); "
+                             "xr_v16u8 _fixed = __builtin_shufflevector(_bytes, _bytes, ");
+                for (unsigned physical_out = 0; physical_out < 16u; physical_out++) {
+                    unsigned output_base = (physical_out / output_lane_bytes) * output_lane_bytes;
+                    unsigned canonical =
+                        output_base + output_lane_bytes - 1u - (physical_out % output_lane_bytes);
+                    unsigned input_base = (canonical / input_lane_bytes) * input_lane_bytes;
+                    unsigned physical_in =
+                        input_base + input_lane_bytes - 1u - (canonical % input_lane_bytes);
+                    fprintf(out, "%s%uu", physical_out ? ", " : "", physical_in);
+                }
+                fprintf(out, "); %s _v; memcpy(&_v, &_fixed, sizeof(_v)); ", vec_type);
+            } else {
+                fprintf(out, "; %s _v; memcpy(&_v, &_a, sizeof(_v)); ", vec_type);
+            }
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_SHUFFLE: {
+            if ((!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)) ||
+                (v->nargs != 1 && v->nargs != 2))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            if ((v->aux_int & XI_VEC_SHAPE_UNZIP) != 0) {
+                if (v->nargs != 2 || native_type != XR_NATIVE_U32 || lanes != 4)
+                    return false;
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_vsx_load(ctx, out, v->args[1], native_type);
+                fprintf(out, "; %s _v = __builtin_shufflevector(_a, _b, ", vec_type);
+                unsigned start = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
+                for (uint8_t lane = 0; lane < lanes; lane++)
+                    fprintf(out, "%s%uu", lane ? ", " : "", start + 2u * lane);
+            } else {
+                fprintf(out, "; %s _v = __builtin_shufflevector(_a, _a, ", vec_type);
+                for (uint8_t lane = 0; lane < lanes; lane++)
+                    fprintf(out, "%s%uu", lane ? ", " : "", xicgen_vec_shuffle_lane(v, lane));
+            }
+            fprintf(out, "); ");
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_WIDEN_MUL: {
+            if (v->nargs != 2 || lanes != 2 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_v4u32 _a = ");
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], XR_NATIVE_U32);
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
+            bool contiguous = (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0;
+            unsigned first = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
+            if (!adjacent) {
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_vsx_load(ctx, out, v->args[1], XR_NATIVE_U32);
+            }
+            if (contiguous) {
+                unsigned base = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 2u : 0u;
+                fprintf(out,
+                        "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, %uu, %uu, %uu, "
+                        "%uu), _bl = __builtin_shufflevector(_b, _b, %uu, %uu, %uu, %uu)",
+                        base, base, base + 1u, base + 1u, base, base, base + 1u, base + 1u);
+            } else if (adjacent) {
+                fprintf(out, "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, 0, 0, 2, 2), "
+                             "_bl = __builtin_shufflevector(_a, _a, 1, 1, 3, 3)");
+            } else {
+                fprintf(out,
+                        "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, %uu, %uu, %uu, "
+                        "%uu), _bl = __builtin_shufflevector(_b, _b, %uu, %uu, %uu, %uu)",
+                        first, first, first + 2u, first + 2u, first, first, first + 2u, first + 2u);
+            }
+            /* vec_mule/vec_mulo swap meaning across Power compiler and endian
+             * combinations.  Duplicating each selected Xi lane into both
+             * members of its hardware pair makes the raw vmuleuw instruction
+             * endian-independent while preserving a true 32x32 -> 64 vector
+             * multiply. */
+            fprintf(out, "; xr_v2u64 _v; __asm__(\"vmuleuw %%0, %%1, %%2\" : \"=v\" (_v) : "
+                         "\"v\" (_al), \"v\" (_bl)); ");
+            xicgen_emit_vec_vsx_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_REDUCE_ADD:
+            if (v->nargs != 1 || native_type != XR_NATIVE_U64 || lanes != 2)
+                return false;
+            fprintf(out, "({ xr_v2u64 _a = ");
+            xicgen_emit_vec_vsx_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; _a[0] + _a[1]; })");
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 /* Emit a target-selected 128-bit implementation.  Returning false is an
  * intentional per-operation scalar fallback, not target probing: the exact
  * feature set was resolved into XaotTarget before Xi C generation. */
@@ -1496,6 +1872,9 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
+    if (vsx)
+        return xicgen_emit_vec_vsx(ctx, out, v, lanes, native_type);
     if (!neon && !x86)
         return false;
 
@@ -1787,7 +2166,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             fprintf(out, "({ ");
             if (!native_result)
                 fprintf(out, "%s _r; ", result_type);
-            uint8_t input_native_type = xicgen_vec_value_native_type(ctx, v->args[0], native_type);
+            uint8_t input_native_type = xicgen_vec_input_native_type(ctx, v, native_type);
             if (neon) {
                 const char *input_type = xicgen_vec_neon_type(input_native_type);
                 const char *reinterpret_name =
@@ -2030,9 +2409,9 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 !xicgen_vec_result_aggregate(ctx, v, &result_type))
                 return false;
             fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "); uint32x4_t _v = %s(_a, _b); ",
                     (v->aux_int & XI_VEC_SHAPE_ODD_LANES) ? "vuzp2q_u32" : "vuzp1q_u32");
             xicgen_emit_vec_native_store(out, "_r._lanes", XR_NATIVE_U32, true, false, "_v");
@@ -2046,9 +2425,9 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 !xicgen_vec_result_aggregate(ctx, v, &result_type))
                 return false;
             fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "); uint64x2_t _v = %s; ",
                     (v->aux_int & XI_VEC_SHAPE_ODD_LANES)
                         ? "vmull_u32(vget_high_u32(_a), vget_high_u32(_b))"
@@ -2168,7 +2547,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes);
             fprintf(out, "; memcpy(((%s *)_s.data) + _off, ", lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, ", %uu); XR_NULL_VAL; })",
                     (unsigned) (lanes * (native_type == XR_NATIVE_U8    ? 1
                                          : native_type == XR_NATIVE_U32 ? 4
@@ -2196,7 +2575,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             fprintf(out, "; ");
             xicgen_emit_vec_range_check(out, "_lane", lanes);
             fprintf(out, "(%s)", lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_lane]; })");
             return;
 
@@ -2207,7 +2586,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 return;
             }
             fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, ", sizeof(_r._lanes)); int64_t _lane = ");
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, "; ");
@@ -2237,9 +2616,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     "({ %s _r; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_r._lanes[_i] = (%s)(",
                     result_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i] %s ", op);
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "[_i]); _r; })");
             return;
         }
@@ -2253,7 +2632,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     "({ %s _r; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_r._lanes[_i] = (%s)~",
                     result_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i]; _r; })");
             return;
 
@@ -2270,7 +2649,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     "_r._lanes[_i] = _s >= %uu ? (%s)0 : (%s)(",
                     (unsigned) lanes, native_type == XR_NATIVE_U32 ? 32u : 64u, lane_type,
                     lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i] %s _s); _r; })", v->op == XI_VEC_SHL ? "<<" : ">>");
             return;
 
@@ -2281,7 +2660,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             if (!ctx || !ctx->target || ctx->target->data_layout.endian != XR_TARGET_ENDIAN_BIG) {
                 fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, ", sizeof(_r._lanes)); _r; })");
                 return;
             }
@@ -2292,8 +2671,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
              * big-endian scalar targets; all trip counts are compile-time
              * constants and fold into straight-line shifts. */
             {
-                uint8_t input_native_type =
-                    xicgen_vec_value_native_type(ctx, v->args[0], native_type);
+                uint8_t input_native_type = xicgen_vec_input_native_type(ctx, v, native_type);
                 unsigned input_lane_bytes = input_native_type == XR_NATIVE_U8    ? 1u
                                             : input_native_type == XR_NATIVE_U32 ? 4u
                                                                                  : 8u;
@@ -2305,7 +2683,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                         "uint64_t _lane = 0; for (uint32_t _b = 0; _b < %uu; _b++) { "
                         "uint32_t _byte = _i * %uu + _b; uint64_t _src = (uint64_t)(",
                         result_type, (unsigned) lanes, output_lane_bytes, output_lane_bytes);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out,
                         "[_byte / %uu]); _lane |= ((_src >> ((_byte %% %uu) * 8u)) & "
                         "UINT64_C(255)) << (_b * 8u); } _r._lanes[_i] = (%s)_lane; } "
@@ -2326,7 +2704,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 for (uint8_t lane = 0; lane < lanes; lane++) {
                     unsigned source_lane = (unsigned) (lane & 1u) * 2u + half;
                     fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[lane >= 2 ? 1 : 0]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[lane >= 2 ? 1 : 0]);
                     fprintf(out, "[%uu]; ", source_lane);
                 }
                 fprintf(out, "_r; })");
@@ -2345,7 +2723,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     return;
                 }
                 fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, "[%uu]; ", (unsigned) selected);
             }
             fprintf(out, "_r; })");
@@ -2365,9 +2743,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                         ? lane + ((v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? lanes : 0u)
                         : lane * 2u + ((v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u);
                 fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, "[%uu] * (uint64_t)", src);
-                xicgen_emit_vec_lanes(out, v->args[1]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[1]);
                 fprintf(out, "[%uu]; ", src);
             }
             fprintf(out, "_r; })");
@@ -2386,7 +2764,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     unsigned which = lane < 2 ? 0u : 1u;
                     unsigned src = (lane % 2u) * 2u + odd;
                     fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[which]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[which]);
                     fprintf(out, "[%uu]; ", src);
                 }
                 fprintf(out, "_r; })");
@@ -2405,9 +2783,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 for (uint8_t lane = 0; lane < 2; lane++) {
                     unsigned src = base + lane;
                     fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[0]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                     fprintf(out, "[%uu] * (uint64_t)", src);
-                    xicgen_emit_vec_lanes(out, v->args[1]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[1]);
                     fprintf(out, "[%uu]; ", src);
                 }
                 fprintf(out, "_r; })");
@@ -2423,7 +2801,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     "({ %s _sum = 0; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_sum = (%s)(_sum + ",
                     lane_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i]); _sum; })");
             return;
 

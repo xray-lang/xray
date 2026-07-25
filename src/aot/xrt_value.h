@@ -40,6 +40,12 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 
+#if defined(__GNUC__) || defined(__clang__)
+typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
+typedef uint32_t xr_v4u32 __attribute__((vector_size(16)));
+typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
+#endif
+
 /* =========================================================================
  * Branch expectation and code-layout hints.
  * Error / overflow / grow paths are annotated so the C compiler keeps the

@@ -17,6 +17,8 @@ fn run() {
     assert_eq(a32.add(b32).extract(0), 9)
     assert_eq(a32.mul(b32).extract(3), 35)
     assert_eq(a32.shiftLeft(3).shiftRight(3).extract(2), 4)
+    assert_eq(a32.shiftLeft(32).extract(0), 0)
+    assert_eq(a32.shiftRight(63).extract(3), 0)
     assert_eq(a32.shuffle(3, 2, 1, 0).extract(0), 5)
     assert_eq(a32.swapAdjacent().extract(0), 3)
     assert_eq(a32.swapAdjacent().extract(2), 5)

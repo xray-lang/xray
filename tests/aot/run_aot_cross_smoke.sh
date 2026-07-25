@@ -243,6 +243,7 @@ for target in \
     x86_64-linux-musl \
     aarch64-linux-musl \
     powerpc64-linux-musl \
+    powerpc64le-linux-musl \
     x86_64-windows-gnu \
     aarch64-windows-gnu
 do

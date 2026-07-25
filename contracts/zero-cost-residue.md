@@ -1,9 +1,10 @@
 # Zero-cost residue contract
 
 Status: re-frozen after the xxHash parity work made module-owned immutable
-fixed arrays available as hosted static data and direct full-slice sources.
-The 277-case CGen matrix and the xxHash shape contract were rerun; residue
-categories and allowance semantics are unchanged.
+fixed arrays available as hosted static data, kept unhinted return branches
+neutral, and made caller-proven raw slices free of pending-error residue. The
+277-case CGen matrix and xxHash shape contracts were rerun; residue categories
+and allowance semantics are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -49,6 +50,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c b5ec717c3254bb2a84ef6d4784152ce79346232bd7da0cadb8c0904ec0d565d1
+anchor-sha256: src/aot/xi_cgen.c b49744289fef8615e8aa0bba6b005a894cfe9b1bf5de1ff759b5a2d9cdeb2d13
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

@@ -1,9 +1,9 @@
 # Cross-target ABI contract
 
-Status: re-frozen after hosted module-owned fixed arrays gained direct static
-data and full-slice lowering. Hosted imports retain the shared-slot ABI and
-freestanding imports retain their explicit weak-data contract; the 243-case
-link matrix and cross-target filetests were rerun.
+Status: re-frozen after PowerPC64 gained an explicit VSX target plan for both
+byte orders. Portable SIMD values crossing hosted module shared slots recover
+their fixed aggregate layout from the tagged reference; scalar, native, and
+cross-endian lowering retain one lane-order contract.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -33,20 +33,23 @@ emission, and native linking:
   from the selected target rather than the compiler host. A default C export
   is externally visible; a hidden C export must not leak into the public image.
 
-The release evidence includes generated-C filetests plus executed i386 ILP32
-and PowerPC64 big-endian xxHash KATs. A compile-only cross artifact is not
-sufficient to claim platform support. An exact PE export-set gate proves the
-Windows artifact and ABI shape, but not Windows execution support.
+The release evidence includes generated-C filetests, the ten-case cross-target
+smoke matrix, executed PowerPC64 big- and little-endian portable-SIMD fixtures,
+and 180-vector xxHash VSX KATs for both byte orders under QEMU. Emulation proves
+semantic and ABI correctness, not native Power performance. A compile-only
+cross artifact is not sufficient to claim platform support. An exact PE
+export-set gate proves the Windows artifact and ABI shape, but not Windows
+execution support.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xaot_link.c 666708eb8f9af5c3c5598a6b926108a4abfd7ffffc298052bf86dd1bb99a6e47
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 4ed015b3b02ea5cbf9c1cb9e970b2dbd4ee23515d56cf052df88eb1b176ae265
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 14c410ff523c006eb7c712340ce8eb57fcefbf11599aff25b7d01e118404511c
+anchor-sha256: src/aot/xaot_link.c b42666663978f2a6552adf67dd256a37c3e7ab6b0fdd7466114b6fed4ef4de31
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c fb4d2822ce87e5c633d87edc68d11edb74f07b7595973b955f03d6a72692263b
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 57418a437c5e5a40d0e0c61dc08321e8d3f0deb9da8867b231f147dfe0669e65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
-anchor-sha256: src/aot/xi_cgen.c b5ec717c3254bb2a84ef6d4784152ce79346232bd7da0cadb8c0904ec0d565d1
+anchor-sha256: src/aot/xi_cgen.c b49744289fef8615e8aa0bba6b005a894cfe9b1bf5de1ff759b5a2d9cdeb2d13
 anchor-sha256: src/aot/xrt_coll.h 9cb8e646bfabc64087e5358284f2691d85e785880c325181e81f95780549b6aa
-anchor-sha256: src/aot/xrt_core_freestanding.h c7e93602430e693175823709300d6a12c230bdfefb36eb31cb87aac54066b295
+anchor-sha256: src/aot/xrt_core_freestanding.h 9a9ef6210e91c0274fef211b198df8dc737b5176ffd373ce058c1476638a67d7
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 65a5e17007a746aec20a10409ba2a236ca12abeb20bc2cca81896ba9fbb2f2b4
-anchor-sha256: src/app/cli/xcli_toolchain.c f26a954b090d3c2f9bc9c7fc51f2d8963859aaa6b3f5645616d6121d1c0359db
+anchor-sha256: src/app/cli/xcmd_build.c f83afd157f1ba1ba73606427281d69071ea21d7801584b4bdc52c4cf927e2571
+anchor-sha256: src/app/cli/xcli_toolchain.c b8d34162c18af2152f0df23d257d49114a70f564b21dd05b0979f3437e9be3fa

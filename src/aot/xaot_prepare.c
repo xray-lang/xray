@@ -3914,6 +3914,14 @@ static unsigned prepare_vector_lane_bytes(uint8_t native_type) {
 static const char *prepare_vector_native_c_type(uint32_t features, uint8_t native_type,
                                                 uint8_t lanes) {
     unsigned width = prepare_vector_lane_bytes(native_type) * (unsigned) lanes;
+    if (width == 16 && (features & XAOT_SIMD_FEATURE_VSX) != 0) {
+        if (native_type == XR_NATIVE_U8)
+            return "xr_v16u8";
+        if (native_type == XR_NATIVE_U32)
+            return "xr_v4u32";
+        if (native_type == XR_NATIVE_U64)
+            return "xr_v2u64";
+    }
     if (width == 16 && (features & XAOT_SIMD_FEATURE_NEON) != 0) {
         if (native_type == XR_NATIVE_U8)
             return "uint8x16_t";
@@ -3938,6 +3946,7 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
     if (!prepare_vector_native_c_type(features, native_type, lanes))
         return false;
     switch ((XiOp) value->op) {
@@ -3955,17 +3964,19 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
             return true;
         case XI_VEC_ADD:
         case XI_VEC_SUB:
-            return native_type != XR_NATIVE_U8 || neon || x86;
+            return native_type != XR_NATIVE_U8 || neon || x86 || vsx;
         case XI_VEC_MUL:
             if (native_type == XR_NATIVE_U64)
                 return false;
-            return neon || (native_type == XR_NATIVE_U32 && avx2);
+            return neon || vsx || (native_type == XR_NATIVE_U32 && avx2);
         case XI_VEC_SHL:
         case XI_VEC_SHR:
             return native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64;
         case XI_VEC_SHUFFLE:
             if ((value->aux_int & XI_VEC_SHAPE_UNZIP) != 0)
-                return (neon || x86) && width == 16 && native_type == XR_NATIVE_U32;
+                return (neon || x86 || vsx) && width == 16 && native_type == XR_NATIVE_U32;
+            if (vsx)
+                return width == 16;
             if (neon)
                 return width == 16;
             if (!x86)
@@ -3973,7 +3984,7 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
             return native_type != XR_NATIVE_U8 || avx2;
         case XI_VEC_WIDEN_MUL:
             if ((value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0)
-                return (neon || x86) && native_type == XR_NATIVE_U64 && lanes == 2;
+                return (neon || x86 || vsx) && native_type == XR_NATIVE_U64 && lanes == 2;
             return native_type == XR_NATIVE_U64 && (lanes == 2 || (lanes == 4 && avx2));
         default:
             return false;

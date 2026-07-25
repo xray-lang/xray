@@ -225,6 +225,13 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
             return set_error(errbuf, errbuf_len, "AOT SSE2 vector plan lacks target evidence");
         return true;
     }
+    if ((bundle->target_simd_features & XAOT_SIMD_FEATURE_VSX) != 0 && width == 16) {
+        if ((rep->vector_native_type == XR_NATIVE_U8 && strcmp(rep->c_type, "xr_v16u8") == 0) ||
+            (rep->vector_native_type == XR_NATIVE_U32 && strcmp(rep->c_type, "xr_v4u32") == 0) ||
+            (rep->vector_native_type == XR_NATIVE_U64 && strcmp(rep->c_type, "xr_v2u64") == 0))
+            return true;
+        return set_error(errbuf, errbuf_len, "AOT VSX vector plan has invalid native C type");
+    }
     if ((bundle->target_simd_features & XAOT_SIMD_FEATURE_NEON) == 0 || width != 16)
         return set_error(errbuf, errbuf_len, "AOT NEON vector plan lacks target evidence");
     if ((rep->vector_native_type == XR_NATIVE_U8 && strcmp(rep->c_type, "uint8x16_t") == 0) ||

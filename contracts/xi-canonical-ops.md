@@ -1,6 +1,7 @@
 # Xi canonical operation contract
 
-Status: re-frozen after the xxHash runtime-SIMD dispatch work.
+Status: re-frozen after the xxHash work made raw pointer-backed slices an
+explicit caller-proven unsafe view rather than a backend fallible operation.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, and operand ownership are generated from it.
@@ -20,8 +21,12 @@ Status: re-frozen after the xxHash runtime-SIMD dispatch work.
    `xi.target.simd.runtime-selected`; the operation reports compilation mode,
    while `xi.target.simd.bytes` remains the runtime CPU/OS width query in a
    dispatch build.
+8. `xi.slice.from_ptr` requires explicit unsafe pointer-layout and owner-lifetime
+   assumptions. Once the analyzer accepts that boundary, the operation is
+   non-throwing in VM and AOT; a backend must not recreate a pending-error or
+   bounds check that contradicts the caller-proven contract.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 1d645c14a6e99c1db7d515481ece3e12438537aa198dd2569858c26ed4ec3d2e
+anchor-sha256: xisa/xi/ops.def eb2503ed38e863cfddaf6b3c9af3691b641cc4ce1e8c78d4d9636764041459eb
 anchor-sha256: xisa/xi/lowering.def 3f497bdba9f651908ba7d7e5d500eb82806b0861244638a282b737eb6893fdf9

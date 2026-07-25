@@ -2738,6 +2738,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Return value unchanged while creating a best-effort native compiler scheduling barrier",
     },
     {
+        .name = "compilerOpaque",
+        .signature = "(value: u64): u64",
+        .summary = "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier",
+    },
+    {
         .name = "copy",
         .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
@@ -2810,7 +2815,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "slice",
         .signature = "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>",
-        .summary = "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner",
+        .summary = "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked",
     },
     {
         .name = "store",
@@ -2830,7 +2835,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "withSliceMut",
         .signature = "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any",
-        .summary = "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback",
+        .summary = "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked",
     },
 };
 
@@ -8149,7 +8154,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# mem module\n"
             "\n"
-            "Raw-memory capabilities for explicit low-level work. `unsafe { mem.slice<T>(ptr, count, owner) }` creates a readonly zero-copy Slice over a canonical target layout: the caller proves pointer validity, non-negative count, alignment, and range, while `owner` roots the borrow lifetime. `unsafe { mem.withSliceMut<T>(...) }` carries the same raw-memory proof obligation and scopes writable access to a no-suspend callback. `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
+            "Raw-memory capabilities for explicit low-level work. `mem.slice<T>(ptr, count, owner)` creates a readonly zero-copy Slice over a canonical target layout, while `mem.withSliceMut<T>` scopes writable access to a callback; `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
             "\n"
             "Usage: `import mem` then call `mem.function()`.\n"
             "\n"
@@ -8172,6 +8177,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
             "| `mem.compilerGuard` | `(value: u64): u64` | Return value unchanged while creating a best-effort native compiler scheduling barrier |\n"
+            "| `mem.compilerOpaque` | `(value: u64): u64` | Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
@@ -8186,11 +8192,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner |\n"
+            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
             "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback |\n"
+            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -8532,8 +8538,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "### Loading and storing\n"
             "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n"
             "\n"
+            "### Target lowering\n"
+            "Native 128-bit lowering is available for AArch64 NEON, x86 SSE2/AVX2, and PowerPC64 VSX. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan.\n"
+            "\n"
             "### Operations\n"
-            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range.\n"
+            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: byte zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
             "\n"
             "### Example\n"
             "```xray\n"
