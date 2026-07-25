@@ -2563,19 +2563,11 @@ vmcase(OP_SLICE_FROM_PTR) {
     uint16_t alignment = (uint16_t) (alignment_flags & 0x7fffu);
     uint64_t layout_key = (uint64_t) XR_TO_INT(R(c + 6));
     XrAggregateLayout *layout = xr_vm_struct_layout_lookup_stable_key(&isolate->vm, layout_key);
-    if (count < 0)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "mem.slice<T>() count must be non-negative");
     if (elem_size == 0 || alignment == 0 || elem_type >= XR_ELEM_COUNT)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "mem.slice<T>() has invalid static layout evidence");
-    if (count > 0 && address == 0)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "mem.slice<T>() requires a non-null pointer for non-zero count");
-    if (count > 0 && address % alignment != 0)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "mem.slice<T>() pointer does not satisfy T alignment");
-    if (count > 0 && (uint64_t) count > UINTPTR_MAX / (uint64_t) elem_size)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "mem.slice<T>() byte range overflows address space");
+    /* Source-level mem.slice is an unsafe, caller-proven raw view. Keep only
+     * compiler/bytecode layout integrity checks here; dynamic pointer, count,
+     * alignment, and range validation would contradict that contract. */
     XrSliceView *slice = VM_SLICE_SLOT(R(c + 1));
     slice->data = (void *) address;
     slice->length = count;

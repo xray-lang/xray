@@ -2873,7 +2873,7 @@ module mem {
 
   fn slice {
     signature: "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>"
-    doc: "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner"
+    doc: "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked"
     vm: "mem_slice_intrinsic"
     argc: 3
     arg_spec: "vvv"
@@ -3039,7 +3039,7 @@ module mem {
 
   fn withSliceMut {
     signature: "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any"
-    doc: "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback"
+    doc: "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked"
     vm: "mem_with_slice_mut_intrinsic"
     argc: 4
     arg_spec: "vvvv"

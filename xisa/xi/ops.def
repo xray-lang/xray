@@ -844,7 +844,7 @@
   :arity 3
   :result-ownership borrowed
   :own-use borrow
-  :effects (may-throw memory-read)
+  :effects (memory-read)
   :requires (unsafe-assumption pointer-layout owner-lifetime)
   :observable (slice-from-pointer)
   :targets (vm-bytecode aot-c aot-verify))

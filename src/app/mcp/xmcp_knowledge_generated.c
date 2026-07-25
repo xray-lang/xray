@@ -8149,7 +8149,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# mem module\n"
             "\n"
-            "Raw-memory capabilities for explicit low-level work. `mem.slice<T>(ptr, count, owner)` creates a readonly zero-copy Slice over a canonical target layout, while `mem.withSliceMut<T>` scopes writable access to a callback; `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
+            "Raw-memory capabilities for explicit low-level work. `unsafe { mem.slice<T>(ptr, count, owner) }` creates a readonly zero-copy Slice over a canonical target layout: the caller proves pointer validity, non-negative count, alignment, and range, while `owner` roots the borrow lifetime. `unsafe { mem.withSliceMut<T>(...) }` carries the same raw-memory proof obligation and scopes writable access to a no-suspend callback. `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
             "\n"
             "Usage: `import mem` then call `mem.function()`.\n"
             "\n"

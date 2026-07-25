@@ -376,8 +376,8 @@ typedef enum {
     XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
     XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
     XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
-    XI_SLICE_REINTERPRET,  /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
-    XI_SLICE_FROM_PTR,     /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; unsafe boundary */
+    XI_SLICE_REINTERPRET, /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_FROM_PTR, /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; caller-proven unsafe view */
     XI_BUFFER_MATERIALIZE, /* args[0]=moved Buffer; exact native-output proof is analyzer-owned */
     XI_BYTE_ARRAY_COPY_WITHIN,
     XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,

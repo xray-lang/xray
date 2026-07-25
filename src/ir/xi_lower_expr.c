@@ -1584,7 +1584,10 @@ static XiValue *lower_mem_slice_call(XiLower *l, AstNode *node, CallExprNode *ca
     v->args[2] = owner;
     v->aux_int = layout_aux;
     v->aux = xi_lower_type_struct_layout(l, elem_type);
-    v->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
+    /* mem.slice is already an unsafe boundary. The caller proves non-negative
+     * count, non-null/aligned storage for a non-empty view, and address-range
+     * validity; owner remains explicit lifetime evidence. */
+    v->flags = XI_FLAG_READS_MEM;
     v->line = (uint32_t) node->line;
     v->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
     v->view_evidence.source_operand = 2;
@@ -1661,7 +1664,7 @@ static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExp
     slice->args[2] = guard;
     slice->aux_int = layout_aux | XI_SLICE_FROM_PTR_AUX_MUTABLE;
     slice->aux = xi_lower_type_struct_layout(l, elem_type);
-    slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    slice->flags = XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     slice->line = (uint32_t) node->line;
     slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
     slice->view_evidence.source_operand = 2;

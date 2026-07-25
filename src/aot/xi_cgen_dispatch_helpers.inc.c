@@ -5579,16 +5579,10 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     fprintf(out, "; int64_t _n = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out,
-            "; if (XR_UNLIKELY(_n < 0)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-            "\"mem.slice<T>() count must be non-negative\"); "
-            "if (XR_UNLIKELY(_n > 0 && !_p)) xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-            "\"mem.slice<T>() requires a non-null pointer for non-zero count\"); "
-            "if (XR_UNLIKELY(_n > 0 && ((uintptr_t)_p %% UINT16_C(%u)) != 0)) "
-            "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-            "\"mem.slice<T>() pointer does not satisfy T alignment\"); "
-            "if (XR_UNLIKELY(_n > 0 && (uint64_t)_n > UINTPTR_MAX / UINT16_C(%u))) "
-            "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-            "\"mem.slice<T>() byte range overflows address space\"); "
+            "; /* caller-proven mem.slice raw view */ "
+            "XR_ASSUME(_n >= 0 && (_n == 0 || (_p != NULL && "
+            "((uintptr_t)_p %% UINT16_C(%u)) == 0 && "
+            "(uint64_t)_n <= UINTPTR_MAX / UINT16_C(%u)))); "
             "(xr_span_t){.data = (void *)_p, .length = _n}; })",
             (unsigned) alignment, (unsigned) elem_size);
 }

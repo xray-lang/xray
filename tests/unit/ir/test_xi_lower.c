@@ -787,6 +787,29 @@ TEST(unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access) {
     xi_func_free(f);
 }
 
+TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
+    XiFunc *f = lower_source("import mem\n"
+                             "fn rawLength(source: Slice<byte>) -> int {\n"
+                             "  var view = unsafe {\n"
+                             "    mem.slice<byte>(source.ptr(), len(source), source)\n"
+                             "  }\n"
+                             "  return len(view)\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *slice = func_tree_find_op(f, XI_SLICE_FROM_PTR);
+    assert(slice && "mem.slice must lower to the canonical raw-view op");
+    assert((slice->flags & XI_FLAG_MAY_THROW) == 0 &&
+           "unsafe mem.slice is caller-proven and must not contaminate error effects");
+    assert((slice->flags & XI_FLAG_READS_MEM) != 0 &&
+           "mem.slice must retain its raw-memory aliasing effect");
+    assert(slice->view_evidence.complete && slice->view_evidence.source_operand == 2 &&
+           "mem.slice must retain owner-rooted borrow evidence");
+    assert(!func_tree_find_op(f, XI_ERR_CHECK) &&
+           "caller-proven mem.slice must not generate a pending-error poll");
+    xi_func_free(f);
+}
+
 TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
     XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
                              "  var before = counter.load(Ordering.Relaxed)\n"
@@ -2975,6 +2998,8 @@ int main(void) {
     run_member_access();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
+    run_unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access();
+    run_mem_slice_is_caller_proven_nothrow_raw_view();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
