@@ -592,7 +592,7 @@ typedef enum {
     XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
     XI_RELEASE,       /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
     XI_SOURCE_MOVE,   /* explicit source consume; requires sealed FinalMoveProof evidence */
-    XI_OWNER_FORWARD, /* ARC ownership-edge forwarding; does not invalidate a source binding */
+    XI_OWNER_FORWARD, /* ARC owner transfer to a new SSA value; no source-binding invalidation */
 
     /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
      * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.

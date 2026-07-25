@@ -2188,8 +2188,8 @@
 (define-xi-op xi.owner.forward
   :class pure
   :arity 1
-  :result-ownership none
-  :own-use pass
+  :result-ownership owned
+  :own-use consume
   :effects ()
   :requires ()
   :observable ()

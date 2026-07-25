@@ -271,14 +271,15 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
  * and dup the escaping copy (touching freed memory): a use-after-free for the
  * textbook `var b = a; return b`.
  *
- * The fix is to make such a copy an explicit MOVE. XI_OWNER_FORWARD consumes its source
- * (own-use = consume) and produces an untracked alias (result-ownership =
- * none): the existing owned/borrow machinery then transfers the source's
- * reference through the move (dup'ing it first only when the source is still
- * live afterwards) and never inserts a bogus release/retain on the escaping
- * alias. This is the Perceus copy→move decision, localized to copies whose
- * result is actually consumed. Copies whose result is only borrowed stay
- * copies. Run before borrow-signature precompute so signatures see the move. */
+ * The fix is to make such a copy an explicit MOVE. XI_OWNER_FORWARD consumes
+ * its source and produces a new tracked owner: the existing owned/borrow
+ * machinery transfers the source's reference through the move (dup'ing it
+ * first only when the source is still live afterwards), then owns every later
+ * use of the forwarded SSA value. Tracking the result is essential when a
+ * local forwarding edge feeds several branch or loop consumes. This is the
+ * Perceus copy→move decision, localized to copies whose result is actually
+ * consumed. Copies whose result is only borrowed stay copies. Run before
+ * borrow-signature precompute so signatures see the move. */
 
 /* Does `v` have at least one consuming use anywhere in `f` (an owned-store /
  * return / forward / phi / consuming call argument)? */
@@ -962,13 +963,13 @@ static void insert_drop_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue 
  *     paths that never ran the definition. */
 
 typedef struct {
-    uint8_t has_use;          /* target is used by a value in this block */
-    uint8_t live_in;          /* target live at block entry */
-    uint8_t live_out;         /* target live at block exit */
-    uint8_t use_at_end;       /* last use is the block terminator (control) */
-    uint8_t released_by_move; /* a consuming MOVE releases the owner here, so
-                               * its block-local death needs no drop */
-    uint32_t last_use;        /* index in blk->values of the last use */
+    uint8_t has_use;           /* target is used by a value in this block */
+    uint8_t live_in;           /* target live at block entry */
+    uint8_t live_out;          /* target live at block exit */
+    uint8_t use_at_end;        /* last use is the block terminator (control) */
+    uint8_t moved_in_block;    /* a consuming MOVE transfers the owner in this block */
+    uint8_t moved_on_phi_edge; /* a phi MOVE transfers it on one or more outgoing edges */
+    uint32_t last_use;         /* index in blk->values of the last use */
 } ArcLive;
 
 /* Insert a XI_RELEASE(target) as the first instruction of `blk`. Needed for
@@ -1181,6 +1182,22 @@ static void arc_seed_uses(XiFunc *f, XiValue **tracked, uint32_t ntracked, ArcLi
     }
 }
 
+/* A phi consumes its incoming owner on the predecessor edge. Keep this query
+ * independent of liveness bookkeeping so release placement can fail closed if
+ * either representation drifts. */
+static bool arc_edge_forwards_target_to_phi(const XiBlock *pred, const XiBlock *succ,
+                                            const XiValue *target) {
+    if (!pred || !succ || !target)
+        return false;
+    for (const XiPhi *phi = succ->phis; phi; phi = phi->next) {
+        for (uint16_t a = 0; a < phi->value.nargs && a < succ->npreds; a++) {
+            if (succ->preds[a] == pred && phi->value.args[a] == target)
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Place releases on the live→dead frontier for `target`. Returns true if a
  * CFG edge was split (caller must invalidate analyses). */
 static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *live,
@@ -1203,9 +1220,37 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
             continue;
 
         if (!li->live_out) {
-            /* A consuming MOVE in this block already released the owner (a move
-             * is the last use on its path), so a death-drop would double-free. */
-            if (li->released_by_move)
+            /* A regular consuming MOVE executes before the terminator and
+             * transfers the owner on every outgoing path. */
+            if (li->moved_in_block)
+                continue;
+            /* A phi MOVE transfers only on its particular outgoing edge. The
+             * owner must still be dropped on sibling edges which neither
+             * transfer nor keep it live. */
+            bool forwarded_to_phi = false;
+            for (int s = 0; s < 2 && !forwarded_to_phi; s++) {
+                forwarded_to_phi = arc_edge_forwards_target_to_phi(blk, blk->succs[s], target);
+            }
+            if (li->moved_on_phi_edge) {
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = blk->succs[s];
+                    if (!succ || arc_edge_forwards_target_to_phi(blk, succ, target))
+                        continue;
+                    if (succ->npreds == 1) {
+                        insert_drop_at_head(f, succ, target);
+                    } else {
+                        XiBlock *mid = arc_split_edge(f, blk, succ);
+                        if (mid) {
+                            insert_drop_after(f, mid, NULL, target);
+                            split_any = true;
+                        }
+                    }
+                }
+                continue;
+            }
+            /* A phi transfer should have been classified as an edge MOVE when
+             * live_out is false. Fail closed rather than release before it. */
+            if (forwarded_to_phi)
                 continue;
             /* Death in block: release after the last use (after the def
              * itself when the block never uses the value). */
@@ -1228,6 +1273,8 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
         for (int s = 0; s < 2; s++) {
             XiBlock *sb = blk->succs[s];
             if (!sb || !pos_by_id[sb->id])
+                continue;
+            if (arc_edge_forwards_target_to_phi(blk, sb, target))
                 continue;
             if (live[pos_by_id[sb->id] - 1].live_in)
                 continue;
@@ -1356,9 +1403,12 @@ static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
      * value is only still live afterwards if a successor uses it. */
     if (idx >= 0xFFFE)
         return li->live_out;
-    /* Regular consume at index idx: live after iff a later use exists in this
-     * block, or the value escapes into a successor. */
-    return (li->has_use && li->last_use > idx) || li->live_out;
+    /* Regular consume at index idx: live after iff a later ordinary use exists
+     * in this block, the value is consumed by a phi/return at block end, or it
+     * escapes into a successor. Phi inputs are edge uses recorded with
+     * use_at_end rather than a blk->values[] index, so omitting that flag makes
+     * `consume(v); phi [this_block:v]` wrongly move v into the first consume. */
+    return li->use_at_end || (li->has_use && li->last_use > idx) || li->live_out;
 }
 
 /* Process one tracked value: insert dup before every consuming use except
@@ -1374,19 +1424,53 @@ static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
  *                 keeps). EVERY consuming use dups first; never dropped.
  *   OWN_CALL_RESULT — a call result whose ownership we cannot statically
  *                 prove: it may be a fresh (+1) reference or an alias of an
- *                 argument (e.g. arr.push(x) returns self). We dup before
- *                 every consuming use EXCEPT the last (so a value consumed
- *                 more than once is not freed out from under a later use) but
- *                 we never insert an unconsumed drop (dropping an aliased
- *                 borrow would be a use-after-free). Adding dups only raises
- *                 the count, so this is sound for both fresh and aliased
- *                 returns; it can leak a discarded fresh return (safe).
- *                 A future per-callee return-ownership summary refines this. */
+ *                 argument (e.g. arr.push(x) returns self). A consuming use
+ *                 dups first whenever the result remains live afterwards,
+ *                 including through a borrow in a successor. We never insert
+ *                 an unconsumed drop (dropping an aliased borrow would be a
+ *                 use-after-free). This can leak a discarded fresh return,
+ *                 but never releases an alias owned elsewhere. A future
+ *                 per-callee return-ownership summary refines this. */
 typedef enum {
     OWN_OWNED = 0,
     OWN_BORROWED,
     OWN_CALL_RESULT,
 } XiArcOwnMode;
+
+static void insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
+    if (!site->user || site->user->op == XI_PHI) {
+        XiValue *last = phi_dup_anchor(site->blk);
+        insert_dup_after(f, site->blk, last, target);
+        return;
+    }
+    insert_dup_before(f, site->blk, site->user, target);
+}
+
+static void process_call_result_consumes(XiFunc *f, XiValue *target, const ConsumeSiteVec *sites) {
+    /* Alias-uncertain call result: a static "all but last consume" rule is
+     * insufficient because the last consume can precede a borrow on one
+     * successor. That exact shape occurs when a local owner-forward feeds a
+     * phi on one branch while the original call result is sliced on the
+     * sibling branch. Use CFG liveness to keep that original reference valid.
+     * Never place a death drop here: an unconsumed result may still be a
+     * borrowed alias owned by an argument. */
+    ArcLive *live = NULL;
+    uint32_t *pos_by_id = NULL;
+    if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
+        /* OOM: retain before every consume. This may leak a fresh result, but
+         * count raising is the only fail-closed choice when aliasing and
+         * liveness are both unknown. */
+        for (uint32_t i = 0; i < sites->count; i++)
+            insert_dup_at_consume_site(f, target, &sites->items[i]);
+        return;
+    }
+    for (uint32_t i = 0; i < sites->count; i++) {
+        if (consume_is_live_after(&sites->items[i], live, pos_by_id))
+            insert_dup_at_consume_site(f, target, &sites->items[i]);
+    }
+    xr_free(pos_by_id);
+    xr_free(live);
+}
 
 static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     ConsumeSiteVec sites = {0};
@@ -1410,36 +1494,14 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     if (mode == OWN_BORROWED) {
         /* Borrowed: the function owns no reference, so every consuming use
          * must dup first; nothing is moved out and nothing is dropped. */
-        for (uint32_t i = 0; i < sites.count; i++) {
-            if (sites.items[i].user == NULL || sites.items[i].user->op == XI_PHI) {
-                /* Return terminator, or a phi edge consume (site->blk is the
-                 * predecessor): dup at the end of that block. */
-                XiValue *last = phi_dup_anchor(sites.items[i].blk);
-                insert_dup_after(f, sites.items[i].blk, last, target);
-                continue;
-            }
-            insert_dup_before(f, sites.items[i].blk, sites.items[i].user, target);
-        }
+        for (uint32_t i = 0; i < sites.count; i++)
+            insert_dup_at_consume_site(f, target, &sites.items[i]);
         xr_free(sites.items);
         return false;
     }
 
     if (mode == OWN_CALL_RESULT) {
-        /* Alias-uncertain call result: dup before every consuming use except
-         * the last (program order), never drop. We cannot prove the result is
-         * a fresh +1 vs an alias of an argument, so the conservative
-         * count-raising placement stays — turning a non-live-after consume into
-         * a move could transfer the only reference of an aliased argument. */
-        for (uint32_t i = 0; i + 1 < sites.count; i++) {
-            if (sites.items[i].user == NULL)
-                continue; /* return terminator can only be the single last site */
-            if (sites.items[i].user->op == XI_PHI) {
-                XiValue *last = phi_dup_anchor(sites.items[i].blk);
-                insert_dup_after(f, sites.items[i].blk, last, target);
-                continue;
-            }
-            insert_dup_before(f, sites.items[i].blk, sites.items[i].user, target);
-        }
+        process_call_result_consumes(f, target, &sites);
         xr_free(sites.items);
         return false;
     }
@@ -1472,10 +1534,10 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         return false;
     }
 
-    /* Decide move vs dup per site and mark blocks where a MOVE releases the
-     * owner (the death-drop pass skips those). Record decisions before any
-     * insertion: the drop pass indexes blocks by their pre-dup positions, and
-     * dups are pointer-anchored so they are inserted afterwards. */
+    /* Decide move vs dup per site and record whether the MOVE happens in the
+     * block or on a particular phi edge. Record decisions before insertion:
+     * the drop pass indexes blocks by their pre-dup positions, and dups are
+     * pointer-anchored so they are inserted afterwards. */
     bool *moves = (bool *) xr_calloc(sites.count, sizeof(bool));
     if (!moves) {
         xr_free(pos_by_id);
@@ -1486,8 +1548,13 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     }
     for (uint32_t i = 0; i < sites.count; i++) {
         moves[i] = !consume_is_live_after(&sites.items[i], live, pos_by_id);
-        if (moves[i] && sites.items[i].blk && pos_by_id[sites.items[i].blk->id])
-            live[pos_by_id[sites.items[i].blk->id] - 1].released_by_move = 1;
+        if (moves[i] && sites.items[i].blk && pos_by_id[sites.items[i].blk->id]) {
+            ArcLive *site_live = &live[pos_by_id[sites.items[i].blk->id] - 1];
+            if (sites.items[i].user && sites.items[i].user->op == XI_PHI)
+                site_live->moved_on_phi_edge = 1;
+            else
+                site_live->moved_in_block = 1;
+        }
     }
 
     /* Place death-drops where the owner dies without a move (a borrow-only
@@ -1691,6 +1758,17 @@ static void arc_insert_rec(XiFunc *f) {
             if (v && v->op != XI_PARAM && tracks_rc(v) && !xi_value_vec_push(&targets, v)) {
                 xr_free(targets.items);
                 XR_CHECK(false, "xi_arc: out of memory collecting ARC targets");
+                return;
+            }
+        }
+        /* Phi results are owning SSA values too. They live on blk->phis rather
+         * than blk->values, so omitting them transfers ownership into a value
+         * ARC never tracks; a second consume after the join then uses a freed
+         * object. */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (tracks_rc(&phi->value) && !xi_value_vec_push(&targets, &phi->value)) {
+                xr_free(targets.items);
+                XR_CHECK(false, "xi_arc: out of memory collecting ARC phi targets");
                 return;
             }
         }

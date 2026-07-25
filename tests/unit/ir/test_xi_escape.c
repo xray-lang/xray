@@ -16,6 +16,8 @@
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_arc_verify.h"
+#include "../../../src/ir/xi_effect.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/base/xchecks.h"
 #include "../../../src/base/xmalloc.h"
@@ -511,6 +513,182 @@ static void test_arc_many_consume_sites(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: owner-forward remains an ARC-tracked owner ============ */
+
+static void test_arc_owner_forward_tracks_repeated_consumes(void) {
+    XiFunc *f = make_func("arc_owner_forward_repeated_consumes", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *source = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *forward = xi_value_new(f, b0, XI_COPY, &t_array, 1);
+    forward->args[0] = source;
+
+    XiValue *first = xi_value_new(f, b0, XI_SET_SHARED, &t_any, 1);
+    first->args[0] = forward;
+    first->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *second = xi_value_new(f, b0, XI_SET_SHARED, &t_any, 1);
+    second->args[0] = forward;
+    second->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *zero = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, zero);
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(forward->op, XI_OWNER_FORWARD, "escaping reference copy should become owner-forward");
+    ASSERT_EQ(xi_op_result_ownership(XI_OWNER_FORWARD), XI_GEN_RESULT_OWNERSHIP_OWNED,
+              "owner-forward result must remain an ARC-tracked owner");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(forward, 0), true,
+              "owner-forward must consume its source owner");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "two sequential consumes of a forwarded owner need one retain");
+
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "tracked owner-forward output must satisfy the ARC verifier");
+    xi_func_free(f);
+}
+
+static void test_arc_tracks_owner_forward_through_phi(void) {
+    XiFunc *f = make_func("arc_owner_forward_phi_repeated_consumes", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *join = xi_block_new(f);
+    join->sealed = true;
+
+    XiValue *source = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *forward = xi_value_new(f, entry, XI_COPY, &t_array, 1);
+    forward->args[0] = source;
+    xi_block_set_jump(entry, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    merged->value.args[0] = forward;
+    XiValue *first = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    first->args[0] = &merged->value;
+    first->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *second = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    second->args[0] = &merged->value;
+    second->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *zero = xi_const_int(f, join, 0, &t_int);
+    xi_block_set_return(join, zero);
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(forward->op, XI_OWNER_FORWARD, "phi input copy should become owner-forward");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "two consumes after an owning phi need one retain");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true, "owner-forward must stay live across its phi transfer");
+    xi_func_free(f);
+}
+
+static void test_arc_phi_move_drops_owner_on_sibling_edge(void) {
+    XiFunc *f = make_func("arc_phi_move_sibling_edge_drop", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *join = xi_block_new(f);
+    XiBlock *dead = xi_block_new(f);
+    join->sealed = true;
+    dead->sealed = true;
+
+    XiValue *source = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *cond = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, cond, join, dead);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    merged->value.args[0] = source;
+    XiValue *consume = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = &merged->value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 1, &t_int));
+    xi_block_set_return(dead, xi_const_int(f, dead, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0,
+              "single phi consume should move the incoming owner without retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1,
+              "the sibling edge which does not execute the phi must drop the owner");
+    ASSERT_EQ(dead->values[0]->op, XI_RELEASE,
+              "the sibling-edge drop must execute only in the non-phi successor");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "edge-specific phi transfer and sibling drop must verify");
+    xi_func_free(f);
+}
+
+static void test_arc_call_result_forward_retains_across_sibling_borrow(void) {
+    XiFunc *f = make_func("arc_call_result_forward_sibling_borrow", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *join = xi_block_new(f);
+    XiBlock *borrow = xi_block_new(f);
+    join->sealed = true;
+    borrow->sealed = true;
+
+    XiValue *source = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *forward = xi_value_new(f, entry, XI_COPY, &t_array, 1);
+    forward->args[0] = source;
+    XiValue *cond = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, cond, join, borrow);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    merged->value.args[0] = forward;
+    XiValue *consume = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = &merged->value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 1, &t_int));
+
+    XiValue *length = xi_value_new(f, borrow, XI_LEN, &t_int, 1);
+    length->args[0] = source;
+    xi_block_set_return(borrow, xi_const_int(f, borrow, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(forward->op, XI_OWNER_FORWARD,
+              "phi-bound call-result copy should become owner-forward");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "call result must retain before a forward when a sibling still borrows source");
+    ASSERT_EQ(borrow->values[0]->op, XI_RELEASE,
+              "sibling path must release only the forwarded reference before borrowing source");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "call-result forward with a sibling borrow must satisfy ARC verification");
+    xi_func_free(f);
+}
+
+static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
+    XiFunc *f = make_func("arc_call_result_same_block_phi_consume", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *join = xi_block_new(f);
+    join->sealed = true;
+
+    XiValue *source = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &t_any, 1);
+    store->args[0] = source;
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_jump(entry, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    merged->value.args[0] = source;
+    XiValue *consume = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = &merged->value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ordinary consume before a same-block phi edge consume needs one retain");
+    ASSERT_EQ(entry->values[1]->op, XI_RETAIN,
+              "retain must execute immediately before the first consuming store");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "same-block consume followed by phi-edge consume must verify");
+    xi_func_free(f);
+}
+
 /* ========== Test: borrowed Slice lifetime flows through a phi ========== */
 
 static void test_arc_span_borrow_flows_through_phi(void) {
@@ -847,6 +1025,11 @@ int main(void) {
     test_arc_elim_keeps_borrowed_single_consumer_retain();
     test_arc_elim_keeps_retain_before_sole_borrowing_alias();
     test_arc_many_consume_sites();
+    test_arc_owner_forward_tracks_repeated_consumes();
+    test_arc_tracks_owner_forward_through_phi();
+    test_arc_phi_move_drops_owner_on_sibling_edge();
+    test_arc_call_result_forward_retains_across_sibling_borrow();
+    test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_span_borrow_flows_through_phi();
     test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();

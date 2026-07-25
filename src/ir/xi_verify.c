@@ -1742,13 +1742,11 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            /* XI_OWNER_FORWARD is an ownership-edge marker, not an SSA invalidation:
-             * a preceding RETAIN, a borrowed call result, or a branch-local
-             * consume can legitimately leave the same SSA carrier usable.
-             * The old same-block "no later use" heuristic rejected valid ARC
-             * output while missing cross-block errors.  Verify only the local
-             * executable contract here; the ARC ownership proof owns the
-             * global consume accounting. */
+            /* XI_OWNER_FORWARD transfers an owning reference to a new SSA
+             * value without source-level binding invalidation. A preceding
+             * RETAIN or branch-local consume can legitimately leave the source
+             * SSA carrier usable. Verify only the local executable contract
+             * here; the ARC ownership proof owns the global consume accounting. */
             if (v->op == XI_OWNER_FORWARD && v->nargs >= 1 && v->args[0]) {
                 XiValue *moved = v->args[0];
                 if (!v->type || !moved->type ||

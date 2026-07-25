@@ -33,5 +33,5 @@ semantic Xi shape rather than an overflowing packed-lane encoding.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def eb2503ed38e863cfddaf6b3c9af3691b641cc4ce1e8c78d4d9636764041459eb
+anchor-sha256: xisa/xi/ops.def d293f2048aadfdf665eec9b09b02c539122d9189a2f41ebd19846525b4bc18a1
 anchor-sha256: xisa/xi/lowering.def 3f497bdba9f651908ba7d7e5d500eb82806b0861244638a282b737eb6893fdf9

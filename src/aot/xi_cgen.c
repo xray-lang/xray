@@ -1695,6 +1695,8 @@ typedef struct {
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f);
 static bool cg_coro_value_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+static bool cg_coro_value_needs_frame_arc_release(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v);
 static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call,
                                                          const char **out_prefix);
@@ -6619,6 +6621,42 @@ static void emit_phi_tmp_ref(FILE *out, const XiBlock *target, const XiPhi *phi,
             phi ? phi->value.id : 0u);
 }
 
+/* ARC promotes a phi input with RETAINs at the predecessor tail when the
+ * original owner remains live. If there are fewer promotions than consuming
+ * phi inputs, one input transfers the frame-held owner and that source slot
+ * must be cleared after the parallel copy. Otherwise coroutine teardown would
+ * release the moved reference a second time. */
+static bool cg_phi_edge_moves_frame_owner(XiCgenCtx *ctx, const XiFunc *f, const XiBlock *target,
+                                          uint16_t pred_idx, const XiValue *incoming) {
+    if (!ctx || !f || !target || !incoming || pred_idx >= target->npreds ||
+        !cg_func_needs_aot_coro_ctx(ctx, f) || !cg_coro_value_needs_frame(ctx, f, incoming) ||
+        !cg_coro_value_needs_frame_arc_release(ctx, f, incoming))
+        return false;
+
+    const XiBlock *pred = target->preds[pred_idx];
+    if (!pred)
+        return false;
+
+    uint32_t consumes = 0;
+    for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
+        if (pred_idx < phi->value.nargs && phi->value.args[pred_idx] == incoming)
+            consumes++;
+    }
+    if (consumes == 0)
+        return false;
+
+    uint32_t retains = 0;
+    uint32_t vi = pred->nvalues;
+    while (vi > 0 && pred->values[vi - 1] && pred->values[vi - 1]->op == XI_RELEASE)
+        vi--;
+    while (vi > 0 && pred->values[vi - 1] && pred->values[vi - 1]->op == XI_RETAIN) {
+        const XiValue *retain = pred->values[--vi];
+        if (retain->nargs >= 1 && retain->args[0] == incoming)
+            retains++;
+    }
+    return consumes > retains;
+}
+
 static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *target,
                             uint16_t pred_idx) {
     if (!target)
@@ -6652,6 +6690,20 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_phi_tmp_ref(out, target, phi, pred_idx);
         fprintf(out, ";\n");
         emit_debug_source_var_sync(ctx, out, f, &phi->value);
+    }
+
+    /* Parallel copies have captured every incoming value, so transferred
+     * coroutine-frame owners can now be invalidated without clobbering another
+     * phi assignment on the same edge. */
+    for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
+        if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
+            continue;
+        const XiValue *incoming = phi->value.args[pred_idx];
+        if (!cg_phi_edge_moves_frame_owner(ctx, f, target, pred_idx, incoming))
+            continue;
+        fprintf(out, "    ");
+        emit_vref(out, incoming);
+        fprintf(out, " = %s;\n", cg_rep(incoming) == XR_REP_PTR ? "NULL" : "XR_NULL_VAL");
     }
 }
 
