@@ -2845,6 +2845,34 @@ static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg
     return false;
 }
 
+/* Array/fixed-array pointer projection is a compiler-lowered leaf, not a
+ * native call. The sealed receiver registry owns both source spelling and
+ * lowering identity; consume it here so whole-program effects agree with Xi's
+ * direct ARRAY_DATA_PTR lowering. */
+static bool body_call_is_array_data_ptr_leaf(XgBodyCollect *bc, const AstNode *node) {
+    const CallExprNode *call;
+    const MemberAccessNode *member;
+    XrType *receiver;
+    const XaBuiltinReceiverMethodSpec *ptr_spec;
+    const XaBuiltinReceiverMethodSpec *mut_ptr_spec;
+
+    if (!bc || !bc->producer || !bc->producer->analyzer || !node || node->type != AST_CALL_EXPR)
+        return false;
+    call = &node->as.call_expr;
+    if (call->arg_count != 0 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    member = &call->callee->as.member_access;
+    if (!member->object || !member->name)
+        return false;
+    receiver = xa_analyzer_get_node_type(bc->producer->analyzer, member->object);
+    if (!receiver || (receiver->kind != XR_KIND_ARRAY && receiver->kind != XR_KIND_FIXED_ARRAY))
+        return false;
+    ptr_spec = xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_ARRAY_PTR);
+    mut_ptr_spec = xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_ARRAY_MUT_PTR);
+    return (ptr_spec && strcmp(member->name, ptr_spec->source_name) == 0) ||
+           (mut_ptr_spec && strcmp(member->name, mut_ptr_spec->source_name) == 0);
+}
+
 /* Stdlib script modules can call private native primitives as ordinary identifiers.
  * Those declarations are injected into the analyzer scope from core.def and therefore
  * have no AST declaration for the closed-world producer to register.  Preserve their
@@ -8984,6 +9012,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_CALL_EXPR: {
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
+            bool intrinsic_array_data_ptr = body_call_is_array_data_ptr_leaf(bc, node);
             if (body_call_uses_coro_runtime(bc, &node->as.call_expr))
                 bc->capability_bits |= XG_CAP_COROUTINE;
             if (body_call_is_coro_local_set(bc, &node->as.call_expr)) {
@@ -9007,7 +9036,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);
             body_add_sequence_method_evidence(bc, node);
-            if (!intrinsic_sequence_len)
+            if (!intrinsic_sequence_len && !intrinsic_array_data_ptr)
                 collect_callsite(bc, node);
             walk_body_for_calls(bc, node->as.call_expr.callee);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
