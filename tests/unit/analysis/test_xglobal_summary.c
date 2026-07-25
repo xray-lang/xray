@@ -8248,6 +8248,85 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_captures) {
+    setup_parser_session();
+    const char *source = "const ROUND_PRIME: u32 = 2246822519\n"
+                         "fn localRound(value: u32) -> u32 {\n"
+                         "    var acc = value\n"
+                         "    acc += ROUND_PRIME\n"
+                         "    acc = acc.rotateLeft(13)\n"
+                         "    acc++\n"
+                         "    acc--\n"
+                         "    return acc\n"
+                         "}\n"
+                         "fn sliceRead(data: Slice<byte>) -> u32 {\n"
+                         "    return data.load<u32>(0, Endian.LE)\n"
+                         "}\n"
+                         "fn rebindArray(items: Array<int>, other: Array<int>) -> int {\n"
+                         "    var current = items\n"
+                         "    current = other\n"
+                         "    return 0\n"
+                         "}\n"
+                         "fn makeCounter() -> () -> int {\n"
+                         "    var count = 0\n"
+                         "    return fn() -> int { count += 1; return count }\n"
+                         "}\n";
+
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, "<effect-fixture>", ast);
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    const XgBodySummary *local_round = evidence_find_body_by_name(&ev, "localRound");
+    const XgBodySummary *slice_read = evidence_find_body_by_name(&ev, "sliceRead");
+    const XgBodySummary *rebind_array = evidence_find_body_by_name(&ev, "rebindArray");
+    const XgBodySummary *make_counter = evidence_find_body_by_name(&ev, "makeCounter");
+    ASSERT_NOT_NULL(local_round);
+    ASSERT_NOT_NULL(slice_read);
+    ASSERT_NOT_NULL(rebind_array);
+    ASSERT_NOT_NULL(make_counter);
+
+    ASSERT_TRUE((local_round->effect_bits & XG_BODY_MAY_MUTATE) == 0);
+    ASSERT_TRUE((local_round->effect_bits & XG_BODY_MAY_READ_MEM) == 0);
+    ASSERT_TRUE((local_round->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+    ASSERT_TRUE((local_round->escape_bits & XG_BODY_ESCAPE_NATIVE) == 0);
+    ASSERT_TRUE((local_round->capability_bits & XG_CAP_NATIVE) == 0);
+
+    ASSERT_TRUE((slice_read->effect_bits & XG_BODY_MAY_READ_MEM) != 0);
+    ASSERT_TRUE((slice_read->effect_bits & XG_BODY_MAY_MUTATE) == 0);
+    ASSERT_TRUE((slice_read->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+    ASSERT_TRUE((slice_read->escape_bits & XG_BODY_ESCAPE_NATIVE) == 0);
+    ASSERT_TRUE((slice_read->capability_bits & XG_CAP_NATIVE) == 0);
+
+    ASSERT_TRUE((rebind_array->effect_bits & XG_BODY_MAY_MUTATE) != 0);
+
+    ASSERT_TRUE((make_counter->effect_bits & XG_BODY_MAY_MUTATE) == 0);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_MUTATE), 2);
+    ASSERT_EQ_UINT(ev.ncallsites, 2);
+    for (uint32_t i = 0; i < ev.ncallsites; i++)
+        ASSERT_EQ_UINT(ev.callsites[i].kind, XG_CALL_NATIVE);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_call_effect) {
     setup_parser_session();
     const char *source = "fn add(x: int, y: int) -> int {\n"
@@ -17933,7 +18012,9 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     XiBlock init_block;
     XiBlock *init_blocks[1];
     XiValue static_addr;
-    XiValue *init_values[1];
+    XiValue static_addr_second;
+    XiValue *static_addr_second_args[1];
+    XiValue *init_values[2];
     XrType ptr_type = {.kind = XR_KIND_POINTER, .ptr_is_mut = false};
     XiModule module;
     XiModule *modules[1];
@@ -17957,6 +18038,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     memset(&module, 0, sizeof(module));
     memset(&init_block, 0, sizeof(init_block));
     memset(&static_addr, 0, sizeof(static_addr));
+    memset(&static_addr_second, 0, sizeof(static_addr_second));
     memset(constants, 0, sizeof(constants));
     memset(shared, 0, sizeof(shared));
 
@@ -17983,9 +18065,17 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     static_addr.op = XI_STATIC_ADDR;
     static_addr.type = &ptr_type;
     static_addr.aux_int = 0;
-    init_values[0] = &static_addr;
+    static_addr_second.id = 8;
+    static_addr_second.op = XI_COPY;
+    static_addr_second.type = &ptr_type;
+    static_addr_second.nargs = 1;
+    static_addr_second_args[0] = &static_addr;
+    static_addr_second.args = static_addr_second_args;
+    /* Deliberately put the derived pointer before its provenance source. */
+    init_values[0] = &static_addr_second;
+    init_values[1] = &static_addr;
     init_block.values = init_values;
-    init_block.nvalues = 1;
+    init_block.nvalues = 2;
     init_blocks[0] = &init_block;
     init_func.blocks = init_blocks;
     init_func.nblocks = 1;
@@ -18013,12 +18103,14 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     const XaotCapturePlan *shared_capture = xaot_capture_plan_find(&bundle, &child, 1);
     const XaotCapturePlan *local_capture = xaot_capture_plan_find(&bundle, &child, 2);
     const XaotAddressPlan *address = xaot_address_plan_find(&bundle, &static_addr);
+    const XaotAddressPlan *derived_address = xaot_address_plan_find(&bundle, &static_addr_second);
     ASSERT_NOT_NULL(module_const);
     ASSERT_NOT_NULL(shared_state);
     ASSERT_NOT_NULL(module_capture);
     ASSERT_NOT_NULL(shared_capture);
     ASSERT_NOT_NULL(local_capture);
     ASSERT_NOT_NULL(address);
+    ASSERT_NOT_NULL(derived_address);
     ASSERT_EQ_UINT(module_const->domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
     ASSERT_EQ_UINT(module_const->address_identity, XR_ADDRESS_MODULE_STABLE);
@@ -18035,6 +18127,9 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_EQ_UINT(address->provenance.domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(address->provenance.origin, XR_POINTER_ORIGIN_MODULE);
     ASSERT_EQ_UINT(address->provenance.escape, XR_POINTER_ESCAPE_STABLE);
+    ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    init_values[0] = &static_addr;
+    init_values[1] = &static_addr_second;
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     bundle.capture_plans[1].source_domain = XR_STORAGE_EXEC_LOCAL;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
@@ -18300,6 +18395,7 @@ RUN_TEST(global_evidence_producer_names_go_block_body_anonymous);
 RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);
+RUN_TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_captures);
 RUN_TEST(global_evidence_producer_marks_call_effect);
 RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability);
 RUN_TEST(global_evidence_producer_marks_body_escape_bits);

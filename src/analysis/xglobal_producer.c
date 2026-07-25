@@ -173,6 +173,7 @@ typedef struct XgBodyCollect {
     XgLocalName *name_locals;
     uint32_t nname_locals;
     uint32_t name_local_cap;
+    uint32_t inherited_name_local_count;
     uint32_t callsite_start;
     uint32_t callsite_count;
     uint32_t key_access_count;
@@ -2031,11 +2032,65 @@ static bool body_has_symbol_local(XgBodyCollect *bc, const char *name, uint32_t 
     return false;
 }
 
+/* A binding inherited by a nested function is an upvalue, not a function-local
+ * temporary.  Ownership still matters for an owned reference local, though:
+ * rebinding Array/string/class/etc. can execute retain/release traffic. */
+static bool body_has_owned_symbol_local(XgBodyCollect *bc, const char *name, uint32_t symbol_id) {
+    if (!bc || !name)
+        return false;
+    for (uint32_t i = bc->nname_locals; i > bc->inherited_name_local_count; i--) {
+        const XgLocalName *row = &bc->name_locals[i - 1];
+        if (symbol_id != 0 && row->symbol_id != 0) {
+            if (row->symbol_id == symbol_id)
+                return true;
+            continue;
+        }
+        if (row->name && strcmp(row->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* Only analyzer-proven, non-null scalar locals are safe to classify as a pure
+ * register rebind.  Fail closed for unresolved types and every ownership-
+ * carrying representation so function attributes never hide ARC effects. */
+static bool body_owned_local_rebind_is_scalar(XgBodyCollect *bc, const char *name,
+                                              uint32_t symbol_id) {
+    XaSymbol *symbol;
+    XrType *type;
+
+    if (!body_has_owned_symbol_local(bc, name, symbol_id) || symbol_id == 0 || !bc->producer ||
+        !bc->producer->analyzer)
+        return false;
+    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, symbol_id);
+    type = symbol ? xa_analyzer_get_type(bc->producer->analyzer, symbol) : NULL;
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) {
+    XaSymbol *symbol = NULL;
+    XaSymbolLinks *links = NULL;
+
     if (!bc || !var || !var->name)
         return;
     if (body_has_symbol_local(bc, var->name, var->symbol_id))
         return;
+    if (bc->producer && bc->producer->analyzer && var->symbol_id != 0) {
+        symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, var->symbol_id);
+        links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
+        if (symbol && symbol->is_const && !symbol->is_rebindable && links && links->has_ct_value)
+            return;
+    }
     if (producer_lookup_func_row(bc->producer, var->name) ||
         producer_lookup_class(bc->producer, var->name) != XG_NO_ID ||
         producer_lookup_interface(bc->producer, var->name) != XG_NO_ID ||
@@ -2843,6 +2898,72 @@ static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg
          strcmp(name, "typeName") == 0))
         return true;
     return false;
+}
+
+static bool body_builtin_receiver_pod_span_elem(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool body_builtin_receiver_matches(const XrType *receiver, XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver);
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver && XR_TYPE_IS_ARRAY(receiver);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
+                   body_builtin_receiver_pod_span_elem(receiver->container.element_type);
+    }
+    return false;
+}
+
+/* Receiver intrinsics are sealed language operations.  Resolve them through
+ * the canonical registry so the global effect summary agrees with analyzer
+ * and Xi lowering without a second method-name whitelist. */
+static const XaBuiltinReceiverMethodSpec *
+body_builtin_receiver_method_spec(XgBodyCollect *bc, const MemberAccessNode *member,
+                                  int arg_count) {
+    XrType *receiver;
+
+    if (!bc || !bc->producer || !bc->producer->analyzer || !member || !member->object ||
+        !member->name)
+        return NULL;
+    receiver = xa_analyzer_get_node_type(bc->producer->analyzer, member->object);
+    if (!receiver)
+        return NULL;
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (strcmp(spec->source_name, member->name) != 0 ||
+            !body_builtin_receiver_matches(receiver, spec->receiver) ||
+            (arg_count >= 0 && (arg_count < spec->min_params ||
+                                (!spec->is_variadic && arg_count > spec->param_count))))
+            continue;
+        return spec;
+    }
+    return NULL;
+}
+
+static bool body_member_access_is_scalar_builtin(XgBodyCollect *bc,
+                                                 const MemberAccessNode *member) {
+    const XaBuiltinReceiverMethodSpec *spec = body_builtin_receiver_method_spec(bc, member, -1);
+    return spec && (spec->receiver == XA_BUILTIN_RECEIVER_EXACT_INTEGER ||
+                    spec->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER);
 }
 
 /* Array/fixed-array pointer projection is a compiler-lowered leaf, not a
@@ -8510,6 +8631,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
             body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
+            body_builtin_receiver_method_spec(bc, &callee->as.member_access,
+                                              call->as.call_expr.arg_count);
         XgInterfaceId receiver_interface =
             body_resolve_expr_interface(bc, callee->as.member_access.object);
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
@@ -8552,6 +8676,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                     bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
                     bc->capability_bits |= XG_CAP_NATIVE;
                 }
+            } else if (builtin_receiver_method) {
+                row.kind = XG_CALL_NATIVE;
+                row.method_id = (XgMethodId) method_name_id;
+                row.method_name_id = method_name_id;
+                if (builtin_receiver_method->effect == XA_BUILTIN_EFFECT_MUTATES_RECEIVER)
+                    bc->effect_bits |= XG_BODY_MAY_MUTATE;
+                if (builtin_receiver_method->allocation == XA_BUILTIN_ALLOCATION_MAY_HEAP)
+                    bc->effect_bits |= XG_BODY_MAY_ALLOC;
             } else {
                 bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
                 bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
@@ -8801,6 +8933,7 @@ static bool body_seed_captured_locals(XgBodyCollect *bc, const XgPendingBody *pe
         memcpy(bc->name_locals, pending->captured_name_locals,
                (size_t) pending->captured_name_local_count * sizeof(*bc->name_locals));
         bc->nname_locals = pending->captured_name_local_count;
+        bc->inherited_name_local_count = pending->captured_name_local_count;
     }
     if (pending->captured_local_count > 0) {
         if (!body_reserve_locals(bc, pending->captured_local_count))
@@ -9299,6 +9432,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bc->effect_bits |= XG_BODY_MAY_READ_MEM | XG_BODY_MAY_MUTATE;
             break;
         case AST_ASSIGNMENT: {
+            bool target_is_scalar_local = body_owned_local_rebind_is_scalar(
+                bc, node->as.assignment.name, node->as.assignment.symbol_id);
             XgLocalType *target_row = body_find_local(bc, node->as.assignment.name);
             XgLocalType target_row_snapshot;
             bool target_is_json = body_local_type_is_json(target_row);
@@ -9426,13 +9561,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_sequence_json_shape_local(bc, node->as.assignment.name,
                                                     source_sequence_json_shape_id,
                                                     source_sequence_json_literal);
-            bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            if (!target_is_scalar_local)
+                bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         }
         case AST_MEMBER_ACCESS: {
             const char *stdlib_module =
                 body_stdlib_module_for_expr(bc, node->as.member_access.object);
-            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
+            if (!body_member_access_is_scalar_builtin(bc, &node->as.member_access))
+                bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             if (stdlib_module &&
                 producer_stdlib_member_is_constant(stdlib_module, node->as.member_access.name)) {
                 (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
@@ -9686,14 +9823,24 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_UNSAFE_EXPR:
             walk_body_for_calls(bc, node->as.unsafe_expr.operand);
             break;
-        case AST_COMPOUND_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT: {
+            bool target_is_scalar_local =
+                node->as.compound_assignment.object == NULL &&
+                body_owned_local_rebind_is_scalar(bc, node->as.compound_assignment.name,
+                                                  node->as.compound_assignment.symbol_id);
             walk_body_for_calls(bc, node->as.compound_assignment.object);
             walk_body_for_calls(bc, node->as.compound_assignment.value);
-            bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            if (!target_is_scalar_local)
+                bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
+        }
         case AST_INC:
+            if (!body_owned_local_rebind_is_scalar(bc, node->as.inc.name, node->as.inc.symbol_id))
+                bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            break;
         case AST_DEC:
-            bc->effect_bits |= XG_BODY_MAY_MUTATE;
+            if (!body_owned_local_rebind_is_scalar(bc, node->as.dec.name, node->as.dec.symbol_id))
+                bc->effect_bits |= XG_BODY_MAY_MUTATE;
             break;
         case AST_IF_STMT:
             walk_body_for_calls(bc, node->as.if_stmt.condition);
