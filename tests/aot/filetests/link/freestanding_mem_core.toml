@@ -29,6 +29,10 @@ xray = "xray_mem_compiler_guard"
 symbol = "xray_mem_compiler_guard"
 
 [[export.c]]
+xray = "xray_mem_compiler_opaque"
+symbol = "xray_mem_compiler_opaque"
+
+[[export.c]]
 xray = "xray_mem_bulk"
 symbol = "xray_mem_bulk"
 

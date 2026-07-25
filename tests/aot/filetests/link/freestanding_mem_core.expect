@@ -10,6 +10,7 @@ contains="ld_flags": ["-nostdlib"]
 c_contains=#include "xrt_core_freestanding.h"
 c_not_contains=xrt_mem_mut_ptr
 c_contains=xrt_mem_compiler_guard_u64
+c_contains=xrt_mem_compiler_opaque_u64
 c_contains=xrt_mem_cache_flush
 c_contains=xrt_mem_cache_invalidate
 c_contains=xrt_mem_nontemporal_store

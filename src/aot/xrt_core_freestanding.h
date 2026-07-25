@@ -1763,6 +1763,14 @@ static inline XrValue xrt_mem_fence(XrValue ordering) {
 static inline XrValue xrt_mem_compiler_guard_u64(XrValue value) {
     uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
 #if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits) : : "memory");
+#endif
+    return XR_FROM_INT((int64_t) bits);
+}
+
+static inline XrValue xrt_mem_compiler_opaque_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
     __asm__("" : "+r"(bits));
 #endif
     return XR_FROM_INT((int64_t) bits);
