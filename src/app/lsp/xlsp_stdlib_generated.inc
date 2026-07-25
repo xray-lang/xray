@@ -492,8 +492,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {
     {"U8x64", XLSP_SYM_CLASS, "type U8x64", "Class type", NULL, 0},
     {"U32x16", XLSP_SYM_CLASS, "type U32x16", "Class type", NULL, 0},
     {"U64x8", XLSP_SYM_CLASS, "type U64x8", "Class type", NULL, 0},
+    {"U8xNative", XLSP_SYM_CLASS, "type U8xNative", "Class type", NULL, 0},
+    {"U32xNative", XLSP_SYM_CLASS, "type U32xNative", "Class type", NULL, 0},
+    {"U64xNative", XLSP_SYM_CLASS, "type U64xNative", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT 10
+#define GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT 13
 
 // strconv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_strconv_symbols[] = {

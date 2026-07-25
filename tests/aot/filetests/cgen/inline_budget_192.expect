@@ -1,4 +1,4 @@
 regex=function [0-9]+ name=mediumLeaf module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64 may_suspend=0 captures=0 blocks=1 values=1[3-8][0-9]
-c_regex=static XR_AINLINE int64_t _inline_budget_192_lib_[0-9a-f]+_mediumLeaf_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
-c_not_regex=static XR_NOINLINE int64_t _inline_budget_192_lib_[0-9a-f]+_mediumLeaf_[0-9]+
+c_regex=static XR_AINLINE (XRT_FN_CONST )?int64_t _inline_budget_192_lib_[0-9a-f]+_mediumLeaf_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_not_regex=static XR_NOINLINE (XRT_FN_CONST )?int64_t _inline_budget_192_lib_[0-9a-f]+_mediumLeaf_[0-9]+
 c_syntax=pass
