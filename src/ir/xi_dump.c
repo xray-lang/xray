@@ -216,11 +216,12 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);
     if (v->op >= XI_VEC_LOAD && v->op <= XI_VEC_REDUCE_ADD &&
         xi_vec_shape_is_explicit(v->aux_int)) {
-        fprintf(out, " [shape=%ux%u%s%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
+        fprintf(out, " [shape=%ux%u%s%s%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
                 (unsigned) xi_vec_shape_lanes(v->aux_int),
                 (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? ",odd" : "",
                 (v->aux_int & XI_VEC_SHAPE_UNZIP) != 0 ? ",unzip" : "",
                 (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0 ? ",half" : "",
+                xi_vec_shape_is_scalable(v->aux_int) ? ",scalable" : "",
                 (v->aux_int & XI_ACCESS_UNCHECKED) != 0 ? ",unchecked" : "");
     }
     if ((v->op == XI_BYTE_SLICE_LOAD_U16 || v->op == XI_BYTE_SLICE_LOAD_U32 ||

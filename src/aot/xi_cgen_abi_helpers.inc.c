@@ -212,6 +212,18 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
         return;
     }
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR && plan->rep.c_type) {
+        if (strcmp(plan->rep.c_type, "svuint8_t") == 0) {
+            fprintf(out, "svdup_n_u8(0)");
+            return;
+        }
+        if (strcmp(plan->rep.c_type, "svuint32_t") == 0) {
+            fprintf(out, "svdup_n_u32(0)");
+            return;
+        }
+        if (strcmp(plan->rep.c_type, "svuint64_t") == 0) {
+            fprintf(out, "svdup_n_u64(0)");
+            return;
+        }
         fprintf(out, "((%s){0})", plan->rep.c_type);
         return;
     }

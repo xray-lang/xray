@@ -3912,8 +3912,16 @@ static unsigned prepare_vector_lane_bytes(uint8_t native_type) {
 }
 
 static const char *prepare_vector_native_c_type(uint32_t features, uint8_t native_type,
-                                                uint8_t lanes) {
+                                                uint8_t lanes, bool scalable) {
     unsigned width = prepare_vector_lane_bytes(native_type) * (unsigned) lanes;
+    if (scalable && (features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        if (native_type == XR_NATIVE_U8)
+            return "svuint8_t";
+        if (native_type == XR_NATIVE_U32)
+            return "svuint32_t";
+        if (native_type == XR_NATIVE_U64)
+            return "svuint64_t";
+    }
     if (width == 16 && (features & (XAOT_SIMD_FEATURE_VSX | XAOT_SIMD_FEATURE_LSX)) != 0) {
         if (native_type == XR_NATIVE_U8)
             return "xr_v16u8";
@@ -3951,8 +3959,36 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
     bool avx512 = (features & XAOT_SIMD_FEATURE_AVX512) != 0;
     bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
     bool lsx = (features & XAOT_SIMD_FEATURE_LSX) != 0;
-    if (!prepare_vector_native_c_type(features, native_type, lanes))
+    bool sve = (features & XAOT_SIMD_FEATURE_SVE) != 0;
+    bool scalable = xi_vec_shape_is_scalable(value->aux_int);
+    if (!prepare_vector_native_c_type(features, native_type, lanes, scalable))
         return false;
+    if (scalable) {
+        if (!sve)
+            return false;
+        switch ((XiOp) value->op) {
+            case XI_VEC_LOAD:
+            case XI_VEC_STORE:
+            case XI_VEC_SPLAT:
+            case XI_VEC_ADD:
+            case XI_VEC_SUB:
+            case XI_VEC_MUL:
+            case XI_VEC_BIT_AND:
+            case XI_VEC_BIT_OR:
+            case XI_VEC_BIT_XOR:
+            case XI_VEC_BIT_NOT:
+            case XI_VEC_SHL:
+            case XI_VEC_SHR:
+            case XI_VEC_REINTERPRET:
+                return true;
+            case XI_VEC_SHUFFLE:
+                return (value->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0;
+            case XI_VEC_WIDEN_MUL:
+                return native_type == XR_NATIVE_U64 && lanes == 8;
+            default:
+                return false;
+        }
+    }
     switch ((XiOp) value->op) {
         case XI_VEC_LOAD:
         case XI_VEC_STORE:
@@ -4030,7 +4066,8 @@ static XaotValueRep prepare_vector_rep(const XaotValueRep *base, const XiValue *
     uint8_t native_type = xi_vec_shape_native_type(value->aux_int);
     uint8_t lanes = xi_vec_shape_lanes(value->aux_int);
     rep.kind = XAOT_VALUE_VECTOR;
-    rep.c_type = prepare_vector_native_c_type(features, native_type, lanes);
+    rep.c_type = prepare_vector_native_c_type(features, native_type, lanes,
+                                              xi_vec_shape_is_scalable(value->aux_int));
     rep.vector_native_type = native_type;
     rep.vector_lanes = lanes;
     rep.vector_width_bytes = (uint8_t) (prepare_vector_lane_bytes(native_type) * (unsigned) lanes);

@@ -1,0 +1,14 @@
+args=--target aarch64-linux-musl --simd sve --dump-xaot-plan
+contains=-mcpu=generic+sve
+contains=-fno-vectorize
+contains=-fno-slp-vectorize
+contains="simd_mode": "sve"
+contains="simd_features": 64
+c_contains=#include <arm_sve.h>
+c_contains=svcntb()
+c_contains=xrt_sve_selected_bytes()
+c_contains=svwhilelt_b64_u64
+c_contains=svextw_u64_x
+c_contains=svtbl_u64
+c_contains=svst1_u64
+c_contains=svbool_t _result_pg

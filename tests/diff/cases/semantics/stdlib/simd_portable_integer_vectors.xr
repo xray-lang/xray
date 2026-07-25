@@ -1,4 +1,4 @@
-import { Capabilities, U8x16, U8x32, U8x64, U32x4, U32x8, U32x16, U64x2, U64x4, U64x8 } from simd
+import { Capabilities, U8x16, U8x32, U8x64, U8xNative, U32x4, U32x8, U32x16, U64x2, U64x4, U64x8, U64xNative } from simd
 
 fn run() {
     var bytes = Array<byte>(32)
@@ -100,9 +100,27 @@ fn run() {
     roundTrip512.store(ref out512View)
     assert_eq(out512[0], 10)
     assert_eq(out512[7], 80)
+    var nativeBytes = Array<byte>(64)
+    for (i in 0..64) {
+        nativeBytes[i] = 1
+    }
+    var nativeByteView: Slice<byte> = nativeBytes[:]
+    var nativeData = U8xNative.load(nativeByteView)
+    var nativeWords = nativeData.reinterpretU32()
+    var nativeProducts = nativeWords.widenMulEven(nativeWords.swapAdjacent())
+    var nativeResult = nativeProducts.bitXor(nativeProducts).add(U64xNative.splat(5)).mul(U64xNative.splat(3)).shiftRight(1).swapAdjacent()
+    nativeResult = nativeResult.add(nativeData.bitXor(nativeData).reinterpretU64())
+    var nativeOut = Array<u64>(8, 99)
+    var nativeOutView: Slice<u64> = nativeOut[:]
+    nativeResult.store(ref nativeOutView)
+    for (i in 0..(Capabilities.nativeBytes() / 8)) {
+        assert_eq(nativeOut[i], 7)
+    }
     assert(Capabilities.nativeBytes() >= 16)
     var accelerated = Capabilities.isAccelerated()
     assert(accelerated || !accelerated)
+    var scalable = Capabilities.isScalable()
+    assert(scalable || !scalable)
     print("OK simd portable integer vectors")
 }
 

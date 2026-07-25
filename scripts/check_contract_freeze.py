@@ -78,8 +78,12 @@ CONTRACT_SPECS = (
         "target-abi.md",
         (
             "src/aot/xaot_link.c",
+            "src/aot/xaot_prepare.c",
+            "src/aot/xaot_verify.c",
+            "src/aot/xi_cgen_abi_helpers.inc.c",
             "src/aot/xi_cgen_class_native_helpers.inc.c",
             "src/aot/xi_cgen_dispatch_helpers.inc.c",
+            "src/aot/xi_cgen_program_entry.inc.c",
             "src/aot/xi_cgen_struct_helpers.inc.c",
             "src/aot/xi_cgen.c",
             "src/aot/xrt_coll.h",
@@ -87,6 +91,8 @@ CONTRACT_SPECS = (
             "src/aot/xrt_time.h",
             "src/app/cli/xcmd_build.c",
             "src/app/cli/xcli_toolchain.c",
+            "src/ir/xi.h",
+            "stdlib/simd/simd.xr",
         ),
     ),
 )

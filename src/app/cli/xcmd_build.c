@@ -1561,7 +1561,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!xaot_simd_mode_parse(simd_arg, &simd_mode)) {
         fprintf(stderr,
                 "Error: invalid --simd mode '%s' (expected auto, scalar, native, neon, sse2, "
-                "avx2, avx512, vsx, lsx, or dispatch)\n",
+                "avx2, avx512, vsx, lsx, sve, or dispatch)\n",
                 simd_arg ? simd_arg : "");
         CMD_BUILD_RETURN(2);
     }
@@ -3142,7 +3142,10 @@ static int cmd_build_native(
         char cpu_flag[128];
         /* ARM toolchains reject -march=native; -mcpu is the tuning knob there. */
 #if defined(XR_ARCH_ARM64) || defined(XR_ARCH_ARM) || defined(XR_ARCH_POWERPC64)
-        snprintf(cpu_flag, sizeof(cpu_flag), "-mcpu=%s", cpu);
+        if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_SVE) != 0)
+            snprintf(cpu_flag, sizeof(cpu_flag), "-mcpu=%s+sve", cpu);
+        else
+            snprintf(cpu_flag, sizeof(cpu_flag), "-mcpu=%s", cpu);
 #else
         snprintf(cpu_flag, sizeof(cpu_flag), "-march=%s", cpu);
 #endif
@@ -3178,6 +3181,29 @@ static int cmd_build_native(
         fprintf(stderr, "Error: failed to record LSX target flag in AOT link manifest\n");
         xaot_build_result_free(&aot_result);
         return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        /* LLVM's fixed-trip-count auto-vectorizer can form an equality-exit
+         * loop whose step is 2*VL. That loop is invalid when the runtime SVE
+         * length (for example 384 bits) does not divide the scalar trip count.
+         * Runtime-native Xray operations already carry explicit predicated SVE
+         * intrinsics, so disable only the unsafe implicit vectorization. */
+        if ((!cpu || !cpu[0]) &&
+            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-mcpu=generic+sve")) {
+            fprintf(stderr,
+                    "Error: failed to record scalable SVE target flag in AOT link manifest\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-fno-vectorize") ||
+            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-fno-slp-vectorize")) {
+            fprintf(stderr, "Error: failed to record safe scalable SVE vectorization flags\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
     }
     if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
         (!cpu || !cpu[0]) &&

@@ -246,7 +246,15 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
         fprintf(out, "#include \"xaot_coro.h\"\n\n");
         fprintf(out, "#include \"xrt_thread_aot.h\"\n\n");
     }
-    if ((simd_features & XAOT_SIMD_FEATURE_NEON) != 0)
+    if ((simd_features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        fprintf(out, "#include <arm_sve.h>\n\n");
+        fprintf(out, "#ifndef XRT_SVE_SELECTED_BYTES_DEFINED\n"
+                     "#define XRT_SVE_SELECTED_BYTES_DEFINED 1\n"
+                     "static inline uint64_t xrt_sve_selected_bytes(void) { "
+                     "uint64_t _bytes = svcntb(); "
+                     "return _bytes >= 64u ? 64u : _bytes == 16u ? 16u : 32u; }\n"
+                     "#endif\n\n");
+    } else if ((simd_features & XAOT_SIMD_FEATURE_NEON) != 0)
         fprintf(out, "#include <arm_neon.h>\n\n");
     else if ((simd_features & XAOT_SIMD_FEATURE_LSX) != 0)
         fprintf(out, "#include <lsxintrin.h>\n\n");

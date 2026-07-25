@@ -3654,6 +3654,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "Capabilities.isScalable",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
         .name = "Capabilities.nativeBytes",
         .signature = "(): int",
         .summary = "",
@@ -3836,6 +3841,21 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     {
         .name = "U32x8.widenMulEven",
         .signature = "(other: U32x8): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U32xNative",
+        .signature = "U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U32xNative.swapAdjacent",
+        .signature = "(): U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U32xNative.widenMulEven",
+        .signature = "(other: U32xNative): U64xNative",
         .summary = "",
     },
     {
@@ -4029,6 +4049,51 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U64xNative",
+        .signature = "U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.add",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.bitXor",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.load",
+        .signature = "(data: Slice<u64>, offset: int = 0): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.mul",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.shiftRight",
+        .signature = "(bits: int): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.splat",
+        .signature = "(value: u64): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.store",
+        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.swapAdjacent",
+        .signature = "(): U64xNative",
+        .summary = "",
+    },
+    {
         .name = "U8x16",
         .signature = "U8x16",
         .summary = "",
@@ -4161,6 +4226,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     {
         .name = "U8x64.store",
         .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative",
+        .signature = "U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.bitXor",
+        .signature = "(other: U8xNative): U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.load",
+        .signature = "(data: Slice<byte>, offset: int = 0): U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.reinterpretU32",
+        .signature = "(): U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.reinterpretU64",
+        .signature = "(): U64xNative",
         .summary = "",
     },
 };
@@ -8637,11 +8727,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "simd",
-        .summary = "Portable fixed-width integer vectors",
+        .summary = "Portable fixed-width and runtime-native integer vectors",
         .body =
             "# simd module\n"
             "\n"
-            "Portable 128-bit, 256-bit, and 512-bit integer-vector operations. The same API has scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
+            "Portable 128-bit, 256-bit, and 512-bit integer-vector operations plus a bounded runtime-native family for scalable targets. The APIs have matching scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
             "\n"
             "Usage: `import simd` then call `simd.function()`.\n"
             "\n"
@@ -8649,13 +8739,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "- `U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.\n"
             "- `U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.\n"
             "- `U8x64`, `U32x16`, and `U64x8` provide the AVX-512F-width operations used by 64-byte stripe algorithms.\n"
-            "- `Capabilities.nativeBytes()` returns the native vector width chosen for the compile target; it is at least 16 bytes.\n"
+            "- `U8xNative`, `U32xNative`, and `U64xNative` carry only the active runtime-selected prefix, with a 64-byte storage ceiling and a portable 16-byte fallback.\n"
+            "- `Capabilities.nativeBytes()` returns the selected active width; it is at least 16 bytes. `Capabilities.isScalable()` distinguishes a runtime-scalable plan from a fixed-width or x86-dispatch plan.\n"
             "\n"
             "### Loading and storing\n"
             "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n"
             "\n"
             "### Target lowering\n"
-            "Native lowering is available for AArch64 NEON, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n"
+            "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n"
             "\n"
             "### Operations\n"
             "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: byte zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
@@ -8683,6 +8774,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Capabilities` | `Capabilities` |  |\n"
             "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
             "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n"
+            "| `Capabilities.isScalable` | `(): bool` |  |\n"
             "| `Capabilities.nativeBytes` | `(): int` |  |\n"
             "| `U32x16` | `U32x16` |  |\n"
             "| `U32x16.fromLanes` | `(lanes: [u32; 16]): U32x16` |  |\n"
@@ -8720,6 +8812,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n"
             "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
             "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
+            "| `U32xNative` | `U32xNative` |  |\n"
+            "| `U32xNative.swapAdjacent` | `(): U32xNative` |  |\n"
+            "| `U32xNative.widenMulEven` | `(other: U32xNative): U64xNative` |  |\n"
             "| `U64x2` | `U64x2` |  |\n"
             "| `U64x2.add` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.bitAnd` | `(other: U64x2): U64x2` |  |\n"
@@ -8758,6 +8853,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x8.shiftRight` | `(bits: int): U64x8` |  |\n"
             "| `U64x8.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
             "| `U64x8.swapAdjacent` | `(): U64x8` |  |\n"
+            "| `U64xNative` | `U64xNative` |  |\n"
+            "| `U64xNative.add` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.bitXor` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.load` | `(data: Slice<u64>, offset: int = 0): U64xNative` |  |\n"
+            "| `U64xNative.mul` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.shiftRight` | `(bits: int): U64xNative` |  |\n"
+            "| `U64xNative.splat` | `(value: u64): U64xNative` |  |\n"
+            "| `U64xNative.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64xNative.swapAdjacent` | `(): U64xNative` |  |\n"
             "| `U8x16` | `U8x16` |  |\n"
             "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.bitNot` | `(): U8x16` |  |\n"
@@ -8785,6 +8889,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U8x64.reinterpretU32` | `(): U32x16` |  |\n"
             "| `U8x64.reinterpretU64` | `(): U64x8` |  |\n"
             "| `U8x64.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8xNative` | `U8xNative` |  |\n"
+            "| `U8xNative.bitXor` | `(other: U8xNative): U8xNative` |  |\n"
+            "| `U8xNative.load` | `(data: Slice<byte>, offset: int = 0): U8xNative` |  |\n"
+            "| `U8xNative.reinterpretU32` | `(): U32xNative` |  |\n"
+            "| `U8xNative.reinterpretU64` | `(): U64xNative` |  |\n"
             "",
         .symbols = _symbols_simd,
         .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),

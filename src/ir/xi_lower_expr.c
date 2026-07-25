@@ -5713,6 +5713,8 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         extra |= XI_VEC_SHAPE_UNZIP;
     if ((desc->flags & XA_INTRINSIC_FLAG_CONTIGUOUS_HALF) != 0)
         extra |= XI_VEC_SHAPE_CONTIGUOUS_HALF;
+    if ((desc->flags & XA_INTRINSIC_FLAG_SCALABLE) != 0)
+        extra |= XI_VEC_SHAPE_SCALABLE;
     if (desc->lowering == XA_INTRINSIC_LOWERING_VEC_SHUFFLE &&
         !lower_intrinsic_shuffle_pattern(l, node, call, desc, &extra))
         return NULL;

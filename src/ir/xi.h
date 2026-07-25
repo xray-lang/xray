@@ -669,6 +669,9 @@ static inline bool xi_op_is_identity_forward(uint16_t op) {
 /* Semantic shuffle shapes must not depend on packing every lane into aux_int:
  * 16-lane and wider vectors do not fit above XI_VEC_SHAPE_SHUFFLE_SHIFT. */
 #define XI_VEC_SHAPE_SWAP_ADJACENT (INT64_C(1) << 21)
+/* The vector's active prefix is selected from the target at runtime. The
+ * encoded lane count is its frozen storage maximum, not a fixed active VL. */
+#define XI_VEC_SHAPE_SCALABLE (INT64_C(1) << 22)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
@@ -690,6 +693,10 @@ static inline uint8_t xi_vec_shape_lanes(int64_t shape) {
 
 static inline uint8_t xi_vec_shape_native_type(int64_t shape) {
     return (uint8_t) ((shape & XI_VEC_SHAPE_NATIVE_MASK) >> XI_VEC_SHAPE_NATIVE_SHIFT);
+}
+
+static inline bool xi_vec_shape_is_scalable(int64_t shape) {
+    return (shape & XI_VEC_SHAPE_SCALABLE) != 0;
 }
 
 /* Import reference metadata for XI_IMPORT_REF.

@@ -505,6 +505,8 @@ XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out) {
         mode = XAOT_SIMD_VSX;
     else if (strcmp(text, "lsx") == 0)
         mode = XAOT_SIMD_LSX;
+    else if (strcmp(text, "sve") == 0)
+        mode = XAOT_SIMD_SVE;
     else if (strcmp(text, "dispatch") == 0)
         mode = XAOT_SIMD_DISPATCH;
     else
@@ -534,6 +536,8 @@ XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode) {
             return "vsx";
         case XAOT_SIMD_LSX:
             return "lsx";
+        case XAOT_SIMD_SVE:
+            return "sve";
         case XAOT_SIMD_DISPATCH:
             return "dispatch";
         default:
@@ -633,6 +637,13 @@ XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, c
                 return false;
             }
             features = XAOT_SIMD_FEATURE_LSX;
+            break;
+        case XAOT_SIMD_SVE:
+            if (!arm64) {
+                xaot_simd_error(err, err_size, "--simd sve requires an AArch64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_SVE;
             break;
         case XAOT_SIMD_DISPATCH:
             if (!x86_64) {

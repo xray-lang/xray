@@ -2,8 +2,8 @@
 
 Status: re-frozen after the xxHash parity work refined no-heap pointer effects,
 stable borrowed/mutated aggregate lowering, exact-integer intrinsic nothrow
-resolution, closed struct-method collection, and compiler-owned 512-bit SIMD
-intrinsic identities. Product membership and
+resolution, closed struct-method collection, and compiler-owned fixed and
+runtime-scalable SIMD intrinsic identities. Product membership and
 fail-closed semantics are unchanged.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
@@ -68,7 +68,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h b68c60f6af4d15
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 524f1a8f8da465bb40c4828394d4bf23c64eed33659c6decb8395eeab3c603ff
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 703174dd47d5bab2613b281aa4a6cd9591826e93ae1578c7e4b4b99d3895ca31
 anchor-sha256: src/runtime/value/xtype.h 8d160aa422b68e0b3c4ab080fe30385bd920d3106a36ca7445bfb0944d4504ff
-anchor-sha256: src/ir/xi.h f1cff2465ed9221481ac7d605560c3a7fe7c2f16df950d383dd5c5fdf152a870
+anchor-sha256: src/ir/xi.h 96f7661ffff04bc27b0d3e9fa3ffcb517c5875f2f59635d39bab67c010a0e653
 anchor-sha256: src/ir/xi_lower.c f49c7ddaad290f3fd6644ca7e1ed0228fbd59760430cf55602cc21b81e6c5f16
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
 anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3

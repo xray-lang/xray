@@ -215,6 +215,18 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
             xi_vec_shape_lanes(value->aux_int) != rep->vector_lanes)
             return set_error(errbuf, errbuf_len, "AOT vector value plan disagrees with Xi shape");
     }
+    if (strcmp(rep->c_type, "svuint8_t") == 0 || strcmp(rep->c_type, "svuint32_t") == 0 ||
+        strcmp(rep->c_type, "svuint64_t") == 0) {
+        if (width != 64 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_SVE) == 0 ||
+            (!identity && !xi_vec_shape_is_scalable(value->aux_int)))
+            return set_error(errbuf, errbuf_len,
+                             "AOT scalable SVE vector plan lacks target/shape evidence");
+        if ((rep->vector_native_type == XR_NATIVE_U8 && strcmp(rep->c_type, "svuint8_t") == 0) ||
+            (rep->vector_native_type == XR_NATIVE_U32 && strcmp(rep->c_type, "svuint32_t") == 0) ||
+            (rep->vector_native_type == XR_NATIVE_U64 && strcmp(rep->c_type, "svuint64_t") == 0))
+            return true;
+        return set_error(errbuf, errbuf_len, "AOT scalable SVE vector plan has invalid C type");
+    }
     if (strcmp(rep->c_type, "__m256i") == 0) {
         if (width != 32 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_AVX2) == 0)
             return set_error(errbuf, errbuf_len, "AOT AVX2 vector plan lacks target evidence");

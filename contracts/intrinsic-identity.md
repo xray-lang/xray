@@ -1,7 +1,7 @@
 # Intrinsic identity contract
 
-Status: re-frozen after the xxHash AVX-512F work added stable 64-byte SIMD
-identities without reassigning the existing registry.
+Status: re-frozen after the xxHash SVE work added stable runtime-native scalable
+SIMD identities without reassigning the existing registry.
 
 1. Each compiler intrinsic has one canonical, stable numeric identity in the
    registry. The identity, not a spelling, import path, method name, or emitted
@@ -21,4 +21,4 @@ identities without reassigning the existing registry.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 7f4bbd7c81c8c63a811b4fab3cc4cc5b3095feb517f2344c777844fc93633d24
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 304a34b718732cf4a822c5471fb7746811dfd462126a352f87d3ce9dbdd4903d

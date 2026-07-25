@@ -250,6 +250,12 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid contiguous-half flag %u",
                              value->xa_intrinsic_id, has_half ? 1u : 0u);
+        bool expects_scalable = (desc->flags & XA_INTRINSIC_FLAG_SCALABLE) != 0;
+        bool has_scalable = xi_vec_shape_is_scalable(value->aux_int);
+        if (expects_scalable != has_scalable)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid scalable flag %u",
+                             value->xa_intrinsic_id, has_scalable ? 1u : 0u);
         if (has_unchecked_access && value->op != XI_VEC_LOAD && value->op != XI_VEC_STORE)
             return set_error(error, error_size,
                              "canonical intrinsic id %u has unchecked non-memory vector op %u",

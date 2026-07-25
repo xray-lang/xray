@@ -1,7 +1,7 @@
 {
   "module": "simd",
-  "summary": "Portable fixed-width integer vectors",
-  "lead": "Portable 128-bit, 256-bit, and 512-bit integer-vector operations. The same API has scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.",
+  "summary": "Portable fixed-width and runtime-native integer vectors",
+  "lead": "Portable 128-bit, 256-bit, and 512-bit integer-vector operations plus a bounded runtime-native family for scalable targets. The APIs have matching scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.",
   "sections": [
     {
       "heading": "Vector types",
@@ -9,7 +9,8 @@
         "`U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.",
         "`U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.",
         "`U8x64`, `U32x16`, and `U64x8` provide the AVX-512F-width operations used by 64-byte stripe algorithms.",
-        "`Capabilities.nativeBytes()` returns the native vector width chosen for the compile target; it is at least 16 bytes."
+        "`U8xNative`, `U32xNative`, and `U64xNative` carry only the active runtime-selected prefix, with a 64-byte storage ceiling and a portable 16-byte fallback.",
+        "`Capabilities.nativeBytes()` returns the selected active width; it is at least 16 bytes. `Capabilities.isScalable()` distinguishes a runtime-scalable plan from a fixed-width or x86-dispatch plan."
       ]
     },
     {
@@ -18,7 +19,7 @@
     },
     {
       "heading": "Target lowering",
-      "before_text": "Native lowering is available for AArch64 NEON, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple."
+      "before_text": "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple."
     },
     {
       "heading": "Operations",

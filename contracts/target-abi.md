@@ -2,7 +2,8 @@
 
 Status: re-frozen after x86 gained explicit AVX-512F static and runtime-dispatch
 plans, PowerPC64 gained an explicit VSX target plan for both byte orders, and
-LoongArch64 gained an explicit LSX target plan with an executed target gate.
+LoongArch64 gained an explicit LSX target plan with an executed target gate,
+and AArch64 gained an explicit scalable SVE plan with multi-VL execution.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
@@ -31,6 +32,15 @@ emission, and native linking:
   by the base target triple. Explicit `--simd lsx` or `--simd native` adds
   `-mlsx`, uses the portable 128-bit lane contract, and may publish native
   vector evidence only after an LSX-capable target binary executes.
+- T4c: `aarch64-linux-musl --simd sve` preserves the exact lane count of the
+  fixed-width vector family and gives `U8xNative`, `U32xNative`, and
+  `U64xNative` a bounded runtime-selected active prefix. Hardware vector
+  lengths of 128 bits select 16 bytes, lengths from 256 through 511 bits
+  select 32 bytes, and lengths of at least 512 bits select 64 bytes. Inactive
+  storage is not part of the language value; VM and non-SVE AOT execute a
+  zero-initialized 16-byte fallback. Explicit predicated SVE intrinsics remain
+  enabled, while implicit LLVM loop and SLP vectorization stay disabled until
+  their fixed-trip-count lowering is valid for non-power-of-two vector lengths.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -47,8 +57,12 @@ The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
 portable-SIMD fixtures, 180-vector xxHash VSX KATs for both byte orders, and a
 LoongArch64 LSX binary that executes the 180-vector KAT plus exact 49-symbol C
-ABI oracle under QEMU's `la464` CPU model. Emulation proves semantic and ABI
-correctness, not native Power or LoongArch performance. A compile-only
+ABI oracle under QEMU's `la464` CPU model, plus AArch64 SVE binaries that run
+the same 180-vector KAT and exact 49-symbol C ABI oracle at 128-, 256-, 384-,
+and 512-bit vector lengths. Retained SVE assembly proves that the runtime-native
+xxHash stripe and scramble values remain in sizeless vector SSA rather than
+fixed aggregate stack storage. Emulation proves semantic and ABI correctness,
+not native Power, LoongArch, or SVE performance. A compile-only
 cross artifact is not sufficient to claim platform support. AVX-512F evidence
 may retain exact generated C and assembly plus execution of the same dispatch
 binary on an AVX2-only host, but native AVX-512F execution and performance
@@ -58,13 +72,19 @@ execution support.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xaot_link.c a1f5a96100a247cf77442d2a08455a582f806aef50a807da2c9c7a835ed5680c
+anchor-sha256: src/aot/xaot_link.c 1b660e559facb469e98f02cd35240a88781d61d8c623d075302f74cc8631ff07
+anchor-sha256: src/aot/xaot_prepare.c 56ed8f1fc9323b4441b150f356d5bff7fba910315fde5d161d9564a128f27623
+anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 215e6cad4d4454e8ccb842347f32ead184ddaef8783938189484978029a93082
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c fb4d2822ce87e5c633d87edc68d11edb74f07b7595973b955f03d6a72692263b
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c bd28a6c9d49bb212431880faaebfcfc04159b9f79acd3c2a2e9392e667540eb4
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c f8ac8515221aa1152c5abb55d256669de45e9f86aa3db516d356199c5e1d89bb
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 9d61deb9e9475d6c737d4d0f363399d27b8e85eb413926794819458601970226
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
 anchor-sha256: src/aot/xi_cgen.c 66e8c88b154cc77deee1ac623a576218bbcabdf11110142618d84b4fe18f876c
 anchor-sha256: src/aot/xrt_coll.h 9cb8e646bfabc64087e5358284f2691d85e785880c325181e81f95780549b6aa
 anchor-sha256: src/aot/xrt_core_freestanding.h b23ab157b9b3ee8ed1fd58087baaae038c58a3857e9e12ae5a1dbd0007d6c805
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 5436f2433c1acc23c5b6da78f4dcc154dd102d0e9bedac8bf378887a6e65dc90
+anchor-sha256: src/app/cli/xcmd_build.c 13069dee9cfa55289694a345637fc095850458c31a3219289123280d19583a32
 anchor-sha256: src/app/cli/xcli_toolchain.c b0e406826e26acc3be56db57842c5b81fe970fd4f38c087acc8bc2fe27d04469
+anchor-sha256: src/ir/xi.h 96f7661ffff04bc27b0d3e9fa3ffcb517c5875f2f59635d39bab67c010a0e653
+anchor-sha256: stdlib/simd/simd.xr 56b8ce818e05b8a08475452205187b5cd673f2d992d9299c8ede6be7871eba8b
