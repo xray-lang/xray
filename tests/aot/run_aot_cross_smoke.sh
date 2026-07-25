@@ -244,6 +244,7 @@ for target in \
     aarch64-linux-musl \
     powerpc64-linux-musl \
     powerpc64le-linux-musl \
+    loongarch64-linux-musl \
     x86_64-windows-gnu \
     aarch64-windows-gnu
 do

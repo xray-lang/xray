@@ -1561,7 +1561,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!xaot_simd_mode_parse(simd_arg, &simd_mode)) {
         fprintf(stderr,
                 "Error: invalid --simd mode '%s' (expected auto, scalar, native, neon, sse2, "
-                "avx2, avx512, vsx, or dispatch)\n",
+                "avx2, avx512, vsx, lsx, or dispatch)\n",
                 simd_arg ? simd_arg : "");
         CMD_BUILD_RETURN(2);
     }
@@ -3170,6 +3170,12 @@ static int cmd_build_native(
     if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
         !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mvsx")) {
         fprintf(stderr, "Error: failed to record VSX target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_LSX) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mlsx")) {
+        fprintf(stderr, "Error: failed to record LSX target flag in AOT link manifest\n");
         xaot_build_result_free(&aot_result);
         return 1;
     }

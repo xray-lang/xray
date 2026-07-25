@@ -1,0 +1,13 @@
+import { U8x16, U32x4, U64x2 } from simd
+
+fn stripe(data: U8x16, secret: U8x16) -> u64 {
+    var words: U32x4 = data.bitXor(secret).reinterpretU32()
+    var product = words.widenMulEven(words.swapAdjacent())
+    var mixed = data.reinterpretU64().swapLanes().add(product)
+    var scaled = mixed.bitXor(mixed.shiftRight(47)).mul(U64x2.splat(2654435761))
+    return scaled.reduceAdd()
+}
+
+var data = U8x16.fromLanes([1; 16])
+var secret = U8x16.fromLanes([2; 16])
+print(stripe(data, secret))

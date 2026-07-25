@@ -403,6 +403,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     XaotTarget x86_32 = {0};
     XaotTarget powerpc64 = {0};
     XaotTarget powerpc64le = {0};
+    XaotTarget loongarch64 = {0};
     XaotLinkManifest manifest = {0};
     XaotSimdMode parsed = XAOT_SIMD_AUTO;
     char err[192];
@@ -438,6 +439,20 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(powerpc64le.simd_features == 0);
     ASSERT_TRUE(xaot_target_configure_simd(&powerpc64le, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
     ASSERT_TRUE(powerpc64le.simd_features == XAOT_SIMD_FEATURE_VSX);
+
+    ASSERT_TRUE(xaot_target_init(&loongarch64, "loongarch64-linux-musl"));
+    ASSERT_TRUE(loongarch64.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(loongarch64.endian, "little") == 0);
+    ASSERT_TRUE(loongarch64.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(loongarch64.simd_features == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("lsx", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_LSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&loongarch64, XAOT_SIMD_LSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(loongarch64.simd_features == XAOT_SIMD_FEATURE_LSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&loongarch64, XAOT_SIMD_NATIVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(loongarch64.simd_features == XAOT_SIMD_FEATURE_LSX);
+    ASSERT_TRUE(!xaot_target_configure_simd(&loongarch64, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "PowerPC64") != NULL);
 
     ASSERT_TRUE(xaot_target_init(&arm, "aarch64-linux-musl"));
     ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_NEON);
@@ -477,6 +492,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     xr_free(json);
     xaot_link_manifest_free(&manifest);
     xaot_target_free(&powerpc64le);
+    xaot_target_free(&loongarch64);
     xaot_target_free(&powerpc64);
     xaot_target_free(&x86_32);
     xaot_target_free(&arm);

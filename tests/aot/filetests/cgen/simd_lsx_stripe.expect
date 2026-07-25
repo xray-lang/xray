@@ -1,0 +1,10 @@
+args=--target loongarch64-linux-musl --simd lsx --dump-xaot-plan
+contains=-mlsx
+contains="simd_mode": "lsx"
+contains="simd_features": 32
+c_contains=#include <lsxintrin.h>
+c_contains=__lsx_vmulwev_d_wu
+c_contains=__lsx_vsrli_d
+c_contains=__lsx_vslli_d
+c_contains=__builtin_shufflevector
+c_not_contains=__asm__("vmuleuw
