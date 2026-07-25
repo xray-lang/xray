@@ -14,11 +14,16 @@ struct Counter {
     run(value: int) -> int {
         return this.middle(value)
     }
+
+    @inline
+    hot(value: int) -> int {
+        return this.run(value)
+    }
 }
 
 fn invoke(value: int) -> int {
     var counter = Counter{bias: 1}
-    return counter.run(value)
+    return counter.hot(value)
 }
 
 print(invoke(64))

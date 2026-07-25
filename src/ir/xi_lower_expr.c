@@ -4773,6 +4773,26 @@ static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
         if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
             fn_type = links->type;
     }
+    /* A selected value-type method has one closed implementation. Its bound
+     * member-expression type is created before the error-set fixed point and
+     * can therefore still carry the conservative POLY bit; consult the
+     * authoritative selected method symbol instead. Keep open class/interface
+     * dispatch fail-closed because an override may have a wider error set. */
+    if (!fn_type && l && l->analyzer && call && call->callee &&
+        call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, call->callee);
+        XaSymbol *target = sel ? sel->target_symbol : NULL;
+        XrType *receiver = sel ? sel->receiver_type : NULL;
+        bool closed_value_dispatch =
+            target &&
+            (target->is_static || (receiver && receiver->kind == XR_KIND_ENUM) ||
+             (receiver && receiver->kind == XR_KIND_INSTANCE && receiver->instance.class_ref &&
+              receiver->instance.class_ref->struct_layout));
+        XaSymbolLinks *links =
+            closed_value_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
+        if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
+            fn_type = links->type;
+    }
     if (!fn_type && callee_type && callee_type->kind == XR_KIND_FUNCTION)
         fn_type = callee_type;
     return !(fn_type && fn_type->function.throw_effect == XR_FN_EFFECT_NO_THROW);
@@ -6456,7 +6476,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 
-        xi_lower_insert_err_check(l, node, true);
+        lower_call_emit_err_check(l, v, node, call, method_type);
         if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
             return NULL;
         if (!lower_apply_one_call_writeback(l, &receiver_writeback, (int) node->line))

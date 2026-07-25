@@ -437,11 +437,11 @@ typedef enum {
                      * aux_int bits 8-15: nresults (0 means 1) */
     XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_METHOD_DIRECT,
-    XI_TAIL_CALL,        /* general tail call: args[0]=callee, args[1..n]=params
+    XI_TAIL_CALL,        /* general function tail call: args[0]=callee, args[1..n]=params
                           * Terminates the function — semantically a call + return.
                           * The current frame is cleaned up (ARC release) before
                           * transferring control.  aux_int mirrors XI_CALL encoding.
-                          * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
+                          * Methods retain XI_CALL_METHOD[_DIRECT] + XI_FLAG_TAIL. */
     XI_CALL_BUILTIN,     /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_ATOMIC_LOAD,      /* canonical Atomic<T>.load; identity is xa_intrinsic_id */
     XI_ATOMIC_STORE,     /* canonical Atomic<T>.store */

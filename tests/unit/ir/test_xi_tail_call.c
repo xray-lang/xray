@@ -1,6 +1,7 @@
 /*
- * Unit tests for Xi self-tail-call optimization.
- * Covers self-tail-call loop conversion and conservative no-op cases.
+ * Unit tests for Xi tail-call optimization.
+ * Covers self-tail-call loop conversion, general function promotion, and the
+ * distinct method-tail layout retained for OP_INVOKE_TAIL.
  */
 
 #include "../../../src/ir/xi_opt_tail_call.h"
@@ -191,6 +192,68 @@ TEST(non_self_call_no_change) {
     xi_func_free(f);
 }
 
+/* ========== Test: flagged non-self function call is promoted ========== */
+
+TEST(flagged_function_call_promotes) {
+    XiFunc *f = make_func("caller");
+    XiFunc *g = xi_func_new("callee", &stub_int);
+    ASSERT(g != NULL);
+    XiBlock *g_entry = xi_block_new(g);
+    ASSERT(g_entry != NULL);
+
+    XiBlock *entry = f->entry;
+    XiValue *n = xi_param(f, entry, 0, &stub_int);
+    XiValue *params[1] = {n};
+    setup_params(f, params, 1);
+
+    XiValue *callee = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_func, 0);
+    callee->aux = g;
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
+    call->args[0] = callee;
+    call->args[1] = n;
+    call->flags |= XI_FLAG_TAIL;
+    entry->kind = XI_BLOCK_RETURN;
+    entry->control = call;
+
+    XiPassChange chg = xi_opt_tail_call(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(chg.values_changed);
+    ASSERT(call->op == XI_TAIL_CALL);
+    ASSERT((call->flags & XI_FLAG_TAIL) == 0);
+
+    xi_func_free(g);
+    xi_func_free(f);
+}
+
+/* ========== Test: method tail call keeps receiver/symbol layout ========== */
+
+TEST(flagged_method_call_keeps_method_op) {
+    XiFunc *f = make_func("method_caller");
+    XiBlock *entry = f->entry;
+    XiValue *receiver = xi_param(f, entry, 0, &stub_int);
+    XiValue *arg = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {receiver, arg};
+    setup_params(f, params, 2);
+
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD_DIRECT, &stub_int, 2);
+    call->args[0] = receiver;
+    call->args[1] = arg;
+    call->aux_int = 17;
+    call->flags |= XI_FLAG_TAIL;
+    entry->kind = XI_BLOCK_RETURN;
+    entry->control = call;
+
+    XiPassChange chg = xi_opt_tail_call(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(!chg.values_changed);
+    ASSERT(call->op == XI_CALL_METHOD_DIRECT);
+    ASSERT((call->flags & XI_FLAG_TAIL) != 0);
+    ASSERT(call->args[0] == receiver);
+    ASSERT(call->aux_int == 17);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: call not in tail position is not converted ========== */
 
 TEST(non_tail_call_no_change) {
@@ -246,6 +309,8 @@ int main(void) {
 
     run_self_tail_call_to_loop();
     run_non_self_call_no_change();
+    run_flagged_function_call_promotes();
+    run_flagged_method_call_keeps_method_op();
     run_non_tail_call_no_change();
     run_zero_params_no_change();
 

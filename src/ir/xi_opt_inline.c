@@ -190,6 +190,27 @@ static bool inline_is_leaf_straightline(const XiInlineCostModel *cost) {
     return cost->call_count == 0 && cost->branch_count == 0 && !cost->has_loop;
 }
 
+static bool inline_func_has_owner_scoped_open_dispatch(const XiFunc *f) {
+    if (!f)
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL_METHOD || value->nargs < 1 || !value->args[0] ||
+                !value->args[0]->type)
+                continue;
+            const XrType *receiver = value->args[0]->type;
+            if (receiver->kind == XR_KIND_INTERFACE ||
+                (receiver->kind == XR_KIND_INSTANCE && !receiver->is_value_type))
+                return true;
+        }
+    }
+    return false;
+}
+
 static unsigned inline_vector_lane_bytes(uint8_t native_type) {
     switch (native_type) {
         case XR_NATIVE_U8:
@@ -356,6 +377,8 @@ static const XiCallArgPlan *inline_outer_place_origin(const XiValue *outer_call,
     const XiCallPlan *plan = xi_call_plan(outer_call);
     if (!plan || !place)
         return NULL;
+    if (plan->has_receiver && plan->receiver.place == place)
+        return &plan->receiver;
     for (uint16_t i = 0; i < plan->nargs; i++) {
         const XiCallArgPlan *arg = &plan->args[i];
         if (arg->place == place)
@@ -370,8 +393,9 @@ static void inline_remap_call_place_origins(XiFunc *caller, XiValue *cloned,
     if (!caller || !plan)
         return;
 
-    for (uint16_t i = 0; i < plan->nargs; i++) {
-        XiCallArgPlan *arg = &plan->args[i];
+    uint16_t first = plan->has_receiver ? 0 : 1;
+    for (uint16_t slot = first; slot <= plan->nargs; slot++) {
+        XiCallArgPlan *arg = slot == 0 ? &plan->receiver : &plan->args[slot - 1];
         XiValue *place = arg->place;
         if (!place)
             continue;
@@ -411,6 +435,12 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
+    /* Tail position is scoped to the callee frame. Once that frame is
+     * inlined, its former tail call must flow through the caller's
+     * continuation, so carrying XI_FLAG_TAIL forward can make later method
+     * specialization treat an open dispatch as a direct terminal invoke. The
+     * regular tail-call pass may rediscover a true caller tail position. */
+    cloned->flags &= (uint8_t) ~XI_FLAG_TAIL;
     if (xi_evidence_domain_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
 
@@ -820,6 +850,14 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
             if (callee->is_vararg)
                 continue; /* Rest-Array construction needs a dedicated inline rewrite. */
+            /* Open class/interface dispatch plans are keyed by both callsite
+             * and owning function. Cloning such a site into another function
+             * would make the backend miss the verified type-switch plan and
+             * fall back to the static base method. Keep that boundary until
+             * the global-evidence layer has an explicit clone identity. Value
+             * types remain eligible because their dispatch is sealed. */
+            if (inline_func_has_owner_scoped_open_dispatch(callee))
+                continue;
             if (f->preserve_wide_vector_boundaries &&
                 inline_func_requires_wide_vector(callee, callee, 0) &&
                 !inline_func_requires_wide_vector(f, f, 0))

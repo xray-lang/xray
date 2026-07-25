@@ -1,5 +1,5 @@
 args=--simd native
-# The imported SIMD module contributes 15 existing boundary polls. A poll after
-# either lane operation would raise this to 16 or 17.
-c_count=15:xrt_has_pending_error()
+# Exact-width integer intrinsics are sealed, non-throwing receiver operations.
+# Only the two entry/module-initialization abort guards remain.
+c_count=2:xrt_has_pending_error()
 c_syntax=pass

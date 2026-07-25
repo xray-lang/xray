@@ -22,6 +22,7 @@ static int tests_failed = 0;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 3, .frozen = true};
+static XrType stub_class = {.kind = XR_KIND_INSTANCE, .id = 4, .frozen = true};
 
 #define ASSERT(cond)                                                                               \
     do {                                                                                           \
@@ -486,6 +487,63 @@ TEST(inline_clone_reproves_evidence_for_new_subject_and_revision) {
     xi_func_free(callee);
 }
 
+TEST(inline_clears_callee_tail_position) {
+    XiFunc *callee = make_func("tail_source", &stub_int);
+    XiFunc *caller = make_func("tail_destination", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *receiver = xi_const_int(callee, callee->entry, 7, &stub_int);
+    ASSERT(receiver != NULL);
+    XiValue *method = xi_value_new(callee, callee->entry, XI_CALL_METHOD, &stub_int, 1);
+    ASSERT(method != NULL);
+    method->args[0] = receiver;
+    method->flags |= XI_FLAG_TAIL;
+    xi_block_set_return(callee->entry, method);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(change.cfg_changed && change.values_changed);
+    XiBlock *inlined_entry = caller->entry->succs[0];
+    ASSERT(inlined_entry != NULL && inlined_entry->nvalues == 2);
+    XiValue *cloned_method = inlined_entry->values[1];
+    ASSERT(cloned_method != NULL && cloned_method->op == XI_CALL_METHOD);
+    ASSERT((cloned_method->flags & XI_FLAG_TAIL) == 0);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
+TEST(inline_preserves_owner_scoped_open_dispatch_boundary) {
+    XiFunc *callee = make_func("open_dispatch_source", &stub_int);
+    XiFunc *caller = make_func("open_dispatch_destination", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *receiver = xi_value_new(callee, callee->entry, XI_CONST, &stub_class, 0);
+    ASSERT(receiver != NULL);
+    XiValue *method = xi_value_new(callee, callee->entry, XI_CALL_METHOD, &stub_int, 1);
+    ASSERT(method != NULL);
+    method->args[0] = receiver;
+    xi_block_set_return(callee->entry, method);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(!change.cfg_changed && !change.values_changed);
+    ASSERT(caller->entry->succs[0] == NULL);
+    ASSERT(caller->entry->nvalues == 2);
+    ASSERT(caller->entry->values[1] == call);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -509,6 +567,8 @@ int main(void) {
     run_inlines_top_level_shared_function_load();
     run_preserves_wide_vector_target_feature_boundary();
     run_inline_clone_reproves_evidence_for_new_subject_and_revision();
+    run_inline_clears_callee_tail_position();
+    run_inline_preserves_owner_scoped_open_dispatch_boundary();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

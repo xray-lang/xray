@@ -14,10 +14,10 @@
  *      to the same function, replace with a back-edge to a loop header.
  *
  *   2. General tail call promotion (new):
- *      For non-self calls in tail position (XI_CALL/XI_CALL_METHOD with
- *      XI_FLAG_TAIL), convert the op to XI_TAIL_CALL.  This signals the
- *      backend to emit a tail jump (frame cleanup + jmp) instead of
- *      call + ret.
+ *      For non-self function calls in tail position (XI_CALL with
+ *      XI_FLAG_TAIL), convert the op to XI_TAIL_CALL. Method calls keep their
+ *      original op and XI_FLAG_TAIL because their receiver/symbol layout is
+ *      consumed by the dedicated OP_INVOKE_TAIL emitter.
  *
  * LIMITATIONS:
  *   - Self-recursion only for the loop transform.
@@ -283,9 +283,7 @@ static XiValue *find_general_tail_call(const XiBlock *blk) {
     if (!(ret_val->flags & XI_FLAG_TAIL))
         return NULL;
 
-    bool is_call = (ret_val->op == XI_CALL || ret_val->op == XI_CALL_METHOD ||
-                    ret_val->op == XI_CALL_METHOD_DIRECT);
-    if (!is_call)
+    if (ret_val->op != XI_CALL)
         return NULL;
 
     /* Must be the last value in the block. */
@@ -338,9 +336,9 @@ XR_FUNC XiPassChange xi_opt_tail_call(XiFunc *f) {
         }
     }
 
-    /* Phase 2: Promote remaining XI_FLAG_TAIL calls to XI_TAIL_CALL.
-     * These are general (non-self) tail calls that the backend can
-     * lower to tail jumps (frame cleanup + jmp). */
+    /* Phase 2: Promote remaining XI_FLAG_TAIL function calls to XI_TAIL_CALL.
+     * Method calls retain XI_CALL_METHOD[_DIRECT] plus XI_FLAG_TAIL so their
+     * receiver/symbol layout reaches OP_INVOKE_TAIL unchanged. */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         XiValue *call = find_general_tail_call(blk);
