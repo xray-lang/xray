@@ -27,11 +27,12 @@ XR_FUNC bool xi_lto_context_init(XiLtoContext *ctx, XiModule **modules, uint32_t
 
 XR_FUNC void xi_lto_context_free(XiLtoContext *ctx);
 
-/* Resolve XI_IMPORT_REF + indirect calls to direct XiFunc targets
- * within the LTO context.  Returns number of edges resolved. */
-XR_FUNC uint32_t xi_lto_resolve_calls(XiFunc *f, const XiLtoContext *ctx);
+/* Resolve import-backed bindings within the LTO context: indirect calls become
+ * direct XiFunc targets and immutable scalar imports become Xi constants.
+ * Returns the number of bindings resolved. */
+XR_FUNC uint32_t xi_lto_resolve_bindings(XiFunc *f, const XiLtoContext *ctx);
 
-/* Run LTO resolution on every function in every module. */
+/* Resolve import-backed bindings in every function in every linked module. */
 XR_FUNC uint32_t xi_lto_link_modules(XiLtoContext *ctx);
 
 #endif /* XI_LTO_H */

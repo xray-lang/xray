@@ -36,6 +36,11 @@
  * Single forward pass over each block. O(n) in value count. */
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f);
 
+/* Rewrite a value to a scalar literal while preserving the binding's concrete
+ * type. Cross-module LTO uses this after import resolution, when the exporter
+ * literal first becomes available. */
+XR_FUNC bool xi_rewrite_value_to_const_literal(XiValue *value, const XiConstLiteral *literal);
+
 /* Copy propagation: replace XI_COPY chains with their source.
  * Rewrites all uses of a COPY value to use the original source.
  * Single forward pass. O(n) in value count. */
@@ -100,6 +105,13 @@ static inline XiRepPolicy xi_rep_policy_native_boundary(void) {
  * Intended for the AOT backend, which benefits from unboxed values. */
 XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f);
 XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy);
+
+/* Re-run representation selection after a late, semantics-preserving rewrite
+ * (for example cross-module constant resolution), then remove conversion
+ * pairs and dead identities introduced by the old representation topology.
+ * This is the supported repair boundary for already-repped Xi. */
+XR_FUNC XiPassChange xi_opt_refresh_representations_with_policy(XiFunc *f,
+                                                                const XiRepPolicy *policy);
 
 /* Insert the allocating erased descriptor box at semantic identity
  * boundaries before escape/ownership analysis on every backend. */

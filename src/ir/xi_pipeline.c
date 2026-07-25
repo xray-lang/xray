@@ -80,15 +80,6 @@ static void xi_count_rc_ops_recursive(const XiFunc *f, uint64_t *retain, uint64_
         xi_count_rc_ops_recursive(f->children[i], retain, release);
 }
 
-static void xi_rep_cleanup_recursive(XiFunc *f) {
-    if (!f)
-        return;
-    xi_opt_copy_prop(f);
-    xi_opt_dce(f);
-    for (uint16_t i = 0; i < f->nchildren; i++)
-        xi_rep_cleanup_recursive(f->children[i]);
-}
-
 static void xi_set_source_file_recursive(XiFunc *f, const char *source_file) {
     if (!f)
         return;
@@ -461,9 +452,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
     if (cfg->run_select_rep) {
-        xi_opt_select_rep_with_policy(ir, &cfg->rep_policy);
-        xi_opt_box_elim(ir);
-        xi_rep_cleanup_recursive(ir);
+        xi_opt_refresh_representations_with_policy(ir, &cfg->rep_policy);
         next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
                                       sizeof(transition_error));
         if (!next) {
@@ -522,9 +511,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
          * transition for the IR retained by the proto. */
         if (current_stage == XI_STAGE_OPTIMIZED) {
             XiRepPolicy vm_policy = xi_rep_policy_tagged_boundary();
-            xi_opt_select_rep_with_policy(ir, &vm_policy);
-            xi_opt_box_elim(ir);
-            xi_rep_cleanup_recursive(ir);
+            xi_opt_refresh_representations_with_policy(ir, &vm_policy);
             next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
                                           sizeof(transition_error));
             if (!next) {

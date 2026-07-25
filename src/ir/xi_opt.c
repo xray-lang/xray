@@ -210,7 +210,7 @@ static bool record_shared_const_literal(XiFunc *f, int64_t slot, const XiValue *
     return true;
 }
 
-static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
+XR_FUNC bool xi_rewrite_value_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
     if (!v || !lit || lit->kind == XI_CONST_LITERAL_NONE)
         return false;
     switch (lit->kind) {
@@ -227,15 +227,9 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
     v->op = XI_CONST;
     /* Preserve the read's declared concrete type. A folded shared const must not
      * lose the width/signedness of the binding: e.g. a `uint64` const folded to
-     * a signed `int` would make a later PTR_STORE into a uint64 slot fail verify
-     * (value maps to I64 while the store aux is U64). rewrite_to_const_int
-     * already preserves the value's type; do the same here. Fall back to the
-     * literal's recorded (concrete) type when the read carried no type, or when
-     * it only carried an unresolved `any`/unknown type: an imported const loads
-     * via GET_SHARED typed unknown, and keeping unknown would give the folded
-     * const a tagged representation, so later native uses (pointer `.offset`,
-     * `as int`) mis-lower (a raw pointer add would be emitted as
-     * xrt_add(void*, XrValue)). The literal carries the binding's real width. */
+     * a signed `int` would make a later PTR_STORE into a uint64 slot fail verify.
+     * Cross-module LTO separately recovers the export binding type because an
+     * imported GET_SHARED may carry a tagged placeholder here. */
     if (!v->type || XR_TYPE_IS_UNKNOWN(v->type))
         v->type = lit->type;
     v->nargs = 0;
@@ -718,7 +712,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
             if (v->op == XI_GET_SHARED) {
                 const XiConstLiteral *lit = shared_const_literal_slot(f, v->aux_int);
-                if (lit && !lit->data_weak && rewrite_to_const_literal(v, lit)) {
+                if (lit && !lit->data_weak && xi_rewrite_value_to_const_literal(v, lit)) {
                     chg.values_changed = true;
                     continue;
                 }
@@ -1884,6 +1878,16 @@ static bool sr_convert_can_return_null(const XiValue *v) {
     }
 }
 
+static bool sr_as_is_native_numeric_width(const XiValue *v) {
+    if (!v || v->op != XI_AS || (v->aux_int & 1) != 0 || (int32_t) (v->aux_int >> 1) >= 0 ||
+        v->nargs < 1 || !v->args[0] || !v->type || !v->args[0]->type)
+        return false;
+    bool same_numeric_domain = (XR_TYPE_IS_INT(v->type) && XR_TYPE_IS_INT(v->args[0]->type)) ||
+                               (XR_TYPE_IS_FLOAT(v->type) && XR_TYPE_IS_FLOAT(v->args[0]->type));
+    return same_numeric_domain && sr_type_scalar_rep(v->type) != XR_REP_TAGGED &&
+           sr_type_scalar_rep(v->args[0]->type) != XR_REP_TAGGED;
+}
+
 static bool sr_type_is_task_instance(const XrType *type) {
     if (!type)
         return false;
@@ -2747,6 +2751,14 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
                 return XR_REP_TAGGED;
             return sr_type_scalar_rep(v->type);
         }
+        case XI_AS:
+            /* A numeric `as` normally lowers to NARROW/COPY.  XI_AS survives
+             * only when an imported source was still unresolved during
+             * per-module lowering.  Once LTO supplies its scalar type, the
+             * cast is a native representation-preserving conversion. */
+            if (sr_as_is_native_numeric_width(v))
+                return sr_type_scalar_rep(v->type);
+            return XR_REP_TAGGED;
         /* NARROW/WIDEN: value stays in machine register, only range changes.
          * Integer variants keep I64, float variants keep F64. */
         case XI_NARROW_I8:
@@ -2990,6 +3002,41 @@ static bool sr_use_rep_enum_op(const XiValue *user, uint16_t arg_idx, XrRep *out
     }
 }
 
+static bool sr_use_rep_value_op(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy,
+                                XrRep *out) {
+    switch (user->op) {
+        case XI_NOT:
+            *out =
+                arg_idx == 0 && user->args[0] ? sr_def_rep(user->args[0], policy) : XR_REP_TAGGED;
+            return true;
+        case XI_CONVERT:
+            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
+                !sr_convert_can_return_null(user)) {
+                *out = sr_type_scalar_rep(user->args[0]->type);
+                if (*out == XR_REP_TAGGED)
+                    *out = sr_def_rep(user->args[0], policy);
+            } else {
+                *out = XR_REP_TAGGED;
+            }
+            return true;
+        case XI_AS:
+            *out = arg_idx == 0 && sr_as_is_native_numeric_width(user)
+                       ? sr_type_scalar_rep(user->args[0]->type)
+                       : XR_REP_TAGGED;
+            return true;
+        case XI_SELECT:
+            if (arg_idx == 0 && user->args[0])
+                *out = sr_def_rep(user->args[0], policy);
+            else if (arg_idx < 3)
+                *out = sr_def_rep(user, policy);
+            else
+                *out = XR_REP_TAGGED;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy) {
     XrRep mem_rep = XR_REP_TAGGED;
     if (sr_use_rep_memory_op(user, arg_idx, policy, &mem_rep))
@@ -2997,6 +3044,9 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
     XrRep enum_rep = XR_REP_TAGGED;
     if (sr_use_rep_enum_op(user, arg_idx, &enum_rep))
         return enum_rep;
+    XrRep value_rep = XR_REP_TAGGED;
+    if (sr_use_rep_value_op(user, arg_idx, policy, &value_rep))
+        return value_rep;
     switch (user->op) {
         case XI_ADD:
         case XI_SUB:
@@ -3035,26 +3085,6 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 return XR_REP_TAGGED;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {
                 return sr_type_scalar_rep(user->args[arg_idx]->type);
-            }
-            return XR_REP_TAGGED;
-        case XI_NOT:
-            if (arg_idx == 0 && user->args[0])
-                return sr_def_rep(user->args[0], policy);
-            return XR_REP_TAGGED;
-        case XI_CONVERT:
-            if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
-                !sr_convert_can_return_null(user)) {
-                XrRep r = sr_type_scalar_rep(user->args[0]->type);
-                if (r != XR_REP_TAGGED)
-                    return r;
-                return sr_def_rep(user->args[0], policy);
-            }
-            return XR_REP_TAGGED;
-        case XI_SELECT:
-            if (arg_idx == 0 && user->args[0])
-                return sr_def_rep(user->args[0], policy);
-            if (arg_idx < 3) {
-                return sr_def_rep(user, policy);
             }
             return XR_REP_TAGGED;
         case XI_CALL:
@@ -3750,6 +3780,25 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
             xi_opt_box_elim(f->children[i]);
     }
     return chg;
+}
+
+static XiPassChange refresh_rep_cleanup_recursive(XiFunc *f) {
+    if (!f)
+        return xi_pass_no_change();
+    XiPassChange changed = xi_opt_copy_prop(f);
+    changed = xi_pass_merge(changed, xi_opt_dce(f));
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        changed = xi_pass_merge(changed, refresh_rep_cleanup_recursive(f->children[i]));
+    return changed;
+}
+
+XR_FUNC XiPassChange xi_opt_refresh_representations_with_policy(XiFunc *f,
+                                                                const XiRepPolicy *policy) {
+    XR_DCHECK(f != NULL, "xi_opt_refresh_representations_with_policy: NULL func");
+    XiPassChange changed = xi_opt_select_rep_with_policy(f, policy);
+    changed = xi_pass_merge(changed, xi_opt_box_elim(f));
+    changed = xi_pass_merge(changed, refresh_rep_cleanup_recursive(f));
+    return changed;
 }
 
 /* ========== Combined Pass ========== */

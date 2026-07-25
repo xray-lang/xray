@@ -8898,7 +8898,15 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     }
 
     bool is_safe = as->is_safe;
-    struct XrType *result_type = is_safe ? l->type_any : l->type_any;
+    /* If the source is an unresolved import, lowering cannot yet choose the
+     * normal native NARROW/COPY form for a numeric-width cast.  Retain the
+     * analyzer-resolved target type on the fallback XI_AS so link-time import
+     * resolution can canonicalize its representation later.  Runtime type
+     * assertions and safe casts keep their tagged result contract. */
+    struct XrType *result_type =
+        !is_safe && cast_type && (XR_TYPE_IS_INT(cast_type) || XR_TYPE_IS_FLOAT(cast_type))
+            ? cast_type
+            : l->type_any;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
     if (!v)
         return NULL;
