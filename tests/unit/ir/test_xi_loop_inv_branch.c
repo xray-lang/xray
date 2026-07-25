@@ -74,6 +74,10 @@ static XiFunc *build_loop_with_invariant_branch(void) {
     XiValue *param_a = xi_const_int(f, entry, 5, &stub_int);
     XiValue *param_b = xi_const_int(f, entry, 3, &stub_int);
 
+    /* LICM's input contract for the unswitch pass: the final condition value
+     * is already outside the loop. */
+    XiValue *inv_cond = xi_binary(f, entry, XI_GT, &stub_bool, param_a, param_b);
+
     xi_block_set_jump(entry, header);
     xi_block_set_jump(merge, header);
 
@@ -81,8 +85,6 @@ static XiFunc *build_loop_with_invariant_branch(void) {
     XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
     xi_block_set_if(header, cond, branch_blk, exit_blk);
 
-    /* Invariant branch: both operands from outside the loop. */
-    XiValue *inv_cond = xi_binary(f, branch_blk, XI_GT, &stub_bool, param_a, param_b);
     xi_block_set_if(branch_blk, inv_cond, then_blk, else_blk);
 
     xi_binary(f, then_blk, XI_ADD, &stub_int, &iv->value, param_a);
@@ -98,7 +100,10 @@ static XiFunc *build_loop_with_invariant_branch(void) {
     iv->value.args[pre_idx] = start;
     iv->value.args[latch_idx] = next;
 
-    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
+    /* The old header dominates the exit, so this direct SSA use is valid
+     * before unswitching.  The pass must synthesize an exit phi for the two
+     * versioned header values. */
+    xi_block_set_return(exit_blk, &iv->value);
     return f;
 }
 
@@ -161,14 +166,35 @@ static XiFunc *build_loop_with_phi_branch_condition(void) {
     return f;
 }
 
-TEST(hoists_invariant_condition_to_preheader) {
+TEST(unswitches_invariant_branch_at_preheader) {
     XiFunc *f = build_loop_with_invariant_branch();
     ASSERT(f != NULL);
     ASSERT(verify_func(f));
 
+    XiBlock *entry = f->blocks[0];
+    XiBlock *old_header = f->blocks[1];
+    XiBlock *old_branch = f->blocks[2];
+    XiBlock *exit_block = f->blocks[6];
+    XiValue *invariant_condition = old_branch->control;
+
     XiPassChange chg = xi_opt_loop_inv_branch(f);
+    ASSERT(chg.cfg_changed);
     ASSERT(chg.values_changed);
     ASSERT(chg.n_added >= 1);
+    ASSERT(entry->kind == XI_BLOCK_IF);
+    ASSERT(entry->control == invariant_condition);
+    ASSERT(entry->succs[0] != NULL && entry->succs[1] != NULL);
+    ASSERT(entry->succs[0] != entry->succs[1]);
+    ASSERT(entry->succs[0]->kind == XI_BLOCK_IF);
+    ASSERT(entry->succs[1]->kind == XI_BLOCK_IF);
+    ASSERT(entry->succs[0]->succs[0]->kind == XI_BLOCK_PLAIN);
+    ASSERT(entry->succs[1]->succs[0]->kind == XI_BLOCK_PLAIN);
+    ASSERT(old_header->kind == XI_BLOCK_UNREACHABLE);
+    ASSERT(old_branch->kind == XI_BLOCK_UNREACHABLE);
+    ASSERT(exit_block->npreds == 2);
+    ASSERT(exit_block->phis != NULL);
+    ASSERT(exit_block->control == &exit_block->phis->value);
+    ASSERT(exit_block->phis->value.nargs == 2);
     ASSERT(verify_func(f));
     xi_func_free(f);
 }
@@ -234,7 +260,7 @@ TEST(skips_loop_variant_branch) {
 int main(void) {
     printf("=== Xi Loop Invariant Branch Tests ===\n\n");
 
-    run_hoists_invariant_condition_to_preheader();
+    run_unswitches_invariant_branch_at_preheader();
     run_skips_phi_branch_condition();
     run_no_loop_no_change();
     run_skips_loop_variant_branch();
