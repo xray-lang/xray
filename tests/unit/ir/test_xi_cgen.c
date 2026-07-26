@@ -1117,6 +1117,34 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
+    assert(contains(code, "#if defined(__GNUC__) && !defined(__clang__)") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wattributes\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-variable\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-but-set-variable\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-label\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wsign-compare\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wsign-conversion\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wcast-align\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wcast-qual\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wconversion\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wdeclaration-after-statement\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wfloat-equal\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wredundant-decls\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wstrict-aliasing\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wswitch-enum\"") &&
+           "generated translation units should isolate GCC-only warning suppressions");
+    assert(contains(code, "#if defined(__clang__)") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-variable\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wsign-compare\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wcast-align\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wcast-qual\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wdeclaration-after-statement\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wfloat-equal\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wswitch-enum\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-int-conversion\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wshorten-64-to-32\"") &&
+           "generated translation units should isolate Clang-only warning suppressions");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);

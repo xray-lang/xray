@@ -400,6 +400,7 @@ static bool dump_contains_imported_package_link_dep(const char *dump) {
 static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     XaotTarget x86 = {0};
     XaotTarget arm = {0};
+    XaotTarget arm32 = {0};
     XaotTarget x86_32 = {0};
     XaotTarget powerpc64 = {0};
     XaotTarget powerpc64le = {0};
@@ -469,6 +470,15 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SCALAR, NULL, err, sizeof(err)));
     ASSERT_TRUE(arm.simd_features == 0);
 
+    ASSERT_TRUE(xaot_target_init(&arm32, "arm-linux-gnueabi"));
+    ASSERT_TRUE(strcmp(arm32.arch, "arm") == 0);
+    ASSERT_TRUE(strcmp(arm32.abi, "gnu") == 0);
+    ASSERT_TRUE(arm32.pointer_bits == 32);
+    ASSERT_TRUE(strcmp(arm32.endian, "little") == 0);
+    ASSERT_TRUE(arm32.data_layout.pointer.size == 4);
+    ASSERT_TRUE(arm32.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(arm32.simd_features == 0);
+
     ASSERT_TRUE(xaot_target_init(&x86_32, "i386-linux-musl"));
     ASSERT_TRUE(x86_32.pointer_bits == 32);
     ASSERT_TRUE(strcmp(x86_32.endian, "little") == 0);
@@ -501,6 +511,7 @@ static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
     xaot_target_free(&loongarch64);
     xaot_target_free(&powerpc64);
     xaot_target_free(&x86_32);
+    xaot_target_free(&arm32);
     xaot_target_free(&arm);
     xaot_target_free(&x86);
     passed++;

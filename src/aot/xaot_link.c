@@ -287,6 +287,16 @@ static bool xaot_target_profile(const char *name, const char **arch, const char 
         *endian = "little";
         return true;
     }
+    if (strcmp(name, "arm-linux-gnueabi") == 0) {
+        *arch = "arm";
+        *os = "linux";
+        *abi = "gnu";
+        *object_format = "elf";
+        *triple = "arm-linux-gnueabi";
+        *pointer_bits = 32;
+        *endian = "little";
+        return true;
+    }
     if (strcmp(name, "x86_64-unknown-none") == 0) {
         *arch = "x86_64";
         *os = "none";

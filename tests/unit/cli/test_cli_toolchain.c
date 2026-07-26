@@ -47,7 +47,7 @@ TEST(list_supported_targets) {
     const char *const *targets = xr_cli_build_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 13);
+    ASSERT_EQ_INT((int) count, 14);
     ASSERT_STR_EQ(targets[0], "native");
     ASSERT_STR_EQ(targets[1], "x86_64-unknown-none");
     ASSERT_STR_EQ(targets[2], "riscv32imac-unknown-none-elf");
@@ -55,10 +55,11 @@ TEST(list_supported_targets) {
     ASSERT_STR_EQ(targets[4], "thumbv7em-none-eabi");
     ASSERT_STR_EQ(targets[5], "i386-linux-musl");
     ASSERT_STR_EQ(targets[6], "x86_64-linux-musl");
-    ASSERT_STR_EQ(targets[8], "powerpc64-linux-musl");
-    ASSERT_STR_EQ(targets[9], "powerpc64le-linux-musl");
-    ASSERT_STR_EQ(targets[10], "loongarch64-linux-musl");
-    ASSERT_STR_EQ(targets[12], "aarch64-windows-gnu");
+    ASSERT_STR_EQ(targets[7], "arm-linux-gnueabi");
+    ASSERT_STR_EQ(targets[9], "powerpc64-linux-musl");
+    ASSERT_STR_EQ(targets[10], "powerpc64le-linux-musl");
+    ASSERT_STR_EQ(targets[11], "loongarch64-linux-musl");
+    ASSERT_STR_EQ(targets[13], "aarch64-windows-gnu");
 }
 
 TEST(parse_x86_64_none_target) {
@@ -104,6 +105,21 @@ TEST(parse_i386_linux_musl_target) {
     ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_X86);
     ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_LINUX);
     ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_MUSL);
+    ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
+    ASSERT_EQ_INT(target.pointer_bits, 32);
+}
+
+TEST(parse_arm_linux_gnueabi_target) {
+    XrCliBuildTarget target;
+    char err[256];
+
+    ASSERT_TRUE(xr_cli_build_target_parse("arm-linux-gnueabi", &target, err, sizeof(err)));
+    ASSERT_FALSE(target.is_native);
+    ASSERT_STR_EQ(target.name, "arm-linux-gnueabi");
+    ASSERT_STR_EQ(target.zig_triple, "arm-linux-gnueabi");
+    ASSERT_EQ_INT(target.arch, XR_CLI_TARGET_ARCH_ARM);
+    ASSERT_EQ_INT(target.os, XR_CLI_TARGET_OS_LINUX);
+    ASSERT_EQ_INT(target.abi, XR_CLI_TARGET_ABI_GNU);
     ASSERT_EQ_INT(target.endian, XR_CLI_TARGET_ENDIAN_LITTLE);
     ASSERT_EQ_INT(target.pointer_bits, 32);
 }
@@ -384,6 +400,7 @@ RUN_TEST(parse_riscv32_none_elf_target);
 RUN_TEST(parse_riscv64_none_elf_target);
 RUN_TEST(parse_thumbv7em_none_eabi_target);
 RUN_TEST(parse_i386_linux_musl_target);
+RUN_TEST(parse_arm_linux_gnueabi_target);
 RUN_TEST(parse_linux_musl_target);
 RUN_TEST(parse_powerpc64_linux_musl_target);
 RUN_TEST(parse_powerpc64le_linux_musl_target);

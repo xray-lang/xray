@@ -241,6 +241,7 @@ logs=""
 for target in \
     i386-linux-musl \
     x86_64-linux-musl \
+    arm-linux-gnueabi \
     aarch64-linux-musl \
     powerpc64-linux-musl \
     powerpc64le-linux-musl \

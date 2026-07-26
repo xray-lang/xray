@@ -28,6 +28,7 @@ static const char *const xr_cli_tc_supported_targets[] = {
     "thumbv7em-none-eabi",
     "i386-linux-musl",
     "x86_64-linux-musl",
+    "arm-linux-gnueabi",
     "aarch64-linux-musl",
     "powerpc64-linux-musl",
     "powerpc64le-linux-musl",
@@ -88,6 +89,13 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
     if (strcmp(name, "i386-linux-musl") == 0) {
         xr_cli_tc_set_target(out, "i386-linux-musl", "x86-linux-musl", NULL, "",
                              XR_CLI_TARGET_ARCH_X86, XR_CLI_TARGET_OS_LINUX, XR_CLI_TARGET_ABI_MUSL,
+                             XR_CLI_TARGET_ENDIAN_LITTLE, 32, false);
+        return true;
+    }
+
+    if (strcmp(name, "arm-linux-gnueabi") == 0) {
+        xr_cli_tc_set_target(out, "arm-linux-gnueabi", "arm-linux-gnueabi", NULL, "",
+                             XR_CLI_TARGET_ARCH_ARM, XR_CLI_TARGET_OS_LINUX, XR_CLI_TARGET_ABI_GNU,
                              XR_CLI_TARGET_ENDIAN_LITTLE, 32, false);
         return true;
     }
@@ -166,7 +174,8 @@ XR_FUNC bool xr_cli_build_target_parse(const char *text, XrCliBuildTarget *out, 
                     "unsupported AOT target '%s' (supported: native, x86_64-unknown-none, "
                     "riscv32imac-unknown-none-elf, riscv64gc-unknown-none-elf, "
                     "thumbv7em-none-eabi, i386-linux-musl, "
-                    "x86_64-linux-musl, aarch64-linux-musl, powerpc64-linux-musl, "
+                    "x86_64-linux-musl, arm-linux-gnueabi, aarch64-linux-musl, "
+                    "powerpc64-linux-musl, "
                     "powerpc64le-linux-musl, loongarch64-linux-musl, "
                     "x86_64-windows-gnu, "
                     "aarch64-windows-gnu)",

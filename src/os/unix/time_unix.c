@@ -37,6 +37,7 @@ uint64_t xr_time_realtime_ns(void) {
 }
 
 uint64_t xr_time_process_cpu_ns(void) {
+    clock_t t;
 #ifdef CLOCK_PROCESS_CPUTIME_ID
     struct timespec ts;
     if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
@@ -45,17 +46,17 @@ uint64_t xr_time_process_cpu_ns(void) {
 #endif
     /* Fallback: clock() has poor resolution and wraps on 32-bit, but
      * is universally available. */
-    clock_t t = clock();
+    t = clock();
     return (uint64_t) t * (1000000000ULL / CLOCKS_PER_SEC);
 }
 
 void xr_time_sleep_ns(uint64_t ns) {
     struct timespec req;
+    struct timespec rem;
     req.tv_sec = (time_t) (ns / 1000000000ULL);
     req.tv_nsec = (long) (ns % 1000000000ULL);
     // Loop on EINTR so signal interruption does not shorten the
     // requested wait.
-    struct timespec rem;
     while (nanosleep(&req, &rem) == -1 && errno == EINTR) {
         req = rem;
     }
