@@ -1550,28 +1550,42 @@ int xlsp_server_run(XrLspServer *server) {
             xlsp_workspace_poll_index_results(server);
         }
 
-        // Process stdin messages
+        // Process every complete frame already buffered by the transport.
+        // A single pipe read can contain several LSP frames (for example
+        // initialized + didOpen + completion).  Stopping after the first
+        // frame leaves the remainder in the transport's user-space buffer;
+        // because the kernel pipe is then empty, poll will not wake us again.
+        // Drain until try_read reports that another kernel read would block.
+        bool transport_closed = false;
         if (stdin_ready) {
-            size_t len;
-            bool would_block;
-            char *msg_str = xlsp_transport_try_read(server->transport, &len, &would_block);
+            while (true) {
+                size_t len;
+                bool would_block;
+                char *msg_str = xlsp_transport_try_read(server->transport, &len, &would_block);
 
-            if (msg_str) {
-                XrJsonValue *msg = xjson_parse(msg_str, len);
-                xr_free(msg_str);
+                if (msg_str) {
+                    XrJsonValue *msg = xjson_parse(msg_str, len);
+                    xr_free(msg_str);
 
-                if (msg) {
-                    handle_message(server, msg);
-                    xjson_free(msg);
-                } else {
-                    lsp_log("Failed to parse JSON message");
+                    if (msg) {
+                        handle_message(server, msg);
+                        xjson_free(msg);
+                    } else {
+                        lsp_log("Failed to parse JSON message");
+                    }
+                    continue;
                 }
-            } else if (!would_block) {
-                // EOF or error
-                lsp_log("EOF or read error, exiting");
+
+                if (!would_block) {
+                    // EOF or error
+                    lsp_log("EOF or read error, exiting");
+                    transport_closed = true;
+                }
                 break;
             }
         }
+        if (transport_closed)
+            break;
 
         // Also process any pending background work even without events
         // (timeout case: n == 0)
