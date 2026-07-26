@@ -381,6 +381,52 @@ TEST(completion_shared_channel_member) {
     xlsp_server_free(server);
 }
 
+TEST(completion_inferred_int_members) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn main() {\n"
+                          "    var a = 10\n"
+                          "    a.\n"
+                          "}\n";
+    XrLspDocument *doc =
+        xlsp_document_open(server, "file:///completion_inferred_int.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {2, 6});
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "abs"));
+    ASSERT(json_array_contains_label(items, "toString"));
+    ASSERT(json_array_contains_label(items, "checkedAdd"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_explicit_u32_preserves_receiver_type) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn main() {\n"
+                          "    var a: u32 = 10\n"
+                          "    a.\n"
+                          "}\n";
+    XrLspDocument *doc =
+        xlsp_document_open(server, "file:///completion_explicit_u32.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {2, 6});
+    ASSERT(items != NULL);
+    XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
+    ASSERT(rotate != NULL);
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): u32");
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
 TEST(completion_enum_static_variants_descriptor) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -1148,6 +1194,8 @@ int main(int argc, char **argv) {
 
     printf("\nCompletion tests:\n");
     RUN_TEST(completion_shared_channel_member);
+    RUN_TEST(completion_inferred_int_members);
+    RUN_TEST(completion_explicit_u32_preserves_receiver_type);
     RUN_TEST(completion_enum_static_variants_descriptor);
     RUN_TEST(completion_enum_descriptor_properties);
     RUN_TEST(completion_enum_iteration_variable_is_descriptor);

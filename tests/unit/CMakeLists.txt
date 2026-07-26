@@ -481,6 +481,12 @@ if(XR_BUILD_LSP)
     )
     target_link_libraries(test_lsp_document PRIVATE xray_core)
     add_test(NAME test_lsp_document COMMAND test_lsp_document)
+    add_test(NAME test_lsp_protocol_transcript
+        COMMAND ${XRAY_PYTHON}
+            ${CMAKE_SOURCE_DIR}/tests/lsp/test_protocol_transcript.py
+            --xray $<TARGET_FILE:xray>
+    )
+    set_tests_properties(test_lsp_protocol_transcript PROPERTIES TIMEOUT 20)
 
     add_executable(test_lsp_config
         lsp/test_lsp_config.c
