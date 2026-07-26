@@ -257,6 +257,7 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-variable\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"\n");
+    fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-label\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wsign-compare\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wcast-align\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wcast-qual\"\n");

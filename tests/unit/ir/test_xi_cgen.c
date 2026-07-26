@@ -1174,6 +1174,7 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "#if defined(__clang__)") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wunused-variable\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-label\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wsign-compare\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wcast-align\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wcast-qual\"") &&
