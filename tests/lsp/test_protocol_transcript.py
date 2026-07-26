@@ -123,6 +123,20 @@ def test_batched_open_and_completion(xray: Path) -> None:
         initialized = session.recv_id(1)
         completion_provider = initialized["result"]["capabilities"]["completionProvider"]
         assert "." in completion_provider["triggerCharacters"], initialized
+        token_modifiers = initialized["result"]["capabilities"]["semanticTokensProvider"][
+            "legend"
+        ]["tokenModifiers"]
+        assert token_modifiers == [
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary",
+        ], token_modifiers
 
         source = "fn main() {\n    var a = 10\n    a.\n}\n"
         uri = "file:///private/tmp/xray_lsp_completion_transcript.xr"

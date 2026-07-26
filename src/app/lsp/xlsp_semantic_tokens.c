@@ -49,7 +49,7 @@ XrJsonValue *xlsp_semantic_tokens_legend(void) {
 
     // Token modifiers
     XrJsonValue *modifiers = xjson_new_array();
-    for (int i = 0; i < 10; i++) {
+    for (size_t i = 0; i < XR_COUNTOF(token_modifier_names); i++) {
         xjson_array_push(modifiers, xjson_new_string(token_modifier_names[i]));
     }
     xjson_object_set(legend, "tokenModifiers", modifiers);
