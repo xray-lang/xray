@@ -1264,12 +1264,12 @@ static void emit_class_boxed_clone_helper(XiCgenCtx *ctx, FILE *out, const XiCla
         const XgClassFieldSummary *source =
             xg_global_evidence_find_class_field(ev, derived->source_field_id);
         const char *field_name = cg_class_native_boxed_derived_field_name(ev, derive, cd, fi);
-        fprintf(out, "    { XrValue field = xrt_getprop_name(src, ");
-        emit_c_string_literal(out, field_name);
+        fprintf(out, "    { XrValue field = xrt_getprop_key(src, ");
+        cg_emit_str_value(ctx, out, field_name);
         fprintf(out, "); XrValue cloned = ");
         emit_class_boxed_clone_value(ctx, out, source, "field", prefix);
-        fprintf(out, "; xrt_setprop_name(dst, ");
-        emit_c_string_literal(out, field_name);
+        fprintf(out, "; xrt_setprop_key(dst, ");
+        cg_emit_str_value(ctx, out, field_name);
         fprintf(out, ", cloned); }\n");
     }
     fprintf(out, "    return dst;\n");

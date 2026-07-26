@@ -257,10 +257,18 @@ static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiVal
         return false;
     }
 
-    fprintf(out, "(void *)((uint8_t *)(");
+    bool is_mutable = ptr->type && ptr->type->kind == XR_KIND_POINTER && ptr->type->ptr_is_mut;
+    const char *qualifier = is_mutable ? "" : "const ";
+    /* Pointer arithmetic is an unsafe operation whose source-level contract
+     * requires a live, non-null base.  Materialize each operand once and carry
+     * that proof into C before doing the arithmetic; this both preserves the
+     * single-evaluation semantics and avoids manufacturing an invalid address
+     * from a null base. */
+    fprintf(out, "({ %suint8_t *_xr_base = (%suint8_t *)(", qualifier, qualifier);
     emit_value_as_rep_ctx(ctx, out, ptr, XR_REP_RAWPTR);
-    fprintf(out, ") %c (intptr_t)(", subtract ? '-' : '+');
+    fprintf(out, "); intptr_t _xr_offset = (intptr_t)(");
     emit_value_as_rep_ctx(ctx, out, offset, XR_REP_I64);
-    fprintf(out, "))");
+    fprintf(out, "); XR_ASSUME(_xr_base != NULL); (%svoid *)(_xr_base %c _xr_offset); })",
+            qualifier, subtract ? '-' : '+');
     return true;
 }

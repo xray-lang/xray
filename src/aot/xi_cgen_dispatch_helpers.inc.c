@@ -11978,10 +11978,10 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             xicgen_emit_c_string_literal(out, field ? field : "?");
             fprintf(out, ")");
         } else {
-            fprintf(out, "xrt_getprop_name(");
+            fprintf(out, "xrt_getprop_key(");
             emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
-            xicgen_emit_c_string_literal(out, field ? field : "?");
+            cg_emit_str_value(ctx, out, field ? field : "?");
             fprintf(out, ")");
         }
         emit_conversion_suffix(out, conv_suffix);
@@ -12019,10 +12019,10 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
-        fprintf(out, "xrt_setprop_name(");
+        fprintf(out, "xrt_setprop_key(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        xicgen_emit_c_string_literal(out, field ? field : "?");
+        cg_emit_str_value(ctx, out, field ? field : "?");
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -14728,7 +14728,12 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
-/* memcpy(dst, src, byte_count) for MutPtr<T>.copyFromNonOverlapping. */
+/* memcpy(dst, src, byte_count) for MutPtr<T>.copyFromNonOverlapping.
+ *
+ * C still requires valid pointer arguments for memcpy when the byte count is
+ * zero.  Xray's unsafe primitive permits an empty copy without dereferencing
+ * either pointer, so fold a constant zero to a no-op and guard a dynamic zero
+ * before establishing the caller's non-null proof for an actual copy. */
 static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *prefix) {
     (void) f;
@@ -14737,18 +14742,31 @@ static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "memcpy(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-    fprintf(out, ", ");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
     int64_t byte_count = 0;
-    if (cg_const_int_value(v->args[2], &byte_count) && byte_count >= 0) {
-        fprintf(out, ", (size_t)INT64_C(%" PRId64 "))", byte_count);
-    } else {
-        fprintf(out, ", (size_t)(");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, "))");
+    bool constant_count = cg_const_int_value(v->args[2], &byte_count) && byte_count >= 0;
+    if (constant_count && byte_count == 0) {
+        fprintf(out, "((void)0)");
+        return;
     }
+
+    fprintf(out, "({ void *_xr_dst = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, "; const void *_xr_src = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
+    if (constant_count) {
+        fprintf(out,
+                "; XR_ASSUME(_xr_dst != NULL && _xr_src != NULL); "
+                "(void)memcpy(_xr_dst, _xr_src, (size_t)INT64_C(%" PRId64 ")); "
+                "_xr_dst; })",
+                byte_count);
+        return;
+    }
+
+    fprintf(out, "; size_t _xr_count = (size_t)(");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+    fprintf(out, "); if (_xr_count != 0) { "
+                 "XR_ASSUME(_xr_dst != NULL && _xr_src != NULL); "
+                 "(void)memcpy(_xr_dst, _xr_src, _xr_count); } _xr_dst; })");
 }
 
 static void xicgen_gen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

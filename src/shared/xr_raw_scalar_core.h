@@ -22,9 +22,19 @@
 
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_RAW_COPY(dst, src, size) __builtin_memcpy((dst), (src), (size))
+#define XR_RAW_ASSUME_NON_NULL(ptr)                                                                \
+    do {                                                                                           \
+        if ((ptr) == NULL)                                                                         \
+            __builtin_unreachable();                                                               \
+    } while (0)
+#elif defined(_MSC_VER)
+#include <string.h>
+#define XR_RAW_COPY(dst, src, size) memcpy((dst), (src), (size))
+#define XR_RAW_ASSUME_NON_NULL(ptr) __assume((ptr) != NULL)
 #else
 #include <string.h>
 #define XR_RAW_COPY(dst, src, size) memcpy((dst), (src), (size))
+#define XR_RAW_ASSUME_NON_NULL(ptr) ((void) (ptr))
 #endif
 
 enum {
@@ -111,41 +121,49 @@ XR_RAW_ENDIAN_CONVERSIONS(64, uint64_t, xr_raw_bswap_u64)
 
 static inline uint8_t xr_raw_load_u8_unaligned(const void *ptr) {
     uint8_t value;
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(&value, ptr, sizeof(value));
     return value;
 }
 
 static inline uint16_t xr_raw_load_u16_unaligned(const void *ptr) {
     uint16_t value;
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(&value, ptr, sizeof(value));
     return value;
 }
 
 static inline uint32_t xr_raw_load_u32_unaligned(const void *ptr) {
     uint32_t value;
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(&value, ptr, sizeof(value));
     return value;
 }
 
 static inline uint64_t xr_raw_load_u64_unaligned(const void *ptr) {
     uint64_t value;
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(&value, ptr, sizeof(value));
     return value;
 }
 
 static inline void xr_raw_store_u8_unaligned(void *ptr, uint8_t value) {
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
 
 static inline void xr_raw_store_u16_unaligned(void *ptr, uint16_t value) {
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
 
 static inline void xr_raw_store_u32_unaligned(void *ptr, uint32_t value) {
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
 
 static inline void xr_raw_store_u64_unaligned(void *ptr, uint64_t value) {
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
 
@@ -175,14 +193,17 @@ static inline uint64_t xr_raw_f64_to_bits(double value) {
 
 static inline void *xr_raw_load_ptr_unaligned(const void *ptr) {
     void *value;
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(&value, ptr, sizeof(value));
     return value;
 }
 
 static inline void xr_raw_store_ptr_unaligned(void *ptr, const void *value) {
+    XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
 
 #undef XR_RAW_COPY
+#undef XR_RAW_ASSUME_NON_NULL
 
 #endif /* XR_RAW_SCALAR_CORE_H */

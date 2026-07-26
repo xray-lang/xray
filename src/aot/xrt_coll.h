@@ -4752,28 +4752,58 @@ static inline XrValue xrt_json_stringify(XrValue val) {
     return xrt_strbuf_finish(sbv);
 }
 
-static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
+static inline XrValue xrt_getprop_key(XrValue obj, XrValue key) {
+    if (!XR_IS_STR(key))
+        return XR_NULL_VAL;
+    const char *name = xr_str_data(key);
     if (obj.tag == XR_TAG_ENUM) {
-        if (!name)
-            return XR_NULL_VAL;
         if (strcmp(name, "name") == 0)
             return xrt_enum_box_name(obj);
         if (strcmp(name, "ordinal") == 0)
             return xrt_enum_box_ordinal(obj);
     }
-    if (XR_IS_MAP(obj)) {
-        return xrt_map_get_owned((xrt_map_t *) obj.ptr, xr_box_str(name));
-    }
+    if (XR_IS_MAP(obj))
+        return xrt_map_get_owned((xrt_map_t *) obj.ptr, key);
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
         return xrt_json_get_name_owned(obj, name);
     return XR_NULL_VAL;
 }
 
-static inline XrValue xrt_setprop_name(XrValue obj, const char *name, XrValue val) {
+static inline XrValue xrt_setprop_key(XrValue obj, XrValue key, XrValue val) {
+    if (!XR_IS_STR(key))
+        return val;
     if (XR_IS_MAP(obj)) {
-        xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str(name), val);
+        xrt_map_set((xrt_map_t *) obj.ptr, key, val);
         return val;
     }
+    if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
+        return xrt_json_set_name(obj, xr_str_data(key), val);
+    return val;
+}
+
+/* C/runtime callers may only have a NUL-terminated name.  Reads can borrow a
+ * stack literal header for the duration of lookup.  Writes allocate an ARC
+ * key because a newly inserted map entry takes ownership of it.  Generated
+ * AOT code uses the key-valued forms above with module-static literal headers,
+ * avoiding per-field-access allocation entirely. */
+static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
+    if (!name)
+        return XR_NULL_VAL;
+    xrt_str_t key_header = {
+        .len = (int64_t) strlen(name),
+        .rune_len = -1,
+        .hash = 0,
+        .flags = XRT_STR_LITERAL,
+        .data = (char *) name,
+    };
+    return xrt_getprop_key(obj, xr_str_lit(&key_header));
+}
+
+static inline XrValue xrt_setprop_name(XrValue obj, const char *name, XrValue val) {
+    if (!name)
+        return val;
+    if (XR_IS_MAP(obj))
+        return xrt_setprop_key(obj, xr_box_str(name), val);
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
         return xrt_json_set_name(obj, name, val);
     return val;
@@ -4905,7 +4935,8 @@ static inline void xrt_coll_release(XrValue v) {
     } else if (!xrt_rc_claim_release_last(h)) {
         return;
     }
-    if ((v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+    if (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
         xrt_json_destroy((xrt_json_t *) v.ptr);
         XRT_FREE(v.ptr);
         return;

@@ -31,7 +31,7 @@ static bool cg_value_type_is_fixed_array(const XiValue *value) {
     return v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY;
 }
 
-static void emit_array_i64_arg(FILE *out, const XiValue *value);
+static void emit_array_i64_arg(XiCgenCtx *ctx, FILE *out, const XiValue *value);
 
 typedef struct CgFixedArrayLaneInfo {
     const XiValue *stack_origin;
@@ -938,7 +938,7 @@ static void cg_emit_static_fixed_tuple_array_path_lvalue(XiCgenCtx *ctx, FILE *o
     if (tmp_index)
         fprintf(out, "%s", tmp_index);
     else
-        emit_array_i64_arg(out, path->index);
+        emit_array_i64_arg(ctx, out, path->index);
     fprintf(out, "]");
     for (uint16_t i = 0; i < path->depth; i++)
         fprintf(out, ".f%" PRId64, path->fields[i]);
@@ -1717,7 +1717,7 @@ static void cg_emit_static_fixed_struct_array_field_lvalue_with_tmp(
     if (tmp_index)
         fprintf(out, "%s", tmp_index);
     else
-        emit_array_i64_arg(out, index);
+        emit_array_i64_arg(ctx, out, index);
     fprintf(out, "]");
     cg_struct_field_c_name(sl, field_idx, fname, sizeof(fname));
     fprintf(out, ".%s", fname);
@@ -2368,12 +2368,12 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         cg_emit_static_fixed_array_name(ctx, out, static_matrix_module, static_matrix_slot);
         fprintf(out, "[");
         if (outer_unchecked)
-            emit_array_i64_arg(out, static_matrix_outer_index);
+            emit_array_i64_arg(ctx, out, static_matrix_outer_index);
         else
             fprintf(out, "_outer_idx");
         fprintf(out, "][");
         if (unchecked)
-            emit_array_i64_arg(out, v->args[1]);
+            emit_array_i64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "_idx");
         fprintf(out, "]");
@@ -2421,17 +2421,17 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         cg_emit_static_fixed_array_name(ctx, out, static_cube_module, static_cube_slot);
         fprintf(out, "[");
         if (outer_unchecked)
-            emit_array_i64_arg(out, static_cube_outer_index);
+            emit_array_i64_arg(ctx, out, static_cube_outer_index);
         else
             fprintf(out, "_outer_idx");
         fprintf(out, "][");
         if (middle_unchecked)
-            emit_array_i64_arg(out, static_cube_middle_index);
+            emit_array_i64_arg(ctx, out, static_cube_middle_index);
         else
             fprintf(out, "_middle_idx");
         fprintf(out, "][");
         if (unchecked)
-            emit_array_i64_arg(out, v->args[1]);
+            emit_array_i64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "_idx");
         fprintf(out, "]");
@@ -2471,7 +2471,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
             static_struct_array_info.layout, static_struct_array_field_idx);
         fprintf(out, "[");
         if (unchecked)
-            emit_array_i64_arg(out, v->args[1]);
+            emit_array_i64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "_idx");
         fprintf(out, "]");
@@ -2512,7 +2512,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
             static_struct_array_nested_layout, static_struct_array_nested_field_idx);
         fprintf(out, "[");
         if (unchecked)
-            emit_array_i64_arg(out, v->args[1]);
+            emit_array_i64_arg(ctx, out, v->args[1]);
         else
             fprintf(out, "_idx");
         fprintf(out, "]");
@@ -2543,7 +2543,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
     fprintf(out, "[");
     if (unchecked)
-        emit_array_i64_arg(out, v->args[1]);
+        emit_array_i64_arg(ctx, out, v->args[1]);
     else
         fprintf(out, "_idx");
     fprintf(out, "]");
@@ -2575,7 +2575,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
     fprintf(out, "[");
     if (unchecked)
-        emit_array_i64_arg(out, v->args[1]);
+        emit_array_i64_arg(ctx, out, v->args[1]);
     else
         fprintf(out, "_idx");
     fprintf(out, "] = ");
@@ -2600,13 +2600,13 @@ static bool cg_array_get_const_int_literal(const XiValue *value, int64_t *out) {
     return true;
 }
 
-static void emit_array_i64_arg(FILE *out, const XiValue *value) {
+static void emit_array_i64_arg(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     int64_t literal = 0;
     if (cg_array_get_const_int_literal(value, &literal)) {
         fprintf(out, "INT64_C(%" PRId64 ")", literal);
         return;
     }
-    emit_value_as_rep(out, value, XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
 }
 
 static bool cg_array_elem_info_from_container_plan(const XaotContainerElemPlan *plan,
@@ -3561,12 +3561,60 @@ static const char *cg_array_cache_restrict_str(XiCgenCtx *ctx, const XiValue *or
     return alias && alias->kind == XAOT_ALIAS_UNIQUE_DATA ? "XRT_RESTRICT " : "";
 }
 
+/* A Slice cache plan may survive after every array-data operation has been
+ * optimized away, while the Slice value itself still crosses an addressable
+ * ref boundary.  Such a chain needs the xr_span_t local but never references
+ * `_adN`; suppress only this provably address/ARC-only cache declaration. */
+static bool cg_span_cache_value_uses_only_address_aliases(const XiFunc *f, const XiValue *target,
+                                                          uint8_t depth) {
+    if (!f || !target || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == target)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                if (a == 0 && user->op == XI_LOCAL_ADDR)
+                    continue;
+                if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
+                    continue;
+                if (a == 0 &&
+                    (cg_is_identity_copy_or_move(user) || user->op == XI_BOX ||
+                     user->op == XI_UNBOX) &&
+                    cg_span_cache_value_uses_only_address_aliases(f, user, (uint8_t) (depth + 1)))
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     CgArrayElemInfo info;
     const XiValue *v = cg_unwrap_identity_value(value);
     const XaotArrayCachePlan *plan = xaot_bundle_find_array_cache_plan(cg_ctx_aot_bundle(ctx), v);
     if (plan) {
         if (!cg_array_elem_info_from_cache_plan(plan, &info))
+            return false;
+        const XiFunc *plan_func =
+            plan->value && plan->value->block ? plan->value->block->func : NULL;
+        if (cg_value_plan_is_span_aggregate(ctx, plan->value) && plan_func &&
+            cg_span_cache_value_uses_only_address_aliases(plan_func, plan->value, 0))
             return false;
         if (!cg_array_data_cache_decl_mark(ctx, plan->value))
             return false;

@@ -314,7 +314,7 @@ static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
-    if ((v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
+    if (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
         return 1;
     if (XR_IS_ARRAY_REF(v))
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
@@ -328,8 +328,10 @@ static inline int xrt_arc_value_has_header(XrValue v) {
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
-    return (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0 ? (XrObjHeader *) v.ptr
-                                                           : XRT_ARC_HDR(v.ptr);
+    return v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+                   (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0
+               ? (XrObjHeader *) v.ptr
+               : XRT_ARC_HDR(v.ptr);
 }
 
 /* ========== --rc-guard debug codegen (task 219 P4) ==========
@@ -382,8 +384,15 @@ static inline void xrt_rc_guard_check(XrValue v, const char *site) {
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrObjHeader. */
 static inline void xrt_retain(XrValue v) {
+    /* Compiler-interned string sidecars have static storage and are never ARC
+     * objects.  Keep this fast rejection explicit before any container/header
+     * routing so both optimized C and path-sensitive analyzers preserve that
+     * lifetime fact when a literal key has travelled through a collection. */
+    if (v.tag == XR_TAG_STR)
+        return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
         xrt_coll_retain(v);
         return;
     }
@@ -457,8 +466,11 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
 }
 
 static inline void xrt_release(XrValue v) {
+    if (v.tag == XR_TAG_STR)
+        return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
         xrt_coll_release(v);
         return;
     }
