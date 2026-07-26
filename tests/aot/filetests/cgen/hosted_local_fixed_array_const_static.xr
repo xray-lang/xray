@@ -1,0 +1,10 @@
+const SECRET: [byte; 8] = comptime [11, 22, 33, 44, 55, 66, 77, 88]
+
+fn readSecret(index: int) -> int {
+    // Keep a separate codegen boundary so this tests the module-owned
+    // GET_SHARED path rather than caller-side constant propagation.
+    var bytes: const Slice<byte> = SECRET[:]
+    return bytes[index] as int
+}
+
+print(readSecret(5))

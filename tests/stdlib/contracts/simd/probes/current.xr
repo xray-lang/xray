@@ -8,6 +8,8 @@ fn run() {
     assert(result.extract(3) == 18)
     assert(vector.swapAdjacent().extract(0) == 2)
     assert(Capabilities.nativeBytes() >= 16)
+    var accelerated = Capabilities.isAccelerated()
+    assert(accelerated || !accelerated)
     print("{\"case\":\"portable-lane-ops\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
 
     var bytes = U8x16.splat(7)

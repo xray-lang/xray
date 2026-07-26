@@ -74,6 +74,28 @@ CONTRACT_SPECS = (
             "tests/aot/TOMBSTONES.tsv",
         ),
     ),
+    ContractSpec(
+        "target-abi.md",
+        (
+            "src/aot/xaot_link.c",
+            "src/aot/xaot_prepare.c",
+            "src/aot/xaot_verify.c",
+            "src/aot/xi_cgen_abi_helpers.inc.c",
+            "src/aot/xi_cgen_class_native_helpers.inc.c",
+            "src/aot/xi_cgen_dispatch_helpers.inc.c",
+            "src/aot/xi_cgen_program_entry.inc.c",
+            "src/aot/xi_cgen_struct_helpers.inc.c",
+            "src/aot/xi_cgen.c",
+            "src/aot/xrt_coll.h",
+            "src/aot/xrt_core_freestanding.h",
+            "src/aot/xrt_time.h",
+            "src/app/cli/xcmd_build.c",
+            "src/app/toolchain/xtc_model.c",
+            "src/app/toolchain/xtc_probe.c",
+            "src/ir/xi.h",
+            "stdlib/simd/simd.xr",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

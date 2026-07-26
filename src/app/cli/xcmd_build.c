@@ -37,6 +37,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
 #include "../../os/os_dir.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -512,6 +513,13 @@ static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
             strcmp(value, "time.micros") == 0 || strcmp(value, "time.clock") == 0);
 }
 
+static bool xaot_cli_stdlib_object_needs_aot_core_for_target(const char *value,
+                                                             const XrToolchainTarget *target) {
+    if (target && !target->is_native && value && strncmp(value, "time.", 5) == 0)
+        return false;
+    return xaot_cli_stdlib_object_needs_aot_core(value);
+}
+
 static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,
                                             size_t err_size) {
     size_t len;
@@ -535,6 +543,21 @@ static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
     }
     for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
         if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_symbols[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool xaot_cli_manifest_needs_aot_core_for_target(const XaotLinkManifest *manifest,
+                                                        const XrToolchainTarget *target) {
+    if (!manifest)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_objects[i], target))
+            return true;
+    }
+    for (uint32_t i = 0; i < manifest->n_stdlib_symbols; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core_for_target(manifest->stdlib_symbols[i], target))
             return true;
     }
     return false;
@@ -618,6 +641,22 @@ static void xaot_cli_manifest_clear_string_list(char ***items, uint32_t *count) 
     xr_free(*items);
     *items = NULL;
     *count = 0;
+}
+
+static void xaot_cli_manifest_remove_string(char ***items, uint32_t *count, const char *value) {
+    if (!items || !*items || !count || !value)
+        return;
+    uint32_t i = 0;
+    while (i < *count) {
+        if ((*items)[i] && strcmp((*items)[i], value) == 0) {
+            xr_free((*items)[i]);
+            for (uint32_t j = i + 1; j < *count; j++)
+                (*items)[j - 1] = (*items)[j];
+            *count = *count - 1;
+            continue;
+        }
+        i++;
+    }
 }
 
 static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
@@ -1048,7 +1087,7 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     }
 
     needs_runtime = xaot_link_manifest_needs_runtime(manifest);
-    needs_aot_core = xaot_cli_manifest_needs_aot_core(manifest);
+    needs_aot_core = xaot_cli_manifest_needs_aot_core_for_target(manifest, target);
     freestanding_profile =
         xaot_link_manifest_contains(manifest, XAOT_LINK_DEFINE, "XRAY_PROFILE_FREESTANDING=1");
     if (needs_runtime && !target->is_native) {
@@ -1307,12 +1346,16 @@ static bool build_opt_level_is_fast(const char *level) {
     return level && strcmp(level, "fast") == 0;
 }
 
-static const char *default_shared_library_output(void) {
+static const char *default_shared_library_output(const XrToolchainTarget *target) {
+    if (target && target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS)
+        return "xray_exports.dll";
 #ifdef XR_OS_MACOS
-    return "libxray_exports.dylib";
+    if (!target || target->is_native)
+        return "libxray_exports.dylib";
 #else
-    return "libxray_exports.so";
+    (void) target;
 #endif
+    return "libxray_exports.so";
 }
 
 /* ========== Build Sub-Modes (forward declarations) ========== */
@@ -1361,6 +1404,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_toolchain_plan = xr_cli_opt_bool(&inv->options, "dump-toolchain-plan");
     bool dry_run_link = xr_cli_opt_bool(&inv->options, "dry-run-link");
     const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
+    const char *c_export_prefix = xr_cli_opt_string(&inv->options, "c-export-prefix", NULL);
+    const char *c_export_exclude = xr_cli_opt_string(&inv->options, "c-export-exclude", NULL);
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
@@ -1417,6 +1462,24 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         }
         if (project)
             target_config = xr_project_find_target_config(project, target_arg);
+    }
+
+    if ((c_export_prefix || c_export_exclude) && !native_mode) {
+        fprintf(stderr, "Error: --c-export-prefix/--c-export-exclude require --native\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (c_export_prefix || c_export_exclude) {
+        if (!project || !project->native_plan) {
+            fprintf(stderr,
+                    "Error: --c-export-prefix/--c-export-exclude require manifest C exports\n");
+            CMD_BUILD_RETURN(2);
+        }
+        if (!xr_native_package_configure_c_exports(project->native_plan, c_export_prefix,
+                                                   c_export_exclude, parse_err,
+                                                   sizeof(parse_err))) {
+            fprintf(stderr, "Error: %s\n", parse_err);
+            CMD_BUILD_RETURN(2);
+        }
     }
 
     cc = build_config_string(&inv->options, "cc", target_config ? target_config->cc : NULL, NULL);
@@ -1593,13 +1656,9 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                 target_config->objcopy_output);
         CMD_BUILD_RETURN(2);
     }
+#ifdef XR_OS_WINDOWS
     bool freestanding_shared_object =
         shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
-    if (shared_library && !c_only && !target.is_native && !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared currently requires native target\n");
-        CMD_BUILD_RETURN(2);
-    }
-#ifdef XR_OS_WINDOWS
     if (shared_library && !c_only && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
         CMD_BUILD_RETURN(2);
@@ -1620,7 +1679,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!xaot_simd_mode_parse(simd_arg, &simd_mode)) {
         fprintf(stderr,
                 "Error: invalid --simd mode '%s' (expected auto, scalar, native, neon, sse2, "
-                "or avx2)\n",
+                "avx2, avx512, vsx, lsx, sve, or dispatch)\n",
                 simd_arg ? simd_arg : "");
         CMD_BUILD_RETURN(2);
     }
@@ -1669,15 +1728,9 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         toolchain_plan = toolchain_probe.selection;
         toolchain_plan.program = toolchain_plan.program_storage;
     }
-    if (shared_library && !c_only && toolchain_plan.provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
-        !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared currently requires a system provider\n");
-        CMD_BUILD_RETURN(2);
-    }
-
     if (!output_file)
         output_file = c_only ? "app.c"
-                             : (shared_library ? default_shared_library_output()
+                             : (shared_library ? default_shared_library_output(&target)
                                                : xtc_target_default_output(&target));
 
     const char *opt_flag = make_opt_flag(opt_level, debug_symbols);
@@ -2345,47 +2398,6 @@ static int xaot_invoke_native_unit_compile(const XrToolchainSelection *plan,
     return 0;
 }
 
-static int xaot_combine_native_unit_objects(const XrToolchainSelection *plan,
-                                            const XrToolchainTarget *target,
-                                            const XrNativeUnit *unit, const char *const *objects,
-                                            uint32_t object_count, const char *output,
-                                            bool dump_command, bool dry_run) {
-    char err[512];
-    XaotCliLinkCommand cmd;
-    memset(&cmd, 0, sizeof(cmd));
-    if (!xaot_cli_add_provider_driver_prefix(&cmd, plan, target, err, sizeof(err)))
-        goto command_error;
-    XrToolchainArgSink sink = xaot_cli_command_sink(&cmd);
-    XrNativeLinkSpec spec;
-    memset(&spec, 0, sizeof(spec));
-    spec.relocatable = true;
-    if (!xtc_command_emit_link(plan, target, &spec, &sink, err, sizeof(err)) ||
-        !xtc_command_emit_link_output(plan->provider, output, &sink, err, sizeof(err)))
-        goto command_error;
-    for (uint32_t i = 0; i < object_count; i++) {
-        if (!xaot_cli_link_add_arg(&cmd, objects[i], err, sizeof(err)))
-            goto command_error;
-    }
-    if (dump_command)
-        xaot_cli_print_command("Native combine command", &cmd);
-    if (dry_run)
-        return 0;
-    {
-        XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
-        int code = -1;
-        if (pid == XR_PROC_INVALID || xr_proc_wait(pid, &code) != 0 || code != 0) {
-            fprintf(stderr, "Error: cannot combine native unit '%s' objects\n",
-                    unit->name ? unit->name : "?");
-            return 1;
-        }
-    }
-    return 0;
-
-command_error:
-    fprintf(stderr, "Error: %s\n", err);
-    return 1;
-}
-
 static uint64_t xaot_native_object_cache_key(const XrNativeUnit *unit, uint32_t source_index,
                                              const XrToolchainTarget *target,
                                              const XrToolchainSelection *plan,
@@ -2493,50 +2505,32 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
             if (ret != 0)
                 break;
         }
-        if (ret == 0 && !dry_run) {
-            char output_dir[XR_PATH_MAX];
-            char tmp_output[XR_PATH_MAX];
-            xaot_dirname(unit->output, output_dir, sizeof(output_dir));
-            if (xaot_mkdir_p(output_dir) != 0) {
-                fprintf(stderr, "Error: cannot create native output directory '%s'\n", output_dir);
+        bool retain_unit =
+            xaot_link_manifest_contains(link_manifest, XAOT_LINK_NATIVE_INPUT, unit->output) ||
+            xaot_link_manifest_contains(link_manifest, XAOT_LINK_LD_FLAG, unit->output) ||
+            xaot_native_unit_owns_entry_stub(native_plan, unit);
+        xaot_cli_manifest_remove_string(&link_manifest->native_inputs,
+                                        &link_manifest->n_native_inputs, unit->output);
+        xaot_cli_manifest_remove_string(&link_manifest->ld_flags, &link_manifest->n_ld_flags,
+                                        unit->output);
+        for (uint32_t si = 0; ret == 0 && retain_unit && si < unit->source_count; si++) {
+            if (!xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_NATIVE_INPUT,
+                                               objects[si])) {
+                fprintf(stderr, "Error: cannot isolate native unit link object '%s[%u]'\n",
+                        unit->name ? unit->name : "?", si);
                 ret = 1;
-            } else {
-                snprintf(tmp_output, sizeof(tmp_output), "%s.%d.tmp", unit->output,
-                         (int) xr_proc_self_pid());
-                if (unit->source_count == 1) {
-                    if (xaot_copy_file(objects[0], tmp_output, 0644) != 0)
-                        ret = 1;
-                } else {
-                    ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
-                                                           unit->source_count, tmp_output,
-                                                           dump_command, false);
-                }
-                if (ret == 0 && xr_fs_rename(tmp_output, unit->output) != 0) {
-                    fprintf(stderr, "Error: cannot install native unit output '%s'\n",
-                            unit->output);
-                    xr_fs_remove(tmp_output);
-                    ret = 1;
-                }
             }
-        } else if (ret == 0 && dry_run && unit->source_count > 1) {
-            ret = xaot_combine_native_unit_objects(toolchain_plan, target, unit, objects,
-                                                   unit->source_count, unit->output, dump_command,
-                                                   true);
         }
         xr_free(objects);
         xr_free(object_paths);
         if (ret != 0)
             return ret;
-        /* Entry stubs are linker roots rather than calls reachable from Xi, so
-         * extern-symbol reachability cannot retain their native unit.  The
-         * explicit freestanding.entry.stub binding is the audited linkage
-         * edge; place that unit on the final link line exactly once. */
-        if (xaot_native_unit_owns_entry_stub(native_plan, unit) &&
-            !xaot_link_manifest_add_unique(link_manifest, XAOT_LINK_NATIVE_INPUT, unit->output)) {
-            fprintf(stderr, "Error: cannot retain freestanding entry stub unit '%s'\n",
-                    unit->name ? unit->name : "?");
-            return 1;
-        }
+        /* The manifest spelling is a package-level identity.  Final linking
+         * uses each target/toolchain-keyed cache object directly.  This keeps
+         * multi-source units portable across Mach-O/ELF/COFF and prevents
+         * concurrent cross-target builds from sharing a package-tree object.
+         * Entry stubs are linker roots, so their audited unit is retained even
+         * when ordinary extern-symbol reachability does not mention it. */
     }
     for (uint32_t ei = 0; ei < native_plan->entry_count; ei++) {
         const XrFreestandingEntryPlan *entry = &native_plan->entries[ei];
@@ -2927,6 +2921,87 @@ static int xaot_write_c_export_header(const XaotBuildResult *result, const char 
     return 0;
 }
 
+/* Per-module C sources intentionally use compact file-static literal names.
+ * When --c-only combines those sources into one translation unit, give just
+ * those generated identifiers a module ordinal while leaving user string and
+ * character contents byte-for-byte unchanged. */
+static void xaot_write_amalgamated_unit(FILE *out, const char *source, int module_ordinal) {
+    enum {
+        XAOT_C_NORMAL = 0,
+        XAOT_C_STRING,
+        XAOT_C_CHAR,
+        XAOT_C_LINE_COMMENT,
+        XAOT_C_BLOCK_COMMENT,
+    } state = XAOT_C_NORMAL;
+    const char *p = source ? source : "";
+    while (*p) {
+        if (state == XAOT_C_NORMAL) {
+            if (p[0] == '/' && p[1] == '/') {
+                fputs("//", out);
+                p += 2;
+                state = XAOT_C_LINE_COMMENT;
+                continue;
+            }
+            if (p[0] == '/' && p[1] == '*') {
+                fputs("/*", out);
+                p += 2;
+                state = XAOT_C_BLOCK_COMMENT;
+                continue;
+            }
+            if (*p == '"') {
+                fputc(*p++, out);
+                state = XAOT_C_STRING;
+                continue;
+            }
+            if (*p == '\'') {
+                fputc(*p++, out);
+                state = XAOT_C_CHAR;
+                continue;
+            }
+            bool token_start = p == source || (!isalnum((unsigned char) p[-1]) && p[-1] != '_');
+            if (token_start && strncmp(p, "_xstr_", 6) == 0 && isdigit((unsigned char) p[6])) {
+                fprintf(out, "_xstr_m%d_", module_ordinal);
+                p += 6;
+                continue;
+            }
+            if (token_start && strncmp(p, "_xbytes_", 8) == 0 && isdigit((unsigned char) p[8])) {
+                fprintf(out, "_xbytes_m%d_", module_ordinal);
+                p += 8;
+                continue;
+            }
+            fputc(*p++, out);
+            continue;
+        }
+        if (state == XAOT_C_STRING || state == XAOT_C_CHAR) {
+            char quote = state == XAOT_C_STRING ? '"' : '\'';
+            if (*p == '\\' && p[1]) {
+                fputc(*p++, out);
+                fputc(*p++, out);
+                continue;
+            }
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == quote)
+                state = XAOT_C_NORMAL;
+            continue;
+        }
+        if (state == XAOT_C_LINE_COMMENT) {
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == '\n')
+                state = XAOT_C_NORMAL;
+            continue;
+        }
+        if (p[0] == '*' && p[1] == '/') {
+            fputs("*/", out);
+            p += 2;
+            state = XAOT_C_NORMAL;
+            continue;
+        }
+        fputc(*p++, out);
+    }
+}
+
 static bool xaot_cli_fast_test_build_enabled(void) {
     const char *flag = getenv("XRAY_AOT_FAST_TEST_BUILD");
     return flag && flag[0] && strcmp(flag, "0") != 0;
@@ -3218,7 +3293,8 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
 #endif
         aot_result.link_manifest.compile.disable_machine_outliner =
             clang_family && aarch64_target && optimization != XAOT_OPTIMIZATION_SIZE;
-        aot_result.link_manifest.compile.pic = shared_library;
+        aot_result.link_manifest.compile.pic =
+            shared_library && (!target || target->os != XR_TOOLCHAIN_TARGET_OS_WINDOWS);
         if (debug_symbols && !xaot_cli_add_build_debug_flags(
                                  &aot_result.link_manifest, normalize_err, sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
@@ -3234,6 +3310,63 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
             xaot_build_result_free(&aot_result);
             return 1;
         }
+    }
+    if (aot_result.link_manifest.target.simd_mode != XAOT_SIMD_DISPATCH &&
+        (aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx512f")) {
+        fprintf(stderr, "Error: failed to record AVX-512 target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if (aot_result.link_manifest.target.simd_mode != XAOT_SIMD_DISPATCH &&
+        (aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx2")) {
+        fprintf(stderr, "Error: failed to record AVX2 target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mvsx")) {
+        fprintf(stderr, "Error: failed to record VSX target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_LSX) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mlsx")) {
+        fprintf(stderr, "Error: failed to record LSX target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        /* LLVM's fixed-trip-count auto-vectorizer can form an equality-exit
+         * loop whose step is 2*VL. That loop is invalid when the runtime SVE
+         * length (for example 384 bits) does not divide the scalar trip count.
+         * Runtime-native Xray operations already carry explicit predicated SVE
+         * intrinsics, so disable only the unsafe implicit vectorization. */
+        if ((!cpu || !cpu[0]) &&
+            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-mcpu=generic+sve")) {
+            fprintf(stderr,
+                    "Error: failed to record scalable SVE target flag in AOT link manifest\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-fno-vectorize") ||
+            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-fno-slp-vectorize")) {
+            fprintf(stderr, "Error: failed to record safe scalable SVE vectorization flags\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
+        (!cpu || !cpu[0]) &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                       "-mcpu=pwr8")) {
+        fprintf(stderr, "Error: failed to record Power8 VSX baseline in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
     }
     if (shared_library && xaot_link_manifest_needs_runtime(&aot_result.link_manifest)) {
         fprintf(stderr, "Error: --shared does not support runtime-backed features yet; export "
@@ -3318,7 +3451,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
                 fprintf(f, "/* ==== module: %s ==== */\n",
                         aot_result.sources[impl_source].name ? aot_result.sources[impl_source].name
                                                              : "?");
-            fputs(aot_result.sources[impl_source].c_source, f);
+            xaot_write_amalgamated_unit(f, aot_result.sources[impl_source].c_source, impl_source);
             fputc('\n', f);
         }
         for (int i = 0; i < n_sources; i++) {
@@ -3327,7 +3460,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
             if (n_sources > 1)
                 fprintf(f, "/* ==== module: %s ==== */\n",
                         aot_result.sources[i].name ? aot_result.sources[i].name : "?");
-            fputs(aot_result.sources[i].c_source, f);
+            xaot_write_amalgamated_unit(f, aot_result.sources[i].c_source, i);
             fputc('\n', f);
         }
         fclose(f);

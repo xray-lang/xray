@@ -69,8 +69,8 @@ fi
 
 ATTR_LOG="$WORK/attributes.log"
 if "$XRAY" language attributes >"$ATTR_LOG" 2>&1; then
-    expect_file_contains "$ATTR_LOG" "Public attributes (7):" \
-        "language surface exposes exactly seven public attributes"
+    expect_file_contains "$ATTR_LOG" "Public attributes (9):" \
+        "language surface exposes exactly nine public attributes"
     for retired in c_export section weak used naked interrupt no_alloc zero_cost; do
         expect_file_not_contains "$ATTR_LOG" "@$retired" \
             "language surface excludes retired @$retired"

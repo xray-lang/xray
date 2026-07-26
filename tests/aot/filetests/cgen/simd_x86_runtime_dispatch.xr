@@ -1,0 +1,60 @@
+import { Capabilities, U64x2, U64x4, U64x8 } from simd
+
+fn mixUltra(values: U64x8, output: ref Slice<u64>) {
+    values.add(values.swapAdjacent()).store(ref output)
+}
+
+fn mixUltraIsland(values: U64x8, output: ref Slice<u64>) {
+    mixUltra(values, ref output)
+}
+
+fn sumWide(values: U64x4) -> u64 {
+    return values.add(values.swapAdjacent()).reduceAdd()
+}
+
+fn sumWideIsland(values: U64x4) -> u64 {
+    return sumWide(values)
+}
+
+fn sumBaseline(values: U64x2) -> u64 {
+    return values.reduceAdd()
+}
+
+fn runtimeSelected() -> bool {
+    return Capabilities.isRuntimeSelected()
+}
+
+struct Runner {
+    marker: int
+
+    wide(values: U64x4) -> u64 {
+        return sumWideIsland(values)
+    }
+
+    ultra(values: U64x8, output: ref Slice<u64>) {
+        mixUltraIsland(values, ref output)
+    }
+
+    run(ultra: U64x8, wide: U64x4, baseline: U64x2, output: ref Slice<u64>) -> u64 {
+        if (runtimeSelected() && Capabilities.nativeBytes() >= 64) {
+            this.ultra(ultra, ref output)
+            return output[0]
+        }
+        if (runtimeSelected() && Capabilities.nativeBytes() >= 32) {
+            return this.wide(wide)
+        }
+        return sumBaseline(baseline)
+    }
+}
+
+fn main() {
+    var lanes4: [u64; 4] = [1, 2, 3, 4]
+    var lanes2: [u64; 2] = [5, 6]
+    var lanes8: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var output: [u64; 8] = [0; 8]
+    var outputView: Slice<u64> = output[:]
+    var runner = Runner{marker: 0}
+    print(runner.run(U64x8.fromLanes(lanes8), U64x4.fromLanes(lanes4), U64x2.fromLanes(lanes2), ref outputView))
+}
+
+main()

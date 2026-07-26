@@ -89,6 +89,12 @@ static inline const char *xrt_os_arch_cstr(void) {
     return "x86";
 #elif defined(XR_ARCH_ARM) || defined(_M_ARM)
     return "arm";
+#elif defined(XR_ARCH_POWERPC64)
+    return "ppc64";
+#elif defined(XR_ARCH_LOONGARCH64)
+    return "loongarch64";
+#elif defined(XR_ARCH_RISCV64)
+    return "riscv64";
 #else
     return "unknown";
 #endif

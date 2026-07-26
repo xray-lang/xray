@@ -1,0 +1,9 @@
+import io
+var file = io.File.stdin()
+var first = file.read(3)
+var second = file.read(3)
+var third = file.read(3)
+print(first != null && len(first!) == 3 && first![0] == 0 && first![2] == 255)
+print(second != null && len(second!) == 2 && second![0] == 65 && second![1] == 10)
+print(third != null && len(third!) == 0)
+print(file.close())

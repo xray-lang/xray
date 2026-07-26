@@ -1,0 +1,2 @@
+c_contains=XR_EXPORT_SYM int64_t xr_public_value(void) {
+c_contains=XRT_INTERNAL int64_t xr_hidden_value(void) {

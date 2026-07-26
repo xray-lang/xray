@@ -3867,6 +3867,20 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
                 return false;
+            /* A local value-struct constructor is concrete even when it does
+             * not reach a native function boundary.  Seed its POD aggregate
+             * representation here so a semantic XI_COPY can become an
+             * independent C aggregate value and subsequent AGG_SET operations
+             * stay on the stack.  Previously only returns/arguments seeded
+             * this representation, so `var p = makePair(); p.x += 1` boxed p
+             * and routed the copy through xrt_value_clone_for_coro. */
+            if (blk->values[vi]->op == XI_AGG_NEW) {
+                XaotValueRep aggregate_rep =
+                    xaot_abi_native_value_rep(bundle, func, blk->values[vi]);
+                if (aggregate_rep.kind == XAOT_VALUE_AGGREGATE &&
+                    (aggregate_rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0)
+                    vp->rep = aggregate_rep;
+            }
             if (blk->values[vi]->xa_intrinsic_id != 0 && blk->values[vi]->op >= XI_VEC_LOAD &&
                 blk->values[vi]->op <= XI_VEC_REDUCE_ADD) {
                 XaotValueRep intrinsic_rep =
@@ -3898,8 +3912,24 @@ static unsigned prepare_vector_lane_bytes(uint8_t native_type) {
 }
 
 static const char *prepare_vector_native_c_type(uint32_t features, uint8_t native_type,
-                                                uint8_t lanes) {
+                                                uint8_t lanes, bool scalable) {
     unsigned width = prepare_vector_lane_bytes(native_type) * (unsigned) lanes;
+    if (scalable && (features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        if (native_type == XR_NATIVE_U8)
+            return "svuint8_t";
+        if (native_type == XR_NATIVE_U32)
+            return "svuint32_t";
+        if (native_type == XR_NATIVE_U64)
+            return "svuint64_t";
+    }
+    if (width == 16 && (features & (XAOT_SIMD_FEATURE_VSX | XAOT_SIMD_FEATURE_LSX)) != 0) {
+        if (native_type == XR_NATIVE_U8)
+            return "xr_v16u8";
+        if (native_type == XR_NATIVE_U32)
+            return "xr_v4u32";
+        if (native_type == XR_NATIVE_U64)
+            return "xr_v2u64";
+    }
     if (width == 16 && (features & XAOT_SIMD_FEATURE_NEON) != 0) {
         if (native_type == XR_NATIVE_U8)
             return "uint8x16_t";
@@ -3912,6 +3942,8 @@ static const char *prepare_vector_native_c_type(uint32_t features, uint8_t nativ
         return "__m128i";
     if (width == 32 && (features & XAOT_SIMD_FEATURE_AVX2) != 0)
         return "__m256i";
+    if (width == 64 && (features & XAOT_SIMD_FEATURE_AVX512) != 0)
+        return "__m512i";
     return NULL;
 }
 
@@ -3924,8 +3956,39 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
-    if (!prepare_vector_native_c_type(features, native_type, lanes))
+    bool avx512 = (features & XAOT_SIMD_FEATURE_AVX512) != 0;
+    bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
+    bool lsx = (features & XAOT_SIMD_FEATURE_LSX) != 0;
+    bool sve = (features & XAOT_SIMD_FEATURE_SVE) != 0;
+    bool scalable = xi_vec_shape_is_scalable(value->aux_int);
+    if (!prepare_vector_native_c_type(features, native_type, lanes, scalable))
         return false;
+    if (scalable) {
+        if (!sve)
+            return false;
+        switch ((XiOp) value->op) {
+            case XI_VEC_LOAD:
+            case XI_VEC_STORE:
+            case XI_VEC_SPLAT:
+            case XI_VEC_ADD:
+            case XI_VEC_SUB:
+            case XI_VEC_MUL:
+            case XI_VEC_BIT_AND:
+            case XI_VEC_BIT_OR:
+            case XI_VEC_BIT_XOR:
+            case XI_VEC_BIT_NOT:
+            case XI_VEC_SHL:
+            case XI_VEC_SHR:
+            case XI_VEC_REINTERPRET:
+                return true;
+            case XI_VEC_SHUFFLE:
+                return (value->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0;
+            case XI_VEC_WIDEN_MUL:
+                return native_type == XR_NATIVE_U64 && lanes == 8;
+            default:
+                return false;
+        }
+    }
     switch ((XiOp) value->op) {
         case XI_VEC_LOAD:
         case XI_VEC_STORE:
@@ -3941,26 +4004,32 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
             return true;
         case XI_VEC_ADD:
         case XI_VEC_SUB:
-            return native_type != XR_NATIVE_U8 || neon || x86;
+            return native_type != XR_NATIVE_U8 || neon || x86 || vsx || lsx;
         case XI_VEC_MUL:
             if (native_type == XR_NATIVE_U64)
-                return false;
-            return neon || (native_type == XR_NATIVE_U32 && avx2);
+                return lsx;
+            return neon || vsx || lsx || (native_type == XR_NATIVE_U32 && avx2);
         case XI_VEC_SHL:
         case XI_VEC_SHR:
             return native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64;
         case XI_VEC_SHUFFLE:
             if ((value->aux_int & XI_VEC_SHAPE_UNZIP) != 0)
-                return (neon || x86) && width == 16 && native_type == XR_NATIVE_U32;
+                return (neon || x86 || vsx || lsx) && width == 16 && native_type == XR_NATIVE_U32;
+            if (vsx || lsx)
+                return width == 16;
             if (neon)
                 return width == 16;
             if (!x86)
                 return false;
+            if (width == 64)
+                return avx512 && (value->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0 &&
+                       (native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64);
             return native_type != XR_NATIVE_U8 || avx2;
         case XI_VEC_WIDEN_MUL:
             if ((value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0)
-                return (neon || x86) && native_type == XR_NATIVE_U64 && lanes == 2;
-            return native_type == XR_NATIVE_U64 && (lanes == 2 || (lanes == 4 && avx2));
+                return (neon || x86 || vsx || lsx) && native_type == XR_NATIVE_U64 && lanes == 2;
+            return native_type == XR_NATIVE_U64 &&
+                   (lanes == 2 || (lanes == 4 && avx2) || (lanes == 8 && avx512));
         default:
             return false;
     }
@@ -3997,7 +4066,8 @@ static XaotValueRep prepare_vector_rep(const XaotValueRep *base, const XiValue *
     uint8_t native_type = xi_vec_shape_native_type(value->aux_int);
     uint8_t lanes = xi_vec_shape_lanes(value->aux_int);
     rep.kind = XAOT_VALUE_VECTOR;
-    rep.c_type = prepare_vector_native_c_type(features, native_type, lanes);
+    rep.c_type = prepare_vector_native_c_type(features, native_type, lanes,
+                                              xi_vec_shape_is_scalable(value->aux_int));
     rep.vector_native_type = native_type;
     rep.vector_lanes = lanes;
     rep.vector_width_bytes = (uint8_t) (prepare_vector_lane_bytes(native_type) * (unsigned) lanes);
@@ -4411,12 +4481,17 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
                 continue;
             if (prepare_apply_freestanding_typed_catch_rep(bundle, value, changed))
                 continue;
+            /* ERR_SET/ERR_RETURN carry the thrown value, not the enclosing
+             * function's ordinary result.  A value-struct return can make the
+             * statement itself aggregate-shaped; resolve the error channel
+             * first so that shape is never propagated into a payload enum and
+             * forced back through the hosted boxed-error path. */
+            if (prepare_apply_error_channel_aggregate_rep(bundle, value, changed))
+                continue;
             if (value_rep_is_propagating_aggregate(vp->rep)) {
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);
                 continue;
             }
-            if (prepare_apply_error_channel_aggregate_rep(bundle, value, changed))
-                continue;
             if (!prepare_parallel_reduce_aggregate_rep(bundle, value, &rep) &&
                 !prepare_identity_aggregate_rep(bundle, value, &rep))
                 continue;

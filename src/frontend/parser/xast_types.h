@@ -243,6 +243,8 @@ typedef enum {
     ATTR_AFTER_ALL,     // @after_all
     ATTR_DEPRECATED,    // @deprecated or @deprecated("message")
     ATTR_DERIVE,        // @derive(...) — opt-in generated capability metadata
+    ATTR_INLINE,        // @inline — request native call-boundary expansion
+    ATTR_NOINLINE,      // @noinline — preserve a native function boundary
 } AttributeKind;
 
 // Destructuring pattern types (flat only, no nesting)

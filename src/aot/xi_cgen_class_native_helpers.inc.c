@@ -1264,12 +1264,12 @@ static void emit_class_boxed_clone_helper(XiCgenCtx *ctx, FILE *out, const XiCla
         const XgClassFieldSummary *source =
             xg_global_evidence_find_class_field(ev, derived->source_field_id);
         const char *field_name = cg_class_native_boxed_derived_field_name(ev, derive, cd, fi);
-        fprintf(out, "    { XrValue field = xrt_getprop_name(src, ");
-        emit_c_string_literal(out, field_name);
+        fprintf(out, "    { XrValue field = xrt_getprop_key(src, ");
+        cg_emit_str_value(ctx, out, field_name);
         fprintf(out, "); XrValue cloned = ");
         emit_class_boxed_clone_value(ctx, out, source, "field", prefix);
-        fprintf(out, "; xrt_setprop_name(dst, ");
-        emit_c_string_literal(out, field_name);
+        fprintf(out, "; xrt_setprop_key(dst, ");
+        cg_emit_str_value(ctx, out, field_name);
         fprintf(out, ", cloned); }\n");
     }
     fprintf(out, "    return dst;\n");
@@ -1356,6 +1356,31 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
     if (!cg_class_native_receiver_ref_field(ctx, f, v, expected_native, &info, &idx))
         return false;
     emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v, idx);
+    return true;
+}
+
+/* A writable scalar class-field projection already has stable native storage.
+ * XI keeps the projection temporary plus copy-back for shared VM semantics,
+ * but native direct calls may borrow the verified field address itself. This
+ * avoids a stack copy around `callee(ref this.field)` while preserving the
+ * same call-bound, nonescaping place contract. */
+static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out,
+                                                              const XiFunc *f,
+                                                              const XiValue *value) {
+    CgClassNativeFunc info = cg_class_native_func(ctx, f);
+    const XiValue *load = cg_unwrap_identity_value(value);
+    if (!info.layout || !load || load->op != XI_LOAD_FIELD || load->nargs < 1 ||
+        !cg_class_native_receiver_value(ctx, f, load->args[0]))
+        return false;
+    int idx = cg_class_native_field_index_for_value(ctx, info.class_data, info.layout, load);
+    const XrAggregateFieldLayout *field = cg_struct_field(info.layout, idx);
+    if (idx < 0 || !field || !cg_static_struct_native_scalar_supported(field->native_type))
+        return false;
+    if (!cg_exact_place_rep_alias_safe(ctx, value, load))
+        return false;
+    fprintf(out, "(void *)(&");
+    emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, load, (uint16_t) idx);
+    fprintf(out, ")");
     return true;
 }
 
@@ -5561,9 +5586,16 @@ static bool emit_class_shared_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, 
 
 static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth);
 
+/* Count one unit per callee edge.  The function walker and call resolver are
+ * mutually recursive, so incrementing in both would halve this fail-closed
+ * budget and reject ordinary helper chains after only four calls. */
+enum {
+    CG_CLASS_NATIVE_EFFECT_DEPTH_MAX = 8
+};
+
 static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call, uint8_t depth) {
-    if (!ctx || !current || !call || depth > 8)
+    if (!ctx || !current || !call || depth > CG_CLASS_NATIVE_EFFECT_DEPTH_MAX)
         return false;
     if (cg_class_native_map_method_call_is_direct(ctx, current, call))
         return true;
@@ -5589,11 +5621,30 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
-        !cg_class_func_uses_native_receiver(ctx, mfunc) ||
-        cg_class_native_func_has_error_flow(ctx, mfunc, (uint8_t) (depth + 1)))
+    const XaotMethodDispatchPlan *dispatch_plan =
+        xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), call);
+    const XiFunc *effect_target = mfunc;
+    if (dispatch_plan) {
+        XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+        const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+        if (dispatch_plan->kind != XAOT_DISPATCH_DIRECT ||
+            !xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue))
+            return false;
+        const XaotDispatchTargetCase *target =
+            &bundle->dispatch_target_cases[dispatch_plan->target_start - 1];
+        effect_target = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+    }
+    if (!effect_target || cg_func_needs_aot_coro_ctx(ctx, effect_target) ||
+        cg_class_native_func_has_error_flow(ctx, effect_target, (uint8_t) (depth + 1)))
         return false;
-    CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
+    /* Struct methods and other statically resolved methods use the same direct
+     * call emitter as native-class methods, but they intentionally have no
+     * XaotClassNativeFunc receiver metadata.  Once dispatch is proven absent,
+     * their callee effect is sufficient; the class-only receiver-origin checks
+     * below do not apply to their typed parameter ABI. */
+    if (!cg_class_func_uses_native_receiver(ctx, effect_target))
+        return true;
+    CgClassNativeFunc target_info = cg_class_native_func(ctx, effect_target);
     const XiClassData *source_info = cg_class_native_instance_data(ctx, current, call->args[0]);
     return cg_class_native_instance_origin(ctx, current, call->args[0]) &&
            cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data);
@@ -5604,14 +5655,14 @@ static bool cg_class_native_call_is_nothrow_direct(XiCgenCtx *ctx, const XiFunc 
     return cg_class_native_call_is_nothrow_direct_depth(ctx, current, call, 0);
 }
 
-static bool cg_class_native_value_is_nothrow_lowlevel(const XiValue *value) {
+static bool cg_class_native_value_is_nothrow_lowlevel(XiCgenCtx *ctx, const XiFunc *current,
+                                                      const XiValue *value, uint8_t depth) {
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
-    switch (v->op) {
-        default:
-            return false;
-    }
+    if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT)
+        return false;
+    return xicgen_value_is_proven_nothrow(ctx, current, v, depth);
 }
 
 static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *current,
@@ -5619,7 +5670,7 @@ static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *curr
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     const XiValue *source = cg_class_native_prev_error_source_value(check);
-    return cg_class_native_value_is_nothrow_lowlevel(source) ||
+    return cg_class_native_value_is_nothrow_lowlevel(ctx, current, source, 0) ||
            cg_class_native_call_is_nothrow_direct(ctx, current, source);
 }
 
@@ -5648,7 +5699,7 @@ static bool cg_class_native_value_is_nothrow_native_scalar(const XiValue *v) {
 }
 
 static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth) {
-    if (!ctx || !f || depth > 8)
+    if (!ctx || !f || depth > CG_CLASS_NATIVE_EFFECT_DEPTH_MAX)
         return true;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -5666,11 +5717,11 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
             if (v->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
             if (v->flags & XI_FLAG_MAY_THROW) {
-                if (cg_class_native_value_is_nothrow_lowlevel(v))
+                if (cg_class_native_value_is_nothrow_lowlevel(ctx, f, v, (uint8_t) (depth + 1)))
                     continue;
                 if (cg_class_native_value_is_nothrow_native_scalar(v))
                     continue;
-                if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, (uint8_t) (depth + 1)))
+                if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, depth))
                     return true;
             }
         }
@@ -5691,6 +5742,9 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
                                           const char *prefix) {
     if (!cd)
         return;
+    char native_type[288];
+    class_native_type_name(native_type, sizeof(native_type), prefix, cd->class_name);
+    fprintf(out, "#ifndef XRT_DEFINED_%s\n#define XRT_DEFINED_%s 1\n", native_type, native_type);
     if (!cd->instance_layout) {
         if ((cd->derive_flags & XR_DERIVE_CLONE) != 0) {
             fprintf(out, "XrValue ");
@@ -5698,6 +5752,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
             fprintf(out, "(XrValue src);\n");
         }
         emit_class_boxed_derived_eq_hash_callbacks(ctx, out, cd, prefix);
+        fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;
     }
     fprintf(out, "typedef struct ");
@@ -5745,8 +5800,10 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "};\n");
     }
     emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
-    if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
+    if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
+        fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;
+    }
     fprintf(out, "static void ");
     emit_class_native_dtor_name(out, prefix, cd);
     fprintf(out, "(void *obj) {\n");
@@ -5767,6 +5824,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, ");\n");
     }
     fprintf(out, "}\n");
+    fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
 }
 
 static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *module,

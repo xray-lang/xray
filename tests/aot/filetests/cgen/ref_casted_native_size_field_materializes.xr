@@ -1,0 +1,17 @@
+fn bump(value: ref int) {
+    value += 3
+}
+
+struct Counter {
+    stripes: usize
+    total: u64
+
+    advanced() -> int {
+        var stripes = this.stripes as int
+        bump(ref stripes)
+        return stripes
+    }
+}
+
+var counter = Counter{stripes: 4, total: 241}
+print(counter.advanced())

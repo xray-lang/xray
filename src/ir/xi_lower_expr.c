@@ -425,7 +425,8 @@ static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
 }
 
 static bool xi_lower_type_needs_value_clone(XiLower *l, struct XrType *type) {
-    return type && (type->is_value_type || xi_lower_type_struct_layout(l, type) != NULL);
+    return type && (type->kind == XR_KIND_FIXED_ARRAY || type->is_value_type ||
+                    xi_lower_type_struct_layout(l, type) != NULL);
 }
 
 XR_FUNC bool xi_lower_type_uses_read_place(XiLower *l, struct XrType *type) {
@@ -442,7 +443,10 @@ static bool xi_lower_value_needs_value_clone(XiLower *l, XiValue *v) {
 }
 
 static bool xi_lower_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_AGG_NEW && !xi_var_id_is_valid(v->var_id);
+    if (!v || xi_var_id_is_valid(v->var_id))
+        return false;
+    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
+           (v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE);
 }
 
 static void xi_lower_mark_value_clone_copy(XiValue *v) {
@@ -1149,7 +1153,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * the same physical register — corrupting loop-carried values
          * when the source variable is subsequently modified. */
         bool need_copy = (xi_var_id_is_valid(val->var_id) && val->var_id != (XiVarId) var_id);
-        /* Value types (structs) need independent storage on assignment. */
+        /* Value types (structs and fixed arrays) need independent storage on assignment. */
         bool value_clone_copy =
             xi_lower_value_needs_value_clone(l, val) && !xi_lower_value_is_fresh_value_struct(val);
         if (!need_copy && value_clone_copy)
@@ -1580,7 +1584,10 @@ static XiValue *lower_mem_slice_call(XiLower *l, AstNode *node, CallExprNode *ca
     v->args[2] = owner;
     v->aux_int = layout_aux;
     v->aux = xi_lower_type_struct_layout(l, elem_type);
-    v->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
+    /* mem.slice is already an unsafe boundary. The caller proves non-negative
+     * count, non-null/aligned storage for a non-empty view, and address-range
+     * validity; owner remains explicit lifetime evidence. */
+    v->flags = XI_FLAG_READS_MEM;
     v->line = (uint32_t) node->line;
     v->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
     v->view_evidence.source_operand = 2;
@@ -1657,7 +1664,7 @@ static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExp
     slice->args[2] = guard;
     slice->aux_int = layout_aux | XI_SLICE_FROM_PTR_AUX_MUTABLE;
     slice->aux = xi_lower_type_struct_layout(l, elem_type);
-    slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    slice->flags = XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     slice->line = (uint32_t) node->line;
     slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
     slice->view_evidence.source_operand = 2;
@@ -4537,7 +4544,8 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
         XiValue *place = NULL;
         if (var_id >= 0 && l->vars[var_id].call_place) {
             place = l->vars[var_id].call_place;
-            arg_plan->origin = XI_PLACE_ORIGIN_PARAM;
+            arg_plan->origin =
+                place->op == XI_LOCAL_ADDR ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PARAM;
             arg_plan->origin_var_id = (XiVarId) var_id;
         } else {
             XiValue *source = arg_vals[i];
@@ -4557,6 +4565,8 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                 var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
                 arg_plan->origin_var_id = (XiVarId) var_id;
+            else if (!xi_top_binding_valid(top_binding))
+                place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
             if (mode == XR_PARAM_REF) {
                 /* `ref owner[a:b]` borrows the projected element range.  The
                  * analyzer only authorizes it when the callee's canonical
@@ -4640,8 +4650,27 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
     XiVarId origin_var_id = XI_NO_VAR_ID;
     if (var_id >= 0 && l->vars[var_id].call_place) {
         place = l->vars[var_id].call_place;
-        origin = XI_PLACE_ORIGIN_PARAM;
+        origin = place->op == XI_LOCAL_ADDR ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PARAM;
         origin_var_id = (XiVarId) var_id;
+    } else if (receiver->op == XI_PTR_LOAD && receiver->nargs >= 1 && receiver->args[0] &&
+               receiver->args[0]->type && XR_TYPE_IS_POINTER(receiver->args[0]->type) &&
+               (mode == XR_PARAM_READ || receiver->args[0]->type->ptr_is_mut)) {
+        /* Preserve the PTR_LOAD as the semantic source so the VM retains its
+         * value/writeback behavior. Native backends may recognize this exact
+         * call-bound shape and borrow the pointee address directly. */
+        place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, receiver->type, 1);
+        if (!place)
+            return NULL;
+        place->args[0] = receiver;
+        place->aux_int = XI_LOCAL_ADDR_AUX_RAW_DEREF;
+        place->line = (uint32_t) line;
+        if (mode == XR_PARAM_REF) {
+            writeback->source = receiver;
+            writeback->place = place;
+            writeback->top_binding = top_binding;
+            writeback->var_id = var_id;
+            writeback->projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+        }
     } else {
         place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, receiver->type, 1);
         if (!place)
@@ -4651,7 +4680,8 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
         if (var_id >= 0) {
             origin = XI_PLACE_ORIGIN_STACK_LOCAL;
             origin_var_id = (XiVarId) var_id;
-        }
+        } else if (!xi_top_binding_valid(top_binding))
+            place->aux_int |= XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION;
         if (mode == XR_PARAM_REF) {
             writeback->source = receiver;
             writeback->place = place;
@@ -4743,6 +4773,26 @@ static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
         XaSymbol *sym =
             xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
+            fn_type = links->type;
+    }
+    /* A selected value-type method has one closed implementation. Its bound
+     * member-expression type is created before the error-set fixed point and
+     * can therefore still carry the conservative POLY bit; consult the
+     * authoritative selected method symbol instead. Keep open class/interface
+     * dispatch fail-closed because an override may have a wider error set. */
+    if (!fn_type && l && l->analyzer && call && call->callee &&
+        call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, call->callee);
+        XaSymbol *target = sel ? sel->target_symbol : NULL;
+        XrType *receiver = sel ? sel->receiver_type : NULL;
+        bool closed_value_dispatch =
+            target &&
+            (target->is_static || (receiver && receiver->kind == XR_KIND_ENUM) ||
+             (receiver && receiver->kind == XR_KIND_INSTANCE && receiver->instance.class_ref &&
+              receiver->instance.class_ref->struct_layout));
+        XaSymbolLinks *links =
+            closed_value_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
         if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
             fn_type = links->type;
     }
@@ -5207,7 +5257,7 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
 
 static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
                                             XaIntrinsicId intrinsic_id, XiValue *recv,
-                                            struct XrType *result_type) {
+                                            struct XrType *result_type, bool unchecked_access) {
     if (!call->type_args || !call->type_args[0] || call->type_arg_count != 1)
         return NULL;
 
@@ -5224,6 +5274,7 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
 
     XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
     target = xi_lower_type_or_any(l, target, "byte-slice type argument", node->line);
+    unchecked_access = unchecked_access && target && XR_TYPE_IS_INT(target);
     uint16_t byte_slice_op = lower_byte_slice_typed_op_for_target(target, byte_slice_typed_load);
     if (!byte_slice_op)
         return NULL;
@@ -5272,8 +5323,11 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
     }
     v->line = (uint32_t) node->line;
     v->xa_intrinsic_id = (uint32_t) intrinsic_id;
+    if (unchecked_access)
+        v->aux_int |= XI_ACCESS_UNCHECKED;
     v->flags = xi_op_default_effects((XiOp) v->op);
-    xi_lower_insert_err_check(l, node, true);
+    if (!unchecked_access)
+        xi_lower_insert_err_check(l, node, true);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -5562,6 +5616,10 @@ static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprN
         return false;
     uint8_t lanes = desc->shape_rule.input_lanes;
     if ((desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0) {
+        if (lanes > XI_VEC_SHAPE_PACKED_SHUFFLE_LANES) {
+            l->had_error = true;
+            return false;
+        }
         for (uint8_t lane = 0; lane < lanes; lane++) {
             int64_t selected = -1;
             const char *error = NULL;
@@ -5575,8 +5633,11 @@ static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprN
             *extra |= selected << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
         }
     } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_ADJACENT) != 0) {
-        for (uint8_t lane = 0; lane < lanes; lane++)
-            *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        *extra |= XI_VEC_SHAPE_SWAP_ADJACENT;
+        if (lanes <= XI_VEC_SHAPE_PACKED_SHUFFLE_LANES) {
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        }
     } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_LANES) != 0) {
         if (lanes != 2) {
             l->had_error = true;
@@ -5615,8 +5676,9 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     if (!receiver)
         return NULL;
     if (typed_byte_slice)
-        return lower_byte_slice_typed_call(l, node, call, resolved->intrinsic_id, receiver,
-                                           xi_lower_node_type(l, node));
+        return lower_byte_slice_typed_call(
+            l, node, call, resolved->intrinsic_id, receiver, xi_lower_node_type(l, node),
+            (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0);
 
     XrParamMode stack_modes[64];
     const XrParamMode *param_modes = NULL;
@@ -5651,6 +5713,8 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         extra |= XI_VEC_SHAPE_UNZIP;
     if ((desc->flags & XA_INTRINSIC_FLAG_CONTIGUOUS_HALF) != 0)
         extra |= XI_VEC_SHAPE_CONTIGUOUS_HALF;
+    if ((desc->flags & XA_INTRINSIC_FLAG_SCALABLE) != 0)
+        extra |= XI_VEC_SHAPE_SCALABLE;
     if (desc->lowering == XA_INTRINSIC_LOWERING_VEC_SHUFFLE &&
         !lower_intrinsic_shuffle_pattern(l, node, call, desc, &extra))
         return NULL;
@@ -5658,6 +5722,10 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         value->aux_int = xi_vec_shape_encode(desc->shape_rule.result_native_type,
                                              desc->shape_rule.result_lanes) |
                          extra;
+        bool unchecked_access = (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0 &&
+                                (op == XI_VEC_LOAD || op == XI_VEC_STORE);
+        if (unchecked_access)
+            value->aux_int |= XI_ACCESS_UNCHECKED;
     } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
         value->aux_int = receiver->type ? receiver->type->scalar_rep : 0;
     }
@@ -5682,14 +5750,20 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
             value->aux = xi_lower_type_struct_layout(l, target);
         } else if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_GET) {
             value->aux_int = 1;
+        } else if ((desc->lowering == XA_INTRINSIC_LOWERING_SLICE_WINDOW ||
+                    desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY ||
+                    desc->lowering == XA_INTRINSIC_LOWERING_SLICE_COPY) &&
+                   (resolved->flags & XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE) != 0) {
+            value->aux_int |= XI_ACCESS_UNCHECKED;
         }
         XiSequenceEvidenceIds sequence_ids;
         lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
         xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
-    if (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
-        desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
-        desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
+    bool unchecked_access = (value->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    if (!unchecked_access && (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
+                              desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
+                              desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW))
         xi_lower_insert_err_check(l, node, true);
     return value;
 }
@@ -6009,11 +6083,48 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
+        /* Resolve the method's source-argument contract before lowering its
+         * arguments.  Value aggregates use ordinary read-copy semantics only
+         * for XR_PARAM_READ value slots; ref/move slots and the internal
+         * fixed-layout read-place ABI must keep the caller's original place.
+         *
+         * Ordinary function calls already establish this contract before
+         * lower_call_args_expand_spread().  Doing it later for methods caused
+         * e.g. `state.digestLong(ref acc)` to deep-clone a stack fixed array and
+         * then borrow the clone, adding allocation and hiding the native place
+         * from AOT while preserving only accidentally-correct copy-out
+         * semantics. */
+        XrParamMode stack_method_modes[64];
+        const XrParamMode *method_modes = NULL;
+        int method_pcount = 0;
+        XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+        if (method_type && method_type->kind == XR_KIND_FUNCTION) {
+            method_modes = lower_function_param_modes(
+                l, method_type, stack_method_modes,
+                (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
+        }
+        bool stack_method_read_places[64];
+        bool *method_read_places = NULL;
+        int method_read_place_count = method_pcount;
+        if (method_read_place_count > 0) {
+            method_read_places =
+                method_read_place_count <= (int) (sizeof(stack_method_read_places) /
+                                                  sizeof(stack_method_read_places[0]))
+                    ? stack_method_read_places
+                    : (bool *) xi_func_arena_alloc(
+                          l->func, (uint32_t) ((size_t) method_read_place_count * sizeof(bool)));
+            if (!method_read_places)
+                return NULL;
+            lower_collect_read_place_params(l, NULL, method_type, method_modes, method_pcount,
+                                            method_read_places, method_read_place_count);
+        }
+
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0, NULL, 0,
-                                           (int) node->line))
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, method_modes,
+                                           method_pcount, method_read_places,
+                                           method_read_place_count, (int) node->line))
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
@@ -6333,19 +6444,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return phi ? &phi->value : chan_recv;
         }
 
-        XrParamMode stack_method_modes[64];
-        const XrParamMode *method_modes = NULL;
-        int method_pcount = 0;
-        XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
-        if (method_type && method_type->kind == XR_KIND_FUNCTION) {
-            method_modes = lower_function_param_modes(
-                l, method_type, stack_method_modes,
-                (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
-        }
         XiCallWriteback *writebacks = NULL;
-        XiCallPlan *call_plan =
-            lower_build_call_plan(l, call, arg_vals, n, method_modes, method_pcount, NULL, 0,
-                                  method_type, &writebacks, (int) node->line);
+        XiCallPlan *call_plan = lower_build_call_plan(
+            l, call, arg_vals, n, method_modes, method_pcount, method_read_places,
+            method_read_place_count, method_type, &writebacks, (int) node->line);
         if (l->had_error)
             return NULL;
 
@@ -6386,7 +6488,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 
-        xi_lower_insert_err_check(l, node, true);
+        lower_call_emit_err_check(l, v, node, call, method_type);
         if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
             return NULL;
         if (!lower_apply_one_call_writeback(l, &receiver_writeback, (int) node->line))
@@ -8831,7 +8933,15 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     }
 
     bool is_safe = as->is_safe;
-    struct XrType *result_type = is_safe ? l->type_any : l->type_any;
+    /* If the source is an unresolved import, lowering cannot yet choose the
+     * normal native NARROW/COPY form for a numeric-width cast.  Retain the
+     * analyzer-resolved target type on the fallback XI_AS so link-time import
+     * resolution can canonicalize its representation later.  Runtime type
+     * assertions and safe casts keep their tagged result contract. */
+    struct XrType *result_type =
+        !is_safe && cast_type && (XR_TYPE_IS_INT(cast_type) || XR_TYPE_IS_FLOAT(cast_type))
+            ? cast_type
+            : l->type_any;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
     if (!v)
         return NULL;

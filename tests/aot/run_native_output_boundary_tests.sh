@@ -19,6 +19,40 @@ if [ "$("$WORK/native-output")" != "42" ]; then
     exit 1
 fi
 
+if [ -e "$WORK/project/native_output.o" ]; then
+    echo "native unit leaked a target-specific object into the package tree" >&2
+    exit 1
+fi
+
+(
+    cd "$WORK/project" &&
+        "$XRAY" build --native --target x86_64-linux-musl --cache-dir "$WORK/cross-cache" \
+            -o "$WORK/native-output-linux" main.xr >"$WORK/cross-linux.log" 2>&1
+) &
+linux_pid=$!
+(
+    cd "$WORK/project" &&
+        "$XRAY" build --native --target x86_64-windows-gnu --cache-dir "$WORK/cross-cache" \
+            -o "$WORK/native-output-windows.exe" main.xr >"$WORK/cross-windows.log" 2>&1
+) &
+windows_pid=$!
+cross_failed=0
+wait "$linux_pid" || cross_failed=1
+wait "$windows_pid" || cross_failed=1
+if [ "$cross_failed" -ne 0 ]; then
+    sed -n '1,160p' "$WORK/cross-linux.log" >&2
+    sed -n '1,160p' "$WORK/cross-windows.log" >&2
+    exit 1
+fi
+if [ ! -s "$WORK/native-output-linux" ] || [ ! -s "$WORK/native-output-windows.exe" ]; then
+    echo "parallel cross-target native outputs were not produced" >&2
+    exit 1
+fi
+if [ -e "$WORK/project/native_output.o" ]; then
+    echo "parallel cross-target native units shared a package-tree object" >&2
+    exit 1
+fi
+
 if (cd "$WORK/project" && "$XRAY" run main.xr >"$WORK/vm.log" 2>&1); then
     echo "VM unexpectedly accepted a package declared vm=unsupported" >&2
     exit 1

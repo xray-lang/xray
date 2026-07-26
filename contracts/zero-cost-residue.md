@@ -1,6 +1,11 @@
 # Zero-cost residue contract
 
-Status: re-frozen by task 239 after numeric scalar representation canonicalization.
+Status: re-frozen after the xxHash parity work made module-owned immutable
+fixed arrays available as hosted static data, kept unhinted return branches
+neutral, made caller-proven raw slices free of pending-error residue, and kept
+AVX-512F values native inside attributed feature islands. The CGen matrix and
+xxHash shape contracts were rerun; residue categories and allowance semantics
+are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -19,6 +24,13 @@ bounds-panic branch remains; when the AOT plan proves the same Slice receiver,
 non-negative affine offset, dominating relational length guard, constant width,
 and no clobber, CGen consumes that evidence and emits the raw load/store without
 the redundant branch. The proof never changes the checked source boundary.
+An explicitly source-marked `unsafe` SIMD load/store, fixed-width integer
+byte-Slice load, strict `Slice.window` construction, or byte/POD
+`Slice.copyFrom` is a separate boundary: the analyzer records the unsafe scope
+on the resolved call, Xi preserves that fact, and native CGen may emit an
+unchecked memory access, borrowed view, or bounded copy with an `XR_ASSUME`
+precondition and an audit marker. Safe calls remain checked unless ordinary AOT
+proof removes only a redundant branch.
 
 Small external-linkage leaf bodies may carry a force-inline hint so native LTO
 can specialize a cross-module caller. The hint does not remove the exported
@@ -39,6 +51,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c 8ded8ab7b467d0ee8412de058ffcc5cb33b62e38e769c1ab1b6b7980262dac9c
+anchor-sha256: src/aot/xi_cgen.c a80e8fd0572ae8ab46d22acebe17b7b5b99d88cedaf48e73b39fb276f6e21c24
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

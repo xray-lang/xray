@@ -141,6 +141,11 @@ vmcase(OP_MAP_SETKS) {
             if (!xr_vm_instance_struct_set_field(isolate, inst_obj, j, val)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
+        } else if (XR_IS_ARRAY_REF(val)) {
+            if (!vm_store_persistent_array_ref(isolate, &inst_obj->fields[j], val)) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "failed to materialize fixed array instance field");
+            }
         } else {
             inst_obj->fields[j] = val;
         }
@@ -183,6 +188,11 @@ vmcase(OP_SETFIELD) {
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
         if (!xr_vm_instance_struct_set_field(isolate, inst_obj, field_idx, val)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+        }
+    } else if (XR_IS_ARRAY_REF(val)) {
+        if (!vm_store_persistent_array_ref(isolate, &inst_obj->fields[field_idx], val)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                             "failed to materialize fixed array instance field");
         }
     } else {
         inst_obj->fields[field_idx] = val;
@@ -758,6 +768,11 @@ vmcase(OP_SETPROP) {
             if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
             }
+        } else if (XR_IS_ARRAY_REF(value)) {
+            if (!vm_store_persistent_array_ref(isolate, &inst_s->fields[field_index], value)) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "failed to materialize fixed array instance field");
+            }
         } else {
             inst_s->fields[field_index] = value;
         }
@@ -769,6 +784,11 @@ vmcase(OP_SETPROP) {
         if (inst_class->struct_layout) {
             if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else if (XR_IS_ARRAY_REF(value)) {
+            if (!vm_store_persistent_array_ref(isolate, &inst_s->fields[field_index], value)) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "failed to materialize fixed array instance field");
             }
         } else {
             inst_s->fields[field_index] = value;
@@ -783,6 +803,11 @@ vmcase(OP_SETPROP) {
         if (inst_class->struct_layout) {
             if (!xr_vm_instance_struct_set_field(isolate, inst_s, field_index, value)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
+            }
+        } else if (XR_IS_ARRAY_REF(value)) {
+            if (!vm_store_persistent_array_ref(isolate, &inst_s->fields[field_index], value)) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "failed to materialize fixed array instance field");
             }
         } else {
             inst_s->fields[field_index] = value;

@@ -124,6 +124,7 @@ typedef struct XiPipelineConfig {
     const char *source_file; /* Source path propagated to emitted XrProto debug info. */
     XiRepPolicy rep_policy;  /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
+    bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
     const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
     uint32_t global_evidence_module_id;             /* 1-based module id in global evidence */
 } XiPipelineConfig;

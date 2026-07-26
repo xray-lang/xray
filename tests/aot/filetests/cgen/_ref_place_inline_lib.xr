@@ -1,0 +1,9 @@
+export fn refKernel(values: ref [u64; 8], rounds: int) {
+    var view: Slice<u64> = values[:]
+    var i = 0
+    while (i < rounds) {
+        var lane = i & 7
+        view[lane] = view[lane] + 1
+        i += 1
+    }
+}

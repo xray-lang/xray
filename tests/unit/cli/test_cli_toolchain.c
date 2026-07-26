@@ -151,13 +151,16 @@ TEST(list_uses_canonical_targets_only) {
     const char *const *targets = xtc_target_supported_names(&count);
 
     ASSERT_NOT_NULL(targets);
-    ASSERT_EQ_INT((int) count, 14);
+    ASSERT_EQ_INT((int) count, 19);
     ASSERT_STR_EQ(targets[0], "native");
     ASSERT_STR_EQ(targets[1], "aarch64-apple-darwin");
     ASSERT_STR_EQ(targets[3], "x86_64-linux-gnu");
-    ASSERT_STR_EQ(targets[10], "x86_64-freestanding-none");
-    ASSERT_STR_EQ(targets[12], "riscv64-freestanding-none");
-    ASSERT_STR_EQ(targets[13], "thumb-freestanding-eabi");
+    ASSERT_STR_EQ(targets[5], "i386-linux-musl");
+    ASSERT_STR_EQ(targets[9], "powerpc64-linux-musl");
+    ASSERT_STR_EQ(targets[11], "loongarch64-linux-musl");
+    ASSERT_STR_EQ(targets[15], "x86_64-freestanding-none");
+    ASSERT_STR_EQ(targets[17], "riscv64-freestanding-none");
+    ASSERT_STR_EQ(targets[18], "thumb-freestanding-eabi");
 }
 
 TEST(parse_linux_musl_target) {
@@ -172,6 +175,32 @@ TEST(parse_linux_musl_target) {
     ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_MUSL);
     ASSERT_EQ_INT(target.endian, XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE);
     ASSERT_STR_EQ(xtc_target_default_output(&target), "a.out");
+}
+
+TEST(parse_portability_targets) {
+    XrToolchainTarget target;
+    char err[256];
+
+    ASSERT_TRUE(xtc_target_parse("i386-linux-musl", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_X86);
+    ASSERT_EQ_INT(target.pointer_bits, 32);
+    ASSERT_STR_EQ(target.zig_triple, "x86-linux-musl");
+
+    ASSERT_TRUE(xtc_target_parse("arm-linux-gnueabi", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_ARM);
+    ASSERT_EQ_INT(target.abi, XR_TOOLCHAIN_TARGET_ABI_GNU);
+
+    ASSERT_TRUE(xtc_target_parse("powerpc64-linux-musl", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_POWERPC64);
+    ASSERT_EQ_INT(target.endian, XR_TOOLCHAIN_TARGET_ENDIAN_BIG);
+
+    ASSERT_TRUE(xtc_target_parse("powerpc64le-linux-musl", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_POWERPC64);
+    ASSERT_EQ_INT(target.endian, XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE);
+
+    ASSERT_TRUE(xtc_target_parse("loongarch64-linux-musl", &target, err, sizeof(err)));
+    ASSERT_EQ_INT(target.arch, XR_TOOLCHAIN_TARGET_ARCH_LOONGARCH64);
+    ASSERT_EQ_INT(target.pointer_bits, 64);
 }
 
 TEST(parse_freestanding_targets) {
@@ -553,6 +582,7 @@ RUN_TEST_SUITE("Toolchain model");
 RUN_TEST(parse_native_target_normalizes_abi);
 RUN_TEST(list_uses_canonical_targets_only);
 RUN_TEST(parse_linux_musl_target);
+RUN_TEST(parse_portability_targets);
 RUN_TEST(parse_freestanding_targets);
 RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);

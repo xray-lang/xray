@@ -33,3 +33,4 @@ Initial frozen contracts:
 - `cgen-wellformedness.md`
 - `meta-ownership.md`
 - `differential-protocol.md`
+- `target-abi.md`

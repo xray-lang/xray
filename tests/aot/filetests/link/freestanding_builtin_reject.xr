@@ -10,9 +10,9 @@ fn xray_builtin_typename_reject(x: int) -> int {
     return 0
 }
 
-fn xray_builtin_copy_reject(x: int) -> int {
-    var y = copy(x)
-    return y
+fn xray_builtin_copy_reject(values: Slice<int>) -> int {
+    var copied = copy(values)
+    return len(copied)
 }
 
 fn xray_builtin_char_reject(x: int) -> int {

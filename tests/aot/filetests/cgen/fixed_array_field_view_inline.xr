@@ -1,0 +1,22 @@
+fn first(values: const Slice<u64>) -> u64 {
+    return values[0]
+}
+
+struct LaneState {
+    values: [u64; 8]
+
+    private kernel() -> u64 {
+        return first(this.values[:])
+    }
+
+    read() -> u64 {
+        return this.kernel()
+    }
+}
+
+fn run() -> u64 {
+    var state = LaneState{values: [7; 8]}
+    return state.read()
+}
+
+print(run())

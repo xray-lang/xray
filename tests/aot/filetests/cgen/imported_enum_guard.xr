@@ -1,0 +1,9 @@
+import { ImportedGuardError, importedGuardError } from "./_imported_enum_guard_lib"
+
+fn readImportedGuardError(value: ImportedGuardError) -> int {
+    return match (value) {
+        ImportedGuardError.Failed(code) -> code
+    }
+}
+
+print(readImportedGuardError(importedGuardError(42)))

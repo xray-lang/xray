@@ -1,0 +1,8 @@
+import mem
+
+fn rawLength(source: Slice<byte>) -> int {
+    var view = mem.slice<byte>(unsafe {
+        source.ptr()
+    }, len(source), source)
+    return len(view)
+}

@@ -107,6 +107,16 @@ xray toolchain doctor                   # validate AOT toolchains
 
 `xray run` and the shorthand `xray file.xr` execute bytecode in the VM. The default `xray build` packages bytecode with the runtime as a standalone executable. Native compilation is selected explicitly with `xray build --native`; the native pipeline is Xi IR → optimized C → the selected C toolchain. Xray does not use a JIT.
 
+Native library projects declare their C ABI with `[[export.c]]` entries in
+`xray.toml`. `--c-export-prefix PREFIX` prefixes every public manifest export
+while leaving hidden support symbols unchanged, and
+`--c-export-exclude A,B,...` removes selected manifest exports from the AOT
+root set. Both options validate identifiers and symbol names fail-closed and
+participate in the native-plan fingerprint, so package systems can implement
+namespaced or feature-sliced libraries without source rewriting. `--c-only`
+emits one compilable amalgamated translation unit even for multi-module
+programs.
+
 ## Language at a glance
 
 ```xray

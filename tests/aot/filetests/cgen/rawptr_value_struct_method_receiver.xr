@@ -1,0 +1,15 @@
+import { State } from "./_rawptr_value_struct_method_receiver_lib"
+
+fn bridgeValueState(destination: MutPtr<State>, source: MutPtr<State>, value: u64) -> u64 {
+    unsafe {
+        source.deref().reset(value)
+        destination.deref().copyFrom(source.deref())
+        return destination.deref().digest()
+    }
+}
+
+fn readValueState(source: Ptr<State>) -> u64 {
+    unsafe {
+        return source.deref().digest()
+    }
+}

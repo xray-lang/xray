@@ -945,6 +945,14 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
         dst->alloc_effect_id = src->alloc_effect_id;
     }
     dst->throw_effect = src->throw_effect;
+    /* The typed throw-effect bit is an invariant of both the symbol links and
+     * its function type. Import metadata used to copy only the links field,
+     * leaving the freshly reconstructed function type at its fail-closed
+     * MAY_THROW default. Xi lowering consults the type, so every cross-module
+     * call retained a dead error-channel check even when the exported callee
+     * had already been proven NO_THROW. */
+    if (dst->type && dst->type->kind == XR_KIND_FUNCTION)
+        xr_type_function_set_throw_effect(dst->type, dst->throw_effect);
     dst->intrinsic_id = src->intrinsic_id;
     dst->alloc_state = src->alloc_state;
     dst->alloc_reason_bits = src->alloc_reason_bits;
@@ -967,6 +975,7 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->import_member_name = src->import_member_name;
     dst->file_path = src->file_path;
     dst->assign_count = src->assign_count;
+    dst->value_mutated = src->value_mutated;
     dst->is_const_foldable = src->is_const_foldable;
     dst->const_initializer = src->const_initializer;
     dst->has_ct_value = src->has_ct_value;

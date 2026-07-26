@@ -1,0 +1,5 @@
+import { liveAdd } from "./_freestanding_closed_world_lib"
+
+fn freestandingClosedWorld(value: i64) -> i64 {
+    return liveAdd(value)
+}

@@ -1,0 +1,7 @@
+import { importedNothrow } from "./_imported_nothrow_lib"
+
+fn callImported(value: u64) -> u64 {
+    return importedNothrow(value)
+}
+
+print(callImported(41))

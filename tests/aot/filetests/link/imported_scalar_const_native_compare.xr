@@ -1,0 +1,12 @@
+import { LIMIT } from "./_imported_scalar_const_native_compare_lib"
+
+fn withinLimit(length: int) -> bool {
+    return length <= LIMIT
+}
+
+fn withinWideLimit(length: u64) -> bool {
+    return length <= (LIMIT as u64)
+}
+
+print(withinLimit(16))
+print(withinWideLimit(16 as u64))

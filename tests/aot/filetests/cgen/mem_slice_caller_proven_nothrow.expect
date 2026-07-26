@@ -1,0 +1,6 @@
+c_count=1:/* caller-proven mem.slice raw view */
+c_not_contains=mem.slice<T>() count must be non-negative
+c_not_contains=mem.slice<T>() requires a non-null pointer for non-zero count
+c_not_contains=mem.slice<T>() pointer does not satisfy T alignment
+c_not_contains=mem.slice<T>() byte range overflows address space
+c_syntax=pass

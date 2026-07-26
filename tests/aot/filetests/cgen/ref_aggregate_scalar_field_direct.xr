@@ -1,0 +1,17 @@
+fn bumpPair(left: ref int, right: ref int) {
+    left += 1
+    right += 2
+}
+
+struct Counter {
+    left: int
+    right: int
+
+    advance() {
+        bumpPair(ref this.left, ref this.right)
+    }
+}
+
+var counter = Counter{left: 3, right: 5}
+counter.advance()
+print(counter.left + counter.right)

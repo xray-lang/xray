@@ -145,6 +145,9 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                 v->op == XI_CALL_BUILTIN)
                 m.call_count++;
+            if (v->op == XI_FIXED_ARRAY_NEW ||
+                (v->op == XI_STACK_ALLOC && v->aux_int == XI_ARRAY_NEW))
+                m.has_stack_aggregate = true;
             if (v->op == XI_ERR_CHECK && inline_err_check_is_dead(callee, v, 0))
                 continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
@@ -187,6 +190,104 @@ static bool inline_is_leaf_straightline(const XiInlineCostModel *cost) {
     return cost->call_count == 0 && cost->branch_count == 0 && !cost->has_loop;
 }
 
+static bool inline_func_has_owner_scoped_open_dispatch(const XiFunc *f) {
+    if (!f)
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL_METHOD || value->nargs < 1 || !value->args[0] ||
+                !value->args[0]->type)
+                continue;
+            const XrType *receiver = value->args[0]->type;
+            if (receiver->kind == XR_KIND_INTERFACE ||
+                (receiver->kind == XR_KIND_INSTANCE && !receiver->is_value_type))
+                return true;
+        }
+    }
+    return false;
+}
+
+static unsigned inline_vector_lane_bytes(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_U8:
+            return 1;
+        case XR_NATIVE_U32:
+            return 4;
+        case XR_NATIVE_U64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+static bool inline_func_has_runtime_simd_dispatch(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (block->values[vi] && (block->values[vi]->op == XI_TARGET_SIMD_BYTES ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_ACCELERATED ||
+                                      block->values[vi]->op == XI_TARGET_SIMD_RUNTIME_SELECTED))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool inline_func_has_wide_vector_op(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op < XI_VEC_LOAD || value->op > XI_VEC_REDUCE_ADD ||
+                !xi_vec_shape_is_explicit(value->aux_int))
+                continue;
+            unsigned width = inline_vector_lane_bytes(xi_vec_shape_native_type(value->aux_int)) *
+                             (unsigned) xi_vec_shape_lanes(value->aux_int);
+            if (width > 16)
+                return true;
+        }
+    }
+    return false;
+}
+
+/* A dispatch query is an explicit baseline boundary. Away from such a query,
+ * propagate the required feature through direct calls so a wide kernel may
+ * inline into a larger same-feature loop without leaking into its dispatcher. */
+static bool inline_func_requires_wide_vector(const XiFunc *f, const XiFunc *origin, uint8_t depth) {
+    if (!f || depth > 16 || inline_func_has_runtime_simd_dispatch(f))
+        return false;
+    if (inline_func_has_wide_vector_op(f))
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL || value->nargs < 1)
+                continue;
+            const XiFunc *target = resolve_callee(f, value->args[0]);
+            if (!target || target == origin)
+                continue;
+            if (inline_func_requires_wide_vector(target, origin, (uint8_t) (depth + 1)))
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Benefit scoring:
  *   leaf straight-line helper:
  *     MAX_COST - value_count + 1       (call overhead dominates, even in large callers)
@@ -206,6 +307,8 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
         return -1000; /* never inline recursion */
     if (cost->has_throw)
         return -1000; /* error flow and defers are call-boundary scoped */
+    if (cost->has_stack_aggregate)
+        return -1000; /* keep branch-local frame storage out of unrelated caller paths */
 
     if (inline_is_leaf_straightline(cost)) {
         int score = (int) XI_INLINE_MAX_COST - (int) cost->value_count + 1;
@@ -274,6 +377,8 @@ static const XiCallArgPlan *inline_outer_place_origin(const XiValue *outer_call,
     const XiCallPlan *plan = xi_call_plan(outer_call);
     if (!plan || !place)
         return NULL;
+    if (plan->has_receiver && plan->receiver.place == place)
+        return &plan->receiver;
     for (uint16_t i = 0; i < plan->nargs; i++) {
         const XiCallArgPlan *arg = &plan->args[i];
         if (arg->place == place)
@@ -288,8 +393,9 @@ static void inline_remap_call_place_origins(XiFunc *caller, XiValue *cloned,
     if (!caller || !plan)
         return;
 
-    for (uint16_t i = 0; i < plan->nargs; i++) {
-        XiCallArgPlan *arg = &plan->args[i];
+    uint16_t first = plan->has_receiver ? 0 : 1;
+    for (uint16_t slot = first; slot <= plan->nargs; slot++) {
+        XiCallArgPlan *arg = slot == 0 ? &plan->receiver : &plan->args[slot - 1];
         XiValue *place = arg->place;
         if (!place)
             continue;
@@ -329,6 +435,12 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
+    /* Tail position is scoped to the callee frame. Once that frame is
+     * inlined, its former tail call must flow through the caller's
+     * continuation, so carrying XI_FLAG_TAIL forward can make later method
+     * specialization treat an open dispatch as a direct terminal invoke. The
+     * regular tail-call pass may rediscover a true caller tail position. */
+    cloned->flags &= (uint8_t) ~XI_FLAG_TAIL;
     if (xi_evidence_domain_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
 
@@ -730,12 +842,26 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue; /* no self-recursion */
             if (callee->is_extern)
                 continue; /* FFI: extern call must survive to a direct C call */
+            if (callee->noinline_hint)
+                continue; /* source explicitly preserves this optimization boundary */
             if (callee->nblocks == 0)
                 continue;
             if (callee->ncaptures > 0)
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
             if (callee->is_vararg)
                 continue; /* Rest-Array construction needs a dedicated inline rewrite. */
+            /* Open class/interface dispatch plans are keyed by both callsite
+             * and owning function. Cloning such a site into another function
+             * would make the backend miss the verified type-switch plan and
+             * fall back to the static base method. Keep that boundary until
+             * the global-evidence layer has an explicit clone identity. Value
+             * types remain eligible because their dispatch is sealed. */
+            if (inline_func_has_owner_scoped_open_dispatch(callee))
+                continue;
+            if (f->preserve_wide_vector_boundaries &&
+                inline_func_requires_wide_vector(callee, callee, 0) &&
+                !inline_func_requires_wide_vector(f, f, 0))
+                continue; /* keep optional target-feature bodies out of the baseline caller */
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)

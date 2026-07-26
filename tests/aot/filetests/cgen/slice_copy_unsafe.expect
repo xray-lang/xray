@@ -1,0 +1,4 @@
+c_count=2:/* unchecked Slice.copyFrom access */
+c_contains=XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG
+c_contains="Slice.copyFrom(src) range out of bounds"
+c_syntax=pass

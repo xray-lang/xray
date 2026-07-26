@@ -1,0 +1,15 @@
+args=--target x86_64-linux-musl --simd avx512 --dump-xaot-plan
+contains=-mavx512f
+contains="simd_mode": "avx512"
+contains="simd_features": 22
+c_contains=__m512i
+c_contains=_mm512_loadu_si512(
+c_contains=_mm512_xor_si512(
+c_contains=_mm512_srli_epi64(
+c_contains=_mm512_mul_epu32(
+c_contains=_mm512_shuffle_epi32(
+c_contains=_mm512_add_epi64(
+c_contains=_mm512_srl_epi64(
+c_contains=_mm512_sll_epi64(
+c_contains=_mm512_storeu_si512(
+c_not_contains=_mm512_mullo_epi64(

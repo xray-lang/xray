@@ -303,7 +303,10 @@ XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int li
 }
 
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_AGG_NEW && !xi_var_id_is_valid(v->var_id);
+    if (!v || xi_var_id_is_valid(v->var_id))
+        return false;
+    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
+           (v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE);
 }
 
 static void stmt_mark_value_clone_copy(XiValue *v) {
@@ -469,7 +472,78 @@ static XrAggregateLayout *stmt_type_struct_layout(XiLower *l, struct XrType *typ
 static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
     if (!type)
         return false;
-    return type->is_value_type || stmt_type_struct_layout(l, type) != NULL;
+    return type->kind == XR_KIND_FIXED_ARRAY || type->is_value_type ||
+           stmt_type_struct_layout(l, type) != NULL;
+}
+
+/* Keep large mutable value structs in one addressable local for their whole
+ * source lifetime.  Braun SSA is excellent for scalar values, but a mutating
+ * method on a large aggregate otherwise requires a whole-value PLACE_LOAD
+ * writeback after every call.  A stable place preserves the same value
+ * semantics while allowing both VM and native backends to update the original
+ * storage directly.  Small aggregates remain in SSA so ordinary scalar
+ * replacement and register passing stay cheap. */
+#define XI_STABLE_VALUE_LOCAL_MIN_BYTES 32u
+
+static bool stmt_function_may_suspend(XiLower *l) {
+    if (!l || !l->func)
+        return true;
+    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) & XA_SEM_EFFECT_SUSPEND) !=
+        0)
+        return true;
+    if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
+        return false;
+    const XgBodySummary *body = NULL;
+    for (uint32_t i = 0; i < l->global_evidence->nbodies; i++) {
+        if (l->global_evidence->bodies[i].func_id == l->func->xg_body_func_id) {
+            body = &l->global_evidence->bodies[i];
+            break;
+        }
+    }
+    if (!body)
+        return true;
+    if ((body->capability_bits & XG_CAP_COROUTINE) != 0)
+        return true;
+    uint32_t effects = 0;
+    return xg_body_effects_compose_closed_world_calls(l->global_evidence, body, &effects) &&
+           (effects & XG_BODY_MAY_SUSPEND) != 0;
+}
+
+static bool stmt_decl_prefers_stable_value_place(XiLower *l, AstNode *node, int var_id,
+                                                 struct XrType *type) {
+    if (!l || !l->analyzer || !node || node->type != AST_VAR_DECL || var_id < 0 ||
+        var_id >= l->var_count || l->vars[var_id].captured_by_child)
+        return false;
+    /* Coroutine locals that survive suspension must ultimately live in the
+     * heap frame.  XI_LOCAL_ADDR currently denotes ordinary function-local
+     * storage, so keep suspendable bodies on the SSA path until the coroutine
+     * planner can publish a frame-relative stable place. */
+    if (stmt_function_may_suspend(l))
+        return false;
+    if (l->is_program && l->shared_map && l->shared_map[var_id] >= 0)
+        return false;
+    XaSymbol *symbol =
+        node->as.var_decl.symbol_id
+            ? xa_scope_lookup_by_id(l->analyzer->global_scope, node->as.var_decl.symbol_id)
+            : NULL;
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(l->analyzer, symbol) : NULL;
+    if (!links || (!links->value_mutated && links->assign_count <= 1))
+        return false;
+    XrAggregateLayout *layout = stmt_type_struct_layout(l, type);
+    return layout && layout->total_size >= XI_STABLE_VALUE_LOCAL_MIN_BYTES;
+}
+
+static bool stmt_bind_stable_value_place(XiLower *l, AstNode *node, int var_id, XiValue *init_val) {
+    if (!stmt_decl_prefers_stable_value_place(l, node, var_id, l->vars[var_id].type))
+        return true;
+    XiValue *place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, l->vars[var_id].type, 1);
+    if (!place)
+        return false;
+    place->args[0] = init_val;
+    place->line = (uint32_t) node->line;
+    l->vars[var_id].call_place = place;
+    l->vars[var_id].place_mode = XR_PARAM_REF;
+    return true;
 }
 
 static XrClassInfo *stmt_class_info_for_type(XiLower *l, struct XrType *type) {
@@ -3219,7 +3293,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * loop-carried updates to the source corrupt the snapshot. */
     bool needs_copy =
         (xi_var_id_is_valid(init_val->var_id) && init_val->var_id != (XiVarId) var_id);
-    /* Value types (structs) always need deep copy on assignment regardless
+    /* Value types (structs and fixed arrays) always need a value copy regardless
      * of var_id — the source could be a shared variable, upvalue, or
      * function return whose identity must not leak into the new binding. */
     bool value_clone_copy =
@@ -3238,6 +3312,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val = copy;
         }
     }
+    if (!stmt_bind_stable_value_place(l, node, var_id, init_val))
+        return;
     stmt_write_decl_value(l, var_id, init_val);
 }
 

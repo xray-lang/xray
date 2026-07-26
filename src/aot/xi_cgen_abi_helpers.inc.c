@@ -212,6 +212,18 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
         return;
     }
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR && plan->rep.c_type) {
+        if (strcmp(plan->rep.c_type, "svuint8_t") == 0) {
+            fprintf(out, "svdup_n_u8(0)");
+            return;
+        }
+        if (strcmp(plan->rep.c_type, "svuint32_t") == 0) {
+            fprintf(out, "svdup_n_u32(0)");
+            return;
+        }
+        if (strcmp(plan->rep.c_type, "svuint64_t") == 0) {
+            fprintf(out, "svdup_n_u64(0)");
+            return;
+        }
         fprintf(out, "((%s){0})", plan->rep.c_type);
         return;
     }
@@ -1062,6 +1074,15 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         return;
     }
     if (arg_plan && arg_plan->rep.kind == XAOT_VALUE_AGGREGATE) {
+        if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
+            cg_value_rep_is_span_aggregate(arg_plan->rep)) {
+            /* A function whose result or control flow requires the tagged ABI
+             * still accepts a native Slice argument. Box the frame-local span
+             * descriptor for the duration of the direct call; safe Slice
+             * values cannot escape or be retained by the callee. */
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            return;
+        }
         if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(arg_plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");

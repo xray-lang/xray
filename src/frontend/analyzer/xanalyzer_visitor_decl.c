@@ -123,6 +123,78 @@ static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
         if (defaults[i]) {
             ctx->expected_type = param_types ? param_types[i] : NULL;
             xa_visit_infer_expr(ctx, defaults[i]);
+
+            /*
+             * Export metadata must not retain a dependency on a private
+             * declaration-module const: the VM imports that metadata into a
+             * separate analyzer where the private symbol intentionally does
+             * not exist.  Publish scalar consteval defaults as self-contained
+             * literals.  Dynamic defaults remain caller-evaluated expressions.
+             */
+            XrCtValue value = {0};
+            const char *ct_error = NULL;
+            if (xa_consteval_expr(ctx->analyzer, defaults[i], &value, &ct_error)) {
+                AstNodeType literal_type = AST_LITERAL_NULL;
+                bool can_fold = true;
+                switch (value.kind) {
+                    case XR_CT_INT:
+                        literal_type = AST_LITERAL_INT;
+                        break;
+                    case XR_CT_FLOAT:
+                        literal_type = AST_LITERAL_FLOAT;
+                        break;
+                    case XR_CT_BOOL:
+                        literal_type = value.as.bool_val ? AST_LITERAL_TRUE : AST_LITERAL_FALSE;
+                        break;
+                    case XR_CT_STRING:
+                        literal_type = AST_LITERAL_STRING;
+                        break;
+                    case XR_CT_CHAR:
+                        literal_type = AST_LITERAL_RUNE;
+                        break;
+                    case XR_CT_NULL:
+                        literal_type = AST_LITERAL_NULL;
+                        break;
+                    default:
+                        can_fold = false;
+                        break;
+                }
+                if (can_fold) {
+                    AstNode *folded = defaults[i];
+                    memset(&folded->as, 0, sizeof(folded->as));
+                    folded->type = literal_type;
+                    folded->as.literal.escape_mode = XR_LITERAL_ESCAPED;
+                    folded->as.literal.source_form = XR_LITERAL_INLINE;
+                    switch (value.kind) {
+                        case XR_CT_INT:
+                            folded->as.literal.kind = LITERAL_KIND_INT;
+                            folded->as.literal.int_bits = (uint64_t) value.as.int_val;
+                            folded->as.literal.raw_value.int_val = value.as.int_val;
+                            break;
+                        case XR_CT_FLOAT:
+                            folded->as.literal.kind = LITERAL_KIND_FLOAT;
+                            folded->as.literal.raw_value.float_val = value.as.float_val;
+                            break;
+                        case XR_CT_BOOL:
+                            folded->as.literal.kind = LITERAL_KIND_BOOL;
+                            folded->as.literal.raw_value.bool_val = value.as.bool_val;
+                            break;
+                        case XR_CT_STRING:
+                            folded->as.literal.kind = LITERAL_KIND_STRING;
+                            folded->as.literal.raw_value.string_val = value.as.string_val;
+                            break;
+                        case XR_CT_CHAR:
+                            folded->as.literal.kind = LITERAL_KIND_RUNE;
+                            folded->as.literal.raw_value.rune_val = value.as.rune_val;
+                            break;
+                        case XR_CT_NULL:
+                            folded->as.literal.kind = LITERAL_KIND_NULL;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
         }
     }
     ctx->expected_type = saved_expected;

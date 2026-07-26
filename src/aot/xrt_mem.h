@@ -186,6 +186,32 @@ static inline XrValue xrt_mem_fence(XrValue ordering) {
     return XR_NULL_VAL;
 }
 
+/* Semantic identity with an AOT-only optimization barrier. The read/write
+ * register operand creates a scalar dependence and the compiler-only memory
+ * clobber prevents independent loads/stores from crossing the source-level
+ * scheduling point. This is not a hardware fence and has no observable
+ * runtime effect. Toolchains without GNU-style inline assembly retain the
+ * identity semantics and conservatively omit the hint. */
+static inline XrValue xrt_mem_compiler_guard_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits) : : "memory");
+#endif
+    return XR_FROM_INT((int64_t) bits);
+}
+
+/* Semantic identity with an AOT-only scalar opacity hint. Unlike
+ * compilerGuard, this deliberately has no memory clobber: it blocks
+ * value-based constant propagation while preserving ordinary alias analysis
+ * and loop-invariant load motion. */
+static inline XrValue xrt_mem_compiler_opaque_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits));
+#endif
+    return XR_FROM_INT((int64_t) bits);
+}
+
 /* Prefetch a cache line at the given raw address into caches (performance hint,
  * no observable effect). `rw` != 0 requests write intent. AOT lowers to
  * __builtin_prefetch; the VM binding (mem.c) is a no-op — both are observably

@@ -15,6 +15,8 @@
     X(TARGET_SIZEOF, xi_emit_target_sizeof) \
     X(TARGET_ALIGNOF, xi_emit_target_alignof) \
     X(TARGET_SIMD_BYTES, xi_emit_semantic_intrinsic_call) \
+    X(TARGET_SIMD_ACCELERATED, xi_emit_semantic_intrinsic_call) \
+    X(TARGET_SIMD_RUNTIME_SELECTED, xi_emit_semantic_intrinsic_call) \
     X(COPY, emit_copy) \
     X(SOURCE_MOVE, xi_emit_move) \
     X(OWNER_FORWARD, xi_emit_move) \

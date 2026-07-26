@@ -249,12 +249,54 @@ static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                      const char *prefix) {
     (void) f;
     (void) prefix;
+    bool runtime_dispatch =
+        ctx && ctx->target &&
+        (ctx->target->simd_mode == XAOT_SIMD_DISPATCH || ctx->target->simd_mode == XAOT_SIMD_SVE);
+    if (runtime_dispatch) {
+        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+            fprintf(out, "XR_FROM_INT(%s)",
+                    ctx->target->simd_mode == XAOT_SIMD_SVE ? "(int64_t)xrt_sve_selected_bytes()"
+                                                            : "xrt_target_runtime_simd_bytes()");
+        else
+            fprintf(out, "%s",
+                    ctx->target->simd_mode == XAOT_SIMD_SVE ? "(int64_t)xrt_sve_selected_bytes()"
+                                                            : "xrt_target_runtime_simd_bytes()");
+        return;
+    }
     int bytes =
-        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32 : 16;
+        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 ? 64
+        : ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32
+                                                                                           : 16;
     if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
         fprintf(out, "XR_FROM_INT(%d)", bytes);
     else
         fprintf(out, "%d", bytes);
+}
+
+static void xicgen_target_simd_accelerated(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    bool accelerated = ctx && ctx->target && ctx->target->simd_features != 0;
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_BOOL(%s)", accelerated ? "true" : "false");
+    else
+        fprintf(out, "%s", accelerated ? "true" : "false");
+}
+
+static void xicgen_target_simd_runtime_selected(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    bool scalable_query = v && v->xa_intrinsic_id == XA_INTRINSIC_SIMD_CAPABILITIES_IS_SCALABLE;
+    bool selected = ctx && ctx->target &&
+                    (scalable_query ? ctx->target->simd_mode == XAOT_SIMD_SVE
+                                    : (ctx->target->simd_mode == XAOT_SIMD_DISPATCH ||
+                                       ctx->target->simd_mode == XAOT_SIMD_SVE));
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_BOOL(%s)", selected ? "true" : "false");
+    else
+        fprintf(out, "%s", selected ? "true" : "false");
 }
 
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
@@ -283,6 +325,25 @@ static const XiConstLiteral *xicgen_freestanding_const_slot_literal(XiCgenCtx *c
         slot < 0 || slot >= ctx->module->nslots)
         return NULL;
     const XiConstLiteral *lit = &ctx->module->slot_const_literals[slot];
+    return xicgen_const_literal_is_freestanding_scalar(lit) &&
+                   !cg_const_literal_is_static_scalar_object(lit)
+               ? lit
+               : NULL;
+}
+
+/* A source-level top-level `const` is immutable in hosted and freestanding
+ * profiles alike. Imported scalar constants already retain their literal at
+ * use sites; do the same for constants owned by the current module instead of
+ * reloading and unboxing their compatibility shared slot on every access.
+ * Addressable scalar objects deliberately stay on the static-data path. */
+static const XiConstLiteral *xicgen_owned_scalar_const_slot_literal(XiCgenCtx *ctx, const XiFunc *f,
+                                                                    int64_t slot) {
+    const XiModule *module = cg_module_for_func(ctx, f);
+    const XiFunc *init = module ? module->init : NULL;
+    if (!init || slot < 0 || slot >= init->nshared || !init->slot_owned_consts ||
+        !init->slot_owned_consts[slot])
+        return NULL;
+    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
     return xicgen_const_literal_is_freestanding_scalar(lit) &&
                    !cg_const_literal_is_static_scalar_object(lit)
                ? lit
@@ -537,6 +598,13 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     (void) prefix;
     uint16_t param_idx = (uint16_t) v->aux_int;
     XrRep from_rep = cg_func_param_abi_rep(ctx, f, param_idx);
+    XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    if (param_value_rep.kind == XAOT_VALUE_TAGGED && value_plan &&
+        cg_value_rep_is_span_aggregate(value_plan->rep)) {
+        fprintf(out, "xrt_span_from_value_ref(p%u)", (unsigned) v->aux_int);
+        return;
+    }
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, to_rep);
     fprintf(out, "p%u", (unsigned) v->aux_int);
@@ -592,10 +660,18 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         xicgen_identity(ctx, out, f, v, prefix);
         return;
     }
-    if (cg_value_plan_is_aggregate(ctx, v) && cg_value_plan_is_aggregate(ctx, v->args[0]) &&
-        xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
-        xicgen_identity(ctx, out, f, v, prefix);
-        return;
+    if (cg_value_plan_is_aggregate(ctx, v) && cg_value_plan_is_aggregate(ctx, v->args[0])) {
+        /* Native value-struct representations contain only POD scalar,
+         * fixed-array, or nested-POD fields.  C assignment is therefore the
+         * exact independent value copy required by XI_COPY; it is not limited
+         * to identity aliases.  Compact ADTs retain their existing clone path
+         * because their payload ownership can be non-trivial. */
+        if ((cg_value_plan_is_struct_aggregate(ctx, v) &&
+             cg_value_plan_is_struct_aggregate(ctx, v->args[0])) ||
+            xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
+            xicgen_identity(ctx, out, f, v, prefix);
+            return;
+        }
     }
     if (cg_debug_boxed_adapter_enabled() && cg_value_plan_is_aggregate(ctx, v)) {
         const XaotValuePlan *vp = cg_value_plan(ctx, v);
@@ -781,7 +857,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
-        if (cg_div_mod_is_trusted_nothrow(f, v)) {
+        if (cg_div_mod_is_trusted_nothrow(ctx, f, v)) {
             fprintf(out, "(int64_t)((uint64_t)(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
             fprintf(out, ") %s (uint64_t)(", v->op == XI_DIV ? "/" : "%");
@@ -798,6 +874,14 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         return;
     }
+
+    /* Imported/local module constants can remain represented as tagged shared
+     * slots even though the bundle carries their exact integer literal.  Fold
+     * a nonzero divisor here before the generic tagged arithmetic path so a
+     * source-level `const` divisor lowers to native C division and cannot
+     * publish a pending divide-by-zero error. */
+    if (emit_native_const_div_mod_expr(ctx, out, f, v))
+        return;
 
     bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
     if (result_rep == XR_REP_TAGGED || any_tagged) {
@@ -846,7 +930,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_I64) {
-        if (!emit_native_unsigned_div_mod_expr(out, v) && !emit_native_const_div_mod_expr(out, v) &&
+        if (!emit_native_unsigned_div_mod_expr(out, v) &&
             !emit_native_positive_divisor_div_mod_expr(out, f, v)) {
             const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);
@@ -1183,8 +1267,29 @@ static const XiValue *xicgen_vec_unwrap_value(const XiValue *value) {
     return value;
 }
 
-static void xicgen_emit_vec_lanes(FILE *out, const XiValue *value) {
+static void xicgen_vec_error(XiCgenCtx *ctx, FILE *out, const XiValue *value, const char *detail);
+
+static void xicgen_emit_vec_lanes(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_TAGGED) {
+        const XrAggregateLayout *layout = cg_type_struct_layout(value ? value->type : NULL);
+        char field_name[128];
+        if (cg_struct_native_heap_supported(layout) && layout->field_count == 1) {
+            cg_struct_field_c_name(layout, 0, field_name, sizeof(field_name));
+            if (strcmp(field_name, "_lanes") == 0) {
+                char aggregate_type[128];
+                cg_struct_heap_type_name(aggregate_type, sizeof(aggregate_type), NULL, layout);
+                fprintf(out, "((const %s *)(const void *)(", aggregate_type);
+                emit_vref(out, value);
+                fprintf(out, ").ptr)->_lanes");
+                return;
+            }
+        }
+        xicgen_vec_error(ctx, out, value,
+                         "tagged vector input needs a fixed _lanes aggregate layout");
+        return;
+    }
     fprintf(out, "(");
     emit_vref(out, value);
     fprintf(out, ")._lanes");
@@ -1241,7 +1346,7 @@ static void xicgen_emit_vec_native_load(XiCgenCtx *ctx, FILE *out, const XiValue
         fprintf(out, "_mm256_loadu_si256((const __m256i *)(const void *)");
     else
         fprintf(out, "_mm_loadu_si128((const __m128i *)(const void *)");
-    xicgen_emit_vec_lanes(out, value);
+    xicgen_emit_vec_lanes(ctx, out, value);
     fprintf(out, ")");
 }
 
@@ -1274,6 +1379,20 @@ static uint8_t xicgen_vec_value_native_type(XiCgenCtx *ctx, const XiValue *value
     if (value && xi_vec_shape_is_explicit(value->aux_int))
         return xi_vec_shape_native_type(value->aux_int);
     return fallback;
+}
+
+static uint8_t xicgen_vec_input_native_type(XiCgenCtx *ctx, const XiValue *operation,
+                                            uint8_t fallback) {
+    if (operation && operation->xa_intrinsic_id != XA_INTRINSIC_NONE) {
+        const XaIntrinsicDesc *desc =
+            xa_intrinsic_by_id((XaIntrinsicId) operation->xa_intrinsic_id);
+        if (desc && desc->family == XA_INTRINSIC_FAMILY_SIMD &&
+            desc->shape_rule.input_native_type != 0)
+            return desc->shape_rule.input_native_type;
+    }
+    return operation && operation->nargs > 0
+               ? xicgen_vec_value_native_type(ctx, operation->args[0], fallback)
+               : fallback;
 }
 
 static const char *xicgen_vec_neon_reinterpret_name(uint8_t to, uint8_t from) {
@@ -1327,8 +1446,10 @@ static bool xicgen_vec_widen_mul_is_adjacent_pair(const XiValue *value) {
         xi_vec_shape_native_type(rhs->aux_int) != XR_NATIVE_U32)
         return false;
     uint8_t lanes = xi_vec_shape_lanes(rhs->aux_int);
-    if (lanes != 4 && lanes != 8)
+    if (lanes != 4 && lanes != 8 && lanes != 16)
         return false;
+    if ((rhs->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0)
+        return true;
     for (uint8_t lane = 0; lane < lanes; lane++) {
         if (xicgen_vec_shuffle_lane(rhs, lane) != (uint8_t) (lane ^ 1u))
             return false;
@@ -1399,6 +1520,11 @@ static const XiValue *xicgen_vec_proven_window(XiCgenCtx *ctx, const XiValue *v,
     return window && window->op == XI_SLICE_WINDOW && window->nargs == 3 ? window : NULL;
 }
 
+static bool xicgen_vec_unchecked_access(const XiValue *v) {
+    return v && (v->op == XI_VEC_LOAD || v->op == XI_VEC_STORE) &&
+           (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+}
+
 static void xicgen_emit_vec_window_offset(XiCgenCtx *ctx, FILE *out, const XiValue *window,
                                           const XiValue *relative) {
     fprintf(out, "(");
@@ -1408,7 +1534,1086 @@ static void xicgen_emit_vec_window_offset(XiCgenCtx *ctx, FILE *out, const XiVal
     fprintf(out, ")");
 }
 
-/* Emit a target-selected 128-bit implementation.  Returning false is an
+static const char *xicgen_vec_fixed128_type(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8    ? "xr_v16u8"
+           : native_type == XR_NATIVE_U32 ? "xr_v4u32"
+                                          : "xr_v2u64";
+}
+
+static void xicgen_emit_vec_fixed128_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                          uint8_t native_type) {
+    value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
+        emit_vref(out, value);
+        return;
+    }
+    fprintf(out, "({ %s _v; memcpy(&_v, ", xicgen_vec_fixed128_type(native_type));
+    xicgen_emit_vec_lanes(ctx, out, value);
+    fprintf(out, ", sizeof(_v)); _v; })");
+}
+
+static void xicgen_emit_vec_fixed128_result(FILE *out, bool native_result, const char *value_name) {
+    if (native_result) {
+        fprintf(out, "%s; })", value_name);
+    } else {
+        fprintf(out, "memcpy(_r._lanes, &%s, sizeof(%s)); _r; })", value_name, value_name);
+    }
+}
+
+/* Power VSX and LoongArch LSX share the portable 128-bit Xi lane model.
+ * Clang/GCC fixed-size vectors avoid endian-sensitive Altivec syntax, while
+ * memcpy keeps loads/stores unaligned and alias-safe.  LSX uses dedicated
+ * widening-multiply intrinsics where the generic vector language has no
+ * direct 32x32 -> 64 operator. */
+static bool xicgen_emit_vec_fixed128(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t lanes,
+                                     uint8_t native_type) {
+    const char *vec_type = xicgen_vec_fixed128_type(native_type);
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    const char *result_type = NULL;
+    bool native_result = xicgen_vec_result_native(ctx, v, &result_type);
+    bool lsx = ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_LSX) != 0;
+    unsigned vector_bytes = (unsigned) lanes * (native_type == XR_NATIVE_U8    ? 1u
+                                                : native_type == XR_NATIVE_U32 ? 4u
+                                                                               : 8u);
+    if (vector_bytes != 16u)
+        return false;
+
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; %s _v; memcpy(&_v, ((const %s *)_s.data) + _off, sizeof(_v)); ",
+                    vec_type, lane_type);
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; %s _v = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; memcpy(((%s *)_s.data) + _off, &_v, sizeof(_v)); XR_NULL_VAL; })",
+                    lane_type);
+            return true;
+        }
+
+        case XI_VEC_EXTRACT:
+            if (v->nargs != 2)
+                return false;
+            fprintf(out, "({ %s _a = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; int64_t _lane = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "; ");
+            xicgen_emit_vec_range_check(out, "_lane", lanes);
+            fprintf(out, "_a[_lane]; })");
+            return true;
+
+        case XI_VEC_REPLACE:
+            if (v->nargs != 3 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _v = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; int64_t _lane = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "; ");
+            xicgen_emit_vec_range_check(out, "_lane", lanes);
+            fprintf(out, "_v[_lane] = (%s)(", lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, "); ");
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_SPLAT:
+            /* LSX has byte broadcasts; the older VSX lane stays fail-closed
+             * for U8 until its existing backend contract is widened. */
+            if (v->nargs != 1 || (!lsx && native_type == XR_NATIVE_U8) ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _x = (%s)(", lane_type, lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, "); %s _v = {", vec_type);
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                fprintf(out, "%s_x", lane ? ", " : "");
+            fprintf(out, "}; ");
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const char *op = v->op == XI_VEC_ADD       ? "+"
+                             : v->op == XI_VEC_SUB     ? "-"
+                             : v->op == XI_VEC_MUL     ? "*"
+                             : v->op == XI_VEC_BIT_AND ? "&"
+                             : v->op == XI_VEC_BIT_OR  ? "|"
+                                                       : "^";
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, ", _b = ");
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[1], native_type);
+            if (lsx && v->op == XI_VEC_MUL && native_type == XR_NATIVE_U64) {
+                /* LSX has no direct 64x64 -> low64 lane multiply.  Compose
+                 * the result modulo 2^64 from three unsigned 32x32 products. */
+                fprintf(out,
+                        "; __m128i _ai = (__m128i)_a, _bi = (__m128i)_b; "
+                        "__m128i _ahi = __lsx_vsrli_d(_ai, 32), "
+                        "_bhi = __lsx_vsrli_d(_bi, 32); "
+                        "__m128i _lo = __lsx_vmulwev_d_wu(_ai, _bi); "
+                        "__m128i _cross = __lsx_vadd_d(__lsx_vmulwev_d_wu(_ai, _bhi), "
+                        "__lsx_vmulwev_d_wu(_ahi, _bi)); "
+                        "%s _v = (%s)__lsx_vadd_d(_lo, __lsx_vslli_d(_cross, 32)); ",
+                        vec_type, vec_type);
+            } else {
+                fprintf(out, "; %s _v = _a %s _b; ", vec_type, op);
+            }
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_BIT_NOT:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; %s _v = ~_a; ", vec_type);
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type == XR_NATIVE_U8 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; uint32_t _sn = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") & 63u; %s _s0 = (%s)_sn; %s _s = {", lane_type, lane_type, vec_type);
+            for (uint8_t lane = 0; lane < lanes; lane++)
+                fprintf(out, "%s_s0", lane ? ", " : "");
+            fprintf(out, "}; %s _v = ", vec_type);
+            if (native_type == XR_NATIVE_U32)
+                fprintf(out, "_sn >= 32u ? (%s){0, 0, 0, 0} : ", vec_type);
+            fprintf(out, "_a %s _s; ", v->op == XI_VEC_SHL ? "<<" : ">>");
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+
+        case XI_VEC_REINTERPRET: {
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            uint8_t input_type = xicgen_vec_input_native_type(ctx, v, native_type);
+            unsigned input_lane_bytes = input_type == XR_NATIVE_U8    ? 1u
+                                        : input_type == XR_NATIVE_U32 ? 4u
+                                                                      : 8u;
+            unsigned output_lane_bytes = native_type == XR_NATIVE_U8    ? 1u
+                                         : native_type == XR_NATIVE_U32 ? 4u
+                                                                        : 8u;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", xicgen_vec_fixed128_type(input_type));
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], input_type);
+            if (ctx && ctx->target && ctx->target->data_layout.endian == XR_TARGET_ENDIAN_BIG &&
+                input_lane_bytes != output_lane_bytes) {
+                /* Xi reinterpretation concatenates the little-endian bytes of
+                 * each source lane and rebuilds destination lanes from that
+                 * byte stream.  On a big-endian VSX target, translate between
+                 * native lane storage and that endian-neutral stream with one
+                 * compile-time byte permutation. */
+                fprintf(out, "; xr_v16u8 _bytes; memcpy(&_bytes, &_a, sizeof(_bytes)); "
+                             "xr_v16u8 _fixed = __builtin_shufflevector(_bytes, _bytes, ");
+                for (unsigned physical_out = 0; physical_out < 16u; physical_out++) {
+                    unsigned output_base = (physical_out / output_lane_bytes) * output_lane_bytes;
+                    unsigned canonical =
+                        output_base + output_lane_bytes - 1u - (physical_out % output_lane_bytes);
+                    unsigned input_base = (canonical / input_lane_bytes) * input_lane_bytes;
+                    unsigned physical_in =
+                        input_base + input_lane_bytes - 1u - (canonical % input_lane_bytes);
+                    fprintf(out, "%s%uu", physical_out ? ", " : "", physical_in);
+                }
+                fprintf(out, "); %s _v; memcpy(&_v, &_fixed, sizeof(_v)); ", vec_type);
+            } else {
+                fprintf(out, "; %s _v; memcpy(&_v, &_a, sizeof(_v)); ", vec_type);
+            }
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_SHUFFLE: {
+            if ((!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)) ||
+                (v->nargs != 1 && v->nargs != 2))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "%s _a = ", vec_type);
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            if ((v->aux_int & XI_VEC_SHAPE_UNZIP) != 0) {
+                if (v->nargs != 2 || native_type != XR_NATIVE_U32 || lanes != 4)
+                    return false;
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_fixed128_load(ctx, out, v->args[1], native_type);
+                fprintf(out, "; %s _v = __builtin_shufflevector(_a, _b, ", vec_type);
+                unsigned start = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
+                for (uint8_t lane = 0; lane < lanes; lane++)
+                    fprintf(out, "%s%uu", lane ? ", " : "", start + 2u * lane);
+            } else {
+                fprintf(out, "; %s _v = __builtin_shufflevector(_a, _a, ", vec_type);
+                for (uint8_t lane = 0; lane < lanes; lane++)
+                    fprintf(out, "%s%uu", lane ? ", " : "", xicgen_vec_shuffle_lane(v, lane));
+            }
+            fprintf(out, "); ");
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_WIDEN_MUL: {
+            if (v->nargs != 2 || lanes != 2 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_v4u32 _a = ");
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], XR_NATIVE_U32);
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
+            bool contiguous = (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0;
+            unsigned first = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
+            if (!adjacent) {
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_fixed128_load(ctx, out, v->args[1], XR_NATIVE_U32);
+            }
+            if (contiguous) {
+                unsigned base = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 2u : 0u;
+                fprintf(out,
+                        "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, %uu, %uu, %uu, "
+                        "%uu), _bl = __builtin_shufflevector(_b, _b, %uu, %uu, %uu, %uu)",
+                        base, base, base + 1u, base + 1u, base, base, base + 1u, base + 1u);
+            } else if (adjacent) {
+                fprintf(out, "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, 0, 0, 2, 2), "
+                             "_bl = __builtin_shufflevector(_a, _a, 1, 1, 3, 3)");
+            } else {
+                fprintf(out,
+                        "; xr_v4u32 _al = __builtin_shufflevector(_a, _a, %uu, %uu, %uu, "
+                        "%uu), _bl = __builtin_shufflevector(_b, _b, %uu, %uu, %uu, %uu)",
+                        first, first, first + 2u, first + 2u, first, first, first + 2u, first + 2u);
+            }
+            if (lsx) {
+                fprintf(out, "; xr_v2u64 _v = (xr_v2u64)__lsx_vmulwev_d_wu((__m128i)_al, "
+                             "(__m128i)_bl); ");
+            } else {
+                /* vec_mule/vec_mulo swap meaning across Power compiler and
+                 * endian combinations. Duplicating each selected Xi lane into
+                 * both members of its hardware pair makes raw vmuleuw
+                 * endian-independent. */
+                fprintf(out, "; xr_v2u64 _v; __asm__(\"vmuleuw %%0, %%1, %%2\" : \"=v\" (_v) : "
+                             "\"v\" (_al), \"v\" (_bl)); ");
+            }
+            xicgen_emit_vec_fixed128_result(out, native_result, "_v");
+            return true;
+        }
+
+        case XI_VEC_REDUCE_ADD:
+            if (v->nargs != 1 || native_type != XR_NATIVE_U64 || lanes != 2)
+                return false;
+            fprintf(out, "({ xr_v2u64 _a = ");
+            xicgen_emit_vec_fixed128_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; _a[0] + _a[1]; })");
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static const char *xicgen_vec_sve_type(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8    ? "svuint8_t"
+           : native_type == XR_NATIVE_U32 ? "svuint32_t"
+                                          : "svuint64_t";
+}
+
+static const char *xicgen_vec_sve_suffix(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8 ? "u8" : native_type == XR_NATIVE_U32 ? "u32" : "u64";
+}
+
+static const char *xicgen_vec_sve_predicate_suffix(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8 ? "b8" : native_type == XR_NATIVE_U32 ? "b32" : "b64";
+}
+
+static const char *xicgen_vec_sve_count(uint8_t native_type) {
+    return native_type == XR_NATIVE_U8    ? "svcntb()"
+           : native_type == XR_NATIVE_U32 ? "svcntw()"
+                                          : "svcntd()";
+}
+
+static void xicgen_emit_vec_sve_pointer(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    xicgen_emit_vec_lanes(ctx, out, value);
+}
+
+static void xicgen_emit_vec_sve_active_predicate(FILE *out, uint8_t native_type) {
+    unsigned lane_bytes = native_type == XR_NATIVE_U8 ? 1u : native_type == XR_NATIVE_U32 ? 4u : 8u;
+    fprintf(out, "svwhilelt_%s_u64(0, xrt_sve_selected_bytes() / %uu)",
+            xicgen_vec_sve_predicate_suffix(native_type), lane_bytes);
+}
+
+static void xicgen_emit_vec_sve_scalable_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                              uint8_t native_type) {
+    value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
+        emit_vref(out, value);
+        return;
+    }
+    fprintf(out, "svld1_%s(", xicgen_vec_sve_suffix(native_type));
+    xicgen_emit_vec_sve_active_predicate(out, native_type);
+    fprintf(out, ", ");
+    xicgen_emit_vec_lanes(ctx, out, value);
+    fprintf(out, ")");
+}
+
+static void xicgen_emit_vec_sve_scalable_result_begin(FILE *out, bool native_result,
+                                                      const char *result_type,
+                                                      uint8_t native_type) {
+    if (native_result)
+        return;
+    fprintf(out, "({ %s _r = {0}; svbool_t _result_pg = ", result_type);
+    xicgen_emit_vec_sve_active_predicate(out, native_type);
+    fprintf(out, "; %s _result = ", xicgen_vec_sve_type(native_type));
+}
+
+static void xicgen_emit_vec_sve_scalable_result_end(FILE *out, bool native_result,
+                                                    uint8_t native_type) {
+    if (native_result)
+        return;
+    fprintf(out, "; svst1_%s(_result_pg, _r._lanes, _result); _r; })",
+            xicgen_vec_sve_suffix(native_type));
+}
+
+/* Runtime-native vector values carry only the selected active prefix. Unlike
+ * fixed public U8x16/U8x32/U8x64 values, this representation may therefore
+ * remain a sizeless SVE SSA value without changing language semantics. */
+static bool xicgen_emit_vec_sve_scalable(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                         uint8_t native_type) {
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    const char *vec_type = xicgen_vec_sve_type(native_type);
+    const char *suffix = xicgen_vec_sve_suffix(native_type);
+    const char *pred_suffix = xicgen_vec_sve_predicate_suffix(native_type);
+    const char *result_type = NULL;
+    bool native_result = xicgen_vec_result_native(ctx, v, &result_type);
+    bool aggregate_result = !native_result && xicgen_vec_result_aggregate(ctx, v, &result_type);
+    bool vector_result = native_result || aggregate_result;
+    unsigned lane_bytes = native_type == XR_NATIVE_U8 ? 1u : native_type == XR_NATIVE_U32 ? 4u : 8u;
+
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 || !vector_result)
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "; int64_t _n = (int64_t)(xrt_sve_selected_bytes() / %uu)", lane_bytes);
+            if (!window && !unchecked)
+                fprintf(out, "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - _n)) "
+                             "xrt_index_oob(_off < 0 ? _off : _off + _n - 1, _s.length); "
+                             "XR_ASSUME(_off >= 0 && _off <= _s.length - _n)");
+            else if (unchecked)
+                fprintf(out, "; /* unchecked scalable SIMD access */ "
+                             "XR_ASSUME(_off >= 0 && _off <= _s.length - _n)");
+            fprintf(out,
+                    "; svbool_t _pg = svwhilelt_%s_u64(0, (uint64_t)_n); "
+                    "svld1_%s(_pg, ((const %s *)_s.data) + _off); })",
+                    pred_suffix, suffix, lane_type);
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, "; int64_t _n = (int64_t)(xrt_sve_selected_bytes() / %uu)", lane_bytes);
+            if (!window && !unchecked)
+                fprintf(out, "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - _n)) "
+                             "xrt_index_oob(_off < 0 ? _off : _off + _n - 1, _s.length); "
+                             "XR_ASSUME(_off >= 0 && _off <= _s.length - _n)");
+            else if (unchecked)
+                fprintf(out, "; /* unchecked scalable SIMD access */ "
+                             "XR_ASSUME(_off >= 0 && _off <= _s.length - _n)");
+            fprintf(out,
+                    "; svbool_t _pg = svwhilelt_%s_u64(0, (uint64_t)_n); %s _v = ", pred_suffix,
+                    vec_type);
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; svst1_%s(_pg, ((%s *)_s.data) + _off, _v); XR_NULL_VAL; })", suffix,
+                    lane_type);
+            return true;
+        }
+
+        case XI_VEC_SPLAT:
+            if (v->nargs != 1 || !vector_result)
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "svdup_n_%s((%s)(", suffix, lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, "))");
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 || !vector_result)
+                return false;
+            const char *op = v->op == XI_VEC_ADD       ? "svadd"
+                             : v->op == XI_VEC_SUB     ? "svsub"
+                             : v->op == XI_VEC_MUL     ? "svmul"
+                             : v->op == XI_VEC_BIT_AND ? "svand"
+                             : v->op == XI_VEC_BIT_OR  ? "svorr"
+                                                       : "sveor";
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "%s_%s_x(", op, suffix);
+            xicgen_emit_vec_sve_active_predicate(out, native_type);
+            fprintf(out, ", ");
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], native_type);
+            fprintf(out, ", ");
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[1], native_type);
+            fprintf(out, ")");
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+        }
+
+        case XI_VEC_BIT_NOT:
+            if (v->nargs != 1 || !vector_result)
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "svnot_%s_x(", suffix);
+            xicgen_emit_vec_sve_active_predicate(out, native_type);
+            fprintf(out, ", ");
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], native_type);
+            fprintf(out, ")");
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type == XR_NATIVE_U8 || !vector_result)
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "({ svbool_t _pg = ");
+            xicgen_emit_vec_sve_active_predicate(out, native_type);
+            fprintf(out, "; %s _a = ", vec_type);
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], native_type);
+            fprintf(out, "; uint32_t _sn = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") & 63u; %s_%s_x(_pg, _a, svdup_n_%s(_sn)); })",
+                    v->op == XI_VEC_SHL ? "svlsl" : "svlsr", suffix, suffix);
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+
+        case XI_VEC_REINTERPRET: {
+            if (v->nargs != 1 || !vector_result)
+                return false;
+            uint8_t input_type = xicgen_vec_input_native_type(ctx, v, native_type);
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "svreinterpret_%s_%s(", suffix, xicgen_vec_sve_suffix(input_type));
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], input_type);
+            fprintf(out, ")");
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+        }
+
+        case XI_VEC_SHUFFLE:
+            if (v->nargs != 1 || (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) == 0 || !vector_result)
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "({ svbool_t _pg = ");
+            xicgen_emit_vec_sve_active_predicate(out, native_type);
+            fprintf(out, "; %s _a = ", vec_type);
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], native_type);
+            fprintf(out,
+                    "; %s _ix = sveor_n_%s_x(_pg, svindex_%s(0, 1), 1); "
+                    "svtbl_%s(_a, _ix); })",
+                    vec_type, suffix, suffix, suffix);
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+
+        case XI_VEC_WIDEN_MUL:
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 || !vector_result ||
+                !xicgen_vec_widen_mul_is_adjacent_pair(v))
+                return false;
+            xicgen_emit_vec_sve_scalable_result_begin(out, native_result, result_type, native_type);
+            fprintf(out, "({ svbool_t _pg = ");
+            xicgen_emit_vec_sve_active_predicate(out, XR_NATIVE_U64);
+            fprintf(out, "; svuint32_t _aw = ");
+            xicgen_emit_vec_sve_scalable_load(ctx, out, v->args[0], XR_NATIVE_U32);
+            fprintf(out, "; svuint64_t _aq = svreinterpret_u64_u32(_aw); "
+                         "svuint64_t _lo = svextw_u64_x(_pg, _aq); "
+                         "svuint64_t _hi = svlsr_n_u64_x(_pg, _aq, 32); "
+                         "svmul_u64_x(_pg, _lo, _hi); })");
+            xicgen_emit_vec_sve_scalable_result_end(out, native_result, native_type);
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+/* SVE is scalable while Xray's public vector values have fixed lane counts.
+ * Keep the language value in its frozen aggregate layout and process it in
+ * svcnt*() chunks.  This is correct for every architectural VL from 128 to
+ * 2048 bits; when the selected Xi width equals the hardware VL, LLVM can
+ * eliminate the aggregate hand-off and retain one z-register hot path. */
+static bool xicgen_emit_vec_sve(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t lanes,
+                                uint8_t native_type) {
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    const char *vec_type = xicgen_vec_sve_type(native_type);
+    const char *suffix = xicgen_vec_sve_suffix(native_type);
+    const char *pred_suffix = xicgen_vec_sve_predicate_suffix(native_type);
+    const char *count = xicgen_vec_sve_count(native_type);
+    const char *result_type = NULL;
+
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 || !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ %s _r; xr_span_t _s = ", result_type);
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out,
+                    "; const %s *_p = ((const %s *)_s.data) + _off; "
+                    "for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _v = svld1_%s(_pg, _p + _i); "
+                    "svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    lane_type, lane_type, (unsigned) lanes, count, pred_suffix, (unsigned) lanes,
+                    vec_type, suffix, suffix);
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *window = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(window ? window->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (window)
+                xicgen_emit_vec_window_offset(ctx, out, window, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            if (!window && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ XR_ASSUME(_off >= 0 && _off <= "
+                        "_s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; const %s *_p = ", lane_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; %s *_dst = ((%s *)_s.data) + _off; "
+                    "for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _v = svld1_%s(_pg, _p + _i); "
+                    "svst1_%s(_pg, _dst + _i, _v); } XR_NULL_VAL; })",
+                    lane_type, lane_type, (unsigned) lanes, count, pred_suffix, (unsigned) lanes,
+                    vec_type, suffix, suffix);
+            return true;
+        }
+
+        case XI_VEC_SPLAT:
+            if (v->nargs != 1 || !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; %s _x = (%s)(", result_type, lane_type, lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out,
+                    "); for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _v = svdup_n_%s(_x); svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    (unsigned) lanes, count, pred_suffix, (unsigned) lanes, vec_type, suffix,
+                    suffix);
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 || !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            const char *op = v->op == XI_VEC_ADD       ? "svadd"
+                             : v->op == XI_VEC_SUB     ? "svsub"
+                             : v->op == XI_VEC_MUL     ? "svmul"
+                             : v->op == XI_VEC_BIT_AND ? "svand"
+                             : v->op == XI_VEC_BIT_OR  ? "svorr"
+                                                       : "sveor";
+            fprintf(out, "({ %s _r; const %s *_a = ", result_type, lane_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out, ", *_b = ");
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[1]);
+            fprintf(out,
+                    "; for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _av = svld1_%s(_pg, _a + _i), _bv = svld1_%s(_pg, _b + _i); "
+                    "%s _v = %s_%s_x(_pg, _av, _bv); "
+                    "svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    (unsigned) lanes, count, pred_suffix, (unsigned) lanes, vec_type, suffix,
+                    suffix, vec_type, op, suffix, suffix);
+            return true;
+        }
+
+        case XI_VEC_BIT_NOT:
+            if (v->nargs != 1 || !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; const %s *_a = ", result_type, lane_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _av = svld1_%s(_pg, _a + _i); "
+                    "%s _v = svnot_%s_x(_pg, _av); "
+                    "svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    (unsigned) lanes, count, pred_suffix, (unsigned) lanes, vec_type, suffix,
+                    vec_type, suffix, suffix);
+            return true;
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type == XR_NATIVE_U8 ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; const %s *_a = ", result_type, lane_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out, "; uint32_t _sn = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out,
+                    ") & 63u; for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _av = svld1_%s(_pg, _a + _i); %s _sv = svdup_n_%s(_sn); "
+                    "%s _v = %s_%s_x(_pg, _av, _sv); "
+                    "svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    (unsigned) lanes, count, pred_suffix, (unsigned) lanes, vec_type, suffix,
+                    vec_type, suffix, vec_type, v->op == XI_VEC_SHL ? "svlsl" : "svlsr", suffix,
+                    suffix);
+            return true;
+
+        case XI_VEC_SHUFFLE:
+            if (v->nargs != 1 || (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) == 0 ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; const %s *_a = ", result_type, lane_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; for (uint64_t _i = 0; _i < %uu; _i += %s) { "
+                    "svbool_t _pg = svwhilelt_%s_u64(_i, %uu); "
+                    "%s _av = svld1_%s(_pg, _a + _i); "
+                    "%s _ix = sveor_n_%s_x(_pg, svindex_%s(0, 1), 1); "
+                    "%s _v = svtbl_%s(_av, _ix); "
+                    "svst1_%s(_pg, _r._lanes + _i, _v); } _r; })",
+                    (unsigned) lanes, count, pred_suffix, (unsigned) lanes, vec_type, suffix,
+                    vec_type, suffix, suffix, vec_type, suffix, suffix);
+            return true;
+
+        case XI_VEC_WIDEN_MUL: {
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 ||
+                (lanes != 2 && lanes != 4 && lanes != 8) ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
+            bool contiguous = (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0;
+            bool odd = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0;
+            fprintf(out, "({ %s _r; const uint32_t *_a = ", result_type);
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            if (!adjacent) {
+                fprintf(out, ", *_b = ");
+                xicgen_emit_vec_sve_pointer(ctx, out, v->args[1]);
+            }
+            fprintf(out,
+                    "; for (uint64_t _i = 0; _i < %uu; _i += svcntd()) { "
+                    "uint64_t _remaining = %uu - _i; "
+                    "svbool_t _pg64 = svwhilelt_b64_u64(_i, %uu); ",
+                    (unsigned) lanes, (unsigned) lanes, (unsigned) lanes);
+            if (adjacent) {
+                fprintf(out, "svbool_t _pg32 = svwhilelt_b32_u64(0, _remaining * 2u); "
+                             "svuint32_t _aw = svld1_u32(_pg32, _a + _i * 2u); "
+                             "svuint64_t _aq = svreinterpret_u64_u32(_aw); "
+                             "svuint64_t _lo = svextw_u64_x(_pg64, _aq); "
+                             "svuint64_t _hi = svlsr_n_u64_x(_pg64, _aq, 32); "
+                             "svuint64_t _v = svmul_u64_x(_pg64, _lo, _hi); ");
+            } else if (contiguous) {
+                unsigned base = odd ? (unsigned) lanes : 0u;
+                fprintf(out,
+                        "svbool_t _pg32 = svwhilelt_b32_u64(0, _remaining); "
+                        "svuint32_t _aw = svld1_u32(_pg32, _a + %uu + _i), "
+                        "_bw = svld1_u32(_pg32, _b + %uu + _i); "
+                        "svuint64_t _al = svunpklo_u64(_aw), _bl = svunpklo_u64(_bw); "
+                        "svuint64_t _v = svmul_u64_x(_pg64, _al, _bl); ",
+                        base, base);
+            } else {
+                fprintf(out,
+                        "svbool_t _pg32 = svwhilelt_b32_u64(0, _remaining * 2u); "
+                        "svuint32_t _aw = svld1_u32(_pg32, _a + _i * 2u), "
+                        "_bw = svld1_u32(_pg32, _b + _i * 2u); "
+                        "svuint32_t _as = %s(_aw, _aw), _bs = %s(_bw, _bw); "
+                        "svuint64_t _al = svunpklo_u64(_as), _bl = svunpklo_u64(_bs); "
+                        "svuint64_t _v = svmul_u64_x(_pg64, _al, _bl); ",
+                        odd ? "svuzp2_u32" : "svuzp1_u32", odd ? "svuzp2_u32" : "svuzp1_u32");
+            }
+            fprintf(out, "svst1_u64(_pg64, _r._lanes + _i, _v); } _r; })");
+            return true;
+        }
+
+        case XI_VEC_REDUCE_ADD:
+            if (v->nargs != 1 || native_type != XR_NATIVE_U64)
+                return false;
+            fprintf(out, "({ const uint64_t *_a = ");
+            xicgen_emit_vec_sve_pointer(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; uint64_t _sum = 0; for (uint64_t _i = 0; _i < %uu; _i += svcntd()) { "
+                    "svbool_t _pg = svwhilelt_b64_u64(_i, %uu); "
+                    "svuint64_t _v = svld1_u64(_pg, _a + _i); _sum += svaddv_u64(_pg, _v); "
+                    "} _sum; })",
+                    (unsigned) lanes, (unsigned) lanes);
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static void xicgen_emit_vec_avx512_load(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+    value = xicgen_vec_unwrap_value(value);
+    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
+        emit_vref(out, value);
+        return;
+    }
+    fprintf(out, "_mm512_loadu_si512((const void *)");
+    xicgen_emit_vec_lanes(ctx, out, value);
+    fprintf(out, ")");
+}
+
+static void xicgen_emit_vec_avx512_result(FILE *out, bool native_result, const char *result_type,
+                                          const char *value_name) {
+    if (native_result) {
+        fprintf(out, "%s; })", value_name);
+        return;
+    }
+    fprintf(out, "_mm512_storeu_si512((void *)_r._lanes, %s); _r; })", value_name);
+    (void) result_type;
+}
+
+/* AVX-512F deliberately has its own width path.  It cannot be modeled as a
+ * boolean extension of the 128/256-bit x86 lowering: shuffle controls and OS
+ * dispatch evidence are distinct, and xxHash relies on 32x32 -> 64 widening
+ * multiply without requiring AVX-512DQ. */
+static bool xicgen_emit_vec_avx512(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t lanes,
+                                   uint8_t native_type) {
+    const char *result_type = NULL;
+    const char *lane_type = xicgen_vec_lane_ctype(native_type);
+    bool native_result = xicgen_vec_result_native(ctx, v, &result_type);
+    switch ((XiOp) v->op) {
+        case XI_VEC_LOAD: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const XiValue *proven = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(proven ? proven->args[0] : v->args[0]));
+            fprintf(out, "; int64_t _off = ");
+            if (proven)
+                xicgen_emit_vec_window_offset(ctx, out, proven, v->args[1]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            if (!proven && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out,
+                    "; __m512i _v = _mm512_loadu_si512((const void *)(((const %s *)_s.data) + "
+                    "_off)); ",
+                    lane_type);
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        case XI_VEC_STORE: {
+            if (v->nargs != 3)
+                return false;
+            const XiValue *proven = xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ xr_span_t _s = ");
+            emit_vref(out, xicgen_vec_unwrap_value(proven ? proven->args[0] : v->args[1]));
+            fprintf(out, "; int64_t _off = ");
+            if (proven)
+                xicgen_emit_vec_window_offset(ctx, out, proven, v->args[2]);
+            else
+                emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            if (!proven && !unchecked)
+                fprintf(out,
+                        "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
+                        "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; __m512i _v = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out,
+                    "; _mm512_storeu_si512((void *)(((%s *)_s.data) + _off), _v); "
+                    "XR_NULL_VAL; })",
+                    lane_type);
+            return true;
+        }
+
+        case XI_VEC_SPLAT:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _v = %s((%s)(",
+                    native_type == XR_NATIVE_U8    ? "_mm512_set1_epi8"
+                    : native_type == XR_NATIVE_U32 ? "_mm512_set1_epi32"
+                                                   : "_mm512_set1_epi64",
+                    lane_type);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ")); ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR: {
+            if (v->nargs != 2 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            const char *op = v->op == XI_VEC_BIT_AND   ? "_mm512_and_si512"
+                             : v->op == XI_VEC_BIT_OR  ? "_mm512_or_si512"
+                             : v->op == XI_VEC_BIT_XOR ? "_mm512_xor_si512"
+                             : v->op == XI_VEC_ADD
+                                 ? (native_type == XR_NATIVE_U8    ? "_mm512_add_epi8"
+                                    : native_type == XR_NATIVE_U32 ? "_mm512_add_epi32"
+                                                                   : "_mm512_add_epi64")
+                                 : (native_type == XR_NATIVE_U8    ? "_mm512_sub_epi8"
+                                    : native_type == XR_NATIVE_U32 ? "_mm512_sub_epi32"
+                                                                   : "_mm512_sub_epi64");
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, ", _b = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[1]);
+            fprintf(out, "; __m512i _v = %s(_a, _b); ", op);
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; uint32_t _s = (uint32_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") & 63u; __m512i _v = %s(_a, _mm_cvtsi64_si128((int64_t)_s)); ",
+                    v->op == XI_VEC_SHL ? "_mm512_sll_epi64" : "_mm512_srl_epi64");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_REINTERPRET:
+            if (v->nargs != 1 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _v = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_SHUFFLE:
+            if (v->nargs != 1 || (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) == 0 ||
+                (native_type != XR_NATIVE_U32 && native_type != XR_NATIVE_U64) ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            fprintf(out, "; __m512i _v = _mm512_shuffle_epi32(_a, (_MM_PERM_ENUM)%s); ",
+                    native_type == XR_NATIVE_U32 ? "0xb1" : "0x4e");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+
+        case XI_VEC_WIDEN_MUL: {
+            if (v->nargs != 2 || lanes != 8 || native_type != XR_NATIVE_U64 ||
+                (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
+                return false;
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
+            bool odd = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0;
+            fprintf(out, "({ ");
+            if (!native_result)
+                fprintf(out, "%s _r; ", result_type);
+            fprintf(out, "__m512i _a = ");
+            xicgen_emit_vec_avx512_load(ctx, out, v->args[0]);
+            if (adjacent) {
+                fprintf(out, ", _b = _mm512_srli_epi64(_a, 32)");
+            } else {
+                fprintf(out, ", _b = ");
+                xicgen_emit_vec_avx512_load(ctx, out, v->args[1]);
+            }
+            if (odd)
+                fprintf(out, "; _a = _mm512_srli_epi64(_a, 32); _b = "
+                             "_mm512_srli_epi64(_b, 32)");
+            fprintf(out, "; __m512i _v = _mm512_mul_epu32(_a, _b); ");
+            xicgen_emit_vec_avx512_result(out, native_result, result_type, "_v");
+            return true;
+        }
+
+        default:
+            return false;
+    }
+}
+
+/* Emit a target-selected native-width implementation. Returning false is an
  * intentional per-operation scalar fallback, not target probing: the exact
  * feature set was resolved into XaotTarget before Xi C generation. */
 static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1419,11 +2624,26 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
     bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
     bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    bool avx512 = (features & XAOT_SIMD_FEATURE_AVX512) != 0;
+    bool vsx = (features & XAOT_SIMD_FEATURE_VSX) != 0;
+    bool lsx = (features & XAOT_SIMD_FEATURE_LSX) != 0;
+    bool sve = (features & XAOT_SIMD_FEATURE_SVE) != 0;
+    if (xi_vec_shape_is_scalable(v->aux_int) && !sve)
+        return false;
+    if (vsx || lsx)
+        return xicgen_emit_vec_fixed128(ctx, out, v, lanes, native_type);
+    if (sve) {
+        if (xi_vec_shape_is_scalable(v->aux_int))
+            return xicgen_emit_vec_sve_scalable(ctx, out, v, native_type);
+        return xicgen_emit_vec_sve(ctx, out, v, lanes, native_type);
+    }
     if (!neon && !x86)
         return false;
 
     unsigned lane_bytes = native_type == XR_NATIVE_U8 ? 1u : native_type == XR_NATIVE_U32 ? 4u : 8u;
     unsigned vector_bytes = (unsigned) lanes * lane_bytes;
+    if (vector_bytes == 64u)
+        return x86 && avx512 ? xicgen_emit_vec_avx512(ctx, out, v, lanes, native_type) : false;
     bool wide = vector_bytes == 32u;
     if ((wide && (!x86 || !avx2)) || (!wide && vector_bytes != 16u))
         return false;
@@ -1444,6 +2664,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 fprintf(out, "%s _r; ", result_type);
             const XiValue *proven_load_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
+            bool unchecked_load = xicgen_vec_unchecked_access(v);
             fprintf(out, "xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(proven_load_window ? proven_load_window->args[0]
                                                                       : v->args[0]));
@@ -1452,12 +2673,17 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 xicgen_emit_vec_window_offset(ctx, out, proven_load_window, v->args[1]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            if (!proven_load_window)
+            if (!proven_load_window && !unchecked_load)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_load)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; %s _v = ", vec_type);
             if (neon)
                 fprintf(out, "%s(((const %s *)_s.data) + _off)",
@@ -1486,6 +2712,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 return false;
             const XiValue *proven_store_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked_store = xicgen_vec_unchecked_access(v);
             fprintf(out, "({ xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(
                                proven_store_window ? proven_store_window->args[0] : v->args[1]));
@@ -1494,12 +2721,17 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 xicgen_emit_vec_window_offset(ctx, out, proven_store_window, v->args[2]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-            if (!proven_store_window)
+            if (!proven_store_window && !unchecked_store)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_store)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; %s _v = ", vec_type);
             xicgen_emit_vec_native_load(ctx, out, v->args[0], native_type, neon, wide);
             fprintf(out, "; ");
@@ -1698,7 +2930,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             fprintf(out, "({ ");
             if (!native_result)
                 fprintf(out, "%s _r; ", result_type);
-            uint8_t input_native_type = xicgen_vec_value_native_type(ctx, v->args[0], native_type);
+            uint8_t input_native_type = xicgen_vec_input_native_type(ctx, v, native_type);
             if (neon) {
                 const char *input_type = xicgen_vec_neon_type(input_native_type);
                 const char *reinterpret_name =
@@ -1941,9 +3173,9 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 !xicgen_vec_result_aggregate(ctx, v, &result_type))
                 return false;
             fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "); uint32x4_t _v = %s(_a, _b); ",
                     (v->aux_int & XI_VEC_SHAPE_ODD_LANES) ? "vuzp2q_u32" : "vuzp1q_u32");
             xicgen_emit_vec_native_store(out, "_r._lanes", XR_NATIVE_U32, true, false, "_v");
@@ -1957,9 +3189,9 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 !xicgen_vec_result_aggregate(ctx, v, &result_type))
                 return false;
             fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "); uint64x2_t _v = %s; ",
                     (v->aux_int & XI_VEC_SHAPE_ODD_LANES)
                         ? "vmull_u32(vget_high_u32(_a), vget_high_u32(_b))"
@@ -2001,11 +3233,21 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         xicgen_vec_error(ctx, out, v, "missing explicit lane shape");
         return;
     }
-    const uint8_t lanes = xi_vec_shape_lanes(v->aux_int);
+    uint8_t lanes = xi_vec_shape_lanes(v->aux_int);
     const uint8_t native_type = xi_vec_shape_native_type(v->aux_int);
     const char *lane_type = xicgen_vec_lane_ctype(native_type);
     const char *result_type = NULL;
-    if (!lane_type || lanes == 0 || lanes > 32) {
+    const bool scalable = xi_vec_shape_is_scalable(v->aux_int);
+    const bool sve =
+        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_SVE) != 0;
+    const char *result_init = scalable && !sve ? " = {0}" : "";
+    unsigned lane_bytes = native_type == XR_NATIVE_U8    ? 1u
+                          : native_type == XR_NATIVE_U32 ? 4u
+                          : native_type == XR_NATIVE_U64 ? 8u
+                                                         : 0u;
+    if (scalable && !sve && lane_bytes != 0)
+        lanes = (uint8_t) (16u / lane_bytes);
+    if (!lane_type || lanes == 0 || lanes > 64) {
         xicgen_vec_error(ctx, out, v, "unsupported lane type/count");
         return;
     }
@@ -2023,7 +3265,8 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             const XiValue *proven_scalar_load_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_LOAD);
-            fprintf(out, "({ %s _r; xr_span_t _s = ", result_type);
+            bool unchecked_scalar_load = xicgen_vec_unchecked_access(v);
+            fprintf(out, "({ %s _r%s; xr_span_t _s = ", result_type, result_init);
             emit_vref(out, xicgen_vec_unwrap_value(proven_scalar_load_window
                                                        ? proven_scalar_load_window->args[0]
                                                        : v->args[0]));
@@ -2032,16 +3275,19 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_emit_vec_window_offset(ctx, out, proven_scalar_load_window, v->args[1]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            if (!proven_scalar_load_window)
+            if (!proven_scalar_load_window && !unchecked_scalar_load)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
-            fprintf(out,
-                    "; memcpy(_r._lanes, ((const %s *)_s.data) + _off, sizeof(_r._lanes)); "
-                    "_r; })",
-                    lane_type);
+            else if (unchecked_scalar_load)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
+            fprintf(out, "; memcpy(_r._lanes, ((const %s *)_s.data) + _off, %uu); _r; })",
+                    lane_type, (unsigned) lanes * lane_bytes);
             return;
 
         case XI_VEC_STORE:
@@ -2051,6 +3297,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             const XiValue *proven_scalar_store_window =
                 xicgen_vec_proven_window(ctx, v, XAOT_SLICE_ACCESS_VEC_STORE);
+            bool unchecked_scalar_store = xicgen_vec_unchecked_access(v);
             fprintf(out, "({ xr_span_t _s = ");
             emit_vref(out, xicgen_vec_unwrap_value(proven_scalar_store_window
                                                        ? proven_scalar_store_window->args[0]
@@ -2060,14 +3307,19 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_emit_vec_window_offset(ctx, out, proven_scalar_store_window, v->args[2]);
             else
                 emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-            if (!proven_scalar_store_window)
+            if (!proven_scalar_store_window && !unchecked_scalar_store)
                 fprintf(out,
                         "; if (XR_UNLIKELY(_off < 0 || _off > _s.length - %uu)) "
                         "xrt_index_oob(_off < 0 ? _off : _off + %uu, _s.length); "
                         "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
                         (unsigned) lanes, (unsigned) (lanes - 1), (unsigned) lanes);
+            else if (unchecked_scalar_store)
+                fprintf(out,
+                        "; /* unchecked SIMD access */ "
+                        "XR_ASSUME(_off >= 0 && _off <= _s.length - %uu)",
+                        (unsigned) lanes);
             fprintf(out, "; memcpy(((%s *)_s.data) + _off, ", lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, ", %uu); XR_NULL_VAL; })",
                     (unsigned) (lanes * (native_type == XR_NATIVE_U8    ? 1
                                          : native_type == XR_NATIVE_U32 ? 4
@@ -2079,7 +3331,8 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_vec_error(ctx, out, v, "splat needs scalar and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; %s _x = (%s)(", result_type, lane_type, lane_type);
+            fprintf(out, "({ %s _r%s; %s _x = (%s)(", result_type, result_init, lane_type,
+                    lane_type);
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
             fprintf(out, "); for (uint32_t _i = 0; _i < %uu; _i++) _r._lanes[_i] = _x; _r; })",
                     (unsigned) lanes);
@@ -2095,7 +3348,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             fprintf(out, "; ");
             xicgen_emit_vec_range_check(out, "_lane", lanes);
             fprintf(out, "(%s)", lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_lane]; })");
             return;
 
@@ -2105,9 +3358,9 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                                  "replace needs vector, lane, scalar and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
-            fprintf(out, ", sizeof(_r._lanes)); int64_t _lane = ");
+            fprintf(out, "({ %s _r%s; memcpy(_r._lanes, ", result_type, result_init);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
+            fprintf(out, ", %uu); int64_t _lane = ", (unsigned) lanes * lane_bytes);
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, "; ");
             xicgen_emit_vec_range_check(out, "_lane", lanes);
@@ -2133,12 +3386,12 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                              : v->op == XI_VEC_BIT_OR  ? "|"
                                                        : "^";
             fprintf(out,
-                    "({ %s _r; for (uint32_t _i = 0; _i < %uu; _i++) "
+                    "({ %s _r%s; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_r._lanes[_i] = (%s)(",
-                    result_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+                    result_type, result_init, (unsigned) lanes, lane_type);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i] %s ", op);
-            xicgen_emit_vec_lanes(out, v->args[1]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[1]);
             fprintf(out, "[_i]); _r; })");
             return;
         }
@@ -2149,10 +3402,10 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 return;
             }
             fprintf(out,
-                    "({ %s _r; for (uint32_t _i = 0; _i < %uu; _i++) "
+                    "({ %s _r%s; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_r._lanes[_i] = (%s)~",
-                    result_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+                    result_type, result_init, (unsigned) lanes, lane_type);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i]; _r; })");
             return;
 
@@ -2162,14 +3415,14 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_vec_error(ctx, out, v, "shift needs vector, count and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; uint32_t _s = (uint32_t)(", result_type);
+            fprintf(out, "({ %s _r%s; uint32_t _s = (uint32_t)(", result_type, result_init);
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out,
                     ") & 63u; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_r._lanes[_i] = _s >= %uu ? (%s)0 : (%s)(",
                     (unsigned) lanes, native_type == XR_NATIVE_U32 ? 32u : 64u, lane_type,
                     lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i] %s _s); _r; })", v->op == XI_VEC_SHL ? "<<" : ">>");
             return;
 
@@ -2178,9 +3431,39 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_vec_error(ctx, out, v, "reinterpret needs vector and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; memcpy(_r._lanes, ", result_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
-            fprintf(out, ", sizeof(_r._lanes)); _r; })");
+            if (!ctx || !ctx->target || ctx->target->data_layout.endian != XR_TARGET_ENDIAN_BIG) {
+                fprintf(out, "({ %s _r%s; memcpy(_r._lanes, ", result_type, result_init);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
+                fprintf(out, ", %uu); _r; })", (unsigned) lanes * lane_bytes);
+                return;
+            }
+            /* Portable vector reinterpretation has an endian-neutral lane
+             * contract: byte zero is the least-significant byte of numeric
+             * lane zero. A C memcpy only implements that contract on
+             * little-endian targets. Rebuild numeric lanes explicitly on
+             * big-endian scalar targets; all trip counts are compile-time
+             * constants and fold into straight-line shifts. */
+            {
+                uint8_t input_native_type = xicgen_vec_input_native_type(ctx, v, native_type);
+                unsigned input_lane_bytes = input_native_type == XR_NATIVE_U8    ? 1u
+                                            : input_native_type == XR_NATIVE_U32 ? 4u
+                                                                                 : 8u;
+                unsigned output_lane_bytes = native_type == XR_NATIVE_U8    ? 1u
+                                             : native_type == XR_NATIVE_U32 ? 4u
+                                                                            : 8u;
+                fprintf(out,
+                        "({ %s _r%s; for (uint32_t _i = 0; _i < %uu; _i++) { "
+                        "uint64_t _lane = 0; for (uint32_t _b = 0; _b < %uu; _b++) { "
+                        "uint32_t _byte = _i * %uu + _b; uint64_t _src = (uint64_t)(",
+                        result_type, result_init, (unsigned) lanes, output_lane_bytes,
+                        output_lane_bytes);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
+                fprintf(out,
+                        "[_byte / %uu]); _lane |= ((_src >> ((_byte %% %uu) * 8u)) & "
+                        "UINT64_C(255)) << (_b * 8u); } _r._lanes[_i] = (%s)_lane; } "
+                        "_r; })",
+                        input_lane_bytes, input_lane_bytes, lane_type);
+            }
             return;
 
         case XI_VEC_SHUFFLE:
@@ -2190,12 +3473,12 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     xicgen_vec_error(ctx, out, v, "unzip needs two u32x4 vectors");
                     return;
                 }
-                fprintf(out, "({ %s _r; ", result_type);
+                fprintf(out, "({ %s _r%s; ", result_type, result_init);
                 unsigned half = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
                 for (uint8_t lane = 0; lane < lanes; lane++) {
                     unsigned source_lane = (unsigned) (lane & 1u) * 2u + half;
                     fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[lane >= 2 ? 1 : 0]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[lane >= 2 ? 1 : 0]);
                     fprintf(out, "[%uu]; ", source_lane);
                 }
                 fprintf(out, "_r; })");
@@ -2205,38 +3488,40 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 xicgen_vec_error(ctx, out, v, "shuffle needs vector and aggregate result");
                 return;
             }
-            fprintf(out, "({ %s _r; ", result_type);
+            fprintf(out, "({ %s _r%s; ", result_type, result_init);
             for (uint8_t lane = 0; lane < lanes; lane++) {
                 uint8_t selected =
-                    (uint8_t) ((v->aux_int >> (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4)) & 0xf);
+                    (v->aux_int & XI_VEC_SHAPE_SWAP_ADJACENT) != 0
+                        ? (uint8_t) (lane ^ 1u)
+                        : (uint8_t) ((v->aux_int >> (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4)) & 0xf);
                 if (selected >= lanes) {
                     xicgen_vec_error(ctx, out, v, "shuffle lane outside shape");
                     return;
                 }
                 fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, "[%uu]; ", (unsigned) selected);
             }
             fprintf(out, "_r; })");
             return;
 
         case XI_VEC_WIDEN_MUL:
-            if (v->nargs != 2 || (lanes != 2 && lanes != 4) || native_type != XR_NATIVE_U64 ||
+            if (v->nargs != 2 || (lanes != 2 && lanes != 4 && lanes != 8) ||
+                native_type != XR_NATIVE_U64 ||
                 !xicgen_vec_result_aggregate(ctx, v, &result_type)) {
-                xicgen_vec_error(ctx, out, v,
-                                 "widen-mul requires u32x4 -> u64x2 or u32x8 -> u64x4");
+                xicgen_vec_error(ctx, out, v, "widen-mul requires u32x4/8/16 -> u64x2/4/8");
                 return;
             }
-            fprintf(out, "({ %s _r; ", result_type);
+            fprintf(out, "({ %s _r%s; ", result_type, result_init);
             for (uint8_t lane = 0; lane < lanes; lane++) {
                 unsigned src =
                     (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0
                         ? lane + ((v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? lanes : 0u)
                         : lane * 2u + ((v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u);
                 fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
-                xicgen_emit_vec_lanes(out, v->args[0]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, "[%uu] * (uint64_t)", src);
-                xicgen_emit_vec_lanes(out, v->args[1]);
+                xicgen_emit_vec_lanes(ctx, out, v->args[1]);
                 fprintf(out, "[%uu]; ", src);
             }
             fprintf(out, "_r; })");
@@ -2250,12 +3535,12 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             {
                 unsigned odd = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
-                fprintf(out, "({ %s _r; ", result_type);
+                fprintf(out, "({ %s _r%s; ", result_type, result_init);
                 for (uint8_t lane = 0; lane < 4; lane++) {
                     unsigned which = lane < 2 ? 0u : 1u;
                     unsigned src = (lane % 2u) * 2u + odd;
                     fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[which]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[which]);
                     fprintf(out, "[%uu]; ", src);
                 }
                 fprintf(out, "_r; })");
@@ -2270,13 +3555,13 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
             }
             {
                 unsigned base = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 2u : 0u;
-                fprintf(out, "({ %s _r; ", result_type);
+                fprintf(out, "({ %s _r%s; ", result_type, result_init);
                 for (uint8_t lane = 0; lane < 2; lane++) {
                     unsigned src = base + lane;
                     fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
-                    xicgen_emit_vec_lanes(out, v->args[0]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                     fprintf(out, "[%uu] * (uint64_t)", src);
-                    xicgen_emit_vec_lanes(out, v->args[1]);
+                    xicgen_emit_vec_lanes(ctx, out, v->args[1]);
                     fprintf(out, "[%uu]; ", src);
                 }
                 fprintf(out, "_r; })");
@@ -2292,7 +3577,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                     "({ %s _sum = 0; for (uint32_t _i = 0; _i < %uu; _i++) "
                     "_sum = (%s)(_sum + ",
                     lane_type, (unsigned) lanes, lane_type);
-            xicgen_emit_vec_lanes(out, v->args[0]);
+            xicgen_emit_vec_lanes(ctx, out, v->args[0]);
             fprintf(out, "[_i]); _sum; })");
             return;
 
@@ -2388,6 +3673,12 @@ static bool xicgen_value_is_elided_static_aggregate_access(XiCgenCtx *ctx, const
 static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
+    const XiConstLiteral *owned_lit =
+        xicgen_owned_scalar_const_slot_literal(ctx, f, v ? v->aux_int : -1);
+    if (owned_lit) {
+        xicgen_emit_const_slot_literal_as_value(ctx, out, v, owned_lit);
+        return;
+    }
     const XiConstLiteral *lit = xicgen_freestanding_const_slot_literal(ctx, v ? v->aux_int : -1);
     if (lit) {
         xicgen_emit_const_slot_literal_as_value(ctx, out, v, lit);
@@ -5360,11 +6651,16 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
 
     const XiValue *source = cg_unwrap_identity_value(v->args[0]);
     CgFixedArrayLaneInfo fixed;
+    const XiModule *static_module = NULL;
+    int64_t static_slot = -1;
     int64_t start = 0;
     int64_t end = 0;
-    if (!source || !cg_fixed_array_lane_info_from_value(source, &fixed) || !fixed.ctype ||
-        !cg_const_int_value(v->args[1], &start) || !cg_const_int_value(v->args[2], &end) ||
-        start != 0 || (end != INT64_MAX && end != (int64_t) fixed.count))
+    bool static_source =
+        cg_static_fixed_array_value_ex(ctx, source, &fixed, &static_slot, &static_module);
+    if (!source || (!static_source && !cg_fixed_array_lane_info_from_value(source, &fixed)) ||
+        !fixed.ctype || !cg_const_int_value(v->args[1], &start) ||
+        !cg_const_int_value(v->args[2], &end) || start != 0 ||
+        (end != INT64_MAX && end != (int64_t) fixed.count))
         return false;
 
     /* A full view of a fixed array has compile-time layout and range.  Keep
@@ -5372,7 +6668,10 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
      * only to feed xrt_span_from_array_slice would obscure both facts from C
      * optimization and introduce a spurious runtime boundary. */
     fprintf(out, "((xr_span_t){.data = (void *)(");
-    emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
+    if (static_source)
+        cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
+    else
+        emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
     fprintf(out, "), .length = INT64_C(%u)})", (unsigned) fixed.count);
     return true;
 }
@@ -5434,16 +6733,10 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     fprintf(out, "; int64_t _n = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out,
-            "; if (XR_UNLIKELY(_n < 0)) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-            "\"mem.slice<T>() count must be non-negative\"); "
-            "if (XR_UNLIKELY(_n > 0 && !_p)) xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-            "\"mem.slice<T>() requires a non-null pointer for non-zero count\"); "
-            "if (XR_UNLIKELY(_n > 0 && ((uintptr_t)_p %% UINT16_C(%u)) != 0)) "
-            "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-            "\"mem.slice<T>() pointer does not satisfy T alignment\"); "
-            "if (XR_UNLIKELY(_n > 0 && (uint64_t)_n > UINTPTR_MAX / UINT16_C(%u))) "
-            "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-            "\"mem.slice<T>() byte range overflows address space\"); "
+            "; /* caller-proven mem.slice raw view */ "
+            "XR_ASSUME(_n >= 0 && (_n == 0 || (_p != NULL && "
+            "((uintptr_t)_p %% UINT16_C(%u)) == 0 && "
+            "(uint64_t)_n <= UINTPTR_MAX / UINT16_C(%u)))); "
             "(xr_span_t){.data = (void *)_p, .length = _n}; })",
             (unsigned) alignment, (unsigned) elem_size);
 }
@@ -6689,6 +7982,15 @@ static const XgBodySummary *xicgen_evidence_body_for_func(const XgGlobalEvidence
     return NULL;
 }
 
+static bool xicgen_global_evidence_proves_nothrow(XiCgenCtx *ctx, const XiFunc *func) {
+    const XgGlobalEvidence *ev = xicgen_global_evidence(ctx);
+    const XgBodySummary *body = xicgen_evidence_body_for_func(ev, func);
+    uint32_t effects = 0;
+    if (!body || !xg_body_effects_compose_closed_world_calls(ev, body, &effects))
+        return false;
+    return (effects & (XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC)) == 0;
+}
+
 static bool xicgen_evidence_interface_extends_reaches(const XgGlobalEvidence *ev,
                                                       XgInterfaceId from, XgInterfaceId target,
                                                       uint32_t depth) {
@@ -7568,7 +8870,8 @@ static CgAtomicI64DirectOp xicgen_atomic_i64_direct_op(const XiValue *v, XaIntri
 
 static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth);
 
-static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue *value) {
+static bool xicgen_value_is_nothrow_native_scalar(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
@@ -7589,7 +8892,7 @@ static bool xicgen_value_is_nothrow_native_scalar(const XiFunc *f, const XiValue
     if (op == XI_BNOT || op == XI_NEG)
         return v->nargs >= 1 && cg_rep(v) == XR_REP_I64 && cg_rep(v->args[0]) == XR_REP_I64;
     if (op == XI_DIV || op == XI_MOD)
-        return cg_div_mod_is_trusted_nothrow(f, v);
+        return cg_div_mod_is_trusted_nothrow(ctx, f, v);
     return false;
 }
 
@@ -7598,12 +8901,13 @@ static bool xicgen_span_slice_is_nothrow(XiCgenCtx *ctx, const XiValue *value) {
     return v && v->op == XI_SLICE && v->nargs >= 3 && cg_value_plan_is_span_aggregate(ctx, v);
 }
 
-/* Vector span loads/stores are semantically checked, but both the native-SIMD
- * and portable aggregate C emitters implement failure with xrt_index_oob(), a
- * noreturn trap/exception transfer.  They never communicate failure through
- * xrt_pending_error.  Treat that lowering contract as nothrow with respect to
- * Xi's pending-error channel so the ERR_CHECK mechanically inserted after the
- * intrinsic does not turn every vector access into a TLS load on the hot path.
+/* Vector span loads/stores and lane extract/replace are semantically checked,
+ * but both the native-SIMD and portable aggregate C emitters implement failure
+ * with xrt_index_oob()/xrt_fixed_index_oob(), a noreturn trap/exception
+ * transfer.  They never communicate failure through xrt_pending_error.  Treat
+ * that lowering contract as nothrow with respect to Xi's pending-error channel
+ * so the ERR_CHECK mechanically inserted after the intrinsic does not turn
+ * every vector operation into a TLS load on the hot path.
  *
  * Keep the predicate deliberately structural and fail closed: if the value is
  * not one of the exact span-backed shapes accepted by xicgen_vec(), the normal
@@ -7620,6 +8924,10 @@ static bool xicgen_vec_span_access_uses_direct_trap(XiCgenCtx *ctx, const XiValu
         return v->nargs == 3 && v->args[1] && v->args[1]->type &&
                v->args[1]->type->kind == XR_KIND_SLICE &&
                cg_value_plan_is_span_aggregate(ctx, v->args[1]);
+    if (v->op == XI_VEC_EXTRACT)
+        return v->nargs == 2;
+    if (v->op == XI_VEC_REPLACE)
+        return v->nargs == 3;
     return false;
 }
 
@@ -7691,6 +8999,34 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     return false;
 }
 
+static bool xicgen_stdlib_call_is_declared_nothrow(XiCgenCtx *ctx, const XiFunc *current,
+                                                   const XiValue *call) {
+    const XiValue *v = cg_unwrap_identity_value(call);
+    const char *module = NULL;
+    const char *member = NULL;
+    if (!ctx || !current || !v)
+        return false;
+
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 && v->aux) {
+        module = cg_aot_stdlib_module_of_receiver(ctx, current, v->args[0]);
+        member = (const char *) v->aux;
+    } else if (v->op == XI_CALL && v->nargs >= 1) {
+        const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+        const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                     ? (const XiImportRef *) callee->aux
+                                     : cg_import_ref_for_value(ctx, current, callee);
+        if (ref) {
+            module = ref->module_path;
+            member = ref->member_name;
+        }
+    }
+    if (!module || !member)
+        return false;
+
+    const XaEffectContract *contract = xa_builtin_get_module_func_effect_contract(module, member);
+    return contract && contract->kind == XA_EFFECT_CONTRACT_NOTHROW;
+}
+
 static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *current,
                                                 const XiValue *call, uint8_t depth) {
     const XiValue *v = cg_unwrap_identity_value(call);
@@ -7709,6 +9045,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
         return true;
     if (xicgen_runtime_method_call_is_direct_nothrow(v))
         return true;
+    if (xicgen_stdlib_call_is_declared_nothrow(ctx, current, v))
+        return true;
     if (cg_class_native_call_is_nothrow_direct(ctx, current, v))
         return true;
 
@@ -7720,6 +9058,8 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
     if (!target || target == current || target->is_extern || direct.is_class_constructor ||
         cg_func_needs_aot_coro_ctx(ctx, target))
         return false;
+    if (xicgen_global_evidence_proves_nothrow(ctx, target))
+        return true;
     return !xicgen_func_has_error_flow(ctx, target, (uint8_t) (depth + 1));
 }
 
@@ -7748,7 +9088,7 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return true;
     if (xicgen_span_access_plan_uses_direct_trap(ctx, v))
         return true;
-    if (xicgen_value_is_nothrow_native_scalar(current, v))
+    if (xicgen_value_is_nothrow_native_scalar(ctx, current, v))
         return true;
     if (xicgen_span_slice_is_nothrow(ctx, v))
         return true;
@@ -9712,11 +11052,12 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                                               v->aux_int))
         return;
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
-        char fname[128];
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
-        cg_struct_field_c_name(sl, v->aux_int, fname, sizeof(fname));
-        emit_vref(out, v->args[0]);
-        fprintf(out, ".%s", fname);
+        /* A locally inlined struct and a value-plan aggregate can describe the
+         * same AGG_NEW.  The lvalue helper resolves that storage identity to
+         * `_stN.field`; spelling `vN.field` directly would reference a C
+         * temporary that was intentionally elided. */
+        emit_struct_field_lvalue(ctx, out, f, sl, v->aux_int, v->args[0], prefix);
         return;
     }
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
@@ -9829,6 +11170,16 @@ static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
     if (count_out)
         *count_out = (uint32_t) v->type->fixed_array.length;
     return true;
+}
+
+static bool xicgen_fixed_array_stack_copy_info(const XiValue *v, uint8_t *native_out,
+                                               uint32_t *count_out) {
+    if (!v || v->nargs != 1 || !v->args[0])
+        return false;
+    bool value_clone = v->op == XI_COPY && xi_copy_is_value_clone(v);
+    bool explicit_copy =
+        v->op == XI_CALL_BUILTIN && v->aux && strcmp((const char *) v->aux, "copy") == 0;
+    return (value_clone || explicit_copy) && xicgen_fixed_array_new_info(v, native_out, count_out);
 }
 
 static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -10627,10 +11978,10 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             xicgen_emit_c_string_literal(out, field ? field : "?");
             fprintf(out, ")");
         } else {
-            fprintf(out, "xrt_getprop_name(");
+            fprintf(out, "xrt_getprop_key(");
             emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
-            xicgen_emit_c_string_literal(out, field ? field : "?");
+            cg_emit_str_value(ctx, out, field ? field : "?");
             fprintf(out, ")");
         }
         emit_conversion_suffix(out, conv_suffix);
@@ -10668,10 +12019,10 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
-        fprintf(out, "xrt_setprop_name(");
+        fprintf(out, "xrt_setprop_key(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        xicgen_emit_c_string_literal(out, field ? field : "?");
+        cg_emit_str_value(ctx, out, field ? field : "?");
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -11558,8 +12909,8 @@ static void xicgen_byte_array_box_result(FILE *out, bool boxed) {
 
 static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                         const char *core_helper, const char *le_unchecked_helper,
-                                        const char *ctype, int64_t byte_width,
-                                        const char *bounds_message_expr) {
+                                        const char *unchecked_helper, const char *ctype,
+                                        int64_t byte_width, const char *bounds_message_expr) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 3 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
@@ -11568,16 +12919,23 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     (void) info;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    bool drop_bounds = unchecked_access || cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD,
+                                                              XAOT_SLICE_DROP_BOUNDS);
     int64_t endian = XR_ENDIAN_NATIVE;
-    if (le_unchecked_helper && xicgen_value_is_const_endian(v->args[2], &endian) &&
-        endian == XR_ENDIAN_LE) {
-        bool drop_bounds =
-            cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_BOUNDS);
+    bool const_endian = xicgen_value_is_const_endian(v->args[2], &endian);
+    if (le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        if (!drop_bounds) {
+        if (unchecked_access) {
+            fprintf(out,
+                    "; /* unchecked byte-Slice access */ "
+                    "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                    ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                    byte_width, byte_width);
+        } else if (!drop_bounds) {
             fprintf(out,
                     "; if (XR_UNLIKELY(!_s.data || _off < 0 || _s.length < INT64_C(%" PRId64
                     ") || _off > _s.length - INT64_C(%" PRId64 "))) "
@@ -11586,6 +12944,24 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
         }
         fprintf(out, "; %s _v = (%s)%s(_s, _off); (int64_t)_v; })", ctype, ctype,
                 le_unchecked_helper);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (unchecked_helper && drop_bounds) {
+        fprintf(out, "({ xr_span_t _s = ");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, "; int64_t _off = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        if (unchecked_access) {
+            fprintf(out,
+                    "; /* unchecked byte-Slice access */ "
+                    "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                    ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                    byte_width, byte_width);
+        }
+        fprintf(out, "; %s _v = (%s)%s(_s, _off, ", ctype, ctype, unchecked_helper);
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
+        fprintf(out, "); (int64_t)_v; })");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -11632,7 +13008,8 @@ static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const X
 
 static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                          const char *checked_helper, const char *core_helper,
-                                         const char *value_ctype, const char *bounds_message_expr) {
+                                         const char *unchecked_helper, const char *value_ctype,
+                                         int64_t byte_width, const char *bounds_message_expr) {
     CgArrayElemInfo info;
     if (!v || v->nargs != 4 || !cg_span_value_u8_info(ctx, v->args[0], &info))
         return false;
@@ -11640,10 +13017,29 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
+        bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+        bool drop_bounds =
+            unchecked_access ||
+            cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_BOUNDS);
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        if (unchecked_helper && drop_bounds) {
+            if (unchecked_access) {
+                fprintf(out,
+                        "; /* unchecked byte-Slice access */ "
+                        "XR_ASSUME(_s.data && _off >= 0 && _s.length >= INT64_C(%" PRId64
+                        ") && _off <= _s.length - INT64_C(%" PRId64 "))",
+                        byte_width, byte_width);
+            }
+            fprintf(out, "; %s(_s, _off, (%s)", unchecked_helper, value_ctype);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, ", ");
+            xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
+            fprintf(out, "); XR_NULL_VAL; })");
+            return true;
+        }
         fprintf(out, "; ");
         fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
                 value_ctype);
@@ -11708,7 +13104,8 @@ static void xicgen_byte_slice_load_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u16",
-                                    "xrt_byte_slice_load_u16_le_unchecked_raw", "uint16_t", 2,
+                                    "xrt_byte_slice_load_u16_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u16_unchecked_raw", "uint16_t", 2,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11728,7 +13125,8 @@ static void xicgen_byte_slice_load_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u32",
-                                    "xrt_byte_slice_load_u32_le_unchecked_raw", "uint32_t", 4,
+                                    "xrt_byte_slice_load_u32_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u32_unchecked_raw", "uint32_t", 4,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11748,7 +13146,8 @@ static void xicgen_byte_slice_load_u64(XiCgenCtx *ctx, FILE *out, const XiFunc *
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_load(ctx, out, v, "xr_array_core_bytes_load_u64",
-                                    "xrt_byte_slice_load_u64_le_unchecked_raw", "uint64_t", 8,
+                                    "xrt_byte_slice_load_u64_le_unchecked_raw",
+                                    "xrt_byte_slice_load_u64_unchecked_raw", "uint64_t", 8,
                                     "XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG"))
         return;
     const char *conv_suffix =
@@ -11806,7 +13205,8 @@ static void xicgen_byte_slice_store_u16(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u16_checked_raw",
-                                     "xr_array_core_bytes_store_u16", "uint16_t",
+                                     "xr_array_core_bytes_store_u16",
+                                     "xrt_byte_slice_store_u16_unchecked_raw", "uint16_t", 2,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u16_value(");
@@ -11825,7 +13225,8 @@ static void xicgen_byte_slice_store_u32(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u32_checked_raw",
-                                     "xr_array_core_bytes_store_u32", "uint32_t",
+                                     "xr_array_core_bytes_store_u32",
+                                     "xrt_byte_slice_store_u32_unchecked_raw", "uint32_t", 4,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u32_value(");
@@ -11844,7 +13245,8 @@ static void xicgen_byte_slice_store_u64(XiCgenCtx *ctx, FILE *out, const XiFunc 
     (void) f;
     (void) prefix;
     if (xicgen_emit_byte_slice_store(ctx, out, v, "xrt_byte_slice_store_u64_checked_raw",
-                                     "xr_array_core_bytes_store_u64", "uint64_t",
+                                     "xr_array_core_bytes_store_u64",
+                                     "xrt_byte_slice_store_u64_unchecked_raw", "uint64_t", 8,
                                      "XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG"))
         return;
     fprintf(out, "xrt_byte_slice_store_u64_value(");
@@ -11989,13 +13391,14 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
         return;
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk =
         cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<byte>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
         fprintf(out, "xrt_byte_slice_copy_checked_raw(");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
@@ -12005,9 +13408,10 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         return;
     }
     bool inline_copy =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                   bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER);
+        unchecked_access ||
+        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
+                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
+              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER));
     if (bulk && !inline_copy) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
@@ -12025,14 +13429,19 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             emit_codegen_abort_expr(out);
         }
         fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
-                     "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
-                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG); ");
+        if (unchecked_access)
+            fprintf(out, "/* unchecked Slice.copyFrom access */ "
+                         "XR_ASSUME(_src.length >= 0 && _dst.length >= _src.length && "
+                         "(_src.length == 0 || (_dst.data && _src.data))); ");
+        else
+            fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
+                         "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
+                         "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                         "XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG); ");
         if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
             fprintf(out, "if (_src.length > 0) memcpy(_dst.data, _src.data, "
                          "(size_t)_src.length);");
-        else if (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE)
+        else if (unchecked_access || (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE))
             fprintf(out, "if (_src.length > 0) memmove(_dst.data, _src.data, "
                          "(size_t)_src.length);");
         else if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP)
@@ -12238,8 +13647,9 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                                const char *prefix) {
     (void) prefix;
     XR_DCHECK(v && v->nargs == 3, "xicgen_span_window: need source, start, and count");
-    bool bounds_proven =
-        cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_WINDOW, XAOT_SLICE_DROP_BOUNDS);
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
+    bool bounds_proven = unchecked_access || cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_WINDOW,
+                                                                XAOT_SLICE_DROP_BOUNDS);
     int64_t fixed_count = 0;
     bool has_fixed_count = (cg_const_int_value(v->args[2], &fixed_count) ||
                             xicgen_imported_int_const_value(ctx, f, v->args[2], &fixed_count)) &&
@@ -12255,6 +13665,8 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _start = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    if (unchecked_access)
+        fprintf(out, "; /* unchecked Slice.window access */ ");
     if (has_fixed_count) {
         fprintf(out, "; XR_ASSUME(_src.length >= 0); ");
         if (!bounds_proven)
@@ -12388,12 +13800,13 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_SLICE_COPY))
         return;
+    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
         CgArrayElemInfo helper_info;
         if (!cg_span_elem_info_from_value(ctx, v->args[0], &helper_info) || !helper_info.ctype) {
             cg_ctx_set_error(ctx);
@@ -12411,28 +13824,40 @@ static void xicgen_span_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     bool have_native_info =
         cg_span_elem_info_from_value(ctx, v->args[0], &info) && info.rep != XR_REP_TAGGED;
     bool inline_copy =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                   bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_HELPER);
+        unchecked_access ||
+        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
+                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
+              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_SLICE_COPY, XAOT_SLICE_DROP_HELPER));
     if (inline_copy && have_native_info) {
         fprintf(out, "({ xr_span_t _dst = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; xr_span_t _src = ");
         emit_span_ref_expr(out, v->args[1]);
         fprintf(out, "; ");
-        fprintf(out,
-                "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
-                "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
-                "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "\"Slice.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
-                "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
-                "(int64_t)sizeof(%s); if (XR_UNLIKELY(_src_bytes > _dst_bytes || "
-                "(_src_bytes > 0 && (!_dst.data || !_src.data)))) xrt_throw_error("
-                "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.copyFrom(src) range out of bounds\"); ",
-                info.ctype, info.ctype, info.ctype, info.ctype);
+        if (unchecked_access)
+            fprintf(out,
+                    "/* unchecked Slice.copyFrom access */ "
+                    "XR_ASSUME(_dst.length >= 0 && _src.length >= 0 && _dst.length >= "
+                    "_src.length && _dst.length <= INT64_MAX / (int64_t)sizeof(%s) && "
+                    "_src.length <= INT64_MAX / (int64_t)sizeof(%s) && "
+                    "(_src.length == 0 || (_dst.data && _src.data))); int64_t _dst_bytes = "
+                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
+                    "(int64_t)sizeof(%s); ",
+                    info.ctype, info.ctype, info.ctype, info.ctype);
+        else
+            fprintf(out,
+                    "if (XR_UNLIKELY(_dst.length < 0 || _src.length < 0 || _dst.length > "
+                    "INT64_MAX / (int64_t)sizeof(%s) || _src.length > INT64_MAX / "
+                    "(int64_t)sizeof(%s))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                    "\"Slice.copyFrom(src) byte length overflow\"); int64_t _dst_bytes = "
+                    "_dst.length * (int64_t)sizeof(%s); int64_t _src_bytes = _src.length * "
+                    "(int64_t)sizeof(%s); if (XR_UNLIKELY(_src_bytes > _dst_bytes || "
+                    "(_src_bytes > 0 && (!_dst.data || !_src.data)))) xrt_throw_error("
+                    "XR_ERR_INDEX_OUT_OF_BOUNDS, \"Slice.copyFrom(src) range out of bounds\"); ",
+                    info.ctype, info.ctype, info.ctype, info.ctype);
         if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
             fprintf(out, "if (_src_bytes > 0) memcpy(_dst.data, _src.data, (size_t)_src_bytes); ");
-        else if (!bulk || bulk->action == XAOT_BULK_INLINE_MEMMOVE)
+        else if (unchecked_access || !bulk || bulk->action == XAOT_BULK_INLINE_MEMMOVE)
             fprintf(out, "if (_src_bytes > 0) memmove(_dst.data, _src.data, (size_t)_src_bytes); ");
         else
             fprintf(out,
@@ -12780,8 +14205,7 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
     }
 
     CgFixedArrayLaneInfo fixed_array_info;
-    if (cg_freestanding_static_fixed_array_literal_in_module(ctx, module, slot, &fixed_array_info,
-                                                             NULL)) {
+    if (cg_static_fixed_array_literal_in_module(ctx, module, slot, &fixed_array_info, NULL)) {
         cg_emit_static_fixed_array_name(ctx, out, module, slot);
         return true;
     }
@@ -12974,6 +14398,21 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
+        const XiValue *load = v->args[0];
+        if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "(void *)(");
+        emit_value_as_rep_ctx(ctx, out, load->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")");
+        return;
+    }
+    if ((v->aux_int & XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION) != 0 &&
+        (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix) ||
+         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0])))
+        return;
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {
         fprintf(out, "(void *)((xr_span_t[]){xrt_byte_slice_from_value(");
@@ -13022,11 +14461,105 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     emit_conversion_suffix(out, conv_suffix);
 }
 
+/* Return the sole whole-array PLACE_STORE fed by a semantic fixed-array clone
+ * when the clone-to-store interval contains only ownership bookkeeping.  In
+ * that shape the destination copy itself is the value-semantics boundary, so
+ * materializing an intermediate owned Array would add a heap allocation
+ * without changing any observable snapshot. */
+static const XiValue *cg_fixed_array_value_clone_place_store(const XiFunc *f,
+                                                             const XiValue *value) {
+    if (!f || !value || value->op != XI_COPY || value->aux_int != XI_COPY_KIND_VALUE_CLONE ||
+        value->nargs != 1 || !value->args[0] || !value->type ||
+        value->type->kind != XR_KIND_FIXED_ARRAY || !value->block)
+        return NULL;
+
+    const XiValue *store = NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == value)
+            return NULL;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == value)
+                    return NULL;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == value)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                if (ai == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
+                    continue;
+                if (ai == 1 && user->op == XI_PLACE_STORE && user->nargs == 2 && user->args[0] &&
+                    user->args[0]->type && user->args[0]->type->kind == XR_KIND_FIXED_ARRAY &&
+                    !store) {
+                    store = user;
+                    continue;
+                }
+                return NULL;
+            }
+        }
+    }
+    if (!store || store->block != value->block)
+        return NULL;
+
+    bool between = false;
+    for (uint32_t vi = 0; vi < value->block->nvalues; vi++) {
+        const XiValue *current = value->block->values[vi];
+        if (current == value) {
+            between = true;
+            continue;
+        }
+        if (!between)
+            continue;
+        if (current == store)
+            return store;
+        if (current && (current->op == XI_RETAIN || current->op == XI_RELEASE) &&
+            current->nargs == 1 && current->args[0] == value)
+            continue;
+        return NULL;
+    }
+    return NULL;
+}
+
 static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     (void) prefix;
     if (!v || v->nargs != 2 || !v->args[0] || !v->args[1]) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    CgFixedArrayLaneInfo fixed;
+    if (cg_fixed_array_lane_info_from_type(v->args[0]->type, &fixed)) {
+        /* A `ref [T; N]` parameter uses the address of its first native lane
+         * as its borrowed-place ABI.  It is not a pointer-valued place: whole
+         * fixed-array assignment must copy the N lanes into caller storage.
+         * Treating that raw address as `void **` overwrote the first bytes with
+         * a temporary array-ref pointer and left the rest of the destination
+         * stale. */
+        const XiValue *source = v->args[1];
+        if (cg_fixed_array_value_clone_place_store(f, source) == v)
+            source = source->args[0];
+        XrRep source_rep = cg_value_plan_storage_rep(ctx, source);
+        if (source->type && source->type->kind == XR_KIND_FIXED_ARRAY &&
+            (source_rep == XR_REP_PTR || source_rep == XR_REP_RAWPTR)) {
+            fprintf(out, "memmove((void *)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+            fprintf(out, "), (const void *)(");
+            emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
+            fprintf(out, "), sizeof(%s) * %u)", fixed.ctype, (unsigned) fixed.count);
+            return;
+        }
+        fprintf(out, "xrt_fixed_array_copy((void *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, source, XR_REP_TAGGED);
+        fprintf(out, ", %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
         return;
     }
     XaotValueRep pointee_rep;
@@ -13108,6 +14641,13 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_codegen_abort_expr(out);
         return;
     }
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    if (value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE && value_plan->rep.c_type) {
+        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "))");
+        return;
+    }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
     int64_t endian = XR_ENDIAN_NATIVE;
@@ -13153,6 +14693,16 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_codegen_abort_expr(out);
         return;
     }
+    const XiValue *stored_value = cg_unwrap_identity_value(v->args[1]);
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, stored_value);
+    if (stored_value && value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
+        value_plan->rep.c_type) {
+        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")) = ");
+        emit_vref(out, stored_value);
+        return;
+    }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
     int64_t endian = XR_ENDIAN_NATIVE;
@@ -13178,7 +14728,12 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
-/* memcpy(dst, src, byte_count) for MutPtr<T>.copyFromNonOverlapping. */
+/* memcpy(dst, src, byte_count) for MutPtr<T>.copyFromNonOverlapping.
+ *
+ * C still requires valid pointer arguments for memcpy when the byte count is
+ * zero.  Xray's unsafe primitive permits an empty copy without dereferencing
+ * either pointer, so fold a constant zero to a no-op and guard a dynamic zero
+ * before establishing the caller's non-null proof for an actual copy. */
 static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *prefix) {
     (void) f;
@@ -13187,18 +14742,31 @@ static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "memcpy(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-    fprintf(out, ", ");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
     int64_t byte_count = 0;
-    if (cg_const_int_value(v->args[2], &byte_count) && byte_count >= 0) {
-        fprintf(out, ", (size_t)INT64_C(%" PRId64 "))", byte_count);
-    } else {
-        fprintf(out, ", (size_t)(");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, "))");
+    bool constant_count = cg_const_int_value(v->args[2], &byte_count) && byte_count >= 0;
+    if (constant_count && byte_count == 0) {
+        fprintf(out, "((void)0)");
+        return;
     }
+
+    fprintf(out, "({ void *_xr_dst = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, "; const void *_xr_src = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
+    if (constant_count) {
+        fprintf(out,
+                "; XR_ASSUME(_xr_dst != NULL && _xr_src != NULL); "
+                "(void)memcpy(_xr_dst, _xr_src, (size_t)INT64_C(%" PRId64 ")); "
+                "_xr_dst; })",
+                byte_count);
+        return;
+    }
+
+    fprintf(out, "; size_t _xr_count = (size_t)(");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+    fprintf(out, "); if (_xr_count != 0) { "
+                 "XR_ASSUME(_xr_dst != NULL && _xr_src != NULL); "
+                 "(void)memcpy(_xr_dst, _xr_src, _xr_count); } _xr_dst; })");
 }
 
 static void xicgen_gen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -14116,7 +15684,7 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (value->op == XI_INDEX_SET && cg_array_index_access_bounds_proven(ctx, body, value))
                 continue;
-            if (cg_div_mod_is_trusted_nothrow(body, value))
+            if (cg_div_mod_is_trusted_nothrow(ctx, body, value))
                 continue;
             if (cg_byte_slice_load_trusted_nothrow(ctx, body, value))
                 continue;

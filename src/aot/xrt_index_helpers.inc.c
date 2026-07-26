@@ -102,7 +102,7 @@ static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_t
         uint32_t src_count = XR_ARRAY_REF_ELEM_COUNT(src);
         count = src_count < elem_count ? src_count : elem_count;
         if (XR_ARRAY_REF_ELEM_TYPE(src) == native_type) {
-            memcpy(dst, src.ptr, (size_t) count * elem_size);
+            memmove(dst, src.ptr, (size_t) count * elem_size);
         } else {
             for (int64_t i = 0; i < count; i++)
                 xrt_fixed_array_set(dst, native_type, i,

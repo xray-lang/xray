@@ -216,12 +216,18 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);
     if (v->op >= XI_VEC_LOAD && v->op <= XI_VEC_REDUCE_ADD &&
         xi_vec_shape_is_explicit(v->aux_int)) {
-        fprintf(out, " [shape=%ux%u%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
+        fprintf(out, " [shape=%ux%u%s%s%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
                 (unsigned) xi_vec_shape_lanes(v->aux_int),
                 (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? ",odd" : "",
                 (v->aux_int & XI_VEC_SHAPE_UNZIP) != 0 ? ",unzip" : "",
-                (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0 ? ",half" : "");
+                (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0 ? ",half" : "",
+                xi_vec_shape_is_scalable(v->aux_int) ? ",scalable" : "",
+                (v->aux_int & XI_ACCESS_UNCHECKED) != 0 ? ",unchecked" : "");
     }
+    if ((v->op == XI_BYTE_SLICE_LOAD_U16 || v->op == XI_BYTE_SLICE_LOAD_U32 ||
+         v->op == XI_BYTE_SLICE_LOAD_U64) &&
+        (v->aux_int & XI_ACCESS_UNCHECKED) != 0)
+        fprintf(out, " [unchecked]");
     if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
     if (v->xg_record_merge_id != 0)

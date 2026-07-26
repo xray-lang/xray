@@ -17,6 +17,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_cross_smoke.XXXXXX")" || {
     exit 1
 }
 BASIC_SRC="$WORK/basic_cross_standalone.xr"
+TIME_SRC="$WORK/time_cross_standalone.xr"
+SHARED_DIR="$WORK/shared_cross"
+SHARED_SRC="$SHARED_DIR/main.xr"
 RUNTIME_SRC="$SCRIPT_DIR/coro/typed_channel.xr"
 ZIG_BIN="${XRAY_ZIG:-}"
 
@@ -32,6 +35,32 @@ fn answer() -> int {
 }
 
 answer()
+XR_EOF
+
+mkdir -p "$SHARED_DIR"
+cat > "$SHARED_SRC" <<'XR_EOF'
+export fn answer() -> int {
+    return 42
+}
+XR_EOF
+cat > "$SHARED_DIR/xray.toml" <<'TOML_EOF'
+[package]
+name = "test/windows-shared-cross"
+version = "0.1.0"
+
+[[export.c]]
+xray = "answer"
+symbol = "xr_answer"
+visibility = "default"
+header = true
+TOML_EOF
+
+cat > "$TIME_SRC" <<'XR_EOF'
+import time
+
+print(time.now() > 0)
+print(time.nanos() > 0)
+print(time.clock() >= 0)
 XR_EOF
 
 if [ -z "$ZIG_BIN" ]; then
@@ -150,12 +179,73 @@ run_runtime_rejection() {
     record_pass
 }
 
+run_windows_time_build() {
+    local target="x86_64-windows-gnu"
+    local out="$WORK/time_${target}.exe"
+    local log="$WORK/time_${target}.log"
+
+    printf "  %-28s" "windows-time"
+
+    if ! XRAY_ZIG="$ZIG_BIN" "$XRAY" build --native --target "$target" \
+            --dump-link-command -o "$out" "$TIME_SRC" >"$log" 2>&1; then
+        record_fail "build failed"
+        sed 's/^/    /' "$log" | head -20
+        return
+    fi
+    if grep -q -- "-lxray_aot_core" "$log"; then
+        record_fail "host AOT core leaked into cross link"
+        sed 's/^/    /' "$log" | head -20
+        return
+    fi
+    if [ ! -s "$out" ]; then
+        record_fail "missing output"
+        return
+    fi
+    record_pass
+    if command -v file >/dev/null 2>&1; then
+        file "$out" | sed 's/^/    /'
+    fi
+}
+
+run_windows_shared_build() {
+    local target="x86_64-windows-gnu"
+    local out="$WORK/shared_${target}.dll"
+    local log="$WORK/shared_${target}.log"
+
+    printf "  %-28s" "windows-shared"
+
+    if ! XRAY_ZIG="$ZIG_BIN" "$XRAY" build --native --shared --target "$target" \
+            --dump-link-command -o "$out" "$SHARED_SRC" >"$log" 2>&1; then
+        record_fail "build failed"
+        sed 's/^/    /' "$log" | head -20
+        return
+    fi
+    if ! grep -q -- "-shared" "$log" || grep -q -- "-dynamiclib" "$log"; then
+        record_fail "wrong target shared-library flag"
+        sed 's/^/    /' "$log" | head -20
+        return
+    fi
+    if [ ! -s "$out" ]; then
+        record_fail "missing output"
+        return
+    fi
+    record_pass
+    if command -v file >/dev/null 2>&1; then
+        file "$out" | sed 's/^/    /'
+    fi
+}
+
 mkdir -p "$WORK/logs"
 pids=""
 logs=""
 for target in \
+    i386-linux-musl \
     x86_64-linux-musl \
+    arm-linux-gnueabi \
     aarch64-linux-musl \
+    powerpc64-linux-musl \
+    powerpc64le-linux-musl \
+    loongarch64-linux-musl \
     x86_64-windows-gnu \
     aarch64-windows-gnu
 do
@@ -169,6 +259,16 @@ runtime_log="$WORK/logs/runtime_rejection.log"
 ( run_runtime_rejection >"$runtime_log" 2>&1 ) &
 pids="$pids $!"
 logs="$logs $runtime_log"
+
+time_log="$WORK/logs/windows_time.log"
+( run_windows_time_build >"$time_log" 2>&1 ) &
+pids="$pids $!"
+logs="$logs $time_log"
+
+shared_log="$WORK/logs/windows_shared.log"
+( run_windows_shared_build >"$shared_log" 2>&1 ) &
+pids="$pids $!"
+logs="$logs $shared_log"
 
 for p in $pids; do
     wait "$p"

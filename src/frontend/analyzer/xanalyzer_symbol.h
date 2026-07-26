@@ -284,6 +284,7 @@ struct XaSymbolLinks {
     const char *file_path;  // File where this symbol is defined
 
     int assign_count;                   // Number of assignments
+    bool value_mutated;                 // Binding value is modified in place (receiver/ref/field)
     bool is_const_foldable;             // const with literal init, can inline
     struct AstNode *const_initializer;  // const initializer expression for compile-time eval
     bool has_ct_value;                  // const initializer proved to a compile-time value

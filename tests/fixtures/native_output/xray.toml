@@ -14,8 +14,11 @@ vm = "unsupported"
 [[native.unit]]
 name = "native-output"
 kind = "c"
-sources = ["native_output.c"]
-source_hashes = ["09e4a85e190794da814fd550869df3543c40f6229efb63964dde90a1ef062a02"]
+sources = ["native_output.c", "native_output_value.c"]
+source_hashes = [
+  "cb2090856453f496bc93d84fbe8bbd5aafc6e2c82baab6f5b03c372c683f1db4",
+  "08a49bbf28f10c71c6927132ff1fbfbc12ed444654da34ffde2827c7c4cb2653",
+]
 include_dirs = []
 defines = []
 system_links = []

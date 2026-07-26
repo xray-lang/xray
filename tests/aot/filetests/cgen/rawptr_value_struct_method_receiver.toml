@@ -1,0 +1,13 @@
+[package]
+name = "filetest-rawptr-value-struct-method-receiver"
+version = "1.0.0"
+license = "MIT"
+main = "rawptr_value_struct_method_receiver.xr"
+
+[[export.c]]
+xray = "bridgeValueState"
+symbol = "xray_bridge_value_state"
+
+[[export.c]]
+xray = "readValueState"
+symbol = "xray_read_value_state"

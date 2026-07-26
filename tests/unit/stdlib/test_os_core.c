@@ -84,6 +84,10 @@ TEST(os_core_arch_matches_target) {
     ASSERT_STR_EQ(xr_os_core_arch(), "x86");
 #elif defined(XR_ARCH_ARM)
     ASSERT_STR_EQ(xr_os_core_arch(), "arm");
+#elif defined(XR_ARCH_POWERPC64)
+    ASSERT_STR_EQ(xr_os_core_arch(), "ppc64");
+#elif defined(XR_ARCH_RISCV64)
+    ASSERT_STR_EQ(xr_os_core_arch(), "riscv64");
 #else
     ASSERT_STR_EQ(xr_os_core_arch(), "unknown");
 #endif

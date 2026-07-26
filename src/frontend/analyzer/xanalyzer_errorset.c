@@ -28,6 +28,7 @@
 #include "../parser/xtype_ref.h"
 #include "xa_effect_db.h"
 #include "xa_selection.h"
+#include "xbuiltin_receiver_registry.h"
 #include "xtype_ref_resolve.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../runtime/value/xtype.h"
@@ -3432,6 +3433,27 @@ static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx
     return xa_builtin_get_handle_method_effect_contract(handle_name, ma->name);
 }
 
+static const XaEffectContract *es_exact_integer_intrinsic_effect_contract(XrType *receiver_type,
+                                                                          const char *name) {
+    if (!receiver_type || !name || receiver_type->kind != XR_KIND_INT || receiver_type->is_nullable)
+        return NULL;
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        bool receiver_matches = spec->receiver == XA_BUILTIN_RECEIVER_EXACT_INTEGER ||
+                                (spec->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER &&
+                                 xr_type_is_exact_unsigned_integer(receiver_type));
+        if (receiver_matches && strcmp(spec->source_name, name) == 0) {
+            static const XaEffectContract nothrow = {
+                .kind = XA_EFFECT_CONTRACT_NOTHROW,
+                .errors = NULL,
+                .error_count = 0,
+            };
+            return &nothrow;
+        }
+    }
+    return NULL;
+}
+
 static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCtx *ctx,
                                                                       AstNode *callee) {
     if (!ctx || !callee || callee->type != AST_MEMBER_ACCESS)
@@ -3452,6 +3474,9 @@ static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCt
     }
 
     XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+    contract = es_exact_integer_intrinsic_effect_contract(receiver_type, ma->name);
+    if (contract)
+        return contract;
     contract = xa_builtin_get_type_member_effect_contract(receiver_type, ma->name, false);
     return contract;
 }
@@ -4399,6 +4424,11 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
     if (node->type == AST_CLASS_DECL) {
         for (int i = 0; i < node->as.class_decl.method_count; i++)
             collect_functions(analyzer, node->as.class_decl.methods[i], out, count, cap);
+    }
+
+    if (node->type == AST_STRUCT_DECL) {
+        for (int i = 0; i < node->as.struct_decl.method_count; i++)
+            collect_functions(analyzer, node->as.struct_decl.methods[i], out, count, cap);
     }
 }
 

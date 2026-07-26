@@ -14,6 +14,8 @@
     X(TARGET_SIZEOF, "xi.target.sizeof", xicgen_target_sizeof) \
     X(TARGET_ALIGNOF, "xi.target.alignof", xicgen_target_alignof) \
     X(TARGET_SIMD_BYTES, "xi.target.simd.bytes", xicgen_target_simd_bytes) \
+    X(TARGET_SIMD_ACCELERATED, "xi.target.simd.accelerated", xicgen_target_simd_accelerated) \
+    X(TARGET_SIMD_RUNTIME_SELECTED, "xi.target.simd.runtime-selected", xicgen_target_simd_runtime_selected) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(SOURCE_MOVE, "xi.source.move", xicgen_move) \
     X(OWNER_FORWARD, "xi.owner.forward", xicgen_move) \

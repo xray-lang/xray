@@ -347,7 +347,16 @@ static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char
     bool arch_ok =
         (strstr(target, "aarch64") && (strstr(triple, "aarch64") || strstr(triple, "arm64"))) ||
         (strstr(target, "x86_64") && strstr(triple, "x86_64")) ||
+        (strstr(target, "i386") &&
+         (strstr(triple, "i386") || strstr(triple, "i686") || strstr(triple, "x86-"))) ||
+        (strncmp(target, "arm-", 4) == 0 &&
+         (strncmp(triple, "arm-", 4) == 0 || strncmp(triple, "armv", 4) == 0)) ||
+        (strstr(target, "powerpc64le") && strstr(triple, "powerpc64le")) ||
+        (strstr(target, "powerpc64") && strstr(triple, "powerpc64") &&
+         !strstr(target, "powerpc64le") && !strstr(triple, "powerpc64le")) ||
+        (strstr(target, "loongarch64") && strstr(triple, "loongarch64")) ||
         (strstr(target, "riscv32") && strstr(triple, "riscv32")) ||
+        (strstr(target, "riscv64") && strstr(triple, "riscv64")) ||
         (strstr(target, "thumb") && strstr(triple, "thumb"));
     bool os_ok =
         (strstr(target, "apple-darwin") && (strstr(triple, "apple") || strstr(triple, "darwin"))) ||

@@ -769,6 +769,47 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     xi_func_free(f);
 }
 
+TEST(unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access) {
+    XiFunc *f = lower_source("fn copyNative(source: Slice<byte>, destination: ref Slice<byte>) {\n"
+                             "  unsafe {\n"
+                             "    var value = source.load<u64>(0, Endian.Native)\n"
+                             "    destination.store<u64>(0, value, Endian.Native)\n"
+                             "  }\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *load = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
+    XiValue *store = func_tree_find_op(f, XI_BYTE_SLICE_STORE_U64);
+    assert(load && (load->aux_int & XI_ACCESS_UNCHECKED) != 0 &&
+           "unsafe integer byte-slice load must keep its unchecked marker");
+    assert(store && (store->aux_int & XI_ACCESS_UNCHECKED) != 0 &&
+           "unsafe integer byte-slice store must keep its unchecked marker");
+    xi_func_free(f);
+}
+
+TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
+    XiFunc *f = lower_source("import mem\n"
+                             "fn rawLength(source: Slice<byte>) -> int {\n"
+                             "  var view = unsafe {\n"
+                             "    mem.slice<byte>(source.ptr(), len(source), source)\n"
+                             "  }\n"
+                             "  return len(view)\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *slice = func_tree_find_op(f, XI_SLICE_FROM_PTR);
+    assert(slice && "mem.slice must lower to the canonical raw-view op");
+    assert((slice->flags & XI_FLAG_MAY_THROW) == 0 &&
+           "unsafe mem.slice is caller-proven and must not contaminate error effects");
+    assert((slice->flags & XI_FLAG_READS_MEM) != 0 &&
+           "mem.slice must retain its raw-memory aliasing effect");
+    assert(slice->view_evidence.complete && slice->view_evidence.source_operand == 2 &&
+           "mem.slice must retain owner-rooted borrow evidence");
+    assert(!func_tree_find_op(f, XI_ERR_CHECK) &&
+           "caller-proven mem.slice must not generate a pending-error poll");
+    xi_func_free(f);
+}
+
 TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
     XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
                              "  var before = counter.load(Ordering.Relaxed)\n"
@@ -2635,6 +2676,141 @@ TEST(struct_method_receivers_use_call_bound_places) {
     xi_func_free(f);
 }
 
+TEST(large_mutable_struct_local_reuses_stable_place) {
+    XiFunc *f = lower_source("struct State {\n"
+                             "    lanes: [u64; 8]\n"
+                             "    bump(index: int, delta: u64) {\n"
+                             "        this.lanes[index] = this.lanes[index] + delta\n"
+                             "    }\n"
+                             "    read(index: int) -> u64 {\n"
+                             "        return this.lanes[index]\n"
+                             "    }\n"
+                             "}\n"
+                             "fn exercise() -> u64 {\n"
+                             "    var state = State{lanes: [1, 2, 3, 4, 5, 6, 7, 8]}\n"
+                             "    state.bump(0, 10)\n"
+                             "    state.bump(1, 20)\n"
+                             "    return state.read(0) + state.read(1)\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *calls[8] = {0};
+    int call_count = func_collect_method_calls(exercise, calls, 8);
+    assert(call_count == 4 && "exercise should retain all four struct method calls");
+    XiValue *stable_place = calls[0]->args[0];
+    assert(stable_place && stable_place->op == XI_LOCAL_ADDR && stable_place->args[0] &&
+           stable_place->block == exercise->entry &&
+           "large mutable struct should allocate one stable place at declaration");
+    for (int i = 0; i < call_count; i++) {
+        assert(calls[i]->call_plan && calls[i]->call_plan->has_receiver &&
+               calls[i]->call_plan->receiver.origin == XI_PLACE_ORIGIN_STACK_LOCAL &&
+               calls[i]->args[0] == stable_place &&
+               "every method call should reuse the declaration's stable local place");
+    }
+
+    xi_func_free(f);
+}
+
+TEST(large_readonly_struct_local_stays_in_ssa) {
+    XiFunc *f = lower_source("struct State {\n"
+                             "    lanes: [u64; 8]\n"
+                             "    read(index: int) -> u64 { return this.lanes[index] }\n"
+                             "}\n"
+                             "fn exercise() -> u64 {\n"
+                             "    var state = State{lanes: [1, 2, 3, 4, 5, 6, 7, 8]}\n"
+                             "    return state.read(0) + state.read(1)\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *calls[4] = {0};
+    int call_count = func_collect_method_calls(exercise, calls, 4);
+    assert(call_count == 2 && calls[0]->args[0] && calls[1]->args[0] &&
+           calls[0]->args[0]->op == XI_LOCAL_ADDR && calls[1]->args[0]->op == XI_LOCAL_ADDR &&
+           calls[0]->args[0] != calls[1]->args[0] &&
+           "large read-only locals should retain per-use SSA borrow places");
+
+    xi_func_free(f);
+}
+
+TEST(rawptr_struct_method_receivers_mark_native_borrow_shape) {
+    XiFunc *f = lower_source("struct State {\n"
+                             "    value: u64\n"
+                             "    reset(value: u64) { this.value = value }\n"
+                             "    digest() -> u64 { return this.value }\n"
+                             "}\n"
+                             "fn mutate(state: MutPtr<State>, value: u64) {\n"
+                             "    unsafe { state.deref().reset(value) }\n"
+                             "}\n"
+                             "fn read(state: Ptr<State>) -> u64 {\n"
+                             "    unsafe { return state.deref().digest() }\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiFunc *mutate = func_tree_find_func_name(f, "mutate");
+    XiFunc *read = func_tree_find_func_name(f, "read");
+    XiValue *reset = func_tree_find_method(mutate, "reset");
+    XiValue *digest = func_tree_find_method(read, "digest");
+    assert(reset && reset->call_plan && reset->call_plan->receiver.param_mode == XR_PARAM_REF);
+    assert(reset->args[0] && reset->args[0]->op == XI_LOCAL_ADDR &&
+           reset->args[0]->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF && reset->args[0]->args[0] &&
+           reset->args[0]->args[0]->op == XI_PTR_LOAD &&
+           "mutable raw dereference receiver should retain PTR_LOAD and mark native borrowing");
+    assert(func_tree_has_op(mutate, XI_PTR_STORE) &&
+           "shared Xi must retain mutable raw dereference writeback for VM semantics");
+    assert(digest && digest->call_plan && digest->call_plan->receiver.param_mode == XR_PARAM_READ);
+    assert(digest->args[0] && digest->args[0]->op == XI_LOCAL_ADDR &&
+           digest->args[0]->aux_int == XI_LOCAL_ADDR_AUX_RAW_DEREF && digest->args[0]->args[0] &&
+           digest->args[0]->args[0]->op == XI_PTR_LOAD &&
+           "readonly raw dereference receiver should expose the same native borrow shape");
+    assert(!func_tree_has_op(read, XI_PTR_STORE) &&
+           "readonly raw dereference receiver must not synthesize a writeback");
+
+    xi_func_free(f);
+}
+
+TEST(struct_method_fixed_array_args_preserve_caller_places) {
+    XiFunc *f = lower_source("struct Worker {\n"
+                             "    tag: u32\n"
+                             "    bump(acc: ref [u32; 4], x: u32) {\n"
+                             "        acc[0] = acc[0] + x\n"
+                             "    }\n"
+                             "    readPair(acc: [u32; 4]) -> u32 {\n"
+                             "        return acc[0] + acc[1]\n"
+                             "    }\n"
+                             "}\n"
+                             "fn exercise() -> u32 {\n"
+                             "    var worker = Worker{tag: 0}\n"
+                             "    var acc: [u32; 4] = [1, 2, 3, 4]\n"
+                             "    worker.bump(ref acc, 7)\n"
+                             "    return worker.readPair(acc)\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *bump = func_tree_find_method(exercise, "bump");
+    XiValue *read_pair = func_tree_find_method(exercise, "readPair");
+    assert(bump && bump->nargs == 3 && bump->call_plan && bump->call_plan->verified &&
+           bump->call_plan->nargs == 2 && bump->call_plan->args[0].param_mode == XR_PARAM_REF &&
+           bump->args[1] && bump->args[1]->op == XI_LOCAL_ADDR && bump->args[1]->args[0] &&
+           bump->args[1]->args[0]->op != XI_COPY &&
+           "method ref fixed-array arguments must borrow the caller place without cloning");
+    assert(read_pair && read_pair->nargs == 2 && read_pair->call_plan &&
+           read_pair->call_plan->verified && read_pair->call_plan->nargs == 1 &&
+           read_pair->call_plan->args[0].param_mode == XR_PARAM_READ && read_pair->args[1] &&
+           read_pair->args[1]->op == XI_LOCAL_ADDR && read_pair->args[1]->args[0] &&
+           read_pair->args[1]->args[0]->op != XI_COPY &&
+           "method read fixed-array arguments must use the internal read-place ABI directly");
+    assert(!func_tree_has_op(exercise, XI_COPY) &&
+           "method fixed-array call setup must not introduce deep value clones");
+
+    xi_func_free(f);
+}
+
 TEST(read_value_struct_param_uses_internal_call_place) {
     XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
                              "fn sum(p: Pair) -> int {\n"
@@ -2822,6 +2998,8 @@ int main(void) {
     run_member_access();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
+    run_unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access();
+    run_mem_slice_is_caller_proven_nothrow_raw_view();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
@@ -2874,6 +3052,10 @@ int main(void) {
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
+    run_large_mutable_struct_local_reuses_stable_place();
+    run_large_readonly_struct_local_stays_in_ssa();
+    run_rawptr_struct_method_receivers_mark_native_borrow_shape();
+    run_struct_method_fixed_array_args_preserve_caller_places();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_force_unwrap();

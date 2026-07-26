@@ -1931,6 +1931,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
+        .name = "File",
+        .signature = "File",
+        .summary = "",
+    },
+    {
+        .name = "File.close",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "File.open",
+        .signature = "(path: Path): File?",
+        .summary = "",
+    },
+    {
+        .name = "File.read",
+        .signature = "(maxBytes: int = 131072): Array<byte>?",
+        .summary = "",
+    },
+    {
+        .name = "File.stdin",
+        .signature = "(): File",
+        .summary = "",
+    },
+    {
         .name = "FileStat",
         .signature = "FileStat",
         .summary = "Native handle type",
@@ -2076,6 +2101,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "Read all data from standard input",
     },
     {
+        .name = "readStdinBytes",
+        .signature = "(): Array<byte>?",
+        .summary = "Read all standard input as binary bytes",
+    },
+    {
         .name = "readlink",
         .signature = "(p: Path): Path?",
         .summary = "",
@@ -2134,6 +2164,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .name = "writeFileBytes",
         .signature = "(path: Path, data: Array<byte>): bool",
         .summary = "Write byte array to file",
+    },
+    {
+        .name = "writeStderr",
+        .signature = "(data: string): bool",
+        .summary = "Write text to standard error without adding a newline",
+    },
+    {
+        .name = "writeStdout",
+        .signature = "(data: string): bool",
+        .summary = "Write text to standard output without adding a newline",
     },
 };
 
@@ -2693,6 +2733,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
     },
     {
+        .name = "compilerGuard",
+        .signature = "(value: u64): u64",
+        .summary = "Return value unchanged while creating a best-effort native compiler scheduling barrier",
+    },
+    {
+        .name = "compilerOpaque",
+        .signature = "(value: u64): u64",
+        .summary = "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier",
+    },
+    {
         .name = "copy",
         .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
@@ -2765,7 +2815,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "slice",
         .signature = "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>",
-        .summary = "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner",
+        .summary = "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked",
     },
     {
         .name = "store",
@@ -2785,7 +2835,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "withSliceMut",
         .signature = "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any",
-        .summary = "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback",
+        .summary = "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked",
     },
 };
 
@@ -3594,8 +3644,53 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "Capabilities.isAccelerated",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Capabilities.isRuntimeSelected",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "Capabilities.isScalable",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
         .name = "Capabilities.nativeBytes",
         .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "U32x16",
+        .signature = "U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U32x16.fromLanes",
+        .signature = "(lanes: [u32; 16]): U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U32x16.splat",
+        .signature = "(value: u32): U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U32x16.swapAdjacent",
+        .signature = "(): U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U32x16.widenMulEven",
+        .signature = "(other: U32x16): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U32x16.widenMulOdd",
+        .signature = "(other: U32x16): U64x8",
         .summary = "",
     },
     {
@@ -3749,6 +3844,21 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U32xNative",
+        .signature = "U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U32xNative.swapAdjacent",
+        .signature = "(): U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U32xNative.widenMulEven",
+        .signature = "(other: U32xNative): U64xNative",
+        .summary = "",
+    },
+    {
         .name = "U64x2",
         .signature = "U64x2",
         .summary = "",
@@ -3889,6 +3999,101 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U64x8",
+        .signature = "U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.add",
+        .signature = "(other: U64x8): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.bitXor",
+        .signature = "(other: U64x8): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.fromLanes",
+        .signature = "(lanes: [u64; 8]): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.load",
+        .signature = "(data: Slice<u64>, offset: int = 0): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.reinterpretU32",
+        .signature = "(): U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.shiftLeft",
+        .signature = "(bits: int): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.shiftRight",
+        .signature = "(bits: int): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.store",
+        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U64x8.swapAdjacent",
+        .signature = "(): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative",
+        .signature = "U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.add",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.bitXor",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.load",
+        .signature = "(data: Slice<u64>, offset: int = 0): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.mul",
+        .signature = "(other: U64xNative): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.shiftRight",
+        .signature = "(bits: int): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.splat",
+        .signature = "(value: u64): U64xNative",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.store",
+        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U64xNative.swapAdjacent",
+        .signature = "(): U64xNative",
+        .summary = "",
+    },
+    {
         .name = "U8x16",
         .signature = "U8x16",
         .summary = "",
@@ -3986,6 +4191,66 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     {
         .name = "U8x32.store",
         .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U8x64",
+        .signature = "U8x64",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.bitXor",
+        .signature = "(other: U8x64): U8x64",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.fromLanes",
+        .signature = "(lanes: [byte; 64]): U8x64",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.load",
+        .signature = "(data: Slice<byte>, offset: int = 0): U8x64",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.reinterpretU32",
+        .signature = "(): U32x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.reinterpretU64",
+        .signature = "(): U64x8",
+        .summary = "",
+    },
+    {
+        .name = "U8x64.store",
+        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative",
+        .signature = "U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.bitXor",
+        .signature = "(other: U8xNative): U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.load",
+        .signature = "(data: Slice<byte>, offset: int = 0): U8xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.reinterpretU32",
+        .signature = "(): U32xNative",
+        .summary = "",
+    },
+    {
+        .name = "U8xNative.reinterpretU64",
+        .signature = "(): U64xNative",
         .summary = "",
     },
 };
@@ -7101,6 +7366,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "@deprecated(\"use newAPI() instead\")\n"
             "fn oldAPI() { return }\n"
+            "\n"
+            "@inline\n"
+            "fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }\n"
+            "\n"
+            "@noinline\n"
+            "fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n"
             "```\n"
             "\n"
             "### Run tests\n"
@@ -7871,6 +8142,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `File` | `File` |  |\n"
+            "| `File.close` | `(): bool` |  |\n"
+            "| `File.open` | `(path: Path): File?` |  |\n"
+            "| `File.read` | `(maxBytes: int = 131072): Array<byte>?` |  |\n"
+            "| `File.stdin` | `(): File` |  |\n"
             "| `io.FileStat` | `FileStat` | Native handle type |\n"
             "| `io.FileStat.atime` | `const int` | Handle field |\n"
             "| `io.FileStat.ctime` | `const int` | Handle field |\n"
@@ -7900,6 +8176,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.readFileBytes` | `(path: Path): Array<byte>?` | Read entire file as byte array |\n"
             "| `io.readLines` | `(path: Path): Array<string>` | Read file as lines |\n"
             "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
+            "| `io.readStdinBytes` | `(): Array<byte>?` | Read all standard input as binary bytes |\n"
             "| `io.readlink` | `(p: Path): Path?` |  |\n"
             "| `io.realpath` | `(p: Path): Path?` |  |\n"
             "| `io.remove` | `(path: Path): bool` | Remove a file |\n"
@@ -7912,6 +8189,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.touch` | `(path: Path): bool` | Create or update file timestamp |\n"
             "| `io.writeFile` | `(path: Path, data: string): bool` | Write string to file |\n"
             "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` | Write byte array to file |\n"
+            "| `io.writeStderr` | `(data: string): bool` | Write text to standard error without adding a newline |\n"
+            "| `io.writeStdout` | `(data: string): bool` | Write text to standard output without adding a newline |\n"
             "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
@@ -8102,6 +8381,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.compilerGuard` | `(value: u64): u64` | Return value unchanged while creating a best-effort native compiler scheduling barrier |\n"
+            "| `mem.compilerOpaque` | `(value: u64): u64` | Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
@@ -8116,11 +8397,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner |\n"
+            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
             "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback |\n"
+            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -8446,24 +8727,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "simd",
-        .summary = "Portable fixed-width integer vectors",
+        .summary = "Portable fixed-width and runtime-native integer vectors",
         .body =
             "# simd module\n"
             "\n"
-            "Portable 128-bit and 256-bit integer-vector operations. The same API has scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
+            "Portable 128-bit, 256-bit, and 512-bit integer-vector operations plus a bounded runtime-native family for scalable targets. The APIs have matching scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
             "\n"
             "Usage: `import simd` then call `simd.function()`.\n"
             "\n"
             "### Vector types\n"
             "- `U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.\n"
             "- `U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.\n"
-            "- `Capabilities.nativeBytes()` returns the native vector width chosen for the compile target; it is at least 16 bytes.\n"
+            "- `U8x64`, `U32x16`, and `U64x8` provide the AVX-512F-width operations used by 64-byte stripe algorithms.\n"
+            "- `U8xNative`, `U32xNative`, and `U64xNative` carry only the active runtime-selected prefix, with a 64-byte storage ceiling and a portable 16-byte fallback.\n"
+            "- `Capabilities.nativeBytes()` returns the selected active width; it is at least 16 bytes. `Capabilities.isScalable()` distinguishes a runtime-scalable plan from a fixed-width or x86-dispatch plan.\n"
             "\n"
             "### Loading and storing\n"
             "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n"
             "\n"
+            "### Target lowering\n"
+            "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n"
+            "\n"
             "### Operations\n"
-            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range.\n"
+            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: byte zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
             "\n"
             "### Example\n"
             "```xray\n"
@@ -8486,7 +8772,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Capabilities` | `Capabilities` |  |\n"
+            "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
+            "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n"
+            "| `Capabilities.isScalable` | `(): bool` |  |\n"
             "| `Capabilities.nativeBytes` | `(): int` |  |\n"
+            "| `U32x16` | `U32x16` |  |\n"
+            "| `U32x16.fromLanes` | `(lanes: [u32; 16]): U32x16` |  |\n"
+            "| `U32x16.splat` | `(value: u32): U32x16` |  |\n"
+            "| `U32x16.swapAdjacent` | `(): U32x16` |  |\n"
+            "| `U32x16.widenMulEven` | `(other: U32x16): U64x8` |  |\n"
+            "| `U32x16.widenMulOdd` | `(other: U32x16): U64x8` |  |\n"
             "| `U32x4` | `U32x4` |  |\n"
             "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.bitAnd` | `(other: U32x4): U32x4` |  |\n"
@@ -8517,6 +8812,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n"
             "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
             "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
+            "| `U32xNative` | `U32xNative` |  |\n"
+            "| `U32xNative.swapAdjacent` | `(): U32xNative` |  |\n"
+            "| `U32xNative.widenMulEven` | `(other: U32xNative): U64xNative` |  |\n"
             "| `U64x2` | `U64x2` |  |\n"
             "| `U64x2.add` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.bitAnd` | `(other: U64x2): U64x2` |  |\n"
@@ -8545,6 +8843,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x4.reduceAdd` | `(): u64` |  |\n"
             "| `U64x4.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
             "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
+            "| `U64x8` | `U64x8` |  |\n"
+            "| `U64x8.add` | `(other: U64x8): U64x8` |  |\n"
+            "| `U64x8.bitXor` | `(other: U64x8): U64x8` |  |\n"
+            "| `U64x8.fromLanes` | `(lanes: [u64; 8]): U64x8` |  |\n"
+            "| `U64x8.load` | `(data: Slice<u64>, offset: int = 0): U64x8` |  |\n"
+            "| `U64x8.reinterpretU32` | `(): U32x16` |  |\n"
+            "| `U64x8.shiftLeft` | `(bits: int): U64x8` |  |\n"
+            "| `U64x8.shiftRight` | `(bits: int): U64x8` |  |\n"
+            "| `U64x8.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64x8.swapAdjacent` | `(): U64x8` |  |\n"
+            "| `U64xNative` | `U64xNative` |  |\n"
+            "| `U64xNative.add` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.bitXor` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.load` | `(data: Slice<u64>, offset: int = 0): U64xNative` |  |\n"
+            "| `U64xNative.mul` | `(other: U64xNative): U64xNative` |  |\n"
+            "| `U64xNative.shiftRight` | `(bits: int): U64xNative` |  |\n"
+            "| `U64xNative.splat` | `(value: u64): U64xNative` |  |\n"
+            "| `U64xNative.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64xNative.swapAdjacent` | `(): U64xNative` |  |\n"
             "| `U8x16` | `U8x16` |  |\n"
             "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.bitNot` | `(): U8x16` |  |\n"
@@ -8565,6 +8882,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n"
             "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n"
             "| `U8x32.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x64` | `U8x64` |  |\n"
+            "| `U8x64.bitXor` | `(other: U8x64): U8x64` |  |\n"
+            "| `U8x64.fromLanes` | `(lanes: [byte; 64]): U8x64` |  |\n"
+            "| `U8x64.load` | `(data: Slice<byte>, offset: int = 0): U8x64` |  |\n"
+            "| `U8x64.reinterpretU32` | `(): U32x16` |  |\n"
+            "| `U8x64.reinterpretU64` | `(): U64x8` |  |\n"
+            "| `U8x64.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8xNative` | `U8xNative` |  |\n"
+            "| `U8xNative.bitXor` | `(other: U8xNative): U8xNative` |  |\n"
+            "| `U8xNative.load` | `(data: Slice<byte>, offset: int = 0): U8xNative` |  |\n"
+            "| `U8xNative.reinterpretU32` | `(): U32xNative` |  |\n"
+            "| `U8xNative.reinterpretU64` | `(): U64xNative` |  |\n"
             "",
         .symbols = _symbols_simd,
         .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),

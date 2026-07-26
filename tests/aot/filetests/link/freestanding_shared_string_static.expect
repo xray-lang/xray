@@ -5,9 +5,9 @@ contains="stdlib_objects": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
-c_regex=static const xrt_str_t _xstr_[0-9]+ = \{INT64_C\(4\)
+c_regex=static const xrt_str_t _xstr_m[0-9]+_[0-9]+ = \{INT64_C\(4\)
 c_contains=xray_shared_label
-c_regex=xr_str_lit\(&_xstr_[0-9]+\)
+c_regex=xr_str_lit\(&_xstr_m[0-9]+_[0-9]+\)
 c_not_contains=xrt_shared[
 not_contains=xray_rt_coro
 not_contains=xray_core

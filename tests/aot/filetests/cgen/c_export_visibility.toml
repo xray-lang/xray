@@ -1,0 +1,15 @@
+[package]
+name = "test/c-export-visibility"
+version = "0.1.0"
+
+[[export.c]]
+xray = "publicValue"
+symbol = "xr_public_value"
+visibility = "default"
+header = true
+
+[[export.c]]
+xray = "hiddenValue"
+symbol = "xr_hidden_value"
+visibility = "hidden"
+header = false

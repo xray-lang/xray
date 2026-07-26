@@ -1,0 +1,11 @@
+import mem
+
+fn rawLength(source: Slice<byte>) -> int {
+    var view = unsafe {
+        mem.slice<byte>(source.ptr(), len(source), source)
+    }
+    return len(view)
+}
+
+var source: [byte; 4] = [1, 2, 3, 4]
+print(rawLength(source[:]))

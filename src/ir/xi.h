@@ -139,6 +139,14 @@ typedef enum XiPlaceOrigin {
     XI_PLACE_ORIGIN_PROJECTION_TEMP = 3,
 } XiPlaceOrigin;
 
+/* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
+ * These flags permit native backends to borrow an underlying place only when
+ * lowering retained explicit source-place provenance.  In particular, a local
+ * initialized from a field is still a value copy even when its SSA value is a
+ * LOAD_FIELD; it must not be mistaken for `ref receiver.field`. */
+#define XI_LOCAL_ADDR_AUX_RAW_DEREF 1
+#define XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION 2
+
 typedef enum XiPlaceLifetime {
     XI_PLACE_LIFETIME_NONE = 0,
     XI_PLACE_LIFETIME_CALL_BOUND = 1,
@@ -217,6 +225,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
  *  XI_TARGET_SIMD_BYTES —                canonical target SIMD width query
+ *  XI_TARGET_SIMD_ACCELERATED —          canonical hardware-SIMD availability query
+ *  XI_TARGET_SIMD_RUNTIME_SELECTED —     runtime-vs-static SIMD selection query
  *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
@@ -264,6 +274,8 @@ typedef enum {
     XI_TARGET_SIZEOF,
     XI_TARGET_ALIGNOF,
     XI_TARGET_SIMD_BYTES,
+    XI_TARGET_SIMD_ACCELERATED,
+    XI_TARGET_SIMD_RUNTIME_SELECTED,
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,
@@ -364,8 +376,8 @@ typedef enum {
     XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
     XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
     XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
-    XI_SLICE_REINTERPRET,  /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
-    XI_SLICE_FROM_PTR,     /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; unsafe boundary */
+    XI_SLICE_REINTERPRET, /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_FROM_PTR, /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; caller-proven unsafe view */
     XI_BUFFER_MATERIALIZE, /* args[0]=moved Buffer; exact native-output proof is analyzer-owned */
     XI_BYTE_ARRAY_COPY_WITHIN,
     XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
@@ -425,11 +437,11 @@ typedef enum {
                      * aux_int bits 8-15: nresults (0 means 1) */
     XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_METHOD_DIRECT,
-    XI_TAIL_CALL,        /* general tail call: args[0]=callee, args[1..n]=params
+    XI_TAIL_CALL,        /* general function tail call: args[0]=callee, args[1..n]=params
                           * Terminates the function — semantically a call + return.
                           * The current frame is cleaned up (ARC release) before
                           * transferring control.  aux_int mirrors XI_CALL encoding.
-                          * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
+                          * Methods retain XI_CALL_METHOD[_DIRECT] + XI_FLAG_TAIL. */
     XI_CALL_BUILTIN,     /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_ATOMIC_LOAD,      /* canonical Atomic<T>.load; identity is xa_intrinsic_id */
     XI_ATOMIC_STORE,     /* canonical Atomic<T>.store */
@@ -580,7 +592,7 @@ typedef enum {
     XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
     XI_RELEASE,       /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
     XI_SOURCE_MOVE,   /* explicit source consume; requires sealed FinalMoveProof evidence */
-    XI_OWNER_FORWARD, /* ARC ownership-edge forwarding; does not invalidate a source binding */
+    XI_OWNER_FORWARD, /* ARC owner transfer to a new SSA value; no source-binding invalidation */
 
     /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
      * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
@@ -650,10 +662,21 @@ static inline bool xi_op_is_identity_forward(uint16_t op) {
 #define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
 #define XI_VEC_SHAPE_UNZIP (INT64_C(1) << 18)
 #define XI_VEC_SHAPE_CONTIGUOUS_HALF (INT64_C(1) << 19)
+/* The source explicitly placed this memory access in `unsafe {}` and
+ * therefore promises that the complete access window is valid.  This bit is
+ * legal only on explicitly supported memory intrinsics. */
+#define XI_ACCESS_UNCHECKED (INT64_C(1) << 20)
+/* Semantic shuffle shapes must not depend on packing every lane into aux_int:
+ * 16-lane and wider vectors do not fit above XI_VEC_SHAPE_SHUFFLE_SHIFT. */
+#define XI_VEC_SHAPE_SWAP_ADJACENT (INT64_C(1) << 21)
+/* The vector's active prefix is selected from the target at runtime. The
+ * encoded lane count is its frozen storage maximum, not a fixed active VL. */
+#define XI_VEC_SHAPE_SCALABLE (INT64_C(1) << 22)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
 #define XI_VEC_SHAPE_SHUFFLE_SHIFT 24
+#define XI_VEC_SHAPE_PACKED_SHUFFLE_LANES 8
 
 static inline int64_t xi_vec_shape_encode(uint8_t native_type, uint8_t lanes) {
     return XI_VEC_SHAPE_EXPLICIT | (int64_t) lanes |
@@ -670,6 +693,10 @@ static inline uint8_t xi_vec_shape_lanes(int64_t shape) {
 
 static inline uint8_t xi_vec_shape_native_type(int64_t shape) {
     return (uint8_t) ((shape & XI_VEC_SHAPE_NATIVE_MASK) >> XI_VEC_SHAPE_NATIVE_SHIFT);
+}
+
+static inline bool xi_vec_shape_is_scalable(int64_t shape) {
+    return (shape & XI_VEC_SHAPE_SCALABLE) != 0;
 }
 
 /* Import reference metadata for XI_IMPORT_REF.
@@ -1451,6 +1478,11 @@ typedef struct XiFunc {
     /* IR stage, monotonically non-decreasing across pipeline passes. */
     XiStage stage;
 
+    /* Target-feature dispatch builds preserve source function boundaries that
+     * own wide vector intrinsics.  The inline pass consumes this policy before
+     * target preparation so an AVX2 body cannot leak into its SSE2 caller. */
+    bool preserve_wide_vector_boundaries;
+
     /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;
 
@@ -1492,6 +1524,8 @@ typedef struct XiFunc {
      * not executable.  Function-level generics instead keep a canonical
      * erased ABI and do not set this bit. */
     bool is_generic_template;
+    bool inline_hint;   /* source @inline; optimization-only, semantics-neutral */
+    bool noinline_hint; /* source @noinline; optimization-only, semantics-neutral */
 
     /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend
@@ -1563,11 +1597,13 @@ typedef struct XiFunc {
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id; /* unique name suffix for generated C functions */
 
-    /* Active phi coalescing map for this function during AOT emission: a
-     * value-id-indexed array mapping a phi's SSA id to the SSA id of the C
-     * variable it shares (identity = its own). Non-owning view into the
-     * XiCgenCtx scratch buffer, published by cg_build_phi_coalesce so the
-     * ctx-less emit_vref can resolve coalesced phi operands. NULL = identity. */
+    /* Active C-value coalescing map for this function during AOT emission: a
+     * value-id-indexed array mapping a phi or representation-identical SSA
+     * forwarding/conversion boundary, or a trivial native value clone, to the
+     * SSA id of the C variable it shares (identity = its own).
+     * Non-owning view into the XiCgenCtx scratch buffer, published by
+     * cg_build_phi_coalesce so the ctx-less emit_vref can resolve operands.
+     * NULL = identity. */
     const uint32_t *phi_coalesce;
     uint32_t phi_coalesce_count;
 

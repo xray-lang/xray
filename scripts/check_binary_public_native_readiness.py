@@ -69,6 +69,7 @@ PRE_SWITCH_NATIVE_PUBLIC_SURFACE = {
         "readFileBytes",
         "readLines",
         "readStdin",
+        "readStdinBytes",
         "remove",
         "removeAll",
         "rename",
@@ -77,6 +78,8 @@ PRE_SWITCH_NATIVE_PUBLIC_SURFACE = {
         "touch",
         "writeFile",
         "writeFileBytes",
+        "writeStderr",
+        "writeStdout",
     ),
     "net": (
         "CopyBidirectionalResult",

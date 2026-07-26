@@ -338,27 +338,37 @@ static bool add_addresses_recursive(XaotBundle *bundle, const XiModule *module,
                                     const XiFunc *func) {
     if (!func)
         return true;
-    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
-        const XiBlock *block = func->blocks[bi];
-        if (!block)
-            continue;
-        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
-            XaotAddressPlan plan;
-            const XiValue *value = block->values[vi];
-            if (!address_plan_for_value(bundle, module, func, value, &plan))
+    /* Identity forwards can appear before their provenance source in the
+     * physical block array (especially under XRAY_XI_SHUFFLE). Seal the
+     * dependency graph to a fixed point instead of treating container order as
+     * dataflow order. */
+    bool changed;
+    do {
+        changed = false;
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            const XiBlock *block = func->blocks[bi];
+            if (!block)
                 continue;
-            if (address_has_forbidden_escape(func, &plan)) {
-                bundle->error_msg = "address borrow escapes its verified lifetime";
-                return false;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                XaotAddressPlan plan;
+                const XiValue *value = block->values[vi];
+                if (xaot_address_plan_find(bundle, value) ||
+                    !address_plan_for_value(bundle, module, func, value, &plan))
+                    continue;
+                if (address_has_forbidden_escape(func, &plan)) {
+                    bundle->error_msg = "address borrow escapes its verified lifetime";
+                    return false;
+                }
+                if (!reserve_rows((void **) &bundle->address_plans, &bundle->address_plan_cap,
+                                  bundle->naddress_plans + 1, sizeof(XaotAddressPlan))) {
+                    bundle->error_msg = "address plan allocation failed";
+                    return false;
+                }
+                bundle->address_plans[bundle->naddress_plans++] = plan;
+                changed = true;
             }
-            if (!reserve_rows((void **) &bundle->address_plans, &bundle->address_plan_cap,
-                              bundle->naddress_plans + 1, sizeof(XaotAddressPlan))) {
-                bundle->error_msg = "address plan allocation failed";
-                return false;
-            }
-            bundle->address_plans[bundle->naddress_plans++] = plan;
         }
-    }
+    } while (changed);
     for (uint16_t i = 0; i < func->nchildren; i++) {
         if (!add_addresses_recursive(bundle, module, func->children[i])) {
             return false;
@@ -412,7 +422,7 @@ bool xaot_storage_capture_plans_build(XaotBundle *bundle) {
 bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     uint32_t storage_index = 0;
     uint32_t capture_index = 0;
-    uint32_t address_index = 0;
+    uint32_t address_count = 0;
     if (!bundle)
         return false;
     if (bundle->nmodule_init_plans == 0 && bundle->entry_plan.entry_func_id == XG_NO_ID)
@@ -486,6 +496,7 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
                     continue;
                 for (uint32_t vi = 0; vi < block->nvalues; vi++) {
                     XaotAddressPlan expected;
+                    const XaotAddressPlan *actual;
                     const XiValue *value = block->values[vi];
                     if (!address_plan_for_value(bundle, module, func, value, &expected))
                         continue;
@@ -495,14 +506,24 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
                                      "AOT address provenance permits a lifetime escape");
                         return false;
                     }
-                    if (address_index >= bundle->naddress_plans ||
-                        memcmp(&expected, &bundle->address_plans[address_index],
-                               sizeof(expected)) != 0) {
+                    /* Plans are keyed by SSA identity. Optimizer debug mode may
+                     * legally reorder blocks and topologically independent
+                     * values after the plan was sealed; array position is not
+                     * provenance. */
+                    actual = xaot_address_plan_find(bundle, value);
+                    if (!actual || memcmp(&expected, actual, sizeof(expected)) != 0) {
                         if (errbuf && errbuf_len)
-                            snprintf(errbuf, errbuf_len, "AOT address provenance plan is stale");
+                            snprintf(errbuf, errbuf_len,
+                                     "AOT address provenance plan is stale at %s v%u "
+                                     "(actual=%s, origin=%u/%u, escape=%u/%u)",
+                                     func->name ? func->name : "<anonymous>", value->id,
+                                     actual ? "present" : "missing", expected.provenance.origin,
+                                     actual ? actual->provenance.origin : 0,
+                                     expected.provenance.escape,
+                                     actual ? actual->provenance.escape : 0);
                         return false;
                     }
-                    address_index++;
+                    address_count++;
                 }
             }
             for (uint16_t ci = func->nchildren; ci > 0; ci--) {
@@ -515,7 +536,7 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
             }
         }
     }
-    if (address_index != bundle->naddress_plans) {
+    if (address_count != bundle->naddress_plans) {
         if (errbuf && errbuf_len)
             snprintf(errbuf, errbuf_len, "AOT address provenance plan count is stale");
         return false;

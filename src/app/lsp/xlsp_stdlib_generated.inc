@@ -206,6 +206,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"readFileBytes", XLSP_SYM_FUNCTION, "fn(path: Path): Array<byte>?", "Read entire file as byte array", NULL, 0},
     {"readLines", XLSP_SYM_FUNCTION, "fn(path: Path): Array<string>", "Read file as lines", NULL, 0},
     {"readStdin", XLSP_SYM_FUNCTION, "fn(): string?", "Read all data from standard input", NULL, 0},
+    {"readStdinBytes", XLSP_SYM_FUNCTION, "fn(): Array<byte>?", "Read all standard input as binary bytes", NULL, 0},
     {"remove", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Remove a file", NULL, 0},
     {"removeAll", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Remove directory recursively", NULL, 0},
     {"rename", XLSP_SYM_FUNCTION, "fn(old: Path, new: Path): bool", "Rename a file", NULL, 0},
@@ -214,6 +215,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"touch", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "Create or update file timestamp", NULL, 0},
     {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, data: string): bool", "Write string to file", NULL, 0},
     {"writeFileBytes", XLSP_SYM_FUNCTION, "fn(path: Path, data: Array<byte>): bool", "Write byte array to file", NULL, 0},
+    {"writeStderr", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Write text to standard error without adding a newline", NULL, 0},
+    {"writeStdout", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Write text to standard output without adding a newline", NULL, 0},
     {"cwd", XLSP_SYM_FUNCTION, "fn(): Path", "the current working directory.", NULL, 0},
     {"tempDir", XLSP_SYM_FUNCTION, "fn(): Path?", "create a temporary directory and return its path.", NULL, 0},
     {"tempFile", XLSP_SYM_FUNCTION, "fn(): Path?", "create a temporary file and return its path.", NULL, 0},
@@ -222,8 +225,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"readDir", XLSP_SYM_FUNCTION, "fn(p: Path): Array<Path>", "the immediate entries of a directory.", NULL, 0},
     {"readDirRecursive", XLSP_SYM_FUNCTION, "fn(p: Path): Array<Path>", "every entry beneath a directory.", NULL, 0},
     {"FileStat", XLSP_SYM_CLASS, "type FileStat", "Native handle type", NULL, 0},
+    {"File", XLSP_SYM_CLASS, "type File", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 31
+#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 35
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
@@ -306,6 +310,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
+    {"compilerGuard", XLSP_SYM_FUNCTION, "fn(value: u64): u64", "Return value unchanged while creating a best-effort native compiler scheduling barrier", NULL, 0},
+    {"compilerOpaque", XLSP_SYM_FUNCTION, "fn(value: u64): u64", "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
@@ -313,7 +319,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"sizeOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
     {"alignOf", XLSP_SYM_FUNCTION, "fn(): int", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
     {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", NULL, 0},
-    {"slice", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner", NULL, 0},
+    {"slice", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", NULL, 0},
     {"assumeInitialized", XLSP_SYM_FUNCTION, "fn(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", NULL, 0},
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
@@ -322,7 +328,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
     {"ptr", XLSP_SYM_FUNCTION, "fn(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"withSliceMut", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any", "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback", NULL, 0},
+    {"withSliceMut", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", NULL, 0},
     {"mutPtr", XLSP_SYM_FUNCTION, "fn(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"addr", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", NULL, 0},
     {"load", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, offset?: int, endian?: Endian): int", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", NULL, 0},
@@ -338,7 +344,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 33
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 35
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
@@ -483,8 +489,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {
     {"U8x32", XLSP_SYM_CLASS, "type U8x32", "Class type", NULL, 0},
     {"U32x8", XLSP_SYM_CLASS, "type U32x8", "Class type", NULL, 0},
     {"U64x4", XLSP_SYM_CLASS, "type U64x4", "Class type", NULL, 0},
+    {"U8x64", XLSP_SYM_CLASS, "type U8x64", "Class type", NULL, 0},
+    {"U32x16", XLSP_SYM_CLASS, "type U32x16", "Class type", NULL, 0},
+    {"U64x8", XLSP_SYM_CLASS, "type U64x8", "Class type", NULL, 0},
+    {"U8xNative", XLSP_SYM_CLASS, "type U8xNative", "Class type", NULL, 0},
+    {"U32xNative", XLSP_SYM_CLASS, "type U32xNative", "Class type", NULL, 0},
+    {"U64xNative", XLSP_SYM_CLASS, "type U64xNative", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT 13
 
 // strconv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_strconv_symbols[] = {

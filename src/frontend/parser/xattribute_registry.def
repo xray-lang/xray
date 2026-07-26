@@ -21,3 +21,7 @@ XR_PUBLIC_ATTRIBUTE(DEPRECATED, "deprecated", "declaration", "optional message:s
                     "diagnostic", true, "API metadata only; no ABI/effect/codegen impact", "stable")
 XR_PUBLIC_ATTRIBUTE(DERIVE, "derive", "class | struct | enum", "sealed target list", "analysis",
                     true, "generates ordinary checked implementations", "stable")
+XR_PUBLIC_ATTRIBUTE(INLINE, "inline", "function | method", "none", "native-codegen", true,
+                    "optimization hint only; no semantic, effect, or ABI impact", "experimental")
+XR_PUBLIC_ATTRIBUTE(NOINLINE, "noinline", "function | method", "none", "native-codegen", true,
+                    "optimization hint only; no semantic, effect, or ABI impact", "experimental")

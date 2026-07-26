@@ -75,6 +75,8 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_use_is_consuming(XI_ADD, 0), false, "ADD borrows operands");
     ASSERT_EQ(xi_own_use_is_consuming(XI_TARGET_SIMD_BYTES, 0), false,
               "TARGET_SIMD_BYTES borrows its static receiver");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_TARGET_SIMD_RUNTIME_SELECTED, 0), false,
+              "TARGET_SIMD_RUNTIME_SELECTED borrows its static receiver");
     ASSERT_EQ(xi_own_use_is_consuming(XI_INDEX_GET, 0), false, "INDEX_GET borrows base");
     ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 0), false, "STORE_FIELD borrows receiver");
     ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 1), true,

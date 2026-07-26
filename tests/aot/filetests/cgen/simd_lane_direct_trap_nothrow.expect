@@ -1,0 +1,5 @@
+args=--simd native
+# Exact-width integer intrinsics are sealed, non-throwing receiver operations.
+# Only the two entry/module-initialization abort guards remain.
+c_count=2:xrt_has_pending_error()
+c_syntax=pass

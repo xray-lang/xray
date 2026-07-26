@@ -1,0 +1,2 @@
+c_count=2:#ifndef XRT_TYPEDEF_xrt_enum_
+c_count=2:#define XRT_TYPEDEF_xrt_enum_

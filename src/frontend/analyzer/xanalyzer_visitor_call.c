@@ -30,6 +30,7 @@
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "xanalyzer_mono.h"
+#include "xanalyzer_allocation.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xnative_package.h"
@@ -270,6 +271,8 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
         .target_symbol_id = target ? target->id : 0,
         .intrinsic_id = intrinsic_id,
         .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+        .flags =
+            ctx->unsafe_depth > 0 ? XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE : XA_RESOLVED_CALL_FLAG_NONE,
     };
     xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
                                &resolved);
@@ -280,7 +283,7 @@ static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
     return strcmp(name, "string") == 0 || strcmp(name, "rune") == 0 || strcmp(name, "chr") == 0 ||
-           strcmp(name, "typeName") == 0 || strcmp(name, "copy") == 0 || strcmp(name, "dump") == 0;
+           strcmp(name, "typeName") == 0 || strcmp(name, "dump") == 0;
 }
 
 static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
@@ -3889,18 +3892,11 @@ static bool xa_expr_needs_parameter_context(AstNode *expr) {
         return xa_expr_needs_parameter_context(expr->as.grouping);
     if (expr->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(expr))
         return true;
-    if (expr->type == AST_ARRAY_LITERAL) {
-        if (expr->as.array_literal.is_repeat)
-            return xa_expr_needs_parameter_context(expr->as.array_literal.repeat_value) ||
-                   xa_expr_needs_parameter_context(expr->as.array_literal.repeat_count);
-        if (expr->as.array_literal.count == 0)
-            return true;
-        for (int i = 0; i < expr->as.array_literal.count; i++) {
-            if (xa_expr_needs_parameter_context(expr->as.array_literal.elements[i]))
-                return true;
-        }
-        return false;
-    }
+    /* Every array literal can be a fixed array when the parameter contract
+     * supplies that layout.  Eagerly inferring only non-empty literals loses
+     * the contract and misclassifies them as heap-backed Array<T>. */
+    if (expr->type == AST_ARRAY_LITERAL)
+        return true;
     if (expr->type == AST_MAP_LITERAL) {
         if (expr->as.map_literal.count == 0)
             return true;
@@ -5833,6 +5829,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (method_name && callee_obj_type && !XR_TYPE_IS_SLICE(callee_obj_type) &&
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
+            if (root)
+                root->links.value_mutated = true;
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
             bool interior_mutation = xa_type_allows_interior_mutation(ctx, callee_obj_type) ||
                                      (root && root->links.storage_domain == XR_STORAGE_SYNC_SHARED);
@@ -6489,6 +6487,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                           sizeof(local_path), &path_precise);
             if (!arg_sym)
                 arg_sym = xa_call_root_variable_symbol(ctx, arg_node);
+            if (arg_sym && param_mode == XR_PARAM_REF)
+                arg_sym->links.value_mutated = true;
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
                 effective_arg_names[slot] = arg_sym->name;
@@ -6825,6 +6825,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         effective_arg_types[0] && (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {
         XrType *owned = xa_copy_owned_return_type(ctx, effective_arg_types[0]);
         return_type = owned ? owned : effective_arg_types[0];
+    }
+    if (xa_freestanding_profile_enabled(ctx->analyzer) && xa_call_is_copy_builtin(call) &&
+        arg_count == 1 && effective_arg_types && effective_arg_types[0] &&
+        !xa_fixed_value_copy_is_no_heap(effective_arg_types[0], 0)) {
+        xa_freestanding_report_unavailable(
+            ctx, node, "builtin copy()",
+            "freestanding copy supports only scalar, pointer, and recursively fixed-array "
+            "values");
     }
 
     if (xa_call_is_byte_slice_typed_load(call, callee_obj_type))

@@ -1371,6 +1371,10 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "    var writePtr = data.mutPtr()\n"
                          "  }\n"
                          "}\n"
+                         "fn pointerOffsetNoHeap(data: Ptr<byte>, write: MutPtr<byte>) {\n"
+                         "  var nextRead = data.offset(1)\n"
+                         "  var nextWrite = write.offset(1)\n"
+                         "}\n"
                          "fn rawSliceProjection(data: Ptr<byte>, count: int) -> Slice<byte> {\n"
                          "  return unsafe { mem.slice<byte>(data, count, data) }\n"
                          "}\n"
@@ -1402,6 +1406,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
         analyzer_function_allocation_summary(a, "callbackBad");
     const XaAllocationSummary *slice_pointer_views =
         analyzer_function_allocation_summary(a, "slicePointerViews");
+    const XaAllocationSummary *pointer_offset_noheap =
+        analyzer_function_allocation_summary(a, "pointerOffsetNoHeap");
     const XaAllocationSummary *fixed_value_copy =
         analyzer_function_allocation_summary(a, "fixedValueCopy");
     const XaAllocationSummary *value_error = analyzer_function_allocation_summary(a, "valueError");
@@ -1418,6 +1424,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(callback_ok && callback_ok->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(callback_bad && callback_bad->state == XA_ALLOC_MAY);
     ASSERT(slice_pointer_views && slice_pointer_views->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(pointer_offset_noheap && pointer_offset_noheap->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(fixed_value_copy && fixed_value_copy->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(value_error && value_error->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(scalar_effect && leaf_effect && two_hop_effect && unknown_effect);

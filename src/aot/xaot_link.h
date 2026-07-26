@@ -21,12 +21,21 @@ typedef enum XaotSimdMode {
     XAOT_SIMD_NEON,
     XAOT_SIMD_SSE2,
     XAOT_SIMD_AVX2,
+    XAOT_SIMD_AVX512,
+    XAOT_SIMD_VSX,
+    XAOT_SIMD_LSX,
+    XAOT_SIMD_SVE,
+    XAOT_SIMD_DISPATCH,
 } XaotSimdMode;
 
 enum {
     XAOT_SIMD_FEATURE_NEON = 1u << 0,
     XAOT_SIMD_FEATURE_SSE2 = 1u << 1,
     XAOT_SIMD_FEATURE_AVX2 = 1u << 2,
+    XAOT_SIMD_FEATURE_VSX = 1u << 3,
+    XAOT_SIMD_FEATURE_AVX512 = 1u << 4,
+    XAOT_SIMD_FEATURE_LSX = 1u << 5,
+    XAOT_SIMD_FEATURE_SVE = 1u << 6,
 };
 
 typedef struct XaotTarget {

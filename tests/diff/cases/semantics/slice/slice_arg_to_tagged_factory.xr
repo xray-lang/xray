@@ -1,0 +1,21 @@
+// anchor: slice-arg-to-tagged-factory
+class Snapshot {
+    size: int
+    first: byte
+    owned: Array<byte>
+
+    constructor(size: int, first: byte) {
+        this.size = size
+        this.first = first
+        this.owned = Array<byte>(1)
+        this.owned[0] = first
+    }
+}
+
+fn snapshot(data: Slice<byte>) -> Snapshot {
+    return Snapshot(len(data), data[0])
+}
+
+var bytes: [byte; 3] = [17, 23, 41]
+var result = snapshot(bytes[:])
+print("size=${result.size} first=${result.first}")

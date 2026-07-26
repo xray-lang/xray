@@ -1,0 +1,12 @@
+// Both compiler hints are observable identities in every backend. Native AOT
+// gives compilerGuard memory-scheduling semantics and compilerOpaque only
+// hides the scalar value from constant propagation.
+import mem
+
+var zero: u64 = 0
+var high: u64 = 18446744073709551615
+
+print(mem.compilerGuard(zero) == zero)
+print(mem.compilerGuard(high) == high)
+print(mem.compilerOpaque(zero) == zero)
+print(mem.compilerOpaque(high) == high)

@@ -15,6 +15,12 @@
 
 struct XaAnalyzer;
 struct AstNode;
+struct XrType;
+
+/* `copy()` is allocation-free for scalar/pointer values and recursively fixed
+ * arrays of those values.  Freestanding validation and allocation-effect
+ * inference must consume the same predicate. */
+XR_FUNC bool xa_fixed_value_copy_is_no_heap(const struct XrType *type, int depth);
 
 /* Pass 4: infer allocation effects for every function/method. External verify
  * contracts consume these facts. The pass runs before either backend sees the program. */

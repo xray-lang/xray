@@ -8292,6 +8292,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                     vp->value->op == XI_PHI ? "phi" : "v", vp->value->id, xi_op_name(vp->value->op),
                     xaot_value_kind_name(vp->rep.kind), rep_name(vp->rep.rep),
                     safe_str(vp->rep.c_type));
+            if (vp->value->xa_intrinsic_id != 0)
+                fprintf(out, " intrinsic=%u", vp->value->xa_intrinsic_id);
+            if (xi_vec_shape_is_explicit(vp->value->aux_int))
+                fprintf(out, " vec_shape=0x%" PRIx64 " scalable=%u", (uint64_t) vp->value->aux_int,
+                        xi_vec_shape_is_scalable(vp->value->aux_int) ? 1u : 0u);
             if (vp->value->enum_metadata_owner || vp->value->enum_metadata_kind != 0)
                 fprintf(out, " enum_owner=%s enum_kind=%u enum_field=%u",
                         vp->value->enum_metadata_owner &&

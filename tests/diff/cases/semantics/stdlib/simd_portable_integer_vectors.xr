@@ -1,4 +1,4 @@
-import { Capabilities, U8x16, U8x32, U32x4, U32x8, U64x2, U64x4 } from simd
+import { Capabilities, U8x16, U8x32, U8x64, U8xNative, U32x4, U32x8, U32x16, U64x2, U64x4, U64x8, U64xNative } from simd
 
 fn run() {
     var bytes = Array<byte>(32)
@@ -17,6 +17,8 @@ fn run() {
     assert_eq(a32.add(b32).extract(0), 9)
     assert_eq(a32.mul(b32).extract(3), 35)
     assert_eq(a32.shiftLeft(3).shiftRight(3).extract(2), 4)
+    assert_eq(a32.shiftLeft(32).extract(0), 0)
+    assert_eq(a32.shiftRight(63).extract(3), 0)
     assert_eq(a32.shuffle(3, 2, 1, 0).extract(0), 5)
     assert_eq(a32.swapAdjacent().extract(0), 3)
     assert_eq(a32.swapAdjacent().extract(2), 5)
@@ -75,7 +77,50 @@ fn run() {
     var xbytes = U8x32.load(byteView).bitXor(U8x32.load(byteView))
     xbytes.reinterpretU64().store(ref wideOutView)
     assert_eq(wideOut[0], 0)
+    var bytes512 = Array<byte>(64)
+    for (i in 0..64) {
+        bytes512[i] = (i * 13 + 5) & 255
+    }
+    var bytes512View: Slice<byte> = bytes512[:]
+    var zero512 = U8x64.load(bytes512View).bitXor(U8x64.load(bytes512View))
+    zero512.store(ref bytes512View)
+    assert_eq(bytes512[0], 0)
+    assert_eq(bytes512[63], 0)
+    var words512: [u32; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    var products512 = U32x16.fromLanes(words512).widenMulEven(U32x16.fromLanes(words512).swapAdjacent())
+    var lanes512: [u64; 8] = [10, 20, 30, 40, 50, 60, 70, 80]
+    var combined512 = U64x8.fromLanes(lanes512).swapAdjacent().add(products512)
+    combined512 = combined512.bitXor(combined512.shiftRight(47)).add(U32x16.splat(3).widenMulOdd(U32x16.fromLanes(words512)).shiftLeft(32))
+    var out512 = Array<u64>(8)
+    var out512View: Slice<u64> = out512[:]
+    combined512.store(ref out512View)
+    assert_eq(out512[0], 22 + (6 << 32))
+    assert_eq(out512[7], 310 + (48 << 32))
+    var roundTrip512 = U64x8.fromLanes(lanes512).reinterpretU32().widenMulEven(U32x16.splat(1))
+    roundTrip512.store(ref out512View)
+    assert_eq(out512[0], 10)
+    assert_eq(out512[7], 80)
+    var nativeBytes = Array<byte>(64)
+    for (i in 0..64) {
+        nativeBytes[i] = 1
+    }
+    var nativeByteView: Slice<byte> = nativeBytes[:]
+    var nativeData = U8xNative.load(nativeByteView)
+    var nativeWords = nativeData.reinterpretU32()
+    var nativeProducts = nativeWords.widenMulEven(nativeWords.swapAdjacent())
+    var nativeResult = nativeProducts.bitXor(nativeProducts).add(U64xNative.splat(5)).mul(U64xNative.splat(3)).shiftRight(1).swapAdjacent()
+    nativeResult = nativeResult.add(nativeData.bitXor(nativeData).reinterpretU64())
+    var nativeOut = Array<u64>(8, 99)
+    var nativeOutView: Slice<u64> = nativeOut[:]
+    nativeResult.store(ref nativeOutView)
+    for (i in 0..(Capabilities.nativeBytes() / 8)) {
+        assert_eq(nativeOut[i], 7)
+    }
     assert(Capabilities.nativeBytes() >= 16)
+    var accelerated = Capabilities.isAccelerated()
+    assert(accelerated || !accelerated)
+    var scalable = Capabilities.isScalable()
+    assert(scalable || !scalable)
     print("OK simd portable integer vectors")
 }
 

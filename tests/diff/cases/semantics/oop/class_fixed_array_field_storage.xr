@@ -1,0 +1,46 @@
+// anchor: class-fixed-array-field-storage
+class State {
+    lanes: [u64; 8]
+
+    constructor(value: u64) {
+        this.lanes = [value, value + 1, value + 2, value + 3,
+                      value + 4, value + 5, value + 6, value + 7]
+    }
+
+    copyFrom(other: State) {
+        this.lanes = [other.lanes[0], other.lanes[1], other.lanes[2], other.lanes[3],
+                      other.lanes[4], other.lanes[5], other.lanes[6], other.lanes[7]]
+    }
+
+    set(index: int, value: u64) {
+        this.lanes[index] = value
+    }
+
+    first() -> u64 {
+        return this.lanes[0]
+    }
+
+    last() -> u64 {
+        return this.lanes[7]
+    }
+}
+
+fn copyFieldToLocal(state: State) {
+    var local = state.lanes
+    local[2] = 501
+    print("function first=${state.lanes[2]} local=${local[2]}")
+}
+
+var first = State(37)
+var second = State(99)
+print("constructed first=${first.first()}:${first.last()} second=${second.first()}:${second.last()}")
+
+second.copyFrom(first)
+first.set(0, 7)
+print("copied first=${first.first()}:${first.last()} second=${second.first()}:${second.last()}")
+
+var local = first.lanes
+local[1] = 500
+print("local first=${first.lanes[1]} local=${local[1]}")
+
+copyFieldToLocal(first)

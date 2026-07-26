@@ -1,0 +1,3 @@
+import io
+io.writeStdout("stdout-without-newline")
+io.writeStderr("stderr-without-newline")

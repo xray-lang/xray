@@ -2242,6 +2242,45 @@ module io {
     layer: "system"
   }
 
+  fn __fileClose {
+    signature: "(handle: int): bool"
+    doc: "Close an owned binary file handle"
+    vm: "io_fileClose"
+    aot: "xrt_io_file_close"
+    argc: 1
+    arg_spec: "i"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __fileOpen {
+    signature: "(path: Path): int"
+    doc: "Open a file for binary reading and return an opaque handle"
+    vm: "io_fileOpen"
+    aot: "xrt_io_file_open"
+    argc: 1
+    arg_spec: "p"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __fileRead {
+    signature: "(handle: int, maxBytes: int): Array<byte>?"
+    doc: "Read at most maxBytes from an opaque binary stream; empty means EOF"
+    vm: "io_fileRead"
+    aot: "xrt_io_read_handle_chunk"
+    argc: 2
+    arg_spec: "ii"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn fileSize {
     signature: "(path: Path): int"
     doc: "Get file size in bytes"
@@ -2383,6 +2422,18 @@ module io {
     doc: "Read all data from standard input"
     vm: "io_readStdin"
     aot: "xrt_io_read_stdin"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readStdinBytes {
+    signature: "(): Array<byte>?"
+    doc: "Read all standard input as binary bytes"
+    vm: "io_readStdinBytes"
+    aot: "xrt_io_read_stdin_bytes"
     argc: 0
     arg_spec: ""
     aot_direct: true
@@ -2539,6 +2590,30 @@ module io {
     link_object: false
     layer: "system"
   }
+
+  fn writeStderr {
+    signature: "(data: string): bool"
+    doc: "Write text to standard error without adding a newline"
+    vm: "io_writeStderr"
+    aot: "xrt_io_write_stderr"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeStdout {
+    signature: "(data: string): bool"
+    doc: "Write text to standard output without adding a newline"
+    vm: "io_writeStdout"
+    aot: "xrt_io_write_stdout"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
 }
 
 module runtime {
@@ -2687,6 +2762,34 @@ module mem {
     allocation: "no_heap"
   }
 
+  fn compilerGuard {
+    signature: "(value: u64): u64"
+    doc: "Return value unchanged while creating a best-effort native compiler scheduling barrier"
+    effect: "nothrow"
+    vm: "mem_compiler_guard_u64"
+    aot: "xrt_mem_compiler_guard_u64"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+    allocation: "no_heap"
+  }
+
+  fn compilerOpaque {
+    signature: "(value: u64): u64"
+    doc: "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier"
+    effect: "nothrow"
+    vm: "mem_compiler_opaque_u64"
+    aot: "xrt_mem_compiler_opaque_u64"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+    allocation: "no_heap"
+  }
+
   fn cacheFlush {
     signature: "(ptr: Ptr<byte>, n: int): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
@@ -2770,7 +2873,7 @@ module mem {
 
   fn slice {
     signature: "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>"
-    doc: "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner"
+    doc: "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked"
     vm: "mem_slice_intrinsic"
     argc: 3
     arg_spec: "vvv"
@@ -2936,7 +3039,7 @@ module mem {
 
   fn withSliceMut {
     signature: "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any"
-    doc: "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback"
+    doc: "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked"
     vm: "mem_with_slice_mut_intrinsic"
     argc: 4
     arg_spec: "vvvv"

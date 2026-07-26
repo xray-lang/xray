@@ -11,3 +11,4 @@
 prelude tests/aot/filetests/link/freestanding_export.xr
 math tests/aot/filetests/link/freestanding_math_allowlist.xr
 mem tests/aot/filetests/link/freestanding_mem_core.xr
+simd tests/aot/filetests/link/freestanding_simd_core.xr

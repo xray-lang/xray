@@ -107,6 +107,19 @@ else
     fi
 fi
 
+if (cd "$FIXTURE_ROOT/amalgam" && "$XRAY" build --native --c-only \
+        -o "$WORK/amalgam.c" main.xr >"$WORK/amalgam.log" 2>&1) &&
+   "$CC_BIN" -std=c11 -I "$PROJECT_DIR/include" -I "$PROJECT_DIR/src/aot" \
+        -c "$WORK/amalgam.c" -o "$WORK/amalgam.o" \
+        >"$WORK/cc-amalgam.log" 2>&1; then
+    pass "multi-module C-only output is one compilable translation unit"
+else
+    fail "multi-module C-only output is one compilable translation unit"
+    for log in "$WORK/amalgam.log" "$WORK/cc-amalgam.log"; do
+        [ ! -f "$log" ] || sed -n '1,140p' "$log" | sed 's/^/      /'
+    done
+fi
+
 echo ""
 echo "Manifest C export smoke: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

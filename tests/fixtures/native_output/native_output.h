@@ -8,5 +8,6 @@ typedef struct CValue {
 } CValue;
 
 int32_t xr_fixture_fill_i64(void *out);
+int64_t xr_fixture_native_value(void);
 
 #endif

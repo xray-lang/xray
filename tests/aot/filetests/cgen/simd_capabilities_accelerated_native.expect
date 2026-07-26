@@ -1,0 +1,4 @@
+args=--simd native
+c_contains=XR_FROM_BOOL(true)
+c_not_contains=xi.target.simd.accelerated
+c_syntax=pass

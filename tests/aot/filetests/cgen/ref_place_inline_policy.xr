@@ -1,0 +1,5 @@
+import { refKernel } from "./_ref_place_inline_lib"
+
+var values: [u64; 8] = [0; 8]
+refKernel(ref values, 16)
+print(values[0])

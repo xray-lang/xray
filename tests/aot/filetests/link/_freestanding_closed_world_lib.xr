@@ -1,0 +1,15 @@
+export struct ExportedBox {
+    value: int
+
+    unusedBytes() -> [byte; 4] {
+        return [1, 2, 3, 4]
+    }
+}
+
+export fn liveAdd(value: int) -> int {
+    return value + 7
+}
+
+export fn unusedBytes() -> [byte; 8] {
+    return [0; 8]
+}

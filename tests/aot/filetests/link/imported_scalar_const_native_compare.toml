@@ -1,0 +1,4 @@
+[package]
+name = "tests/imported-scalar-const-native-compare"
+version = "0.1.0"
+main = "imported_scalar_const_native_compare.xr"

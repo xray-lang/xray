@@ -21,6 +21,24 @@ static XrRep cg_struct_native_rep(uint8_t native_type) {
     return xaot_layout_storage_rep_for_native_type(native_type);
 }
 
+/* Borrowing an identity-forwarded projection is stricter than copying its
+ * value.  `usize` and `int` both use the semantic I64 value lane, but an ILP32
+ * field is a 32-bit `size_t` place while a local `int` is an `int64_t` place.
+ * Only the exact AOT representation may inherit the projection's address. */
+static bool cg_exact_place_rep_alias_safe(XiCgenCtx *ctx, const XiValue *value,
+                                          const XiValue *projection) {
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *projection_plan = cg_value_plan(ctx, projection);
+    if (!value_plan || !projection_plan ||
+        !xaot_value_reps_equal(value_plan->rep, projection_plan->rep) ||
+        value_plan->rep.rep != projection_plan->rep.rep)
+        return false;
+    const char *value_c_type = value_plan->rep.c_type;
+    const char *projection_c_type = projection_plan->rep.c_type;
+    return value_c_type == projection_c_type ||
+           (value_c_type && projection_c_type && strcmp(value_c_type, projection_c_type) == 0);
+}
+
 static bool cg_struct_native_heap_supported_depth(const XrAggregateLayout *sl, int depth) {
     if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_AGG_FIELDS)
         return false;
@@ -2493,6 +2511,29 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return true;
     }
     emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+    return true;
+}
+
+/* Borrow the stable storage behind `ref aggregate.field` directly. Shared Xi
+ * retains its projection temporary and copy-back for the VM, while the native
+ * backend uses the verified aggregate layout to avoid a scalar stack shuttle
+ * around the direct call. */
+static bool emit_struct_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *value, const char *prefix) {
+    const XiValue *field = value;
+    while (field && cg_is_identity_copy_or_move(field) && field->nargs >= 1)
+        field = field->args[0];
+    if (!field || field->op != XI_AGG_GET || field->nargs < 1 || !field->aux)
+        return false;
+    const XrAggregateLayout *layout = (const XrAggregateLayout *) field->aux;
+    const XrAggregateFieldLayout *field_layout = cg_struct_field(layout, field->aux_int);
+    if (!field_layout || !cg_static_struct_native_scalar_supported(field_layout->native_type))
+        return false;
+    if (!cg_exact_place_rep_alias_safe(ctx, value, field))
+        return false;
+    fprintf(out, "(void *)(&");
+    emit_struct_field_lvalue(ctx, out, f, layout, field->aux_int, field->args[0], prefix);
+    fprintf(out, ")");
     return true;
 }
 

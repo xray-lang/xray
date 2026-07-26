@@ -22,6 +22,9 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 #include "xrt_callable.h"
 
 #ifdef memcpy
@@ -51,6 +54,12 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_sync_core.h"
 #include "xrt_method_symbols.h"
+
+#if defined(__GNUC__) || defined(__clang__)
+typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
+typedef uint32_t xr_v4u32 __attribute__((vector_size(16)));
+typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
+#endif
 
 #ifndef XR_FUNC
 #define XR_FUNC extern
@@ -86,6 +95,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XRT_INTERNAL __attribute__((visibility("hidden")))
 #define XRT_COLD __attribute__((cold))
 #define XRT_NORETURN __attribute__((noreturn))
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
@@ -100,6 +110,18 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
+#if defined(__x86_64__) || defined(__i386__)
+#define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
+#if defined(__clang__)
+#define XRT_TARGET_AVX512                                                                          \
+    __attribute__((target("avx512f,evex512"), __min_vector_width__(512), flatten))
+#else
+#define XRT_TARGET_AVX512 __attribute__((target("avx512f"), flatten))
+#endif
+#else
+#define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
+#endif
 #if defined(__arm__) || defined(__thumb__)
 #define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
 #else
@@ -109,6 +131,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #elif defined(_MSC_VER)
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #define XRT_NORETURN __declspec(noreturn)
 #define XR_ASSUME_ALIGNED(p, n) (p)
@@ -119,11 +142,14 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT __restrict
 #else
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #define XRT_NORETURN
 #define XR_ASSUME_ALIGNED(p, n) (p)
@@ -134,9 +160,53 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #define XRT_ATTR_INTERRUPT(abi)
 #define XRT_RESTRICT
 #endif
+
+static inline int xrt_target_runtime_simd_bytes(void) {
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+    static _Atomic int cached_bytes = 0;
+    int cached = atomic_load_explicit(&cached_bytes, memory_order_relaxed);
+    if (cached != 0)
+        return cached;
+    unsigned eax, ebx, ecx, edx;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0u), "c"(0u));
+    if (eax < 7u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1u), "c"(0u));
+    if ((ecx & (1u << 27)) == 0 || (ecx & (1u << 28)) == 0)
+        goto baseline;
+    unsigned xcr0_lo, xcr0_hi;
+    __asm__ volatile("xgetbv" : "=a"(xcr0_lo), "=d"(xcr0_hi) : "c"(0u));
+    (void) xcr0_hi;
+    if ((xcr0_lo & 6u) != 6u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7u), "c"(0u));
+    cached = (ebx & (1u << 5)) != 0 && (ebx & (1u << 16)) != 0 && (xcr0_lo & 0xe6u) == 0xe6u ? 64
+             : (ebx & (1u << 5)) != 0                                                        ? 32
+                                                                                             : 16;
+    atomic_store_explicit(&cached_bytes, cached, memory_order_relaxed);
+    return cached;
+baseline:
+    atomic_store_explicit(&cached_bytes, 16, memory_order_relaxed);
+    return 16;
+#elif (defined(_M_X64) || defined(_M_IX86)) && defined(_MSC_VER)
+    int regs[4];
+    __cpuid(regs, 1);
+    unsigned __int64 xcr0 = _xgetbv(0);
+    if ((regs[2] & (1 << 27)) == 0 || (regs[2] & (1 << 28)) == 0 || (xcr0 & 6) != 6)
+        return 16;
+    __cpuidex(regs, 7, 0);
+    return (regs[1] & (1 << 5)) != 0 && (regs[1] & (1 << 16)) != 0 && (xcr0 & 0xe6) == 0xe6 ? 64
+           : (regs[1] & (1 << 5)) != 0                                                      ? 32
+                                                                                            : 16;
+#else
+    return 16;
+#endif
+}
 
 #if defined(__APPLE__)
 #define XR_FFI_ASMNAME(s) "_" s
@@ -464,6 +534,35 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
+/* Native value structs still receive stable, non-zero type identities during
+ * module initialization.  Freestanding code has no dynamic class table: the
+ * verified native path resolves constructors and methods statically, so only
+ * monotonic identity assignment is required here and no allocator is pulled
+ * into an otherwise no-heap binary. */
+typedef void (*XrtDestructor)(void *obj);
+typedef XrValue (*XrtMethodFn)(void);
+
+#ifdef XRT_IMPL
+XRT_INTERNAL uint16_t xrt_freestanding_type_count = 1;
+#else
+extern XRT_INTERNAL uint16_t xrt_freestanding_type_count;
+#endif
+
+static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vtable,
+                                             int vtable_size, XrtDestructor dtor,
+                                             uint32_t inst_size) {
+    (void) parent_id;
+    (void) vtable;
+    (void) vtable_size;
+    (void) dtor;
+    (void) inst_size;
+    if (XR_UNLIKELY(xrt_freestanding_type_count == UINT16_MAX)) {
+        XR_ASSUME(0);
+        return 0;
+    }
+    return xrt_freestanding_type_count++;
+}
+
 #if defined(XRAY_TARGET_RUNTIME_PROVIDER)
 #include "xrt_provider_abi.h"
 #endif
@@ -727,12 +826,24 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
     }
 }
 
-typedef struct {
+#if defined(_MSC_VER)
+#define XRT_SPAN_ALIGN __declspec(align(8))
+#else
+#define XRT_SPAN_ALIGN __attribute__((aligned(8)))
+#endif
+typedef struct XRT_SPAN_ALIGN {
     void *data;
+#if UINTPTR_MAX == UINT32_MAX
+    uint32_t _abi_padding;
+#endif
     int64_t length;
 } xr_span_t;
+#undef XRT_SPAN_ALIGN
 
 _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
+#if !defined(_MSC_VER)
+_Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
+#endif
 
 static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
     XrValue out = {0};
@@ -1214,6 +1325,54 @@ static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uin
     return xr_array_core_bytes_store_u64(data, length, elem_type, offset, bits, endian);
 }
 
+static inline int64_t xrt_byte_slice_load_u16_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint16_t value = xr_raw_load_u16_unaligned(ptr);
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap16(value);
+    return (int64_t) value;
+}
+
+static inline int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint32_t value = xr_raw_load_u32_unaligned(ptr);
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap32(value);
+    return (int64_t) value;
+}
+
+static inline int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t off,
+                                                            int64_t endian) {
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    uint64_t value = xr_raw_load_u64_unaligned(ptr);
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap64(value);
+    return (int64_t) value;
+}
+
+static inline void xrt_byte_slice_store_u16_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint16_t value, int64_t endian) {
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap16(value);
+    xr_raw_store_u16_unaligned((uint8_t *) span.data + off, value);
+}
+
+static inline void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint32_t value, int64_t endian) {
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap32(value);
+    xr_raw_store_u32_unaligned((uint8_t *) span.data + off, value);
+}
+
+static inline void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t off,
+                                                          uint64_t value, int64_t endian) {
+    if (!xrt_freestanding_endian_matches_host(endian))
+        value = xrt_freestanding_bswap64(value);
+    xr_raw_store_u64_unaligned((uint8_t *) span.data + off, value);
+}
+
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
     const uint8_t *ptr = (const uint8_t *) span.data + off;
     return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));
@@ -1651,6 +1810,22 @@ static inline int64_t xrt_mem_int_arg(XrValue v) {
 static inline XrValue xrt_mem_fence(XrValue ordering) {
     xr_sync_core_fence(xrt_mem_int_arg(ordering));
     return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_mem_compiler_guard_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits) : : "memory");
+#endif
+    return XR_FROM_INT((int64_t) bits);
+}
+
+static inline XrValue xrt_mem_compiler_opaque_u64(XrValue value) {
+    uint64_t bits = (uint64_t) xrt_mem_int_arg(value);
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__("" : "+r"(bits));
+#endif
+    return XR_FROM_INT((int64_t) bits);
 }
 
 static inline XrValue xrt_mem_prefetch(XrValue ptr, XrValue rw) {

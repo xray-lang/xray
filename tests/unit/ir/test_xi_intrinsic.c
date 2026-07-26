@@ -399,6 +399,22 @@ static void test_semantic_intrinsic_registry(void) {
                     (cap->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
                 "target capability must be an explicit semantic identity, not a late name match");
 
+    const XaIntrinsicDesc *accelerated =
+        xa_intrinsic_by_id(XA_INTRINSIC_SIMD_CAPABILITIES_IS_ACCELERATED);
+    ASSERT_TRUE(accelerated && accelerated->family == XA_INTRINSIC_FAMILY_TARGET &&
+                    accelerated->lowering == XA_INTRINSIC_LOWERING_TARGET_SIMD_ACCELERATED &&
+                    (accelerated->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
+                "SIMD acceleration availability must be a compile-target semantic identity");
+
+    const XaIntrinsicDesc *runtime_selected =
+        xa_intrinsic_by_id(XA_INTRINSIC_SIMD_CAPABILITIES_IS_RUNTIME_SELECTED);
+    ASSERT_TRUE(runtime_selected && runtime_selected->family == XA_INTRINSIC_FAMILY_TARGET &&
+                    runtime_selected->lowering ==
+                        XA_INTRINSIC_LOWERING_TARGET_SIMD_RUNTIME_SELECTED &&
+                    runtime_selected->effect == XA_INTRINSIC_EFFECT_PURE &&
+                    (runtime_selected->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
+                "runtime SIMD selection must be an explicit target-mode semantic identity");
+
     const XaIntrinsicDesc *rotl = xa_intrinsic_by_id(XA_INTRINSIC_BITS_ROTATE_LEFT);
     ASSERT_TRUE(rotl && rotl->family == XA_INTRINSIC_FAMILY_BITS &&
                     rotl->lowering == XA_INTRINSIC_LOWERING_BIT_ROTL &&

@@ -27,6 +27,9 @@
 #include <inttypes.h>
 #include <stdarg.h>
 #include <math.h>
+#if defined(__GNUC__) || defined(__clang__)
+#include <stdatomic.h>
+#endif
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
@@ -36,6 +39,12 @@
 #include "../shared/xr_native_type_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
+
+#if defined(__GNUC__) || defined(__clang__)
+typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
+typedef uint32_t xr_v4u32 __attribute__((vector_size(16)));
+typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
+#endif
 
 /* =========================================================================
  * Branch expectation and code-layout hints.
@@ -57,6 +66,7 @@
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XRT_INTERNAL __attribute__((visibility("hidden")))
 #define XRT_COLD __attribute__((cold))
 #define XRT_NORETURN __attribute__((noreturn))
 /* Alignment promise for the optimizer. Only assert alignments that the
@@ -79,6 +89,18 @@
 #define XRT_ATTR_WEAK __attribute__((weak))
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
+#if defined(__x86_64__) || defined(__i386__)
+#define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
+#if defined(__clang__)
+#define XRT_TARGET_AVX512                                                                          \
+    __attribute__((target("avx512f,evex512"), __min_vector_width__(512), flatten))
+#else
+#define XRT_TARGET_AVX512 __attribute__((target("avx512f"), flatten))
+#endif
+#else
+#define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
+#endif
 #if defined(__arm__) || defined(__thumb__)
 #define XRT_ATTR_INTERRUPT(abi) __attribute__((interrupt(abi)))
 #else
@@ -90,6 +112,7 @@
 #else
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
+#define XRT_INTERNAL
 #define XRT_COLD
 #if defined(_MSC_VER)
 #define XRT_NORETURN __declspec(noreturn)
@@ -108,6 +131,8 @@
 #define XRT_ATTR_WEAK
 #define XRT_ATTR_USED
 #define XRT_ATTR_NAKED
+#define XRT_TARGET_AVX2
+#define XRT_TARGET_AVX512
 #define XRT_ATTR_INTERRUPT(abi)
 #if defined(_MSC_VER)
 #define XRT_RESTRICT __restrict
@@ -115,6 +140,51 @@
 #define XRT_RESTRICT
 #endif
 #endif
+
+/* Runtime width query used only by the x86 --simd dispatch plan. Keep the
+ * probe self-contained: compiler CPU builtins can introduce hidden libgcc
+ * symbols (__cpu_model) which are unavailable in freestanding/Zig-musl links. */
+static inline int xrt_target_runtime_simd_bytes(void) {
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+    static _Atomic int cached_bytes = 0;
+    int cached = atomic_load_explicit(&cached_bytes, memory_order_relaxed);
+    if (cached != 0)
+        return cached;
+    unsigned eax, ebx, ecx, edx;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0u), "c"(0u));
+    if (eax < 7u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1u), "c"(0u));
+    if ((ecx & (1u << 27)) == 0 || (ecx & (1u << 28)) == 0)
+        goto baseline;
+    unsigned xcr0_lo, xcr0_hi;
+    __asm__ volatile("xgetbv" : "=a"(xcr0_lo), "=d"(xcr0_hi) : "c"(0u));
+    (void) xcr0_hi;
+    if ((xcr0_lo & 6u) != 6u)
+        goto baseline;
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7u), "c"(0u));
+    cached = (ebx & (1u << 5)) != 0 && (ebx & (1u << 16)) != 0 && (xcr0_lo & 0xe6u) == 0xe6u ? 64
+             : (ebx & (1u << 5)) != 0                                                        ? 32
+                                                                                             : 16;
+    atomic_store_explicit(&cached_bytes, cached, memory_order_relaxed);
+    return cached;
+baseline:
+    atomic_store_explicit(&cached_bytes, 16, memory_order_relaxed);
+    return 16;
+#elif (defined(_M_X64) || defined(_M_IX86)) && defined(_MSC_VER)
+    int regs[4];
+    __cpuid(regs, 1);
+    unsigned __int64 xcr0 = _xgetbv(0);
+    if ((regs[2] & (1 << 27)) == 0 || (regs[2] & (1 << 28)) == 0 || (xcr0 & 6) != 6)
+        return 16;
+    __cpuidex(regs, 7, 0);
+    return (regs[1] & (1 << 5)) != 0 && (regs[1] & (1 << 16)) != 0 && (xcr0 & 0xe6) == 0xe6 ? 64
+           : (regs[1] & (1 << 5)) != 0                                                      ? 32
+                                                                                            : 16;
+#else
+    return 16;
+#endif
+}
 
 /* =========================================================================
  * XrValue — 16 bytes, struct-of-unions, binary-compatible with VM XrValue.

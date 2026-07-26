@@ -24,6 +24,7 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/module/xnative_package.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
@@ -1016,6 +1017,44 @@ static bool contains_between(const char *start, const char *end, const char *nee
     return count_between(start, end, needle) > 0;
 }
 
+static size_t count_lines_outside_debug_locals_with_prefix(const char *code, const char *end,
+                                                           const char *prefix, const char *needle) {
+    size_t count = 0;
+    unsigned debug_depth = 0;
+    const char *line = code;
+    assert(code != NULL);
+    assert(end != NULL && end >= code);
+    assert(prefix != NULL);
+    assert(needle != NULL && needle[0] != '\0');
+
+    while (line < end && *line != '\0') {
+        const char *end = strchr(line, '\n');
+        size_t len = end ? (size_t) (end - line) : strlen(line);
+        if (len == strlen("#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
+            strncmp(line, "#if defined(XRAY_AOT_DEBUG_LOCALS)", len) == 0) {
+            debug_depth++;
+        } else if (len == strlen("#endif") && strncmp(line, "#endif", len) == 0) {
+            if (debug_depth > 0)
+                debug_depth--;
+        } else if (debug_depth == 0) {
+            const char *hit = strstr(line, needle);
+            size_t prefix_len = strlen(prefix);
+            if (hit && (size_t) (hit - line) < len && len >= prefix_len &&
+                strncmp(line, prefix, prefix_len) == 0)
+                count++;
+        }
+        if (!end)
+            break;
+        line = end + 1;
+    }
+    return count;
+}
+
+static size_t count_lines_outside_debug_locals(const char *code, const char *end,
+                                               const char *needle) {
+    return count_lines_outside_debug_locals_with_prefix(code, end, "    xrt_struct_abi_", needle);
+}
+
 static size_t count_op_in_func(const XiFunc *func, XiOp op) {
     size_t count = 0;
     if (!func)
@@ -1116,8 +1155,646 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
+    assert(contains(code, "#if defined(__GNUC__) && !defined(__clang__)") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wattributes\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-variable\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-but-set-variable\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wunused-label\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wsign-compare\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wsign-conversion\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wcast-align\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wcast-qual\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wconversion\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wdeclaration-after-statement\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wfloat-equal\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wredundant-decls\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wstrict-aliasing\"") &&
+           contains(code, "#pragma GCC diagnostic ignored \"-Wswitch-enum\"") &&
+           "generated translation units should isolate GCC-only warning suppressions");
+    assert(contains(code, "#if defined(__clang__)") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-variable\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wunused-label\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wsign-compare\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wcast-align\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wcast-qual\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wdeclaration-after-statement\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wfloat-equal\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wswitch-enum\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-int-conversion\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wshorten-64-to-32\"") &&
+           "generated translation units should isolate Clang-only warning suppressions");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_rep_identical_source_alias_shares_immutable_c_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 919, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_c_alias", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual C-alias function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual C-alias entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual C-alias parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &int_type);
+    TEST_REQUIRE(source != NULL, "manual C-alias source allocated");
+    ir->params[0] = source;
+    source->var_id = 0;
+    XiValue *alias = xi_value_new(ir, entry, XI_COPY, &int_type, 1);
+    TEST_REQUIRE(alias != NULL, "manual C-alias boundary allocated");
+    alias->args[0] = source;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    alias->var_id = 1; /* keep this source-variable domain through Xi copy-prop */
+    XiValue *sum = xi_value_new(ir, entry, XI_ADD, &int_type, 2);
+    TEST_REQUIRE(sum != NULL, "manual C-alias consumer allocated");
+    sum->args[0] = alias;
+    sum->args[1] = source;
+    xi_block_set_return(entry, sum);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual C-alias C generation failed");
+    TEST_REQUIRE(!had_error, "representation-identical C alias should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_alias");
+    TEST_REQUIRE(fn != NULL, "manual C-alias function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual C-alias function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v1 = v0;"),
+                 "release C must not materialize a representation-identical source alias");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "v1"),
+                 "ordinary C consumers must not reference the elided alias local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v2 ="),
+                 "the alias consumer should remain as an ordinary native computation");
+
+    printf("  Generated representation-identical C alias coalescing %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_rep_identical_unbox_shares_immutable_c_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 920, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_c_unbox_alias", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual C-unbox function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual C-unbox entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual C-unbox parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &int_type);
+    TEST_REQUIRE(source != NULL, "manual C-unbox source allocated");
+    ir->params[0] = source;
+    XiValue *alias = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
+    TEST_REQUIRE(alias != NULL, "manual C-unbox boundary allocated");
+    alias->args[0] = source;
+    XiValue *sum = xi_value_new(ir, entry, XI_ADD, &int_type, 2);
+    TEST_REQUIRE(sum != NULL, "manual C-unbox consumer allocated");
+    sum->args[0] = alias;
+    sum->args[1] = source;
+    xi_block_set_return(entry, sum);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual C-unbox C generation failed");
+    TEST_REQUIRE(!had_error, "representation-identical C unbox should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_unbox_alias");
+    TEST_REQUIRE(fn != NULL, "manual C-unbox function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual C-unbox function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v1 = v0;"),
+                 "release C must not materialize a representation-identical unbox");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "v1"),
+                 "ordinary C consumers must not reference the elided unbox local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v2 ="),
+                 "the unbox consumer should remain as an ordinary native computation");
+
+    printf("  Generated representation-identical C unbox coalescing %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_fixed_array_alias_address_projection_shares_backing_c_local) {
+    const char *src = "fn fixedArrayAlias() -> u32 {\n"
+                      "    var lanes: [u32; 4] = [0; 4]\n"
+                      "    lanes[0] = 7\n"
+                      "    return lanes[0]\n"
+                      "}\n"
+                      "print(fixedArrayAlias())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "fixed-array alias source compiled to Xi");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "fixed-array alias C generation failed");
+    TEST_REQUIRE(!had_error, "fixed-array alias address projection should generate");
+    const char *fn = find_static_function_definition(code, "fixedArrayAlias");
+    TEST_REQUIRE(fn != NULL, "fixed-array alias function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "fixed-array alias function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "_fa"),
+                 "fixed-array local should keep native lane storage");
+    TEST_REQUIRE(count_between(fn, fn_end, "XrValue v") == 1,
+                 "fixed-array LOCAL_ADDR must not force a redundant tagged alias local");
+    TEST_REQUIRE(
+        contains_between(fn, fn_end,
+                         "#if defined(XRAY_AOT_DEBUG_LOCALS)\n    XrValue v3 = xr_array_ref"),
+        "the remaining fixed-array wrapper must be debug-only");
+
+    printf("  Generated fixed-array alias projection in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 928, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_c_addressed_alias", &int_type);
+    TEST_REQUIRE(ir != NULL, "addressed C-alias function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "addressed C-alias entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "addressed C-alias parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &int_type);
+    TEST_REQUIRE(source != NULL, "addressed C-alias source allocated");
+    ir->params[0] = source;
+    XiValue *alias = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
+    TEST_REQUIRE(alias != NULL, "addressed C-alias boundary allocated");
+    alias->args[0] = source;
+    XiValue *place = xi_value_new(ir, entry, XI_LOCAL_ADDR, &int_type, 1);
+    TEST_REQUIRE(place != NULL, "addressed C-alias place allocated");
+    place->args[0] = alias;
+    XiValue *load = xi_value_new(ir, entry, XI_PLACE_LOAD, &int_type, 1);
+    TEST_REQUIRE(load != NULL, "addressed C-alias load allocated");
+    load->args[0] = place;
+    xi_block_set_return(entry, load);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "addressed C-alias C generation failed");
+    TEST_REQUIRE(!had_error, "addressed scalar C alias should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_addressed_alias");
+    TEST_REQUIRE(fn != NULL, "addressed C-alias function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "addressed C-alias function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v1 = v0;"),
+                 "a scalar alias whose C address is taken must remain materialized");
+    TEST_REQUIRE(contains_between(fn, fn_end, "(void *)(&v1)"),
+                 "the scalar place must address the materialized alias local");
+
+    printf("  Kept addressed scalar alias in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_forward_use_predeclarations_have_no_dead_initializers) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 932, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_forward_predecl", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual forward-predecl function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    XiBlock *use = xi_block_new(ir);
+    XiBlock *def = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL && use != NULL && def != NULL,
+                 "manual forward-predecl blocks allocated");
+
+    XiValue *value = xi_const_int(ir, def, 41, &int_type);
+    XiValue *one = xi_const_int(ir, def, 1, &int_type);
+    XiValue *sum = xi_value_new(ir, use, XI_ADD, &int_type, 2);
+    TEST_REQUIRE(value != NULL && one != NULL && sum != NULL,
+                 "manual forward-predecl values allocated");
+    sum->args[0] = value;
+    sum->args[1] = one;
+    xi_block_set_jump(entry, def);
+    xi_block_set_jump(def, use);
+    xi_block_set_return(use, sum);
+    entry->sealed = true;
+    use->sealed = true;
+    def->sealed = true;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual forward-predecl C generation failed");
+    TEST_REQUIRE(!had_error, "manual forward-predecl fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_forward_predecl");
+    TEST_REQUIRE(fn != NULL, "manual forward-predecl definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual forward-predecl function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v0;") &&
+                     contains_between(fn, fn_end, "int64_t v1;"),
+                 "forward definitions must be declared before their earlier C use block");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v0 = 0;") &&
+                     !contains_between(fn, fn_end, "int64_t v1 = 0;"),
+                 "ordinary SSA dominance must not create dead defensive initializers");
+    TEST_REQUIRE(contains_between(fn, fn_end, "v0 = INT64_C(41);") &&
+                     contains_between(fn, fn_end, "v1 = INT64_C(1);"),
+                 "the real definition blocks must still assign both forward values");
+
+    printf("  Generated initializer-free forward predeclarations in %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_trivial_span_value_clone_shares_immutable_c_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 921, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType span_type = {.kind = XR_KIND_SLICE, .id = 922, .frozen = true};
+    span_type.container.element_type = &int_type;
+    XiFunc *ir = xi_func_new("manual_c_span_clone", &span_type);
+    TEST_REQUIRE(ir != NULL, "manual C-span-clone function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual C-span-clone entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual C-span-clone parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &span_type);
+    TEST_REQUIRE(source != NULL, "manual C-span-clone source allocated");
+    ir->params[0] = source;
+    XiValue *clone = xi_value_new(ir, entry, XI_COPY, &span_type, 1);
+    TEST_REQUIRE(clone != NULL, "manual C-span-clone boundary allocated");
+    clone->args[0] = source;
+    clone->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    xi_block_set_return(entry, clone);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual C-span-clone C generation failed");
+    TEST_REQUIRE(!had_error, "trivial span clone should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_span_clone");
+    TEST_REQUIRE(fn != NULL, "manual C-span-clone function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual C-span-clone function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "xr_span_t v1 = v0;"),
+                 "release C must not materialize a trivial span value clone");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "v1"),
+                 "ordinary C consumers must not reference the elided span clone local");
+
+    printf("  Generated trivial span clone coalescing %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 924, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType span_type = {.kind = XR_KIND_SLICE, .id = 925, .frozen = true};
+    span_type.container.element_type = &int_type;
+    XiFunc *ir = xi_func_new("manual_c_span_box", &span_type);
+    TEST_REQUIRE(ir != NULL, "manual C-span-box function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual C-span-box entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual C-span-box parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &span_type);
+    TEST_REQUIRE(source != NULL, "manual C-span-box source allocated");
+    ir->params[0] = source;
+    XiValue *box = xi_value_new(ir, entry, XI_BOX, &span_type, 1);
+    TEST_REQUIRE(box != NULL, "manual C-span-box boundary allocated");
+    box->args[0] = source;
+    xi_block_set_return(entry, box);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual C-span-box C generation failed");
+    TEST_REQUIRE(!had_error, "representation-identical span box should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_span_box");
+    TEST_REQUIRE(fn != NULL, "manual C-span-box function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual C-span-box function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "xr_span_t v1 = v0;"),
+                 "release C must not materialize a representation-identical span box");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "v1"),
+                 "ordinary C consumers must not reference the elided span box local");
+
+    printf("  Generated representation-identical span box coalescing %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_scalar_value_clone_remains_distinct_c_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 923, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_c_scalar_clone", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual C-scalar-clone function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual C-scalar-clone entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual C-scalar-clone parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &int_type);
+    TEST_REQUIRE(source != NULL, "manual C-scalar-clone source allocated");
+    ir->params[0] = source;
+    XiValue *clone = xi_value_new(ir, entry, XI_COPY, &int_type, 1);
+    TEST_REQUIRE(clone != NULL, "manual C-scalar-clone boundary allocated");
+    clone->args[0] = source;
+    clone->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    xi_block_set_return(entry, clone);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual C-scalar-clone C generation failed");
+    TEST_REQUIRE(!had_error, "nontrivial scalar clone should generate");
+    const char *fn = find_static_function_definition(code, "manual_c_scalar_clone");
+    TEST_REQUIRE(fn != NULL, "manual C-scalar-clone function definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual C-scalar-clone function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_value_clone_for_coro("),
+                 "nontrivial scalar value clones must remain distinct C locals");
+
+    printf("  Kept nontrivial scalar clone in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local) {
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 929, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_debug_const", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual debug-constant function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual debug-constant entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual debug-constant parameter table allocated");
+    XiValue *source = xi_param(ir, entry, 0, &u64_type);
+    TEST_REQUIRE(source != NULL, "manual debug-constant source allocated");
+    ir->params[0] = source;
+    XiValue *literal = xi_const_int(ir, entry, 255, &u64_type);
+    TEST_REQUIRE(literal != NULL, "manual debug-constant literal allocated");
+    literal->var_id = 0;
+    ir->source_var_count = 1;
+    ir->source_var_names = (const char **) xi_func_arena_alloc(ir, sizeof(*ir->source_var_names));
+    TEST_REQUIRE(ir->source_var_names != NULL, "manual debug-constant name table allocated");
+    ir->source_var_names[0] = "mask";
+    XiValue *masked_value = xi_value_new(ir, entry, XI_BXOR, &u64_type, 2);
+    TEST_REQUIRE(masked_value != NULL, "manual debug-constant consumer allocated");
+    masked_value->args[0] = source;
+    masked_value->args[1] = literal;
+    xi_block_set_return(entry, masked_value);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "immediate-constant C generation failed");
+    TEST_REQUIRE(!had_error, "immediate-constant fixture should generate");
+    const char *masked = find_static_function_definition(code, "manual_debug_const");
+    TEST_REQUIRE(masked != NULL, "manual debug-constant definition should be emitted");
+    const char *masked_end = strstr(masked, "\n}\n");
+    TEST_REQUIRE(masked_end != NULL, "manual debug-constant function end emitted");
+    TEST_REQUIRE(contains_between(masked, masked_end, "uint64_t mask = 0;"),
+                 "debug-local builds must declare the source-level constant slot");
+    TEST_REQUIRE(contains_between(masked, masked_end, "mask = (uint64_t)INT64_C(255);"),
+                 "debug-local builds must synchronize the source-level constant slot");
+    TEST_REQUIRE(contains_between(masked, masked_end, "INT64_C(255)"),
+                 "release expression must retain the exact constant literal");
+    TEST_REQUIRE(count_between(masked, masked_end, " = INT64_C(255);") == 0,
+                 "release C must not materialize a constant used only by literal-aware ops");
+
+    printf("  Generated debug-synchronized immediate constant %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 933, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_debug_shared", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual debug-shared function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual debug-shared entry block allocated");
+    entry->sealed = true;
+
+    ir->nshared = 1;
+    XiValue *load = xi_value_new(ir, entry, XI_GET_SHARED, &u64_type, 0);
+    TEST_REQUIRE(load != NULL, "manual debug-shared load allocated");
+    load->aux_int = 0;
+    load->var_id = 0;
+    ir->source_var_count = 1;
+    ir->source_var_names = (const char **) xi_func_arena_alloc(ir, sizeof(*ir->source_var_names));
+    TEST_REQUIRE(ir->source_var_names != NULL, "manual debug-shared name table allocated");
+    ir->source_var_names[0] = "sharedValue";
+    XiValue *zero = xi_const_int(ir, entry, 0, &u64_type);
+    TEST_REQUIRE(zero != NULL, "manual debug-shared return allocated");
+    xi_block_set_return(entry, zero);
+
+    XiModule *mod = xi_module_new("test.xr", "test", ir);
+    TEST_REQUIRE(mod != NULL, "manual debug-shared module allocated");
+    mod->nslots = 1;
+    ir->module = mod;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "unused shared-load C generation failed");
+    TEST_REQUIRE(!had_error, "unused shared-load fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_debug_shared");
+    TEST_REQUIRE(fn != NULL, "manual debug-shared definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual debug-shared function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "XrValue sharedValue = XR_NULL_VAL;"),
+                 "debug-local builds must declare the source-level shared slot");
+    TEST_REQUIRE(contains_between(fn, fn_end, "#if defined(XRAY_AOT_DEBUG_LOCALS)"),
+                 "the unused source-bound shared load must be debug-only");
+    TEST_REQUIRE(count_between(fn, fn_end, "xrt_shared[0]") == 1,
+                 "release C must not duplicate an unused shared-slot load");
+
+    printf("  Generated debug-only unused shared load %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_consumed_shared_load_stays_release_materialized) {
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 934, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_consumed_shared", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual consumed-shared function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual consumed-shared entry block allocated");
+    entry->sealed = true;
+    ir->nshared = 1;
+    XiValue *load = xi_value_new(ir, entry, XI_GET_SHARED, &u64_type, 0);
+    TEST_REQUIRE(load != NULL, "manual consumed-shared load allocated");
+    load->aux_int = 0;
+    xi_block_set_return(entry, load);
+
+    XiModule *mod = xi_module_new("test.xr", "test", ir);
+    TEST_REQUIRE(mod != NULL, "manual consumed-shared module allocated");
+    mod->nslots = 1;
+    ir->module = mod;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "consumed shared-load C generation failed");
+    TEST_REQUIRE(!had_error, "consumed shared-load fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_consumed_shared");
+    TEST_REQUIRE(fn != NULL, "manual consumed-shared definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual consumed-shared function end emitted");
+    TEST_REQUIRE(contains_between(fn, fn_end, "XrValue v0 = xrt_shared[0];"),
+                 "a shared load consumed by the return must remain materialized");
+    TEST_REQUIRE(contains_between(fn, fn_end, "XR_TO_INT(v0)"),
+                 "the consumed shared local must feed the native return conversion");
+
+    printf("  Kept consumed shared load in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_immediate_scalar_constant_inlines_into_as_cast) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 926, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 927, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_const_as", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual const-as function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual const-as entry block allocated");
+    entry->sealed = true;
+
+    XiValue *literal = xi_const_int(ir, entry, 64, &int_type);
+    TEST_REQUIRE(literal != NULL, "manual const-as literal allocated");
+    XiValue *cast = xi_value_new(ir, entry, XI_AS, &u64_type, 1);
+    TEST_REQUIRE(cast != NULL, "manual const-as cast allocated");
+    cast->args[0] = literal;
+    cast->aux_int = -2; /* unresolved semantic cast: tid == -1 */
+    xi_block_set_return(entry, cast);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual const-as C generation failed");
+    TEST_REQUIRE(!had_error, "manual const-as fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_const_as");
+    TEST_REQUIRE(fn != NULL, "manual const-as definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual const-as function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v0 = INT64_C(64);"),
+                 "literal-aware XI_AS must not require a source constant local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "INT64_C(64)"),
+                 "XI_AS result must still contain the exact scalar literal");
+
+    printf("  Generated immediate scalar cast %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 930, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 931, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_const_place_store", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual constant place-store function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual constant place-store entry block allocated");
+    entry->sealed = true;
+
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual constant place-store parameter table allocated");
+    XiValue *place = xi_param(ir, entry, 0, &u64_type);
+    TEST_REQUIRE(place != NULL, "manual constant place-store parameter allocated");
+    place->param_mode = XR_PARAM_REF;
+    ir->params[0] = place;
+    XiValue *literal = xi_const_int(ir, entry, 64, &u64_type);
+    TEST_REQUIRE(literal != NULL, "manual constant place-store literal allocated");
+    XiValue *store = xi_value_new(ir, entry, XI_PLACE_STORE, &unit_type, 2);
+    TEST_REQUIRE(store != NULL, "manual constant place-store operation allocated");
+    store->args[0] = place;
+    store->args[1] = literal;
+    store->flags |= XI_FLAG_WRITES_MEM | XI_FLAG_SIDE_EFFECT;
+    XiValue *load = xi_value_new(ir, entry, XI_PLACE_LOAD, &u64_type, 1);
+    TEST_REQUIRE(load != NULL, "manual constant place-load operation allocated");
+    load->args[0] = place;
+    load->flags |= XI_FLAG_READS_MEM;
+    xi_block_set_return(entry, load);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "constant place-store C generation failed");
+    TEST_REQUIRE(!had_error, "constant place-store fixture should generate");
+    const char *reset = find_static_function_definition(code, "manual_const_place_store");
+    TEST_REQUIRE(reset != NULL, "manual constant place-store definition should be emitted");
+    const char *reset_end = strstr(reset, "\n}\n");
+    TEST_REQUIRE(reset_end != NULL, "manual constant place-store function end emitted");
+    TEST_REQUIRE(contains_between(reset, reset_end, ")) = ") &&
+                     contains_between(reset, reset_end, "INT64_C(64)"),
+                 "scalar place store must receive the immediate literal directly");
+    TEST_REQUIRE(count_between(reset, reset_end, " = INT64_C(64);") == 0,
+                 "scalar place store must not retain a dead constant local");
+
+    printf("  Generated immediate scalar place store %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
+    const char *src = "@noinline\n"
+                      "fn narrow(value: u32) -> u32 {\n"
+                      "    return value * 2246822519\n"
+                      "}\n"
+                      "print(narrow(7))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "clean-narrow constant IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual narrow-constant C generation failed");
+    TEST_REQUIRE(!had_error, "manual narrow-constant fixture should generate");
+    const char *fn = find_static_function_definition(code, "narrow_");
+    TEST_REQUIRE(fn != NULL, "clean-narrow constant definition should be emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(contains_between(fn, fn_end, " = INT64_C(2246822519);") &&
+                     contains_between(fn, fn_end, "2246822519") &&
+                     contains_between(fn, fn_end, "(v"),
+                 "clean-narrow arithmetic must retain constants referenced by emit_vref");
+
+    printf("  Preserved clean-narrow constant local in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_struct_fixed_array_index_keeps_required_constant_local) {
+    const char *src = "struct Lanes { data: [u64; 4] }\n"
+                      "@noinline\n"
+                      "fn pick(view: ref Lanes) -> u64 {\n"
+                      "    return view.data[1]\n"
+                      "}\n"
+                      "var lanes = Lanes{data: [1, 2, 3, 4]}\n"
+                      "print(pick(ref lanes))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "struct fixed-array index IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "struct fixed-array index C generation failed");
+    TEST_REQUIRE(!had_error, "struct fixed-array index fixture should generate");
+    const char *pick = find_static_function_definition(code, "pick_");
+    TEST_REQUIRE(pick != NULL, "pick definition should be emitted");
+    const char *pick_end = next_static_after(pick);
+    TEST_REQUIRE(count_between(pick, pick_end, " = INT64_C(1);") == 1,
+                 "struct fixed-array index must retain its ctx-less constant local");
+    TEST_REQUIRE(contains_between(pick, pick_end, "->data[v"),
+                 "struct fixed-array field access must reference the retained index local");
+
+    printf("  Preserved struct fixed-array index local in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1325,7 +2002,7 @@ TEST(cgen_if_else) {
     xi_func_free(ir);
 }
 
-TEST(cgen_early_return_branch_uses_unlikely_hint) {
+TEST(cgen_early_return_branch_stays_neutral_without_hint) {
     const char *src = "fn guard(x: int) -> int {\n"
                       "    var y = x\n"
                       "    if (y < 0) {\n"
@@ -1347,10 +2024,43 @@ TEST(cgen_early_return_branch_uses_unlikely_hint) {
     char *code = generate_c(ir, "test");
     assert(code != NULL);
 
-    assert(contains(code, "XR_UNLIKELY(") &&
-           "early-return guard branch should be marked unlikely in generated C");
+    const char *guard = find_static_function_definition(code, "test_guard_");
+    TEST_REQUIRE(guard != NULL, "guard function should be generated");
+    const char *guard_end = next_static_after(guard);
+    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
+    TEST_REQUIRE(!hint || hint >= guard_end,
+                 "an unhinted early-return branch must remain probability-neutral");
 
-    printf("  Generated early-return branch hint %zu bytes of C code\n", strlen(code));
+    printf("  Generated neutral early-return branch %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_explicit_unlikely_early_return_preserves_hint) {
+    const char *src = "fn guard(x: int) -> int {\n"
+                      "    if (unlikely(x < 0)) {\n"
+                      "        return -1\n"
+                      "    }\n"
+                      "    return x\n"
+                      "}\n"
+                      "print(guard(1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+    const char *guard = find_static_function_definition(code, "test_guard_");
+    TEST_REQUIRE(guard != NULL, "guard function should be generated");
+    const char *guard_end = next_static_after(guard);
+    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
+    TEST_REQUIRE(hint && hint < guard_end,
+                 "an explicit unlikely(...) branch must retain its native hint");
+
+    printf("  Generated explicit early-return branch hint %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1595,10 +2305,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     assert((contains(buf, "\nstatic XR_AINLINE int64_t lib_helper_") ||
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
-    assert((contains(buf, "\nXR_FORCEINLINE int64_t lib_public_exp(") ||
-            contains(buf, "\nXR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
-           "small exported function should keep external stable C linkage while exposing "
-           "its cross-module inline contract");
+    assert((contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
+           "small module-ABI function should stay linkable across translation units while "
+           "remaining hidden and inlineable inside the final bundle");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
            "exported function must not become file-static");
@@ -1612,6 +2322,167 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     test_aot_plan_free(&plan);
     xi_func_free(lib_ir);
     xi_func_free(app_ir);
+}
+
+TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
+    const char *lib_src = "fn path0(value: int) -> int { return value + 1 }\n"
+                          "fn path1(value: int) -> int { return value + 2 }\n"
+                          "fn path2(value: int) -> int { return value + 3 }\n"
+                          "export fn dispatch(tag: int, value: int) -> int {\n"
+                          "    var mixed = value ^ (tag << 1)\n"
+                          "    mixed = (mixed + 7) ^ (mixed >> 3)\n"
+                          "    mixed = mixed ^ tag\n"
+                          "    if (tag == 0) { return path0(mixed) }\n"
+                          "    if (tag == 1) { return path1(mixed) }\n"
+                          "    return path2(mixed)\n"
+                          "}\n"
+                          "dispatch(0, 0)\n";
+    const char *app_src = "print(0)\n";
+
+    XiFunc *lib_ir = compile_to_ir(lib_src);
+    XiFunc *app_ir = compile_to_ir(app_src);
+    TEST_REQUIRE(lib_ir != NULL && app_ir != NULL, "IR compilation failed");
+    TEST_REQUIRE(lib_ir->module != NULL && app_ir->module != NULL, "module metadata required");
+    lib_ir->module->name = "lib";
+    lib_ir->module->path = "lib.xr";
+    app_ir->module->name = "app";
+    app_ir->module->path = "app.xr";
+    XiModule *modules[] = {lib_ir->module, app_ir->module};
+
+    TEST_REQUIRE(test_prepare_backend_ir(lib_ir), "library backend preparation failed");
+    TEST_REQUIRE(test_prepare_backend_ir(app_ir), "app backend preparation failed");
+
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 2, 1);
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    xi_cgen_resolve_module_imports(ctx, modules, 2);
+
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "CGen output stream allocated");
+    xi_cgen_module_tu(ctx, mem, modules, 2, 0, 1);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0, "CGen output stream closed");
+    TEST_REQUIRE(code != NULL && !xi_cgen_has_error(ctx), "multi-module C generation succeeded");
+    TEST_REQUIRE(contains(code, "lib_dispatch_exp("), "dispatcher definition generated");
+    TEST_REQUIRE(!contains(code, "XR_FORCEINLINE int64_t lib_dispatch_exp(") &&
+                     !contains(code, "XR_FORCEINLINE XRT_FN_CONST int64_t lib_dispatch_exp("),
+                 "three-way call dispatcher must not be forced into every caller");
+    TEST_REQUIRE(contains(code, "XRT_INTERNAL int64_t lib_dispatch_exp(") ||
+                     contains(code, "XRT_INTERNAL XRT_FN_CONST int64_t lib_dispatch_exp("),
+                 "dispatcher keeps ordinary hidden cross-module linkage");
+
+    printf("  Generated native-inliner dispatcher boundary %zu bytes of C code\n", code_size);
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    xi_func_free(lib_ir);
+    xi_func_free(app_ir);
+}
+
+TEST(cgen_noinline_attribute_preserves_native_boundary) {
+    const char *src = "@noinline\n"
+                      "fn boundary(value: int) -> int { return value + 1 }\n"
+                      "print(boundary(41))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    XiFunc *boundary = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "boundary") == 0) {
+            boundary = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(boundary != NULL && boundary->noinline_hint,
+                 "@noinline must survive AST-to-Xi lowering");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "@noinline fixture should generate");
+    TEST_REQUIRE(contains(code, "static XR_NOINLINE int64_t test_boundary_") ||
+                     contains(code, "static XR_NOINLINE XRT_FN_CONST int64_t test_boundary_"),
+                 "@noinline must emit a native noinline function boundary");
+
+    printf("  Generated explicit noinline boundary %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_inline_attribute_forces_native_expansion) {
+    const char *src = "@inline\n"
+                      "fn expansion(value: int) -> int {\n"
+                      "    var scratch: [int; 4] = [value, 2, 3, 4]\n"
+                      "    var result = value\n"
+                      "    var i = 0\n"
+                      "    while (i < 64) {\n"
+                      "        result = (result * 33) ^ i\n"
+                      "        i += 1\n"
+                      "    }\n"
+                      "    return result + scratch[0]\n"
+                      "}\n"
+                      "print(expansion(7))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    XiFunc *expansion = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "expansion") == 0) {
+            expansion = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(expansion != NULL && expansion->inline_hint,
+                 "@inline must survive AST-to-Xi lowering");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "@inline fixture should generate");
+    TEST_REQUIRE(contains(code, "static XR_AINLINE int64_t test_expansion_") ||
+                     contains(code, "static XR_AINLINE XRT_FN_CONST int64_t test_expansion_"),
+                 "@inline must emit an always-inline native expansion boundary");
+
+    printf("  Generated explicit inline expansion %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_c_export_wrapper_keeps_default_visibility) {
+    const char *src = "fn bridge(x: int) -> int { return x + 1 }\n"
+                      "bridge(0)\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    assert(bridge != NULL && "bridge function should be lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_bridge_visible",
+        .visibility = "default",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "C-export wrapper should generate");
+    assert(contains(code, "\nXR_EXPORT_SYM int64_t xr_bridge_visible(int64_t p0)") &&
+           "the public C-export wrapper must carry explicit external visibility");
+    assert(!contains(code, "XRT_INTERNAL int64_t xr_bridge_visible(") &&
+           !contains(code, "XRT_INTERNAL XR_FORCEINLINE int64_t xr_bridge_visible(") &&
+           "internal implementation visibility must never leak onto the public wrapper");
+
+    xr_free(code);
+    xi_func_free(ir);
 }
 
 TEST(cgen_stats_tracks_native_abi) {
@@ -1793,6 +2664,255 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
            "struct source local q should not degrade to an opaque XrValue debug slot");
 
     printf("  Generated struct debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_struct_field_only_place_loads_are_debug_guarded) {
+    const char *src = "struct Pair {\n"
+                      "    left: int\n"
+                      "    right: int\n"
+                      "    sum() -> int {\n"
+                      "        return this.left + this.right\n"
+                      "    }\n"
+                      "}\n"
+                      "var pair = Pair{left: 20, right: 22}\n"
+                      "print(pair.sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "field-only struct place-load test should generate");
+    const char *sum = find_static_function_definition(code, "sum_");
+    TEST_REQUIRE(sum != NULL, "struct method definition should be emitted");
+    const char *sum_end = next_static_after(sum);
+    TEST_REQUIRE(count_between(sum, sum_end, " = (*(xrt_struct_abi_") > 0,
+                 "debug build should retain a whole-struct source local materialization");
+    TEST_REQUIRE(count_lines_outside_debug_locals(sum, sum_end, " = (*(xrt_struct_abi_") == 0,
+                 "field-only whole-struct loads must not survive outside debug-local guards");
+    TEST_REQUIRE(contains_between(sum, sum_end, ")).left") &&
+                     contains_between(sum, sum_end, ")).right"),
+                 "ordinary field consumers should address the original aggregate place directly");
+
+    printf("  Generated debug-only aggregate place loads %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_struct_raw_deref_method_receiver_skips_release_copy) {
+    const char *src = "struct State {\n"
+                      "    value: u64\n"
+                      "    tail: [byte; 4]\n"
+                      "    reset(value: u64) {\n"
+                      "        this.value = value\n"
+                      "        this.tail = [1, 2, 3, 4]\n"
+                      "    }\n"
+                      "    digest() -> u64 {\n"
+                      "        return this.value + this.tail[0] + this.tail[3]\n"
+                      "    }\n"
+                      "}\n"
+                      "export fn digestState(source: Ptr<State>) -> u64 {\n"
+                      "    unsafe { return source.deref().digest() }\n"
+                      "}\n"
+                      "export fn loadState(source: Ptr<State>) -> State {\n"
+                      "    unsafe { return source.deref() }\n"
+                      "}\n"
+                      "var pointer = MutPtr<State>.null()\n"
+                      "digestState(pointer)\n"
+                      "var loaded = loadState(pointer)\n"
+                      "print(loaded.value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "raw-deref struct receiver test should generate");
+    const char *mutate = find_static_function_definition(code, "digestState");
+    TEST_REQUIRE(mutate != NULL, "raw-deref receiver function should be emitted");
+    const char *mutate_end = next_static_after(mutate);
+    TEST_REQUIRE(count_lines_outside_debug_locals(mutate, mutate_end, " = (*(xrt_struct_abi_") == 0,
+                 "raw-deref method receivers must not copy the whole struct in release C");
+    TEST_REQUIRE(contains_between(mutate, mutate_end, "(void *)("),
+                 "raw-deref method receivers should address the original pointer target");
+
+    const char *load = find_static_function_definition(code, "loadState");
+    TEST_REQUIRE(load != NULL, "raw-deref value-load function should be emitted");
+    const char *load_end = next_static_after(load);
+    TEST_REQUIRE(count_lines_outside_debug_locals(load, load_end, " = (*(xrt_struct_abi_") > 0,
+                 "a raw dereference returned by value must still materialize the struct load");
+
+    printf("  Generated release-zero-copy raw-deref struct receivers %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_struct_scalar_field_ref_skips_release_load) {
+    const char *src = "fn bumpPair(left: ref int, right: ref int) {\n"
+                      "    left += 1\n"
+                      "    right += 2\n"
+                      "}\n"
+                      "struct Counter {\n"
+                      "    left: int\n"
+                      "    right: int\n"
+                      "    advance() { bumpPair(ref this.left, ref this.right) }\n"
+                      "}\n"
+                      "var counter = Counter{left: 3, right: 5}\n"
+                      "counter.advance()\n"
+                      "print(counter.left + counter.right)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "scalar aggregate-field ref test should generate");
+    const char *advance = find_static_function_definition(code, "advance_");
+    TEST_REQUIRE(advance != NULL, "struct advance method should be emitted");
+    const char *advance_end = next_static_after(advance);
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(advance, advance_end, "    int64_t v",
+                                                              " = (*(xrt_struct_abi_") == 0,
+                 "direct scalar-field refs must not retain receiver or field loads in release C");
+    TEST_REQUIRE(contains_between(advance, advance_end, "(void *)(&(*(xrt_struct_abi_"),
+                 "scalar-field ref arguments should address the original aggregate fields");
+
+    printf("  Generated release-zero-load scalar aggregate refs %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_mem_slice_struct_pointer_owner_load_is_elided) {
+    const char *src = "import mem\n"
+                      "struct Holder {\n"
+                      "    pointer: Ptr<byte>\n"
+                      "    viewLength(size: int) -> int {\n"
+                      "        var bytes: const Slice<byte> = unsafe {\n"
+                      "            mem.slice<byte>(this.pointer, size, this.pointer)\n"
+                      "        }\n"
+                      "        return len(bytes)\n"
+                      "    }\n"
+                      "}\n"
+                      "var holder = Holder{pointer: Ptr<byte>.null()}\n"
+                      "print(holder.viewLength(0))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "mem.slice struct-owner test should generate");
+    const char *view = find_static_function_definition(code, "viewLength_");
+    TEST_REQUIRE(view != NULL, "Holder.viewLength method should be emitted");
+    const char *view_end = next_static_after(view);
+    TEST_REQUIRE(count_between(view, view_end, ")).pointer") == 1,
+                 "mem.slice must load a struct pointer field only for its emitted pointer operand");
+    TEST_REQUIRE(contains_between(view, view_end, "caller-proven mem.slice raw view"),
+                 "the native mem.slice proof-preserving path should remain intact");
+
+    printf("  Elided mem.slice lifetime-only pointer field load in %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_native_bool_assert_does_not_materialize_box) {
+    const char *src = "fn checkRange(value: int) {\n"
+                      "    assert(value >= 0)\n"
+                      "    assert(value < 16)\n"
+                      "}\n"
+                      "checkRange(7)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "native bool assert test should generate");
+    const char *check = find_static_function_definition(code, "checkRange");
+    TEST_REQUIRE(check != NULL, "asserting function should be emitted");
+    const char *check_end = next_static_after(check);
+    TEST_REQUIRE(!contains_between(check, check_end, "XR_FROM_BOOL("),
+                 "native bool assert conditions must not materialize tagged boxes");
+    TEST_REQUIRE(count_between(check, check_end, "bool _xr_assert_ok") == 2,
+                 "both assertions must remain as native abort checks");
+
+    printf("  Generated native unboxed assert conditions %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_span_phi_snapshot_is_debug_only) {
+    const char *src =
+        "fn selectedLength(flag: bool, first: Slice<byte>, second: Slice<byte>) -> int {\n"
+        "    var selected: const Slice<byte> = first\n"
+        "    if (flag) { selected = second }\n"
+        "    return len(selected)\n"
+        "}\n"
+        "var bytes = Array<byte>(2)\n"
+        "print(selectedLength(true, bytes[:], bytes[:]))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "span phi snapshot test should generate");
+    const char *selected = find_static_function_definition(code, "selectedLength");
+    TEST_REQUIRE(selected != NULL, "span-selection function should be emitted");
+    const char *selected_end = next_static_after(selected);
+    TEST_REQUIRE(contains_between(selected, selected_end, "xr_span_t phi"),
+                 "branch-selected Slice should retain its native phi");
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(selected, selected_end,
+                                                              "    xr_span_t v", " = phi") == 0,
+                 "consumer-free Slice phi snapshots must not be copied in release C");
+    TEST_REQUIRE(contains_between(selected, selected_end, "selected = phi"),
+                 "debug source storage should still synchronize from the Slice phi");
+
+    printf("  Generated debug-only Slice phi snapshots %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_span_ref_only_value_omits_unused_data_cache) {
+    const char *src = "fn touch(view: ref Slice<byte>) {\n"
+                      "    if (len(view) > 0) { view[0] = 7 }\n"
+                      "}\n"
+                      "fn allocate(size: int) -> Array<byte> {\n"
+                      "    var output = Array<byte>(size)\n"
+                      "    var view: Slice<byte> = output[:]\n"
+                      "    touch(ref view)\n"
+                      "    return output\n"
+                      "}\n"
+                      "print(len(allocate(4)))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "ref-only Slice cache test should generate");
+    const char *allocate = find_static_function_definition(code, "allocate");
+    TEST_REQUIRE(allocate != NULL, "Slice allocating function should be emitted");
+    const char *allocate_end = next_static_after(allocate);
+    TEST_REQUIRE(
+        !contains_between(allocate, allocate_end, "_ad"),
+        "a Slice used only through an addressable ref must not declare an unused data cache");
+    TEST_REQUIRE(contains_between(allocate, allocate_end, "xr_span_t") &&
+                     contains_between(allocate, allocate_end, "(void *)(&"),
+                 "the addressable Slice value itself must remain materialized");
+
+    printf("  Omitted ref-only Slice data cache in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2656,6 +3776,79 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_byte_slice_native_load_elides_endian_box) {
+    const char *src =
+        "fn roundtrip(view: ref Slice<byte>, value: u64, endian: Endian, flip: bool) -> u64 {\n"
+        "    var bias: u64 = 1\n"
+        "    if (flip) { bias = 2 }\n"
+        "    unsafe {\n"
+        "        view.store<u64>(0, value, endian)\n"
+        "        return view.load<u64>(0, endian) + bias\n"
+        "    }\n"
+        "}\n"
+        "fn run() -> u64 {\n"
+        "    var bytes = Array<byte>(8)\n"
+        "    var view: Slice<byte> = bytes[:]\n"
+        "    return roundtrip(ref view, 42, Endian.LE, false)\n"
+        "}\n"
+        "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "byte-slice native load test should generate");
+    const char *roundtrip = find_static_function_definition(code, "roundtrip_");
+    TEST_REQUIRE(roundtrip != NULL, "byte-slice roundtrip definition should be emitted");
+    const char *roundtrip_end = next_static_after(roundtrip);
+    TEST_REQUIRE(contains_between(roundtrip, roundtrip_end, "byte_slice_store_u64") &&
+                     contains_between(roundtrip, roundtrip_end, "byte_slice_load_u64"),
+                 "planned byte-slice operations must use native raw helpers");
+    TEST_REQUIRE(contains_between(roundtrip, roundtrip_end, "phi"),
+                 "regression fixture must retain an unrelated branch phi");
+    TEST_REQUIRE(!contains_between(roundtrip, roundtrip_end, "XR_FROM_INT("),
+                 "unrelated phis must not block native byte-slice operand box elision");
+
+    printf("  Generated byte-slice native endian operand %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_span_window_and_mem_slice_elide_boxed_operands) {
+    const char *src = "import mem\n"
+                      "fn rawWindowLength(source: Slice<byte>, start: int, count: u32) -> int {\n"
+                      "    var window = source.window(start, count as int)\n"
+                      "    unsafe {\n"
+                      "        var raw = mem.slice<byte>(window.ptr(), len(window), window)\n"
+                      "        return len(raw)\n"
+                      "    }\n"
+                      "}\n"
+                      "var source: [byte; 4] = [1, 2, 3, 4]\n"
+                      "print(rawWindowLength(source[:], 1, 2))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "span-window/mem-slice operand test should generate");
+    const char *raw_window = find_static_function_definition(code, "rawWindowLength_");
+    TEST_REQUIRE(raw_window != NULL, "rawWindowLength definition should be emitted");
+    const char *raw_window_end = next_static_after(raw_window);
+    TEST_REQUIRE(
+        contains_between(raw_window, raw_window_end, "/* caller-proven mem.slice raw view */"),
+        "mem.slice must retain its caller-proven native lowering");
+    TEST_REQUIRE(!contains_between(raw_window, raw_window_end, "XR_FROM_INT("),
+                 "span-window and mem.slice native operands must not retain boxes");
+
+    printf("  Generated span-window/mem-slice native operands %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     const char *src = "fn hot(dst: ref Array<byte>) -> int {\n"
                       "    dst.reserve(8)\n"
@@ -2811,6 +4004,8 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "MutPtr.copyFromNonOverlapping must lower to raw memcpy");
     assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
            "constant-size MutPtr.copyFromNonOverlapping should expose literal byte count");
+    assert(count_between(fn, fn_end, "XR_ASSUME(_xr_dst != NULL && _xr_src != NULL)") > 0 &&
+           "non-empty raw memcpy must preserve the unsafe non-null proof in generated C");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "Ptr/MutPtr hot locals must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
@@ -2824,6 +4019,38 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
            "the owning Array<byte> must be released exactly once; raw pointers add no ARC");
 
     printf("  Generated Array/Slice data pointer fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
+    const char *src = "fn run() -> int {\n"
+                      "    unsafe {\n"
+                      "        var dst = MutPtr<byte>.null()\n"
+                      "        var src = Ptr<byte>.null()\n"
+                      "        dst.copyFromNonOverlapping(src, 0)\n"
+                      "    }\n"
+                      "    return 1\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "zero-byte raw-pointer copy should generate");
+    const char *fn = find_static_function_definition(code, "static int64_t test_run_");
+    TEST_REQUIRE(fn != NULL, "run definition should exist");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(fn_end != NULL, "run function body should be bounded");
+    TEST_REQUIRE(count_between(fn, fn_end, "memcpy(") == 0,
+                 "zero-byte raw-pointer copy must not call C memcpy with null pointers");
+    TEST_REQUIRE(count_between(fn, fn_end, "XR_ASSUME(_xr_dst") == 0,
+                 "zero-byte raw-pointer copy must not establish a false non-null proof");
+
+    printf("  Generated zero-byte raw pointer copy %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -3203,6 +4430,14 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
            "borrowed read Slice<byte> stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
            "local Ptr read chain must not force a heap slice view");
+    const char *read_fn = find_static_function_definition(code, "readByteAt_");
+    assert(read_fn != NULL && "raw pointer reader definition should exist");
+    const char *read_end = next_static_after(read_fn);
+    assert(read_end != NULL && "raw pointer reader should be bounded");
+    assert(contains_between(read_fn, read_end, "XR_ASSUME(_xr_base != NULL)") &&
+           "unsafe Ptr.offset must carry its non-null base proof into generated C");
+    assert(!contains_between(read_fn, read_end, "(uintptr_t)") &&
+           "Ptr.offset must keep native pointer arithmetic without integer round-trips");
 
     printf("  Generated stack-borrow slice Ptr read-chain fast path %zu bytes of C code\n",
            strlen(code));
@@ -3671,6 +4906,130 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
     printf("  Generated local fixed-array stack path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
+}
+
+TEST(cgen_fixed_array_local_return_clones_borrowed_stack_storage) {
+    const char *src = "fn bump(lanes: ref [u8; 4]) {\n"
+                      "    lanes[2] = 9\n"
+                      "}\n"
+                      "fn make() -> [u8; 4] {\n"
+                      "    var out: [u8; 4] = [1, 2, 3, 4]\n"
+                      "    bump(ref out)\n"
+                      "    return out\n"
+                      "}\n"
+                      "var value = make()\n"
+                      "print(value[2])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "fixed-array local return should generate");
+    const char *fn = find_static_function_definition(code, "make_");
+    TEST_REQUIRE(fn != NULL, "make definition should exist");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(fn_end != NULL, "make function body should be bounded");
+    TEST_REQUIRE(contains_between(fn, fn_end, "return xrt_array_ref_clone_value("),
+                 "borrowed stack fixed-array return must clone directly into owned storage");
+    TEST_REQUIRE(
+        !contains_between(fn, fn_end, "xrt_array_ref_to_owned("),
+        "known borrowed stack storage must not retain an analyzer-opaque ownership branch");
+
+    printf("  Generated owned fixed-array return %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_fixed_array_index_ops_elide_boxed_operands) {
+    const char *src = "fn run(i: int) -> int {\n"
+                      "    var lanes: [u64; 4] = [1, 2, 3, 4]\n"
+                      "    lanes[1] = lanes[i]\n"
+                      "    return lanes[1]\n"
+                      "}\n"
+                      "print(run(2))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "fixed-array native operand test should generate");
+    const char *run = find_static_function_definition(code, "run_");
+    TEST_REQUIRE(run != NULL, "fixed-array run definition should be emitted");
+    const char *run_end = next_static_after(run);
+    TEST_REQUIRE(!contains_between(run, run_end, "XR_FROM_INT("),
+                 "fixed-array native indexes and lanes must not retain boxed temporaries");
+    TEST_REQUIRE(contains_between(run, run_end, "_fa") &&
+                     contains_between(run, run_end, "xrt_fixed_index_oob("),
+                 "fixed-array direct storage and dynamic bounds checks must remain");
+
+    printf("  Generated fixed-array native operands %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
+    const char *lib_src = "export struct Pair {\n"
+                          "    lanes: [u64; 2]\n"
+                          "    static fromLanes(lanes: [u64; 2]) -> Pair {\n"
+                          "        return Pair{lanes: lanes}\n"
+                          "    }\n"
+                          "}\n"
+                          "export fn make() -> Pair {\n"
+                          "    return Pair.fromLanes([20, 22])\n"
+                          "}\n"
+                          "make()\n";
+    const char *app_src = "print(0)\n";
+
+    XiFunc *lib_ir = compile_to_ir(lib_src);
+    XiFunc *app_ir = compile_to_ir(app_src);
+    TEST_REQUIRE(lib_ir && app_ir, "IR compilation succeeded");
+    TEST_REQUIRE(lib_ir->module && app_ir->module, "module metadata available");
+    lib_ir->module->name = "lib";
+    lib_ir->module->path = "lib.xr";
+    app_ir->module->name = "app";
+    app_ir->module->path = "app.xr";
+    XiModule *modules[] = {lib_ir->module, app_ir->module};
+
+    TEST_REQUIRE(test_prepare_backend_ir(lib_ir), "library backend preparation succeeded");
+    TEST_REQUIRE(test_prepare_backend_ir(app_ir), "app backend preparation succeeded");
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 2, 1);
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    xi_cgen_resolve_module_imports(ctx, modules, 2);
+
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "CGen output stream allocated");
+    xi_cgen_module_tu(ctx, mem, modules, 2, 0, 1);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0, "CGen output stream closed");
+    TEST_REQUIRE(code && !xi_cgen_has_error(ctx), "multi-module C generation succeeded");
+    TEST_REQUIRE(contains(code, "xrt_shared_lib["),
+                 "exported class descriptor storage remains available to other modules");
+
+    const char *make = find_static_function_definition(code, "lib_make_exp");
+    TEST_REQUIRE(make != NULL, "make definition exists");
+    const char *make_end = strstr(make, "\n}\n\n");
+    TEST_REQUIRE(make_end != NULL, "make function body bounded");
+    TEST_REQUIRE(count_between(make, make_end, "fromLanes") > 0,
+                 "static method lowers to a direct function call");
+    TEST_REQUIRE(count_between(make, make_end, "xrt_shared_lib[") == 0,
+                 "direct static method call omits its class descriptor receiver load");
+
+    printf("  Generated static method descriptor-free direct call %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    xi_func_free(lib_ir);
+    xi_func_free(app_ir);
 }
 
 TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
@@ -5535,6 +6894,117 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
 
     printf("  Generated no-throw scalar helper chain %zu bytes of C code\n", strlen(code));
     xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_declared_nothrow_stdlib_call_elides_pending_error_check) {
+    const char *src = "import mem\n"
+                      "fn guarded(value: u64) -> u64 {\n"
+                      "    return mem.compilerGuard(value)\n"
+                      "}\n"
+                      "print(guarded(123))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "declared nothrow stdlib call should generate");
+
+    const char *guarded = find_static_function_definition(code, "test_guarded_");
+    TEST_REQUIRE(guarded != NULL, "guarded function should be generated");
+    const char *guarded_end = next_static_after(guarded);
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_mem_compiler_guard_u64(") == 1,
+                 "compiler guard must use its direct AOT helper");
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_has_pending_error") == 0,
+                 "declared nothrow stdlib call must not poll the pending-error channel");
+
+    printf("  Generated declared no-throw stdlib call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
+    const char *src = "fn layer0(value: int) -> int { return value + 1 }\n"
+                      "fn layer1(value: int) -> int { return layer0(value) + 1 }\n"
+                      "fn layer2(value: int) -> int { return layer1(value) + 1 }\n"
+                      "fn layer3(value: int) -> int { return layer2(value) + 1 }\n"
+                      "fn layer4(value: int) -> int { return layer3(value) + 1 }\n"
+                      "fn layer5(value: int) -> int { return layer4(value) + 1 }\n"
+                      "fn layer6(value: int) -> int { return layer5(value) + 1 }\n"
+                      "fn layer7(value: int) -> int { return layer6(value) + 1 }\n"
+                      "fn layer8(value: int) -> int { return layer7(value) + 1 }\n"
+                      "fn layer9(value: int) -> int { return layer8(value) + 1 }\n"
+                      "fn caller(value: int) -> int {\n"
+                      "    var result = layer9(value)\n"
+                      "    return result + 1\n"
+                      "}\n"
+                      "print(caller(1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL && ir->module != NULL, "IR compilation failed");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "backend preparation failed");
+    ir->module->name = "test";
+    XiModule *modules[] = {ir->module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+
+    XiFunc *caller = NULL;
+    XiValue *caller_call = NULL;
+    for (uint16_t fi = 0; fi < ir->nchildren; fi++) {
+        XiFunc *func = ir->children[fi];
+        if (!func || !func->name)
+            continue;
+        if (strcmp(func->name, "caller") == 0)
+            caller = func;
+        if (strncmp(func->name, "layer", 5) != 0 && strcmp(func->name, "caller") != 0)
+            continue;
+        /* Model conservative imported-call flags after evidence production.
+         * The evidence still records the semantic, closed-world no-throw fact;
+         * a local recursive scan alone exceeds its fail-closed depth budget. */
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            XiBlock *block = func->blocks[bi];
+            if (!block)
+                continue;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                XiValue *value = block->values[vi];
+                if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL))
+                    continue;
+                value->flags |= XI_FLAG_MAY_THROW;
+                if (func == caller)
+                    caller_call = value;
+            }
+        }
+    }
+    TEST_REQUIRE(caller != NULL && caller_call != NULL, "caller direct call must survive lowering");
+
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1901, .frozen = true};
+    XiValue *check =
+        xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 1);
+    TEST_REQUIRE(check != NULL, "conservative error check inserted");
+    check->args[0] = caller_call;
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "CGen output stream allocated");
+    xi_cgen_program(ctx, mem, ir->module);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0, "CGen output stream closed");
+    TEST_REQUIRE(code != NULL && !xi_cgen_has_error(ctx), "closed-world fixture should generate");
+
+    const char *caller_def = find_static_function_definition(code, "test_caller_");
+    TEST_REQUIRE(caller_def != NULL, "caller function should be generated");
+    const char *caller_end = next_static_after(caller_def);
+    TEST_REQUIRE(count_between(caller_def, caller_end, "xrt_has_pending_error") == 0,
+                 "closed-world no-throw evidence must remove a conservative TLS error poll");
+
+    printf("  Generated closed-world no-throw call fixture %zu bytes of C code\n", code_size);
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
     xi_func_free(ir);
 }
 
@@ -8485,6 +9955,21 @@ int main(void) {
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_simple_arith();
+    run_cgen_rep_identical_source_alias_shares_immutable_c_local();
+    run_cgen_rep_identical_unbox_shares_immutable_c_local();
+    run_cgen_fixed_array_alias_address_projection_shares_backing_c_local();
+    run_cgen_scalar_alias_materializes_when_c_address_is_taken();
+    run_cgen_forward_use_predeclarations_have_no_dead_initializers();
+    run_cgen_trivial_span_value_clone_shares_immutable_c_local();
+    run_cgen_rep_identical_span_box_shares_immutable_c_local();
+    run_cgen_scalar_value_clone_remains_distinct_c_local();
+    run_cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local();
+    run_cgen_unused_shared_load_is_debug_only_when_source_bound();
+    run_cgen_consumed_shared_load_stays_release_materialized();
+    run_cgen_immediate_scalar_constant_inlines_into_as_cast();
+    run_cgen_immediate_scalar_constant_inlines_into_place_store();
+    run_cgen_clean_narrow_arithmetic_keeps_required_constant_local();
+    run_cgen_struct_fixed_array_index_keeps_required_constant_local();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
     run_cgen_initializes_file_dir_builtins_from_entry_source();
@@ -8493,7 +9978,8 @@ int main(void) {
     run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();
     run_cgen_if_else();
-    run_cgen_early_return_branch_uses_unlikely_hint();
+    run_cgen_early_return_branch_stays_neutral_without_hint();
+    run_cgen_explicit_unlikely_early_return_preserves_hint();
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();
@@ -8502,12 +9988,23 @@ int main(void) {
     run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_plain_function_does_not_emit_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
+    run_cgen_multimodule_branching_dispatcher_defers_to_native_inliner();
+    run_cgen_noinline_attribute_preserves_native_boundary();
+    run_cgen_inline_attribute_forces_native_expansion();
+    run_cgen_c_export_wrapper_keeps_default_visibility();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();
     run_cgen_emits_debug_source_var_slots();
     run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_struct_debug_source_var_slots_use_typed_pointers();
+    run_cgen_struct_field_only_place_loads_are_debug_guarded();
+    run_cgen_struct_raw_deref_method_receiver_skips_release_copy();
+    run_cgen_struct_scalar_field_ref_skips_release_load();
+    run_cgen_mem_slice_struct_pointer_owner_load_is_elided();
+    run_cgen_native_bool_assert_does_not_materialize_box();
+    run_cgen_span_phi_snapshot_is_debug_only();
+    run_cgen_span_ref_only_value_omits_unused_data_cache();
     run_cgen_struct_value_abi_uses_canonical_layout_typedef();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
@@ -8529,10 +10026,13 @@ int main(void) {
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
     run_cgen_byte_slice_safe_methods_use_raw_memory_helpers();
+    run_cgen_byte_slice_native_load_elides_endian_box();
+    run_cgen_span_window_and_mem_slice_elide_boxed_operands();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();
     run_cgen_direct_call_converts_bytes_to_byte_slice_arg();
     run_cgen_boxed_adapter_converts_byte_slice_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
+    run_cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy();
     run_cgen_rawptr_parallel_for_each_capture_is_rejected();
     run_cgen_span_index_get_elides_dead_err_check();
     run_cgen_span_slice_elides_dead_err_check();
@@ -8553,6 +10053,9 @@ int main(void) {
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_local_uses_stack_array_ref_storage();
+    run_cgen_fixed_array_local_return_clones_borrowed_stack_storage();
+    run_cgen_fixed_array_index_ops_elide_boxed_operands();
+    run_cgen_static_method_call_elides_class_descriptor_receiver();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
@@ -8589,6 +10092,8 @@ int main(void) {
     run_cgen_unsigned_const_shift_uses_native_op();
     run_cgen_unsigned_arith_uses_native_unsigned_expr();
     run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
+    run_cgen_declared_nothrow_stdlib_call_elides_pending_error_check();
+    run_cgen_uses_closed_world_effects_for_conservative_direct_call_checks();
     run_cgen_defer_isolates_existing_pending_error();
     run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();

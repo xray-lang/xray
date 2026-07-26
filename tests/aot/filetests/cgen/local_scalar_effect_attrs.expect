@@ -1,0 +1,2 @@
+c_regex=static XR_NOINLINE XRT_FN_CONST uint32_t local_scalar_effect_attrs_[0-9a-f]+_localRound_[0-9]+\(xrt_closure_t \*_cl, uint32_t p0\)
+c_not_regex=static XR_NOINLINE XRT_FN_PURE uint32_t local_scalar_effect_attrs_[0-9a-f]+_localRound_[0-9]+

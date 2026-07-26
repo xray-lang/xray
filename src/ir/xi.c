@@ -92,7 +92,8 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     dst->call_plan = NULL;
     if (!src->call_plan)
         return true;
-    if ((dst->op != XI_CALL && dst->op != XI_CALL_METHOD && dst->op != XI_CALL_METHOD_DIRECT) ||
+    if ((dst->op != XI_CALL && dst->op != XI_CALL_METHOD && dst->op != XI_CALL_METHOD_DIRECT &&
+         dst->op != XI_TAIL_CALL) ||
         dst->nargs < 1 || src->call_plan->nargs != (uint16_t) (dst->nargs - 1) ||
         (src->call_plan->nargs > 0 && !src->call_plan->args))
         return false;

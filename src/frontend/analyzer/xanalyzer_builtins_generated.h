@@ -308,6 +308,9 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"copyFile", "(src: Path, dst: Path): bool", "Copy a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"exists", "(path: Path): bool", "Check if path exists", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileClose", "(handle: int): bool", "Close an owned binary file handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileOpen", "(path: Path): int", "Open a file for binary reading and return an opaque handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileRead", "(handle: int, maxBytes: int): Array<byte>?", "Read at most maxBytes from an opaque binary stream; empty means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"fileSize", "(path: Path): int", "Get file size in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"isDir", "(path: Path): bool", "Check if path is a directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"isFile", "(path: Path): bool", "Check if path is a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -320,6 +323,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"readFileBytes", "(path: Path): Array<byte>?", "Read entire file as byte array", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"readLines", "(path: Path): Array<string>", "Read file as lines", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"readStdin", "(): string?", "Read all data from standard input", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"readStdinBytes", "(): Array<byte>?", "Read all standard input as binary bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"remove", "(path: Path): bool", "Remove a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -332,8 +336,10 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"touch", "(path: Path): bool", "Create or update file timestamp", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"writeFileBytes", "(path: Path, data: Array<byte>): bool", "Write byte array to file", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 30
+#define GEN_IO_FUNCTION_COUNT 36
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
@@ -396,6 +402,8 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 static const XaBuiltinMember g_gen_mem_functions[] = {
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"prefetch", "(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"compilerGuard", "(value: u64): u64", "Return value unchanged while creating a best-effort native compiler scheduling barrier", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"compilerOpaque", "(value: u64): u64", "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"cacheFlush", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"cacheInvalidate", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"nontemporalStore", "(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -403,7 +411,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"slice", "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"slice", "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"assumeInitialized", "(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -412,7 +420,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"pageProtect", "(ptr: MutPtr<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"pageFree", "(ptr: MutPtr<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"ptr", "(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"withSliceMut", "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any", "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"withSliceMut", "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"mutPtr", "(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"addr", "(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"load", "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -429,7 +437,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_MEM_FUNCTION_COUNT 33
+#define GEN_MEM_FUNCTION_COUNT 35
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

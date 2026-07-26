@@ -1116,6 +1116,60 @@ static bool native_parse_entries(XrNativePackagePlan *plan, XrTomlValue *root) {
     return true;
 }
 
+static void native_refresh_plan_fingerprint(XrNativePackagePlan *plan) {
+    uint64_t fingerprint = XR_NATIVE_FNV_OFFSET;
+    fingerprint = native_hash_text(fingerprint, plan->name);
+    fingerprint = native_hash_text(fingerprint, plan->version);
+    fingerprint = native_hash_text(fingerprint, plan->license);
+    fingerprint = native_hash_text(fingerprint, plan->source);
+    fingerprint = native_hash_bytes(fingerprint, &plan->audit_mode, sizeof(plan->audit_mode));
+    fingerprint = native_hash_bytes(fingerprint, &plan->vm_policy, sizeof(plan->vm_policy));
+    for (uint32_t i = 0; i < plan->unit_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->units[i].name);
+        fingerprint = native_hash_bytes(fingerprint, &plan->units[i].fingerprint,
+                                        sizeof(plan->units[i].fingerprint));
+    }
+    for (uint32_t i = 0; i < plan->symbol_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->symbols[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->symbols[i].native_name);
+    }
+    for (uint32_t i = 0; i < plan->target_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].triple);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].profile);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].visibility);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].cpu_feature);
+        for (uint32_t j = 0; j < plan->targets[i].system_link_count; j++)
+            fingerprint = native_hash_text(fingerprint, plan->targets[i].system_links[j]);
+        fingerprint = native_hash_bytes(fingerprint, &plan->targets[i].vm_policy,
+                                        sizeof(plan->targets[i].vm_policy));
+    }
+    for (uint32_t i = 0; i < plan->export_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].symbol);
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].visibility);
+        fingerprint = native_hash_bytes(fingerprint, &plan->exports[i].header,
+                                        sizeof(plan->exports[i].header));
+    }
+    for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].section);
+        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].used,
+                                        sizeof(plan->link_symbols[i].used));
+        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].weak,
+                                        sizeof(plan->link_symbols[i].weak));
+    }
+    for (uint32_t i = 0; i < plan->entry_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].xray_name);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].symbol);
+        fingerprint =
+            native_hash_bytes(fingerprint, &plan->entries[i].kind, sizeof(plan->entries[i].kind));
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].abi);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].section);
+        fingerprint = native_hash_text(fingerprint, plan->entries[i].stub);
+    }
+    plan->fingerprint = fingerprint ? fingerprint : 1;
+}
+
 XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
                                                   const char *project_root) {
     static const char *const native_keys[] = {
@@ -1174,57 +1228,7 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
                           "freestanding entries");
         return plan;
     }
-    uint64_t fingerprint = XR_NATIVE_FNV_OFFSET;
-    fingerprint = native_hash_text(fingerprint, plan->name);
-    fingerprint = native_hash_text(fingerprint, plan->version);
-    fingerprint = native_hash_text(fingerprint, plan->license);
-    fingerprint = native_hash_text(fingerprint, plan->source);
-    fingerprint = native_hash_bytes(fingerprint, &plan->audit_mode, sizeof(plan->audit_mode));
-    fingerprint = native_hash_bytes(fingerprint, &plan->vm_policy, sizeof(plan->vm_policy));
-    for (uint32_t i = 0; i < plan->unit_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->units[i].name);
-        fingerprint = native_hash_bytes(fingerprint, &plan->units[i].fingerprint,
-                                        sizeof(plan->units[i].fingerprint));
-    }
-    for (uint32_t i = 0; i < plan->symbol_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->symbols[i].xray_name);
-        fingerprint = native_hash_text(fingerprint, plan->symbols[i].native_name);
-    }
-    for (uint32_t i = 0; i < plan->target_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->targets[i].triple);
-        fingerprint = native_hash_text(fingerprint, plan->targets[i].profile);
-        fingerprint = native_hash_text(fingerprint, plan->targets[i].visibility);
-        fingerprint = native_hash_text(fingerprint, plan->targets[i].cpu_feature);
-        for (uint32_t j = 0; j < plan->targets[i].system_link_count; j++)
-            fingerprint = native_hash_text(fingerprint, plan->targets[i].system_links[j]);
-        fingerprint = native_hash_bytes(fingerprint, &plan->targets[i].vm_policy,
-                                        sizeof(plan->targets[i].vm_policy));
-    }
-    for (uint32_t i = 0; i < plan->export_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->exports[i].xray_name);
-        fingerprint = native_hash_text(fingerprint, plan->exports[i].symbol);
-        fingerprint = native_hash_text(fingerprint, plan->exports[i].visibility);
-        fingerprint = native_hash_bytes(fingerprint, &plan->exports[i].header,
-                                        sizeof(plan->exports[i].header));
-    }
-    for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].xray_name);
-        fingerprint = native_hash_text(fingerprint, plan->link_symbols[i].section);
-        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].used,
-                                        sizeof(plan->link_symbols[i].used));
-        fingerprint = native_hash_bytes(fingerprint, &plan->link_symbols[i].weak,
-                                        sizeof(plan->link_symbols[i].weak));
-    }
-    for (uint32_t i = 0; i < plan->entry_count; i++) {
-        fingerprint = native_hash_text(fingerprint, plan->entries[i].xray_name);
-        fingerprint = native_hash_text(fingerprint, plan->entries[i].symbol);
-        fingerprint =
-            native_hash_bytes(fingerprint, &plan->entries[i].kind, sizeof(plan->entries[i].kind));
-        fingerprint = native_hash_text(fingerprint, plan->entries[i].abi);
-        fingerprint = native_hash_text(fingerprint, plan->entries[i].section);
-        fingerprint = native_hash_text(fingerprint, plan->entries[i].stub);
-    }
-    plan->fingerprint = fingerprint ? fingerprint : 1;
+    native_refresh_plan_fingerprint(plan);
     return plan;
 }
 
@@ -1382,6 +1386,142 @@ const XrCExportPlan *xr_native_package_find_export(const XrNativePackagePlan *pl
         found = &plan->exports[i];
     }
     return found;
+}
+
+static bool native_csv_has_symbol(const char *csv, const char *symbol) {
+    if (!csv || !csv[0] || !symbol)
+        return false;
+    size_t symbol_len = strlen(symbol);
+    const char *item = csv;
+    while (*item) {
+        const char *comma = strchr(item, ',');
+        size_t item_len = comma ? (size_t) (comma - item) : strlen(item);
+        if (item_len == symbol_len && memcmp(item, symbol, item_len) == 0)
+            return true;
+        if (!comma)
+            break;
+        item = comma + 1;
+    }
+    return false;
+}
+
+static bool native_validate_export_excludes(const XrNativePackagePlan *plan, const char *csv,
+                                            char *error, size_t error_size) {
+    if (!csv || !csv[0])
+        return true;
+    const char *item = csv;
+    while (true) {
+        const char *comma = strchr(item, ',');
+        size_t item_len = comma ? (size_t) (comma - item) : strlen(item);
+        if (item_len == 0) {
+            if (error && error_size)
+                snprintf(error, error_size, "--c-export-exclude contains an empty symbol");
+            return false;
+        }
+        char *symbol = (char *) xr_malloc(item_len + 1);
+        if (!symbol) {
+            if (error && error_size)
+                snprintf(error, error_size, "cannot allocate C export filter");
+            return false;
+        }
+        memcpy(symbol, item, item_len);
+        symbol[item_len] = '\0';
+        bool valid = native_valid_c_identifier(symbol);
+        bool found = false;
+        if (valid) {
+            for (uint32_t i = 0; i < plan->export_count; i++) {
+                if (strcmp(plan->exports[i].symbol, symbol) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!valid && error && error_size)
+            snprintf(error, error_size, "invalid C export symbol in --c-export-exclude: %s",
+                     symbol);
+        else if (!found && error && error_size)
+            snprintf(error, error_size, "unknown C export symbol in --c-export-exclude: %s",
+                     symbol);
+        xr_free(symbol);
+        if (!valid || !found)
+            return false;
+        if (!comma)
+            break;
+        item = comma + 1;
+    }
+    return true;
+}
+
+bool xr_native_package_configure_c_exports(XrNativePackagePlan *plan, const char *public_prefix,
+                                           const char *exclude_csv, char *error,
+                                           size_t error_size) {
+    if (error && error_size)
+        error[0] = '\0';
+    if (!plan || !plan->valid) {
+        if (error && error_size)
+            snprintf(error, error_size, "C export shaping requires a valid project manifest");
+        return false;
+    }
+    if (public_prefix && public_prefix[0] && !native_valid_c_identifier(public_prefix)) {
+        if (error && error_size)
+            snprintf(error, error_size, "invalid --c-export-prefix C identifier: %s",
+                     public_prefix);
+        return false;
+    }
+    if (!native_validate_export_excludes(plan, exclude_csv, error, error_size))
+        return false;
+
+    char **renamed = NULL;
+    if (public_prefix && public_prefix[0] && plan->export_count > 0) {
+        renamed = (char **) xr_calloc(plan->export_count, sizeof(char *));
+        if (!renamed) {
+            if (error && error_size)
+                snprintf(error, error_size, "cannot allocate prefixed C exports");
+            return false;
+        }
+        size_t prefix_len = strlen(public_prefix);
+        for (uint32_t i = 0; i < plan->export_count; i++) {
+            XrCExportPlan *item = &plan->exports[i];
+            if (item->visibility && strcmp(item->visibility, "hidden") == 0)
+                continue;
+            size_t symbol_len = strlen(item->symbol);
+            renamed[i] = (char *) xr_malloc(prefix_len + symbol_len + 1);
+            if (!renamed[i]) {
+                for (uint32_t j = 0; j < i; j++)
+                    xr_free(renamed[j]);
+                xr_free(renamed);
+                if (error && error_size)
+                    snprintf(error, error_size, "cannot allocate prefixed C export symbol");
+                return false;
+            }
+            memcpy(renamed[i], public_prefix, prefix_len);
+            memcpy(renamed[i] + prefix_len, item->symbol, symbol_len + 1);
+        }
+    }
+
+    uint32_t write = 0;
+    for (uint32_t i = 0; i < plan->export_count; i++) {
+        XrCExportPlan *item = &plan->exports[i];
+        if (native_csv_has_symbol(exclude_csv, item->symbol)) {
+            xr_free(item->xray_name);
+            xr_free(item->symbol);
+            xr_free(item->visibility);
+            if (renamed)
+                xr_free(renamed[i]);
+            continue;
+        }
+        if (renamed && renamed[i]) {
+            xr_free(item->symbol);
+            item->symbol = renamed[i];
+        }
+        if (write != i)
+            plan->exports[write] = *item;
+        write++;
+    }
+    xr_free(renamed);
+    plan->export_count = write;
+    native_refresh_plan_fingerprint(plan);
+    return true;
 }
 
 const XrLinkSymbolPlan *xr_native_package_find_link_symbol(const XrNativePackagePlan *plan,

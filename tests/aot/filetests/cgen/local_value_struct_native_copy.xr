@@ -1,0 +1,14 @@
+struct Pair {
+    low: u64
+    high: u64
+}
+
+fn localCopy(seed: u64) -> u64 {
+    var original = Pair{low: seed + 1, high: seed + 2}
+    var changed = original
+    changed.low += 7
+    changed.high ^= 3
+    return original.low + changed.low + changed.high
+}
+
+print(localCopy(11))

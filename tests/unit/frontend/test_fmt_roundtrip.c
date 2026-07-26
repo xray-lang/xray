@@ -387,6 +387,26 @@ TEST(method_deprecated_attribute_roundtrip) {
     teardown();
 }
 
+TEST(inline_control_attributes_roundtrip) {
+    setup();
+    const char *src = "@inline\n"
+                      "fn hot(value: int) -> int { return value }\n"
+                      "struct Worker {\n"
+                      "  @noinline\n"
+                      "  cold(value: int) -> int { return value }\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "@inline\nfn hot"));
+    ASSERT_TRUE(contains(fmt1, "@noinline\n    cold"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(deprecated_message_roundtrip) {
     setup();
     const char *src = "@deprecated(\"use coldPath instead\")\n"
@@ -922,6 +942,7 @@ RUN_TEST(empty_string_roundtrip);
 RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
 RUN_TEST(method_deprecated_attribute_roundtrip);
+RUN_TEST(inline_control_attributes_roundtrip);
 RUN_TEST(deprecated_message_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);

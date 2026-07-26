@@ -314,7 +314,7 @@ static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
-    if ((v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
+    if (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
         return 1;
     if (XR_IS_ARRAY_REF(v))
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
@@ -328,8 +328,10 @@ static inline int xrt_arc_value_has_header(XrValue v) {
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
-    return (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0 ? (XrObjHeader *) v.ptr
-                                                           : XRT_ARC_HDR(v.ptr);
+    return v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+                   (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0
+               ? (XrObjHeader *) v.ptr
+               : XRT_ARC_HDR(v.ptr);
 }
 
 /* ========== --rc-guard debug codegen (task 219 P4) ==========
@@ -382,8 +384,15 @@ static inline void xrt_rc_guard_check(XrValue v, const char *site) {
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrObjHeader. */
 static inline void xrt_retain(XrValue v) {
+    /* Compiler-interned string sidecars have static storage and are never ARC
+     * objects.  Keep this fast rejection explicit before any container/header
+     * routing so both optimized C and path-sensitive analyzers preserve that
+     * lifetime fact when a literal key has travelled through a collection. */
+    if (v.tag == XR_TAG_STR)
+        return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
         xrt_coll_retain(v);
         return;
     }
@@ -457,8 +466,11 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
 }
 
 static inline void xrt_release(XrValue v) {
+    if (v.tag == XR_TAG_STR)
+        return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
+         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
         xrt_coll_release(v);
         return;
     }
@@ -501,13 +513,13 @@ static inline void xrt_release(XrValue v) {
 
 static inline XrValue xrt_value_to_owned(XrValue v);
 
-static inline XrValue xrt_array_ref_to_owned(XrValue v) {
+/* Materialize an independent fixed-array value.  This differs from
+ * xrt_array_ref_to_owned(): an already-owned source must still get new outer
+ * storage for value-copy semantics.  Reference-valued lanes retain their
+ * elements rather than recursively cloning the referenced objects. */
+static inline XrValue xrt_array_ref_clone_value(XrValue v) {
     if (!XR_IS_ARRAY_REF(v) || !v.ptr)
         return v;
-    if ((v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0) {
-        xrt_retain(v);
-        return v;
-    }
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(v);
     uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(v);
     size_t elem_size = xrt_value_native_type_size(elem_type);
@@ -522,6 +534,16 @@ static inline XrValue xrt_array_ref_to_owned(XrValue v) {
         memcpy(dst, v.ptr, size);
     }
     return xr_array_ref_owned(dst, elem_type, elem_count);
+}
+
+static inline XrValue xrt_array_ref_to_owned(XrValue v) {
+    if (!XR_IS_ARRAY_REF(v) || !v.ptr)
+        return v;
+    if ((v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0) {
+        xrt_retain(v);
+        return v;
+    }
+    return xrt_array_ref_clone_value(v);
 }
 
 static inline void xrt_array_ref_release_owned(XrValue v) {

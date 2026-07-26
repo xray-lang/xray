@@ -1,0 +1,9 @@
+args=--target powerpc64-linux-musl --simd vsx --dump-xaot-plan
+contains=-mcpu=pwr8
+c_contains=xr_v16u8 _fixed = __builtin_shufflevector(_bytes, _bytes, 7u, 6u, 5u, 4u, 3u, 2u, 1u, 0u
+c_contains=__asm__("vmuleuw %0, %1, %2"
+c_contains=xr_v4u32 _al = __builtin_shufflevector(_a, _a, 0u, 0u, 2u, 2u)
+c_contains=xr_v4u32 _al = __builtin_shufflevector(_a, _a, 1u, 1u, 3u, 3u)
+c_contains=_sn >= 32u ? (xr_v4u32){0, 0, 0, 0}
+c_regex=\(\(const xrt_struct_abi_[0-9a-f]+ \*\)\(const void \*\)\(v[0-9]+\)\.ptr\)->_lanes
+c_not_contains=uint32_t _byte = _i * 8u + _b

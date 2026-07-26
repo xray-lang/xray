@@ -1,0 +1,20 @@
+struct Worker {
+    tag: u32
+
+    bump(acc: ref [u32; 4], x: u32) {
+        acc[0] = acc[0] + x
+    }
+
+    readPair(acc: [u32; 4]) -> u32 {
+        return acc[0] + acc[1]
+    }
+}
+
+fn run() -> u32 {
+    var worker = Worker{tag: 0}
+    var acc: [u32; 4] = [1, 2, 3, 4]
+    worker.bump(ref acc, 7)
+    return worker.readPair(acc)
+}
+
+print(run())

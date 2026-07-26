@@ -1,0 +1,38 @@
+import { Capabilities, U8xNative, U64xNative } from simd
+
+fn stripe(acc: ref Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
+    var width = Capabilities.nativeBytes()
+    var offset = 0
+    while (offset < 64) {
+        var data = U8xNative.load(input, offset)
+        var words = data.bitXor(U8xNative.load(secret, offset)).reinterpretU32()
+        var product = words.widenMulEven(words.swapAdjacent())
+        var next = U64xNative.load(acc, offset / 8).add(data.reinterpretU64().swapAdjacent()).add(product)
+        var mixed = next.bitXor(next.shiftRight(47)).bitXor(U8xNative.load(secret, offset).reinterpretU64())
+        var scrambled = mixed.mul(U64xNative.splat(2654435761))
+        scrambled.store(ref acc, offset / 8)
+        offset += width
+    }
+}
+
+fn aggregateBoundary(output: ref Slice<u64>) {
+    var value = U64xNative.splat(8).shiftRight(1).swapAdjacent()
+    value = value.add(U64xNative.splat(3))
+    value.store(ref output)
+}
+
+fn main() {
+    var acc: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var input: [byte; 64] = [1; 64]
+    var secret: [byte; 64] = [2; 64]
+    var accView: Slice<u64> = acc[:]
+    stripe(ref accView, input[:], secret[:])
+    var boundary: [u64; 8] = [0; 8]
+    var boundaryView: Slice<u64> = boundary[:]
+    aggregateBoundary(ref boundaryView)
+    print(Capabilities.isScalable())
+    print(Capabilities.nativeBytes())
+    print(acc[0])
+}
+
+main()

@@ -22,6 +22,7 @@ static int tests_failed = 0;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 3, .frozen = true};
+static XrType stub_class = {.kind = XR_KIND_INSTANCE, .id = 4, .frozen = true};
 
 #define ASSERT(cond)                                                                               \
     do {                                                                                           \
@@ -255,6 +256,26 @@ TEST(throw_never_inline) {
     ASSERT(b == -1000);
 }
 
+/* ========== Test: frame-resident aggregate is not hoisted into caller ========== */
+
+TEST(stack_aggregate_never_inline) {
+    XiInlineCostModel cost = {
+        .value_count = 8,
+        .call_count = 0,
+        .branch_count = 0,
+        .has_loop = false,
+        .calls_self = false,
+        .has_throw = false,
+        .has_stack_aggregate = true,
+    };
+    XiInlineCallSiteInfo site = {
+        .all_args_const = true,
+        .single_call_site = true,
+        .caller_size = 12,
+    };
+    ASSERT(xi_inline_benefit(&cost, &site) == -1000);
+}
+
 /* ========== Test: combined bonuses overcome borderline ========== */
 
 TEST(combined_bonuses) {
@@ -371,6 +392,39 @@ TEST(inlines_top_level_shared_function_load) {
     xi_func_free(program);
 }
 
+TEST(preserves_wide_vector_target_feature_boundary) {
+    XiFunc *callee = make_func("wide_vector_callee", &stub_int);
+    XiFunc *caller = make_func("baseline_caller", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *lane = xi_const_int(callee, callee->entry, 1, &stub_int);
+    ASSERT(lane != NULL);
+    XiValue *wide = xi_value_new(callee, callee->entry, XI_VEC_SPLAT, &stub_int, 1);
+    ASSERT(wide != NULL);
+    wide->args[0] = lane;
+    wide->aux_int = xi_vec_shape_encode(XR_NATIVE_U64, 4);
+    xi_block_set_return(callee->entry, wide);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    XiValue *runtime_width =
+        xi_value_new(caller, caller->entry, XI_TARGET_SIMD_BYTES, &stub_int, 0);
+    ASSERT(runtime_width != NULL);
+    xi_block_set_return(caller->entry, call);
+    caller->preserve_wide_vector_boundaries = true;
+
+    XiPassChange chg = xi_opt_inline(caller);
+    ASSERT(!chg.cfg_changed && !chg.values_changed);
+    ASSERT(caller->entry->succs[0] == NULL);
+    ASSERT(caller->entry->nvalues == 3);
+    ASSERT(caller->entry->values[1] == call);
+    ASSERT(caller->entry->values[2] == runtime_width);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 TEST(inline_clone_reproves_evidence_for_new_subject_and_revision) {
     XiFunc *callee = make_func("proof_source", &stub_int);
     XiFunc *caller = make_func("proof_destination", &stub_int);
@@ -433,6 +487,63 @@ TEST(inline_clone_reproves_evidence_for_new_subject_and_revision) {
     xi_func_free(callee);
 }
 
+TEST(inline_clears_callee_tail_position) {
+    XiFunc *callee = make_func("tail_source", &stub_int);
+    XiFunc *caller = make_func("tail_destination", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *receiver = xi_const_int(callee, callee->entry, 7, &stub_int);
+    ASSERT(receiver != NULL);
+    XiValue *method = xi_value_new(callee, callee->entry, XI_CALL_METHOD, &stub_int, 1);
+    ASSERT(method != NULL);
+    method->args[0] = receiver;
+    method->flags |= XI_FLAG_TAIL;
+    xi_block_set_return(callee->entry, method);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(change.cfg_changed && change.values_changed);
+    XiBlock *inlined_entry = caller->entry->succs[0];
+    ASSERT(inlined_entry != NULL && inlined_entry->nvalues == 2);
+    XiValue *cloned_method = inlined_entry->values[1];
+    ASSERT(cloned_method != NULL && cloned_method->op == XI_CALL_METHOD);
+    ASSERT((cloned_method->flags & XI_FLAG_TAIL) == 0);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
+TEST(inline_preserves_owner_scoped_open_dispatch_boundary) {
+    XiFunc *callee = make_func("open_dispatch_source", &stub_int);
+    XiFunc *caller = make_func("open_dispatch_destination", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *receiver = xi_value_new(callee, callee->entry, XI_CONST, &stub_class, 0);
+    ASSERT(receiver != NULL);
+    XiValue *method = xi_value_new(callee, callee->entry, XI_CALL_METHOD, &stub_int, 1);
+    ASSERT(method != NULL);
+    method->args[0] = receiver;
+    xi_block_set_return(callee->entry, method);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(!change.cfg_changed && !change.values_changed);
+    ASSERT(caller->entry->succs[0] == NULL);
+    ASSERT(caller->entry->nvalues == 2);
+    ASSERT(caller->entry->values[1] == call);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -447,13 +558,17 @@ int main(void) {
     run_straightline_helper_ignores_large_caller_penalty();
     run_large_caller_penalizes_general_helper();
     run_throw_never_inline();
+    run_stack_aggregate_never_inline();
     run_combined_bonuses();
     run_budget_small_caller();
     run_budget_medium_caller();
     run_budget_large_caller();
     run_inlines_unannotated_callee_under_tbaa_invariant();
     run_inlines_top_level_shared_function_load();
+    run_preserves_wide_vector_target_feature_boundary();
     run_inline_clone_reproves_evidence_for_new_subject_and_revision();
+    run_inline_clears_callee_tail_position();
+    run_inline_preserves_owner_scoped_open_dispatch_boundary();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

@@ -1193,7 +1193,11 @@ static bool verify_call_plan_receiver(VerifyCtx *ctx, const XiFunc *f, const XiV
 static bool verify_call_plan_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                    XiValue *v) {
     const XiCallPlan *plan = v->call_plan;
-    bool call_op = v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT;
+    /* XI_TAIL_CALL preserves the ordinary call argument layout and verified
+     * read/ref/move plan. The VM consumes it directly; AOT normalizes it back
+     * to XI_CALL before bundle planning. */
+    bool call_op = v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+                   v->op == XI_TAIL_CALL;
     if (!plan) {
         if (!call_op)
             return true;
@@ -1399,7 +1403,8 @@ static void verify_place_uses(VerifyCtx *ctx, const XiFunc *f) {
                         } else if (user->op == XI_PLACE_STORE && a == 0) {
                             allowed = true;
                         } else if ((user->op == XI_CALL || user->op == XI_CALL_METHOD ||
-                                    user->op == XI_CALL_METHOD_DIRECT) &&
+                                    user->op == XI_CALL_METHOD_DIRECT ||
+                                    user->op == XI_TAIL_CALL) &&
                                    verify_call_plan_accepts_place_at(user, a, place)) {
                             allowed = true;
                         }
@@ -1737,13 +1742,11 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            /* XI_OWNER_FORWARD is an ownership-edge marker, not an SSA invalidation:
-             * a preceding RETAIN, a borrowed call result, or a branch-local
-             * consume can legitimately leave the same SSA carrier usable.
-             * The old same-block "no later use" heuristic rejected valid ARC
-             * output while missing cross-block errors.  Verify only the local
-             * executable contract here; the ARC ownership proof owns the
-             * global consume accounting. */
+            /* XI_OWNER_FORWARD transfers an owning reference to a new SSA
+             * value without source-level binding invalidation. A preceding
+             * RETAIN or branch-local consume can legitimately leave the source
+             * SSA carrier usable. Verify only the local executable contract
+             * here; the ARC ownership proof owns the global consume accounting. */
             if (v->op == XI_OWNER_FORWARD && v->nargs >= 1 && v->args[0]) {
                 XiValue *moved = v->args[0];
                 if (!v->type || !moved->type ||

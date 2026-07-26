@@ -24,11 +24,20 @@ typedef enum XaResolvedCallReason {
     XA_RESOLVED_CALL_REASON_RECOVERY_POISON,
 } XaResolvedCallReason;
 
+typedef enum XaResolvedCallFlags {
+    XA_RESOLVED_CALL_FLAG_NONE = 0,
+    /* The source call is lexically enclosed by an explicit `unsafe {}`.
+     * This is analyzer-owned source evidence; individual intrinsic lowerings
+     * decide whether the fact changes their backend contract. */
+    XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE = 1u << 0,
+} XaResolvedCallFlags;
+
 typedef struct XaResolvedCall {
     uint32_t source_node_id;
     uint32_t target_symbol_id;
     XaIntrinsicId intrinsic_id;
     XaResolvedCallReason reason;
+    uint32_t flags;
 } XaResolvedCall;
 
 typedef struct XaResolvedCallTable XaResolvedCallTable;

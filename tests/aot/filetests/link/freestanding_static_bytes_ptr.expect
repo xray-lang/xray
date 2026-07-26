@@ -5,10 +5,10 @@ contains=mutability=0
 contains=identity=2
 contains=origin=static
 contains=escape=stable
-c_contains=static const char _xbytes_1[] = "A\000B";
-c_contains=static const char _xbytes_2[] = "ok\000";
-c_contains=(void *)((const uint8_t *)_xbytes_1)
-c_contains=(void *)((const uint8_t *)_xbytes_2)
+c_contains=static const char _xbytes_m0_1[] = "A\000B";
+c_contains=static const char _xbytes_m0_2[] = "ok\000";
+c_contains=(void *)((const uint8_t *)_xbytes_m0_1)
+c_contains=(void *)((const uint8_t *)_xbytes_m0_2)
 c_not_contains=_fa
 c_not_contains=xrt_mem_addr
 not_contains=xray_rt_coro

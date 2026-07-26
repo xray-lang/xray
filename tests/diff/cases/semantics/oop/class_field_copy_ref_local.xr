@@ -1,0 +1,29 @@
+// A local initialized from a class field is a value copy. Taking `ref` to the
+// local must not borrow or mutate the original receiver field.
+fn increment(value: ref int) {
+    value = value + 1
+}
+
+class DigestState {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    digestCopy() -> int {
+        var local = this.value
+        increment(ref local)
+        return local
+    }
+
+    incrementField() {
+        increment(ref this.value)
+    }
+}
+
+var state = DigestState(41)
+print(state.digestCopy())
+print(state.value)
+state.incrementField()
+print(state.value)
