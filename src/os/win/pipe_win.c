@@ -76,11 +76,25 @@ int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len) {
 }
 
 XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int64_t *out_n) {
-    if (out_n) {
-        *out_n = xr_pipe_read(handle, buf, len);
-        return *out_n < 0 ? XR_PIPE_IO_ERROR : XR_PIPE_IO_OK;
+    if (out_n)
+        *out_n = -1;
+    if (handle == XR_PIPE_INVALID || (!buf && len > 0) || !out_n)
+        return XR_PIPE_IO_ERROR;
+
+    DWORD available = 0;
+    if (!PeekNamedPipe(pipe_handle(handle), NULL, 0, NULL, &available, NULL)) {
+        if (GetLastError() == ERROR_BROKEN_PIPE) {
+            *out_n = 0;
+            return XR_PIPE_IO_OK;
+        }
+        return XR_PIPE_IO_ERROR;
     }
-    return XR_PIPE_IO_ERROR;
+    if (available == 0)
+        return XR_PIPE_IO_WOULD_BLOCK;
+
+    size_t readable = len < (size_t) available ? len : (size_t) available;
+    *out_n = xr_pipe_read(handle, buf, readable);
+    return *out_n < 0 ? XR_PIPE_IO_ERROR : XR_PIPE_IO_OK;
 }
 
 int64_t xr_pipe_write(XrPipeHandle handle, const void *buf, size_t len) {

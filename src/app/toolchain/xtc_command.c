@@ -171,7 +171,7 @@ static bool emit_msvc_compile(const XrToolchainSelection *selection,
         spec->disable_machine_outliner || (spec->cpu && spec->cpu[0]))
         return command_error(err, err_size,
                              "requested native compile intent is unsupported by MSVC provider");
-    if (!add(sink, "/nologo", err, err_size) ||
+    if (!add(sink, "/nologo", err, err_size) || !add(sink, "/utf-8", err, err_size) ||
         !add(sink, msvc_optimization(spec->optimization), err, err_size))
         return false;
     if (spec->fp_contract == XR_FP_CONTRACT_OFF && !add(sink, "/fp:strict", err, err_size))
@@ -199,7 +199,8 @@ static bool emit_msvc_compile(const XrToolchainSelection *selection,
         if (strcmp(spec->language_standard, "c11") != 0 &&
             strcmp(spec->language_standard, "c17") != 0)
             return command_error(err, err_size, "MSVC provider supports only c11 or c17 here");
-        if (!joined(sink, "/std:", spec->language_standard, err, err_size))
+        if (!joined(sink, "/std:", spec->language_standard, err, err_size) ||
+            !add(sink, "/experimental:c11atomics", err, err_size))
             return false;
     }
     return true;
@@ -248,6 +249,10 @@ static bool emit_msvc_link(const XrToolchainSelection *selection, const XrToolch
         return command_error(err, err_size,
                              "requested native link intent is unsupported by MSVC provider");
     if (spec->shared && !add(sink, "/LD", err, err_size))
+        return false;
+    /* cl.exe forwards arguments following /link to link.exe. Keep compiler
+     * switches (notably /LD) before the delimiter. */
+    if (!add(sink, "/link", err, err_size))
         return false;
     if (spec->lto && !add(sink, "/LTCG", err, err_size))
         return false;
@@ -338,11 +343,21 @@ XR_FUNC bool xtc_command_emit_define(XrToolchainProviderId provider, const char 
 XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, const char *name,
                                              XrToolchainArgSink *sink, char *err, size_t err_size) {
     if (provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
+        static const struct {
+            const char *logical;
+            const char *library;
+        } mappings[] = {{"ws2_32", "ws2_32.lib"},
+                        {"bcrypt", "bcrypt.lib"},
+                        {"synchronization", "synchronization.lib"},
+                        {"api-ms-win-core-synch-l1-2-0", "synchronization.lib"}};
         size_t len = name ? strlen(name) : 0;
-        if (len < 4 || strcmp(name + len - 4, ".lib") != 0)
-            return command_error(err, err_size,
-                                 "MSVC system-library logical name has no explicit .lib mapping");
-        return add(sink, name, err, err_size);
+        if (len >= 4 && strcmp(name + len - 4, ".lib") == 0)
+            return add(sink, name, err, err_size);
+        for (size_t i = 0; i < sizeof(mappings) / sizeof(mappings[0]); i++)
+            if (name && strcmp(name, mappings[i].logical) == 0)
+                return add(sink, mappings[i].library, err, err_size);
+        return command_error(err, err_size,
+                             "MSVC system-library logical name has no explicit .lib mapping");
     }
     return joined(sink, "-l", name, err, err_size);
 }

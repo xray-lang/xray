@@ -4,7 +4,8 @@
  * E.g. "/a/b/math.xr" from dir "/a/b" becomes "./math".  Caller must free. */
 static char *cg_derive_import_string(const char *target_path, const char *importer_dir) {
     size_t dir_len = strlen(importer_dir);
-    if (strncmp(target_path, importer_dir, dir_len) == 0 && target_path[dir_len] == '/') {
+    if (strncmp(target_path, importer_dir, dir_len) == 0 &&
+        (target_path[dir_len] == '/' || target_path[dir_len] == '\\')) {
         const char *filename = target_path + dir_len + 1;
         size_t flen = strlen(filename);
         if (flen > 3 && strcmp(filename + flen - 3, ".xr") == 0)
@@ -19,6 +20,9 @@ static char *cg_derive_import_string(const char *target_path, const char *import
         return result;
     }
     const char *base = strrchr(target_path, '/');
+    const char *backslash = strrchr(target_path, '\\');
+    if (backslash && (!base || backslash > base))
+        base = backslash;
     base = base ? base + 1 : target_path;
     size_t blen = strlen(base);
     if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0)
@@ -85,6 +89,9 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
             strncpy(importer_dir, imp_path, sizeof(importer_dir) - 1);
             importer_dir[sizeof(importer_dir) - 1] = '\0';
             char *slash = strrchr(importer_dir, '/');
+            char *backslash = strrchr(importer_dir, '\\');
+            if (backslash && (!slash || backslash > slash))
+                slash = backslash;
             if (slash)
                 *slash = '\0';
 

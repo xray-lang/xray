@@ -41,6 +41,8 @@ XR_FUNC bool xtc_find_bundled_zig(const char *program_hint, char *out, size_t ou
 XR_FUNC bool xtc_active_apple_sdk(char *out, size_t out_size, char *err, size_t err_size);
 XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolchainCandidates *out,
                                      char *err, size_t err_size);
+XR_FUNC bool xtc_msvc_version_from_banner(const char *source, char *version,
+                                          size_t version_size);
 XR_FUNC bool xtc_candidate_read_version(XrToolchainCandidate *candidate, char *err,
                                         size_t err_size);
 XR_FUNC bool xtc_selector_accepts_provider(XrToolchainSelector selector,

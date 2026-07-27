@@ -766,6 +766,9 @@ static char *derive_module_name(const XrModuleSpec *spec) {
     identity_hash = identity ? xr_hash_bytes64(identity, strlen(identity)) : 0;
     snprintf(suffix, sizeof(suffix), "_%016llx", (unsigned long long) identity_hash);
     const char *base = strrchr(path, '/');
+    const char *backslash = strrchr(path, '\\');
+    if (backslash && (!base || backslash > base))
+        base = backslash;
     base = base ? base + 1 : path;
     size_t len = strlen(base);
     if (len > 3 && strcmp(base + len - 3, ".xr") == 0)
@@ -2222,8 +2225,10 @@ fail_free_graph:
         xray_vm_delete(X);
     xr_free(mono_roots);
     for (int i = 0; i < nmodules; i++) {
-        xr_free(paths[i]);
-        xr_free(mod_names[i]);
+        if (paths)
+            xr_free(paths[i]);
+        if (mod_names)
+            xr_free(mod_names[i]);
     }
     xr_free(paths);
     xr_free(mod_names);

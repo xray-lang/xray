@@ -53,6 +53,9 @@ XR_FUNC const char *xi_resolve_import_canonical(const XrModuleGraph *graph,
     strncpy(dir, importer_path, sizeof(dir) - 1);
     dir[sizeof(dir) - 1] = '\0';
     char *slash = strrchr(dir, '/');
+    char *backslash = strrchr(dir, '\\');
+    if (backslash && (!slash || backslash > slash))
+        slash = backslash;
     if (slash)
         *(slash + 1) = '\0';
     else

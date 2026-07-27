@@ -620,6 +620,9 @@ static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest, XrNativeCo
     compile->disable_unwind_tables = !manifest->compile.unwind_tables;
     compile->disable_machine_outliner = manifest->compile.disable_machine_outliner;
     compile->cpu = manifest->compile.cpu;
+    /* Xray-generated translation units include the C11 runtime ABI (including
+     * stdatomic.h), so every provider must compile them as C11. */
+    compile->language_standard = "c11";
     if ((manifest->target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0)
         compile->simd = XR_NATIVE_SIMD_AVX2;
 
@@ -1096,12 +1099,6 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
                  target->name);
         return false;
     }
-    if (needs_runtime && !xtc_provider_uses_gnu_driver(plan->provider)) {
-        snprintf(err, err_size,
-                 "toolchain '%s' cannot consume runtime objects from AOT link manifest yet",
-                 xtc_provider_name(plan->provider));
-        return false;
-    }
     memset(cmd, 0, sizeof(*cmd));
     if (!xaot_cli_add_provider_driver_prefix(cmd, plan, target, err, err_size))
         return false;
@@ -1111,7 +1108,6 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     sink = xaot_cli_command_sink(cmd);
     xaot_cli_semantic_specs(manifest, &compile_spec, &link_spec);
     if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
-        !xtc_command_emit_link(plan, target, &link_spec, &sink, err, err_size) ||
         !xtc_command_emit_link_output(plan->provider, output_file, &sink, err, err_size))
         return false;
     for (in = 0; in < n_inputs; in++) {
@@ -1170,6 +1166,8 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
                                              err_size))
             return false;
     }
+    if (!xtc_command_emit_link(plan, target, &link_spec, &sink, err, err_size))
+        return false;
     for (i = 0; i < manifest->n_ld_flags; i++) {
         if (!xaot_cli_link_ld_flag_supported(target, manifest->ld_flags[i]))
             continue;
@@ -1656,14 +1654,6 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                 target_config->objcopy_output);
         CMD_BUILD_RETURN(2);
     }
-#ifdef XR_OS_WINDOWS
-    bool freestanding_shared_object =
-        shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
-    if (shared_library && !c_only && !freestanding_shared_object) {
-        fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
-        CMD_BUILD_RETURN(2);
-    }
-#endif
     if ((xr_cli_opt_present(&inv->options, "cache-dir") || rebuild) && !native_mode) {
         fprintf(stderr, "Error: --cache-dir/--rebuild require --native\n");
         CMD_BUILD_RETURN(2);
@@ -2051,7 +2041,12 @@ static bool xaot_link_value_is_path(const char *value) {
     len = strlen(value);
     return strchr(value, '/') || (len > 2 && strcmp(value + len - 2, ".o") == 0) ||
            (len > 2 && strcmp(value + len - 2, ".a") == 0) ||
+           (len > 4 && strcmp(value + len - 4, ".obj") == 0) ||
            (len > 4 && strcmp(value + len - 4, ".lib") == 0);
+}
+
+static const char *xaot_cli_object_suffix(const XrToolchainSelection *plan) {
+    return plan && plan->provider == XR_TOOLCHAIN_PROVIDER_MSVC ? ".obj" : ".o";
 }
 
 static void xaot_runtime_archive_path(const char *lib_dir, const char *name, char *out,
@@ -2480,8 +2475,8 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
         for (uint32_t si = 0; si < unit->source_count; si++) {
             uint64_t key = xaot_native_object_cache_key(unit, si, target, toolchain_plan, sysroot);
             char tmp[XR_PATH_MAX];
-            snprintf(object_paths[si], XR_PATH_MAX, "%s/%016llx.o", native_cache,
-                     (unsigned long long) key);
+            snprintf(object_paths[si], XR_PATH_MAX, "%s/%016llx%s", native_cache,
+                     (unsigned long long) key, xaot_cli_object_suffix(toolchain_plan));
             objects[si] = object_paths[si];
             if (!rebuild && xr_fs_is_file(object_paths[si])) {
                 if (verbose)
@@ -2489,8 +2484,9 @@ static int xaot_compile_native_package(const XrNativePackagePlan *native_plan,
                            (unsigned long long) key);
                 continue;
             }
-            snprintf(tmp, sizeof(tmp), "%s/%016llx.%d.o.tmp", native_cache,
-                     (unsigned long long) key, (int) xr_proc_self_pid());
+            snprintf(tmp, sizeof(tmp), "%s/%016llx.%d%s.tmp", native_cache,
+                     (unsigned long long) key, (int) xr_proc_self_pid(),
+                     xaot_cli_object_suffix(toolchain_plan));
             if (verbose)
                 printf("[xi-native] compiling native unit: %s[%u] (%016llx)\n", unit->name, si,
                        (unsigned long long) key);
@@ -2589,8 +2585,8 @@ static int xaot_verify_native_layouts(const XrNativePackagePlan *native_plan,
         }
         snprintf(source, sizeof(source), "%s/layout-%u.%d.c", cache_dir, i,
                  (int) xr_proc_self_pid());
-        snprintf(object, sizeof(object), "%s/layout-%u.%d.o", cache_dir, i,
-                 (int) xr_proc_self_pid());
+        snprintf(object, sizeof(object), "%s/layout-%u.%d%s", cache_dir, i,
+                 (int) xr_proc_self_pid(), xaot_cli_object_suffix(toolchain_plan));
         if (!dry_run) {
             FILE *f = fopen(source, "w");
             if (!f) {
@@ -2735,7 +2731,9 @@ static void xaot_write_evidence_cache_text(const char *path, const char *text) {
     n = snprintf(tmp, sizeof(tmp), "%s.%d.tmp", path, (int) xr_proc_self_pid());
     if (n < 0 || (size_t) n >= sizeof(tmp))
         return;
-    f = fopen(tmp, "w");
+    /* Cache payload headers hash the exact LF-delimited bytes.  Binary mode
+     * prevents the Windows CRT from rewriting them to CRLF on disk. */
+    f = fopen(tmp, "wb");
     if (!f)
         return;
     bool write_ok = fputs(text, f) >= 0;
@@ -2856,7 +2854,8 @@ static int xaot_compile_source_cached(const XrToolchainSelection *plan,
     char tmp_o[XR_PATH_MAX];
     int ret;
 
-    snprintf(obj_out, obj_out_sz, "%s/%016llx.o", cache_dir, (unsigned long long) key);
+    snprintf(obj_out, obj_out_sz, "%s/%016llx%s", cache_dir, (unsigned long long) key,
+             xaot_cli_object_suffix(plan));
     if (dry_run) {
         if (verbose)
             printf("[xi-native] link-plan object: %s (%016llx)\n", src->name ? src->name : "?",
@@ -2872,8 +2871,8 @@ static int xaot_compile_source_cached(const XrToolchainSelection *plan,
 
     snprintf(tmp_c, sizeof(tmp_c), "%s/%016llx.%d.c", cache_dir, (unsigned long long) key,
              (int) xr_proc_self_pid());
-    snprintf(tmp_o, sizeof(tmp_o), "%s/%016llx.%d.o.tmp", cache_dir, (unsigned long long) key,
-             (int) xr_proc_self_pid());
+    snprintf(tmp_o, sizeof(tmp_o), "%s/%016llx.%d%s.tmp", cache_dir, (unsigned long long) key,
+             (int) xr_proc_self_pid(), xaot_cli_object_suffix(plan));
 
     FILE *f = fopen(tmp_c, "w");
     if (!f) {

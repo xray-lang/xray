@@ -109,13 +109,27 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(
         xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "ws2_32", &sink, err,
+                                                sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "bcrypt", &sink, err,
+                                                sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider,
+                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
+                                                sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "/O2"));
+    ASSERT_TRUE(command_capture_has(&capture, "/utf-8"));
     ASSERT_TRUE(command_capture_has(&capture, "/fp:strict"));
+    ASSERT_TRUE(command_capture_has(&capture, "/std:c11"));
+    ASSERT_TRUE(command_capture_has(&capture, "/experimental:c11atomics"));
     ASSERT_TRUE(command_capture_has(&capture, "/GL"));
     ASSERT_TRUE(command_capture_has(&capture, "/LD"));
     ASSERT_TRUE(command_capture_has(&capture, "/LTCG"));
+    ASSERT_TRUE(command_capture_has(&capture, "/link"));
     ASSERT_TRUE(command_capture_has(&capture, "/OPT:REF"));
     ASSERT_TRUE(command_capture_has(&capture, "/ENTRY:mainCRTStartup"));
+    ASSERT_TRUE(command_capture_has(&capture, "ws2_32.lib"));
+    ASSERT_TRUE(command_capture_has(&capture, "bcrypt.lib"));
+    ASSERT_TRUE(command_capture_has(&capture, "synchronization.lib"));
     ASSERT_FALSE(command_capture_has(&capture, "-O2"));
 }
 
@@ -415,16 +429,27 @@ TEST(config_corruption_is_preserved) {
 }
 
 TEST(process_capture_and_output_limit) {
-#ifndef _WIN32
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
     XrProcessResult result;
+#ifdef _WIN32
+    ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.argv[1] = "-NoLogo";
+    spec.argv[2] = "-NoProfile";
+    spec.argv[3] = "-NonInteractive";
+    spec.argv[4] = "-Command";
+    spec.argv[5] =
+        "[Console]::Out.Write('123456789'); [Console]::Error.Write('abcdefghi')";
+    spec.argv[6] = NULL;
+#else
     ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
     spec.argv[1] = "-c";
     spec.argv[2] = "printf 123456789; printf abcdefghi >&2";
     spec.argv[3] = NULL;
+#endif
     spec.output_limit = 5;
     ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
     ASSERT_EQ_INT(result.exit_code, 0);
@@ -432,36 +457,50 @@ TEST(process_capture_and_output_limit) {
     ASSERT_STR_EQ(result.stderr_data, "abcde");
     ASSERT_TRUE(result.output_truncated);
     xtc_process_result_free(&result);
-#endif
 }
 
 TEST(process_timeout_is_bounded) {
-#ifndef _WIN32
     char shell[1200];
     char err[256];
     XrProcessSpec spec;
     XrProcessResult result;
+#ifdef _WIN32
+    ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 30);
+    spec.argv[1] = "-NoLogo";
+    spec.argv[2] = "-NoProfile";
+    spec.argv[3] = "-NonInteractive";
+    spec.argv[4] = "-Command";
+    spec.argv[5] = "Start-Sleep -Seconds 5";
+    spec.argv[6] = NULL;
+#else
     ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 30);
     spec.argv[1] = "-c";
     spec.argv[2] = "sleep 5";
     spec.argv[3] = NULL;
+#endif
     ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
     ASSERT_TRUE(result.timed_out);
     ASSERT_TRUE(result.duration_ms < 2000);
     xtc_process_result_free(&result);
-#endif
 }
 
 TEST(process_diagnostic_redacts_secret_environment_values) {
-#ifndef _WIN32
     const char *secret = "xray-super-secret-value";
     char output[128];
+#ifdef _WIN32
+    ASSERT_EQ_INT(_putenv_s("XRAY_TEST_SECRET_TOKEN", secret), 0);
+#else
     ASSERT_EQ_INT(setenv("XRAY_TEST_SECRET_TOKEN", secret, 1), 0);
+#endif
     const char *input = "compiler failed: token=xray-super-secret-value";
     xtc_process_redact_output(input, strlen(input), output, sizeof(output));
     ASSERT_TRUE(strstr(output, secret) == NULL);
     ASSERT_TRUE(strstr(output, "token=<redacted>") != NULL);
+#ifdef _WIN32
+    ASSERT_EQ_INT(_putenv_s("XRAY_TEST_SECRET_TOKEN", ""), 0);
+#else
     unsetenv("XRAY_TEST_SECRET_TOKEN");
 #endif
 }

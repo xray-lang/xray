@@ -154,7 +154,6 @@ static bool xtc_capture_append(XtcCapture *capture, const char *data, size_t len
     return true;
 }
 
-#ifndef XR_OS_WINDOWS
 static bool xtc_capture_drain(XrPipeHandle handle, XtcCapture *capture) {
     char buffer[4096];
     for (;;) {
@@ -172,7 +171,6 @@ static bool xtc_capture_drain(XrPipeHandle handle, XtcCapture *capture) {
             return false;
     }
 }
-#endif
 
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
                                    uint32_t timeout_ms) {
@@ -196,44 +194,6 @@ XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, ch
     uint64_t start_ms = xr_time_monotonic_ms();
     uint64_t deadline_ms = start_ms + (spec->timeout_ms ? spec->timeout_ms : 30000);
 
-#ifdef XR_OS_WINDOWS
-    XrProcSpawnOptions options = {0};
-    options.cwd = spec->cwd;
-    options.env_keys = spec->env_keys;
-    options.env_values = spec->env_values;
-    options.env_count = spec->env_count;
-    options.new_process_group = true;
-    XrProcId pid = xr_proc_spawn_ex(spec->executable, spec->argv, &options);
-    if (pid == XR_PROC_INVALID) {
-        xtc_process_error(err, err_size, "failed to spawn process");
-        return false;
-    }
-    for (;;) {
-        XrProcWaitResult wait = xr_proc_try_wait(pid, &out->exit_code);
-        if (wait == XR_PROC_WAIT_EXITED)
-            break;
-        if (wait == XR_PROC_WAIT_ERROR) {
-            xtc_process_error(err, err_size, "failed to wait for process");
-            return false;
-        }
-        if (xr_time_monotonic_ms() >= deadline_ms) {
-            (void) xr_proc_kill_tree(pid, 9);
-            (void) xr_proc_wait(pid, &out->exit_code);
-            out->timed_out = true;
-            break;
-        }
-        xr_time_sleep_ms(5);
-    }
-    out->stdout_data = (char *) malloc(1);  // xr:allow-raw-alloc
-    out->stderr_data = (char *) malloc(1);  // xr:allow-raw-alloc
-    if (!out->stdout_data || !out->stderr_data) {
-        xtc_process_result_free(out);
-        xtc_process_error(err, err_size, "out of memory while capturing process output");
-        return false;
-    }
-    out->stdout_data[0] = '\0';
-    out->stderr_data[0] = '\0';
-#else
     XrPipe stdout_pipe = {XR_PIPE_INVALID, XR_PIPE_INVALID};
     XrPipe stderr_pipe = {XR_PIPE_INVALID, XR_PIPE_INVALID};
     XrPipeOptions pipe_options = {.read_inheritable = false, .write_inheritable = true};
@@ -323,7 +283,6 @@ XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, ch
     out->stdout_data = stdout_capture.data;
     out->stderr_data = stderr_capture.data;
     out->output_truncated = stdout_capture.truncated || stderr_capture.truncated;
-#endif
 
     out->duration_ms = xr_time_monotonic_ms() - start_ms;
     return true;

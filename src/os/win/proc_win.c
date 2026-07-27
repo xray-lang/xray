@@ -61,7 +61,7 @@ static HANDLE live_pop(DWORD pid) {
     return h;
 }
 
-// Write one already-quoted argument body into `buf`, escaping per the
+// Write one quoted argument body into `buf`, escaping per the
 // Microsoft CommandLineToArgvW contract: a run of backslashes is only
 // doubled when it precedes a literal `"` or the closing quote; ordinary
 // backslashes are emitted verbatim. The caller writes the surrounding quotes.
@@ -86,9 +86,26 @@ static void append_escaped_arg(char *buf, size_t *pos, const char *arg) {
         buf[(*pos)++] = '\\';
 }
 
-// Quote-and-join argv into a single command line. Each argument is
-// wrapped in double quotes; embedded quotes and trailing backslashes
-// are escaped per Microsoft's CommandLineToArgvW contract.
+static bool command_arg_needs_quotes(const char *arg) {
+    return arg[0] == '\0' || strpbrk(arg, " \t\"") != NULL;
+}
+
+static void append_command_arg(char *buf, size_t *pos, const char *arg) {
+    if (!command_arg_needs_quotes(arg)) {
+        size_t len = strlen(arg);
+        memcpy(buf + *pos, arg, len);
+        *pos += len;
+        return;
+    }
+    buf[(*pos)++] = '"';
+    append_escaped_arg(buf, pos, arg);
+    buf[(*pos)++] = '"';
+}
+
+// Quote-and-join argv into a single command line. Arguments are quoted only
+// when the Windows argv contract requires it. Besides producing the same argv
+// for ordinary programs, this matters for cmd.exe: quoting every token turns
+// builtins and control operators into literal text.
 static char *build_command_line(const char *prog, const char *const argv[]) {
     size_t cap = strlen(prog) * 2 + 3;
     for (int i = 0; argv[i] != NULL; i++) {
@@ -100,17 +117,13 @@ static char *build_command_line(const char *prog, const char *const argv[]) {
     }
     size_t pos = 0;
     if (argv[0] == NULL || strcmp(argv[0], prog) != 0) {
-        buf[pos++] = '"';
-        append_escaped_arg(buf, &pos, prog);
-        buf[pos++] = '"';
+        append_command_arg(buf, &pos, prog);
     }
     for (int i = 0; argv[i] != NULL; i++) {
         if (pos > 0) {
             buf[pos++] = ' ';
         }
-        buf[pos++] = '"';
-        append_escaped_arg(buf, &pos, argv[i]);
-        buf[pos++] = '"';
+        append_command_arg(buf, &pos, argv[i]);
     }
     buf[pos] = '\0';
     return buf;

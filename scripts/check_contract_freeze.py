@@ -103,7 +103,11 @@ TRAILER_RE = re.compile(r"^CONTRACT-CHANGE:\s+(\S+)\s+(.+)$", re.MULTILINE)
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    # Contract anchors describe repository content, whose canonical Git form
+    # uses LF.  Normalize checkout-only CRLF so the gate has the same result on
+    # Windows and Unix hosts while preserving every other byte.
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
 
 
 def parse_contract(path: Path) -> tuple[dict[str, str], list[str]]:
@@ -208,6 +212,8 @@ def self_test() -> int:
         contract.write_text(
             f"# Sample\n\nanchor-sha256: src/truth.def {digest(anchor)}\n", encoding="utf-8"
         )
+        assert verify_digests(root, root / "contracts", (spec,)) == []
+        anchor.write_bytes(b"v1\r\n")
         assert verify_digests(root, root / "contracts", (spec,)) == []
         changed = {"src/truth.def", "contracts/sample.md"}
         assert verify_trailers(changed, "subject\n", (spec,))

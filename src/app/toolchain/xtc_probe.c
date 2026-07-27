@@ -261,21 +261,15 @@ static bool xtc_probe_compile(const XrToolchainSelection *selection, const char 
 }
 
 static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
-                                   const XrRuntimeArtifactSet *runtime, const char *source,
+                                   const XrRuntimeArtifactSet *runtime, const char *object,
                                    const char *executable, char *detail, size_t detail_size) {
     XrProcessResult process;
     XtcProbeCommand command;
     if (!xtc_probe_command_init(selection, &command, detail, detail_size))
         return false;
     XrToolchainArgSink sink = xtc_probe_command_sink(&command);
-    XrNativeCompileSpec compile = {0};
     XrNativeLinkSpec link = {0};
-    compile.optimization = XR_OPTIMIZATION_NONE;
-    compile.fp_contract = XR_FP_CONTRACT_OFF;
-    compile.language_standard = "c11";
-    if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size) ||
-        !xtc_probe_command_add(&command, source, detail, detail_size) ||
-        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size) ||
+    if (!xtc_probe_command_add(&command, object, detail, detail_size) ||
         !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size))
         return false;
     for (size_t i = 0; i < runtime->artifact_count; i++)
@@ -286,6 +280,8 @@ static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
                                              &sink, detail, detail_size))
             return false;
     }
+    if (!xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
+        return false;
     bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
     return ok;
@@ -305,8 +301,8 @@ static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const 
     compile.language_standard = "c11";
     if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size) ||
         !xtc_probe_command_add(&command, source, detail, detail_size) ||
-        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size) ||
-        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size))
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size) ||
+        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
     bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
@@ -389,7 +385,7 @@ static void xtc_probe_fingerprint(const XrToolchainProbeOptions *options,
     char identity[4096];
     int written = snprintf(
         identity, sizeof(identity),
-        "xtc-probe-v1|xray=%s|build=%s|provider=%s|compiler=%s|size=%llu|mtime=%lld|version=%s|"
+        "xtc-probe-v2|xray=%s|build=%s|provider=%s|compiler=%s|size=%llu|mtime=%lld|version=%s|"
         "target=%s|sdk=%s|runtime=%s|systemSdk=%s|profile=%s|noRun=%d|"
         "options=semantic-v1|PATH=%s|SDKROOT=%s",
         XRAY_VERSION_STRING, XRAY_BUILD_COMMIT, xtc_provider_name(result->selection.provider),
@@ -471,6 +467,27 @@ static void xtc_probe_add_environment_diagnostics(XrToolchainProbeResult *result
     }
 }
 
+static bool xtc_probe_msvc_environment_ready(char *detail, size_t detail_size) {
+#ifdef XR_OS_WINDOWS
+    const char *include = getenv("INCLUDE");
+    const char *lib = getenv("LIB");
+    if (include && include[0] && lib && lib[0])
+        return true;
+    const char *missing = (!include || !include[0]) && (!lib || !lib[0])
+                              ? "INCLUDE and LIB"
+                              : ((!include || !include[0]) ? "INCLUDE" : "LIB");
+    snprintf(detail, detail_size,
+             "MSVC environment is incomplete (missing %s); omit an explicit --cc to allow "
+             "Visual Studio auto-discovery, or run from a Developer Command Prompt",
+             missing);
+    return false;
+#else
+    (void) detail;
+    (void) detail_size;
+    return true;
+#endif
+}
+
 static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
                                 XrToolchainCandidate *candidate, size_t candidate_index,
                                 XrToolchainProbeResult *result, char *err, size_t err_size) {
@@ -482,9 +499,10 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     char sdk_object[1300] = {0};
     char lto_object[1300] = {0};
     char runtime_source[1300] = {0};
+    char runtime_object[1300] = {0};
     char runtime_executable[1300] = {0};
     const char *cleanup_files[] = {minimal_source, minimal_object, sdk_source,        sdk_object,
-                                   lto_object,     runtime_source, runtime_executable};
+                                   lto_object,     runtime_source, runtime_object,    runtime_executable};
 
     memset(result, 0, sizeof(*result));
     snprintf(result->cache, sizeof(result->cache), "%s", "miss");
@@ -529,6 +547,12 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         result->selection.reason = XR_TOOLCHAIN_REASON_PROVIDER_EXPLICIT_NO_FALLBACK;
         xtc_probe_add_diagnostic(result, result->selection.reason, "version",
                                  "compiler identity does not match the explicit provider");
+        return false;
+    }
+    if (candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC &&
+        !xtc_probe_msvc_environment_ready(detail, sizeof(detail))) {
+        result->selection.reason = XR_TOOLCHAIN_REASON_TOOLCHAIN_ENV_INCOMPLETE;
+        xtc_probe_add_diagnostic(result, result->selection.reason, "environment", detail);
         return false;
     }
     if (candidate->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
@@ -590,6 +614,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         !xtc_probe_join(sdk_object, sizeof(sdk_object), temp_dir, "sdk.o") ||
         !xtc_probe_join(lto_object, sizeof(lto_object), temp_dir, "lto.o") ||
         !xtc_probe_join(runtime_source, sizeof(runtime_source), temp_dir, "runtime.c") ||
+        !xtc_probe_join(runtime_object, sizeof(runtime_object), temp_dir, "runtime.o") ||
         !xtc_probe_join(runtime_executable, sizeof(runtime_executable), temp_dir,
                         options->request.target.os == XR_TOOLCHAIN_TARGET_OS_WINDOWS ? "runtime.exe"
                                                                                      : "runtime")) {
@@ -649,7 +674,9 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         result->cross = XR_TOOLCHAIN_CAPABILITY_OK;
         result->selection.readiness = XR_TOOLCHAIN_READY;
     } else {
-        if (!xtc_probe_link_runtime(&result->selection, &result->runtime, runtime_source,
+        if (!xtc_probe_compile(&result->selection, runtime_source, runtime_object, NULL, false,
+                               false, detail, sizeof(detail)) ||
+            !xtc_probe_link_runtime(&result->selection, &result->runtime, runtime_object,
                                     runtime_executable, detail, sizeof(detail))) {
             result->runtime_link = XR_TOOLCHAIN_CAPABILITY_FAILED;
             result->selection.reason = XR_TOOLCHAIN_REASON_LINK_PROBE_FAILED;

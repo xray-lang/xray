@@ -172,7 +172,7 @@ static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModu
 }
 
 static bool write_file_text(const char *path, const char *text) {
-    FILE *f = fopen(path, "w");
+    FILE *f = fopen(path, "wb");
     if (!f)
         return false;
     if (fputs(text, f) < 0) {

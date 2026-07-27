@@ -43,7 +43,7 @@ def render(types_dir):
     entries = []
     for path in xr_files:
         name = os.path.splitext(os.path.basename(path))[0]
-        with open(path, 'r') as f:
+        with open(path, "r", encoding="utf-8") as f:
             content = f.read()
         var_name = f"xr_native_def_{name}"
         escaped = escape_c_string(content)

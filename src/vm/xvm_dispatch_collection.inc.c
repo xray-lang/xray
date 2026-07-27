@@ -2617,7 +2617,10 @@ vmcase(OP_BUFFER_MATERIALIZE) {
         }
         R(a) = xr_aggregate_ref(dst, layout_id);
     } else {
-        _Alignas(max_align_t) uint8_t bytes[16] = {0};
+        /* The scalar materialization contract is capped at this 16-byte buffer.
+         * Use the contract alignment directly because MSVC C11 does not expose
+         * max_align_t even though it supports _Alignas. */
+        _Alignas(16) uint8_t bytes[16] = {0};
         if (size > sizeof(bytes) || !xr_ffi_type_is_memory_scalar(code) ||
             !xr_mem_buffer_materialize(R(b), bytes, size, align, NULL)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
