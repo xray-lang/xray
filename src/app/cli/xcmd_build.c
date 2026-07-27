@@ -751,6 +751,19 @@ static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
         snprintf(err, err_size, "failed to add ASan flags to AOT link manifest");
         return false;
     }
+#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                         \
+    defined(XRT_BUILD_ASAN_WINDOWS_THUNK)
+    if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+        (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--whole-archive") ||
+         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG,
+                                        XRT_BUILD_ASAN_WINDOWS_THUNK) ||
+         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--no-whole-archive") ||
+         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG,
+                                        XRT_BUILD_ASAN_WINDOWS_IMPORT))) {
+        snprintf(err, err_size, "failed to add the MSVC ASan runtime to the Zig link plan");
+        return false;
+    }
+#endif
 #endif
 #if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=undefined") ||
@@ -2205,15 +2218,16 @@ static int xaot_mkdir_p(const char *path) {
     if (len >= sizeof(buf))
         return -1;
     memcpy(buf, path, len + 1);
-    while (len > 1 && buf[len - 1] == '/')
+    while (len > 1 && (buf[len - 1] == '/' || buf[len - 1] == '\\'))
         buf[--len] = '\0';
     for (char *p = buf + 1; *p; p++) {
-        if (*p != '/')
+        if (*p != '/' && *p != '\\')
             continue;
+        char separator = *p;
         *p = '\0';
         if (xr_fs_mkdir(buf, 0755) != 0 && !xr_fs_is_dir(buf))
             return -1;
-        *p = '/';
+        *p = separator;
     }
     if (xr_fs_mkdir(buf, 0755) != 0 && !xr_fs_is_dir(buf))
         return -1;

@@ -43,7 +43,12 @@ static bool emit_gnu_driver(const XrToolchainSelection *selection, const XrToolc
     if (selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG) {
         if (!add(sink, "cc", err, err_size))
             return false;
-        if (target && !target->is_native) {
+        /* Zig defaults to the Windows GNU ABI on Windows. Keep an explicitly
+         * selected native MSVC ABI exact so it can consume the verified COFF
+         * runtime archives shipped with the SDK. */
+        bool needs_explicit_target =
+            target && (!target->is_native || target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC);
+        if (needs_explicit_target) {
             if (!target->zig_triple || !target->zig_triple[0])
                 return command_error(err, err_size, "cross target has no Zig triple");
             if (!add(sink, "-target", err, err_size) ||
@@ -105,9 +110,20 @@ static const char *msvc_optimization(XrOptimizationLevel level) {
 
 static bool emit_gnu_compile(const XrToolchainSelection *selection, const XrNativeCompileSpec *spec,
                              XrToolchainArgSink *sink, char *err, size_t err_size) {
-    (void) selection;
     if (!spec)
         return command_error(err, err_size, "missing native compile specification");
+    /* Xray's hosted Linux AOT runtime uses the POSIX/GNU interfaces exposed by
+     * glibc and musl under their feature-test macros (clock_gettime,
+     * pthread_rwlock_t, getaddrinfo, MAP_ANONYMOUS, and friends). C11 mode
+     * otherwise hides those declarations, so make the hosted Linux contract
+     * explicit for every GNU-style provider instead of relying on shell flags. */
+    if (selection && selection->target.os == XR_TOOLCHAIN_TARGET_OS_LINUX &&
+        !add(sink, "-D_GNU_SOURCE", err, err_size))
+        return false;
+    if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+        selection->target.abi == XR_TOOLCHAIN_TARGET_ABI_MSVC &&
+        !add(sink, "-D_CRT_SECURE_NO_WARNINGS", err, err_size))
+        return false;
     if (!add(sink, gnu_optimization(spec->optimization), err, err_size))
         return false;
     if (spec->fp_contract == XR_FP_CONTRACT_OFF && !add(sink, "-ffp-contract=off", err, err_size))
@@ -359,6 +375,9 @@ XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, con
         return command_error(err, err_size,
                              "MSVC system-library logical name has no explicit .lib mapping");
     }
+    if (provider == XR_TOOLCHAIN_PROVIDER_ZIG && name &&
+        strcmp(name, "api-ms-win-core-synch-l1-2-0") == 0)
+        return joined(sink, "-l", "synchronization", err, err_size);
     return joined(sink, "-l", name, err, err_size);
 }
 

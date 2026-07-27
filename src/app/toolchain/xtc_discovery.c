@@ -338,14 +338,26 @@ static bool xtc_windows_activate_latest_msvc(void) {
 }
 
 static void xtc_windows_add_msvc(const char *requested, XrToolchainCandidates *out) {
-    size_t before = out->count;
-    (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC,
-                              XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
-                              requested && requested[0] ? requested : "cl");
-    if (out->count == before && (!requested || !requested[0]) &&
-        xtc_windows_activate_latest_msvc())
+    if (requested && requested[0]) {
         (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC,
-                                  XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cl");
+                                  XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, requested);
+        return;
+    }
+
+    /*
+     * A program may put cl.exe on PATH only to make the ASan runtime DLL
+     * discoverable.  That is not a usable MSVC environment: compilation also
+     * needs INCLUDE and LIB.  Complete an incomplete implicit environment via
+     * VsDevCmd before recording the native candidate.  If activation is not
+     * available, still record cl so the probe can report the precise failure
+     * and continue to a managed Zig candidate.
+     */
+    const char *include = getenv("INCLUDE");
+    const char *lib = getenv("LIB");
+    if (!include || !include[0] || !lib || !lib[0])
+        (void) xtc_windows_activate_latest_msvc();
+    (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC,
+                              XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cl");
 }
 #endif
 

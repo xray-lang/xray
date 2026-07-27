@@ -166,6 +166,11 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+if(MSVC)
+    # This exhaustive generator test recursively lowers hundreds of fixtures.
+    # MSVC ASan expands the call frames beyond PE/COFF's 1 MiB default stack.
+    target_link_options(test_xi_cgen PRIVATE "/STACK:8388608")
+endif()
 add_xray_unit_test(test_xi_lower_hardfail ir/test_xi_lower_hardfail.c)
 add_xray_unit_test(test_xi_stage ir/test_xi_stage.c)
 add_xray_unit_test(test_xi_evidence ir/test_xi_evidence.c)
@@ -676,6 +681,7 @@ add_executable(test_cli_toolchain
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_json.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_probe_cache.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_process.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_runtime_manifest.c
 )
 target_include_directories(test_cli_toolchain PRIVATE
     ${XRAY_COMMON_INCLUDES}

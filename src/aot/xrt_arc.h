@@ -513,6 +513,15 @@ static inline void xrt_release(XrValue v) {
 
 static inline XrValue xrt_value_to_owned(XrValue v);
 
+#if defined(__clang_analyzer__)
+/* Clang's path-sensitive analyzer does not otherwise understand that an ARC
+ * allocation embedded in the returned XrValue transfers ownership to the
+ * caller.  This declaration is visible only to the analyzer: the unknown
+ * external call models that escape without adding code or a link dependency
+ * to ordinary generated-C builds. */
+extern void xrt_clang_analyzer_escape_owned_pointer(void *ptr);
+#endif
+
 /* Materialize an independent fixed-array value.  This differs from
  * xrt_array_ref_to_owned(): an already-owned source must still get new outer
  * storage for value-copy semantics.  Reference-valued lanes retain their
@@ -533,6 +542,9 @@ static inline XrValue xrt_array_ref_clone_value(XrValue v) {
     } else {
         memcpy(dst, v.ptr, size);
     }
+#if defined(__clang_analyzer__)
+    xrt_clang_analyzer_escape_owned_pointer(dst);
+#endif
     return xr_array_ref_owned(dst, elem_type, elem_count);
 }
 

@@ -238,15 +238,17 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
                                         char *err, size_t err_size) {
 #if defined(XRT_BUILD_LIB_DIR) && defined(XRT_AOT_INCLUDE_DIR) &&                                  \
     defined(XRT_SOURCE_INCLUDE_DIR) && defined(XTC_BUILD_HOST_TARGET)
-    if (strcmp(target->name, XTC_BUILD_HOST_TARGET) != 0 ||
-        provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
+    if (strcmp(target->name, XTC_BUILD_HOST_TARGET) != 0) {
         xtc_runtime_error(err, err_size, "build tree has no runtime for target '%s'", target->name);
         return false;
     }
+    (void) provider;
     out->schema = 1;
     out->sdk_abi = 1;
     snprintf(out->target, sizeof(out->target), "%s", target->name);
-#ifdef XR_OS_MACOS
+#if defined(XR_OS_WINDOWS)
+    snprintf(out->object_format, sizeof(out->object_format), "%s", "coff");
+#elif defined(XR_OS_MACOS)
     snprintf(out->object_format, sizeof(out->object_format), "%s", "macho");
 #else
     snprintf(out->object_format, sizeof(out->object_format), "%s", "elf");
@@ -268,10 +270,17 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
         }
         out->artifact_count++;
     }
+#if defined(XR_OS_WINDOWS)
+    snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
+             "%s", "ws2_32");
+    snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
+             "%s", "synchronization");
+#else
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "m");
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "pthread");
+#endif
     uint8_t digest[32];
     char identity[512];
     int written = snprintf(identity, sizeof(identity), "%s:%s:%s", target->name,

@@ -16,6 +16,7 @@
 #include "app/toolchain/xtc_model.h"
 #include "app/toolchain/xtc_process.h"
 #include "app/toolchain/xtc_probe_cache.h"
+#include "app/toolchain/xtc_runtime_manifest.h"
 #include "base/xjson.h"
 
 #include <stdio.h>
@@ -87,6 +88,7 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_driver(&selection, &selection.target, &sink, err, sizeof(err)));
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "/usr/bin/gcc"));
+    ASSERT_TRUE(command_capture_has(&capture, "-D_GNU_SOURCE"));
     ASSERT_TRUE(command_capture_has(&capture, "-O3"));
     ASSERT_TRUE(command_capture_has(&capture, "-ffp-contract=off"));
     ASSERT_TRUE(command_capture_has(&capture, "-flto"));
@@ -271,6 +273,74 @@ TEST(selector_and_provider_names_are_stable) {
 TEST(find_missing_executable) {
     char out[256];
     ASSERT_FALSE(xtc_find_executable("/definitely/not/xray-provider", out, sizeof(out)));
+}
+
+TEST(build_tree_runtime_manifest_matches_host_platform) {
+    XrToolchainTarget target;
+    XrRuntimeArtifactSet runtime;
+    XrToolchainReasonCode reason = XR_TOOLCHAIN_REASON_NONE;
+    char err[512] = {0};
+
+    ASSERT_TRUE(xtc_target_parse(NULL, &target, err, sizeof(err)));
+#ifdef _WIN32
+    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_ZIG, NULL, &runtime,
+                                          &reason, err, sizeof(err)));
+    ASSERT_STR_EQ(runtime.object_format, "coff");
+    ASSERT_EQ_INT(runtime.system_library_count, 2);
+    ASSERT_STR_EQ(runtime.system_libraries[0], "ws2_32");
+    ASSERT_STR_EQ(runtime.system_libraries[1], "synchronization");
+#elif defined(__APPLE__)
+    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_APPLE_CLANG, NULL,
+                                          &runtime, &reason, err, sizeof(err)));
+    ASSERT_STR_EQ(runtime.object_format, "macho");
+    ASSERT_EQ_INT(runtime.system_library_count, 2);
+    ASSERT_STR_EQ(runtime.system_libraries[0], "m");
+    ASSERT_STR_EQ(runtime.system_libraries[1], "pthread");
+#else
+    ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_GCC, NULL, &runtime,
+                                          &reason, err, sizeof(err)));
+    ASSERT_STR_EQ(runtime.object_format, "elf");
+    ASSERT_EQ_INT(runtime.system_library_count, 2);
+    ASSERT_STR_EQ(runtime.system_libraries[0], "m");
+    ASSERT_STR_EQ(runtime.system_libraries[1], "pthread");
+#endif
+    ASSERT_EQ_INT(reason, XR_TOOLCHAIN_REASON_NONE);
+}
+
+TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
+    XrToolchainSelection selection = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+    selection.provider = XR_TOOLCHAIN_PROVIDER_ZIG;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "zig.exe");
+    ASSERT_TRUE(xtc_target_parse("x86_64-windows-msvc", &selection.target, err, sizeof(err)));
+    selection.target.is_native = true;
+
+    ASSERT_TRUE(xtc_command_emit_driver(&selection, &selection.target, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "zig.exe"));
+    ASSERT_TRUE(command_capture_has(&capture, "cc"));
+    ASSERT_TRUE(command_capture_has(&capture, "-target"));
+    ASSERT_TRUE(command_capture_has(&capture, "x86_64-windows-msvc"));
+    XrNativeCompileSpec compile = {0};
+    compile.optimization = XR_OPTIMIZATION_RELEASE;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-D_CRT_SECURE_NO_WARNINGS"));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider,
+                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
+                                                sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
+}
+
+TEST(msvc_version_parser_accepts_banner_text) {
+    char version[64];
+    ASSERT_TRUE(xtc_msvc_version_from_banner(
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35219 for x64", version,
+        sizeof(version)));
+    ASSERT_STR_EQ(version, "19.44.35219");
+    ASSERT_FALSE(xtc_msvc_version_from_banner("Microsoft C/C++ compiler help", version,
+                                              sizeof(version)));
 }
 
 TEST(cross_target_rejects_explicit_host_without_fallback) {
@@ -627,9 +697,12 @@ RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
+RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
+RUN_TEST(build_tree_runtime_manifest_matches_host_platform);
+RUN_TEST(msvc_version_parser_accepts_banner_text);
 RUN_TEST(cross_target_rejects_explicit_host_without_fallback);
 RUN_TEST(explicit_provider_has_no_fallback);
 RUN_TEST(explicit_clang_is_classified_from_banner);

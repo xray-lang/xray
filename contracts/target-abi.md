@@ -26,6 +26,11 @@ emission, and native linking:
   pointer width, and endianness agree. Unsupported SIMD modes fail closed.
   Toolchain discovery is provider-neutral: target identity lives in the shared
   toolchain model, while probing resolves an installed provider for that model.
+  Automatic selection tries the ordered host/provider set by capability, not by
+  executable presence alone. A rejected host provider may fall back to Zig, but
+  the fallback must retain the already selected target ABI (including native
+  `x86_64-windows-msvc`) and pass compile, SDK, runtime-link, native-run, and LTO
+  probes before it is reported ready.
 - T4a: x86 runtime SIMD dispatch probes CPU and OS state together. AVX-512F is
   selectable only when CPUID leaf 7 reports AVX-512F and XCR0 enables XMM, YMM,
   opmask, ZMM high-256, and high-16 ZMM state. Baseline, AVX2, and AVX-512F
@@ -68,9 +73,12 @@ not native Power, LoongArch, or SVE performance. A compile-only
 cross artifact is not sufficient to claim platform support. AVX-512F evidence
 may retain exact generated C and assembly plus execution of the same dispatch
 binary on an AVX2-only host, but native AVX-512F execution and performance
-remain separate release gates. An exact PE
-export-set gate proves the Windows artifact and ABI shape, but not Windows
-execution support.
+remain separate release gates. Windows x86_64 evidence additionally includes
+native execution of all five xxHash CLI names, a 24-case byte-exact upstream CLI
+differential, the exact 49-export PE gate, an executing C ABI oracle, and complete
+31-sample alternating Xray/API throughput matrices. On the verified host, MSVC
+fails the generated-C SDK capability probe and automatic selection falls back to
+Zig 0.16.0 while preserving the `x86_64-windows-msvc` ABI.
 
 ## Digest anchors
 
@@ -86,8 +94,8 @@ anchor-sha256: src/aot/xi_cgen.c a80e8fd0572ae8ab46d22acebe17b7b5b99d88cedaf48e7
 anchor-sha256: src/aot/xrt_coll.h 8104b8d30e016cbca6c948bfc83c2b358258ec7ee2309d1e7bd60c967c61e6a0
 anchor-sha256: src/aot/xrt_core_freestanding.h 96f25c3a7e609fc4024a70680ad34d5223ad4f9bc70f9aaec4b08943fec4333a
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 3f8773ba6fbbec81cb0e3645647510c174fe2d4203a5ff1e94e781797d986c29
+anchor-sha256: src/app/cli/xcmd_build.c 19122939aa291b24ed6091cc2f66fb97af3d472a3c4b07b827237a633511fb80
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e
-anchor-sha256: src/app/toolchain/xtc_probe.c b629b6e347d8721d153ffa90096a1e5c469728b2e45b8fc86c595c085d6d79b1
+anchor-sha256: src/app/toolchain/xtc_probe.c 1feb4ecaa53dbc48ec5242734b6fb87740525b459b70477606f635f4590624a8
 anchor-sha256: src/ir/xi.h 633ceecd4e038acfc29a5ff826ecbfebd2295dc902e807039aab0bbb8da24260
 anchor-sha256: stdlib/simd/simd.xr 56b8ce818e05b8a08475452205187b5cd673f2d992d9299c8ede6be7871eba8b

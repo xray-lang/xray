@@ -39,10 +39,13 @@ static const char xtc_probe_minimal_c[] = "int main(void) { return 0; }\n";
 static const char xtc_probe_sdk_c[] =
     "#include \"xray.h\"\n"
     "#include \"xrt_core_freestanding.h\"\n"
-    "int xray_sdk_probe(void) { return XRAY_VERSION_MAJOR >= 0 && sizeof(XrValue) > 0 ? 0 : 1; }\n";
+    "int xray_cgen_dialect_probe(void) { return ({ int value = 0; value; }); }\n"
+    "int xray_sdk_probe(void) { return XRAY_VERSION_MAJOR >= 0 && sizeof(XrValue) > 0 "
+    "? xray_cgen_dialect_probe() : 1; }\n";
 static const char xtc_probe_freestanding_sdk_c[] =
     "#include \"xrt_core_freestanding.h\"\n"
-    "int xray_sdk_probe(void) { return sizeof(XrValue) > 0 ? 0 : 1; }\n";
+    "int xray_cgen_dialect_probe(void) { return ({ int value = 0; value; }); }\n"
+    "int xray_sdk_probe(void) { return sizeof(XrValue) > 0 ? xray_cgen_dialect_probe() : 1; }\n";
 static const char xtc_probe_runtime_c[] =
     "#include <stddef.h>\n"
     "#include <stdint.h>\n"
@@ -260,6 +263,49 @@ static bool xtc_probe_compile(const XrToolchainSelection *selection, const char 
     return ok;
 }
 
+static bool xtc_probe_add_build_sanitizer_link_flags(const XrToolchainSelection *selection,
+                                                     XtcProbeCommand *command, char *detail,
+                                                     size_t detail_size) {
+#if (defined(XR_BUILD_ASAN) && XR_BUILD_ASAN) || (defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN) ||    \
+    (defined(XR_BUILD_TSAN) && XR_BUILD_TSAN) || (defined(XR_BUILD_MSAN) && XR_BUILD_MSAN)
+    if (!selection || !xtc_provider_uses_gnu_driver(selection->provider)) {
+        snprintf(detail, detail_size,
+                 "this instrumented Xray build requires a GNU-driver provider");
+        return false;
+    }
+#endif
+#if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
+    if (!xtc_probe_command_add(command, "-fsanitize=address", detail, detail_size))
+        return false;
+#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                         \
+    defined(XRT_BUILD_ASAN_WINDOWS_THUNK)
+    if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+        (!xtc_probe_command_add(command, "-Wl,--whole-archive", detail, detail_size) ||
+         !xtc_probe_command_add(command, XRT_BUILD_ASAN_WINDOWS_THUNK, detail, detail_size) ||
+         !xtc_probe_command_add(command, "-Wl,--no-whole-archive", detail, detail_size) ||
+         !xtc_probe_command_add(command, XRT_BUILD_ASAN_WINDOWS_IMPORT, detail, detail_size)))
+        return false;
+#endif
+#endif
+#if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
+    if (!xtc_probe_command_add(command, "-fsanitize=undefined", detail, detail_size))
+        return false;
+#endif
+#if defined(XR_BUILD_TSAN) && XR_BUILD_TSAN
+    if (!xtc_probe_command_add(command, "-fsanitize=thread", detail, detail_size))
+        return false;
+#endif
+#if defined(XR_BUILD_MSAN) && XR_BUILD_MSAN
+    if (!xtc_probe_command_add(command, "-fsanitize=memory", detail, detail_size))
+        return false;
+#endif
+    (void) selection;
+    (void) command;
+    (void) detail;
+    (void) detail_size;
+    return true;
+}
+
 static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
                                    const XrRuntimeArtifactSet *runtime, const char *object,
                                    const char *executable, char *detail, size_t detail_size) {
@@ -280,6 +326,8 @@ static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
                                              &sink, detail, detail_size))
             return false;
     }
+    if (!xtc_probe_add_build_sanitizer_link_flags(selection, &command, detail, detail_size))
+        return false;
     if (!xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
     bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
@@ -508,18 +556,6 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     snprintf(result->cache, sizeof(result->cache), "%s", "miss");
     result->selection.target = options->request.target;
     result->selection.provider = candidate->provider;
-#ifdef XR_OS_WINDOWS
-    /* Native Windows is provider-dependent: MSVC consumes the MSVC ABI while
-     * Zig's native fallback is deliberately Windows GNU. Never mix archives. */
-    if (candidate->provider == XR_TOOLCHAIN_PROVIDER_ZIG && options->request.target.is_native &&
-        options->request.target.abi == XR_TOOLCHAIN_TARGET_ABI_MSVC) {
-        const char *gnu_target = options->request.target.arch == XR_TOOLCHAIN_TARGET_ARCH_AARCH64
-                                     ? "aarch64-windows-gnu"
-                                     : "x86_64-windows-gnu";
-        if (!xtc_target_parse(gnu_target, &result->selection.target, err, err_size))
-            return false;
-    }
-#endif
     result->selection.ownership = candidate->ownership;
     result->selection.readiness = XR_TOOLCHAIN_DISCOVERED;
     result->selection.fallback_used =

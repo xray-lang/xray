@@ -8,6 +8,7 @@ cost of several temp files and shell processes per case.
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import os
 import shutil
 import subprocess
@@ -52,11 +53,22 @@ def configure_hot_jobs(current: int, env_name: str, default_cap: int) -> int:
 
 
 def run_cksum(args: list[str], data: bytes | None = None) -> tuple[str, str]:
-    proc = subprocess.run(["cksum", *args], input=data, stdout=subprocess.PIPE, check=True)
-    parts = proc.stdout.decode("ascii", "replace").strip().split()
-    if len(parts) < 2:
-        return "0", "0"
-    return parts[0], parts[1]
+    cksum = shutil.which("cksum")
+    if cksum:
+        proc = subprocess.run([cksum, *args], input=data, stdout=subprocess.PIPE, check=True)
+        parts = proc.stdout.decode("ascii", "replace").strip().split()
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+
+    # Windows does not provide POSIX cksum. These values key disposable test
+    # caches rather than a wire format, so a SHA-256 fallback is both portable
+    # and stronger while preserving the existing Unix cache names.
+    payload = data
+    if payload is None:
+        if len(args) != 1:
+            raise RuntimeError("portable checksum fallback expects one file path")
+        payload = Path(args[0]).read_bytes()
+    return hashlib.sha256(payload).hexdigest(), str(len(payload))
 
 
 def file_key(path: Path) -> str:
@@ -169,6 +181,13 @@ def safe_name(rel: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in stem)
 
 
+def case_cache_name(rel: str, case_key: str) -> str:
+    """Return a readable, bounded cache component for one differential case."""
+    stem = safe_name(Path(rel).stem)[:32] or "case"
+    digest = hashlib.sha256(f"{rel}\0{case_key}".encode()).hexdigest()[:24]
+    return f"{stem}-{digest}"
+
+
 def append_case_manifest(manifest: str) -> list[Path] | None:
     if not manifest:
         return []
@@ -271,8 +290,7 @@ class RunnerConfig:
 
 
 def build_aot_binary(config: RunnerConfig, case: Path, rel: str, case_key: str) -> tuple[Path | None, bytes]:
-    safe = safe_name(rel)
-    bin_dir = config.aot_bin_cache / f"{safe}-{case_key}"
+    bin_dir = config.aot_bin_cache / case_cache_name(rel, case_key)
     binary = bin_dir / "aot"
     if binary.is_file() and os.access(binary, os.X_OK):
         return binary, f"cached: {binary}\n".encode()
@@ -442,7 +460,7 @@ def aot_binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]])
             continue
         rel = rel_path(case)
         key = case_dir_key(case)
-        binary = config.aot_bin_cache / f"{safe_name(rel)}-{key}" / "aot"
+        binary = config.aot_bin_cache / case_cache_name(rel, key) / "aot"
         if not (binary.is_file() and os.access(binary, os.X_OK)):
             return False
     return True

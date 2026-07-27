@@ -112,7 +112,10 @@ elseif(WIN32)
         set(XRAY_HOST_TARGET_ABI "x86_64-windows-msvc")
     endif()
     set(XRAY_RUNTIME_OBJECT_FORMAT "coff")
-    set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"msvc\\\"")
+    # Both cl.exe and Zig's Clang frontend can consume the installed MSVC-ABI
+    # COFF archives. Zig is the managed fallback for generated C that uses
+    # GNU/Clang expression extensions unavailable in cl.exe.
+    set(XRAY_RUNTIME_PROVIDERS_JSON "\\\"msvc\\\",\\\"zig\\\"")
     set(XRAY_RUNTIME_SYSTEM_LIBRARIES_JSON "\\\"ws2_32\\\",\\\"synchronization\\\"")
 else()
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" _XRAY_RELEASE_OS)
@@ -450,8 +453,37 @@ endif()
 if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer enabled")
     add_compile_definitions(XR_BUILD_ASAN=1)
-    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
-    add_link_options(-fsanitize=address)
+    if(MSVC)
+        # MSVC's ASan instrumentation is a compiler option.  The object files
+        # carry the runtime directives consumed by link.exe; /INCREMENTAL:NO
+        # is required by the Windows ASan runtime and /Oy- preserves frames.
+        add_compile_options(/fsanitize=address /Oy-)
+        add_link_options(/INCREMENTAL:NO)
+        # A generated-C fallback may be compiled by Zig while consuming the
+        # MSVC-instrumented build-tree archives.  Zig does not auto-link the
+        # Visual C++ ASan import library or its dynamic-runtime thunk, so make
+        # those exact developer-toolchain artifacts available to the verified
+        # probe and AOT link plan.  Release payloads never define these paths.
+        get_filename_component(_XRAY_MSVC_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+        get_filename_component(_XRAY_MSVC_HOST_DIR "${_XRAY_MSVC_BIN_DIR}" DIRECTORY)
+        get_filename_component(_XRAY_MSVC_BIN_ROOT "${_XRAY_MSVC_HOST_DIR}" DIRECTORY)
+        get_filename_component(_XRAY_MSVC_TOOL_ROOT "${_XRAY_MSVC_BIN_ROOT}" DIRECTORY)
+        set(_XRAY_MSVC_ASAN_LIB_DIR "${_XRAY_MSVC_TOOL_ROOT}/lib/x64")
+        set(_XRAY_MSVC_ASAN_IMPORT
+            "${_XRAY_MSVC_ASAN_LIB_DIR}/clang_rt.asan_dynamic-x86_64.lib")
+        set(_XRAY_MSVC_ASAN_THUNK
+            "${_XRAY_MSVC_ASAN_LIB_DIR}/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib")
+        if(NOT EXISTS "${_XRAY_MSVC_ASAN_IMPORT}" OR NOT EXISTS "${_XRAY_MSVC_ASAN_THUNK}")
+            message(FATAL_ERROR "MSVC x64 ASan runtime libraries are missing")
+        endif()
+        add_compile_definitions(
+            XRT_BUILD_ASAN_WINDOWS_IMPORT="${_XRAY_MSVC_ASAN_IMPORT}"
+            XRT_BUILD_ASAN_WINDOWS_THUNK="${_XRAY_MSVC_ASAN_THUNK}"
+        )
+    else()
+        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address)
+    endif()
 endif()
 
 # UndefinedBehaviorSanitizer configuration
@@ -1040,11 +1072,17 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     )
 endif()
 
-# Expose development-tree paths for cmd_build's C compiler.
+# Expose development-tree paths for cmd_build's C compiler. Multi-config
+# generators place static archives under the active configuration directory.
+if(CMAKE_CONFIGURATION_TYPES)
+    set(XRAY_BUILD_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+else()
+    set(XRAY_BUILD_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 add_compile_definitions(
     XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot"
     XRT_SOURCE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
-    XRT_BUILD_LIB_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    XRT_BUILD_LIB_DIR="${XRAY_BUILD_LIB_DIR}"
     XTC_BUILD_HOST_TARGET="${XRAY_HOST_TARGET_ABI}"
     XTC_STATIC_LIBRARY_PREFIX="${CMAKE_STATIC_LIBRARY_PREFIX}"
     XTC_STATIC_LIBRARY_SUFFIX="${CMAKE_STATIC_LIBRARY_SUFFIX}"
@@ -1201,6 +1239,13 @@ target_include_directories(xray_stdlib_bcgen PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+if(MSVC)
+    # The bootstrap compiler runs the same recursive parser/lowering passes as
+    # xray.  ASan inflates those frames enough to overflow PE/COFF's default
+    # 1 MiB stack while compiling the embedded stdlib, so give both compiler
+    # executables the same Unix-like main-thread allowance.
+    target_link_options(xray_stdlib_bcgen PRIVATE "/STACK:8388608")
+endif()
 
 add_custom_command(
     OUTPUT ${XRAY_STDLIB_FINAL_BYTECODE_INC}
@@ -1375,6 +1420,13 @@ endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
 add_dependencies(xray xray_aot_core xray_rt_coro xray_vm_runtime)
+
+# The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
+# stack on larger programs. Match the usual Unix main-thread allowance so
+# native Windows builds do not fail with STATUS_STACK_OVERFLOW.
+if(MSVC)
+    target_link_options(xray PRIVATE "/STACK:8388608")
+endif()
 
 target_link_libraries(xray PRIVATE xray_core)
 if(READLINE_LIB)
@@ -2093,8 +2145,21 @@ if(BUILD_TESTS)
     # surface.  Do not register nested sanitizer drivers inside an already
     # sanitized build: CI runs those configurations directly and recursive
     # sanitizer builds would only duplicate the same work.
-    if(NOT WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+    if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
        NOT ENABLE_MSAN)
+        add_test(
+            NAME asan_focused
+            COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused_windows.ps1
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(asan_focused PROPERTIES
+            LABELS "sanitizer;asan;task-218;windows"
+            RUN_SERIAL TRUE
+            TIMEOUT 3600
+        )
+    elseif(NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+           NOT ENABLE_MSAN)
         add_test(
             NAME asan_focused
             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
