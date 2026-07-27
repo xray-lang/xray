@@ -49,6 +49,13 @@ static XrType t_set = {.kind = XR_KIND_SET, .id = 5, .frozen = true};
 static XrType t_func = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
 static XrType t_span = {.kind = XR_KIND_SLICE, .id = 7, .frozen = true};
 static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 8, .frozen = true};
+static XrType t_unit = {.kind = XR_KIND_UNIT, .id = 10, .frozen = true};
+static XrType t_stringbuilder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 9,
+    .frozen = true,
+    .instance = {.class_name = "StringBuilder"},
+};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -689,6 +696,86 @@ static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
     xi_func_free(f);
 }
 
+static void test_arc_stringbuilder_builtin_result_is_fresh(void) {
+    XiFunc *f = make_func("arc_fresh_stringbuilder", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    builder->aux = (void *) "StringBuilder";
+    builder->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    XiValue *release = NULL;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        if (entry->values[i]->op == XI_RELEASE) {
+            release = entry->values[i];
+            break;
+        }
+    }
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1,
+              "discarded StringBuilder() result must be released as a fresh owner");
+    ASSERT_EQ(release != NULL && release->args[0] == builder, true,
+              "StringBuilder death-point release must target the constructor result");
+    xi_func_free(f);
+}
+
+static void test_arc_err_check_carries_cold_edge_cleanup(void) {
+    XiFunc *f = make_func("arc_err_check_cleanup", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    builder->aux = (void *) "StringBuilder";
+    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *fallible = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_int, 0);
+    fallible->aux = (void *) "fallible";
+    fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
+    use->args[0] = builder;
+    xi_block_set_return(entry, use);
+
+    xi_arc_insert(f);
+    xi_arc_elim(f);
+    int producer_uses_before = fallible->uses;
+    xi_arc_attach_error_cleanups(f);
+
+    ASSERT_EQ(check->nargs, 1,
+              "unit ERR_CHECK should carry one cold-edge owner");
+    ASSERT_EQ(fallible->uses, producer_uses_before,
+              "ERR_CHECK must not force an otherwise-unused producer result to materialize");
+    ASSERT_EQ(check->args[XI_ERR_CHECK_CLEANUP_ARG_BASE] == builder, true,
+              "ERR_CHECK cold edge must drop the StringBuilder live on success");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "error-edge cleanup operands must preserve the ARC contract");
+    xi_func_free(f);
+}
+
+static void test_arc_err_check_without_throwing_source_stays_operand_free(void) {
+    XiFunc *f = make_func("arc_dead_err_check", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    builder->aux = (void *) "StringBuilder";
+    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
+    use->args[0] = builder;
+    xi_block_set_return(entry, use);
+
+    xi_arc_insert(f);
+    xi_arc_elim(f);
+    xi_arc_attach_error_cleanups(f);
+
+    ASSERT_EQ(check->nargs, 0,
+              "ERR_CHECK left after a folded nothrow producer has no error-edge owners");
+    xi_func_free(f);
+}
+
 /* ========== Test: borrowed Slice lifetime flows through a phi ========== */
 
 static void test_arc_span_borrow_flows_through_phi(void) {
@@ -1030,6 +1117,9 @@ int main(void) {
     test_arc_phi_move_drops_owner_on_sibling_edge();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
+    test_arc_stringbuilder_builtin_result_is_fresh();
+    test_arc_err_check_carries_cold_edge_cleanup();
+    test_arc_err_check_without_throwing_source_stays_operand_free();
     test_arc_span_borrow_flows_through_phi();
     test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();

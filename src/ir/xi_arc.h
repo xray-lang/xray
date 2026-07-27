@@ -34,4 +34,12 @@ XR_FUNC void xi_arc_insert(XiFunc *f);
  * Returns the number of pairs eliminated. */
 XR_FUNC int xi_arc_elim(XiFunc *f);
 
+/* Finalize implicit error exits after ordinary ARC elimination.  Unit-typed
+ * XI_ERR_CHECK values receive args[]=owned values that must be dropped only
+ * when propagation returns from the function.  An associated may-throw
+ * producer remains implicit so an unused result is not materialized; checks
+ * whose producer was folded to proven-nothrow stay operand-free.  For AOT this
+ * runs after all value-rewriting passes. */
+XR_FUNC void xi_arc_attach_error_cleanups(XiFunc *f);
+
 #endif  // XI_ARC_H

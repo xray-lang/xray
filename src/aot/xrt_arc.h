@@ -117,6 +117,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_NET_CONN 11u
 #define XRT_ARC_KIND_NET_LISTENER 12u
 #define XRT_ARC_KIND_JSON 13u
+#define XRT_ARC_KIND_STRBUF 14u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -235,6 +236,22 @@ static void xrt_bump_destroy(void) {
     xrt_bump_end = NULL;
 }
 
+/* Allocate a normal individually-reclaimed ARC object even when the optional
+ * process-lifetime bump arena is enabled.  Objects whose destructor owns
+ * separately allocated storage (for example StringBuilder's growable byte
+ * buffer) must use this path: a sticky bump object never runs its destructor,
+ * so its external storage would otherwise survive until process teardown. */
+static inline void *xrt_arc_alloc_heap(size_t obj_size) {
+    obj_size = (obj_size + 15u) & ~(size_t) 15u;
+    size_t total = sizeof(XrObjHeader) + obj_size;
+    XrObjHeader *hdr = (XrObjHeader *) XRT_CALLOC(1, total);
+    if (XR_UNLIKELY(!hdr)) {
+        fprintf(stderr, "xrt_arc_alloc_heap: out of memory\n");
+        abort();
+    }
+    return (char *) hdr + sizeof(XrObjHeader);
+}
+
 /* Alignment contract: returned user pointers are 16-byte aligned.
  * Bump path: block data starts 16-aligned and every allocation advances the
  * cursor by a multiple of 16. Heap path: calloc returns max_align_t (>= 16
@@ -248,13 +265,8 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
         memset(hdr, 0, total);
         hdr->extra = XR_OBJ_STORAGE_BUMP;  // mark as bump-allocated
         atomic_store_explicit(&hdr->refcount, XR_RC_STICKY, memory_order_relaxed);
-    } else {
-        hdr = (XrObjHeader *) XRT_CALLOC(1, total);
-        if (XR_UNLIKELY(!hdr)) {
-            fprintf(stderr, "xrt_arc_alloc: out of memory\n");
-            abort();
-        }
-    }
+    } else
+        return xrt_arc_alloc_heap(obj_size);
     return (char *) hdr + sizeof(XrObjHeader);
 }
 
@@ -320,7 +332,8 @@ static inline int xrt_arc_value_has_header(XrValue v) {
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
-    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
+    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
+           v.tag == XR_TAG_CELL ||
            v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
            v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
            v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||

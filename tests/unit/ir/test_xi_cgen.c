@@ -1720,6 +1720,302 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     xi_func_free(ir);
 }
 
+TEST(cgen_unused_call_result_emits_effect_statement_without_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 156, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 157, .frozen = true};
+
+    XiFunc *ir = xi_func_new("unused_call_result", &int_type);
+    assert(ir != NULL);
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+    entry->sealed = true;
+
+    XiFunc *child = xi_func_new("effect", &int_type);
+    assert(child != NULL);
+    child->parent_func = ir;
+    XiBlock *child_entry = xi_block_new(child);
+    assert(child_entry != NULL);
+    child_entry->sealed = true;
+    XiValue *child_ret = xi_const_int(child, child_entry, 7, &int_type);
+    assert(child_ret != NULL);
+    xi_block_set_return(child_entry, child_ret);
+
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(ir->children != NULL);
+    ir->children[0] = child;
+    ir->children_cap = 1;
+    ir->nchildren = 1;
+
+    XiValue *callee = xi_value_new(ir, entry, XI_CLOSURE_NEW, &func_type, 0);
+    assert(callee != NULL);
+    callee->aux = (void *) child;
+    XiValue *unused = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
+    assert(unused != NULL);
+    unused->args[0] = callee;
+    /* Model the conservative/stale use metadata that can remain after DCE. */
+    unused->uses = 1;
+    unused->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_CALL_EFFECTS;
+    XiValue *ret = xi_const_int(ir, entry, 1, &int_type);
+    assert(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "unused call result should generate");
+
+    char dead_decl[64];
+    snprintf(dead_decl, sizeof(dead_decl), "int64_t v%u =", (unsigned) unused->id);
+    assert(!contains(code, dead_decl) && "unused call result must not create a C local");
+    assert(contains(code, "    (void)(") &&
+           "unused call must remain as an effect-preserving expression statement");
+
+    printf("  Generated unused call-result statement %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
+    const char *src = "fn grow() -> int {\n"
+                      "    var bytes: Array<byte> = [1, 2, 3]\n"
+                      "    bytes.reserve(len(bytes) + 4)\n"
+                      "    return len(bytes)\n"
+                      "}\n"
+                      "print(grow())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "unused array reserve fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "unused array reserve fixture should generate");
+    const char *fn = find_static_function_definition(code, "test_grow_");
+    TEST_REQUIRE(fn != NULL, "array reserve function should emit");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = xrt_array_reserve_trusted_raw("),
+                 "unused array reserve result must not materialize a C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "(void)(xrt_array_reserve_trusted_raw("),
+                 "array reserve side effect must remain emitted");
+
+    printf("  Generated unused array reserve statement %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_dead_native_box_without_source_storage_is_elided) {
+    XrType u64_type = {
+        .kind = XR_KIND_INT, .id = 162, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XiFunc *ir = xi_func_new("dead_native_box", &u64_type);
+    TEST_REQUIRE(ir != NULL, "dead native box function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "dead native box entry allocated");
+    entry->sealed = true;
+
+    XiValue *inner = xi_const_int(ir, entry, 7, &u64_type);
+    TEST_REQUIRE(inner != NULL, "dead native box input allocated");
+    XiValue *box = xi_value_new(ir, entry, XI_BOX, &u64_type, 1);
+    TEST_REQUIRE(box != NULL, "dead native box allocated");
+    box->args[0] = inner;
+    box->uses = 1;
+    XiValue *ret = xi_const_int(ir, entry, 1, &u64_type);
+    TEST_REQUIRE(ret != NULL, "dead native box return allocated");
+    xi_block_set_return(entry, ret);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "dead native box fixture should generate");
+    const char *fn = find_static_function_definition(code, "dead_native_box");
+    TEST_REQUIRE(fn != NULL, "dead native box function should emit");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "dead native box function end emitted");
+    char dead_decl[64];
+    snprintf(dead_decl, sizeof(dead_decl), "v%u = XR_FROM_INT(", (unsigned) box->id);
+    TEST_REQUIRE(!contains_between(fn, fn_end, dead_decl),
+                 "dead native box must not materialize a C local");
+
+    printf("  Generated dead native box elision %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
+    const char *src = "fn label(value: u64) -> string { return \"value=${value}\" }\n"
+                      "print(label(7))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "native unsigned interpolation fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "native unsigned interpolation fixture should generate");
+    const char *fn = find_static_function_definition(code, "test_label_");
+    TEST_REQUIRE(fn != NULL, "native unsigned interpolation function should emit");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = XR_FROM_INT("),
+                 "native unsigned interpolation must not materialize a box local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_strpart_init_u64("),
+                 "native unsigned interpolation must use the direct u64 string part");
+
+    printf("  Generated native unsigned interpolation without box %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_panicinfo_constructor_token_emits_no_local) {
+    const char *src = "fn requireValue(value: int?) -> int { return value! }\n"
+                      "print(requireValue(1))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "PanicInfo token fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "PanicInfo token fixture should generate");
+    const char *fn = find_static_function_definition(code, "test_requireValue_");
+    TEST_REQUIRE(fn != NULL, "PanicInfo token function should emit");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, "builtin native class token: PanicInfo"),
+                 "PanicInfo constructor receiver must not materialize a C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_exception_from_message_value("),
+                 "PanicInfo constructor effect must remain emitted");
+
+    printf("  Generated PanicInfo constructor token elision %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_static_module_namespace_receivers_emit_no_shared_locals) {
+    const char *src = "import os\n"
+                      "import time\n"
+                      "fn describe() -> string { return os.platform + os.arch }\n"
+                      "fn stamp() -> int { return time.nanos() }\n"
+                      "print(describe())\n"
+                      "print(stamp() >= 0)\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "static module namespace fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "static module namespace fixture should generate");
+
+    const char *describe = find_static_function_definition(code, "test_describe_");
+    const char *stamp = find_static_function_definition(code, "test_stamp_");
+    TEST_REQUIRE(describe != NULL && stamp != NULL, "static namespace functions should emit");
+    const char *describe_end = next_static_after(describe);
+    const char *stamp_end = next_static_after(stamp);
+    TEST_REQUIRE(count_between(describe, describe_end, " = xrt_shared_") == 0,
+                 "direct os field loads must not materialize their module namespace");
+    TEST_REQUIRE(count_between(stamp, stamp_end, " = xrt_shared_") == 0,
+                 "direct time calls must not materialize their module namespace");
+    TEST_REQUIRE(contains_between(describe, describe_end, "xrt_os_platform()") &&
+                     contains_between(describe, describe_end, "xrt_os_arch()"),
+                 "os field helpers must remain emitted");
+    TEST_REQUIRE(contains_between(stamp, stamp_end, "xrt_time_nanos()"),
+                 "time helper call must remain emitted");
+
+    printf("  Generated direct module namespaces %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
+    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 159, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
+    XiFunc *ir = xi_func_new("direct_stdlib_import", &bool_type);
+    TEST_REQUIRE(ir != NULL, "direct stdlib import function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "direct stdlib import entry allocated");
+    entry->sealed = true;
+
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(ir, sizeof(XiImportRef));
+    TEST_REQUIRE(ref != NULL, "direct stdlib import metadata allocated");
+    ref->module_path = "io";
+    ref->member_name = "__fileClose";
+    ref->resolved_mod_index = -1;
+    ref->resolved_shared_slot = -1;
+    XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &func_type, 0);
+    TEST_REQUIRE(import != NULL, "direct stdlib import token allocated");
+    import->aux = ref;
+    import->aux_int = -1;
+    XiValue *handle = xi_const_int(ir, entry, 0, &int_type);
+    TEST_REQUIRE(handle != NULL, "direct stdlib import argument allocated");
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &bool_type, 2);
+    TEST_REQUIRE(call != NULL, "direct stdlib import call allocated");
+    call->args[0] = import;
+    call->args[1] = handle;
+    call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_CALL_EFFECTS;
+    xi_block_set_return(entry, call);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "direct stdlib import fixture should generate");
+    char dead_decl[64];
+    snprintf(dead_decl, sizeof(dead_decl), "XrValue v%u =", (unsigned) import->id);
+    TEST_REQUIRE(!contains(code, dead_decl),
+                 "direct stdlib function token must not materialize a C local");
+    TEST_REQUIRE(contains(code, "xrt_io_file_close("),
+                 "direct stdlib call must remain emitted");
+
+    printf("  Generated direct stdlib import token elision %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_string_literal_runes_receiver_emits_immediate_without_local) {
+    const char *src = "fn hexDigit() -> rune {\n"
+                      "    return \"0123456789abcdef\".runes().nth(10)\n"
+                      "}\n"
+                      "print(hexDigit())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "string literal runes fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "string literal runes fixture should generate");
+    const char *fn = find_static_function_definition(code, "test_hexDigit_");
+    TEST_REQUIRE(fn != NULL, "string literal runes function should emit");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit("),
+                 "literal runes receiver must not materialize a C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_method_0(xr_str_lit("),
+                 "literal runes receiver must remain in the dynamic method call");
+
+    printf("  Generated immediate string runes receiver %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
+    const char *src = "fn viewLength(view: Slice<byte>) -> int { return len(view) }\n"
+                      "fn slicedLength(bytes: Array<byte>) -> int {\n"
+                      "    const view: Slice<byte> = bytes[1:]\n"
+                      "    var decoded = string.fromUtf8(bytes)\n"
+                      "    if (decoded == null) { return 0 }\n"
+                      "    return viewLength(view)\n"
+                      "}\n"
+                      "var bytes: Array<byte> = [1, 2, 3]\n"
+                      "print(slicedLength(bytes))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "direct span argument fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "direct span argument fixture should generate");
+    const char *fn = find_static_function_definition(code, "test_slicedLength_");
+    TEST_REQUIRE(fn != NULL, "direct span argument function should emit");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(count_between(fn, fn_end, "_ad") == 0,
+                 "a Slice used only by a direct Slice parameter and error cleanup must not cache data");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_has_pending_error()"),
+                 "the direct Slice fixture must exercise an intervening fallible call");
+    TEST_REQUIRE(contains_between(fn, fn_end, "test_viewLength_"),
+                 "the direct Slice call must remain emitted");
+
+    printf("  Generated direct span argument without data cache %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 933, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XiFunc *ir = xi_func_new("manual_debug_shared", &u64_type);
@@ -3702,6 +3998,103 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
            "Array<int> index read must not fall back to runtime index dispatch");
 
     printf("  Generated typed array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_checked_typed_array_store_proves_nonnull_data) {
+    const char *src = "fn put(values: ref Array<u64>, index: int, value: u64) {\n"
+                      "    values[index] = value\n"
+                      "}\n"
+                      "var values: Array<u64> = [1, 2]\n"
+                      "put(ref values, 1, 9)\n"
+                      "print(values[1])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "checked typed-array store should generate");
+
+    const char *fn = find_static_function_definition(code, "test_put_");
+    assert(fn != NULL && "put definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "put function body should be bounded");
+    assert(count_between(fn, fn_end, "XR_ASSUME(_a->data != NULL)") == 1 &&
+           "successful checked typed-array store must expose its non-null storage invariant");
+    assert(count_between(fn, fn_end, "xrt_index_oob(") == 1 &&
+           "checked typed-array store must preserve its out-of-bounds trap");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
+    const char *src = "fn copyRunes(text: string) -> string {\n"
+                      "    var out = StringBuilder()\n"
+                      "    var iter = text.runes()\n"
+                      "    while (iter.hasNext()) {\n"
+                      "        var r = iter.next()\n"
+                      "        var cp = r.toUInt32()\n"
+                      "        if (cp > 0) { out.append(r) }\n"
+                      "    }\n"
+                      "    return out.toString()\n"
+                      "}\n"
+                      "print(copyRunes(\"Ab\"))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "StringBuilder/Iterator direct runtime methods should generate");
+
+    const char *fn = find_static_function_definition(code, "test_copyRunes_");
+    assert(fn != NULL && "copyRunes definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "copyRunes function body should be bounded");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
+           "exact built-in StringBuilder/Iterator helpers must not retain impossible error polls");
+    assert(count_between(fn, fn_end, "xrt_release(") >= 1 &&
+           "fresh StringBuilder owner must be released after producing the returned string");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_err_check_releases_live_arc_owners_on_cold_edge) {
+    const char *src = "fn decode(bytes: Array<u8>) -> string? {\n"
+                      "    var out = StringBuilder()\n"
+                      "    out.append(\"prefix\")\n"
+                      "    var decoded = string.fromUtf8(bytes)\n"
+                      "    out.append(\"suffix\")\n"
+                      "    return decoded\n"
+                      "}\n"
+                      "print(decode([65 as u8]))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "error-edge ARC cleanup fixture should generate");
+
+    const char *fn = find_static_function_definition(code, "test_decode_");
+    assert(fn != NULL && "decode definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "decode function body should be bounded");
+    const char *check = strstr(fn, "if (XR_UNLIKELY(xrt_has_pending_error())) {");
+    assert(check != NULL && check < fn_end && "fallible UTF-8 decode must retain its error check");
+    const char *check_end = strstr(check, "    }");
+    assert(check_end != NULL && check_end < fn_end &&
+           "pending-error branch should have a bounded body");
+    assert(count_between(check, check_end, "xrt_release(") >= 1 &&
+           "pending-error branch must release the live StringBuilder owner");
+
     xr_free(code);
     xi_func_free(ir);
 }
@@ -10111,6 +10504,15 @@ int main(void) {
     run_cgen_returned_null_constant_emits_immediate_without_local();
     run_cgen_multi_concat_string_constants_emit_immediate_without_locals();
     run_cgen_shared_string_constant_emits_immediate_without_local();
+    run_cgen_unused_call_result_emits_effect_statement_without_local();
+    run_cgen_unused_array_reserve_result_emits_effect_statement_without_local();
+    run_cgen_dead_native_box_without_source_storage_is_elided();
+    run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
+    run_cgen_panicinfo_constructor_token_emits_no_local();
+    run_cgen_static_module_namespace_receivers_emit_no_shared_locals();
+    run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
+    run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
+    run_cgen_span_passed_only_to_direct_call_omits_data_cache();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
@@ -10169,6 +10571,9 @@ int main(void) {
     run_analyzer_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
+    run_cgen_checked_typed_array_store_proves_nonnull_data();
+    run_cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow();
+    run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();

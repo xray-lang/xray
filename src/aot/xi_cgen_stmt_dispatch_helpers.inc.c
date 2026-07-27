@@ -165,6 +165,31 @@ static bool xicgen_err_check_elided_by_func_attr(XiCgenCtx *ctx, const XiFunc *f
            xaot_bundle_find_func_attr_plan(cg_ctx_aot_bundle(ctx), f) != NULL;
 }
 
+/* Unit ERR_CHECK has an implicit function-exit edge.  ARC records the owners
+ * that remain live on the normal continuation in args[]; release them only
+ * inside the already-cold pending-error branch.  A synthetic RELEASE reuses
+ * the authoritative representation conversion used by ordinary ARC drops. */
+static void xicgen_emit_err_check_arc_cleanups(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *check, const char *prefix) {
+    if (!xi_err_check_has_arc_cleanups(check))
+        return;
+    for (uint16_t i = XI_ERR_CHECK_CLEANUP_ARG_BASE; i < check->nargs; i++) {
+        XiValue *owner = check->args[i];
+        if (!owner)
+            continue;
+        XiValue *drop_args[1] = {owner};
+        XiValue drop = {
+            .op = XI_RELEASE,
+            .type = owner->type,
+            .args = drop_args,
+            .nargs = 1,
+        };
+        fprintf(out, "        ");
+        xicgen_release(ctx, out, f, &drop, prefix);
+        fprintf(out, ";\n");
+    }
+}
+
 static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     if (cg_value_type_is_bool(v)) {
@@ -199,6 +224,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
+    xicgen_emit_err_check_arc_cleanups(ctx, out, f, v, prefix);
     emit_cell_var_releases(ctx, out);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "        return;\n");

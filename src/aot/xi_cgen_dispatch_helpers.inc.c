@@ -8974,6 +8974,24 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
 
     const char *method = (const char *) v->aux;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
+    const XrType *receiver_type = v->args[0] ? v->args[0]->type : NULL;
+
+    /* These exact built-in receiver/method pairs lower to header-only AOT
+     * helpers which either return normally or abort on allocation failure;
+     * none of them can publish a language pending error.  Keep this table
+     * fail-closed so user-defined structural lookalikes still retain their
+     * ordinary error propagation checks. */
+    if (receiver_type && receiver_type->kind == XR_KIND_RUNE)
+        return strcmp(method, "toUInt32") == 0 && nargs == 0;
+    if (receiver_type && receiver_type->kind == XR_KIND_STRING)
+        return (strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0) && nargs == 0;
+    if (xr_type_is_named_class(receiver_type, "Iterator"))
+        return ((strcmp(method, "hasNext") == 0 || strcmp(method, "next") == 0 ||
+                 strcmp(method, "iterator") == 0) &&
+                nargs == 0);
+    if (xr_type_is_named_class(receiver_type, "StringBuilder"))
+        return ((strcmp(method, "toString") == 0 || strcmp(method, "clear") == 0) && nargs == 0) ||
+               (strcmp(method, "append") == 0 && nargs == 1);
 
     if (xi_value_type_is_result_group(v->args[0])) {
         return (strcmp(method, "add") == 0 && nargs == 1) ||

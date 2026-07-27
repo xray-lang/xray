@@ -1,8 +1,8 @@
 # Xi canonical operation contract
 
-Status: re-frozen after the xxHash work made raw pointer-backed slices an
-explicit caller-proven unsafe view and gave wide adjacent-lane shuffles a
-semantic Xi shape rather than an overflowing packed-lane encoding.
+Status: re-frozen after implicit error propagation gained late cold-edge ARC
+operands, and raw-pointer loads plus ordinary slices were made explicit
+borrowed views instead of accidental owners.
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
    effects, result ownership, and operand ownership are generated from it.
@@ -33,5 +33,5 @@ semantic Xi shape rather than an overflowing packed-lane encoding.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def d293f2048aadfdf665eec9b09b02c539122d9189a2f41ebd19846525b4bc18a1
+anchor-sha256: xisa/xi/ops.def d7adb59818202606d535943923ccb5f3aefbc3b98ab2e7ac9fe229718dd041de
 anchor-sha256: xisa/xi/lowering.def 3f497bdba9f651908ba7d7e5d500eb82806b0861244638a282b737eb6893fdf9

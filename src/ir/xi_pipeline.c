@@ -475,6 +475,14 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
             goto fail;
         }
         xi_backend_lower(ir);
+        /* A unit ERR_CHECK has an implicit function-exit edge which ordinary
+         * CFG liveness cannot represent.  Publish its cold-edge drop operands
+         * only after optimization, representation selection, vector scalar
+         * lowering, and every other value-cloning rewrite.  Earlier attachment
+         * would turn error-only ownership into normal SSA uses and inhibit
+         * dead-value/representation cleanup on the successful hot path. */
+        if (cfg->run_escape && cfg->run_arc)
+            xi_arc_attach_error_cleanups(ir);
         next = xi_program_plan_backend((XiReppedProgram *) program, transition_error,
                                        sizeof(transition_error));
         if (!next) {

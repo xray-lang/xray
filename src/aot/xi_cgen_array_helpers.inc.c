@@ -3563,11 +3563,30 @@ static const char *cg_array_cache_restrict_str(XiCgenCtx *ctx, const XiValue *or
 
 /* A Slice cache plan may survive after every array-data operation has been
  * optimized away, while the Slice value itself still crosses an addressable
- * ref boundary.  Such a chain needs the xr_span_t local but never references
- * `_adN`; suppress only this provably address/ARC-only cache declaration. */
-static bool cg_span_cache_value_uses_only_address_aliases(const XiFunc *f, const XiValue *target,
-                                                          uint8_t depth) {
-    if (!f || !target || depth > 8)
+ * ref boundary or an implicit-error cleanup edge.  Such a chain needs the
+ * xr_span_t local but never references `_adN`; suppress only this provably
+ * address/ARC-only cache declaration. */
+static bool cg_span_cache_direct_call_arg_uses_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *user, uint16_t arg_index) {
+    if (!ctx || !f || !user || arg_index == 0)
+        return false;
+    CgStaticFunctionCall call = cg_no_static_function_call();
+    if (user->op == XI_CALL) {
+        call = cg_resolve_static_function_call(ctx, f, user->args[0]);
+    } else if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) && user->aux) {
+        call = cg_resolve_module_member_call(ctx, f, user, (const char *) user->aux);
+    } else {
+        return false;
+    }
+    uint16_t param_index = (uint16_t) (arg_index - 1);
+    return call.func && !call.func->is_vararg && call.func->params &&
+           param_index < call.func->nparams && call.func->params[param_index] &&
+           cg_value_plan_is_span_aggregate(ctx, call.func->params[param_index]);
+}
+
+static bool cg_span_cache_value_uses_only_address_aliases(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *target, uint8_t depth) {
+    if (!ctx || !f || !target || depth > 8)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -3592,10 +3611,18 @@ static bool cg_span_cache_value_uses_only_address_aliases(const XiFunc *f, const
                     continue;
                 if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
                     continue;
+                /* Late ARC operands on a unit ERR_CHECK are consumed only by
+                 * xicgen_release in the pending-error branch.  Releasing an
+                 * xr_span_t never reads its cached data pointer. */
+                if (user->op == XI_ERR_CHECK)
+                    continue;
+                if (cg_span_cache_direct_call_arg_uses_value(ctx, f, user, a))
+                    continue;
                 if (a == 0 &&
                     (cg_is_identity_copy_or_move(user) || user->op == XI_BOX ||
                      user->op == XI_UNBOX) &&
-                    cg_span_cache_value_uses_only_address_aliases(f, user, (uint8_t) (depth + 1)))
+                    cg_span_cache_value_uses_only_address_aliases(ctx, f, user,
+                                                                  (uint8_t) (depth + 1)))
                     continue;
                 return false;
             }
@@ -3614,7 +3641,7 @@ static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const Xi
         const XiFunc *plan_func =
             plan->value && plan->value->block ? plan->value->block->func : NULL;
         if (cg_value_plan_is_span_aggregate(ctx, plan->value) && plan_func &&
-            cg_span_cache_value_uses_only_address_aliases(plan_func, plan->value, 0))
+            cg_span_cache_value_uses_only_address_aliases(ctx, plan_func, plan->value, 0))
             return false;
         if (!cg_array_data_cache_decl_mark(ctx, plan->value))
             return false;
@@ -4434,7 +4461,9 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     /* Index assignment is strict: no negative-from-end wraparound (that is
      * slice-only), matching index reads. An out-of-range index traps. */
     fprintf(out, "; ");
-    fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _a->length)) { ((%s*)_a->data)[_idx] = ",
+    fprintf(out,
+            "if (XR_LIKELY(_idx >= 0 && _idx < _a->length)) { "
+            "XR_ASSUME(_a->data != NULL); ((%s*)_a->data)[_idx] = ",
             info.ctype);
     emit_typed_array_store_value(ctx, out, &info, v->args[2]);
     fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } XR_NULL_VAL; })");
@@ -4578,7 +4607,7 @@ static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFun
     if (!cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
 
-    bool value_used = call->uses != 0;
+    bool value_used = cg_value_has_actual_ir_use(f, call);
     bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");

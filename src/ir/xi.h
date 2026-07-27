@@ -505,7 +505,8 @@ typedef enum {
     /* Value-return error channel */
     XI_ERR_SET,    /* write args[0] to error channel (no return) */
     XI_ERR_RETURN, /* write args[0] to error channel + return from function */
-    XI_ERR_CHECK,  /* after fallible call: check pending_error, propagate if set */
+    XI_ERR_CHECK,  /* after fallible call: check pending_error, propagate if set;
+                    * post-ARC args[]=error-edge drops */
     XI_ERR_CATCH,  /* read pending_error into result, clear error channel */
 
     /* Iteration (for-in protocol) */
@@ -1182,6 +1183,18 @@ static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
 #define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
 #define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
 #define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
+
+/* XI_ERR_CHECK starts operand-free at lowering.  After all AOT value-rewriting
+ * passes, ARC finalization attaches the owners which remain live only on the
+ * successful continuation.  The may-throw producer is deliberately not an
+ * operand: making its otherwise-unused result an SSA use would force useless
+ * hot-path materialization.  AOT C emits the owners inside the existing
+ * pending-error cold branch. */
+#define XI_ERR_CHECK_CLEANUP_ARG_BASE 0u
+
+static inline bool xi_err_check_has_arc_cleanups(const XiValue *v) {
+    return v && v->op == XI_ERR_CHECK && v->nargs != 0;
+}
 
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;

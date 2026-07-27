@@ -1,10 +1,8 @@
 # Effect and assertion semantics contract
 
-Status: re-frozen after the xxHash parity work refined no-heap pointer effects,
-stable borrowed/mutated aggregate lowering, exact-integer intrinsic nothrow
-resolution, closed struct-method collection, and compiler-owned fixed and
-runtime-scalable SIMD intrinsic identities. Product membership and
-fail-closed semantics are unchanged.
+Status: re-frozen after the xxHash parity work made implicit error propagation
+carry explicit cold-edge ARC cleanup while keeping the ordinary effect product,
+product membership, and fail-closed semantics unchanged.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -68,7 +66,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h b68c60f6af4d15
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 524f1a8f8da465bb40c4828394d4bf23c64eed33659c6decb8395eeab3c603ff
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 703174dd47d5bab2613b281aa4a6cd9591826e93ae1578c7e4b4b99d3895ca31
 anchor-sha256: src/runtime/value/xtype.h 8d160aa422b68e0b3c4ab080fe30385bd920d3106a36ca7445bfb0944d4504ff
-anchor-sha256: src/ir/xi.h 633ceecd4e038acfc29a5ff826ecbfebd2295dc902e807039aab0bbb8da24260
+anchor-sha256: src/ir/xi.h 9d8f229600dc4a6aeb6092ae88c767ef67f79865f278884654d501f5598009d7
 anchor-sha256: src/ir/xi_lower.c f49c7ddaad290f3fd6644ca7e1ed0228fbd59760430cf55602cc21b81e6c5f16
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
 anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3

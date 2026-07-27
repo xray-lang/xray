@@ -628,6 +628,10 @@ static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValu
 }
 
 static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
+    if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
+        strcmp((const char *) v->aux, "StringBuilder") == 0 &&
+        xr_type_is_named_class(v->type, "StringBuilder"))
+        return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
@@ -1648,6 +1652,22 @@ static void arc_precompute_sigs(XiFunc *f) {
     xr_free(vec.items);
 }
 
+static XiArcOwnMode arc_target_own_mode(const XiFunc *f, const XiValue *target,
+                                        const XiBorrowSig *own_sig,
+                                        const XiValue *borrowed_recv) {
+    if (target == borrowed_recv)
+        return OWN_BORROWED;
+    if (f->operator_borrowed && target->op == XI_PARAM)
+        return OWN_BORROWED;
+    if (target->op == XI_PARAM && param_is_borrowed(f, target, own_sig))
+        return OWN_BORROWED;
+    if (op_produces_borrow(target->op))
+        return OWN_BORROWED;
+    if (op_is_call(target->op) && !call_returns_fresh(f, target))
+        return OWN_CALL_RESULT;
+    return OWN_OWNED;
+}
+
 static void arc_insert_rec(XiFunc *f) {
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i])
@@ -1722,23 +1742,8 @@ static void arc_insert_rec(XiFunc *f) {
 
     bool cfg_changed = false;
     for (uint32_t i = 0; i < targets.count; i++) {
-        XiArcOwnMode mode = OWN_OWNED;
-        if (targets.items[i] == borrowed_recv) {
-            mode = OWN_BORROWED;
-        } else if (f->operator_borrowed && targets.items[i]->op == XI_PARAM) {
-            mode = OWN_BORROWED;
-        } else if (targets.items[i]->op == XI_PARAM &&
-                   param_is_borrowed(f, targets.items[i], own_sig)) {
-            /* The borrow signature proved this parameter is only borrowed:
-             * dup at consuming uses, never drop (caller keeps ownership). */
-            mode = OWN_BORROWED;
-        } else if (op_produces_borrow(targets.items[i]->op)) {
-            mode = OWN_BORROWED;
-        } else if (op_is_call(targets.items[i]->op)) {
-            /* Known fresh-returning callees produce an owned reference;
-             * everything else stays in the alias-safe CALL_RESULT mode. */
-            mode = call_returns_fresh(f, targets.items[i]) ? OWN_OWNED : OWN_CALL_RESULT;
-        }
+        XiArcOwnMode mode =
+            arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
         cfg_changed |= process_value_ex(f, targets.items[i], mode);
     }
     xr_free(targets.items);
@@ -1757,6 +1762,177 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * is mutated, then insert dup/drop bottom-up. */
     arc_precompute_sigs(f);
     arc_insert_rec(f);
+}
+
+/* Return the nearest producer associated with a unit ERR_CHECK.  ARC ops can
+ * legally be inserted between the producer and the check, so adjacency is not
+ * sufficient.  Stop at a previous check: pending-error boundaries never
+ * borrow a producer across another already-consumed boundary. */
+static XiValue *arc_err_check_source(XiValue *check) {
+    if (!check || check->op != XI_ERR_CHECK || !check->block)
+        return NULL;
+    XiBlock *blk = check->block;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        if (blk->values[i] != check)
+            continue;
+        while (i > 0) {
+            XiValue *candidate = blk->values[--i];
+            if (!candidate)
+                continue;
+            if (candidate->op == XI_ERR_CHECK)
+                return NULL;
+            if ((candidate->flags & XI_FLAG_MAY_THROW) != 0 || candidate->op == XI_SCOPE_EXIT)
+                return candidate;
+        }
+        break;
+    }
+    return NULL;
+}
+
+static bool arc_value_is_defined_before_block_index(const XiValue *target, const XiBlock *blk,
+                                                    uint32_t index) {
+    if (!target || !blk)
+        return false;
+    if (target->block != blk)
+        return true;
+    if (target->op == XI_PHI)
+        return true;
+    for (uint32_t i = 0; i < index; i++) {
+        if (blk->values[i] == target)
+            return true;
+    }
+    return false;
+}
+
+static bool arc_value_live_after_block_index(const ArcLive *live, uint32_t index) {
+    return live && (live->live_out || live->use_at_end ||
+                    (live->has_use && live->last_use > index));
+}
+
+/* Attach error-edge owner operands for one function after ordinary
+ * ARC elimination.  The temporary vectors intentionally live off-arena: all
+ * liveness queries run before any ERR_CHECK operands are published, so one
+ * check's cleanup list cannot extend another target's normal-path liveness. */
+static void arc_attach_error_cleanups_func(XiFunc *f) {
+    XiValueVec checks = {0};
+    XiValueVec targets = {0};
+    const XiBorrowSig *own_sig = arc_get_borrow_sig(f);
+    XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
+
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        if (f->params[p] && tracks_rc(f->params[p]) &&
+            !xi_value_vec_push(&targets, f->params[p]))
+            goto oom;
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            /* Optimizers may retain a unit check after folding its producer to
+             * a proven-nothrow form.  CGen erases that check, so it has no
+             * error edge and must not gain cleanup operands (which would also
+             * make otherwise-dead owners look live on the hot path). */
+            if (v->op == XI_ERR_CHECK && (!v->type || v->type->kind != XR_KIND_BOOL) &&
+                v->nargs == 0 && arc_err_check_source(v) != NULL &&
+                !xi_value_vec_push(&checks, v))
+                goto oom;
+            if (v->op == XI_PARAM ||
+                stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
+                continue;
+            if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
+                goto oom;
+        }
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (tracks_rc(&phi->value) && !xi_value_vec_push(&targets, &phi->value))
+                goto oom;
+        }
+    }
+    if (checks.count == 0)
+        goto done;
+
+    XiValueVec *cleanups = (XiValueVec *) xr_calloc(checks.count, sizeof(*cleanups));
+    if (!cleanups)
+        goto oom;
+
+    /* Reverse definition order gives simultaneously-dead owners the same
+     * destructor ordering as the ordinary repeated insert-after death drops. */
+    for (uint32_t ti = targets.count; ti-- > 0;) {
+        XiValue *target = targets.items[ti];
+        if (arc_target_own_mode(f, target, own_sig, borrowed_recv) != OWN_OWNED)
+            continue;
+        ArcLive *live = NULL;
+        uint32_t *pos_by_id = NULL;
+        if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
+            for (uint32_t ci = 0; ci < checks.count; ci++)
+                xr_free(cleanups[ci].items);
+            xr_free(cleanups);
+            goto oom;
+        }
+        for (uint32_t ci = 0; ci < checks.count; ci++) {
+            XiValue *check = checks.items[ci];
+            XiBlock *blk = check->block;
+            if (!blk || !pos_by_id[blk->id])
+                continue;
+            uint32_t check_index = UINT32_MAX;
+            for (uint32_t i = 0; i < blk->nvalues; i++) {
+                if (blk->values[i] == check) {
+                    check_index = i;
+                    break;
+                }
+            }
+            if (check_index == UINT32_MAX ||
+                !arc_value_is_defined_before_block_index(target, blk, check_index) ||
+                !arc_value_live_after_block_index(&live[pos_by_id[blk->id] - 1], check_index))
+                continue;
+            if (!xi_value_vec_push(&cleanups[ci], target)) {
+                xr_free(pos_by_id);
+                xr_free(live);
+                for (uint32_t cj = 0; cj < checks.count; cj++)
+                    xr_free(cleanups[cj].items);
+                xr_free(cleanups);
+                goto oom;
+            }
+        }
+        xr_free(pos_by_id);
+        xr_free(live);
+    }
+
+    for (uint32_t ci = 0; ci < checks.count; ci++) {
+        uint32_t nargs = cleanups[ci].count;
+        XR_CHECK(nargs <= UINT16_MAX, "xi_arc: too many unit ERR_CHECK cleanup owners");
+        XiValue **args = NULL;
+        if (nargs != 0) {
+            args = (XiValue **) xi_func_arena_alloc(
+                f, (uint32_t) ((size_t) nargs * sizeof(*args)));
+            XR_CHECK(args != NULL, "xi_arc: out of memory publishing ERR_CHECK cleanups");
+            for (uint32_t i = 0; i < cleanups[ci].count; i++)
+                args[i] = cleanups[ci].items[i];
+        }
+        checks.items[ci]->args = args;
+        checks.items[ci]->nargs = (uint16_t) nargs;
+        xr_free(cleanups[ci].items);
+    }
+    xr_free(cleanups);
+    goto done;
+
+oom:
+    XR_CHECK(false, "xi_arc: out of memory attaching ERR_CHECK cleanup owners");
+done:
+    xr_free(targets.items);
+    xr_free(checks.items);
+}
+
+XR_FUNC void xi_arc_attach_error_cleanups(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_arc_attach_error_cleanups: NULL func");
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_arc_attach_error_cleanups(f->children[i]);
+    }
+    arc_attach_error_cleanups_func(f);
 }
 
 /* ========== Dup/Drop Elimination (copy→move optimization) ========== */

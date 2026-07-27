@@ -397,6 +397,37 @@ static bool cg_phi_has_storage(const XiPhi *phi) {
     return phi && !cg_is_void_like(&phi->value);
 }
 
+/* Xi use counters are optimization metadata and can conservatively retain an
+ * old use after DCE.  C emission decisions need the final graph, so query the
+ * actual control/phi/value edges instead of treating `uses` as authoritative. */
+static bool cg_value_has_actual_ir_use(const XiFunc *f, const XiValue *target) {
+    if (!f || !target)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return true;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == target)
+                    return true;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == target)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] == target)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
 static void cg_ctx_set_error(XiCgenCtx *ctx);
 
@@ -1704,6 +1735,8 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
                                                  const char **out_prefix);
 static bool cg_aot_stdlib_receiver_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *call);
+static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *call);
 
 static CgStaticFunctionCall cg_no_static_function_call(void) {
     CgStaticFunctionCall call;
@@ -6424,6 +6457,12 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
         case XI_CALL_METHOD:
             return arg_index >= 1 &&
                    cg_call_method_is_typed_array_resize_zero_specialization(ctx, f, user);
+        case XI_STR_CONCAT:
+            /* Only unsigned interpolation selects the direct u64 part
+             * emitter.  Other scalar parts request TAGGED and therefore still
+             * need their BOX local even in a multi-part concat. */
+            return arg_index < user->nargs &&
+                   cg_value_type_is_unsigned_int(user->args[arg_index]);
         case XI_CALL:
             return cg_native_box_direct_call_arg_is_native(ctx, f, user, arg_index);
         default:
@@ -6555,6 +6594,13 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
              * representation emitter.  The one-part string fast path still
              * calls emit_vref() and therefore deliberately fails closed. */
             return user->nargs > 1;
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            /* string.runes() is emitted as a dynamic method call whose
+             * receiver is rendered through emit_value_as_rep_ctx(). */
+            return arg_index == 0 && user->nargs >= 1 && user->args[0] &&
+                   user->args[0]->type && user->args[0]->type->kind == XR_KIND_STRING &&
+                   user->aux && strcmp((const char *) user->aux, "runes") == 0;
         case XI_INDEX_GET:
         case XI_INDEX_SET: {
             CgFixedArrayLaneInfo info;
@@ -6616,10 +6662,16 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                 if (user->args[a] != v)
                     continue;
                 seen_use = true;
-                if (v->type->kind == XR_KIND_STRING &&
-                    ((user->op != XI_STR_CONCAT || user->nargs <= 1) &&
-                     (user->op != XI_SET_SHARED || a != 0)))
-                    return false;
+                if (v->type->kind == XR_KIND_STRING) {
+                    bool allowed_string_use =
+                        (user->op == XI_STR_CONCAT && user->nargs > 1) ||
+                        (user->op == XI_SET_SHARED && a == 0) ||
+                        ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+                         a == 0 && user->aux &&
+                         strcmp((const char *) user->aux, "runes") == 0);
+                    if (!allowed_string_use)
+                        return false;
+                }
                 if (!cg_const_use_emits_immediate(ctx, f, user, a))
                     return false;
             }
@@ -6630,6 +6682,54 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
 
 static bool cg_static_enum_namespace_uses_are_elidable(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiValue *value, int depth);
+
+static bool cg_module_namespace_field_ignores_receiver(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *load, uint16_t arg_index) {
+    if (!ctx || !f || !load || arg_index != 0 || load->op != XI_LOAD_FIELD ||
+        load->nargs < 1 || !load->args[0] || !load->aux ||
+        !cg_value_is_module_import_ctx(ctx, f, load->args[0], "os"))
+        return false;
+    const char *field = (const char *) load->aux;
+    return strcmp(field, "platform") == 0 || strcmp(field, "arch") == 0 ||
+           strcmp(field, "sep") == 0 || strcmp(field, "eol") == 0;
+}
+
+static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiValue *v) {
+    if (!ctx || !f || !v || v->op != XI_IMPORT_REF || !v->aux || cg_value_has_cell(ctx, v))
+        return false;
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == v)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == v)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == v)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != v)
+                    continue;
+                seen_use = true;
+                if (a != 0 || user->op != XI_CALL ||
+                    !cg_aot_stdlib_import_call_is_direct(ctx, f, user))
+                    return false;
+            }
+        }
+    }
+    /* A dead native BOX can survive with a conservative Xi use count after
+     * DCE.  It is a pure representation boundary, so omit it unless it owns a
+     * source debugger slot that must remain observable in debug-local builds. */
+    return seen_use || !cg_debug_value_has_source_storage(ctx, f, v);
+}
 
 /* A shared slot load is a semantic memory read in Xi, but the AOT C target is
  * an ordinary non-volatile array access.  It needs no C local when it is either
@@ -6665,6 +6765,8 @@ static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != v)
                     continue;
+                if (cg_module_namespace_field_ignores_receiver(ctx, f, user, a))
+                    continue;
                 if (a == 0 && (user->op == XI_CALL || user->op == XI_TAIL_CALL)) {
                     CgStaticFunctionCall call =
                         cg_resolve_static_function_call(ctx, f, user->args[0]);
@@ -6690,6 +6792,8 @@ static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
                 }
                 if (a == 0 && (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
                     user->aux) {
+                    if (cg_time_module_helper_ctx(ctx, f, user))
+                        continue;
                     const char *method = (const char *) user->aux;
                     CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, user, method);
                     if (call.func && call.func->ncaptures == 0)
@@ -6940,6 +7044,46 @@ static bool cg_static_prelude_enum_namespace_is_elided(const XiFunc *f, const Xi
     return seen_use;
 }
 
+/* PanicInfo is a compile-time class token in hosted AOT.  Its dedicated
+ * constructor emitter recognizes the receiver identity and materializes the
+ * exception directly, so the token itself has no C representation.  Keep the
+ * proof deliberately exact: every use must be arg0 of PanicInfo.constructor. */
+static bool cg_panicinfo_constructor_token_is_elided(const XiFunc *f, const XiValue *v) {
+    if (!f || !v || v->op != XI_GET_BUILTIN || v->aux_int != XR_GLOBAL_VAR_PANIC_INFO)
+        return false;
+
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == v)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == v)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == v)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != v)
+                    continue;
+                const char *method = user->aux ? (const char *) user->aux : NULL;
+                if (ai != 0 ||
+                    (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) ||
+                    !method || strcmp(method, "constructor") != 0)
+                    return false;
+                seen_use = true;
+            }
+        }
+    }
+    return seen_use;
+}
+
 /* User enum namespaces are type-domain tokens as well.  The frontend never
  * exposes them as ordinary collection values; their legal Xi consumers are
  * static member loads, enum-case iteration, and typed metadata operations.
@@ -7042,6 +7186,21 @@ static bool cg_static_enum_namespace_value_is_elided(XiCgenCtx *ctx, const XiFun
     return false;
 }
 
+/* Calls whose Xi result has no consumer still have to execute for their side
+ * effects and pending-error state, but release C does not need a dead result
+ * local.  Restrict this to ordinary expression-form calls in functions that do
+ * not use the exception pre-declaration path.  Source-bound and cell-backed
+ * values retain their local so XRAY_AOT_DEBUG_LOCALS remains exact. */
+static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v) {
+    if (!ctx || !f || !v || ctx->pre_decl_all || cg_value_has_actual_ir_use(f, v) ||
+        cg_is_void_like(v) ||
+        cg_value_has_cell(ctx, v) || cg_debug_value_has_source_storage(ctx, f, v))
+        return false;
+    return v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+           v->op == XI_CALL_BUILTIN;
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
@@ -7091,6 +7250,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
+        return;
+    if (cg_panicinfo_constructor_token_is_elided(f, v))
         return;
     if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
         return;
@@ -7361,6 +7522,16 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
+        return;
+
+    if (cg_unused_call_result_emits_statement(ctx, f, v)) {
+        fprintf(out, "    (void)(");
+        emit_value_rhs(ctx, out, f, v, prefix);
+        fprintf(out, ");\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        return;
+    }
+    if (cg_import_ref_has_no_emitted_c_use(ctx, f, v))
         return;
 
     bool release_only_value = cg_struct_place_load_only_feeds_direct_fields(ctx, f, v) ||
@@ -8135,6 +8306,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_shared_load_has_no_emitted_c_use(ctx, f, v))
         return true;
+    if (cg_import_ref_has_no_emitted_c_use(ctx, f, v))
+        return true;
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
         return true;
     if (v->op != XI_PHI && f->phi_coalesce && v->id < f->phi_coalesce_count &&
@@ -8149,6 +8322,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_span_phi_snapshot_has_no_release_use(ctx, f, v))
         return true;
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
+        return true;
+    if (cg_panicinfo_constructor_token_is_elided(f, v))
         return true;
     if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
         return true;
@@ -11125,8 +11300,23 @@ static bool cg_aot_stdlib_receiver_call_is_direct(XiCgenCtx *ctx, const XiFunc *
         call->nargs < 1 || !call->aux)
         return false;
     const char *module = cg_aot_stdlib_module_of_receiver(ctx, f, call->args[0]);
-    return module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
-                                               (uint16_t) (call->nargs - 1)) != NULL;
+    return (module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
+                                                (uint16_t) (call->nargs - 1)) != NULL) ||
+           cg_time_module_helper_ctx(ctx, f, call) != NULL;
+}
+
+static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *call) {
+    if (!ctx || !f || !call || call->op != XI_CALL || call->nargs < 1)
+        return false;
+    const XiValue *callee = cg_unwrap_identity_value(call->args[0]);
+    const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                 ? (const XiImportRef *) callee->aux
+                                 : NULL;
+    if (!ref || !ref->module_path || !ref->member_name)
+        return false;
+    return cg_find_aot_stdlib_method(ref->module_path, ref->member_name,
+                                     (uint16_t) (call->nargs - 1)) != NULL;
 }
 
 #include "xi_cgen_program_entry.inc.c"

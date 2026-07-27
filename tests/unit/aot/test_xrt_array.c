@@ -579,6 +579,25 @@ static void test_byte_runtime_u8_guards_are_defensive(void) {
     free_test_array(ints);
 }
 
+static void test_stringbuilder_release_frees_arc_object_and_buffer(void) {
+    reset_alloc_counts();
+    XrValue builder = xrt_strbuf_new();
+    XrObjHeader *header = XRT_ARC_HDR(builder.ptr);
+
+    ASSERT_EQ_INT(builder.tag, XR_TAG_STRBUF, "StringBuilder uses its AOT value tag");
+    ASSERT_EQ_INT(header->_rsv, XRT_ARC_KIND_STRBUF,
+                  "StringBuilder header selects the builtin destructor");
+    ASSERT_EQ_INT(g_malloc_count, 2,
+                  "StringBuilder allocates one ARC object and one growable byte buffer");
+
+    xrt_retain(builder);
+    xrt_release(builder);
+    ASSERT_EQ_INT(g_free_count, 0, "non-final StringBuilder release preserves both allocations");
+    xrt_release(builder);
+    ASSERT_EQ_INT(g_free_count, 2,
+                  "final StringBuilder release frees its byte buffer and ARC object");
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -629,6 +648,7 @@ int main(void) {
     test_indexof_typed_fast_path_shared_rules();
     test_byte_array_raw_helpers_share_core_rules();
     test_byte_runtime_u8_guards_are_defensive();
+    test_stringbuilder_release_frees_arc_object_and_buffer();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

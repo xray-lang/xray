@@ -1036,6 +1036,9 @@
 (define-xi-op xi.ptr.load
   :class memory-read
   :arity 2
+  ; A raw-pointer load is a shallow view of storage owned by the pointee.  In
+  ; particular, loading a value-ABI aggregate must not acquire its ARC fields.
+  :result-ownership borrowed
   :own-use borrow
   :effects (memory-read)
   :requires ()
@@ -1777,7 +1780,11 @@
 
 (define-xi-op xi.err.check
   :class error
-  :arity 0
+  ; Before ARC this has no operands.  Late AOT ARC finalization makes
+  ; propagation ownership explicit as args[]=owners released only when the
+  ; pending-error branch is taken.  The producer is validated but omitted so
+  ; an otherwise-unused call result remains unmaterialized on the hot path.
+  :arity variadic
   :own-use borrow
   :effects (side-effect)
   :requires ()
@@ -1914,6 +1921,9 @@
 (define-xi-op xi.slice
   :class sequence
   :arity 3
+  ; A Slice is a view into its source container, not a new owner.  Borrow-flow
+  ; analysis keeps the source alive through every derived view use.
+  :result-ownership borrowed
   :own-use borrow
   :effects (memory-read memory-write)
   :requires ()

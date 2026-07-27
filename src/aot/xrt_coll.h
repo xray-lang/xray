@@ -288,6 +288,7 @@ static inline void xrt_array_data_grow(xrt_array_t *a, int64_t new_cap) {
             XrArrayStorage *ns = xrt_array_storage_alloc(tmp, (int64_t) new_bytes, s->elem_is_any);
             if (s->elem_is_any) {
                 XrValue *src = (XrValue *) a->data;
+                XR_ASSUME(a->length == 0 || src != NULL);
                 for (int64_t i = 0; i < a->length; i++)
                     xrt_retain(src[i]);
                 ns->elem_count = a->length;
@@ -1101,11 +1102,8 @@ typedef struct {
 } xrt_strbuf_t;
 
 static inline XrValue xrt_strbuf_new(void) {
-    xrt_strbuf_t *sb = (xrt_strbuf_t *) XRT_MALLOC(sizeof(xrt_strbuf_t));
-    if (XR_UNLIKELY(!sb)) {
-        fprintf(stderr, "xrt_strbuf_new: out of memory\n");
-        abort();
-    }
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) xrt_arc_alloc_heap(sizeof(xrt_strbuf_t));
+    xrt_arc_mark_builtin(sb, XRT_ARC_KIND_STRBUF);
     sb->cap = 64;
     sb->len = 0;
     sb->buf = (char *) XRT_MALLOC(64);
@@ -1279,6 +1277,16 @@ static inline XrValue xrt_strbuf_finish(XrValue sbv) {
     XrValue v = xrt_str_alloc((size_t) sb->len);
     memcpy(xr_str_buf(v), sb->buf, (size_t) (sb->len + 1));
     return v;
+}
+
+static inline void xrt_strbuf_destroy_builtin(void *obj) {
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) obj;
+    if (!sb)
+        return;
+    XRT_FREE(sb->buf);
+    sb->buf = NULL;
+    sb->len = 0;
+    sb->cap = 0;
 }
 
 typedef struct {
@@ -5079,6 +5087,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
             break;
         case XRT_ARC_KIND_JSON:
             xrt_json_destroy((xrt_json_t *) ((char *) obj - sizeof(XrObjHeader)));
+            break;
+        case XRT_ARC_KIND_STRBUF:
+            xrt_strbuf_destroy_builtin(obj);
             break;
 #ifdef XRT_ENABLE_REGEX
         case XRT_ARC_KIND_REGEX:
