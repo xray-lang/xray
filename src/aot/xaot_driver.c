@@ -1435,6 +1435,22 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
     return error_count;
 }
 
+static bool xaot_c90_build_options_supported(const XaotBuildOptions *options) {
+    const XaotTarget *target = options ? options->target : NULL;
+    if (!options || options->c_dialect != XI_CGEN_C_DIALECT_C90)
+        return true;
+    return options->profile == XAOT_BUILD_PROFILE_FREESTANDING &&
+           !options->emit_program_main && target && target->pointer_bits == 64 && target->os &&
+           (strcmp(target->os, "linux") == 0 || strcmp(target->os, "darwin") == 0) &&
+           target->simd_mode == XAOT_SIMD_SCALAR && target->simd_features == 0;
+}
+
+static bool xaot_c90_link_manifest_supported(const XaotLinkManifest *manifest) {
+    return manifest && manifest->n_runtime_caps == 0 && manifest->n_runtime_objects == 0 &&
+           manifest->n_stdlib_objects == 0 && manifest->n_stdlib_symbols == 0 &&
+           manifest->n_native_inputs == 0;
+}
+
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
@@ -1469,6 +1485,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         !xr_target_data_layout_validate(&options->target->data_layout) || !result)
         return 1;
     memset(result, 0, sizeof(*result));
+    if (!xaot_c90_build_options_supported(options)) {
+        fprintf(stderr,
+                "Error: restricted C90 AOT requires a freestanding shared-library graph, an "
+                "LP64 Linux/Darwin target, and scalar code generation\n");
+        return 1;
+    }
     emit_plan_dump = options->emit_plan_dump;
     emit_program_main = options->emit_program_main;
     emit_global_evidence_dump = options->emit_global_evidence_dump;
@@ -1979,6 +2001,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
+    xi_cgen_ctx_set_c_dialect(cg_ctx, options->c_dialect);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
     /* Contract verification explicitly requests the same residue dump. */
     bool want_residue = options->emit_residue_dump;
@@ -2034,6 +2057,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         const char *verify_timing = getenv("XRAY_CGEN_VERIFY_TIMING");
         clock_t verify_started = verify_timing ? clock() : (clock_t) 0;
         xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
+        if (options->c_dialect == XI_CGEN_C_DIALECT_C90) {
+            XiCgenVerifyResult c90_result;
+            if (!xi_cgen_verify_c90_output(buf, bufsz, &c90_result)) {
+                fprintf(stderr,
+                        "Error: restricted C90 code generation rejected module '%s' at line "
+                        "%d: %s\n",
+                        mod_names[m] ? mod_names[m] : "?", c90_result.line,
+                        c90_result.message);
+                xr_free(buf);
+                emit_ok = false;
+                break;
+            }
+        }
         if (verify_timing) {
             clock_t verify_ticks = clock() - verify_started;
             unsigned long long verify_us =
@@ -2106,6 +2142,24 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     link_manifest_initialized = true;
+    if (options->c_dialect == XI_CGEN_C_DIALECT_C90 &&
+        !xaot_c90_link_manifest_supported(&link_manifest)) {
+        fprintf(stderr,
+                "Error: restricted C90 reachable graph requires runtime, stdlib, or native "
+                "capabilities (runtime_caps=%u runtime_objects=%u stdlib_objects=%u "
+                "stdlib_symbols=%u native_inputs=%u)\n",
+                (unsigned) link_manifest.n_runtime_caps,
+                (unsigned) link_manifest.n_runtime_objects,
+                (unsigned) link_manifest.n_stdlib_objects,
+                (unsigned) link_manifest.n_stdlib_symbols,
+                (unsigned) link_manifest.n_native_inputs);
+        for (int m = 0; m < n_sources; m++) {
+            xr_free(sources[m].name);
+            xr_free(sources[m].c_source);
+        }
+        xr_free(sources);
+        goto fail_free_ir;
+    }
 
     xaot_bundle_free(&aot_bundle);
     aot_bundle_initialized = false;

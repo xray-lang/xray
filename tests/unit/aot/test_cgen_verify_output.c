@@ -22,6 +22,13 @@ static XiCgenVerifyResult verify(const char *src) {
     return r;
 }
 
+static XiCgenVerifyResult verify_c90(const char *src) {
+    XiCgenVerifyResult r;
+    memset(&r, 0, sizeof(r));
+    xi_cgen_verify_c90_output(src, strlen(src), &r);
+    return r;
+}
+
 /* ========== W1: brace / quote / comment balance ========== */
 
 TEST(w1_unbalanced_braces) {
@@ -150,11 +157,42 @@ TEST(ok_coroutine_frame_macro_temps) {
     ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_OK);
 }
 
+/* ========== Restricted C90 policy ========== */
+
+TEST(c90_accepts_governed_kernel_shape) {
+    const char *src = "#include \"xrt_c90.h\"\n"
+                      "unsigned int hash(const void *data, size_t length) {\n"
+                      "    unsigned int value;\n"
+                      "    (void) data;\n"
+                      "    value = (unsigned int) length;\n"
+                      "    return value;\n"
+                      "}\n";
+    XiCgenVerifyResult r = verify_c90(src);
+    ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_OK);
+}
+
+TEST(c90_rejects_compound_literal_and_runtime_residue) {
+    XiCgenVerifyResult compound = verify_c90("void f(void) { S s = ((S){0}); }\n");
+    XiCgenVerifyResult runtime = verify_c90("extern int xrt_builtins[4];\n");
+    ASSERT_EQ_INT(compound.category, XI_CGEN_VERIFY_C90_RESTRICTED);
+    ASSERT_TRUE(strstr(compound.message, "compound-literal") != NULL);
+    ASSERT_EQ_INT(runtime.category, XI_CGEN_VERIFY_C90_RESTRICTED);
+    ASSERT_TRUE(strstr(runtime.message, "builtin-table") != NULL);
+}
+
+TEST(c90_rejects_line_comments_but_ignores_literal_text) {
+    XiCgenVerifyResult comment = verify_c90("int x; // not ISO C90\n");
+    XiCgenVerifyResult literal = verify_c90("const char *s = \"// ({ _Atomic ...\";\n");
+    ASSERT_EQ_INT(comment.category, XI_CGEN_VERIFY_C90_RESTRICTED);
+    ASSERT_EQ_INT(literal.category, XI_CGEN_VERIFY_OK);
+}
+
 TEST(category_names_are_stable) {
     ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_W1_BALANCE), "W1_BALANCE");
     ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_W2_IDENTIFIER), "W2_IDENTIFIER");
     ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_W3_SCOPE), "W3_SCOPE");
     ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_W4_FORWARD_REF), "W4_FORWARD_REF");
+    ASSERT_STR_EQ(xi_cgen_verify_category_name(XI_CGEN_VERIFY_C90_RESTRICTED), "C90_RESTRICTED");
 }
 
 TEST_MAIN_BEGIN()
@@ -174,5 +212,9 @@ RUN_TEST_SUITE("CGen output verifier — well-formed inputs");
 RUN_TEST(ok_simple_program);
 RUN_TEST(ok_strings_and_comments_with_braces);
 RUN_TEST(ok_coroutine_frame_macro_temps);
+RUN_TEST_SUITE("CGen output verifier — restricted C90");
+RUN_TEST(c90_accepts_governed_kernel_shape);
+RUN_TEST(c90_rejects_compound_literal_and_runtime_residue);
+RUN_TEST(c90_rejects_line_comments_but_ignores_literal_text);
 RUN_TEST(category_names_are_stable);
 TEST_MAIN_END()

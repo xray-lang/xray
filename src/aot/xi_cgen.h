@@ -100,6 +100,11 @@ typedef enum XiCgenTypeNameProfile {
     XI_CGEN_TYPE_NAMES_ALL,
 } XiCgenTypeNameProfile;
 
+typedef enum XiCgenCDialect {
+    XI_CGEN_C_DIALECT_C11 = 0,
+    XI_CGEN_C_DIALECT_C90,
+} XiCgenCDialect;
+
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
@@ -107,6 +112,7 @@ XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active);
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
+XR_FUNC void xi_cgen_ctx_set_c_dialect(XiCgenCtx *ctx, XiCgenCDialect dialect);
 XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile);
 /* Enable per-function residue capture/scan (task 217 P2/P3).  Off by default so
  * ordinary builds pay no capture overhead. */

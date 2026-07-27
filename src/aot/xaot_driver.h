@@ -141,6 +141,7 @@ typedef struct XaotBuildOptions {
     const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
+    XiCgenCDialect c_dialect;
     XiCgenTypeNameProfile type_name_profile;
     bool emit_plan_dump;
     bool emit_program_main;

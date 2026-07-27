@@ -34,6 +34,7 @@ typedef enum XiCgenVerifyCategory {
     XI_CGEN_VERIFY_W2_IDENTIFIER,  /* path/space/source fragment in a symbol */
     XI_CGEN_VERIFY_W3_SCOPE,       /* statement-shaped line at file scope */
     XI_CGEN_VERIFY_W4_FORWARD_REF, /* vN used before it is defined in a function */
+    XI_CGEN_VERIFY_C90_RESTRICTED, /* C99/C11 or governed-runtime residue in C90 */
 } XiCgenVerifyCategory;
 
 typedef struct XiCgenVerifyResult {
@@ -49,6 +50,11 @@ typedef struct XiCgenVerifyResult {
  * side-effect free — safe to feed crafted malformed strings from unit tests.
  * A NULL/empty buffer is treated as well-formed. */
 XR_FUNC bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *out);
+
+/* Additional fail-closed policy check for XI_CGEN_C_DIALECT_C90 output.  This
+ * rejects syntax/runtime residue outside the governed ISO C90 kernel subset;
+ * it is intentionally separate from the language-neutral W1-W4 verifier. */
+XR_FUNC bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult *out);
 
 /* Fail-closed wrapper used at the C-write boundary in the AOT driver.
  * Verifies the generated TU; on violation it reports an internal compiler

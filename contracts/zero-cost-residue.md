@@ -1,11 +1,12 @@
 # Zero-cost residue contract
 
-Status: re-frozen after the generated-C C++ compatibility work moved SSA/PHI
-declarations only for non-linear CFG, while straight-line hot functions retain
-declaration-at-definition shape. The xxHash backend shape contract, Windows
-same-host quick regression matrix, C/C++ public-symbol size comparison, CGen
-matrix, and W1-W4 verifier were rerun; residue categories and allowance
-semantics are unchanged.
+Status: re-frozen after the explicit restricted-C90 lane predeclared scalar
+locals and suppressed C11-only declaration forms in that lane. The default C11
+lane still uses declaration-at-definition for straight-line hot functions, and
+the generated-C C++ compatibility lane retains the prior non-linear-CFG-only
+SSA/PHI predeclaration rule. The xxHash backend shape contract, same-host quick
+regression matrix, strict C90/C++ generated-core gates, CGen matrix, and W1-W4
+verifier were rerun; residue categories and allowance semantics are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -50,7 +51,7 @@ affected category.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c 2831c25d3a4ce00a76e609d6e13194bd7517817712ea72d5235f52179103f353
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
+anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
+anchor-sha256: src/aot/xi_cgen.c 79e2e7ff3d95674b384e11b773a2a35fe55a0dfa066e7daa73c87dac8ac2e3e2
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4e122b405966ae34cb181508f4b8c0b7072ef05a86e9081d732c4848ff3d6e49
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

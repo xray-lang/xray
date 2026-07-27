@@ -2565,6 +2565,22 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
 
     bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
     (void) f;
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        if (!info.ctype || strcmp(info.ctype, "uint8_t") != 0) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked"
+                                       : "xrt_c90_fixed_u8_set");
+        emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
+        fprintf(out, ", INT64_C(%u), ", (unsigned) info.count);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_fixed_array_lane_store_value(ctx, out, &info, v->args[2]);
+        fprintf(out, ")");
+        return true;
+    }
     fprintf(out, "({ ");
     if (!unchecked) {
         fprintf(out, "int64_t _idx = ");
@@ -4348,6 +4364,24 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                            info.rep == XR_REP_TAGGED &&
                            cg_tagged_array_index_get_can_borrow(ctx, f, v);
     const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        if (struct_aggregate || borrowed_struct_layout || !info.ctype ||
+            strcmp(info.ctype, "uint8_t") != 0 || info.rep == XR_REP_F64 ||
+            info.rep == XR_REP_TAGGED || info.rep == XR_REP_RAWPTR) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "(int64_t)%s(", unchecked ? "xrt_c90_span_u8_get_unchecked"
+                                                : "xrt_c90_span_u8_get");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");
@@ -4406,6 +4440,22 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return true;
 
     bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_SET);
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        if (!info.ctype || strcmp(info.ctype, "uint8_t") != 0) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked"
+                                       : "xrt_c90_span_u8_set");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_typed_array_store_value(ctx, out, &info, v->args[2]);
+        fprintf(out, ")");
+        return true;
+    }
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");

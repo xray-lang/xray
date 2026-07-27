@@ -720,6 +720,7 @@ struct XiCgenCtx {
     int all_nmodules;
     bool emit_main;
     bool freestanding_profile;
+    XiCgenCDialect c_dialect;
     XiCgenTypeNameProfile type_name_profile;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenStats stats;
@@ -9799,9 +9800,39 @@ static const char *cg_c_export_func_prefix(XiCgenCtx *ctx, const XiFunc *f) {
     return module && module->name && module->name[0] ? module->name : "mod";
 }
 
+static const char *cg_c_export_scalar_c_type(XiCgenCtx *ctx, const XrType *type,
+                                             bool is_return) {
+    const char *scalar_type = cg_cfn_value_c_type(type, is_return);
+    if (!scalar_type || !ctx || ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
+        return scalar_type;
+
+    /* The restricted C90 lane is LP64 with a 32-bit int.  Spell public
+     * prototypes using C90 primitive types so the generated header does not
+     * depend on C99 <stdint.h>.  The target/header guards freeze the widths. */
+    if (strcmp(scalar_type, "bool") == 0)
+        return "int";
+    if (strcmp(scalar_type, "int8_t") == 0)
+        return "signed char";
+    if (strcmp(scalar_type, "uint8_t") == 0)
+        return "unsigned char";
+    if (strcmp(scalar_type, "int16_t") == 0)
+        return "signed short";
+    if (strcmp(scalar_type, "uint16_t") == 0)
+        return "unsigned short";
+    if (strcmp(scalar_type, "int32_t") == 0)
+        return "signed int";
+    if (strcmp(scalar_type, "uint32_t") == 0)
+        return "unsigned int";
+    if (strcmp(scalar_type, "int64_t") == 0 || strcmp(scalar_type, "intptr_t") == 0)
+        return "signed long";
+    if (strcmp(scalar_type, "uint64_t") == 0 || strcmp(scalar_type, "uintptr_t") == 0)
+        return "unsigned long";
+    return scalar_type;
+}
+
 static void emit_c_export_value_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const char *prefix, const XrType *type, bool is_return) {
-    const char *scalar_type = cg_cfn_value_c_type(type, is_return);
+    const char *scalar_type = cg_c_export_scalar_c_type(ctx, type, is_return);
     if (scalar_type) {
         fprintf(out, "%s", scalar_type);
         return;
@@ -9821,7 +9852,8 @@ static void emit_c_export_value_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
 static void emit_c_export_return_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const char *prefix) {
-    const char *scalar_type = cg_cfn_value_c_type(f ? f->return_type : NULL, true);
+    const char *scalar_type =
+        cg_c_export_scalar_c_type(ctx, f ? f->return_type : NULL, true);
     if (scalar_type) {
         fprintf(out, "%s", scalar_type);
         return;
@@ -9837,7 +9869,7 @@ static void emit_c_export_return_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc 
 static void emit_c_export_param_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const char *prefix, uint16_t index) {
     const XrType *pt = f && f->params && f->params[index] ? f->params[index]->type : NULL;
-    const char *scalar_type = cg_cfn_value_c_type(pt, false);
+    const char *scalar_type = cg_c_export_scalar_c_type(ctx, pt, false);
     if (scalar_type) {
         fprintf(out, "%s", scalar_type);
         return;
@@ -10004,11 +10036,26 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
             continue;
         cg_c_export_collect_signature_typedefs(ctx, modules[i]->init, typedefs, &typedef_count);
     }
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90 && typedef_count > 0) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: restricted C90 does not support aggregate public C ABI "
+                "signatures\n");
+        ctx->error = true;
+        return;
+    }
 
     fprintf(out, "#ifndef %s\n", header_guard);
     fprintf(out, "#define %s\n\n", header_guard);
-    fprintf(out, "#include <stdint.h>\n");
-    fprintf(out, "#include <stddef.h>\n\n");
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        fprintf(out, "#include <limits.h>\n");
+        fprintf(out, "#include <stddef.h>\n\n");
+        fprintf(out, "#if UINT_MAX != 0xffffffffU || ULONG_MAX <= 0xffffffffUL\n");
+        fprintf(out, "#error \"restricted C90 exports require a 32-bit int and 64-bit long\"\n");
+        fprintf(out, "#endif\n\n");
+    } else {
+        fprintf(out, "#include <stdint.h>\n");
+        fprintf(out, "#include <stddef.h>\n\n");
+    }
     for (int i = 0; i < typedef_count; i++)
         emit_struct_native_typedef(out, typedefs[i].layout, typedefs[i].prefix);
     if (typedef_count > 0)
@@ -10367,7 +10414,7 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f))
         return false;
     if (mod && mod->init == f)
-        return true;
+        return ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
     if (f->export_plan || f->link_plan || f->entry_plan)
         return true;
     /* Hosted shared-library class descriptors are open-world ABI tables.
@@ -10873,7 +10920,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     for (uint16_t i = 0; i < sig_nparams; i++)
         fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
     fprintf(out, ") {\n");
-    if (!has_cl)
+    if (!has_cl && ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
         fprintf(out, "    (void)_cl;\n");
 
     /* Keep non-linear control flow valid for both C and C++ compilation: a C++
@@ -10881,13 +10928,17 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
      * declaration-at-definition code shape.  This must be decided before the
      * storage-planning helpers because they mirror declaration versus assignment
      * choices made by emit_value_stmt. */
-    ctx->pre_decl_all = f->nblocks > 1 || cg_has_exception_handling(f);
+    ctx->pre_decl_all = ctx->c_dialect == XI_CGEN_C_DIALECT_C90 || f->nblocks > 1 ||
+                        cg_has_exception_handling(f);
     cg_prepare_cell_vars(ctx, f);
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
     emit_declarations(ctx, out, f);
-    emit_debug_source_var_declarations(ctx, out, f);
+    if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
+        emit_debug_source_var_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);
+    if (!has_cl && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        fprintf(out, "    (void)_cl;\n");
 
     /* Function-scoped defer: own a stack-local scope and link it onto the global
      * defer chain at entry. Defers (lowered to zero-arg closures) are pushed

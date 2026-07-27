@@ -93,6 +93,33 @@ static bool build_profile_parse(const char *name, XrCliBuildProfile *out, char *
     return false;
 }
 
+static bool build_c_dialect_parse(const char *name, XiCgenCDialect *out, char *err,
+                                  size_t err_size) {
+    if (!out) {
+        if (err && err_size > 0)
+            snprintf(err, err_size, "internal error: missing C dialect output");
+        return false;
+    }
+    if (!name || name[0] == '\0' || strcmp(name, "c11") == 0) {
+        *out = XI_CGEN_C_DIALECT_C11;
+        return true;
+    }
+    if (strcmp(name, "c90") == 0) {
+        *out = XI_CGEN_C_DIALECT_C90;
+        return true;
+    }
+    if (err && err_size > 0)
+        snprintf(err, err_size, "unknown C dialect '%s' (expected 'c11' or 'c90')", name);
+    return false;
+}
+
+static bool build_c90_target_supported(const XrToolchainTarget *target) {
+    if (!target || target->pointer_bits != 64)
+        return false;
+    return target->os == XR_TOOLCHAIN_TARGET_OS_LINUX ||
+           target->os == XR_TOOLCHAIN_TARGET_OS_DARWIN;
+}
+
 static bool build_type_name_profile_parse(const char *name, XrCliBuildProfile build_profile,
                                           XiCgenTypeNameProfile *out, char *err, size_t err_size) {
     if (!out) {
@@ -1378,7 +1405,8 @@ static int
 cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
                  XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
                  bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
+                 XiCgenTypeNameProfile type_name_profile,
                  const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
                  bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
                  bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
@@ -1401,6 +1429,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *simd_arg = xr_cli_opt_string(&inv->options, "simd", "auto");
     XaotSimdMode simd_mode = XAOT_SIMD_AUTO;
     const char *type_names_arg = xr_cli_opt_string(&inv->options, "type-names", NULL);
+    const char *c_dialect_arg = xr_cli_opt_string(&inv->options, "c-dialect", "c11");
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
     bool debug_symbols = xr_cli_opt_bool(&inv->options, "debug");
@@ -1443,6 +1472,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *objcopy_output;
     XrToolchainTarget target;
     XrCliBuildProfile profile;
+    XiCgenCDialect c_dialect;
     XiCgenTypeNameProfile type_name_profile;
     XrToolchainSelector toolchain_selector;
     XrToolchainSelection toolchain_plan;
@@ -1539,6 +1569,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!toolchain_arg)
         toolchain_arg = "auto";
     if (!build_profile_parse(profile_arg, &profile, parse_err, sizeof(parse_err))) {
+        fprintf(stderr, "Error: %s\n", parse_err);
+        CMD_BUILD_RETURN(2);
+    }
+    if (!build_c_dialect_parse(c_dialect_arg, &c_dialect, parse_err, sizeof(parse_err))) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
@@ -1686,6 +1720,21 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                 simd_arg ? simd_arg : "");
         CMD_BUILD_RETURN(2);
     }
+    if (c_dialect == XI_CGEN_C_DIALECT_C90 &&
+        (!native_mode || !c_only || !shared_library ||
+         profile != XR_CLI_BUILD_PROFILE_FREESTANDING || simd_mode != XAOT_SIMD_SCALAR)) {
+        fprintf(stderr,
+                "Error: --c-dialect c90 requires --native --profile freestanding --shared "
+                "--c-only --simd scalar\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (c_dialect == XI_CGEN_C_DIALECT_C90 && !build_c90_target_supported(&target)) {
+        fprintf(stderr,
+                "Error: --c-dialect c90 currently requires an LP64 Linux or Darwin target; "
+                "target '%s' is unsupported\n",
+                target.name ? target.name : "?");
+        CMD_BUILD_RETURN(2);
+    }
     if (debug_symbols && !native_mode) {
         fprintf(stderr, "Error: --debug requires --native\n");
         CMD_BUILD_RETURN(2);
@@ -1762,7 +1811,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (native_mode) {
         rc = cmd_build_native(
             input_file, output_file, cc, opt_flag, semantic_optimization, effective_cpu, simd_mode,
-            c_only, strip_symbols, debug_symbols, shared_library, profile, type_name_profile,
+            c_only, strip_symbols, debug_symbols, shared_library, profile, c_dialect,
+            type_name_profile,
             sysroot, linker_script, verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence,
             dump_link_manifest, dump_residue, dump_link_command, dry_run_link, c_header, keep_c,
             cache_dir_arg, rebuild, effective_lto, rc_guard, &target, &toolchain_plan,
@@ -2124,9 +2174,11 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
 static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag,
                                       const XrToolchainTarget *target,
                                       const XrToolchainSelection *plan,
-                                      const XaotLinkManifest *manifest, const char *sysroot) {
+                                      const XaotLinkManifest *manifest, const char *sysroot,
+                                      XiCgenCDialect c_dialect) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = xaot_hash_fold_str(h, "xaot-obj-cache-v2");
+    h = xaot_hash_fold_str(h, "xaot-obj-cache-v3");
+    h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
     if (target) {
@@ -2157,10 +2209,12 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
 static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const char *opt_flag,
                                            const XrToolchainTarget *target,
                                            const XrToolchainSelection *plan, const char *sysroot,
-                                           bool strip_symbols, bool shared_library) {
+                                           bool strip_symbols, bool shared_library,
+                                           XiCgenCDialect c_dialect) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
 
-    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v2");
+    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v3");
+    h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
     h = xaot_hash_fold_bool(h, strip_symbols);
@@ -2862,8 +2916,9 @@ static int xaot_compile_source_cached(const XrToolchainSelection *plan,
                                       const XaotModuleSource *src, const char *cache_dir,
                                       const char *sysroot, bool dump_command, bool keep_c,
                                       bool verbose, bool force_rebuild, bool dry_run, char *obj_out,
-                                      size_t obj_out_sz) {
-    uint64_t key = xaot_object_cache_key(src->c_source, opt_flag, target, plan, manifest, sysroot);
+                                      size_t obj_out_sz, XiCgenCDialect c_dialect) {
+    uint64_t key =
+        xaot_object_cache_key(src->c_source, opt_flag, target, plan, manifest, sysroot, c_dialect);
     char tmp_c[XR_PATH_MAX];
     char tmp_o[XR_PATH_MAX];
     int ret;
@@ -3134,7 +3189,8 @@ static int
 cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
                  XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
                  bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
+                 XiCgenTypeNameProfile type_name_profile,
                  const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
                  bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
                  bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
@@ -3188,6 +3244,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
     build_options.native_package_plan = native_package_plan;
     build_options.capability_provider = has_capability_provider ? &capability_provider : NULL;
     build_options.profile = aot_profile;
+    build_options.c_dialect = c_dialect;
     build_options.type_name_profile = type_name_profile;
     build_options.emit_plan_dump = dump_xaot_plan;
     build_options.emit_program_main = !shared_library;
@@ -3517,7 +3574,8 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
     uint64_t link_output_cache_key = 0;
     if (use_link_output_cache) {
         link_output_cache_key = xaot_link_output_cache_key(
-            &aot_result, opt_flag, target, toolchain_plan, sysroot, strip, shared_library);
+            &aot_result, opt_flag, target, toolchain_plan, sysroot, strip, shared_library,
+            c_dialect);
         int cache_hit =
             xaot_restore_link_output_cache(cache_dir, link_output_cache_key, output, verbose);
         if (cache_hit > 0) {
@@ -3537,7 +3595,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
             link_output_cache_key
                 ? link_output_cache_key
                 : xaot_link_output_cache_key(&aot_result, opt_flag, target, toolchain_plan, sysroot,
-                                             strip, shared_library);
+                                             strip, shared_library, c_dialect);
         if (xaot_write_temp_c_source(cache_dir, key, &aot_result.sources[0], c_file,
                                      sizeof(c_file)) != 0) {
             xaot_build_result_free(&aot_result);
@@ -3581,7 +3639,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
         ret = xaot_compile_source_cached(toolchain_plan, target, &aot_result.link_manifest,
                                          opt_flag, &aot_result.sources[i], cache_dir, sysroot,
                                          dump_link_command || verbose, keep_c, verbose, rebuild,
-                                         dry_run_link, obj_bufs[i], XR_PATH_MAX);
+                                         dry_run_link, obj_bufs[i], XR_PATH_MAX, c_dialect);
         if (ret != 0)
             break;
         obj_ptrs[i] = obj_bufs[i];

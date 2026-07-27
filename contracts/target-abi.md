@@ -14,6 +14,13 @@ but remains a C ABI artifact: exported definitions use C linkage, atomic fields
 retain their scalar C layout and memory ordering through compiler builtins, and
 typed pointer casts do not change the prepared target ABI. C11 remains the
 default generated language and performance path.
+An explicitly selected restricted-C90 translation unit is also a C ABI
+artifact, but is confined to scalar, freestanding, shared-library core graphs
+for LP64 Linux or Darwin targets. Its public scalar ABI uses C90 primitive
+integer types guarded by width checks, and the build fails closed before host
+compilation if the reachable graph needs ordinary runtime, standard-library,
+native-input, aggregate-export, main-entry, or SIMD support. This opt-in lane
+does not alter the default C11 or generated-C C++ target ABI.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -55,6 +62,12 @@ emission, and native linking:
   zero-initialized 16-byte fallback. Explicit predicated SVE intrinsics remain
   enabled, while implicit LLVM loop and SLP vectorization stay disabled until
   their fixed-trip-count lowering is valid for non-power-of-two vector lengths.
+- T4d: `--c-dialect c90` is valid only for the frozen restricted profile: an
+  LP64 Linux or Darwin target, scalar lowering, `--freestanding --shared
+  --emit-c-only`, no program main, and no reachable runtime, standard-library,
+  native-input, or aggregate public-ABI dependency. Unsupported profiles fail
+  before generated C is handed to a host compiler. Dialect identity is part of
+  both object and link cache keys.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -94,14 +107,14 @@ anchor-sha256: src/aot/xaot_prepare.c 68e7efd04383a8adff9aee330b8fea3755036354c2
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 600aa9d449de2371e02802238a548ee739700df41e8b3c9cf4bd6d8b52b00a18
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 083b2451c3b9fe41f0d1c770a29f1e5004e27fe13eb83c016c3871d976f25b24
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2923f376636dd4ab963b3ed3203136e3d577fe5c5e25171db74844434ff005c9
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 5762e9d9d29ffdccc4b3fdc161cd45f10c1af1c771ed01807ce7c3701ee1f610
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 6b762cbd2ce3ba9feb6c8a0ac30cb04505e81765aba234061a28e8efe42074e1
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c a7d6f645d8190ed95b9add966a1303cb9c085a012abcf68264cb22804aaa9701
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c 2831c25d3a4ce00a76e609d6e13194bd7517817712ea72d5235f52179103f353
+anchor-sha256: src/aot/xi_cgen.c 79e2e7ff3d95674b384e11b773a2a35fe55a0dfa066e7daa73c87dac8ac2e3e2
 anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
 anchor-sha256: src/aot/xrt_core_freestanding.h adcb132c62bdbb9c9282c0181a0689ac1dd5cfe03f8c84d9e02692d955707011
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 19122939aa291b24ed6091cc2f66fb97af3d472a3c4b07b827237a633511fb80
+anchor-sha256: src/app/cli/xcmd_build.c 0cefbe1f13ee426a5fb37505403440027af37ad4d355c0b257e02d7e35685a1b
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e
 anchor-sha256: src/app/toolchain/xtc_probe.c 1feb4ecaa53dbc48ec5242734b6fb87740525b459b70477606f635f4590624a8
 anchor-sha256: src/ir/xi.h 9d8f229600dc4a6aeb6092ae88c767ef67f79865f278884654d501f5598009d7

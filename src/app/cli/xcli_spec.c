@@ -84,6 +84,8 @@ static const XrCliOptionSpec compile_options[] = {
 static const XrCliOptionSpec build_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"c-only", 'c', XR_CLI_VALUE_NONE, false, false, NULL, "Output C source only"},
+    {"c-dialect", 0, XR_CLI_VALUE_STRING, false, false, "DIALECT",
+     "Generated C dialect (c11 or restricted c90; default c11)"},
     {"cc", 'C', XR_CLI_VALUE_STRING, false, false, "CC", "C compiler to use"},
     {"opt", 'O', XR_CLI_VALUE_STRING, false, false, "LEVEL",
      "Optimization (0,1,2,3,s,fast; fast keeps O3 and enables native LTO/CPU tuning)"},

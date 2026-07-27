@@ -259,6 +259,17 @@ static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiVal
 
     bool is_mutable = ptr->type && ptr->type->kind == XR_KIND_POINTER && ptr->type->ptr_is_mut;
     const char *qualifier = is_mutable ? "" : "const ";
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        /* C90 has no statement expressions.  Xi operands are already
+         * materialized SSA values, so the direct expression retains the
+         * single-evaluation property of the ordinary lowering. */
+        fprintf(out, "((%svoid *)((%suint8_t *)(", qualifier, qualifier);
+        emit_value_as_rep_ctx(ctx, out, ptr, XR_REP_RAWPTR);
+        fprintf(out, ") %c (intptr_t)(", subtract ? '-' : '+');
+        emit_value_as_rep_ctx(ctx, out, offset, XR_REP_I64);
+        fprintf(out, ")))" );
+        return true;
+    }
     /* Pointer arithmetic is an unsafe operation whose source-level contract
      * requires a live, non-null base.  Materialize each operand once and carry
      * that proof into C before doing the arithmetic; this both preserves the

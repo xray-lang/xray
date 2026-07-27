@@ -6667,12 +6667,18 @@ static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const X
      * the descriptor as an ordinary value; materializing an XrValue array-ref
      * only to feed xrt_span_from_array_slice would obscure both facts from C
      * optimization and introduce a spurious runtime boundary. */
-    fprintf(out, "((xr_span_t){.data = (void *)(");
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        fprintf(out, "xrt_c90_span_from_ptr((const void *)(");
+    else
+        fprintf(out, "((xr_span_t){.data = (void *)(");
     if (static_source)
         cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
     else
         emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
-    fprintf(out, "), .length = INT64_C(%u)})", (unsigned) fixed.count);
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        fprintf(out, "), INT64_C(%u))", (unsigned) fixed.count);
+    else
+        fprintf(out, "), .length = INT64_C(%u)})", (unsigned) fixed.count);
     return true;
 }
 
@@ -6728,6 +6734,16 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     XR_DCHECK(v && v->nargs == 3, "xicgen_slice_from_ptr: need pointer, count, owner");
     uint16_t elem_size = (uint16_t) ((v->aux_int >> 8) & 0xffff);
     uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        (void) elem_size;
+        (void) alignment;
+        fprintf(out, "xrt_c90_span_from_ptr((const void *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "), ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     fprintf(out, "({ const void *_p = ");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, "; int64_t _n = ");
@@ -12942,6 +12958,29 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
                                                               XAOT_SLICE_DROP_BOUNDS);
     int64_t endian = XR_ENDIAN_NATIVE;
     bool const_endian = xicgen_value_is_const_endian(v->args[2], &endian);
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        if (!drop_bounds || (!unchecked_helper &&
+                             !(le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE))) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "(int64_t)%s(",
+                le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE
+                    ? le_unchecked_helper
+                    : unchecked_helper);
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        if (!(le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE)) {
+            fprintf(out, ", ");
+            xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     if (le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE) {
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
@@ -13039,6 +13078,23 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         bool drop_bounds =
             unchecked_access ||
             cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_BOUNDS);
+        if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+            if (!unchecked_helper || !drop_bounds) {
+                cg_ctx_set_error(ctx);
+                emit_codegen_abort_expr(out);
+                return true;
+            }
+            fprintf(out, "%s(", unchecked_helper);
+            emit_span_ref_expr(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ", (%s)", value_ctype);
+            emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+            fprintf(out, ", ");
+            xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
+            fprintf(out, ")");
+            return true;
+        }
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
@@ -13677,6 +13733,17 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (!has_static_elem) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
+        return;
+    }
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
+        fprintf(out, "%s(", bounds_proven ? "xrt_c90_span_window_unchecked"
+                                           : "xrt_c90_span_window");
+        emit_span_ref_expr(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
+        fprintf(out, ", sizeof(%s))", elem.ctype);
         return;
     }
     fprintf(out, "({ xr_span_t _src = ");

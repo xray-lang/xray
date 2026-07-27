@@ -1138,6 +1138,31 @@ static bool nonzero_state_precedes_call(const char *code, const char *call) {
 
 /* ========== Tests ========== */
 
+TEST(cgen_restricted_c90_header_is_explicit_and_minimal) {
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *out = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(ctx != NULL && out != NULL, "C90 header fixture allocated");
+
+    xi_cgen_ctx_set_freestanding_profile(ctx, true);
+    xi_cgen_ctx_set_c_dialect(ctx, XI_CGEN_C_DIALECT_C90);
+    xi_cgen_header(ctx, out);
+    TEST_REQUIRE(xr_close_memstream(out, &code, &code_size) == 0,
+                 "C90 header fixture closed");
+    TEST_REQUIRE(contains(code, "#include \"xrt_c90.h\""),
+                 "restricted C90 selects the minimal kernel header");
+    TEST_REQUIRE(!contains(code, "#include \"xrt_core_freestanding.h\"") &&
+                     !contains(code, "#include \"xrt.h\"") &&
+                     !contains(code, "xrt_builtins"),
+                 "restricted C90 excludes the ordinary runtime and builtin table");
+    TEST_REQUIRE(!contains(code, "-Wdeclaration-after-statement"),
+                 "restricted C90 does not suppress declaration-order diagnostics");
+
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+}
+
 TEST(cgen_simple_arith) {
     /* Pure arithmetic: 1 + 2 printed */
     const char *src = "print(1 + 2)";
@@ -10497,6 +10522,7 @@ int main(void) {
     run_aot_type_fingerprint_separates_error_recovery();
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
+    run_cgen_restricted_c90_header_is_explicit_and_minimal();
     run_cgen_simple_arith();
     run_cgen_rep_identical_source_alias_shares_immutable_c_local();
     run_cgen_rep_identical_unbox_shares_immutable_c_local();

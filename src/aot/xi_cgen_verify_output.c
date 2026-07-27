@@ -57,6 +57,8 @@ const char *xi_cgen_verify_category_name(XiCgenVerifyCategory category) {
             return "W3_SCOPE";
         case XI_CGEN_VERIFY_W4_FORWARD_REF:
             return "W4_FORWARD_REF";
+        case XI_CGEN_VERIFY_C90_RESTRICTED:
+            return "C90_RESTRICTED";
     }
     return "UNKNOWN";
 }
@@ -602,6 +604,105 @@ bool xi_cgen_verify_output(const char *c_src, size_t len, XiCgenVerifyResult *ou
         if (out)
             *out = w4r;
         return false;
+    }
+    return true;
+}
+
+/* ---- Restricted C90 dialect policy. */
+
+typedef struct C90ForbiddenToken {
+    const char *token;  /* owned: static string literal */
+    const char *detail; /* owned: static string literal */
+} C90ForbiddenToken;
+
+bool xi_cgen_verify_c90_output(const char *c_src, size_t len, XiCgenVerifyResult *out) {
+    static const C90ForbiddenToken forbidden[] = {
+        {"_Atomic", "C11 _Atomic residue"},
+        {"_Thread_local", "C11 _Thread_local residue"},
+        {"_Alignof", "C11 _Alignof residue"},
+        {"long long", "long long residue"},
+        {"({", "GNU statement-expression residue"},
+        {"){", "C99 compound-literal residue"},
+        {"{ .", "C99 designated-initializer residue"},
+        {"...", "variadic residue"},
+        {"union {", "anonymous-union residue"},
+        {"[];", "flexible-array residue"},
+        {"for (int ", "C99 loop-declaration residue"},
+        {"for (size_t ", "C99 loop-declaration residue"},
+        {"xrt_shared_", "module shared-slot residue"},
+        {"xrt_builtins", "dynamic builtin-table residue"},
+        {"xrt_global_ctx", "hosted runtime-context residue"},
+        {"xrt_map_", "dynamic Map runtime residue"},
+        {"xrt_set_", "dynamic Set runtime residue"},
+        {"xrt_thread", "thread runtime residue"},
+        {"xrt_coro", "coroutine runtime residue"},
+        {"xrt_task", "task runtime residue"},
+        {"xrt_channel", "channel runtime residue"},
+    };
+    enum { C90_SCAN_CODE = 0, C90_SCAN_BLOCK_COMMENT, C90_SCAN_STRING, C90_SCAN_CHAR } state =
+        C90_SCAN_CODE;
+    int line = 1;
+
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!c_src || len == 0)
+        return true;
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) c_src[i];
+        unsigned char next = i + 1 < len ? (unsigned char) c_src[i + 1] : 0;
+        if (c == '\n')
+            line++;
+        if (state == C90_SCAN_BLOCK_COMMENT) {
+            if (c == '*' && next == '/') {
+                state = C90_SCAN_CODE;
+                i++;
+            }
+            continue;
+        }
+        if (state == C90_SCAN_STRING || state == C90_SCAN_CHAR) {
+            if (c == '\\' && i + 1 < len) {
+                if (c_src[i + 1] == '\n')
+                    line++;
+                i++;
+                continue;
+            }
+            if ((state == C90_SCAN_STRING && c == '"') ||
+                (state == C90_SCAN_CHAR && c == '\''))
+                state = C90_SCAN_CODE;
+            continue;
+        }
+        if (c == '/' && next == '*') {
+            state = C90_SCAN_BLOCK_COMMENT;
+            i++;
+            continue;
+        }
+        if (c == '/' && next == '/') {
+            set_result(out, XI_CGEN_VERIFY_C90_RESTRICTED, line, "C++ line-comment residue");
+            return false;
+        }
+        if (c == '"') {
+            state = C90_SCAN_STRING;
+            continue;
+        }
+        if (c == '\'') {
+            state = C90_SCAN_CHAR;
+            continue;
+        }
+        if (ident_start(c) && i + 6 <= len && memcmp(c_src + i, "inline", 6) == 0 &&
+            (i == 0 || !ident_char((unsigned char) c_src[i - 1])) &&
+            (i + 6 == len || !ident_char((unsigned char) c_src[i + 6]))) {
+            set_result(out, XI_CGEN_VERIFY_C90_RESTRICTED, line, "C99 inline residue");
+            return false;
+        }
+        for (size_t t = 0; t < sizeof(forbidden) / sizeof(forbidden[0]); t++) {
+            size_t token_len = strlen(forbidden[t].token);
+            if (i + token_len <= len && memcmp(c_src + i, forbidden[t].token, token_len) == 0) {
+                set_result(out, XI_CGEN_VERIFY_C90_RESTRICTED, line, "%s",
+                           forbidden[t].detail);
+                return false;
+            }
+        }
     }
     return true;
 }

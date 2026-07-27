@@ -418,6 +418,28 @@ TEST(parse_build_native_simd_mode) {
     xr_cli_invocation_free(&inv);
 }
 
+TEST(parse_build_restricted_c90_dialect) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native",  "--target",  "x86_64-linux-gnu", "--shared",
+                    "--profile", "freestanding", "--simd",          "scalar",
+                    "--c-only",  "--c-dialect", "c90",             "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 12, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "shared"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "c-only"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c90");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-gnu");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
 TEST(parse_build_cross_toolchain_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
@@ -793,6 +815,7 @@ RUN_TEST(parse_build_native_debug_strip);
 RUN_TEST(parse_build_native_freestanding_profile);
 RUN_TEST(parse_build_native_linker_script);
 RUN_TEST(parse_build_native_simd_mode);
+RUN_TEST(parse_build_restricted_c90_dialect);
 RUN_TEST(parse_build_cross_toolchain_options);
 RUN_TEST(parse_build_global_evidence_dump_option);
 RUN_TEST(parse_build_xi_evidence_dump_option);

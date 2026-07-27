@@ -113,6 +113,11 @@ XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestand
         ctx->freestanding_profile = freestanding;
 }
 
+XR_FUNC void xi_cgen_ctx_set_c_dialect(XiCgenCtx *ctx, XiCgenCDialect dialect) {
+    if (ctx)
+        ctx->c_dialect = dialect;
+}
+
 XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile) {
     if (ctx)
         ctx->type_name_profile = profile;
