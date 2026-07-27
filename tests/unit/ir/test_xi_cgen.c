@@ -1638,6 +1638,88 @@ TEST(cgen_returned_null_constant_emits_immediate_without_local) {
     xi_func_free(ir);
 }
 
+TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 937, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_concat_literals", &string_type);
+    TEST_REQUIRE(ir != NULL, "manual concat-literal function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual concat-literal entry block allocated");
+    entry->sealed = true;
+
+    XiValue *left = xi_const_str(ir, entry, "left", &string_type);
+    XiValue *right = xi_const_str(ir, entry, "right", &string_type);
+    TEST_REQUIRE(left != NULL && right != NULL, "manual concat literals allocated");
+    XiValue *concat = xi_value_new(ir, entry, XI_STR_CONCAT, &string_type, 2);
+    TEST_REQUIRE(concat != NULL, "manual multi-part concat allocated");
+    concat->args[0] = left;
+    concat->args[1] = right;
+    xi_block_set_return(entry, concat);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "multi-part concat C generation failed");
+    TEST_REQUIRE(!had_error, "multi-part concat fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_concat_literals");
+    TEST_REQUIRE(fn != NULL, "manual concat-literal definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual concat-literal function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit(") &&
+                     !contains_between(fn, fn_end, "XrValue v1 = xr_str_lit("),
+                 "multi-part concat literals must not leave dead C locals");
+    TEST_REQUIRE(count_between(fn, fn_end, "xr_str_lit(") >= 2,
+                 "multi-part concat must retain both exact string literals at its use site");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_str_concat_parts(2,"),
+                 "multi-part concat must retain the single-allocation helper");
+
+    printf("  Generated immediate multi-part concat literals %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_shared_string_constant_emits_immediate_without_local) {
+    XrType null_type = {.kind = XR_KIND_NULL, .id = 938, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 939, .frozen = true};
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_shared_literal", &null_type);
+    TEST_REQUIRE(ir != NULL, "manual shared-literal function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual shared-literal entry block allocated");
+    entry->sealed = true;
+    ir->nshared = 1;
+
+    XiValue *literal = xi_const_str(ir, entry, "shared", &string_type);
+    TEST_REQUIRE(literal != NULL, "manual shared literal allocated");
+    XiValue *store = xi_value_new(ir, entry, XI_SET_SHARED, &unit_type, 1);
+    TEST_REQUIRE(store != NULL, "manual shared-literal store allocated");
+    store->args[0] = literal;
+    store->aux_int = 0;
+    XiValue *result = xi_const_null(ir, entry, &null_type);
+    TEST_REQUIRE(result != NULL, "manual shared-literal return allocated");
+    xi_block_set_return(entry, result);
+
+    XiModule *mod = xi_module_new("test.xr", "test", ir);
+    TEST_REQUIRE(mod != NULL, "manual shared-literal module allocated");
+    mod->nslots = 1;
+    ir->module = mod;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "shared-literal C generation failed");
+    TEST_REQUIRE(!had_error, "shared-literal fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_shared_literal");
+    TEST_REQUIRE(fn != NULL, "manual shared-literal definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual shared-literal function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit("),
+                 "a shared string literal must not leave a dead C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "_xsv = xr_str_lit("),
+                 "the shared-slot ownership handoff must retain the exact string literal");
+
+    printf("  Generated immediate shared string literal %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 933, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XiFunc *ir = xi_func_new("manual_debug_shared", &u64_type);
@@ -10027,6 +10109,8 @@ int main(void) {
     run_cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local();
     run_cgen_returned_scalar_constant_emits_immediate_without_local();
     run_cgen_returned_null_constant_emits_immediate_without_local();
+    run_cgen_multi_concat_string_constants_emit_immediate_without_locals();
+    run_cgen_shared_string_constant_emits_immediate_without_local();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();

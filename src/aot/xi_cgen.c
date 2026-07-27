@@ -6472,7 +6472,8 @@ static bool cg_native_box_value_is_elided_in_aot(XiCgenCtx *ctx, const XiFunc *f
     return seen_use;
 }
 
-/* A scalar or null constant has no required C storage when every consumer
+/* A scalar/null constant, or a string literal used only by a multi-part
+ * concat, has no required C storage when every consumer
  * prints the literal through emit_value_as_rep_ctx() (or an equivalent
  * literal-aware helper).  This is deliberately a lowering-shape predicate,
  * not generic DCE: several native emitters still call emit_vref() and
@@ -6545,6 +6546,15 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             /* Scalar place stores convert the stored value with the
              * literal-aware representation emitter. */
             return arg_index == 1;
+        case XI_SET_SHARED:
+            /* Shared-slot stores convert their sole value argument through
+             * emit_value_as_rep_ctx(), including the ownership handoff. */
+            return arg_index == 0;
+        case XI_STR_CONCAT:
+            /* Multi-part concat lowers every part through the literal-aware
+             * representation emitter.  The one-part string fast path still
+             * calls emit_vref() and therefore deliberately fails closed. */
+            return user->nargs > 1;
         case XI_INDEX_GET:
         case XI_INDEX_SET: {
             CgFixedArrayLaneInfo info;
@@ -6565,7 +6575,7 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
         return false;
     if (v->type->kind != XR_KIND_INT && v->type->kind != XR_KIND_BOOL &&
         v->type->kind != XR_KIND_RUNE && v->type->kind != XR_KIND_FLOAT &&
-        v->type->kind != XR_KIND_NULL)
+        v->type->kind != XR_KIND_NULL && v->type->kind != XR_KIND_STRING)
         return false;
     if (v->flags &
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
@@ -6580,9 +6590,10 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
             /* Return lowering prints scalar/null constants through
              * emit_return_value_as_rep_ctx(), so the Xi control edge does not
              * require a C local for the literal.  Other terminators still
-             * reference their control value by name and therefore fail
-             * closed. */
-            if (blk->kind != XI_BLOCK_RETURN)
+             * reference their control value by name.  String returns remain
+             * materialized until their ownership contract is proven
+             * independently. */
+            if (blk->kind != XI_BLOCK_RETURN || v->type->kind == XR_KIND_STRING)
                 return false;
             seen_use = true;
         }
@@ -6605,6 +6616,10 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                 if (user->args[a] != v)
                     continue;
                 seen_use = true;
+                if (v->type->kind == XR_KIND_STRING &&
+                    ((user->op != XI_STR_CONCAT || user->nargs <= 1) &&
+                     (user->op != XI_SET_SHARED || a != 0)))
+                    return false;
                 if (!cg_const_use_emits_immediate(ctx, f, user, a))
                     return false;
             }

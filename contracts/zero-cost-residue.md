@@ -3,9 +3,11 @@
 Status: re-frozen after the xxHash parity work made module-owned immutable
 fixed arrays available as hosted static data, kept unhinted return branches
 neutral, made caller-proven raw slices free of pending-error residue, and kept
-AVX-512F values native inside attributed feature islands, and made scalar/null
+AVX-512F values native inside attributed feature islands, made scalar/null
 return literals storage-free when the return emitter already prints the
-immediate. The CGen matrix, W1-W4 verifier, and xxHash scalar/auto C-ABI code
+immediate, and made string literals storage-free only for proven literal-aware
+multi-part concat and shared-slot consumers. The CGen matrix, W1-W4 verifier,
+and xxHash scalar/auto C-ABI code
 section comparison were rerun; residue categories and allowance semantics are
 unchanged.
 
@@ -53,6 +55,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c c66912af2c9a43dd972b58e69a4e81910ec350e4afb0652a052da91dc85f36c0
+anchor-sha256: src/aot/xi_cgen.c e2fe425f7ef8765c746f383955b0c3876bbf0399f755a78736b1a7084bbebd3f
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
