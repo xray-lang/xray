@@ -215,6 +215,19 @@ add_xray_unit_test(test_xrt_static_map_set aot/test_xrt_static_map_set.c)
 add_xray_unit_test(test_xrt_exception_tls aot/test_xrt_exception_tls.c)
 add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
 add_xray_unit_test(test_xrt_user_hash_eq aot/test_xrt_user_hash_eq.c)
+
+# Generated AOT cores are also compiled as C++ by governed compatibility
+# workflows.  Keep this target at the minimum supported C++ dialect and avoid
+# linking xray_core so the header-only ABI/atomic contract is tested directly.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
+   CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
+   CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    add_executable(test_xr_atomic_cxx aot/test_xr_atomic_cxx.cpp)
+    target_include_directories(test_xr_atomic_cxx PRIVATE ${XRAY_COMMON_INCLUDES})
+    set_target_properties(test_xr_atomic_cxx PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON)
+    add_test(NAME test_xr_atomic_cxx COMMAND $<TARGET_FILE:test_xr_atomic_cxx>)
+    set_tests_properties(test_xr_atomic_cxx PROPERTIES LABELS "aot;cgen;cxx;task-243")
+endif()
 add_xray_unit_test(test_xi_licm ir/test_xi_licm.c)
 add_xray_unit_test(test_xi_ifconv ir/test_xi_ifconv.c)
 add_xray_unit_test(test_xi_sccp ir/test_xi_sccp.c)

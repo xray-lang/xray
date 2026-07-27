@@ -367,8 +367,8 @@ static inline void xrt_map_direct_unsupported(uint8_t elem_type, const char *rol
 static inline void xrt_map_direct_require(xrt_map_t *m, uint8_t key_type, uint8_t value_type,
                                           const char *who) {
     if (!m || m->key_type != key_type || m->value_type != value_type) {
-        uint8_t actual_key = m ? m->key_type : XR_ELEM_ANY;
-        uint8_t actual_value = m ? m->value_type : XR_ELEM_ANY;
+        uint8_t actual_key = m ? m->key_type : (uint8_t) XR_ELEM_ANY;
+        uint8_t actual_value = m ? m->value_type : (uint8_t) XR_ELEM_ANY;
         xrt_map_direct_type_mismatch(key_type, actual_key, value_type, actual_value, who);
     }
 }

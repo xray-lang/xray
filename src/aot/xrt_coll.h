@@ -3672,7 +3672,7 @@ static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_ki
     j->field_names = NULL;
     j->dynamic_fields = NULL;
     for (int64_t i = 0; i < field_count; i++)
-        j->fields[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+        j->fields[i] = XR_NULL_VAL;
     XrValue value = xr_mkptr(j, XR_TAG_PTR);
     value.flags |= XRT_VALUE_FLAG_EMBEDDED_HEADER;
     return value;
@@ -3742,7 +3742,7 @@ static inline XrValue xrt_json_get_field(XrValue obj, int field_idx) {
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
     if (field_idx >= 0 && field_idx < j->field_count)
         return j->fields[field_idx];
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
@@ -4059,6 +4059,7 @@ static int xrt_json_parse_string_value(xrt_json_parser_t *p, XrValue *out) {
     size_t cap = sizeof(stack_buf);
     char *buf = stack_buf;
     size_t len = 0;
+    XrValue str;
 
 #define XRT_JSON_PARSE_STR_ENSURE(n)                                                               \
     do {                                                                                           \
@@ -4163,7 +4164,7 @@ static int xrt_json_parse_string_value(xrt_json_parser_t *p, XrValue *out) {
         goto bad_string;
     p->pos++;
 
-    XrValue str = xrt_str_alloc(len);
+    str = xrt_str_alloc(len);
     memcpy(xr_str_buf(str), buf, len);
     if (buf != stack_buf)
         XRT_FREE(buf);

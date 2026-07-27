@@ -1158,6 +1158,9 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
+    assert(contains(code, "#if defined(__cplusplus)\nextern \"C\" {\n#endif") &&
+           contains(code, "#if defined(__cplusplus)\n}\n#endif") &&
+           "generated definitions must retain C linkage under a C++ compiler");
     assert(contains(code, "#if defined(__GNUC__) && !defined(__clang__)") &&
            contains(code, "#pragma GCC diagnostic ignored \"-Wattributes\"") &&
            contains(code, "#pragma GCC diagnostic ignored \"-Wunused-variable\"") &&
@@ -1181,6 +1184,7 @@ TEST(cgen_simple_arith) {
            contains(code, "#pragma clang diagnostic ignored \"-Wsign-compare\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wcast-align\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wcast-qual\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wmissing-braces\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wdeclaration-after-statement\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wfloat-equal\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wswitch-enum\"") &&
@@ -3179,7 +3183,7 @@ TEST(cgen_struct_raw_deref_method_receiver_skips_release_copy) {
     const char *mutate_end = next_static_after(mutate);
     TEST_REQUIRE(count_lines_outside_debug_locals(mutate, mutate_end, " = (*(xrt_struct_abi_") == 0,
                  "raw-deref method receivers must not copy the whole struct in release C");
-    TEST_REQUIRE(contains_between(mutate, mutate_end, "(void *)("),
+    TEST_REQUIRE(contains_between(mutate, mutate_end, "(xrt_struct_abi_"),
                  "raw-deref method receivers should address the original pointer target");
 
     const char *load = find_static_function_definition(code, "loadState");
@@ -3221,7 +3225,7 @@ TEST(cgen_struct_scalar_field_ref_skips_release_load) {
     TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(advance, advance_end, "    int64_t v",
                                                               " = (*(xrt_struct_abi_") == 0,
                  "direct scalar-field refs must not retain receiver or field loads in release C");
-    TEST_REQUIRE(contains_between(advance, advance_end, "(void *)(&(*(xrt_struct_abi_"),
+    TEST_REQUIRE(contains_between(advance, advance_end, "(int64_t *)(&(*(xrt_struct_abi_"),
                  "scalar-field ref arguments should address the original aggregate fields");
 
     printf("  Generated release-zero-load scalar aggregate refs %zu bytes of C code\n",
@@ -3351,7 +3355,7 @@ TEST(cgen_span_ref_only_value_omits_unused_data_cache) {
         !contains_between(allocate, allocate_end, "_ad"),
         "a Slice used only through an addressable ref must not declare an unused data cache");
     TEST_REQUIRE(contains_between(allocate, allocate_end, "xr_span_t") &&
-                     contains_between(allocate, allocate_end, "(void *)(&"),
+                     contains_between(allocate, allocate_end, "(xr_span_t *)(&"),
                  "the addressable Slice value itself must remain materialized");
 
     printf("  Omitted ref-only Slice data cache in %zu bytes of C code\n", strlen(code));

@@ -5539,7 +5539,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
              * unconditional tagged box: a non-suspendable constructor uses the
              * native ABI (e.g. int64_t) for scalar params, so boxing here would
              * mismatch the emitted definition and fail C compilation. */
-            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, a, v->args[a]);
         }
         fprintf(out, "); _inst; })");
         return;
@@ -8361,7 +8361,7 @@ static bool xicgen_emit_vtable_target_method(XiCgenCtx *ctx, FILE *out, const Xi
         fprintf(out, "*)_xr_vt_recv_%u.ptr", v->id);
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target_func, a));
+            emit_value_as_direct_call_arg(ctx, out, f, v, target_func, a, v->args[a]);
         }
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
@@ -10468,7 +10468,7 @@ static bool xicgen_emit_resolved_user_constructor(XiCgenCtx *ctx, FILE *out, con
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
         /* Match the constructor's actual parameter ABI (see note above). */
-        emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, ctor, a));
+        emit_value_as_direct_call_arg(ctx, out, f, v, ctor, a, v->args[a]);
     }
     fprintf(out, "); _inst; })");
     return true;
@@ -10622,7 +10622,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
             /* Match the constructor's actual parameter ABI (see note above). */
-            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, a, v->args[a]);
         }
         fprintf(out, "); _inst; })");
         return true;
@@ -14410,42 +14410,48 @@ static const char *xicgen_place_pointee_c_type(XiCgenCtx *ctx, const XiFunc *f,
 
 static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) f;
-    (void) prefix;
     if (!v || v->nargs != 1 || !v->args[0]) {
         emit_codegen_abort_expr(out);
         return;
     }
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
+    const char *result_c_type =
+        value_plan && value_plan->rep.c_type &&
+                (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
+            ? value_plan->rep.c_type
+            : "void *";
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
             emit_codegen_abort_expr(out);
             return;
         }
-        fprintf(out, "(void *)(");
+        fprintf(out, "(%s)(", result_c_type);
         emit_value_as_rep_ctx(ctx, out, load->args[0], XR_REP_RAWPTR);
         fprintf(out, ")");
         return;
     }
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION) != 0 &&
-        (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix) ||
-         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0])))
+        (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix, result_c_type) ||
+         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0],
+                                                           result_c_type)))
         return;
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {
-        fprintf(out, "(void *)((xr_span_t[]){xrt_byte_slice_from_value(");
+        fprintf(out, "(%s)((xr_span_t[]){xrt_byte_slice_from_value(", result_c_type);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG)})");
         return;
     }
     CgFixedArrayLaneInfo fixed;
     if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
-        fprintf(out, "(void *)(");
+        fprintf(out, "(%s)(", result_c_type);
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &fixed);
         fprintf(out, ")");
         return;
     }
-    fprintf(out, "(void *)(&");
+    fprintf(out, "(%s)(&", result_c_type);
     emit_vref(out, v->args[0]);
     fprintf(out, ")");
 }

@@ -132,7 +132,8 @@ static inline XrArrayCoreNeedle xr_array_core_needle_float(double value) {
 }
 
 static inline XrArrayCoreNeedle xr_array_core_needle_bool(bool value) {
-    return (XrArrayCoreNeedle) {XR_ARRAY_CORE_NEEDLE_BOOL, 0, 0.0, value ? 1 : 0};
+    return (XrArrayCoreNeedle) {XR_ARRAY_CORE_NEEDLE_BOOL, 0, 0.0,
+                               (uint8_t) (value ? 1 : 0)};
 }
 
 static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t start,

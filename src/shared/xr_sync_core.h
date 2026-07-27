@@ -8,7 +8,7 @@
  * xr_sync_core.h - Single semantic source for standalone sync primitives
  * shared by the VM stdlib binding and the AOT direct-call helper.
  *
- * Self-contained (only <stdatomic.h>) so the AOT prelude can adopt it while
+ * Self-contained (only xr_atomic_compat.h) so the AOT prelude can adopt it while
  * keeping the zero-runtime-symbol contract (consumed via a static-inline
  * wrapper in src/aot/xrt_mem.h).
  *
@@ -20,7 +20,7 @@
 #ifndef XR_SYNC_CORE_H
 #define XR_SYNC_CORE_H
 
-#include <stdatomic.h>
+#include "xr_atomic_compat.h"
 #include <stdint.h>
 
 static inline memory_order xr_sync_core_memorder(int64_t ordering) {

@@ -47,7 +47,9 @@
 #include <io.h>
 #include <process.h>
 
+#if defined(_MSC_VER)
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 // MSVC's <sys/types.h> does not define ssize_t; provide it before
 // any inline helper that returns one.
@@ -287,7 +289,11 @@ static inline ssize_t xr_recv_timeout(xr_socket_t fd, void *buf, size_t len, int
         xr_set_socket_error(XR_ETIMEDOUT);
         return -1;
     }
+#ifdef XR_OS_WINDOWS
+    return recv(fd, (char *) buf, (int) len, 0);
+#else
     return recv(fd, buf, len, 0);
+#endif
 }
 
 static inline ssize_t xr_send_timeout(xr_socket_t fd, const void *buf, size_t len, int timeout_ms) {
@@ -306,7 +312,11 @@ static inline ssize_t xr_send_timeout(xr_socket_t fd, const void *buf, size_t le
         xr_set_socket_error(XR_ETIMEDOUT);
         return -1;
     }
+#ifdef XR_OS_WINDOWS
+    return send(fd, (const char *) buf, (int) len, 0);
+#else
     return send(fd, buf, len, 0);
+#endif
 }
 
 // Loop until the entire buffer is sent or one timed send fails.

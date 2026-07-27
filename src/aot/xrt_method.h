@@ -323,7 +323,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         return xrt_iterator_new(recv, XRT_ITER_VALUES);
     if (sym == XRT_SYM_ENTRIES_ITERATOR)
         return xrt_iterator_new(recv, XRT_ITER_PAIRS);
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 /* string.copyBytes() -> Array<byte>: the UTF-8 bytes of the string. */
@@ -535,7 +535,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
@@ -690,7 +690,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         r[rlen] = 0;
         return sv;
     }
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
@@ -731,7 +731,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_PUSH) {
             xrt_array_push(recv, arg0);
-            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+            return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
@@ -914,7 +914,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         double b = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(a < b ? a : b);
     }
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
@@ -1003,21 +1003,21 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
             return XR_NULL_VAL;
         xrt_map_set(m, arg0, arg1);
-        return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+        return XR_NULL_VAL;
     }
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
         return xrt_array_fill_value(recv, arg0, arg1, arg2);
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_4(XrValue recv, int sym, XrValue arg0, XrValue arg1, XrValue arg2,
                                    XrValue arg3) {
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    return XR_NULL_VAL;
 }
 
 #include "xrt_getprop.inc.c"

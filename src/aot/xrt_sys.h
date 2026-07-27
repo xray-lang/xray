@@ -21,7 +21,7 @@
 #include "../os/os_thread.h"
 #include <limits.h>
 #include <signal.h>
-#include <stdatomic.h>
+#include "../shared/xr_atomic_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1028,8 +1028,8 @@ static inline XrValue xrt_sys_pin_to_cpu(XrValue cpu_value) {
 }
 
 static atomic_flag xrt_threadlocal_live_lock = ATOMIC_FLAG_INIT;
-static _Atomic bool xrt_threadlocal_live_fail_open = false;
-static _Atomic uint64_t xrt_threadlocal_next_id = 1;
+static _Atomic(bool) xrt_threadlocal_live_fail_open = false;
+static _Atomic(uint64_t) xrt_threadlocal_next_id = 1;
 static XR_THREAD_LOCAL uint64_t xrt_threadlocal_tls_id = 0;
 static uint64_t *xrt_threadlocal_live_ids = NULL;
 static size_t xrt_threadlocal_live_count = 0;
@@ -1151,7 +1151,7 @@ static inline XrValue xrt_sys_thread_local_alive(XrValue id_value) {
 }
 
 typedef struct xrt_sys_signal_slot {
-    _Atomic int pending;
+    _Atomic(int) pending;
     XrValue handler;
 } xrt_sys_signal_slot_t;
 

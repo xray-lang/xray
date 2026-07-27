@@ -1141,6 +1141,16 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     if (emit_checked_tagged_direct_call_scalar_arg(ctx, out, target, call, arg_index, arg, from_rep,
                                                    to_rep))
         return;
+    if ((from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) &&
+        (to_rep == XR_REP_PTR || to_rep == XR_REP_RAWPTR)) {
+        /* C implicitly converts void pointers at call boundaries; C++ does not.
+         * Preserve the prepared pointer ABI explicitly so one generated source
+         * is valid under both language front ends. */
+        fprintf(out, "(%s)(", cg_func_param_abi_c_type(ctx, target, arg_index));
+        emit_vref(out, arg);
+        fprintf(out, ")");
+        return;
+    }
     conv_suffix = emit_conversion_prefix_ctx(ctx, out, arg ? arg->type : NULL, from_rep, to_rep);
     emit_vref(out, arg);
     emit_conversion_suffix(out, conv_suffix);

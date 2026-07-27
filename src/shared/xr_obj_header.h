@@ -8,7 +8,7 @@
  * xr_obj_header.h - Single source of truth for the object header layout shared
  * by the VM and AOT runtimes.
  *
- * Self-contained: depends only on <stdint.h>/<stdatomic.h> so the AOT runtime
+ * Self-contained: depends only on <stdint.h>/xr_atomic_compat.h so the AOT runtime
  * prelude can adopt the same header without pulling in any runtime translation
  * unit (a pure AOT program keeps its zero-runtime link contract). The runtime's
  * xobj_header.h includes this and layers its object-type enum, type-tag
@@ -27,14 +27,14 @@
 #define XR_OBJ_HEADER_H
 
 #include <stdint.h>
-#include <stdatomic.h>
+#include "xr_atomic_compat.h"
 
 /* ========== Unified Object Header (16 bytes) ========== */
 
 typedef struct XrObjHeader {
     uint16_t type;            /* [0-1] object type tag */
     uint16_t extra;           /* [2-3] flags word: storage/mmap + XR_OBJ_* */
-    _Atomic int32_t refcount; /* [4-7] 0-based sign-tagged RC. Atomic so the
+    _Atomic(int32_t) refcount; /* [4-7] 0-based sign-tagged RC. Atomic so the
                                * thread-shared (rc<0) band and the thread-local
                                * fast path share one well-defined object: the
                                * hot path uses relaxed loads/stores (identical

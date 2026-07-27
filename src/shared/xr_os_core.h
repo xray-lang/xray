@@ -238,7 +238,7 @@ static inline bool xr_os_core_exec_buffer_next_cap(size_t len, size_t cap, size_
         return true;
     }
 
-    size_t new_cap = cap ? cap : XR_OS_CORE_EXEC_INITIAL_CAP;
+    size_t new_cap = cap ? cap : (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
     while (needed > new_cap) {
         if (new_cap > (size_t) -1 / 2)
             return false;

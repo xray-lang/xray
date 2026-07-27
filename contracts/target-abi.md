@@ -9,6 +9,11 @@ ABIs are unchanged.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
+The same generated translation unit may now be compiled as GNU/Clang C++11,
+but remains a C ABI artifact: exported definitions use C linkage, atomic fields
+retain their scalar C layout and memory ordering through compiler builtins, and
+typed pointer casts do not change the prepared target ABI. C11 remains the
+default generated language and performance path.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -87,14 +92,14 @@ Zig 0.16.0 while preserving the `x86_64-windows-msvc` ABI.
 anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
 anchor-sha256: src/aot/xaot_prepare.c 68e7efd04383a8adff9aee330b8fea3755036354c29d83f96e56014d22cbf5dd
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 215e6cad4d4454e8ccb842347f32ead184ddaef8783938189484978029a93082
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c d11c0870ce6ff89b3aa8b4b6d3af25c62fb4cb1908c494ef821e4bdbb5832a14
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c a3a7d2560773458acc75b5be1d9af03e8033891f9fed2262b98f1cc6b0f7f26b
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1086f8f9c3ca50d13dd6b448acc7d81f89aeb0b3486b13230b76155fc58ab98c
-anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
-anchor-sha256: src/aot/xi_cgen.c df2091a9d8695144790313dd4dfbf77981cb31f037bf6d2f13ca9ea2c8c4f77f
-anchor-sha256: src/aot/xrt_coll.h 4425388174703c40ccba559a564e947ebd0737e359445134a324fa710bfa00b3
-anchor-sha256: src/aot/xrt_core_freestanding.h 96f25c3a7e609fc4024a70680ad34d5223ad4f9bc70f9aaec4b08943fec4333a
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 600aa9d449de2371e02802238a548ee739700df41e8b3c9cf4bd6d8b52b00a18
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 083b2451c3b9fe41f0d1c770a29f1e5004e27fe13eb83c016c3871d976f25b24
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2923f376636dd4ab963b3ed3203136e3d577fe5c5e25171db74844434ff005c9
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 5762e9d9d29ffdccc4b3fdc161cd45f10c1af1c771ed01807ce7c3701ee1f610
+anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
+anchor-sha256: src/aot/xi_cgen.c 2831c25d3a4ce00a76e609d6e13194bd7517817712ea72d5235f52179103f353
+anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
+anchor-sha256: src/aot/xrt_core_freestanding.h adcb132c62bdbb9c9282c0181a0689ac1dd5cfe03f8c84d9e02692d955707011
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 19122939aa291b24ed6091cc2f66fb97af3d472a3c4b07b827237a633511fb80
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e

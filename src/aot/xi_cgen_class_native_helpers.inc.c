@@ -1366,7 +1366,8 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
  * same call-bound, nonescaping place contract. */
 static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out,
                                                               const XiFunc *f,
-                                                              const XiValue *value) {
+                                                              const XiValue *value,
+                                                              const char *result_c_type) {
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
     const XiValue *load = cg_unwrap_identity_value(value);
     if (!info.layout || !load || load->op != XI_LOAD_FIELD || load->nargs < 1 ||
@@ -1378,7 +1379,7 @@ static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FI
         return false;
     if (!cg_exact_place_rep_alias_safe(ctx, value, load))
         return false;
-    fprintf(out, "(void *)(&");
+    fprintf(out, "(%s)(&", result_c_type ? result_c_type : "void *");
     emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, load, (uint16_t) idx);
     fprintf(out, ")");
     return true;
@@ -4316,7 +4317,7 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     emit_vref(out, v);
     for (uint16_t i = 1; i < v->nargs; i++) {
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[i], cg_func_param_abi_rep(ctx, target, i));
+        emit_value_as_direct_call_arg(ctx, out, f, v, target, i, v->args[i]);
     }
     fprintf(out, ");\n");
     return true;
@@ -4388,7 +4389,7 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, a, v->args[a]);
         }
         fprintf(out, "); ");
     }
@@ -5578,7 +5579,7 @@ static bool emit_class_shared_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, 
     emit_class_shared_native_storage_name(ctx, out, slot);
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, inst->ctor, a));
+        emit_value_as_direct_call_arg(ctx, out, f, v, inst->ctor, a, v->args[a]);
     }
     fprintf(out, ");\n");
     return true;

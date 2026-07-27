@@ -1,10 +1,11 @@
 # Zero-cost residue contract
 
-Status: re-frozen after the xxHash parity work made implicit error-edge owner
-cleanup explicit without materializing otherwise-unused hot-path values or
-Slice data caches. The CGen matrix, W1-W4 verifier, and unfiltered generated-CLI
-Clang analysis were rerun; residue categories and allowance semantics are
-unchanged.
+Status: re-frozen after the generated-C C++ compatibility work moved SSA/PHI
+declarations only for non-linear CFG, while straight-line hot functions retain
+declaration-at-definition shape. The xxHash backend shape contract, Windows
+same-host quick regression matrix, C/C++ public-symbol size comparison, CGen
+matrix, and W1-W4 verifier were rerun; residue categories and allowance
+semantics are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -50,6 +51,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c df2091a9d8695144790313dd4dfbf77981cb31f037bf6d2f13ca9ea2c8c4f77f
+anchor-sha256: src/aot/xi_cgen.c 2831c25d3a4ce00a76e609d6e13194bd7517817712ea72d5235f52179103f353
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

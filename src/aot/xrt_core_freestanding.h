@@ -21,7 +21,7 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <float.h>
-#include <stdatomic.h>
+#include "../shared/xr_atomic_compat.h"
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
@@ -168,7 +168,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 
 static inline int xrt_target_runtime_simd_bytes(void) {
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
-    static _Atomic int cached_bytes = 0;
+    static _Atomic(int) cached_bytes = 0;
     int cached = atomic_load_explicit(&cached_bytes, memory_order_relaxed);
     if (cached != 0)
         return cached;
@@ -492,6 +492,21 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
         out.payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
     return out;
 }
+
+/* C compound-literal arrays and C++ temporary arrays have different address
+ * rules.  Keep the payload alive for the complete make call in either mode. */
+#if defined(__cplusplus)
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
+    ([&]() {                                                                                       \
+        const XrValue _xrt_enum_payloads[(payload_count)] = {__VA_ARGS__};                          \
+        return xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name),           \
+                                       (member_name), _xrt_enum_payloads);                          \
+    }())
+#else
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
+    xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name), (member_name),        \
+                            (const XrValue[(payload_count)]) {__VA_ARGS__})
+#endif
 
 typedef struct xrt_closure {
     const XrAotCallableDesc *callable;

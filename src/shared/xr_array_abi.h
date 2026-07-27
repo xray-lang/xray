@@ -18,7 +18,7 @@
 #define XR_ARRAY_ABI_H
 
 #include <stdint.h>
-#include <stdatomic.h>
+#include "xr_atomic_compat.h"
 
 /* Refcounted backing store for array buffers (task 143/144 M2).
  *
@@ -39,7 +39,7 @@
  * already manages), so xi_arc needs no changes: when a view object is collected,
  * its destructor decrements this refcount and frees the buffer at zero. */
 typedef struct XrArrayStorage {
-    _Atomic int64_t refcount; /* number of arrays/slices referencing `data` */
+    _Atomic(int64_t) refcount; /* number of arrays/slices referencing `data` */
     void *data;               /* the element buffer (system heap) */
     int64_t byte_capacity;    /* allocated bytes in `data` */
     void *account_heap;       /* VM only: XrCoroHeap* charged for external bytes */

@@ -892,7 +892,8 @@ static inline XrValue xrt_net_set_accept_deadline(XrValue listener_value, XrValu
 
 static inline XrValue xrt_net_last_error(XrValue handle_value) {
     xrt_net_handle_base_t *base = xrt_net_handle_base_ptr(handle_value);
-    const char *name = xrt_net_error_name(base ? base->last_error : XRT_NETERR_INVALID);
+    const char *name =
+        xrt_net_error_name(base ? base->last_error : (uint8_t) XRT_NETERR_INVALID);
     return name ? xrt_str_from_cstr(name) : XR_NULL_VAL;
 }
 

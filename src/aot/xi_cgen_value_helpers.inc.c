@@ -1040,19 +1040,26 @@ static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const vo
     return NULL;
 }
 
-static void emit_adt_enum_payload_array_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                             uint16_t payload_count) {
+static void emit_adt_enum_make_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed,
+                                    int member_idx, const XiValue *v, uint16_t payload_count,
+                                    const char *enum_name, const char *member_name) {
+    fprintf(out, "%s(%u, %d, %u, ",
+            payload_count > 0 ? "XRT_ENUM_AGGREGATE_MAKE" : "xrt_enum_aggregate_make",
+            ed ? ed->layout_id : 0u, member_idx, (unsigned) payload_count);
+    emit_c_string_literal(out, enum_name);
+    fprintf(out, ", ");
+    emit_c_string_literal(out, member_name);
+    fprintf(out, ", ");
     if (payload_count == 0 || !v || v->nargs <= 1) {
-        fprintf(out, "NULL");
+        fprintf(out, "NULL)");
         return;
     }
-    fprintf(out, "(const XrValue[%u]){", (unsigned) payload_count);
     for (uint16_t a = 1; a < v->nargs; a++) {
         if (a > 1)
             fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
     }
-    fprintf(out, "}");
+    fprintf(out, ")");
 }
 
 static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed,
@@ -1068,26 +1075,14 @@ static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnum
         const XaotValuePlan *plan = cg_value_plan(ctx, v);
         if (plan)
             emit_adt_base_to_value_rep_prefix(out, plan->rep);
-        fprintf(out, "xrt_enum_aggregate_make(%u, %d, %u, ", ed ? ed->layout_id : 0u, member_idx,
-                (unsigned) payload_count);
-        emit_c_string_literal(out, enum_name);
-        fprintf(out, ", ");
-        emit_c_string_literal(out, member_name);
-        fprintf(out, ", ");
-        emit_adt_enum_payload_array_expr(ctx, out, v, payload_count);
-        fprintf(out, ")");
+        emit_adt_enum_make_expr(ctx, out, ed, member_idx, v, payload_count, enum_name, member_name);
         if (plan)
             emit_adt_base_to_value_rep_suffix(out, plan->rep);
         return;
     }
-    fprintf(out, "xrt_enum_aggregate_box(xrt_enum_aggregate_make(%u, %d, %u, ",
-            ed ? ed->layout_id : 0u, member_idx, (unsigned) payload_count);
-    emit_c_string_literal(out, enum_name);
-    fprintf(out, ", ");
-    emit_c_string_literal(out, member_name);
-    fprintf(out, ", ");
-    emit_adt_enum_payload_array_expr(ctx, out, v, payload_count);
-    fprintf(out, "))");
+    fprintf(out, "xrt_enum_aggregate_box(");
+    emit_adt_enum_make_expr(ctx, out, ed, member_idx, v, payload_count, enum_name, member_name);
+    fprintf(out, ")");
 }
 
 static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiFunc *target,

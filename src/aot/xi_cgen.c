@@ -4979,7 +4979,8 @@ static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, c
     emit_vref(out, info.ctor_call);
     for (uint16_t i = 1; i < info.ctor_call->nargs; i++) {
         fprintf(out, ", ");
-        emit_value_as_rep(out, info.ctor_call->args[i], cg_func_param_abi_rep(ctx, info.ctor, i));
+        emit_value_as_direct_call_arg(ctx, out, f, info.ctor_call, info.ctor, i,
+                                      info.ctor_call->args[i]);
     }
     fprintf(out, ");\n");
 
@@ -7726,7 +7727,9 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
             continue;
         any = true;
-        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
+        fprintf(out, "    ");
+        if (!ctx->pre_decl_all)
+            fprintf(out, "%s ", local_ctype_str_ctx(ctx, f, &phi->value));
         emit_phi_tmp_ref(out, target, phi, pred_idx);
         fprintf(out, " = ");
         emit_phi_incoming_as_rep(ctx, out, phi, pred_idx, pred_ran_defer);
@@ -8661,68 +8664,10 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
     }
 }
 
-static int cg_block_emit_index(const XiFunc *f, const XiBlock *needle) {
-    if (!f || !needle)
-        return -1;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        if (f->blocks[bi] == needle)
-            return (int) bi;
-    }
-    return -1;
-}
-
-static bool cg_value_defined_after_use_block(const XiFunc *f, const XiValue *value,
-                                             const XiBlock *use_block) {
-    if (!f || !value || !use_block || !value->block)
-        return false;
-    if (value->op == XI_PHI)
-        return false;
-    int def_idx = cg_block_emit_index(f, value->block);
-    int use_idx = cg_block_emit_index(f, use_block);
-    return def_idx >= 0 && use_idx >= 0 && def_idx > use_idx;
-}
-
-static bool cg_value_args_have_forward_c_use(const XiFunc *f, const XiBlock *use_block,
-                                             const XiValue *user) {
-    if (!f || !use_block || !user)
-        return false;
-    for (uint16_t ai = 0; ai < user->nargs; ai++) {
-        if (cg_value_defined_after_use_block(f, user->args[ai], use_block))
-            return true;
-    }
-    return false;
-}
-
-static bool cg_has_forward_c_value_use(const XiFunc *f) {
-    if (!f)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (cg_value_defined_after_use_block(f, blk->control, blk))
-            return true;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            if (cg_value_args_have_forward_c_use(f, blk, blk->values[vi]))
-                return true;
-        }
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t ai = 0; ai < phi->value.nargs && ai < blk->npreds; ai++) {
-                if (cg_value_defined_after_use_block(f, phi->value.args[ai], blk->preds[ai]))
-                    return true;
-            }
-        }
-    }
-    return false;
-}
-
-static bool cg_needs_predecl_all(const XiFunc *f) {
-    return cg_has_exception_handling(f) || cg_has_forward_c_value_use(f);
-}
-
 /* Collect all values and phis to declare at function top.
- * Functions with exception handling or CFG emission-order forward uses
- * pre-declare SSA values to avoid jumping over C declarations. */
+ * All synchronous functions pre-declare SSA values so the generated translation
+ * unit is valid in both C and C++: arbitrary CFG edges may not jump over a C++
+ * local declaration, even when the initializer is scalar and side-effect free. */
 static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     bool pre_decl_all = ctx->pre_decl_all;
     bool needs_defensive_init = cg_has_exception_handling(f);
@@ -8769,7 +8714,20 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 fprintf(out, " = 0;\n");
         }
 
-        /* SSA values (only pre-declared when exception handling present) */
+        /* Each predecessor captures all incoming PHI values before publishing
+         * any of them.  Put those edge temporaries at function scope as well:
+         * C++ rejects a jump that bypasses their inline declarations. */
+        for (uint16_t pred_idx = 0; pred_idx < blk->npreds; pred_idx++) {
+            for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
+                    continue;
+                fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
+                emit_phi_tmp_ref(out, blk, phi, pred_idx);
+                fprintf(out, ";\n");
+            }
+        }
+
+        /* SSA values (pre-declared for C/C++ CFG compatibility). */
         if (pre_decl_all) {
             for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
                 const XiValue *v = blk->values[vi];
@@ -10918,11 +10876,15 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     if (!has_cl)
         fprintf(out, "    (void)_cl;\n");
 
-    ctx->pre_decl_all = cg_has_exception_handling(f);
+    /* Keep non-linear control flow valid for both C and C++ compilation: a C++
+     * jump may not bypass a local declaration.  Straight-line functions retain
+     * declaration-at-definition code shape.  This must be decided before the
+     * storage-planning helpers because they mirror declaration versus assignment
+     * choices made by emit_value_stmt. */
+    ctx->pre_decl_all = f->nblocks > 1 || cg_has_exception_handling(f);
     cg_prepare_cell_vars(ctx, f);
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
-    ctx->pre_decl_all = cg_needs_predecl_all(f);
     emit_declarations(ctx, out, f);
     emit_debug_source_var_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);

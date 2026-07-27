@@ -2519,7 +2519,8 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
  * backend uses the verified aggregate layout to avoid a scalar stack shuttle
  * around the direct call. */
 static bool emit_struct_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                               const XiValue *value, const char *prefix) {
+                                               const XiValue *value, const char *prefix,
+                                               const char *result_c_type) {
     const XiValue *field = value;
     while (field && cg_is_identity_copy_or_move(field) && field->nargs >= 1)
         field = field->args[0];
@@ -2531,7 +2532,7 @@ static bool emit_struct_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out, const 
         return false;
     if (!cg_exact_place_rep_alias_safe(ctx, value, field))
         return false;
-    fprintf(out, "(void *)(&");
+    fprintf(out, "(%s)(&", result_c_type ? result_c_type : "void *");
     emit_struct_field_lvalue(ctx, out, f, layout, field->aux_int, field->args[0], prefix);
     fprintf(out, ")");
     return true;
