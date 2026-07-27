@@ -309,6 +309,25 @@ static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const 
     return ok;
 }
 
+static bool xtc_probe_link_object(const XrToolchainSelection *selection, const char *object,
+                                  const char *executable, bool lto, char *detail,
+                                  size_t detail_size) {
+    XrProcessResult process;
+    XtcProbeCommand command;
+    if (!xtc_probe_command_init(selection, &command, detail, detail_size))
+        return false;
+    XrToolchainArgSink sink = xtc_probe_command_sink(&command);
+    XrNativeLinkSpec link = {0};
+    link.lto = lto;
+    if (!xtc_probe_command_add(&command, object, detail, detail_size) ||
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size) ||
+        !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
+        return false;
+    bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
+    xtc_process_result_free(&process);
+    return ok;
+}
+
 static bool xtc_probe_run_executable(const char *executable, char *detail, size_t detail_size) {
     XrProcessSpec spec;
     XrProcessResult process;
@@ -569,8 +588,31 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         return false;
     }
 
-    XrToolchainTarget sdk_target = options->request.target;
-    if (!sdk_target.is_native && !xtc_target_parse("native", &sdk_target, detail, sizeof(detail))) {
+    /* The provider-normalized target owns a native Windows runtime ABI. Zig
+     * therefore selects windows-gnu for both `native` and the explicit host
+     * GNU spelling. A true cross-target probe may borrow the installed host
+     * manifest only for SDK header identity; its minimal link never consumes
+     * those runtime archives, and runtime-dependent cross builds fail closed. */
+    XrToolchainTarget sdk_target = result->selection.target;
+    bool exact_runtime_target = options->request.target.is_native;
+#ifdef XR_OS_WINDOWS
+    exact_runtime_target = exact_runtime_target ||
+                           (result->selection.provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+                            result->selection.target.os == XR_TOOLCHAIN_TARGET_OS_WINDOWS &&
+                            result->selection.target.abi == XR_TOOLCHAIN_TARGET_ABI_GNU);
+#endif
+    const char *host_sdk_target = "native";
+#ifdef XR_OS_WINDOWS
+    if (result->selection.provider == XR_TOOLCHAIN_PROVIDER_ZIG) {
+#if defined(_M_ARM64) || defined(__aarch64__)
+        host_sdk_target = "aarch64-windows-gnu";
+#else
+        host_sdk_target = "x86_64-windows-gnu";
+#endif
+    }
+#endif
+    if (!exact_runtime_target &&
+        !xtc_target_parse(host_sdk_target, &sdk_target, detail, sizeof(detail))) {
         result->sdk_compile = XR_TOOLCHAIN_CAPABILITY_FAILED;
         result->selection.reason = XR_TOOLCHAIN_REASON_SDK_MISSING;
         xtc_probe_add_diagnostic(result, result->selection.reason, "sdk-compile", detail);
@@ -701,7 +743,11 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     }
 
     if (xtc_probe_compile(&result->selection, minimal_source, lto_object, NULL, false, true, detail,
-                          sizeof(detail)))
+                          sizeof(detail)) &&
+        xtc_probe_link_object(&result->selection, lto_object, runtime_executable, true, detail,
+                              sizeof(detail)) &&
+        (!options->request.target.is_native || options->no_run ||
+         xtc_probe_run_executable(runtime_executable, detail, sizeof(detail))))
         result->lto = XR_TOOLCHAIN_CAPABILITY_OK;
     else
         result->lto = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;

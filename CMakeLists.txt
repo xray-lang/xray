@@ -450,8 +450,23 @@ endif()
 if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer enabled")
     add_compile_definitions(XR_BUILD_ASAN=1)
-    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
-    add_link_options(-fsanitize=address)
+    if(MSVC)
+        # MSVC AddressSanitizer is incompatible with /RTC and incremental
+        # linking. CMake's Debug defaults enable both, so remove only those
+        # incompatible defaults and retain debuginfo plus frame pointers.
+        foreach(_xray_flag_var
+                CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
+                CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+            string(REPLACE "/RTC1" "" ${_xray_flag_var} "${${_xray_flag_var}}")
+            string(REPLACE "/RTCsu" "" ${_xray_flag_var} "${${_xray_flag_var}}")
+            string(REPLACE "/ZI" "/Zi" ${_xray_flag_var} "${${_xray_flag_var}}")
+        endforeach()
+        add_compile_options(/fsanitize=address /Oy-)
+        add_link_options(/INCREMENTAL:NO)
+    else()
+        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address)
+    endif()
 endif()
 
 # UndefinedBehaviorSanitizer configuration
@@ -985,10 +1000,11 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/xcoro_monitor\\.c$")
-if(MINGW)
-    # COFF/LLD resolves undefined symbols before per-function GC, so the
+if(WIN32)
+    # COFF linkers resolve undefined symbols before per-function GC, so the
     # otherwise-unused xstring_pool reference needs the lightweight accessors
-    # in the archive. Mach-O and ELF discard that section before resolution.
+    # in the archive for both MSVC and MinGW. Mach-O and ELF discard that
+    # section before resolution.
     list(APPEND XRAY_RT_CORO_SOURCES src/runtime/xisolate_api.c)
 endif()
 
@@ -2093,7 +2109,22 @@ if(BUILD_TESTS)
     # surface.  Do not register nested sanitizer drivers inside an already
     # sanitized build: CI runs those configurations directly and recursive
     # sanitizer builds would only duplicate the same work.
-    if(NOT WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+    if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+       NOT ENABLE_MSAN)
+        add_test(
+            NAME asan_focused
+            COMMAND powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
+                    -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.ps1
+                    -SourceRoot ${CMAKE_CURRENT_SOURCE_DIR}
+                    -BuildDirectory ${CMAKE_CURRENT_SOURCE_DIR}/build-asan-windows
+                    -SeedBytecodeInclude ${XRAY_STDLIB_FINAL_BYTECODE_INC}
+        )
+        set_tests_properties(asan_focused PROPERTIES
+            LABELS "sanitizer;asan;task-218;windows"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
+    elseif(NOT WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
        NOT ENABLE_MSAN)
         add_test(
             NAME asan_focused
@@ -2529,12 +2560,25 @@ if(BUILD_TESTS)
 
     # Public install surface: xray_core is an internal development aggregate,
     # not a library users or installed AOT builds should link against.
-    add_test(
-        NAME install_public_surface
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.sh
-                ${CMAKE_BINARY_DIR}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
+    if(WIN32)
+        add_test(
+            NAME install_public_surface
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.py
+                    --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --build-dir ${CMAKE_BINARY_DIR}
+                    --binary $<TARGET_FILE:xray>
+                    --config $<CONFIG>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+    else()
+        add_test(
+            NAME install_public_surface
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.sh
+                    ${CMAKE_BINARY_DIR}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+    endif()
     set_tests_properties(install_public_surface PROPERTIES
         LABELS "install;aot;link;smoke"
         PROCESSORS 2

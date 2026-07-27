@@ -546,6 +546,15 @@ static inline XrValue xrt_array_ref_to_owned(XrValue v) {
     return xrt_array_ref_clone_value(v);
 }
 
+/* Preserve non-array and already-owned values while materializing a borrowed
+ * array-ref.  Keeping this as an ordinary C helper lets generated code remain
+ * portable to MSVC instead of relying on a GNU statement expression. */
+static inline XrValue xrt_array_ref_ensure_owned(XrValue v) {
+    if (XR_IS_ARRAY_REF(v) && (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0)
+        return xrt_array_ref_to_owned(v);
+    return v;
+}
+
 static inline void xrt_array_ref_release_owned(XrValue v) {
     if (!XR_IS_ARRAY_REF(v) || (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0 || !v.ptr)
         return;

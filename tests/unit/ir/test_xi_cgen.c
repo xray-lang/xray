@@ -1659,6 +1659,44 @@ TEST(cgen_consumed_shared_load_stays_release_materialized) {
     xi_func_free(ir);
 }
 
+TEST(cgen_shared_store_uses_portable_owned_value_helper) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 935, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 936, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_portable_shared_store", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual shared-store function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual shared-store entry block allocated");
+    entry->sealed = true;
+    ir->nshared = 1;
+
+    XiValue *literal = xi_const_int(ir, entry, 42, &int_type);
+    TEST_REQUIRE(literal != NULL, "manual shared-store literal allocated");
+    XiValue *store = xi_value_new(ir, entry, XI_SET_SHARED, &unit_type, 1);
+    TEST_REQUIRE(store != NULL, "manual shared-store operation allocated");
+    store->args[0] = literal;
+    store->aux_int = 0;
+    store->flags |= XI_FLAG_WRITES_MEM | XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, literal);
+
+    XiModule *mod = xi_module_new("test.xr", "test", ir);
+    TEST_REQUIRE(mod != NULL, "manual shared-store module allocated");
+    mod->nslots = 1;
+    ir->module = mod;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "manual shared-store C generation failed");
+    TEST_REQUIRE(!had_error, "manual shared-store fixture should generate");
+    TEST_REQUIRE(contains(code, "xrt_array_ref_ensure_owned("),
+                 "shared stores must use the portable ownership helper");
+    TEST_REQUIRE(!contains(code, "({ XrValue _xsv"),
+                 "shared stores must not emit a GNU statement expression");
+
+    printf("  Generated portable shared store %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_immediate_scalar_constant_inlines_into_as_cast) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 926, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     XrType u64_type = {.kind = XR_KIND_INT, .id = 927, .scalar_rep = XR_NATIVE_U64, .frozen = true};
@@ -9966,6 +10004,7 @@ int main(void) {
     run_cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();
+    run_cgen_shared_store_uses_portable_owned_value_helper();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
     run_cgen_immediate_scalar_constant_inlines_into_place_store();
     run_cgen_clean_narrow_arithmetic_keeps_required_constant_local();

@@ -16,6 +16,7 @@ from stdlib_manifest import load_manifest, load_toml
 
 
 INTAKE_PATH = Path("stdlib/stdlib_module_intake.toml")
+INTAKE_LABEL = INTAKE_PATH.as_posix()
 
 
 def pattern_base(pattern: str) -> str:
@@ -74,30 +75,30 @@ def load_intake(root: Path) -> dict[str, Any]:
 def validate_intake(data: dict[str, Any], root: Path | None = None) -> list[str]:
     errors: list[str] = []
     if data.get("schema") != 1:
-        errors.append(f"{INTAKE_PATH}: schema must be 1")
+        errors.append(f"{INTAKE_LABEL}: schema must be 1")
     if not str(data.get("baseline_ref", "")).strip():
-        errors.append(f"{INTAKE_PATH}: baseline_ref must be non-empty")
+        errors.append(f"{INTAKE_LABEL}: baseline_ref must be non-empty")
     s0 = data.get("s0", {})
     for field in ("owned_patterns", "generated_patterns", "contract_exempt_modules"):
         value = s0.get(field)
         if not isinstance(value, list):
-            errors.append(f"{INTAKE_PATH}: s0.{field} must be a list")
+            errors.append(f"{INTAKE_LABEL}: s0.{field} must be a list")
     for field in ("owned_patterns", "generated_patterns"):
         patterns = [str(value) for value in s0.get(field, ())]
         seen: set[str] = set()
         for pattern in patterns:
             if pattern in seen:
-                errors.append(f"{INTAKE_PATH}: duplicate s0.{field} pattern {pattern}")
+                errors.append(f"{INTAKE_LABEL}: duplicate s0.{field} pattern {pattern}")
             seen.add(pattern)
             if root is not None and not pattern_has_target(root, pattern):
-                errors.append(f"{INTAKE_PATH}: s0.{field} pattern matches no path: {pattern}")
+                errors.append(f"{INTAKE_LABEL}: s0.{field} pattern matches no path: {pattern}")
     owned_patterns = [str(value) for value in s0.get("owned_patterns", ())]
     generated_patterns = [str(value) for value in s0.get("generated_patterns", ())]
     for owned in owned_patterns:
         for generated in generated_patterns:
             if patterns_overlap(owned, generated):
                 errors.append(
-                    f"{INTAKE_PATH}: s0.owned_patterns pattern {owned} overlaps generated pattern {generated}"
+                    f"{INTAKE_LABEL}: s0.owned_patterns pattern {owned} overlaps generated pattern {generated}"
                 )
     lanes = data.get("lane", ())
     slots: set[str] = set()
@@ -106,24 +107,24 @@ def validate_intake(data: dict[str, Any], root: Path | None = None) -> list[str]
     for index, lane in enumerate(lanes, 1):
         missing = sorted({"slot", "task", "branch", "scope"} - set(lane))
         if missing:
-            errors.append(f"{INTAKE_PATH}: lane {index} misses {', '.join(missing)}")
+            errors.append(f"{INTAKE_LABEL}: lane {index} misses {', '.join(missing)}")
         slot = str(lane.get("slot", ""))
         branch = str(lane.get("branch", ""))
         task = lane.get("task")
         if slot in slots:
-            errors.append(f"{INTAKE_PATH}: duplicate lane slot {slot}")
+            errors.append(f"{INTAKE_LABEL}: duplicate lane slot {slot}")
         if branch in branches:
-            errors.append(f"{INTAKE_PATH}: duplicate lane branch {branch}")
+            errors.append(f"{INTAKE_LABEL}: duplicate lane branch {branch}")
         if isinstance(task, int) and task in tasks:
-            errors.append(f"{INTAKE_PATH}: duplicate lane task {task}")
+            errors.append(f"{INTAKE_LABEL}: duplicate lane task {task}")
         slots.add(slot)
         branches.add(branch)
         if isinstance(task, int):
             tasks.add(task)
         else:
-            errors.append(f"{INTAKE_PATH}: lane {slot or index} task must be an integer")
+            errors.append(f"{INTAKE_LABEL}: lane {slot or index} task must be an integer")
     if not lanes:
-        errors.append(f"{INTAKE_PATH}: at least one lane is required")
+        errors.append(f"{INTAKE_LABEL}: at least one lane is required")
     return errors
 
 
