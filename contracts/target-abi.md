@@ -3,7 +3,9 @@
 Status: re-frozen after x86 gained explicit AVX-512F static and runtime-dispatch
 plans, PowerPC64 gained an explicit VSX target plan for both byte orders, and
 LoongArch64 gained an explicit LSX target plan with an executed target gate,
-and AArch64 gained an explicit scalable SVE plan with multi-VL execution.
+and AArch64 gained an explicit scalable SVE plan with multi-VL execution. It
+was re-frozen after scalar/null return literals stopped materializing redundant
+C locals; Windows scalar and auto C-ABI `.text` sections remained byte-exact.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
@@ -90,7 +92,7 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c d11c0870ce6ff89b3aa8b4
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ef2fc8833e6d67c55f64811d15b351f00dd5422bf4784e0afafb302cb69f7a88
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1086f8f9c3ca50d13dd6b448acc7d81f89aeb0b3486b13230b76155fc58ab98c
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
-anchor-sha256: src/aot/xi_cgen.c a80e8fd0572ae8ab46d22acebe17b7b5b99d88cedaf48e73b39fb276f6e21c24
+anchor-sha256: src/aot/xi_cgen.c c66912af2c9a43dd972b58e69a4e81910ec350e4afb0652a052da91dc85f36c0
 anchor-sha256: src/aot/xrt_coll.h 8104b8d30e016cbca6c948bfc83c2b358258ec7ee2309d1e7bd60c967c61e6a0
 anchor-sha256: src/aot/xrt_core_freestanding.h 96f25c3a7e609fc4024a70680ad34d5223ad4f9bc70f9aaec4b08943fec4333a
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7

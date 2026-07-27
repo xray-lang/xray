@@ -6472,11 +6472,12 @@ static bool cg_native_box_value_is_elided_in_aot(XiCgenCtx *ctx, const XiFunc *f
     return seen_use;
 }
 
-/* A scalar constant has no required C storage when every consumer prints the
- * literal through emit_value_as_rep_ctx() (or an equivalent literal-aware
- * helper).  This is deliberately a lowering-shape predicate, not generic DCE:
- * several native emitters still call emit_vref() and therefore require the
- * constant's local even though the Xi value itself is pure. */
+/* A scalar or null constant has no required C storage when every consumer
+ * prints the literal through emit_value_as_rep_ctx() (or an equivalent
+ * literal-aware helper).  This is deliberately a lowering-shape predicate,
+ * not generic DCE: several native emitters still call emit_vref() and
+ * therefore require the constant's local even though the Xi value itself is
+ * pure. */
 static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const XiValue *user,
                                          uint16_t arg_index) {
     if (!ctx || !f || !user || arg_index >= user->nargs)
@@ -6563,7 +6564,8 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
     if (!ctx || !f || !v || v->op != XI_CONST || !v->type || cg_value_has_cell(ctx, v))
         return false;
     if (v->type->kind != XR_KIND_INT && v->type->kind != XR_KIND_BOOL &&
-        v->type->kind != XR_KIND_RUNE && v->type->kind != XR_KIND_FLOAT)
+        v->type->kind != XR_KIND_RUNE && v->type->kind != XR_KIND_FLOAT &&
+        v->type->kind != XR_KIND_NULL)
         return false;
     if (v->flags &
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
@@ -6574,8 +6576,16 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
-        if (blk->control == v)
-            return false;
+        if (blk->control == v) {
+            /* Return lowering prints scalar/null constants through
+             * emit_return_value_as_rep_ctx(), so the Xi control edge does not
+             * require a C local for the literal.  Other terminators still
+             * reference their control value by name and therefore fail
+             * closed. */
+            if (blk->kind != XI_BLOCK_RETURN)
+                return false;
+            seen_use = true;
+        }
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 if (phi->value.args[a] != v)

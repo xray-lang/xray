@@ -3,9 +3,11 @@
 Status: re-frozen after the xxHash parity work made module-owned immutable
 fixed arrays available as hosted static data, kept unhinted return branches
 neutral, made caller-proven raw slices free of pending-error residue, and kept
-AVX-512F values native inside attributed feature islands. The CGen matrix and
-xxHash shape contracts were rerun; residue categories and allowance semantics
-are unchanged.
+AVX-512F values native inside attributed feature islands, and made scalar/null
+return literals storage-free when the return emitter already prints the
+immediate. The CGen matrix, W1-W4 verifier, and xxHash scalar/auto C-ABI code
+section comparison were rerun; residue categories and allowance semantics are
+unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -51,6 +53,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 5edc7b4c5c67b6232610bfb0356d38b8eaa02dfdaa82a35ede8accab75f1e4ab
-anchor-sha256: src/aot/xi_cgen.c a80e8fd0572ae8ab46d22acebe17b7b5b99d88cedaf48e73b39fb276f6e21c24
+anchor-sha256: src/aot/xi_cgen.c c66912af2c9a43dd972b58e69a4e81910ec350e4afb0652a052da91dc85f36c0
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4299def31e4313978dedfda4ff099fbb32de24bb1fe59c6186b137df849bd158
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

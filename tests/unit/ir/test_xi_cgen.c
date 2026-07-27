@@ -1577,6 +1577,67 @@ TEST(cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local) {
     xi_func_free(ir);
 }
 
+TEST(cgen_returned_scalar_constant_emits_immediate_without_local) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 936, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_return_scalar", &int_type);
+    TEST_REQUIRE(ir != NULL, "manual returned-scalar function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual returned-scalar entry block allocated");
+    entry->sealed = true;
+
+    XiValue *literal = xi_const_int(ir, entry, 42, &int_type);
+    TEST_REQUIRE(literal != NULL, "manual returned-scalar literal allocated");
+    xi_block_set_return(entry, literal);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "returned-scalar C generation failed");
+    TEST_REQUIRE(!had_error, "returned-scalar fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_return_scalar");
+    TEST_REQUIRE(fn != NULL, "manual returned-scalar definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual returned-scalar function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v0 = INT64_C(42);"),
+                 "a returned scalar literal must not leave a dead C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "return ") &&
+                     contains_between(fn, fn_end, "INT64_C(42)"),
+                 "the returned scalar literal must remain exact at the return site");
+
+    printf("  Generated immediate returned scalar %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_returned_null_constant_emits_immediate_without_local) {
+    XrType null_type = {.kind = XR_KIND_NULL, .id = 935, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_return_null", &null_type);
+    TEST_REQUIRE(ir != NULL, "manual returned-null function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual returned-null entry block allocated");
+    entry->sealed = true;
+
+    XiValue *literal = xi_const_null(ir, entry, &null_type);
+    TEST_REQUIRE(literal != NULL, "manual returned-null literal allocated");
+    xi_block_set_return(entry, literal);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "returned-null C generation failed");
+    TEST_REQUIRE(!had_error, "returned-null fixture should generate");
+    const char *fn = find_static_function_definition(code, "manual_return_null");
+    TEST_REQUIRE(fn != NULL, "manual returned-null definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "manual returned-null function end emitted");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = XR_NULL_VAL;"),
+                 "a returned null literal must not leave a dead C local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "return XR_NULL_VAL;"),
+                 "the returned null literal must remain exact at the return site");
+
+    printf("  Generated immediate returned null %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 933, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XiFunc *ir = xi_func_new("manual_debug_shared", &u64_type);
@@ -9964,6 +10025,8 @@ int main(void) {
     run_cgen_rep_identical_span_box_shares_immutable_c_local();
     run_cgen_scalar_value_clone_remains_distinct_c_local();
     run_cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local();
+    run_cgen_returned_scalar_constant_emits_immediate_without_local();
+    run_cgen_returned_null_constant_emits_immediate_without_local();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
