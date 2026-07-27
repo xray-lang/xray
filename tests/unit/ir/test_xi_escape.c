@@ -56,6 +56,20 @@ static XrType t_stringbuilder = {
     .frozen = true,
     .instance = {.class_name = "StringBuilder"},
 };
+static XrType t_string = {.kind = XR_KIND_STRING, .id = 11, .frozen = true};
+static XrType t_json = {.kind = XR_KIND_JSON, .id = 12, .frozen = true};
+static XrType t_iterator = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 13,
+    .frozen = true,
+    .instance = {.class_name = "Iterator"},
+};
+static XrType t_custom_iterable = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 14,
+    .frozen = true,
+    .instance = {.class_name = "CustomIterable"},
+};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -721,6 +735,89 @@ static void test_arc_stringbuilder_builtin_result_is_fresh(void) {
     xi_func_free(f);
 }
 
+static XiValue *find_release_for_value(const XiFunc *f, const XiValue *target) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *value = blk->values[i];
+            if (value && value->op == XI_RELEASE && value->nargs == 1 &&
+                value->args[0] == target)
+                return value;
+        }
+    }
+    return NULL;
+}
+
+static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, uint16_t op,
+                                                       const char *method, const char *message) {
+    XiFunc *f = make_func("arc_fresh_iterator_method", &t_int);
+    XiBlock *entry = f->entry;
+    XiValue *receiver = xi_value_new(f, entry, XI_PARAM, receiver_type, 0);
+    set_single_param(f, receiver);
+    XiValue *iterator = xi_value_new(f, entry, op, &t_iterator, 1);
+    iterator->args[0] = receiver;
+    iterator->aux = (void *) method;
+    iterator->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(find_release_for_value(f, iterator) != NULL, true, message);
+    xi_func_free(f);
+}
+
+static void test_arc_builtin_iterator_results_are_fresh(void) {
+    assert_arc_iterator_method_result_is_fresh(
+        &t_string, XI_CALL_METHOD, "runes", "discarded string.runes iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(
+        &t_array, XI_CALL_METHOD_DIRECT, "entriesIterator",
+        "discarded array entries iterator must be released after direct lowering");
+    assert_arc_iterator_method_result_is_fresh(
+        &t_map, XI_CALL_METHOD, "iterator", "discarded map iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(
+        &t_set, XI_CALL_METHOD, "iterator", "discarded set iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(
+        &t_json, XI_CALL_METHOD, "entriesIterator",
+        "discarded Json entries iterator must be released");
+}
+
+static void test_arc_generator_iterator_result_is_fresh(void) {
+    XiFunc *f = make_func("arc_fresh_generator_iterator", &t_int);
+    XiBlock *entry = f->entry;
+    XiValue *callee = xi_value_new(f, entry, XI_PARAM, &t_func, 0);
+    set_single_param(f, callee);
+    XiValue *iterator = xi_value_new(f, entry, XI_GEN_CALL, &t_iterator, 1);
+    iterator->args[0] = callee;
+    iterator->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(find_release_for_value(f, iterator) != NULL, true,
+              "discarded generator iterator must be released as a fresh owner");
+    xi_func_free(f);
+}
+
+static void test_arc_custom_iterator_method_stays_alias_uncertain(void) {
+    XiFunc *f = make_func("arc_custom_iterator_alias", &t_int);
+    XiBlock *entry = f->entry;
+    XiValue *receiver = xi_value_new(f, entry, XI_PARAM, &t_custom_iterable, 0);
+    set_single_param(f, receiver);
+    XiValue *iterator = xi_value_new(f, entry, XI_CALL_METHOD, &t_iterator, 1);
+    iterator->args[0] = receiver;
+    iterator->aux = (void *) "iterator";
+    iterator->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(find_release_for_value(f, iterator) == NULL, true,
+              "user-defined iterator method must remain alias-uncertain");
+    xi_func_free(f);
+}
+
 static void test_arc_err_check_carries_cold_edge_cleanup(void) {
     XiFunc *f = make_func("arc_err_check_cleanup", &t_int);
     XiBlock *entry = f->entry;
@@ -1118,6 +1215,9 @@ int main(void) {
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
+    test_arc_builtin_iterator_results_are_fresh();
+    test_arc_generator_iterator_result_is_fresh();
+    test_arc_custom_iterator_method_stays_alias_uncertain();
     test_arc_err_check_carries_cold_edge_cleanup();
     test_arc_err_check_without_throwing_source_stays_operand_free();
     test_arc_span_borrow_flows_through_phi();

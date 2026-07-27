@@ -835,6 +835,9 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         goto fail;
 
     xi_backend_lower(ir);
+    /* Mirror the production AOT pipeline: unit ERR_CHECK cleanup operands are
+     * published only after representation and backend lowering are final. */
+    xi_arc_attach_error_cleanups(ir);
     XiBackendProgram *backend = xi_program_plan_backend(repped, error, sizeof(error));
     if (!backend)
         goto fail;
@@ -4058,8 +4061,8 @@ TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
     assert(fn_end != NULL && "copyRunes function body should be bounded");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "exact built-in StringBuilder/Iterator helpers must not retain impossible error polls");
-    assert(count_between(fn, fn_end, "xrt_release(") >= 1 &&
-           "fresh StringBuilder owner must be released after producing the returned string");
+    assert(count_between(fn, fn_end, "xrt_release(") >= 2 &&
+           "fresh StringBuilder and Iterator owners must both be released");
 
     xr_free(code);
     xi_func_free(ir);

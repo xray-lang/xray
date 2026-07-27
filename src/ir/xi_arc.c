@@ -627,12 +627,44 @@ static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValu
                       strcmp(member, "allocAligned") == 0);
 }
 
+/* Builtin collection/string iterator factories always allocate a new AOT
+ * iterator shell. Match both the exact receiver kind and the zero-argument
+ * method so user-defined structural lookalikes remain alias-uncertain. */
+static bool arc_builtin_iterator_method_returns_fresh(const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 1 ||
+        !v->args[0] || !v->aux)
+        return false;
+    const XrType *receiver = v->args[0]->type;
+    const char *method = (const char *) v->aux;
+    if (!receiver)
+        return false;
+    switch (receiver->kind) {
+        case XR_KIND_STRING:
+            return strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0 ||
+                   strcmp(method, "entriesIterator") == 0;
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_JSON:
+            return strcmp(method, "iterator") == 0 || strcmp(method, "entriesIterator") == 0;
+        case XR_KIND_SET:
+            return strcmp(method, "iterator") == 0;
+        default:
+            return false;
+    }
+}
+
 static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_GEN_CALL)
+        return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
         xr_type_is_named_class(v->type, "StringBuilder"))
         return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
+        return true;
+    if (arc_builtin_iterator_method_returns_fresh(v))
         return true;
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
         return false;

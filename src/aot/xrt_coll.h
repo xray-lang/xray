@@ -3367,9 +3367,9 @@ typedef struct {
 
 /* =========================================================================
  * Iterator runtime — backs the for-in iterator protocol over Map / Set / Json / string.
- * The iterator borrows its source by value (no extra RC: AOT collections are
- * not individually reclaimed) and walks dense entries, typed order[], Json
- * field slots, or UTF-8 scalar boundaries.
+ * The iterator owns one reference to its source so an in-progress traversal
+ * cannot outlive the collection or ARC string it walks. It releases that
+ * reference from its builtin ARC destructor.
  * ========================================================================= */
 
 #define XRT_ITER_KEYS 0      /* map: yield key */
@@ -3393,19 +3393,18 @@ typedef struct {
 #ifdef XRT_ENABLE_GENERATORS
 XR_FUNC int xrt_gen_iter_has_next(xrt_iterator_t *it);
 XR_FUNC XrValue xrt_gen_iter_next(xrt_iterator_t *it);
+XR_FUNC void xrt_gen_iter_destroy(xrt_iterator_t *it);
 #endif
 
 static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
-    xrt_iterator_t *it = (xrt_iterator_t *) XRT_MALLOC(sizeof(xrt_iterator_t));
-    if (XR_UNLIKELY(!it)) {
-        fprintf(stderr, "xrt_iterator_new: out of memory\n");
-        abort();
-    }
+    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc_heap(sizeof(xrt_iterator_t));
+    xrt_arc_mark_builtin(it, XRT_ARC_KIND_ITERATOR);
     it->coll = coll;
     it->cursor = 0;
     it->index = 0;
     it->kind = kind;
     it->gen = NULL;
+    xrt_retain(coll);
     return xr_mkptr(it, XR_TAG_ITERATOR);
 }
 
@@ -5072,6 +5071,21 @@ static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
     xrt_release(old);
 }
 
+static inline void xrt_iterator_destroy_builtin(void *obj) {
+    xrt_iterator_t *it = (xrt_iterator_t *) obj;
+    if (!it)
+        return;
+    if (it->kind == XRT_ITER_GENERATOR) {
+#ifdef XRT_ENABLE_GENERATORS
+        xrt_gen_iter_destroy(it);
+        return;
+#endif
+    }
+    XrValue source = it->coll;
+    it->coll = XR_NULL_VAL;
+    xrt_release(source);
+}
+
 static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
     if (!obj)
         return;
@@ -5090,6 +5104,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
             break;
         case XRT_ARC_KIND_STRBUF:
             xrt_strbuf_destroy_builtin(obj);
+            break;
+        case XRT_ARC_KIND_ITERATOR:
+            xrt_iterator_destroy_builtin(obj);
             break;
 #ifdef XRT_ENABLE_REGEX
         case XRT_ARC_KIND_REGEX:

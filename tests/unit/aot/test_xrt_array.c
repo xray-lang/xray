@@ -598,6 +598,30 @@ static void test_stringbuilder_release_frees_arc_object_and_buffer(void) {
                   "final StringBuilder release frees its byte buffer and ARC object");
 }
 
+static void test_iterator_release_balances_source_and_arc_object(void) {
+    reset_alloc_counts();
+    XrValue source = xrt_str_alloc(3);
+    memcpy(xr_str_buf(source), "abc", 3);
+    XrObjHeader *source_header = XRT_ARC_HDR(source.ptr);
+    XrValue iterator = xrt_iterator_new(source, XRT_ITER_VALUES);
+    XrObjHeader *iterator_header = XRT_ARC_HDR(iterator.ptr);
+
+    ASSERT_EQ_INT(iterator.tag, XR_TAG_ITERATOR, "iterator uses its AOT value tag");
+    ASSERT_EQ_INT(iterator_header->_rsv, XRT_ARC_KIND_ITERATOR,
+                  "iterator header selects the builtin destructor");
+    ASSERT_EQ_INT(atomic_load_explicit(&source_header->refcount, memory_order_relaxed), 1,
+                  "iterator retains one source reference");
+    ASSERT_EQ_INT(g_malloc_count, 2, "source and iterator each allocate one ARC object");
+
+    xrt_release(source);
+    ASSERT_EQ_INT(g_free_count, 0, "dropping the caller source keeps iterator storage alive");
+    ASSERT_EQ_INT(atomic_load_explicit(&source_header->refcount, memory_order_relaxed), 0,
+                  "iterator remains the sole source owner");
+    xrt_release(iterator);
+    ASSERT_EQ_INT(g_free_count, 2,
+                  "final iterator release frees both retained source and iterator shell");
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -649,6 +673,7 @@ int main(void) {
     test_byte_array_raw_helpers_share_core_rules();
     test_byte_runtime_u8_guards_are_defensive();
     test_stringbuilder_release_frees_arc_object_and_buffer();
+    test_iterator_release_balances_source_and_arc_object();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

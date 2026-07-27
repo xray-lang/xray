@@ -11,7 +11,6 @@
 #include "xrt_coll.h"
 #include "xrt_class.h"
 #include "xrt_defer.h"
-#include "../base/xmalloc.h"
 #include "../coro/xaot_coro.h"
 
 static void xrt_gen_iter_finish(xrt_iterator_t *it) {
@@ -75,6 +74,15 @@ XrValue xrt_gen_iter_next(xrt_iterator_t *it) {
     return yielded;
 }
 
+void xrt_gen_iter_destroy(xrt_iterator_t *it) {
+    if (!it)
+        return;
+    XrValue buffered = it->coll;
+    it->coll = XR_NULL_VAL;
+    xrt_release(buffered);
+    xrt_gen_iter_finish(it);
+}
+
 XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoroDesc *desc, void *frame) {
     if (!ctx || !ctx->runtime || !desc || !desc->resume || !frame)
         return XR_NULL_VAL;
@@ -84,11 +92,8 @@ XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoroDesc *de
     if (!gen)
         return XR_NULL_VAL;
 
-    xrt_iterator_t *it = (xrt_iterator_t *) xr_malloc(sizeof(xrt_iterator_t));
-    if (!it) {
-        xr_coro_destroy(gen);
-        return XR_NULL_VAL;
-    }
+    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc_heap(sizeof(xrt_iterator_t));
+    xrt_arc_mark_builtin(it, XRT_ARC_KIND_ITERATOR);
     it->coll = XR_NULL_VAL;
     it->cursor = 0;
     it->index = 0;

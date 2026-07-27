@@ -118,6 +118,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_NET_LISTENER 12u
 #define XRT_ARC_KIND_JSON 13u
 #define XRT_ARC_KIND_STRBUF 14u
+#define XRT_ARC_KIND_ITERATOR 15u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -333,7 +334,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
-           v.tag == XR_TAG_CELL ||
+           v.tag == XR_TAG_CELL || v.tag == XR_TAG_ITERATOR ||
            v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
            v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
            v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||

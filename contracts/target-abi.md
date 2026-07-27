@@ -1,9 +1,11 @@
 # Cross-target ABI contract
 
 Status: re-frozen after raw-pointer aggregate loads and ordinary slices were
-classified as borrowed views, StringBuilder storage became ARC-managed, and
-implicit error cleanup was confined to the existing cold propagation branch.
-The public target and Slice ABIs are unchanged.
+classified as borrowed views, StringBuilder and Iterator storage became
+ARC-managed, and implicit error cleanup was confined to the existing cold
+propagation branch. Iterator values retain their traversed source without
+changing their public value tag or body layout. The public target and Slice
+ABIs are unchanged.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
@@ -91,7 +93,7 @@ anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c a3a7d2560773458acc75b5be1d
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1086f8f9c3ca50d13dd6b448acc7d81f89aeb0b3486b13230b76155fc58ab98c
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 68479cd8cd8feb284ca4267d157571398d49d22d5d892cdecf5aa3614c936cae
 anchor-sha256: src/aot/xi_cgen.c df2091a9d8695144790313dd4dfbf77981cb31f037bf6d2f13ca9ea2c8c4f77f
-anchor-sha256: src/aot/xrt_coll.h d451eb75d6848fcdefe85f67c4cc70244036b1173233760c4874d088ed22b110
+anchor-sha256: src/aot/xrt_coll.h 4425388174703c40ccba559a564e947ebd0737e359445134a324fa710bfa00b3
 anchor-sha256: src/aot/xrt_core_freestanding.h 96f25c3a7e609fc4024a70680ad34d5223ad4f9bc70f9aaec4b08943fec4333a
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 19122939aa291b24ed6091cc2f66fb97af3d472a3c4b07b827237a633511fb80
