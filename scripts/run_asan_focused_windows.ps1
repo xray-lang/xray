@@ -68,13 +68,44 @@ if ($toolLine) {
     # but CMAKE_LINKER lives beside cl.exe and both MSVC ASan runtime DLLs.
     $compilerDir = Split-Path -Parent $toolLine.Matches[0].Groups[1].Value
     if (Test-Path -LiteralPath $compilerDir -PathType Container) {
-        $asanRuntime = Get-ChildItem -LiteralPath $compilerDir -File `
-            -Filter 'clang_rt.asan*_dynamic-x86_64.dll' |
-            Select-Object -First 1
-        if (-not $asanRuntime) {
+        $asanRuntimes = @(Get-ChildItem -LiteralPath $compilerDir -File `
+            -Filter 'clang_rt.asan*_dynamic-x86_64.dll')
+        if ($asanRuntimes.Count -eq 0) {
             throw "MSVC ASan runtime DLL is missing beside the compiler: $compilerDir"
         }
         $env:PATH = "$compilerDir;$env:PATH"
+
+        # Keep the focused build directly runnable outside this PowerShell
+        # process as well. Windows resolves a DLL beside an executable before
+        # PATH, so stage both the release and debug ASan runtimes when the
+        # active MSVC toolset provides them. This also prevents an interactive
+        # missing-DLL dialog from blocking unattended validation.
+        $configurationSuffix = "$([System.IO.Path]::DirectorySeparatorChar)$configuration"
+        $asanOutputDirectories = @(Get-ChildItem -LiteralPath $buildDir -Recurse -File `
+            -Filter '*.exe' |
+            Where-Object {
+                $_.DirectoryName.EndsWith(
+                    $configurationSuffix,
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )
+            } |
+            ForEach-Object { $_.Directory.FullName } |
+            Sort-Object -Unique)
+        if ($asanOutputDirectories.Count -eq 0) {
+            throw "Windows ASan executable output directories are missing below: $buildDir"
+        }
+        foreach ($asanOutputDirectory in $asanOutputDirectories) {
+            foreach ($asanRuntime in $asanRuntimes) {
+                $stagedAsanRuntime = Join-Path $asanOutputDirectory $asanRuntime.Name
+                Copy-Item -LiteralPath $asanRuntime.FullName `
+                    -Destination $stagedAsanRuntime -Force
+                if ((Get-FileHash -Algorithm SHA256 -LiteralPath $asanRuntime.FullName).Hash -ne
+                    (Get-FileHash -Algorithm SHA256 -LiteralPath $stagedAsanRuntime).Hash) {
+                    throw "Windows ASan runtime staging verification failed: $stagedAsanRuntime"
+                }
+                Write-Host "== [asan_focused/windows] staged runtime: $stagedAsanRuntime"
+            }
+        }
     }
 } else {
     throw "cannot locate the MSVC tool directory in $cache"
