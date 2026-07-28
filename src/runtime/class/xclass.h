@@ -217,9 +217,10 @@ struct XrClass {
     /* === Dynamic Layout (hidden class transitions) === */
     // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
     // hidden classes: adding a field creates a child class (transition).
-    // The head is atomic: the list only grows and nodes are immortal &
-    // immutable once published (release-store), so readers traverse lock-free
-    // via an acquire-load while writers serialize on core->metadata_lock (P1-3).
+    // The head is atomic: the list only grows and nodes are immutable once
+    // published (release-store). They share the isolate-lifetime class arena,
+    // so readers traverse lock-free via an acquire-load while writers serialize
+    // on core->metadata_lock (P1-3).
     _Atomic(struct XrClassTransition *) transitions;  // Linked list of transitions
     struct XrClass *transition_parent;                // Parent class in transition chain
     int transition_symbol;                            // Symbol that caused transition from parent

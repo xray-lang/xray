@@ -464,6 +464,27 @@ TEST(scope_lookup) {
     xa_scope_free(global);
 }
 
+TEST(scope_owns_replaced_symbols_until_teardown) {
+    XaScope *scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+    XaSymbol *first = xa_symbol_new("value", XA_SYM_VARIABLE);
+    XaSymbol *replacement = xa_symbol_new("value", XA_SYM_VARIABLE);
+
+    xa_scope_add_symbol(scope, first);
+    xa_scope_add_symbol(scope, replacement);
+
+    ASSERT(xa_scope_lookup_local(scope, "value") == replacement);
+    ASSERT(first->scope == scope);
+    ASSERT(replacement->scope == scope);
+
+    ASSERT(xa_scope_remove_symbol(scope, "value"));
+    ASSERT(replacement->scope == NULL);
+    xa_symbol_free(replacement);
+
+    // LeakSanitizer verifies that the replaced first binding is still owned
+    // and reclaimed by the scope even though it is no longer in the lookup map.
+    xa_scope_free(scope);
+}
+
 // ============================================================================
 // Analyzer tests
 // ============================================================================
@@ -5844,6 +5865,7 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     ASSERT(box != NULL);
     box->links.type = xr_type_new_class(a->isolate, "Box");
     box->links.class_info = xa_class_info_new("Box");
+    box->links.owns_class_info = true;
     xa_scope_add_symbol(a->global_scope, box);
 
     XrArena arena;
@@ -6147,6 +6169,7 @@ int main(void) {
     RUN_TEST(symbol_create);
     RUN_TEST(scope_basic);
     RUN_TEST(scope_lookup);
+    RUN_TEST(scope_owns_replaced_symbols_until_teardown);
 
     printf("\nAnalyzer tests:\n");
     RUN_TEST(analyzer_create);

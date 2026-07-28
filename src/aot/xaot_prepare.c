@@ -31,6 +31,31 @@ static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
     return xaot_value_reps_equal(a, b);
 }
 
+static void prepare_value_plan_set_rep(XaotValuePlan *plan, XaotValueRep rep) {
+    if (!plan)
+        return;
+    if ((plan->rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0) {
+        if (plan->rep.c_type == rep.c_type)
+            rep.flags |= XAOT_VALUE_FLAG_OWNED_C_TYPE;
+        else
+            xaot_value_rep_dispose(&plan->rep);
+    }
+    /* A borrowed dynamic spelling may originate in another value plan.  Those
+     * plans are refined independently during prepare, so the source can drop
+     * its old spelling before CGen consumes this row.  Give every persistent
+     * value plan its own copy; process-lifetime/static spellings stay borrowed
+     * and allocation-free. */
+    if (rep.c_type && (rep.flags & XAOT_VALUE_FLAG_DYNAMIC_C_TYPE) != 0 &&
+        (rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) == 0) {
+        char *owned_c_type = xr_strdup(rep.c_type);
+        if (!owned_c_type)
+            abort();
+        rep.c_type = owned_c_type;
+        rep.flags |= XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    }
+    plan->rep = rep;
+}
+
 static XaotValueRep ptr_value_rep_for_type(const XrType *type) {
     XaotValueRep rep;
     memset(&rep, 0, sizeof(rep));
@@ -85,7 +110,7 @@ static void apply_unit_enum_ordinal_value_plan(XaotBundle *bundle, XaotValuePlan
         !prepare_value_is_unit_enum_ordinal_member(bundle, vp->func, vp->value) &&
         !prepare_value_is_unit_enum_ordinal_compare_member(bundle, vp->func, vp->value))
         return;
-    vp->rep = prepare_enum_ordinal_value_rep(vp->value->type);
+    prepare_value_plan_set_rep(vp, prepare_enum_ordinal_value_rep(vp->value->type));
 }
 
 static bool value_can_use_native_class_ptr(const XaotBundle *bundle, const XiValue *value) {
@@ -144,7 +169,7 @@ static void apply_native_class_ptr_value_plan(XaotBundle *bundle, XaotValuePlan 
         return;
     if (value_can_use_native_class_ptr(bundle, vp->value) ||
         value_can_use_native_ref_field_ptr(bundle, vp->func, vp->value))
-        vp->rep = ptr_value_rep_for_type(vp->value->type);
+        prepare_value_plan_set_rep(vp, ptr_value_rep_for_type(vp->value->type));
 }
 
 static void record_value_stats(XaotPrepareStats *stats, XaotValueKind kind) {
@@ -3833,7 +3858,7 @@ static bool prepare_apply_param_abi_value_plan(XaotBundle *bundle, const XiFunc 
      * tagged/closure-object ABI. */
     if (func_plan->abi.kind != XAOT_ABI_NATIVE && (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0)
         return true;
-    vp->rep = xaot_abi_slot_value_rep(slot);
+    prepare_value_plan_set_rep(vp, xaot_abi_slot_value_rep(slot));
     return true;
 }
 
@@ -3879,14 +3904,14 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                     xaot_abi_native_value_rep(bundle, func, blk->values[vi]);
                 if (aggregate_rep.kind == XAOT_VALUE_AGGREGATE &&
                     (aggregate_rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0)
-                    vp->rep = aggregate_rep;
+                    prepare_value_plan_set_rep(vp, aggregate_rep);
             }
             if (blk->values[vi]->xa_intrinsic_id != 0 && blk->values[vi]->op >= XI_VEC_LOAD &&
                 blk->values[vi]->op <= XI_VEC_REDUCE_ADD) {
                 XaotValueRep intrinsic_rep =
                     xaot_abi_native_value_rep(bundle, func, blk->values[vi]);
                 if (intrinsic_rep.kind != XAOT_VALUE_TAGGED)
-                    vp->rep = intrinsic_rep;
+                    prepare_value_plan_set_rep(vp, intrinsic_rep);
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_unit_enum_ordinal_value_plan(bundle, vp);
@@ -4068,6 +4093,7 @@ static XaotValueRep prepare_vector_rep(const XaotValueRep *base, const XiValue *
     rep.kind = XAOT_VALUE_VECTOR;
     rep.c_type = prepare_vector_native_c_type(features, native_type, lanes,
                                               xi_vec_shape_is_scalable(value->aux_int));
+    rep.flags &= ~(XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE);
     rep.vector_native_type = native_type;
     rep.vector_lanes = lanes;
     rep.vector_width_bytes = (uint8_t) (prepare_vector_lane_bytes(native_type) * (unsigned) lanes);
@@ -4097,7 +4123,7 @@ static bool prepare_vector_propagate_identity_plan(XaotBundle *bundle, XaotValue
     }
     if (prepare_vector_reps_same(plan->rep, first->rep))
         return false;
-    plan->rep = first->rep;
+    prepare_value_plan_set_rep(plan, xaot_value_rep_borrow(first->rep));
     plan->rep.type = value->type;
     return true;
 }
@@ -4186,7 +4212,8 @@ static void prepare_target_vector_value_plans(XaotBundle *bundle) {
             continue;
         if (prepare_vector_op_has_vector_result(value) &&
             prepare_vector_native_op_supported(bundle->target_simd_features, value))
-            plan->rep = prepare_vector_rep(&plan->rep, value, bundle->target_simd_features);
+            prepare_value_plan_set_rep(
+                plan, prepare_vector_rep(&plan->rep, value, bundle->target_simd_features));
     }
     for (uint32_t iteration = 0; iteration < bundle->nvalue_plans; iteration++) {
         bool changed = false;
@@ -4204,7 +4231,8 @@ static void prepare_target_vector_value_plans(XaotBundle *bundle) {
                 continue;
             if (!prepare_vector_identity_inputs_still_native(bundle, plan->value, plan->rep) ||
                 prepare_vector_value_has_unsupported_use(bundle, plan->func, plan->value)) {
-                plan->rep = xaot_abi_native_value_rep(bundle, plan->func, plan->value);
+                prepare_value_plan_set_rep(
+                    plan, xaot_abi_native_value_rep(bundle, plan->func, plan->value));
                 changed = true;
             }
         }
@@ -4252,7 +4280,7 @@ static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
             bundle->error_msg = "AOT aggregate return control has no value plan";
             return false;
         }
-        vp->rep = ret_rep;
+        prepare_value_plan_set_rep(vp, xaot_value_rep_borrow(ret_rep));
     }
     return true;
 }
@@ -4323,7 +4351,7 @@ static bool prepare_identity_aggregate_rep(XaotBundle *bundle, const XiValue *va
     const XaotValuePlan *arg_plan = xaot_bundle_find_value_plan(bundle, value->args[0]);
     if (!arg_plan || !value_rep_is_propagating_aggregate(arg_plan->rep))
         return false;
-    *out_rep = arg_plan->rep;
+    *out_rep = xaot_value_rep_borrow(arg_plan->rep);
     return true;
 }
 
@@ -4363,7 +4391,7 @@ static void prepare_mark_aggregate_value_rep(XaotBundle *bundle, XiValue *value,
         return;
     XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, value);
     if (vp && !value_reps_equal(vp->rep, rep)) {
-        vp->rep = rep;
+        prepare_value_plan_set_rep(vp, xaot_value_rep_borrow(rep));
         *changed = true;
     }
     switch (value->op) {
@@ -4408,7 +4436,7 @@ static bool prepare_apply_error_channel_aggregate_rep(XaotBundle *bundle, XiValu
         if (!vp || !prepare_compact_adt_value_rep_for_type(bundle, value->type, &rep))
             return false;
         if (!value_reps_equal(vp->rep, rep)) {
-            vp->rep = rep;
+            prepare_value_plan_set_rep(vp, xaot_value_rep_borrow(rep));
             *changed = true;
         }
         prepare_mark_aggregate_value_rep(bundle, value, rep, changed, 0);
@@ -4448,11 +4476,11 @@ static bool prepare_apply_freestanding_typed_catch_rep(XaotBundle *bundle, XiVal
     if (!narrow_plan || !catch_plan)
         return false;
     if (!value_reps_equal(narrow_plan->rep, rep)) {
-        narrow_plan->rep = rep;
+        prepare_value_plan_set_rep(narrow_plan, xaot_value_rep_borrow(rep));
         *changed = true;
     }
     if (!value_reps_equal(catch_plan->rep, rep)) {
-        catch_plan->rep = rep;
+        prepare_value_plan_set_rep(catch_plan, xaot_value_rep_borrow(rep));
         *changed = true;
     }
     return true;
@@ -4496,7 +4524,7 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
                 !prepare_identity_aggregate_rep(bundle, value, &rep))
                 continue;
             if (!value_reps_equal(vp->rep, rep)) {
-                vp->rep = rep;
+                prepare_value_plan_set_rep(vp, xaot_value_rep_borrow(rep));
                 *changed = true;
             }
             prepare_mark_aggregate_value_rep(bundle, value, rep, changed, 0);
@@ -4551,8 +4579,8 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
     }
     step->target_func = target;
     step->arg_index = arg_index;
-    step->from_rep = arg_plan->rep;
-    step->to_rep = slot_rep;
+    step->from_rep = xaot_value_rep_borrow(arg_plan->rep);
+    step->to_rep = xaot_value_rep_borrow(slot_rep);
     bundle->stats.boundary_count++;
     return true;
 }
@@ -4576,7 +4604,7 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     }
     ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
     if (ret_rep.kind == XAOT_VALUE_AGGREGATE) {
-        call_plan->rep = ret_rep;
+        prepare_value_plan_set_rep(call_plan, xaot_value_rep_borrow(ret_rep));
         return true;
     }
     if (value_reps_equal(ret_rep, call_plan->rep))
@@ -4589,8 +4617,8 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
         return false;
     }
     step->target_func = target;
-    step->from_rep = ret_rep;
-    step->to_rep = call_plan->rep;
+    step->from_rep = xaot_value_rep_borrow(ret_rep);
+    step->to_rep = xaot_value_rep_borrow(call_plan->rep);
     bundle->stats.boundary_count++;
     return true;
 }
@@ -4623,7 +4651,7 @@ static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFun
                 bundle->error_msg = "AOT aggregate direct call result has no value plan";
                 return false;
             }
-            call_plan->rep = ret_rep;
+            prepare_value_plan_set_rep(call_plan, xaot_value_rep_borrow(ret_rep));
         }
     }
     return true;
@@ -4665,7 +4693,7 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
                  * pointer conversion. */
                 XaotValuePlan *place_plan = xaot_bundle_find_value_plan_mut(bundle, place);
                 if (place_plan)
-                    place_plan->rep = slot->rep;
+                    prepare_value_plan_set_rep(place_plan, xaot_value_rep_borrow(slot->rep));
                 if (value_rep_is_struct_aggregate(slot->pointee_rep)) {
                     bool changed = false;
                     prepare_mark_aggregate_value_rep(bundle, place->args[0], slot->pointee_rep,
@@ -4681,7 +4709,8 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
                      * projects the element pointer. */
                     XaotValuePlan *source = xaot_bundle_find_value_plan_mut(bundle, place->args[0]);
                     if (source)
-                        source->rep = slot->pointee_rep;
+                        prepare_value_plan_set_rep(source,
+                                                   xaot_value_rep_borrow(slot->pointee_rep));
                 }
             }
         }
@@ -4718,7 +4747,7 @@ static bool prepare_seed_place_load_aggregate_reps(XaotBundle *bundle, XiFunc *f
                 continue;
             XaotValuePlan *load_plan = xaot_bundle_find_value_plan_mut(bundle, load);
             if (load_plan)
-                load_plan->rep = pointee;
+                prepare_value_plan_set_rep(load_plan, xaot_value_rep_borrow(pointee));
         }
     }
     return true;
@@ -4787,8 +4816,8 @@ static bool prepare_func_boundary_steps(XaotBundle *bundle, const XaotFuncPlan *
             bundle->error_msg = "failed to allocate AOT function boundary step";
             return false;
         }
-        step->from_rep = func_plan->abi.ret.rep;
-        step->to_rep = func_plan->abi.ret.rep;
+        step->from_rep = xaot_value_rep_borrow(func_plan->abi.ret.rep);
+        step->to_rep = xaot_value_rep_borrow(func_plan->abi.ret.rep);
         bundle->stats.boundary_count++;
     }
 

@@ -11,6 +11,7 @@
  */
 
 #include "xi_pipeline.h"
+#include "xi_semantic_snapshot.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "xi_lower.h"
 #include "xi_verify.h"
@@ -536,6 +537,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         ir = xi_pipeline_release_stage_handle(program, current_stage);
         program = NULL;
         res.ir = ir;
+        char snapshot_error[256];
+        if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
+            xr_vm_proto_free(proto);
+            res.proto = NULL;
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_EMIT,
+                                  XI_VERIFY_EMISSION, ir, NULL, NULL,
+                                  snapshot_error);
+            return res;
+        }
         /* Transfer Xi IR ownership to proto for AOT direct lowering.
          * Null res.ir so xi_pipeline_result_free won't double-free. */
         if (!xi_emit_attach_ir(proto, ir)) {
@@ -552,6 +562,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         ir = xi_pipeline_release_stage_handle(program, current_stage);
         program = NULL;
         res.ir = ir;
+        char snapshot_error[256];
+        if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_BACKEND,
+                                  XI_VERIFY_AOT_PLAN, ir, NULL, NULL,
+                                  snapshot_error);
+            return res;
+        }
     }
 
     res.status = XI_PIPE_OK;
@@ -677,6 +694,13 @@ XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isol
     XiEmitStatus emit_st = xi_emit(ir, isolate, &proto);
     if (emit_st != XI_EMIT_OK) {
         fprintf(stderr, "[xi_pipeline] emit_ir failed: %s\n", xi_emit_status_str(emit_st));
+        return NULL;
+    }
+
+    char snapshot_error[256];
+    if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
+        fprintf(stderr, "[xi_pipeline] semantic snapshot failed: %s\n", snapshot_error);
+        xr_vm_proto_free(proto);
         return NULL;
     }
 

@@ -327,6 +327,50 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
     return layout;
 }
 
+/* Analyzer aggregate layouts may contain names borrowed from XaSymbol and are
+ * therefore valid only while the analyzer is alive.  Class descriptors live
+ * with the emitted proto/IR, so materialize a complete Xi-arena copy instead
+ * of leaking analyzer ownership into bytecode emission or VM execution. */
+static XrAggregateLayout *class_clone_value_layout(XiLower *l,
+                                                   const XrAggregateLayout *source,
+                                                   uint32_t depth) {
+    if (!l || !l->func || !source || depth > 16 || source->field_count > XR_MAX_AGG_FIELDS)
+        return NULL;
+
+    XrAggregateLayout *copy =
+        (XrAggregateLayout *) xi_func_arena_alloc(l->func, sizeof(XrAggregateLayout));
+    if (!copy)
+        return NULL;
+    *copy = *source;
+    copy->layout_id = 0;
+    copy->field_names = NULL;
+
+    if (source->field_count > 0) {
+        copy->field_names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(const char *) * (size_t) source->field_count));
+        if (!copy->field_names)
+            return NULL;
+    }
+
+    for (uint16_t i = 0; i < source->field_count; i++) {
+        copy->field_names[i] =
+            source->field_names && source->field_names[i]
+                ? arena_strdup(l->func, source->field_names[i])
+                : NULL;
+        if (source->field_names && source->field_names[i] && !copy->field_names[i])
+            return NULL;
+
+        copy->fields[i].sub_layout_id = 0;
+        if (source->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            copy->fields[i].sub_layout =
+                class_clone_value_layout(l, source->fields[i].sub_layout, depth + 1);
+            if (!copy->fields[i].sub_layout)
+                return NULL;
+        }
+    }
+    return copy;
+}
+
 /* Lower a class method body to a child XiFunc.
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
@@ -710,6 +754,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->super_name = arena_strdup(l->func, cd->super_name);
     data->generic_origin_name = arena_strdup(l->func, cd->generic_origin_name);
     data->display_name = arena_strdup(l->func, cd->display_name);
+    data->source_file = NULL;
+    data->instance_field_names = NULL;
+    data->instance_field_source_node_ids = NULL;
+    data->instance_field_count = 0;
     data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
     data->is_monomorphized = cd->is_monomorphized;
     /* Copy concrete type arg display names (arena-duplicated) */
@@ -731,8 +779,50 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->clinit_child_idx = clinit_idx;
     data->derive_flags = class_decl_derive_flags(cd->attributes, cd->attr_count);
 
-    /* Propagate struct_layout from analyzer for VALUE_TYPE classes.
-     * The layout is owned by XrClassInfo and outlives the IR arena. */
+    /* Preserve the exact declaration-field identity consumed by derived
+     * Hash/Eq/Clone emission.  AOT runs after the analyzer and AST may have
+     * been destroyed, so field recovery must be an explicit Xi contract. */
+    int declared_instance_fields = 0;
+    for (int i = 0; i < cd->field_count; i++) {
+        AstNode *field_node = cd->fields ? cd->fields[i] : NULL;
+        if (field_node && field_node->type == AST_FIELD_DECL &&
+            !field_node->as.field_decl.is_static)
+            declared_instance_fields++;
+    }
+    if (declared_instance_fields > UINT16_MAX) {
+        l->had_error = true;
+        return;
+    }
+    if (declared_instance_fields > 0) {
+        size_t names_size = (size_t) declared_instance_fields * sizeof(*data->instance_field_names);
+        size_t ids_size = (size_t) declared_instance_fields *
+                          sizeof(*data->instance_field_source_node_ids);
+        data->instance_field_names =
+            (const char **) xi_func_arena_alloc(l->func, (uint32_t) names_size);
+        data->instance_field_source_node_ids =
+            (uint32_t *) xi_func_arena_alloc(l->func, (uint32_t) ids_size);
+        if (!data->instance_field_names || !data->instance_field_source_node_ids) {
+            l->had_error = true;
+            return;
+        }
+        uint16_t field_index = 0;
+        for (int i = 0; i < cd->field_count; i++) {
+            AstNode *field_node = cd->fields ? cd->fields[i] : NULL;
+            if (!field_node || field_node->type != AST_FIELD_DECL ||
+                field_node->as.field_decl.is_static)
+                continue;
+            data->instance_field_names[field_index] =
+                arena_strdup(l->func, field_node->as.field_decl.name);
+            data->instance_field_source_node_ids[field_index] =
+                xi_lower_source_node_id(l, field_node);
+            field_index++;
+        }
+        data->instance_field_count = field_index;
+    }
+
+    /* VALUE_TYPE layouts are copied into the Xi arena.  Analyzer layouts
+     * borrow symbol metadata and end with the compiler context; emitted
+     * descriptors instead share the IR/proto lifetime. */
     data->struct_layout = NULL;
     data->instance_layout = NULL;
     data->inherited_field_count = 0;
@@ -745,8 +835,16 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
             XrClassInfo *class_info = links ? links->class_info : NULL;
             data->class_info = class_info;
-            if (class_info && class_info->struct_layout)
-                data->struct_layout = class_info->struct_layout;
+            if (class_info)
+                data->source_file = arena_strdup(l->func, class_info->location.file);
+            if (class_info && class_info->struct_layout) {
+                data->struct_layout =
+                    class_clone_value_layout(l, class_info->struct_layout, 0);
+                if (!data->struct_layout) {
+                    l->had_error = true;
+                    return;
+                }
+            }
             if (class_info && !class_info->struct_layout)
                 data->instance_layout =
                     class_make_native_instance_layout(l, cd, &data->inherited_field_count);

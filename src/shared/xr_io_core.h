@@ -16,6 +16,24 @@
 #include <stddef.h>
 #include <limits.h>
 
+/* Preserve native-resource ownership across the integer handle ABI used by
+ * the VM and generated C.  Clang's stream checker otherwise loses the FILE *
+ * when it is encoded into an Xray value and reports a false leak at the
+ * transfer boundary.  Other compilers see no attribute and the runtime ABI is
+ * unchanged. */
+#if defined(__clang__)
+#if __has_attribute(acquire_handle)
+#define XR_IO_CORE_ACQUIRE_HANDLE(tag) __attribute__((acquire_handle(tag)))
+#define XR_IO_CORE_RELEASE_HANDLE(tag) __attribute__((release_handle(tag)))
+#define XR_IO_CORE_USE_HANDLE(tag) __attribute__((use_handle(tag)))
+#endif
+#endif
+#ifndef XR_IO_CORE_ACQUIRE_HANDLE
+#define XR_IO_CORE_ACQUIRE_HANDLE(tag)
+#define XR_IO_CORE_RELEASE_HANDLE(tag)
+#define XR_IO_CORE_USE_HANDLE(tag)
+#endif
+
 typedef bool (*XrIoCoreLineFn)(void *ctx, const char *data, size_t len);
 typedef int (*XrIoCoreMkdirFn)(void *ctx, const char *path);
 typedef bool (*XrIoCoreIsDirFn)(void *ctx, const char *path);

@@ -235,6 +235,11 @@ void xr_vm_cleanup(XrVMRuntime *isolate) {
         isolate->vm.strings_map = NULL;
     }
 
+    /* init_globals() owns the backing storage for captured/shared slots.
+     * Release it from the same VM lifecycle path instead of relying on the
+     * unused legacy xr_vm_vm_free() helper. */
+    xr_shared_array_free(&isolate->vm.shared);
+
     /* Globals dict struct is xr_malloc'd; the underlying XrMap nodes
      * are fixed heap-owned and reclaimed by xr_fixed_heap_cleanup later. */
     if (isolate->vm.globals != NULL) {

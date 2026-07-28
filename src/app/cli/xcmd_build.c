@@ -627,8 +627,55 @@ static XrOptimizationLevel xaot_cli_optimization(XaotOptimizationLevel optimizat
     return XR_OPTIMIZATION_NONE;
 }
 
-static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest, XrNativeCompileSpec *compile,
-                                    XrNativeLinkSpec *link) {
+static XrNativeSimdMode xaot_cli_native_simd(const XaotTarget *target) {
+    if (!target || target->simd_mode == XAOT_SIMD_DISPATCH)
+        return XR_NATIVE_SIMD_DEFAULT;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0)
+        return XR_NATIVE_SIMD_AVX512;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0)
+        return XR_NATIVE_SIMD_AVX2;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_SSE2) != 0)
+        return XR_NATIVE_SIMD_SSE2;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_SVE) != 0)
+        return XR_NATIVE_SIMD_SVE;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_NEON) != 0)
+        return XR_NATIVE_SIMD_NEON;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_VSX) != 0)
+        return XR_NATIVE_SIMD_VSX;
+    if ((target->simd_features & XAOT_SIMD_FEATURE_LSX) != 0)
+        return XR_NATIVE_SIMD_LSX;
+    return XR_NATIVE_SIMD_DEFAULT;
+}
+
+static bool xaot_cli_provider_supports_x86_vector_islands(const XrToolchainSelection *plan) {
+    if (!plan)
+        return false;
+    return plan->provider == XR_TOOLCHAIN_PROVIDER_APPLE_CLANG ||
+           plan->provider == XR_TOOLCHAIN_PROVIDER_LLVM_CLANG ||
+           plan->provider == XR_TOOLCHAIN_PROVIDER_GCC ||
+           plan->provider == XR_TOOLCHAIN_PROVIDER_ZIG;
+}
+
+static XrNativeSimdMode xaot_cli_generated_source_simd(const char *path) {
+    if (!path || !path[0])
+        return XR_NATIVE_SIMD_DEFAULT;
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return XR_NATIVE_SIMD_DEFAULT;
+    char prefix[4097];
+    size_t n = fread(prefix, 1, sizeof(prefix) - 1, f);
+    fclose(f);
+    prefix[n] = '\0';
+    if (strstr(prefix, "#define XR_AOT_COMPILE_SIMD_AVX512 1"))
+        return XR_NATIVE_SIMD_AVX512;
+    if (strstr(prefix, "#define XR_AOT_COMPILE_SIMD_AVX2 1"))
+        return XR_NATIVE_SIMD_AVX2;
+    return XR_NATIVE_SIMD_DEFAULT;
+}
+
+static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest,
+                                    const XrToolchainSelection *plan,
+                                    XrNativeCompileSpec *compile, XrNativeLinkSpec *link) {
     memset(compile, 0, sizeof(*compile));
     memset(link, 0, sizeof(*link));
     compile->optimization = xaot_cli_optimization(manifest->compile.optimization);
@@ -646,12 +693,25 @@ static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest, XrNativeCo
     compile->disable_stack_protector = !manifest->compile.stack_protector;
     compile->disable_unwind_tables = !manifest->compile.unwind_tables;
     compile->disable_machine_outliner = manifest->compile.disable_machine_outliner;
+    compile->disable_vectorization = manifest->target.simd_mode == XAOT_SIMD_SVE;
+    compile->disable_slp_vectorization = manifest->target.simd_mode == XAOT_SIMD_SVE;
     compile->cpu = manifest->compile.cpu;
     /* Xray-generated translation units include the C11 runtime ABI (including
      * stdatomic.h), so every provider must compile them as C11. */
     compile->language_standard = "c11";
-    if ((manifest->target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0)
-        compile->simd = XR_NATIVE_SIMD_AVX2;
+    compile->simd = xaot_cli_native_simd(&manifest->target);
+    /* GCC-family providers can compile Xray's attributed AVX2/AVX-512
+     * function islands from a baseline translation unit.  Keep MSVC's
+     * /arch-based whole-unit path because cl.exe has no equivalent target
+     * attribute. */
+    if ((manifest->target.simd_features &
+         (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0 &&
+        xaot_cli_provider_supports_x86_vector_islands(plan))
+        compile->simd = XR_NATIVE_SIMD_DEFAULT;
+    if (!compile->cpu[0] && compile->simd == XR_NATIVE_SIMD_SVE)
+        compile->cpu = "generic+sve";
+    if (!compile->cpu[0] && compile->simd == XR_NATIVE_SIMD_VSX)
+        compile->cpu = "pwr8";
 
     link->shared = manifest->link.shared;
     link->relocatable = manifest->link.relocatable;
@@ -1010,7 +1070,16 @@ static bool xaot_cli_build_compile_command(const XrToolchainSelection *plan,
         return false;
     (void) opt_flag;
     sink = xaot_cli_command_sink(cmd);
-    xaot_cli_semantic_specs(manifest, &compile_spec, &unused_link_spec);
+    xaot_cli_semantic_specs(manifest, plan, &compile_spec, &unused_link_spec);
+    /* Static x86 SIMD is compiled one generated unit at a time.  Only units
+     * whose source-backed marker proves they define native vector values get
+     * the provider's AVX flag; scalar and cross-module caller units remain at
+     * the baseline ISA.  Dispatch never emits these markers. */
+    if (xaot_cli_provider_supports_x86_vector_islands(plan)) {
+        XrNativeSimdMode unit_simd = xaot_cli_generated_source_simd(c_file);
+        if (unit_simd != XR_NATIVE_SIMD_DEFAULT)
+            compile_spec.simd = unit_simd;
+    }
     if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
         !xtc_command_emit_compile_io(plan->provider, c_file, obj_file, &sink, err, err_size))
         return false;
@@ -1146,7 +1215,7 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     (void) strip_symbols;
     (void) shared_library;
     sink = xaot_cli_command_sink(cmd);
-    xaot_cli_semantic_specs(manifest, &compile_spec, &link_spec);
+    xaot_cli_semantic_specs(manifest, plan, &compile_spec, &link_spec);
     if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
         !xtc_command_emit_link_output(plan->provider, output_file, &sink, err, err_size))
         return false;
@@ -2177,7 +2246,7 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
                                       const XaotLinkManifest *manifest, const char *sysroot,
                                       XiCgenCDialect c_dialect) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = xaot_hash_fold_str(h, "xaot-obj-cache-v3");
+    h = xaot_hash_fold_str(h, "xaot-obj-cache-v4");
     h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
@@ -2196,6 +2265,10 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     }
     h = xaot_hash_fold_str(h, sysroot);
     if (manifest) {
+        h = xaot_hash_fold(h, &manifest->target.simd_mode,
+                           sizeof(manifest->target.simd_mode));
+        h = xaot_hash_fold(h, &manifest->target.simd_features,
+                           sizeof(manifest->target.simd_features));
         h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
         for (uint32_t i = 0; i < manifest->n_defines; i++)
             h = xaot_hash_fold_str(h, manifest->defines[i]);
@@ -2213,7 +2286,7 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
                                            XiCgenCDialect c_dialect) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
 
-    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v3");
+    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v4");
     h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
@@ -2238,6 +2311,10 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     h = xaot_hash_fold_str(h, sysroot);
     if (result) {
         const XaotLinkManifest *manifest = &result->link_manifest;
+        h = xaot_hash_fold(h, &manifest->target.simd_mode,
+                           sizeof(manifest->target.simd_mode));
+        h = xaot_hash_fold(h, &manifest->target.simd_features,
+                           sizeof(manifest->target.simd_features));
         h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
         h = xaot_hash_fold(h, &manifest->link, sizeof(manifest->link));
         h = xaot_hash_fold_str(h, manifest->raw_flag_provider);
@@ -3380,63 +3457,6 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
             xaot_build_result_free(&aot_result);
             return 1;
         }
-    }
-    if (aot_result.link_manifest.target.simd_mode != XAOT_SIMD_DISPATCH &&
-        (aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx512f")) {
-        fprintf(stderr, "Error: failed to record AVX-512 target flag in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
-    if (aot_result.link_manifest.target.simd_mode != XAOT_SIMD_DISPATCH &&
-        (aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx2")) {
-        fprintf(stderr, "Error: failed to record AVX2 target flag in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
-    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mvsx")) {
-        fprintf(stderr, "Error: failed to record VSX target flag in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
-    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_LSX) != 0 &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mlsx")) {
-        fprintf(stderr, "Error: failed to record LSX target flag in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
-    }
-    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_SVE) != 0) {
-        /* LLVM's fixed-trip-count auto-vectorizer can form an equality-exit
-         * loop whose step is 2*VL. That loop is invalid when the runtime SVE
-         * length (for example 384 bits) does not divide the scalar trip count.
-         * Runtime-native Xray operations already carry explicit predicated SVE
-         * intrinsics, so disable only the unsafe implicit vectorization. */
-        if ((!cpu || !cpu[0]) &&
-            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                           "-mcpu=generic+sve")) {
-            fprintf(stderr,
-                    "Error: failed to record scalable SVE target flag in AOT link manifest\n");
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
-        if (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                           "-fno-vectorize") ||
-            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                           "-fno-slp-vectorize")) {
-            fprintf(stderr, "Error: failed to record safe scalable SVE vectorization flags\n");
-            xaot_build_result_free(&aot_result);
-            return 1;
-        }
-    }
-    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_VSX) != 0 &&
-        (!cpu || !cpu[0]) &&
-        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
-                                       "-mcpu=pwr8")) {
-        fprintf(stderr, "Error: failed to record Power8 VSX baseline in AOT link manifest\n");
-        xaot_build_result_free(&aot_result);
-        return 1;
     }
     if (shared_library && xaot_link_manifest_needs_runtime(&aot_result.link_manifest)) {
         fprintf(stderr, "Error: --shared does not support runtime-backed features yet; export "

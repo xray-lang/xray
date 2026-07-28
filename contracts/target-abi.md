@@ -48,7 +48,13 @@ emission, and native linking:
 - T4a: x86 runtime SIMD dispatch probes CPU and OS state together. AVX-512F is
   selectable only when CPUID leaf 7 reports AVX-512F and XCR0 enables XMM, YMM,
   opmask, ZMM high-256, and high-16 ZMM state. Baseline, AVX2, and AVX-512F
-  functions remain in separately attributed feature islands.
+  functions remain in separately attributed feature islands. Explicit static
+  SIMD selection is provider-neutral compile intent: each verified provider
+  emits its own flag dialect, while `dispatch` keeps the translation-unit
+  baseline free of global AVX2/AVX-512 enablement. SIMD mode and features are
+  part of both object and link-output cache identities. Providers that predate
+  Clang's `evex512` feature spelling retain the same AVX-512 island through the
+  portable `avx512f` function target instead of dropping the whole attribute.
 - T4b: `loongarch64-linux-musl` defaults to scalar because LSX is not implied
   by the base target triple. Explicit `--simd lsx` or `--simd native` adds
   `-mlsx`, uses the portable 128-bit lane contract, and may publish native
@@ -103,19 +109,19 @@ Zig 0.16.0 while preserving the `x86_64-windows-msvc` ABI.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
-anchor-sha256: src/aot/xaot_prepare.c 68e7efd04383a8adff9aee330b8fea3755036354c29d83f96e56014d22cbf5dd
+anchor-sha256: src/aot/xaot_prepare.c 0a2119ede579c5a66139a24bdb77628679fc97548f70a9a4b3221d6e5fb6e66e
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 600aa9d449de2371e02802238a548ee739700df41e8b3c9cf4bd6d8b52b00a18
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 083b2451c3b9fe41f0d1c770a29f1e5004e27fe13eb83c016c3871d976f25b24
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 6b762cbd2ce3ba9feb6c8a0ac30cb04505e81765aba234061a28e8efe42074e1
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c a7d6f645d8190ed95b9add966a1303cb9c085a012abcf68264cb22804aaa9701
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 16153b0fb4075148ae0ab458dda75b7b8980984f4ee0aed8c6e1b5ac97239c30
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 7bd7f9f776b53e7f1fad6bc594744ec018420917d1d2b62225691cf8d7a27c07
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b487883db6de4c01c33bad0b08d6d4503831872f380b1e8936166d87ea44b59e
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bc860359654ec6597cfbebe6fcd3944436af9b085010d3ebc92acac68a7c1601
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c 79e2e7ff3d95674b384e11b773a2a35fe55a0dfa066e7daa73c87dac8ac2e3e2
+anchor-sha256: src/aot/xi_cgen.c 515bfbb5cd3c9e547cfbe89e1c1493efeda5566d292a5ca5e74e059fa9c8b01d
 anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
-anchor-sha256: src/aot/xrt_core_freestanding.h adcb132c62bdbb9c9282c0181a0689ac1dd5cfe03f8c84d9e02692d955707011
+anchor-sha256: src/aot/xrt_core_freestanding.h 1b65a7607516fdd820508d27b5644e610485f476f2d2a7690c7bb5d91494fba0
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 0cefbe1f13ee426a5fb37505403440027af37ad4d355c0b257e02d7e35685a1b
+anchor-sha256: src/app/cli/xcmd_build.c d441773288383d3a1caf926edec49387a7d0988d19e3005f627ce812047f7de2
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e
 anchor-sha256: src/app/toolchain/xtc_probe.c 1feb4ecaa53dbc48ec5242734b6fb87740525b459b70477606f635f4590624a8
-anchor-sha256: src/ir/xi.h 9d8f229600dc4a6aeb6092ae88c767ef67f79865f278884654d501f5598009d7
-anchor-sha256: stdlib/simd/simd.xr 56b8ce818e05b8a08475452205187b5cd673f2d992d9299c8ede6be7871eba8b
+anchor-sha256: src/ir/xi.h 63b1b248ce49a131e24fd2305789f1641673f5178dc00159757b0fe7565b775f
+anchor-sha256: stdlib/simd/simd.xr c0bdc2461081513bdd1f362ec717da405cfa47ee9ab738d12be6f07cc69f8db3

@@ -1037,24 +1037,13 @@ static const char *cg_class_native_boxed_derived_field_name(const XgGlobalEviden
     if (!class_field || (class_field->flags & XG_CLASS_FIELD_STATIC) != 0 ||
         class_field->instance_slot == UINT32_MAX)
         return NULL;
-    ClassDeclNode *cls =
-        cd && cd->ast && cd->ast->type == AST_CLASS_DECL ? &cd->ast->as.class_decl : NULL;
-    if (!cls)
+    if (!cd || !cd->instance_field_names || !cd->instance_field_source_node_ids)
         return NULL;
-    uint32_t non_static_ordinal = 0;
-    for (int i = 0; i < cls->field_count; i++) {
-        AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
-        if (!field_node || field_node->type != AST_FIELD_DECL)
-            continue;
-        FieldDeclNode *field = &field_node->as.field_decl;
-        if (field->is_static)
-            continue;
-        if (field_node->node_id == class_field->source_node_id)
-            return field->name;
-        if (non_static_ordinal == derived_field->field_ordinal)
-            return field->name;
-        non_static_ordinal++;
-    }
+    for (uint16_t i = 0; i < cd->instance_field_count; i++)
+        if (cd->instance_field_source_node_ids[i] == class_field->source_node_id)
+            return cd->instance_field_names[i];
+    if (derived_field->field_ordinal < cd->instance_field_count)
+        return cd->instance_field_names[derived_field->field_ordinal];
     return NULL;
 }
 
@@ -1615,7 +1604,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "xrt_map_get_owned(");
         emit_class_native_guarded_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
@@ -3792,7 +3781,7 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
         fprintf(out, ").ptr");
     } else {
         fprintf(out, " = (%s)", cg_struct_field_c_type(info.layout, idx));
-        emit_value_as_rep(out, v->args[1], cg_struct_field_rep(info.layout, idx));
+        emit_value_as_rep_ctx(ctx, out, v->args[1], cg_struct_field_rep(info.layout, idx));
     }
     fprintf(out, ")");
     return true;

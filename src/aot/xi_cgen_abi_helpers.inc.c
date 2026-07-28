@@ -831,6 +831,23 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_unit_materialized_as_rep(out, target_rep);
         return;
     }
+    const XiFunc *literal_func = v && v->block ? v->block->func : NULL;
+    const XiValue *literal = v;
+    while (literal && literal->nargs >= 1 && literal_func && literal_func->phi_coalesce &&
+           literal->id < literal_func->phi_coalesce_count &&
+           literal_func->phi_coalesce[literal->id] != literal->id &&
+           (xi_copy_is_identity_alias(literal) || xi_op_is_identity_forward(literal->op)))
+        literal = literal->args[0];
+    if (literal && literal != v && literal->op == XI_CONST && literal->type &&
+        (literal->type->kind == XR_KIND_INT || literal->type->kind == XR_KIND_BOOL ||
+         literal->type->kind == XR_KIND_RUNE || literal->type->kind == XR_KIND_FLOAT ||
+         literal->type->kind == XR_KIND_NULL)) {
+        const XaotValuePlan *literal_plan = cg_value_plan(ctx, literal);
+        XrRep from_rep = literal_plan ? xaot_value_storage_rep(literal_plan->rep)
+                                      : cg_value_plan_storage_rep(ctx, literal);
+        if (emit_const_value_as_rep_expr(ctx, out, literal, from_rep, target_rep))
+            return;
+    }
     if (target_rep != XR_REP_TAGGED && cg_value_box_inner_native_rep(ctx, v, &inner_rep)) {
         const XiValue *inner = v->args[0];
         if (emit_const_value_as_rep_expr(ctx, out, inner, inner_rep, target_rep))

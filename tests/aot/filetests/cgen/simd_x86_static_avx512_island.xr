@@ -1,0 +1,27 @@
+import { U64x8 } from simd
+
+@noinline
+fn ultra(values: U64x8, output: ref Slice<u64>) {
+    values.add(values.swapAdjacent()).store(ref output)
+}
+
+@noinline
+fn ultraIsland(values: U64x8, output: ref Slice<u64>) {
+    ultra(values, ref output)
+}
+
+@noinline
+export fn scalarHash(value: u64) -> u64 {
+    return (value ^ (value >> 29)) * 0x9e3779b185ebca87
+}
+
+fn main() {
+    var lanes: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    var output: [u64; 8] = [0; 8]
+    var outputView: Slice<u64> = output[:]
+    ultraIsland(U64x8.fromLanes(lanes), ref outputView)
+    print(output[0])
+    print(scalarHash(42))
+}
+
+main()

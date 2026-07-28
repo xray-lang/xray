@@ -99,9 +99,12 @@ PRELUDE_ENUMS = {
 
 def rel(root: Path, path: Path) -> str:
     try:
-        return str(path.resolve().relative_to(root.resolve()))
+        # Inventory paths are serialized contract data, not host-native paths.
+        # Keep them byte-stable across Windows and POSIX so source ownership
+        # checks can match the canonical repository prefixes.
+        return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def line_for_offset(text: str, offset: int) -> int:

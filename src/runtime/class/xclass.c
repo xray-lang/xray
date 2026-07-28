@@ -24,6 +24,7 @@
 #include "../../base/xlog.h"
 #include "../xisolate_api.h"
 #include "../object/xnative_type.h"
+#include "../mem/xsystem_heap.h"
 #include "xclass_system.h"
 #include "../value/xvalue.h"
 #include "../symbol/xsymbol_table.h"
@@ -149,12 +150,17 @@ XrClass *xr_class_new(XrVMRuntime *X, const char *name, XrClass *super) {
 
 XrClass *xr_class_new_dynamic_root(XrVMRuntime *X, const char *name, uint16_t capacity, bool sealed,
                                    uint8_t builtin_kind) {
-    (void) X;
+    XR_DCHECK(X != NULL, "dynamic_root: NULL isolate");
     XR_DCHECK(name != NULL, "dynamic_root: NULL name");
     XR_DCHECK(capacity >= 2, "dynamic_root: capacity must be >= 2 (1 slot reserved for overflow)");
-    XrClass *cls = (XrClass *) xr_calloc(1, sizeof(XrClass));
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    XR_DCHECK(heap != NULL, "dynamic_root: isolate has no system heap");
+    if (!heap)
+        return NULL;
+    XrClass *cls = (XrClass *) xr_sysheap_alloc_class(heap, sizeof(XrClass));
     if (!cls)
         return NULL;
+    memset(cls, 0, sizeof(XrClass));
     cls->name = name;
     cls->flags = XR_CLASS_DYNAMIC_LAYOUT | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
     cls->builtin_kind = builtin_kind;

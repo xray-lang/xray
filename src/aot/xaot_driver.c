@@ -98,6 +98,11 @@ static bool xaot_bundle_has_explicit_vector_ops(XiModule **modules, int nmodules
     return false;
 }
 
+static bool xaot_target_uses_x86_vector_islands(const XaotTarget *target) {
+    return target &&
+           (target->simd_features & (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0;
+}
+
 static const char *xaot_view_origin_name(uint8_t origin) {
     switch (origin) {
         case XI_VIEW_ORIGIN_PARAM:
@@ -1735,8 +1740,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     /* --- Compile all modules through Xi IR pipeline --- */
     XiPipelineConfig cfg = xi_pipeline_aot_config();
-    cfg.preserve_wide_vector_boundaries =
-        options->target && options->target->simd_mode == XAOT_SIMD_DISPATCH;
+    /* AVX2/AVX-512 stay behind explicit function target boundaries for both
+     * static and runtime-dispatch builds.  Besides keeping dispatch callers
+     * baseline-safe, this prevents a static SIMD choice from changing the
+     * optimizer's ISA for unrelated scalar functions in the same module. */
+    cfg.preserve_wide_vector_boundaries = xaot_target_uses_x86_vector_islands(options->target);
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
     XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));

@@ -2401,7 +2401,8 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             }
         }
         if (all_inferred)
-            xa_writeback_inferred_type_args(call, actual_types, actual_count);
+            xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call, actual_types,
+                                            actual_count);
     }
 
     xr_free(param_names);
@@ -2669,6 +2670,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->class_info = info;
+    links->owns_class_info = true;
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
     links->type->instance.class_ref = info;
     if (is_struct_decl || is_union_decl)
@@ -2693,6 +2695,7 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
     links->declared_type = links->type;
     links->class_info = xa_class_info_new(edecl->name);
+    links->owns_class_info = true;
     if (edecl->type_param_count > 0 && edecl->type_params) {
         const char **type_param_names =
             xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
@@ -3147,9 +3150,12 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (!links->type)
                     links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
+                bool created_enum_info = links->class_info == NULL;
                 XrClassInfo *enum_info =
                     links->class_info ? links->class_info : xa_class_info_new(edecl->name);
                 links->class_info = enum_info;
+                if (created_enum_info)
+                    links->owns_class_info = true;
                 if (edecl->type_param_count > 0 && edecl->type_params) {
                     const char **type_param_names =
                         xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);

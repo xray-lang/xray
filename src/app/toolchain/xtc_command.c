@@ -108,6 +108,50 @@ static const char *msvc_optimization(XrOptimizationLevel level) {
     return NULL;
 }
 
+static bool emit_gnu_simd(XrNativeSimdMode simd, XrToolchainArgSink *sink, char *err,
+                           size_t err_size) {
+    switch (simd) {
+        case XR_NATIVE_SIMD_DEFAULT:
+        case XR_NATIVE_SIMD_NEON:
+            /* NEON is part of the supported AArch64 baseline. */
+            return true;
+        case XR_NATIVE_SIMD_SSE2:
+            return add(sink, "-msse2", err, err_size);
+        case XR_NATIVE_SIMD_AVX2:
+            return add(sink, "-mavx2", err, err_size);
+        case XR_NATIVE_SIMD_AVX512:
+            return add(sink, "-mavx512f", err, err_size);
+        case XR_NATIVE_SIMD_SVE:
+            return add(sink, "-march=armv8-a+sve", err, err_size);
+        case XR_NATIVE_SIMD_VSX:
+            return add(sink, "-mvsx", err, err_size);
+        case XR_NATIVE_SIMD_LSX:
+            return add(sink, "-mlsx", err, err_size);
+    }
+    return command_error(err, err_size, "unsupported GNU native SIMD compile intent");
+}
+
+static bool emit_msvc_simd(XrNativeSimdMode simd, XrToolchainArgSink *sink, char *err,
+                            size_t err_size) {
+    switch (simd) {
+        case XR_NATIVE_SIMD_DEFAULT:
+        case XR_NATIVE_SIMD_SSE2:
+            /* SSE2 is part of the supported x86_64 MSVC baseline. */
+            return true;
+        case XR_NATIVE_SIMD_AVX2:
+            return add(sink, "/arch:AVX2", err, err_size);
+        case XR_NATIVE_SIMD_AVX512:
+            return add(sink, "/arch:AVX512", err, err_size);
+        case XR_NATIVE_SIMD_NEON:
+        case XR_NATIVE_SIMD_SVE:
+        case XR_NATIVE_SIMD_VSX:
+        case XR_NATIVE_SIMD_LSX:
+            return command_error(err, err_size,
+                                 "requested SIMD compile intent is unsupported by MSVC provider");
+    }
+    return command_error(err, err_size, "unsupported MSVC native SIMD compile intent");
+}
+
 static bool emit_gnu_compile(const XrToolchainSelection *selection, const XrNativeCompileSpec *spec,
                              XrToolchainArgSink *sink, char *err, size_t err_size) {
     if (!spec)
@@ -147,7 +191,25 @@ static bool emit_gnu_compile(const XrToolchainSelection *selection, const XrNati
         return false;
     if (spec->cpu_tune == XR_CPU_TUNE_NATIVE && !add(sink, "-march=native", err, err_size))
         return false;
-    if (spec->simd == XR_NATIVE_SIMD_AVX2 && !add(sink, "-mavx2", err, err_size))
+    if (spec->cpu && spec->cpu[0]) {
+        bool uses_mcpu =
+            selection && (selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_ARM ||
+                          selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_AARCH64 ||
+                          selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_POWERPC64 ||
+                          selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_THUMB);
+        if (!joined(sink, uses_mcpu ? "-mcpu=" : "-march=", spec->cpu, err, err_size))
+            return false;
+    }
+    /* Explicit SIMD intent follows the CPU baseline so a narrower --cpu does
+     * not silently disable the requested ISA. */
+    if (!emit_gnu_simd(spec->simd, sink, err, err_size))
+        return false;
+    bool gcc = selection && selection->provider == XR_TOOLCHAIN_PROVIDER_GCC;
+    if (spec->disable_vectorization &&
+        !add(sink, gcc ? "-fno-tree-vectorize" : "-fno-vectorize", err, err_size))
+        return false;
+    if (spec->disable_slp_vectorization &&
+        !add(sink, gcc ? "-fno-tree-slp-vectorize" : "-fno-slp-vectorize", err, err_size))
         return false;
     if (spec->warnings == XR_WARNING_POLICY_SUPPRESS && !add(sink, "-w", err, err_size))
         return false;
@@ -165,12 +227,6 @@ static bool emit_gnu_compile(const XrToolchainSelection *selection, const XrNati
         return false;
     if (spec->disable_machine_outliner && !add(sink, "-mno-outline", err, err_size))
         return false;
-    if (spec->cpu && spec->cpu[0]) {
-        bool arm = selection && (selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_AARCH64 ||
-                                 selection->target.arch == XR_TOOLCHAIN_TARGET_ARCH_THUMB);
-        if (!joined(sink, arm ? "-mcpu=" : "-march=", spec->cpu, err, err_size))
-            return false;
-    }
     return !spec->language_standard ||
            joined(sink, "-std=", spec->language_standard, err, err_size);
 }
@@ -184,7 +240,8 @@ static bool emit_msvc_compile(const XrToolchainSelection *selection,
     if (spec->pic || spec->visibility == XR_VISIBILITY_HIDDEN ||
         spec->cpu_tune == XR_CPU_TUNE_NATIVE || spec->freestanding ||
         spec->disable_stack_protector || spec->disable_unwind_tables ||
-        spec->disable_machine_outliner || (spec->cpu && spec->cpu[0]))
+        spec->disable_machine_outliner || spec->disable_vectorization ||
+        spec->disable_slp_vectorization || (spec->cpu && spec->cpu[0]))
         return command_error(err, err_size,
                              "requested native compile intent is unsupported by MSVC provider");
     if (!add(sink, "/nologo", err, err_size) || !add(sink, "/utf-8", err, err_size) ||
@@ -204,7 +261,7 @@ static bool emit_msvc_compile(const XrToolchainSelection *selection,
         return false;
     if (spec->data_sections && !add(sink, "/Gw", err, err_size))
         return false;
-    if (spec->simd == XR_NATIVE_SIMD_AVX2 && !add(sink, "/arch:AVX2", err, err_size))
+    if (!emit_msvc_simd(spec->simd, sink, err, err_size))
         return false;
     if (spec->warnings == XR_WARNING_POLICY_SUPPRESS && !add(sink, "/w", err, err_size))
         return false;

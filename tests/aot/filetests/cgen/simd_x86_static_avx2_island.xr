@@ -1,0 +1,31 @@
+import { U32x8, U64x4 } from simd
+
+@noinline
+fn wide(values: U64x4) -> u64 {
+    return values.add(values.swapAdjacent()).reduceAdd()
+}
+
+@noinline
+fn wideIsland(values: U64x4) -> u64 {
+    return wide(values)
+}
+
+@noinline
+fn oddProducts(values: U32x8) -> u64 {
+    return values.widenMulOdd(values).reduceAdd()
+}
+
+@noinline
+export fn scalarHash(value: u64) -> u64 {
+    return (value ^ (value >> 29)) * 0x9e3779b185ebca87
+}
+
+fn main() {
+    var lanes: [u64; 4] = [1, 2, 3, 4]
+    var words: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    print(wideIsland(U64x4.fromLanes(lanes)))
+    print(oddProducts(U32x8.fromLanes(words)))
+    print(scalarHash(42))
+}
+
+main()

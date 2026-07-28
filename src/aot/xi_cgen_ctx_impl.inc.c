@@ -40,6 +40,27 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
     return ctx;
 }
 
+static void cg_clear_imports(XiCgenCtx *ctx) {
+    if (!ctx || !ctx->imports)
+        return;
+    for (int i = 0; i < ctx->nimports; i++) {
+        const char *path = ctx->imports[i].module_path;
+        if (!path)
+            continue;
+        bool first_owner = true;
+        for (int j = 0; j < i; j++) {
+            if (ctx->imports[j].module_path == path) {
+                first_owner = false;
+                break;
+            }
+        }
+        if (first_owner)
+            xr_free((void *) path);
+    }
+    memset(ctx->imports, 0, (size_t) ctx->imports_cap * sizeof(*ctx->imports));
+    ctx->nimports = 0;
+}
+
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     if (!ctx)
         return;
@@ -54,6 +75,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->shared_native_instances);
     xr_free(ctx->shared_native_exports);
     xr_free(ctx->methods);
+    cg_clear_imports(ctx);
     xr_free(ctx->imports);
     xr_free(ctx->xmod_ref_funcs);
     xr_free(ctx->xmod_ref_prefixes);

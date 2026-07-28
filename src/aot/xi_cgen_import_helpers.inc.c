@@ -38,12 +38,12 @@ static char *cg_derive_import_string(const char *target_path, const char *import
 }
 
 /* Add one entry to the internal import table. */
-static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *member_name,
+static bool cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *member_name,
                           const char *target_mod_name, int shared_slot, const XiFunc *target_func,
                           const XiClassData *target_class, const XiEnumData *target_enum,
                           const XiFunc *exporter_func) {
     if (!cg_reserve_imports(ctx, ctx->nimports + 1))
-        return;
+        return false;
     CgImportEntry *e = &ctx->imports[ctx->nimports++];
     e->module_path = module_path;
     e->member_name = member_name;
@@ -53,6 +53,7 @@ static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *m
     e->target_class = target_class;
     e->target_enum = target_enum;
     e->exporter_func = exporter_func;
+    return true;
 }
 
 XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, int nmodules) {
@@ -67,8 +68,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
     if (!modules || nmodules <= 1)
         return;
 
-    ctx->nimports = 0;
-    memset(ctx->imports, 0, (size_t) ctx->imports_cap * sizeof(*ctx->imports));
+    cg_clear_imports(ctx);
 
     for (int exporter = 0; exporter < nmodules; exporter++) {
         XiModule *emod = modules[exporter];
@@ -98,6 +98,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
             char *import_str = cg_derive_import_string(emod->path, importer_dir);
             if (!import_str)
                 continue;
+            bool import_kept = false;
 
             for (uint16_t ei = 0; ei < emod->nexports; ei++) {
                 const XiModuleExport *exp = &emod->exports[ei];
@@ -121,10 +122,14 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
                     }
                 }
 
-                cg_add_import(ctx, import_str, exp->name, emod->name, (int) exp->shared_slot,
-                              target_fn, target_cd, target_ed, emod->init);
+                import_kept =
+                    cg_add_import(ctx, import_str, exp->name, emod->name,
+                                  (int) exp->shared_slot, target_fn, target_cd, target_ed,
+                                  emod->init) ||
+                    import_kept;
             }
-            /* import_str is kept in the table for the short-lived AOT process. */
+            if (!import_kept)
+                xr_free(import_str);
         }
     }
 

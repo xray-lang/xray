@@ -14,6 +14,7 @@
 #include "../ir/xi.h"
 #include "../ir/xi_ops_gen.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../base/xmalloc.h"
 #include <string.h>
 
 XR_FUNC const char *xaot_raw_pointer_c_type(const XrType *type) {
@@ -287,11 +288,29 @@ static bool rep_c_type_equal(const char *a, const char *b) {
 XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b) {
     if (a.kind == XAOT_VALUE_AGGREGATE || b.kind == XAOT_VALUE_AGGREGATE ||
         a.kind == XAOT_VALUE_VECTOR || b.kind == XAOT_VALUE_VECTOR) {
-        return a.kind == b.kind && a.rep == b.rep && a.flags == b.flags &&
+        const uint32_t lifetime_flags =
+            XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE;
+        const uint32_t semantic_a = a.flags & ~lifetime_flags;
+        const uint32_t semantic_b = b.flags & ~lifetime_flags;
+        return a.kind == b.kind && a.rep == b.rep && semantic_a == semantic_b &&
                a.vector_native_type == b.vector_native_type && a.vector_lanes == b.vector_lanes &&
                a.vector_width_bytes == b.vector_width_bytes && rep_c_type_equal(a.c_type, b.c_type);
     }
     return xaot_value_storage_rep(a) == xaot_value_storage_rep(b);
+}
+
+XR_FUNC XaotValueRep xaot_value_rep_borrow(XaotValueRep rep) {
+    rep.flags &= ~XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    return rep;
+}
+
+XR_FUNC void xaot_value_rep_dispose(XaotValueRep *rep) {
+    if (!rep)
+        return;
+    if ((rep->flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0)
+        xr_free((void *) rep->c_type);
+    rep->c_type = NULL;
+    rep->flags &= ~(XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE);
 }
 
 XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind) {

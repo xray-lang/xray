@@ -2870,6 +2870,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     XrClassInfo *info = xa_class_info_new(iface->name);
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->class_info = info;
+    links->owns_class_info = true;
     // Represent the interface as a parameterized XR_KIND_INTERFACE: built-in
     // singletons stay as plain interface types; user `interface Foo<T>` keeps
     // its declared type parameters so generic resolution can plug arguments
@@ -3337,6 +3338,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             info->base_name = xr_strdup(cls->super_name);
         }
         links->class_info = info;
+        links->owns_class_info = true;
     } else {
         info->explicit_final = cls->explicit_final;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
@@ -3598,11 +3600,21 @@ skip_interfaces:
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             layout_valid = false;
         }
-        /* Populate field_names parallel to fields[] for codegen/diagnostics */
+        /* Aggregate layouts outlive individual symbol-table views (IR types,
+         * bytecode descriptors and AOT planning may retain the layout after
+         * analyzer teardown), so field names are layout-owned copies. */
         layout->field_names = xr_calloc((size_t) info->field_count, sizeof(const char *));
-        if (layout->field_names) {
-            for (int i = 0; i < info->field_count; i++)
-                layout->field_names[i] = info->fields[i] ? info->fields[i]->name : NULL;
+        if (!layout->field_names) {
+            xr_free(layout);
+            goto skip_layout;
+        }
+        for (int i = 0; i < info->field_count; i++) {
+            const char *name = info->fields[i] ? info->fields[i]->name : NULL;
+            layout->field_names[i] = name ? xr_strdup(name) : NULL;
+            if (name && !layout->field_names[i]) {
+                layout_valid = false;
+                break;
+            }
         }
 
         for (int i = 0; i < info->field_count && i < XR_MAX_AGG_FIELDS; i++) {
@@ -3763,8 +3775,7 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH,
                                            "Cannot compute aggregate layout for target ABI", &loc);
-                xr_free(layout->field_names);
-                xr_free(layout);
+                xr_aggregate_layout_free_owned(layout);
                 layout = NULL;
             } else if (layout->total_size > UINT16_MAX) {
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
@@ -3775,8 +3786,7 @@ skip_interfaces:
                          diag_label, cls->name ? cls->name : "?", (unsigned) layout->total_size);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                xr_free(layout->field_names);
-                xr_free(layout);
+                xr_aggregate_layout_free_owned(layout);
             } else {
                 info->struct_layout = layout;
                 XrNativePackagePlan *native_plan =
@@ -3786,8 +3796,7 @@ skip_interfaces:
                     (void) xr_native_package_resolve_layout(native_plan, cls->name, layout);
             }
         } else {
-            xr_free(layout->field_names);
-            xr_free(layout);
+            xr_aggregate_layout_free_owned(layout);
         }
     }
 skip_layout:

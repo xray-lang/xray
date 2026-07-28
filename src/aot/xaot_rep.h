@@ -44,6 +44,10 @@ enum {
     XAOT_VALUE_FLAG_ENUM_AGGREGATE = 1u << 1,
     XAOT_VALUE_FLAG_STRUCT = 1u << 2,
     XAOT_VALUE_FLAG_SLICE = 1u << 3,
+    /* c_type points at heap storage rather than a process-lifetime literal or
+     * another bundle-owned immutable name.  Borrowing preserves DYNAMIC so a
+     * longer-lived consumer knows that it must make an independent copy. */
+    XAOT_VALUE_FLAG_DYNAMIC_C_TYPE = 1u << 30,
     XAOT_VALUE_FLAG_OWNED_C_TYPE = 1u << 31,
 };
 
@@ -51,6 +55,8 @@ XR_FUNC XaotValueRep xaot_value_rep_for_type(const XrType *type);
 XR_FUNC XaotValueRep xaot_value_rep_for_value(const struct XiValue *value);
 XR_FUNC XrRep xaot_value_storage_rep(XaotValueRep rep);
 XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b);
+XR_FUNC XaotValueRep xaot_value_rep_borrow(XaotValueRep rep);
+XR_FUNC void xaot_value_rep_dispose(XaotValueRep *rep);
 XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind);
 XR_FUNC const char *xaot_raw_pointer_c_type(const XrType *type);
 

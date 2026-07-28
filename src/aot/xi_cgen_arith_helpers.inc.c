@@ -200,9 +200,9 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
     return true;
 }
 
-static bool emit_native_i64_wrap_arith_expr(FILE *out, const XiValue *v) {
-    if (!out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64)
+static bool emit_native_i64_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (!ctx || !out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
+        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
         return false;
 
     const char *op = NULL;
@@ -221,9 +221,9 @@ static bool emit_native_i64_wrap_arith_expr(FILE *out, const XiValue *v) {
     }
 
     fprintf(out, "(int64_t)((uint64_t)(");
-    emit_vref(out, v->args[0]);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ") %s (uint64_t)(", op);
-    emit_vref(out, v->args[1]);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, "))");
     return true;
 }

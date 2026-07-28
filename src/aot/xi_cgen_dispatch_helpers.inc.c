@@ -816,7 +816,7 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             cg_emit_narrow_arith_operand(ctx, f, out, v->args[1]);
             fprintf(out, ")");
         } else if (emit_native_unsigned_wrap_arith_expr(ctx, out, v)) {
-        } else if (!emit_native_i64_wrap_arith_expr(out, v)) {
+        } else if (!emit_native_i64_wrap_arith_expr(ctx, out, v)) {
             // Native int64: must wrap on overflow (raw + - * is signed UB in C).
             fprintf(out, "%s(", xi_to_c_template_arith_i64_wrap_fn(v->op));
             emit_vref(out, v->args[0]);
@@ -3513,6 +3513,7 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 return;
             }
             fprintf(out, "({ %s _r%s; ", result_type, result_init);
+            bool adjacent = xicgen_vec_widen_mul_is_adjacent_pair(v);
             for (uint8_t lane = 0; lane < lanes; lane++) {
                 unsigned src =
                     (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0
@@ -3521,8 +3522,8 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
                 xicgen_emit_vec_lanes(ctx, out, v->args[0]);
                 fprintf(out, "[%uu] * (uint64_t)", src);
-                xicgen_emit_vec_lanes(ctx, out, v->args[1]);
-                fprintf(out, "[%uu]; ", src);
+                xicgen_emit_vec_lanes(ctx, out, adjacent ? v->args[0] : v->args[1]);
+                fprintf(out, "[%uu]; ", adjacent ? src + 1u : src);
             }
             fprintf(out, "_r; })");
             return;
@@ -3950,6 +3951,8 @@ static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XiValue *v);
 static bool cg_module_has_aot_direct_calls(const char *module);
 static bool cg_aot_stdlib_has_direct_member(const char *module, const char *member);
+static bool cg_import_ref_has_aot_resolution(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                             const XiImportRef *ref);
 /* Resolve a `import { CONST } from "module"` reference to a generated stdlib
  * constant (path.sep, encoding.LE, ...); defined in xi_cgen_stdlib_helpers.inc.c. */
 static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FILE *out,
@@ -7709,8 +7712,7 @@ static bool xicgen_class_data_is_parallel_plan(XiCgenCtx *ctx, const XiClassData
         if (!xicgen_class_data_has_instance_method(class_data, required_methods[i]))
             return false;
     }
-    if (class_data->class_info &&
-        xicgen_path_is_parallel_stdlib_module(class_data->class_info->location.file))
+    if (xicgen_path_is_parallel_stdlib_module(class_data->source_file))
         return true;
     const XiModule *decl_module = cg_class_native_decl_module_for_data(ctx, class_data);
     if (decl_module && xicgen_path_is_parallel_stdlib_module(decl_module->path))

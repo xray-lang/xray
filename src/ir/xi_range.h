@@ -110,4 +110,7 @@ XR_FUNC XiRange xi_range_of(const XiValue *v);
 /* Run range analysis and publish revision-bound range evidence. */
 XR_FUNC XiPassChange xi_range_analyze(XiFunc *f);
 
+/* Release the range-analysis scratch side table owned by a function. */
+XR_FUNC void xi_range_dispose(XiFunc *f);
+
 #endif  // XI_RANGE_H

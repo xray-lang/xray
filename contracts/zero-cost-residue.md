@@ -1,12 +1,12 @@
 # Zero-cost residue contract
 
-Status: re-frozen after the explicit restricted-C90 lane predeclared scalar
-locals and suppressed C11-only declaration forms in that lane. The default C11
-lane still uses declaration-at-definition for straight-line hot functions, and
-the generated-C C++ compatibility lane retains the prior non-linear-CFG-only
-SSA/PHI predeclaration rule. The xxHash backend shape contract, same-host quick
-regression matrix, strict C90/C++ generated-core gates, CGen matrix, and W1-W4
-verifier were rerun; residue categories and allowance semantics are unchanged.
+Status: re-frozen after fixed-width x86 SIMD values became first-class CGen
+expressions across module-isolated feature islands. Cross-module declarations
+retain ordinary internal linkage without promising unavailable force-inline
+bodies, while generated target attributes and the W1-W4 verifier remain
+mandatory. The xxHash KAT, source/generated-C/assembly shape gates, and focused
+CGen fixtures were rerun; residue categories and allowance semantics are
+unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -52,6 +52,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c 79e2e7ff3d95674b384e11b773a2a35fe55a0dfa066e7daa73c87dac8ac2e3e2
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 4e122b405966ae34cb181508f4b8c0b7072ef05a86e9081d732c4848ff3d6e49
+anchor-sha256: src/aot/xi_cgen.c 515bfbb5cd3c9e547cfbe89e1c1493efeda5566d292a5ca5e74e059fa9c8b01d
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

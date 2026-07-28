@@ -4203,6 +4203,8 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
         xr_free(bundle->extern_decls[i].param_types);
     }
     xr_free(bundle->extern_decls);
+    for (i = 0; i < bundle->nvalue_plans; i++)
+        xaot_value_rep_dispose(&bundle->value_plans[i].rep);
     xr_free(bundle->value_plans);
     xr_free(bundle->fixed_bytes_plans);
     xr_free(bundle->fixed_bytes_blobs);

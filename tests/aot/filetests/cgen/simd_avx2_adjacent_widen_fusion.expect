@@ -1,0 +1,3 @@
+args=--target x86_64-linux-musl --simd avx2
+c_contains=_mm256_mul_epu32(
+c_not_contains=_mm256_shuffle_epi32(

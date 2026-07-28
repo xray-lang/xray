@@ -1,0 +1,10 @@
+args=--target x86_64-linux-musl --simd avx2 --dump-xaot-plan
+c_contains=#define XR_AOT_COMPILE_SIMD_AVX2 1
+c_not_regex=XRT_TARGET_AVX2 uint64_t simd_x86_static_avx2_island_[0-9a-f]+_wideIsland_[0-9]+
+c_regex=XRT_TARGET_AVX2 uint64_t simd_x86_static_avx2_island_[0-9a-f]+_wide_[0-9]+
+c_regex=XRT_TARGET_AVX2 uint64_t simd_x86_static_avx2_island_[0-9a-f]+_oddProducts_[0-9]+
+c_not_regex=XRT_TARGET_AVX2 uint64_t simd_x86_static_avx2_island_[0-9a-f]+_scalarHash_exp
+c_contains=_mm256_add_epi64(
+c_contains=_mm256_permute4x64_epi64(
+c_contains=_mm256_srli_epi64(
+c_contains=_mm256_mul_epu32(

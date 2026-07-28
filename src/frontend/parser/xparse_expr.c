@@ -968,8 +968,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     }
 
     XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrTypeRef *type_param =
                 xr_tref_type_param(parser->compiler_session, type_params[i]->name);
@@ -1020,6 +1021,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
     }
 
     return func_expr;

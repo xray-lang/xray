@@ -20,6 +20,7 @@
 #include "../../base/xmalloc.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
+#include "../mem/xsystem_heap.h"
 #include "../core/xr_runtime_core.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
@@ -221,7 +222,10 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     XR_DCHECK(X != NULL, "transition: NULL isolate");
     XR_DCHECK(klass != NULL, "transition: NULL klass");
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "transition: not dynamic");
-    (void) X;
+    XrSystemHeap *metadata_heap = xr_isolate_get_sys_heap(X);
+    XR_DCHECK(metadata_heap != NULL, "transition: isolate has no system heap");
+    if (!metadata_heap)
+        return NULL;
 
     // Runtime field additions must reject sealed classes before consulting the
     // transition cache. Compile-time class-chain construction intentionally
@@ -265,17 +269,18 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     uint16_t parent_fc = klass->field_count;
     uint16_t child_fc = parent_fc + 1;
 
-    XrClass *child = (XrClass *) xr_calloc(1, sizeof(XrClass));
+    XrClass *child = (XrClass *) xr_sysheap_alloc_class(metadata_heap, sizeof(XrClass));
     if (!child) {
         if (core)
             xr_amutex_unlock(&core->metadata_lock);
         return NULL;
     }
+    memset(child, 0, sizeof(XrClass));
 
-    // Copy key fields from parent. The all-zero XrObjHeader from xr_calloc
-    // intentionally matches xr_class_new_dynamic_root: dynamic-layout shapes are
-    // permanent metadata identified by XR_CLASS_DYNAMIC_LAYOUT + builtin_kind,
-    // not by hdr.type, and are never GC-managed or freed.
+    // Copy key fields from parent. Dynamic-layout shapes are isolate-lifetime
+    // metadata identified by XR_CLASS_DYNAMIC_LAYOUT + builtin_kind rather than
+    // hdr.type. The class arena releases the whole transition tree only after
+    // fixed-heap objects have finished reading their layouts during teardown.
     child->name = klass->name;
     child->super = klass->super;
     child->flags = klass->flags;
@@ -286,9 +291,9 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     atomic_store_explicit(&child->transitions, NULL, memory_order_relaxed);
 
     // Build field descriptor array: parent fields + new field
-    child->fields = (XrFieldDescriptor *) xr_malloc(sizeof(XrFieldDescriptor) * child_fc);
+    child->fields = (XrFieldDescriptor *)
+        xr_sysheap_alloc_class(metadata_heap, sizeof(XrFieldDescriptor) * child_fc);
     if (!child->fields) {
-        xr_free(child);
         if (core)
             xr_amutex_unlock(&core->metadata_lock);
         return NULL;
@@ -314,10 +319,9 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     int new_cap = klass->field_map_capacity;
     if (symbol + 1 > new_cap)
         new_cap = symbol + 1;
-    child->field_symbol_to_index = (int *) xr_malloc(sizeof(int) * new_cap);
+    child->field_symbol_to_index =
+        (int *) xr_sysheap_alloc_class(metadata_heap, sizeof(int) * new_cap);
     if (!child->field_symbol_to_index) {
-        xr_free(child->fields);
-        xr_free(child);
         if (core)
             xr_amutex_unlock(&core->metadata_lock);
         return NULL;
@@ -333,11 +337,9 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     }
 
     // Register transition on parent.
-    XrClassTransition *trans = (XrClassTransition *) xr_malloc(sizeof(XrClassTransition));
+    XrClassTransition *trans = (XrClassTransition *)
+        xr_sysheap_alloc_class(metadata_heap, sizeof(XrClassTransition));
     if (!trans) {
-        xr_free(child->field_symbol_to_index);
-        xr_free(child->fields);
-        xr_free(child);
         if (core)
             xr_amutex_unlock(&core->metadata_lock);
         return NULL;

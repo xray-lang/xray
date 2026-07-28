@@ -102,7 +102,14 @@ if cc "${FFI_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_C" >"$WORK/native-build.log" 2>&1;
 else
     fail "native fixture library builds"
 fi
-FFI_HASH="$(shasum -a 256 "$FFI_LIB" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then
+    FFI_HASH="$(sha256sum "$FFI_LIB" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    FFI_HASH="$(shasum -a 256 "$FFI_LIB" | awk '{print $1}')"
+else
+    echo "FAIL: SHA-256 utility not found (need sha256sum or shasum)" >&2
+    exit 1
+fi
 FFI_NAME="$(basename "$FFI_LIB")"
 cat >"$FFI_DIR/main.xr" <<'XR'
 extern "C" {
@@ -195,6 +202,91 @@ else
     fail "core math native binary links"
     sed 's/^/      /' "$MATH_LOG" | sed -n '1,120p'
 fi
+
+# Explicit SIMD selection is provider-neutral manifest intent. GNU-family
+# providers keep AVX2/AVX-512 in attributed function islands so unrelated
+# scalar code and runtime dispatch both retain the x86_64 baseline.
+case "$(uname -s 2>/dev/null):$(uname -m 2>/dev/null)" in
+    Linux:x86_64|Darwin:x86_64)
+        SIMD_SRC="$WORK/simd-intent.xr"
+        cat >"$SIMD_SRC" <<'XR'
+import { Capabilities } from simd
+print(Capabilities.nativeBytes())
+XR
+        for mode in avx2 avx512 dispatch; do
+            SIMD_LOG="$WORK/simd-$mode.log"
+            if "$XRAY" build --native --simd "$mode" --rebuild \
+                    --dump-link-command --dump-link-manifest \
+                    --cache-dir "$WORK/cache-simd-$mode" \
+                    -o "$WORK/simd-$mode" "$SIMD_SRC" >"$SIMD_LOG" 2>&1; then
+                pass "semantic SIMD $mode native build succeeds"
+                expect_file_contains "$SIMD_LOG" '"provider_cc_flags": []' \
+                    "semantic SIMD $mode does not use raw manifest flags"
+                case "$mode" in
+                    avx2)
+                        expect_file_not_contains "$SIMD_LOG" "-mavx2" \
+                            "AVX2 intent does not retarget the whole GNU translation unit"
+                        ;;
+                    avx512)
+                        expect_file_not_contains "$SIMD_LOG" "-mavx512f" \
+                            "AVX-512 intent does not retarget the whole GNU translation unit"
+                        ;;
+                    dispatch)
+                        expect_file_not_contains "$SIMD_LOG" "-mavx2" \
+                            "dispatch keeps baseline compile target"
+                        expect_file_not_contains "$SIMD_LOG" "-mavx512f" \
+                            "dispatch keeps AVX-512 in attributed islands"
+                        ;;
+                esac
+            else
+                fail "semantic SIMD $mode native build succeeds"
+                sed 's/^/      /' "$SIMD_LOG" | sed -n '1,160p'
+            fi
+        done
+
+        DISPATCH_ISLAND_SRC="$PROJECT_DIR/tests/aot/filetests/cgen/simd_x86_runtime_dispatch.xr"
+        DISPATCH_ISLAND_LOG="$WORK/simd-dispatch-islands.log"
+        if "$XRAY" build --native --simd dispatch --rebuild \
+                --dump-link-command --dump-link-manifest \
+                --cache-dir "$WORK/cache-simd-dispatch-islands" \
+                -o "$WORK/simd-dispatch-islands" "$DISPATCH_ISLAND_SRC" \
+                >"$DISPATCH_ISLAND_LOG" 2>&1; then
+            pass "dispatch AVX2/AVX-512 attributed islands compile at baseline"
+            expect_file_not_contains "$DISPATCH_ISLAND_LOG" "-mavx2" \
+                "dispatch island fixture has no global AVX2 flag"
+            expect_file_not_contains "$DISPATCH_ISLAND_LOG" "-mavx512f" \
+                "dispatch island fixture has no global AVX-512 flag"
+        else
+            fail "dispatch AVX2/AVX-512 attributed islands compile at baseline"
+            sed 's/^/      /' "$DISPATCH_ISLAND_LOG" | sed -n '1,180p'
+        fi
+        for mode in avx2 avx512; do
+            STATIC_ISLAND_SRC="$PROJECT_DIR/tests/aot/filetests/cgen/simd_x86_static_${mode}_island.xr"
+            STATIC_ISLAND_LOG="$WORK/simd-static-$mode-islands.log"
+            if "$XRAY" build --native --simd "$mode" --rebuild \
+                    --dump-link-command --dump-link-manifest \
+                    --cache-dir "$WORK/cache-simd-static-$mode-islands" \
+                    -o "$WORK/simd-static-$mode-islands" "$STATIC_ISLAND_SRC" \
+                    >"$STATIC_ISLAND_LOG" 2>&1; then
+                pass "static $mode attributed island compiles with a scoped unit target"
+                if [ "$mode" = avx2 ]; then
+                    expect_file_contains "$STATIC_ISLAND_LOG" "-mavx2" \
+                        "static avx2 vector-bearing unit receives AVX2"
+                    expect_file_not_contains "$STATIC_ISLAND_LOG" "-mavx512f" \
+                        "static avx2 unit does not receive AVX-512"
+                else
+                    expect_file_contains "$STATIC_ISLAND_LOG" "-mavx512f" \
+                        "static avx512 vector-bearing unit receives AVX-512"
+                    expect_file_not_contains "$STATIC_ISLAND_LOG" "-mavx2" \
+                        "static avx512 unit does not receive a separate AVX2 flag"
+                fi
+            else
+                fail "static $mode attributed island compiles at baseline"
+                sed 's/^/      /' "$STATIC_ISLAND_LOG" | sed -n '1,180p'
+            fi
+        done
+        ;;
+esac
 
 # Projectify a committed manifest fixture to prove that export and link-symbol
 # policies reach the freestanding command and generated C/object path.

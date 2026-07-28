@@ -150,6 +150,10 @@ XR_FUNC XrTypeRef *xr_tref_fixed_array_expr(struct XrCompilerSession *session, X
 /* Generic type parameter: T, U, V, ... */
 XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const char *name);
 
+/* Copy a temporary type-reference pointer vector into the AST arena. */
+XR_FUNC XrTypeRef **xr_tref_array_copy(struct XrCompilerSession *session, XrTypeRef **refs,
+                                       int count);
+
 /* ========== Queries ========== */
 
 static inline bool xr_tref_is_nullable(const XrTypeRef *t) {

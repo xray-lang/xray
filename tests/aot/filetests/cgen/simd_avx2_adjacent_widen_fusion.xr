@@ -1,0 +1,14 @@
+import { U32x8 } from simd
+
+@noinline
+fn multiplyAdjacent(seed: u32) -> u64 {
+    var words = U32x8.splat(seed)
+    var product = words.widenMulEven(words.swapAdjacent())
+    return product.reduceAdd()
+}
+
+fn main() {
+    print(multiplyAdjacent(7))
+}
+
+main()

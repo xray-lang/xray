@@ -476,12 +476,20 @@ export struct U32x8 align(32) {
         return U32x8{_lanes: copy(lanes)}
     }
 
+    static splat(value: u32) -> U32x8 {
+        return U32x8{_lanes: [value; 8]}
+    }
+
     swapAdjacent() -> U32x8 {
         return U32x8{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2], this._lanes[5], this._lanes[4], this._lanes[7], this._lanes[6]]}
     }
 
     widenMulEven(other: U32x8) -> U64x4 {
         return U64x4.fromLanes([(this._lanes[0] as u64) * (other._lanes[0] as u64), (this._lanes[2] as u64) * (other._lanes[2] as u64), (this._lanes[4] as u64) * (other._lanes[4] as u64), (this._lanes[6] as u64) * (other._lanes[6] as u64)])
+    }
+
+    widenMulOdd(other: U32x8) -> U64x4 {
+        return U64x4.fromLanes([(this._lanes[1] as u64) * (other._lanes[1] as u64), (this._lanes[3] as u64) * (other._lanes[3] as u64), (this._lanes[5] as u64) * (other._lanes[5] as u64), (this._lanes[7] as u64) * (other._lanes[7] as u64)])
     }
 }
 
@@ -507,12 +515,28 @@ export struct U64x4 align(32) {
         return U64x4{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1], this._lanes[2] + other._lanes[2], this._lanes[3] + other._lanes[3]]}
     }
 
+    bitXor(other: U64x4) -> U64x4 {
+        return U64x4{_lanes: [this._lanes[0] ^ other._lanes[0], this._lanes[1] ^ other._lanes[1], this._lanes[2] ^ other._lanes[2], this._lanes[3] ^ other._lanes[3]]}
+    }
+
+    shiftLeft(bits: int) -> U64x4 {
+        return U64x4{_lanes: [this._lanes[0] << bits, this._lanes[1] << bits, this._lanes[2] << bits, this._lanes[3] << bits]}
+    }
+
+    shiftRight(bits: int) -> U64x4 {
+        return U64x4{_lanes: [this._lanes[0] >> bits, this._lanes[1] >> bits, this._lanes[2] >> bits, this._lanes[3] >> bits]}
+    }
+
     reduceAdd() -> u64 {
         return this._lanes[0] + this._lanes[1] + this._lanes[2] + this._lanes[3]
     }
 
     swapAdjacent() -> U64x4 {
         return U64x4{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2]]}
+    }
+
+    reinterpretU32() -> U32x8 {
+        return U32x8.fromLanes([(this._lanes[0] & 4294967295) as u32, (this._lanes[0] >> 32) as u32, (this._lanes[1] & 4294967295) as u32, (this._lanes[1] >> 32) as u32, (this._lanes[2] & 4294967295) as u32, (this._lanes[2] >> 32) as u32, (this._lanes[3] & 4294967295) as u32, (this._lanes[3] >> 32) as u32])
     }
 }
 

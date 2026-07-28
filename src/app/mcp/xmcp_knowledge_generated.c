@@ -3834,12 +3834,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U32x8.splat",
+        .signature = "(value: u32): U32x8",
+        .summary = "",
+    },
+    {
         .name = "U32x8.swapAdjacent",
         .signature = "(): U32x8",
         .summary = "",
     },
     {
         .name = "U32x8.widenMulEven",
+        .signature = "(other: U32x8): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x8.widenMulOdd",
         .signature = "(other: U32x8): U64x4",
         .summary = "",
     },
@@ -3974,6 +3984,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U64x4.bitXor",
+        .signature = "(other: U64x4): U64x4",
+        .summary = "",
+    },
+    {
         .name = "U64x4.fromLanes",
         .signature = "(lanes: [u64; 4]): U64x4",
         .summary = "",
@@ -3986,6 +4001,21 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     {
         .name = "U64x4.reduceAdd",
         .signature = "(): u64",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.reinterpretU32",
+        .signature = "(): U32x8",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.shiftLeft",
+        .signature = "(bits: int): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.shiftRight",
+        .signature = "(bits: int): U64x4",
         .summary = "",
     },
     {
@@ -8810,8 +8840,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.widenMulOdd` | `(other: U32x4): U64x2` |  |\n"
             "| `U32x8` | `U32x8` |  |\n"
             "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n"
+            "| `U32x8.splat` | `(value: u32): U32x8` |  |\n"
             "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
             "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
+            "| `U32x8.widenMulOdd` | `(other: U32x8): U64x4` |  |\n"
             "| `U32xNative` | `U32xNative` |  |\n"
             "| `U32xNative.swapAdjacent` | `(): U32xNative` |  |\n"
             "| `U32xNative.widenMulEven` | `(other: U32xNative): U64xNative` |  |\n"
@@ -8838,9 +8870,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
             "| `U64x4` | `U64x4` |  |\n"
             "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n"
+            "| `U64x4.bitXor` | `(other: U64x4): U64x4` |  |\n"
             "| `U64x4.fromLanes` | `(lanes: [u64; 4]): U64x4` |  |\n"
             "| `U64x4.load` | `(data: Slice<u64>, offset: int = 0): U64x4` |  |\n"
             "| `U64x4.reduceAdd` | `(): u64` |  |\n"
+            "| `U64x4.reinterpretU32` | `(): U32x8` |  |\n"
+            "| `U64x4.shiftLeft` | `(bits: int): U64x4` |  |\n"
+            "| `U64x4.shiftRight` | `(bits: int): U64x4` |  |\n"
             "| `U64x4.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
             "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
             "| `U64x8` | `U64x8` |  |\n"

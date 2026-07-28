@@ -1,5 +1,5 @@
 args=--target x86_64-linux-musl --simd avx512 --dump-xaot-plan
-contains=-mavx512f
+not_contains=-mavx512f
 contains="simd_mode": "avx512"
 contains="simd_features": 22
 c_contains=__m512i

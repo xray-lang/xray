@@ -484,7 +484,7 @@ static bool emit_class_cached_field_store_expr(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "(");
     emit_class_field_cache_var(out, (uint16_t) index);
     fprintf(out, " = ");
-    emit_value_as_rep(out, v->args[1], entry->rep);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], entry->rep);
     fprintf(out, ")");
     return true;
 }

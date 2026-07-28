@@ -1,7 +1,7 @@
 args=--target aarch64-linux-musl --simd sve --dump-xaot-plan
-contains=-mcpu=generic+sve
-contains=-fno-vectorize
-contains=-fno-slp-vectorize
+not_contains=-mcpu=generic+sve
+not_contains=-fno-vectorize
+not_contains=-fno-slp-vectorize
 contains="simd_mode": "sve"
 contains="simd_features": 64
 c_contains=#include <arm_sve.h>

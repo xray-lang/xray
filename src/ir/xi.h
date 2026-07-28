@@ -740,6 +740,10 @@ typedef struct XiClassData {
     const char
         *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
     const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
+    const char *source_file;  /* arena copy of declaration source path (NULL if unavailable) */
+    const char **instance_field_names; /* declared non-static field names, arena-owned */
+    uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
+    uint16_t instance_field_count;
     XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
     uint16_t nmethod;         /* total method count (instance + static) */
     uint16_t *child_idx;      /* maps method order → XiFunc::children index */
@@ -1600,6 +1604,10 @@ typedef struct XiFunc {
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
+
+    /* True after every backend-visible type/layout has been copied into the
+     * root Xi arena and analyzer/AST back-pointers have been severed. */
+    bool semantic_snapshot_detached;
 
     /* Module back-pointer for program-level init functions. */
     struct XiModule *module;

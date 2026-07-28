@@ -1,5 +1,5 @@
 args=--target loongarch64-linux-musl --simd lsx --dump-xaot-plan
-contains=-mlsx
+not_contains=-mlsx
 contains="simd_mode": "lsx"
 contains="simd_features": 32
 c_contains=#include <lsxintrin.h>

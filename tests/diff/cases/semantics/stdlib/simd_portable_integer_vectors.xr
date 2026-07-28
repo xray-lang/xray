@@ -63,8 +63,14 @@ fn run() {
     var wideWords: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
     var x32 = U32x8.fromLanes(wideWords)
     var products = x32.widenMulEven(x32.swapAdjacent())
+    var oddProducts = x32.widenMulOdd(x32)
+    assert_eq(oddProducts.reduceAdd(), 120)
+    assert_eq(U32x8.splat(3).widenMulOdd(U32x8.splat(4)).reduceAdd(), 48)
     var wide64: [u64; 4] = [10, 20, 30, 40]
-    var combined = U64x4.fromLanes(wide64).add(U64x4.fromLanes(wide64).swapAdjacent())
+    var wideValue = U64x4.fromLanes(wide64)
+    var combined = wideValue.add(wideValue.swapAdjacent())
+    var transformed = wideValue.bitXor(wideValue.shiftRight(1)).shiftLeft(2).reinterpretU32()
+    assert_eq(transformed.widenMulEven(U32x8.splat(1)).reduceAdd(), 488)
     combined = combined.add(products)
     assert_eq(combined.reduceAdd(), 300)
     var wideOut = Array<u64>(4)

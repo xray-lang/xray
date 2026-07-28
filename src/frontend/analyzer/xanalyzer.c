@@ -473,6 +473,21 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
 
     xa_scope_free(analyzer->global_scope);
 
+    /* File scopes are children of global_scope and were reclaimed above.
+     * XaFileEntry itself, including its duplicated path, is owned by the
+     * analyzer's intrusive file list rather than by files_map. */
+    XaFileEntry *file_entry = analyzer->files;
+    while (file_entry) {
+        XaFileEntry *next = file_entry->next;
+        xr_free(file_entry->path);
+        file_entry->path = NULL;
+        file_entry->file_scope = NULL;
+        xr_free(file_entry);
+        file_entry = next;
+    }
+    analyzer->files = NULL;
+    analyzer->file_count = 0;
+
     // Free symbol registry (values are XaSymbol* owned by scopes, don't free them)
     if (analyzer->symbols_by_id) {
         xr_intmap_free((XrIntMap *) analyzer->symbols_by_id);
@@ -541,7 +556,7 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xr_type_pool_free(analyzer->type_pool);
     }
 
-    // Free files map (entries already freed via linked list above)
+    // Free the non-owning path -> XaFileEntry lookup map.
     if (analyzer->files_map) {
         xr_hashmap_free((XrHashMap *) analyzer->files_map);
     }
@@ -1278,16 +1293,19 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
         return NULL;
     }
 
-    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
-    if (!entry->file_scope) {
+    /* Register the entry before attaching its scope to global_scope.  This
+     * ordering keeps allocation failure atomic: a failed map insertion has
+     * no parent-owned child scope to detach. */
+    if (fmap && !xr_hashmap_set(fmap, entry->path, entry)) {
         xr_free(entry->path);
         xr_free(entry);
         return NULL;
     }
 
-    // Register in hash map first: an entry on the list but absent from the
-    // map would make the next lookup miss and create a duplicate entry.
-    if (fmap && !xr_hashmap_set(fmap, entry->path, entry)) {
+    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
+    if (!entry->file_scope) {
+        if (fmap)
+            xr_hashmap_delete(fmap, entry->path);
         xr_free(entry->path);
         xr_free(entry);
         return NULL;
@@ -1368,8 +1386,10 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
                 // Clear class_info - first clear all base references to prevent dangling pointers
                 if (links->class_info) {
                     clear_base_references(analyzer->global_scope, links->class_info, analyzer);
-                    xa_class_info_free(links->class_info);
+                    if (links->owns_class_info)
+                        xa_class_info_free(links->class_info);
                     links->class_info = NULL;
+                    links->owns_class_info = false;
                 }
 
                 // Actually remove symbol from scope
@@ -1564,6 +1584,16 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     if (!analyzer || !ast)
         return;
 
+    /* Analyzer inference may materialize syntax-level type references (for
+     * example inferred generic call arguments).  Those nodes are AST state,
+     * so allocate them from the program's arena and keep their lifetime tied
+     * to xr_program_destroy(). */
+    XrCompilerSessionScope ast_scope;
+    bool has_ast_scope =
+        ast->type == AST_PROGRAM && ast->as.program.arena &&
+        xr_compiler_session_push_arena(analyzer->compiler_session, ast->as.program.arena, file,
+                                       &ast_scope);
+
     // Set current type pool and symbol ID counter (eliminates global state)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
@@ -1595,6 +1625,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
+
+    if (has_ast_scope)
+        xr_compiler_session_pop_arena(&ast_scope);
 
     analyzer->semantic_revision++;
     if (analyzer->semantic_revision == 0)

@@ -16,6 +16,7 @@
 #include "xi_evidence.h"
 #include "xi_loop.h"
 #include "xi_module.h"
+#include "xi_range.h"
 #include "xi_effect.h"
 #include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"
@@ -260,6 +261,11 @@ void xi_func_free(XiFunc *f) {
     }
     xr_free(f->children);
 
+    /* XiFunc is the sole owner; XiModule.closure_metas is a lookup-only
+     * inventory of these pointers. */
+    xr_free(f->closure_meta);
+    f->closure_meta = NULL;
+
     /* Free attached module metadata (only set on program-level init funcs) */
     if (f->module) {
         /* Null out init to avoid xi_module_free trying to recurse into us */
@@ -273,6 +279,8 @@ void xi_func_free(XiFunc *f) {
         xi_loopinfo_free(f->loop_cache);
         f->loop_cache = NULL;
     }
+
+    xi_range_dispose(f);
 
     xi_evidence_dispose_func(f);
 
@@ -679,9 +687,7 @@ XR_FUNC void xi_module_free(XiModule *mod) {
     xr_free(mod->slot_const_literals);
     xr_free(mod->slot_shared_initializers);
     xr_free(mod->global_asm_templates);
-    /* Free closure metadata array (entries point into XiFunc, not owned) */
-    for (uint16_t i = 0; i < mod->nclosure_metas; i++)
-        xr_free(mod->closure_metas[i]);
+    /* Entries are borrowed from XiFunc; only the lookup array is module-owned. */
     xr_free(mod->closure_metas);
     xr_free(mod);
 }

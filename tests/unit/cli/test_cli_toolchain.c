@@ -65,6 +65,14 @@ static bool command_capture_has(const CommandCapture *capture, const char *arg) 
     return false;
 }
 
+static int command_capture_index(const CommandCapture *capture, const char *arg) {
+    for (size_t i = 0; capture && i < capture->count; i++) {
+        if (strcmp(capture->args[i], arg) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
 TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     XrToolchainSelection selection = {0};
     XrNativeCompileSpec compile = {0};
@@ -145,6 +153,90 @@ TEST(msvc_command_plan_fails_closed_for_gnu_only_intent) {
     selection.program = selection.program_storage;
     snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "cl.exe");
     compile.pic = true;
+    ASSERT_FALSE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "unsupported by MSVC") != NULL);
+}
+
+TEST(semantic_simd_intent_maps_provider_dialects) {
+    XrToolchainSelection selection = {0};
+    XrNativeCompileSpec compile = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+
+    selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-gnu", &selection.target, err, sizeof(err)));
+    compile.optimization = XR_OPTIMIZATION_RELEASE;
+
+    compile.simd = XR_NATIVE_SIMD_SSE2;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-msse2"));
+
+    memset(&capture, 0, sizeof(capture));
+    compile.simd = XR_NATIVE_SIMD_AVX2;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-mavx2"));
+
+    memset(&capture, 0, sizeof(capture));
+    compile.simd = XR_NATIVE_SIMD_AVX512;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-mavx512f"));
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_target_parse("aarch64-linux-musl", &selection.target, err, sizeof(err)));
+    compile.cpu = "generic+sve";
+    compile.simd = XR_NATIVE_SIMD_SVE;
+    compile.disable_vectorization = true;
+    compile.disable_slp_vectorization = true;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-mcpu=generic+sve"));
+    ASSERT_TRUE(command_capture_has(&capture, "-march=armv8-a+sve"));
+    ASSERT_TRUE(command_capture_index(&capture, "-mcpu=generic+sve") <
+                command_capture_index(&capture, "-march=armv8-a+sve"));
+    ASSERT_TRUE(command_capture_has(&capture, "-fno-vectorize"));
+    ASSERT_TRUE(command_capture_has(&capture, "-fno-slp-vectorize"));
+
+    memset(&capture, 0, sizeof(capture));
+    selection.provider = XR_TOOLCHAIN_PROVIDER_GCC;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-fno-tree-vectorize"));
+    ASSERT_TRUE(command_capture_has(&capture, "-fno-tree-slp-vectorize"));
+    ASSERT_FALSE(command_capture_has(&capture, "-fno-vectorize"));
+
+    selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_target_parse("powerpc64le-linux-musl", &selection.target, err, sizeof(err)));
+    compile.cpu = "pwr8";
+    compile.disable_vectorization = false;
+    compile.disable_slp_vectorization = false;
+    compile.simd = XR_NATIVE_SIMD_VSX;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-mcpu=pwr8"));
+    ASSERT_TRUE(command_capture_has(&capture, "-mvsx"));
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_target_parse("loongarch64-linux-musl", &selection.target, err, sizeof(err)));
+    compile.cpu = NULL;
+    compile.simd = XR_NATIVE_SIMD_LSX;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-mlsx"));
+
+    memset(&capture, 0, sizeof(capture));
+    selection.provider = XR_TOOLCHAIN_PROVIDER_MSVC;
+    ASSERT_TRUE(xtc_target_parse("x86_64-windows-msvc", &selection.target, err, sizeof(err)));
+    compile.simd = XR_NATIVE_SIMD_AVX2;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/arch:AVX2"));
+    ASSERT_FALSE(command_capture_has(&capture, "-mavx2"));
+
+    memset(&capture, 0, sizeof(capture));
+    compile.simd = XR_NATIVE_SIMD_AVX512;
+    ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/arch:AVX512"));
+
+    memset(&capture, 0, sizeof(capture));
+    compile.simd = XR_NATIVE_SIMD_SVE;
     ASSERT_FALSE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(strstr(err, "unsupported by MSVC") != NULL);
 }
@@ -697,6 +789,7 @@ RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
+RUN_TEST(semantic_simd_intent_maps_provider_dialects);
 RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 
 RUN_TEST_SUITE("Toolchain discovery");

@@ -47,7 +47,13 @@ typedef enum XrCpuTune {
 
 typedef enum XrNativeSimdMode {
     XR_NATIVE_SIMD_DEFAULT = 0,
+    XR_NATIVE_SIMD_SSE2,
     XR_NATIVE_SIMD_AVX2,
+    XR_NATIVE_SIMD_AVX512,
+    XR_NATIVE_SIMD_NEON,
+    XR_NATIVE_SIMD_SVE,
+    XR_NATIVE_SIMD_VSX,
+    XR_NATIVE_SIMD_LSX,
 } XrNativeSimdMode;
 
 typedef enum XrWarningPolicy {
@@ -73,6 +79,8 @@ typedef struct XrNativeCompileSpec {
     bool disable_stack_protector;
     bool disable_unwind_tables;
     bool disable_machine_outliner;
+    bool disable_vectorization;
+    bool disable_slp_vectorization;
     const char *cpu;
     const char *language_standard;
 } XrNativeCompileSpec;

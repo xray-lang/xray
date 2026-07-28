@@ -155,6 +155,52 @@ static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FIL
     return cg_emit_aot_stdlib_generated_constant_value(ctx, out, v, c);
 }
 
+/* Validate import resolution independently of value emission.  Release CGen
+ * deliberately erases dead import tokens, but link resolution is a program
+ * contract and must therefore fail closed even when a token has no emitted C
+ * use.  Keep this predicate aligned with xicgen_import_ref's supported
+ * resolution classes. */
+static bool cg_import_ref_has_aot_resolution(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                             const XiImportRef *ref) {
+    if (!ctx || !f || !v || !ref || !ref->module_path || !ref->module_path[0])
+        return false;
+
+    if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules &&
+        ctx->all_modules && ctx->all_modules[ref->resolved_mod_index]) {
+        const XiModule *target = ctx->all_modules[ref->resolved_mod_index];
+        if (!ref->member_name)
+            return true;
+        if (ref->resolved_shared_slot >= 0 && ref->resolved_shared_slot < target->nslots)
+            return true;
+    }
+
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *binding = &ctx->imports[i];
+        if (!binding->module_path || strcmp(binding->module_path, ref->module_path) != 0)
+            continue;
+        if (!ref->member_name)
+            return true;
+        if (binding->member_name && strcmp(binding->member_name, ref->member_name) == 0)
+            return true;
+    }
+
+    if (!ref->member_name &&
+        (strcmp(ref->module_path, "time") == 0 || strcmp(ref->module_path, "math") == 0 ||
+         strcmp(ref->module_path, "log") == 0 || strcmp(ref->module_path, "parallel") == 0 ||
+         cg_module_has_aot_direct_calls(ref->module_path)))
+        return true;
+    if (xicgen_import_ref_is_core_math_member(ref))
+        return true;
+    if (ref->member_name &&
+        (xa_builtin_get_record_type(ref->module_path, ref->member_name) ||
+         xa_builtin_get_enum_type(ref->module_path, ref->member_name) ||
+         cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name) ||
+         cg_aot_stdlib_generated_const_for_member(ref->module_path, ref->member_name)))
+        return true;
+    return cg_import_ref_has_verified_link_dependency(ctx, ref) &&
+           cg_import_ref_value_is_dead_for_aot(ctx, f, v);
+}
+
 static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                         const XiValue *v) {
     if (!ctx || !out || !f || !v || v->nargs < 1 || !v->aux)

@@ -14,6 +14,7 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xintmap.h"
 #include "../../base/xmalloc.h"
+#include "../../runtime/value/xstruct_layout.h"
 #include <string.h>
 
 // Thread-local symbol ID counter pointer (set by analyzer)
@@ -220,6 +221,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         xr_free(links->param_effects);
     if (links->return_fn_param_effects)
         xr_free(links->return_fn_param_effects);
+    if (links->inferred_param_types)
+        xr_free(links->inferred_param_types);
     if (links->deprecated_message)
         xr_free((void *) links->deprecated_message);
     if (links->type_param_names) {
@@ -242,6 +245,10 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         xa_enum_info_free(links->enum_info);
         links->enum_info = NULL;
     }
+    if (links->owns_class_info && links->class_info)
+        xa_class_info_free(links->class_info);
+    links->class_info = NULL;
+    links->owns_class_info = false;
     XaRefLocation *ref = links->references;
     while (ref) {
         XaRefLocation *next = ref->next;
@@ -333,7 +340,20 @@ void xa_scope_free(XaScope *scope) {
     if (scope->children)
         xr_free(scope->children);
 
-    // Free symbol map
+    // The lookup map can replace same-name bindings during error recovery or
+    // incremental analysis, so it is not an ownership inventory.  Reclaim
+    // every symbol from the scope's append-only ownership chain instead.
+    XaSymbol *symbol = scope->owned_symbols;
+    while (symbol) {
+        XaSymbol *next = symbol->scope_owned_next;
+        symbol->scope = NULL;
+        symbol->scope_owned_next = NULL;
+        xa_symbol_free(symbol);
+        symbol = next;
+    }
+    scope->owned_symbols = NULL;
+
+    // Free lookup maps after their non-owning value pointers are no longer used.
     xr_hashmap_free(scope->symbols);
     xr_hashmap_free(scope->aliases);
 
@@ -344,9 +364,15 @@ void xa_scope_free(XaScope *scope) {
 void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol) {
     if (!scope || !symbol || !symbol->name)
         return;
-    symbol->scope = scope;
-    // The map is the only storage for scope symbols; a dropped insert
-    // would silently corrupt name resolution. Fail-stop on OOM.
+    XR_CHECK(symbol->scope == NULL || symbol->scope == scope,
+             "symbol cannot be owned by multiple scopes");
+    if (symbol->scope == NULL) {
+        symbol->scope = scope;
+        symbol->scope_owned_next = scope->owned_symbols;
+        scope->owned_symbols = symbol;
+    }
+    // The map is the active name-resolution index; a dropped insert would
+    // silently corrupt lookup even though the ownership chain is intact.
     XR_CHECK(xr_hashmap_set(scope->symbols, symbol->name, symbol),
              "scope symbol insert failed (out of memory)");
     // Auto-register for O(1) ID lookup
@@ -359,7 +385,22 @@ void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol) {
 bool xa_scope_remove_symbol(XaScope *scope, const char *name) {
     if (!scope || !name)
         return false;
-    return xr_hashmap_delete(scope->symbols, name);
+    XaSymbol *symbol = (XaSymbol *) xr_hashmap_get(scope->symbols, name);
+    if (!symbol || !xr_hashmap_delete(scope->symbols, name))
+        return false;
+
+    XaSymbol **owned = &scope->owned_symbols;
+    while (*owned && *owned != symbol)
+        owned = &(*owned)->scope_owned_next;
+    XR_CHECK(*owned == symbol, "scope lookup symbol missing from ownership chain");
+    *owned = symbol->scope_owned_next;
+    symbol->scope = NULL;
+    symbol->scope_owned_next = NULL;
+
+    if (g_symbol_registry && symbol->id != 0 &&
+        xr_intmap_get(g_symbol_registry, symbol->id) == symbol)
+        xr_intmap_delete(g_symbol_registry, symbol->id);
+    return true;
 }
 
 // Bind a lookup-only alias to an existing symbol. The alias does not own the
@@ -463,6 +504,8 @@ void xa_class_info_free(XrClassInfo *info) {
         return;
     if (info->name)
         xr_free((void *) info->name);
+    if (info->base_name)
+        xr_free((void *) info->base_name);
     if (info->fields)
         xr_free(info->fields);
     if (info->methods)
@@ -473,12 +516,12 @@ void xa_class_info_free(XrClassInfo *info) {
         xr_free(info->static_methods);
     if (info->constructor_params)
         xr_free(info->constructor_params);
+    if (info->interface_types)
+        xr_free(info->interface_types);
     if (info->vtable)
         xr_free(info->vtable);
-    if (info->struct_layout) {
-        xr_free(info->struct_layout->field_names);
-        xr_free(info->struct_layout);
-    }
+    if (info->struct_layout)
+        xr_aggregate_layout_free_owned(info->struct_layout);
     if (info->members_map)
         xr_hashmap_free(info->members_map);
     xr_free(info);
@@ -968,7 +1011,11 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
                                         src->type_param_constraint_counts, src->type_param_count);
     }
 
+    /* Export metadata observes the declaration owner's canonical class graph.
+     * The source symbol remains its sole owner; imported symbol views must not
+     * reclaim that graph when their own scope is destroyed. */
     dst->class_info = src->class_info;
+    dst->owns_class_info = false;
     dst->enum_info = xa_enum_info_clone(src->enum_info);
 
     dst->module_name = src->module_name;

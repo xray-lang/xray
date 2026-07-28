@@ -272,6 +272,7 @@ struct XaSymbolLinks {
 
     // For classes
     struct XrClassInfo *class_info;
+    bool owns_class_info;  // true only for declaration metadata created by this symbol
 
     // For enum symbols (XA_SYM_ENUM)
     XaEnumInfo *enum_info;
@@ -336,8 +337,9 @@ struct XaSymbol {
     uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing
 
     // Parent references
-    XaScope *scope;    // Containing scope
-    XaSymbol *parent;  // Parent symbol (for methods/fields)
+    XaScope *scope;               // Owning scope
+    XaSymbol *scope_owned_next;   // Intrusive link for scope-owned lifetime
+    XaSymbol *parent;             // Parent symbol (for methods/fields)
 
     // For type aliases: declaration-backed TypeRef plus optional resolved cache.
     struct AstNode *type_alias_node;
@@ -381,6 +383,12 @@ struct XaScope {
 
     // Symbols in this scope (hash map: name -> XaSymbol*)
     void *symbols;  // XrHashMap internally
+
+    // Every symbol accepted by xa_scope_add_symbol remains owned by exactly
+    // one scope until explicitly removed.  This list intentionally retains
+    // replaced bindings: the lookup map may change during recovery or
+    // incremental analysis, but replacement must not orphan the old symbol.
+    XaSymbol *owned_symbols;
 
     // Lookup-only aliases (hash map: alias -> existing XaSymbol*). Aliases
     // participate in lexical resolution but are intentionally omitted from

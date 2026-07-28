@@ -184,7 +184,7 @@ static XaotAbiSlot fixed_array_place_param_slot(const XrType *type, const char *
     slot.rep.rep = XAOT_REP_RAWPTR;
     slot.rep.type = type;
     slot.rep.c_type = c_type;
-    slot.rep.flags = XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    slot.rep.flags = XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE;
     slot.pointee_rep.kind = XAOT_VALUE_VIEW;
     slot.pointee_rep.rep = XAOT_REP_RAWPTR;
     slot.pointee_rep.type = type;
@@ -354,7 +354,8 @@ static XaotValueRep struct_value_rep_for_slot(const XaotBundle *bundle, const Xi
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
     rep.c_type = struct_c_type_for_func(bundle, func, sl);
-    rep.flags = XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    rep.flags = XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_DYNAMIC_C_TYPE |
+                XAOT_VALUE_FLAG_OWNED_C_TYPE;
     return rep;
 }
 
@@ -428,7 +429,7 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
     slot.rep.rep = XAOT_REP_RAWPTR;
     slot.rep.type = type;
     slot.rep.c_type = c_type;
-    slot.rep.flags = XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    slot.rep.flags = XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE;
     slot.pointee_rep = value_slot.rep;
     slot.c_type = slot.rep.c_type;
     slot.flags = XAOT_ABI_SLOT_BORROWED_PLACE;
@@ -603,7 +604,7 @@ XR_FUNC XaotValueRep xaot_abi_slot_value_rep(const XaotAbiSlot *slot) {
         rep.kind = XAOT_VALUE_TAGGED;
         rep.rep = XAOT_REP_TAGGED;
     }
-    return rep;
+    return xaot_value_rep_borrow(rep);
 }
 
 XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind) {

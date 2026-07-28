@@ -743,6 +743,8 @@ static void test_aot_plan_free(TestAotPlan *plan) {
         xg_global_evidence_free(&plan->evidence);
 }
 
+static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error);
+
 /* Compile source to Xi IR (without emitting bytecode). */
 static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cfg) {
     assert(g_iso != NULL);
@@ -788,6 +790,51 @@ static XiFunc *compile_to_ir(const char *source) {
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
     return compile_to_ir_with_config(source, cfg);
+}
+
+static void require_detached_semantic_snapshot(const XiFunc *func) {
+    TEST_REQUIRE(func != NULL, "detached semantic snapshot function exists");
+    TEST_REQUIRE(func->semantic_snapshot_detached,
+                 "escaped Xi function carries a detached semantic snapshot");
+    TEST_REQUIRE(func->analyzer == NULL,
+                 "escaped Xi function has no analyzer back-pointer");
+    for (uint16_t i = 0; i < func->nchildren; i++)
+        require_detached_semantic_snapshot(func->children[i]);
+}
+
+TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
+    const char *src = "enum SnapshotValue { Text(value: string) }\n"
+                      "fn echo(v: SnapshotValue) -> SnapshotValue { return v }\n"
+                      "var value = echo(SnapshotValue.Text(\"ok\"))\n"
+                      "print(value)\n";
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "semantic snapshot fixture compiled to AOT IR");
+    require_detached_semantic_snapshot(ir);
+
+    /* The compiling analyzer and its type arena were destroyed by the helper.
+     * Repeatedly allocate and destroy a new analyzer pool so stale semantic
+     * pointers are likely to be overwritten before AOT planning consumes IR. */
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XaAnalyzer *churn = xa_analyzer_new(session);
+    TEST_REQUIRE(churn != NULL, "type-pool churn analyzer created");
+    for (int i = 0; i < 512; i++) {
+        XrType *element = xr_type_new_array(g_iso, xr_type_new_string(NULL));
+        XrType *params[] = {element};
+        TEST_REQUIRE(element != NULL &&
+                         xr_type_new_function(g_iso, params, 1, xr_type_new_bool(NULL), false) !=
+                             NULL,
+                     "type-pool churn allocation succeeded");
+    }
+    xa_analyzer_free(churn);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "snapshot", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "AOT planning and C generation use only the detached snapshot");
+
+    xr_free(code);
+    xi_func_free(ir);
 }
 
 /* CGen fixtures must explicitly produce a verified Backend program. CGen is
@@ -1183,6 +1230,11 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
+    const char *linux_feature_test = strstr(code, "#define _GNU_SOURCE 1");
+    const char *first_system_header = strstr(code, "#include <math.h>");
+    TEST_REQUIRE(linux_feature_test && first_system_header &&
+                     linux_feature_test < first_system_header,
+                 "hosted Linux feature-test macro precedes every system header");
     assert(contains(code, "#if defined(__cplusplus)\nextern \"C\" {\n#endif") &&
            contains(code, "#if defined(__cplusplus)\n}\n#endif") &&
            "generated definitions must retain C linkage under a C++ compiler");
@@ -1393,7 +1445,10 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
 }
 
 TEST(cgen_forward_use_predeclarations_have_no_dead_initializers) {
-    XrType int_type = {.kind = XR_KIND_INT, .id = 932, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    /* Use clean narrow arithmetic here: unlike native i64 wrap arithmetic,
+     * its emitter intentionally references the SSA locals.  That keeps this
+     * fixture focused on forward declarations rather than literal folding. */
+    XrType int_type = {.kind = XR_KIND_INT, .id = 932, .scalar_rep = XR_NATIVE_U32, .frozen = true};
     XiFunc *ir = xi_func_new("manual_forward_predecl", &int_type);
     TEST_REQUIRE(ir != NULL, "manual forward-predecl function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -1424,11 +1479,11 @@ TEST(cgen_forward_use_predeclarations_have_no_dead_initializers) {
     TEST_REQUIRE(fn != NULL, "manual forward-predecl definition emitted");
     const char *fn_end = strstr(fn, "\n}\n");
     TEST_REQUIRE(fn_end != NULL, "manual forward-predecl function end emitted");
-    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v0;") &&
-                     contains_between(fn, fn_end, "int64_t v1;"),
+    TEST_REQUIRE(contains_between(fn, fn_end, "uint32_t v0;") &&
+                     contains_between(fn, fn_end, "uint32_t v1;"),
                  "forward definitions must be declared before their earlier C use block");
-    TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v0 = 0;") &&
-                     !contains_between(fn, fn_end, "int64_t v1 = 0;"),
+    TEST_REQUIRE(!contains_between(fn, fn_end, "uint32_t v0 = 0;") &&
+                     !contains_between(fn, fn_end, "uint32_t v1 = 0;"),
                  "ordinary SSA dominance must not create dead defensive initializers");
     TEST_REQUIRE(contains_between(fn, fn_end, "v0 = INT64_C(41);") &&
                      contains_between(fn, fn_end, "v1 = INT64_C(1);"),
@@ -1807,12 +1862,13 @@ TEST(cgen_unused_call_result_emits_effect_statement_without_local) {
 }
 
 TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
-    const char *src = "fn grow() -> int {\n"
+    const char *src = "@noinline\n"
+                      "fn grow(flag: bool) -> int {\n"
                       "    var bytes: Array<byte> = [1, 2, 3]\n"
-                      "    bytes.reserve(len(bytes) + 4)\n"
+                      "    if (flag) { bytes.reserve(len(bytes) + 4) }\n"
                       "    return len(bytes)\n"
                       "}\n"
-                      "print(grow())\n";
+                      "print(grow(true))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "unused array reserve fixture should compile");
 
@@ -2214,6 +2270,92 @@ TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
     xi_func_free(ir);
 }
 
+TEST(cgen_native_signed_i64_constant_emits_immediate_without_local) {
+    const char *src = "@noinline\n"
+                      "fn addOne(value: int) -> int {\n"
+                      "    return value + 1\n"
+                      "}\n"
+                      "print(addOne(41))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "signed i64 constant IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "signed i64 constant C generation failed");
+    TEST_REQUIRE(!had_error, "signed i64 constant fixture should generate");
+    const char *fn = find_static_function_definition(code, "addOne_");
+    TEST_REQUIRE(fn != NULL, "signed i64 constant definition should be emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(1);"),
+                 "signed wrap arithmetic must not retain a dead constant local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "(uint64_t)(INT64_C(1))"),
+                 "signed wrap arithmetic must retain the exact immediate operand");
+
+    printf("  Generated immediate signed i64 arithmetic in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_runtime_string_slice_constant_emits_immediate_without_local) {
+    const char *src = "@noinline\n"
+                      "fn firstArgumentTail() -> string {\n"
+                      "    var value = process.args[0]\n"
+                      "    return value.slice(2)\n"
+                      "}\n"
+                      "print(firstArgumentTail())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "runtime string-slice constant IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "runtime string-slice constant C generation failed");
+    TEST_REQUIRE(!had_error, "runtime string-slice constant fixture should generate");
+    const char *fn = find_static_function_definition(code, "firstArgumentTail_");
+    TEST_REQUIRE(fn != NULL, "runtime string-slice definition should be emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(2);"),
+                 "dynamic string slice must not retain a dead constant local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "XR_FROM_INT(INT64_C(2))"),
+                 "dynamic string slice must retain the exact immediate operand");
+
+    printf("  Generated immediate dynamic string slice in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_constants_emit_immediate_without_locals) {
+    const char *src = "@noinline\n"
+                      "fn bytes() -> Array<byte> {\n"
+                      "    var out = Array<byte>(1)\n"
+                      "    out.push(92)\n"
+                      "    return out\n"
+                      "}\n"
+                      "print(len(bytes()))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "typed-array constant IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "typed-array constant C generation failed");
+    TEST_REQUIRE(!had_error, "typed-array constant fixture should generate");
+    const char *fn = find_static_function_definition(code, "bytes_");
+    TEST_REQUIRE(fn != NULL, "typed-array constant definition should be emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(1);"),
+                 "typed array capacity constant must not leave a local");
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(92);"),
+                 "typed array push constant must not leave a local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "INT64_C(92)"),
+                 "typed array push must retain its exact immediate value");
+
+    printf("  Generated immediate typed-array constants in %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
     const char *src = "@noinline\n"
                       "fn narrow(value: u32) -> u32 {\n"
@@ -2565,13 +2707,17 @@ TEST(cgen_multi_print) {
 
 TEST(cgen_while_loop) {
     /* While loop generates blocks and back edges */
-    const char *src = "var i = 0\n"
-                      "while (i < 5) {\n"
-                      "    i = i + 1\n"
+    const char *src = "fn hot() -> int {\n"
+                      "    var i = 0\n"
+                      "    while (i < 5) {\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return i\n"
                       "}\n"
-                      "print(i)\n";
+                      "print(hot())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
     if (!ir) {
         printf("  SKIP\n");
         return;
@@ -2584,6 +2730,17 @@ TEST(cgen_while_loop) {
     assert(contains(code, "goto L") && "should have goto for loop");
     /* Should have comparison */
     assert(contains(code, "<") && "should have comparison");
+    const char *hot = find_static_function_definition(code, "hot_");
+    TEST_REQUIRE(hot != NULL, "hot loop function should be emitted");
+    const char *hot_end = next_static_after(hot);
+    TEST_REQUIRE(contains_between(hot, hot_end, "while (") &&
+                     contains_between(hot, hot_end, "INT64_C(5)"),
+                 "structured loop guard must retain its exact literal condition");
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(
+                     hot, hot_end, "    int64_t v", " = INT64_C(5);") == 0 &&
+                     count_lines_outside_debug_locals_with_prefix(
+                         hot, hot_end, "    v", " = INT64_C(5);") == 0,
+                 "an inlined structured-loop bound must not leave a release C assignment");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -3323,13 +3480,16 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
 
 TEST(cgen_span_phi_snapshot_is_debug_only) {
     const char *src =
-        "fn selectedLength(flag: bool, first: Slice<byte>, second: Slice<byte>) -> int {\n"
+        "import mem\n"
+        "fn selectedLength(flag: bool, first: Slice<byte>, second: Slice<byte>, "
+        "output: MutPtr<byte>) -> int {\n"
         "    var selected: const Slice<byte> = first\n"
         "    if (flag) { selected = second }\n"
+        "    unsafe { mem.set(output, 0, 0) }\n"
         "    return len(selected)\n"
         "}\n"
         "var bytes = Array<byte>(2)\n"
-        "print(selectedLength(true, bytes[:], bytes[:]))\n";
+        "unsafe { print(selectedLength(true, bytes[:], bytes[:], bytes.mutPtr())) }\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -3348,6 +3508,8 @@ TEST(cgen_span_phi_snapshot_is_debug_only) {
                  "consumer-free Slice phi snapshots must not be copied in release C");
     TEST_REQUIRE(contains_between(selected, selected_end, "selected = phi"),
                  "debug source storage should still synchronize from the Slice phi");
+    TEST_REQUIRE(contains_between(selected, selected_end, "xrt_has_pending_error()"),
+                 "fixture must retain an ERR_CHECK cold edge with the Slice live");
 
     printf("  Generated debug-only Slice phi snapshots %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4619,6 +4781,43 @@ TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
                  "zero-byte raw-pointer copy must not establish a false non-null proof");
 
     printf("  Generated zero-byte raw pointer copy %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_rawptr_copy_forwarded_constant_has_no_release_local) {
+    const char *src = "fn copyTwo(enabled: bool, destination: MutPtr<byte>, source: Ptr<byte>) {\n"
+                      "    if (enabled) {\n"
+                      "        unsafe { destination.copyFromNonOverlapping(source, 2) }\n"
+                      "    }\n"
+                      "}\n"
+                      "var source = Array<byte>(2)\n"
+                      "var destination = Array<byte>(2)\n"
+                      "unsafe { copyTwo(true, destination.mutPtr(), source.ptr()) }\n";
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "forwarded raw-pointer-copy C generation failed");
+    TEST_REQUIRE(!had_error, "forwarded raw-pointer-copy fixture should generate");
+    const char *fn = find_static_function_definition(code, "copyTwo");
+    TEST_REQUIRE(fn != NULL, "copyTwo definition should exist");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(fn_end != NULL, "copyTwo function body should be bounded");
+    TEST_REQUIRE(contains_between(fn, fn_end, "memcpy(") &&
+                     contains_between(fn, fn_end, "(size_t)INT64_C(2)"),
+                 "forwarded constant copy count must remain literal at memcpy");
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(
+                     fn, fn_end, "    int64_t v", " = INT64_C(2);") == 0 &&
+                     count_lines_outside_debug_locals_with_prefix(
+                         fn, fn_end, "    v", " = INT64_C(2);") == 0,
+                 "forwarded memcpy constants must not leave a release C local or assignment");
+
+    printf("  Elided forwarded raw-pointer-copy constant in %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -10521,6 +10720,7 @@ int main(void) {
     run_aot_type_fingerprint_includes_param_modes();
     run_aot_type_fingerprint_separates_error_recovery();
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
+    run_aot_semantic_snapshot_survives_analyzer_pool_churn();
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_restricted_c90_header_is_explicit_and_minimal();
     run_cgen_simple_arith();
@@ -10550,6 +10750,9 @@ int main(void) {
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
     run_cgen_immediate_scalar_constant_inlines_into_place_store();
+    run_cgen_native_signed_i64_constant_emits_immediate_without_local();
+    run_cgen_runtime_string_slice_constant_emits_immediate_without_local();
+    run_cgen_typed_array_constants_emit_immediate_without_locals();
     run_cgen_clean_narrow_arithmetic_keeps_required_constant_local();
     run_cgen_struct_fixed_array_index_keeps_required_constant_local();
     run_cgen_skips_unused_process_builtin_init();
@@ -10618,6 +10821,7 @@ int main(void) {
     run_cgen_boxed_adapter_converts_byte_slice_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
     run_cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy();
+    run_cgen_rawptr_copy_forwarded_constant_has_no_release_local();
     run_cgen_rawptr_parallel_for_each_capture_is_rejected();
     run_cgen_span_index_get_elides_dead_err_check();
     run_cgen_span_slice_elides_dead_err_check();

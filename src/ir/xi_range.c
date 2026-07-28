@@ -233,6 +233,17 @@ static RangeTable *get_range_table(const XiFunc *f) {
     return (RangeTable *) f->analysis_data[0];
 }
 
+XR_FUNC void xi_range_dispose(XiFunc *f) {
+    if (!f)
+        return;
+    RangeTable *table = get_range_table(f);
+    if (!table)
+        return;
+    xr_free(table->ranges);
+    xr_free(table);
+    f->analysis_data[0] = NULL;
+}
+
 /* ========== IR Query ========== */
 
 XR_FUNC XiRange xi_range_of(const XiValue *v) {
@@ -550,11 +561,7 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
     }
 
     /* Free previous range table if re-running. */
-    RangeTable *old = get_range_table(f);
-    if (old) {
-        xr_free(old->ranges);
-        xr_free(old);
-    }
+    xi_range_dispose(f);
 
     /* Keep the table only as producer scratch/debug data. Consumers query the
      * revision-bound rows below. */

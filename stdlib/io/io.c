@@ -210,13 +210,23 @@ static XrValue io_readStdinBytes(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_value_from_array(arr);
 }
 
+static intptr_t XR_IO_CORE_ACQUIRE_HANDLE("xray_file_stream")
+io_file_open_handle(const char *path) {
+    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
+    return file ? (intptr_t) file : -1;
+}
+
+static bool io_file_close_handle(
+    intptr_t handle XR_IO_CORE_RELEASE_HANDLE("xray_file_stream")) {
+    return handle >= 0 && fclose((FILE *) handle) == 0;
+}
+
 static XrValue io_fileOpen(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(-1);
     const char *path = xrs_path_arg(args[0], NULL);
-    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
-    return xr_int(file ? (int64_t) (uintptr_t) file : -1);
+    return xr_int((int64_t) io_file_open_handle(path));
 }
 
 static XrValue io_fileRead(XrVMRuntime *X, XrValue *args, int argc) {
@@ -236,7 +246,7 @@ static XrValue io_fileClose(XrVMRuntime *X, XrValue *args, int argc) {
     int64_t handle = XR_TO_INT(args[0]);
     if (handle <= 0)
         return xr_bool(false);
-    return xr_bool(fclose((FILE *) (uintptr_t) handle) == 0);
+    return xr_bool(io_file_close_handle((intptr_t) handle));
 }
 
 static XrValue io_write_stream(XrValue *args, int argc, FILE *stream) {

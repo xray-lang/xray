@@ -181,8 +181,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
     // Register generic type params in type_scope for field/method type parsing.
     XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrTypeRef *type_param =
                 xr_tref_type_param(parser->compiler_session, type_params[i]->name);
@@ -234,6 +235,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         // Local parser allocations are arena-owned and released at parse end.
         if (type_param_count > 0) {
             parser->type_scope = saved_scope;
+            xr_type_scope_free(generic_scope);
         }
         // interfaces[] entries are arena-owned XrTypeRefs; nothing to free.
         (void) interfaces;
@@ -335,6 +337,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     // Restore type_scope after parsing class body
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
     }
 
     // Create class declaration AST node
@@ -413,8 +416,9 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
     // Register generic type params in type_scope for field/method type parsing.
     XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
@@ -549,6 +553,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     // Restore type_scope after parsing struct body
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
     }
 
     // Create struct declaration AST node
@@ -1729,8 +1734,9 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     // Register generic type params in type_scope so member type annotations
     // such as `iterator(): Iterator<T>` recognise T as a type parameter.
     XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
@@ -1812,6 +1818,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     // Restore type_scope after parsing interface body
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
     }
 
     // Create interface declaration AST node
@@ -2104,8 +2111,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
     // Register generic type params in type_scope for payload type parsing.
     XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
     if (type_param_count > 0) {
-        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
@@ -2261,6 +2269,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     // Restore type_scope after parsing enum body
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
     }
 
     AstNode *node = xr_ast_enum_decl(parser->compiler_session, enum_name, members, member_count,

@@ -47,6 +47,11 @@ static XrTypeRef **tref_copy_children(struct XrCompilerSession *session, XrTypeR
     return arr;
 }
 
+XR_FUNC XrTypeRef **xr_tref_array_copy(struct XrCompilerSession *session, XrTypeRef **refs,
+                                       int count) {
+    return tref_copy_children(session, refs, count);
+}
+
 /* ========== Primitive Constructors ========== */
 
 XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session) {

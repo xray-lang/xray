@@ -531,111 +531,65 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
  * specialized: cgen degrades to a map-backed object and calls a constructor that
  * was never generated.
  *
- * The analyzer runs after parsing, so the parse arena is not available for
- * ast_alloc. We instead build the XrTypeRef with xr_calloc — the same allocation
- * strategy monomorphization already uses when it clones type-ref arrays — and
- * point `name` at the persistent class/enum/type-param name (valid for the whole
- * compile). Returns NULL for shapes we do not synthesize; the caller then skips
+ * The inferred reference becomes part of the AST, so it uses the compiler
+ * session's active AST arena through the XrTypeRef constructors. Those
+ * constructors copy temporary child arrays; no analyzer-owned heap graph
+ * escapes. Returns NULL for shapes we do not synthesize; the caller then skips
  * the writeback and keeps prior behavior.
  */
-static XrTypeRef *xa_synth_tref_from_type(const XrType *t) {
-    if (!t)
+static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrType *t) {
+    if (!session || !t)
         return NULL;
-    uint8_t kind;
-    const char *name = NULL;
-    int nch = 0;
-    XrTypeRef **children = NULL;
-    uint8_t scalar_rep = XR_SCALAR_REP_NONE;
-    XrSourceTypeSpelling builtin_spelling = XR_SOURCE_TYPE_NONE;
     switch (t->kind) {
         case XR_KIND_INT:
-            scalar_rep = t->scalar_rep;
-            builtin_spelling = t->scalar_rep == XR_NATIVE_I64     ? XR_SOURCE_TYPE_INT
-                               : t->scalar_rep == XR_NATIVE_I8    ? XR_SOURCE_TYPE_I8
-                               : t->scalar_rep == XR_NATIVE_U8    ? XR_SOURCE_TYPE_BYTE
-                               : t->scalar_rep == XR_NATIVE_I16   ? XR_SOURCE_TYPE_I16
-                               : t->scalar_rep == XR_NATIVE_U16   ? XR_SOURCE_TYPE_U16
-                               : t->scalar_rep == XR_NATIVE_I32   ? XR_SOURCE_TYPE_I32
-                               : t->scalar_rep == XR_NATIVE_U32   ? XR_SOURCE_TYPE_U32
-                               : t->scalar_rep == XR_NATIVE_U64   ? XR_SOURCE_TYPE_U64
-                               : t->scalar_rep == XR_NATIVE_ISIZE ? XR_SOURCE_TYPE_ISIZE
-                               : t->scalar_rep == XR_NATIVE_USIZE ? XR_SOURCE_TYPE_USIZE
-                                                                  : XR_SOURCE_TYPE_NONE;
-            if (builtin_spelling == XR_SOURCE_TYPE_NONE)
-                return NULL;
-            kind = t->scalar_rep == XR_NATIVE_I64 ? XR_TREF_INT : XR_TREF_INT_WIDTH;
-            break;
+            return t->scalar_rep == XR_NATIVE_I64 ? xr_tref_int(session)
+                                                  : xr_tref_int_width(session, t->scalar_rep);
         case XR_KIND_FLOAT:
             if (!xr_scalar_rep_is_float(t->scalar_rep))
                 return NULL;
-            scalar_rep = t->scalar_rep;
-            builtin_spelling =
-                t->scalar_rep == XR_NATIVE_F64 ? XR_SOURCE_TYPE_FLOAT : XR_SOURCE_TYPE_F32;
-            kind = t->scalar_rep == XR_NATIVE_F64 ? XR_TREF_FLOAT : XR_TREF_FLOAT_WIDTH;
-            break;
+            return t->scalar_rep == XR_NATIVE_F64 ? xr_tref_float(session)
+                                                  : xr_tref_float_width(session, t->scalar_rep);
         case XR_KIND_STRING:
-            kind = XR_TREF_STRING;
-            break;
+            return xr_tref_string(session);
         case XR_KIND_BOOL:
-            kind = XR_TREF_BOOL;
-            break;
+            return xr_tref_bool(session);
         case XR_KIND_RUNE:
-            kind = XR_TREF_RUNE;
-            break;
+            return xr_tref_char(session);
         case XR_KIND_TYPE_PARAM:
-            if (!t->type_param.name)
-                return NULL;
-            kind = XR_TREF_TYPE_PARAM;
-            name = t->type_param.name;
-            break;
+            return t->type_param.name ? xr_tref_type_param(session, t->type_param.name) : NULL;
         case XR_KIND_ENUM:
-            if (!t->enum_type.enum_name)
-                return NULL;
-            kind = XR_TREF_NAMED;
-            name = t->enum_type.enum_name;
-            break;
+            return t->enum_type.enum_name ? xr_tref_named(session, t->enum_type.enum_name) : NULL;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE: {
             if (!t->instance.class_name)
                 return NULL;
-            name = t->instance.class_name;
             int n = t->instance.type_arg_count;
-            if (n > 0 && t->instance.type_args) {
-                if (n > 255)
-                    return NULL;
-                children = (XrTypeRef **) xr_calloc((size_t) n, sizeof(XrTypeRef *));
-                if (!children)
-                    return NULL;
-                for (int i = 0; i < n; i++) {
-                    children[i] = xa_synth_tref_from_type(t->instance.type_args[i]);
-                    if (!children[i]) {
-                        xr_free(children);
-                        return NULL;
-                    }
+            if (n <= 0 || !t->instance.type_args)
+                return xr_tref_named(session, t->instance.class_name);
+            if (n > 255)
+                return NULL;
+            XrTypeRef *stack_args[8] = {0};
+            XrTypeRef **args =
+                n <= 8 ? stack_args : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) n);
+            if (!args)
+                return NULL;
+            bool complete = true;
+            for (int i = 0; i < n; i++) {
+                args[i] = xa_synth_tref_from_type(session, t->instance.type_args[i]);
+                if (!args[i]) {
+                    complete = false;
+                    break;
                 }
-                nch = n;
-                kind = XR_TREF_GENERIC;
-            } else {
-                kind = XR_TREF_NAMED;
             }
-            break;
+            XrTypeRef *result =
+                complete ? xr_tref_generic(session, t->instance.class_name, args, n) : NULL;
+            if (args != stack_args)
+                xr_free(args);
+            return result;
         }
         default:
             return NULL;
     }
-    XrTypeRef *r = (XrTypeRef *) xr_calloc(1, sizeof(XrTypeRef));
-    if (!r) {
-        if (children)
-            xr_free(children);
-        return NULL;
-    }
-    r->kind = kind;
-    r->scalar_rep = scalar_rep;
-    r->builtin_spelling = (uint8_t) builtin_spelling;
-    r->name = name;
-    r->nchildren = (uint8_t) nch;
-    r->children = children;
-    return r;
 }
 
 /*
@@ -646,22 +600,30 @@ static XrTypeRef *xa_synth_tref_from_type(const XrType *t) {
  * type args were written and every inferred arg synthesizes; otherwise leaves
  * the node untouched.
  */
-void xa_writeback_inferred_type_args(CallExprNode *call, XrType **inferred, int type_param_count) {
-    if (!call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
+void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *call,
+                                     XrType **inferred, int type_param_count) {
+    if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
-    XrTypeRef **synth = (XrTypeRef **) xr_calloc((size_t) type_param_count, sizeof(XrTypeRef *));
+    XrTypeRef *stack_synth[8] = {0};
+    XrTypeRef **synth = type_param_count <= 8
+                            ? stack_synth
+                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
+                                                       (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
-        synth[i] = xa_synth_tref_from_type(inferred[i]);
+        synth[i] = xa_synth_tref_from_type(session, inferred[i]);
         if (!synth[i]) {
-            xr_free(synth);
+            if (synth != stack_synth)
+                xr_free(synth);
             return;
         }
     }
-    call->type_args = synth;
+    call->type_args = xr_tref_array_copy(session, synth, type_param_count);
+    if (synth != stack_synth)
+        xr_free(synth);
     call->type_arg_count = type_param_count;
-    call->semantic_type_args = synth;
+    call->semantic_type_args = call->type_args;
     call->semantic_type_arg_count = type_param_count;
 }
 
@@ -833,7 +795,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
                             inst->semantic_type_id = (uint32_t) semantic_type_id;
                         if (inst)
-                            xa_writeback_inferred_type_args(call, inferred, type_param_count);
+                            xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call,
+                                                            inferred, type_param_count);
                         if (inferred != inferred_buf)
                             xr_free(inferred);
                         if (inst)
@@ -2056,10 +2019,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
     else if (body_type && !XR_TYPE_IS_FUNCTION(body_type))
         result_type = body_type;
 
-    XrType **args = (XrType **) xr_malloc(sizeof(XrType *));
-    if (!args)
-        return xr_type_new_named_instance(ctx->analyzer->isolate, "Thread");
-    args[0] = result_type ? result_type : xr_type_new_unknown(NULL);
+    XrType *args[1] = {result_type ? result_type : xr_type_new_unknown(NULL)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "Thread", NULL, args, 1);
 }
 
@@ -2426,10 +2386,8 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType **type_args = (XrType **) xr_malloc(sizeof(XrType *));
-    if (!type_args)
-        return xr_type_new_error(ctx->analyzer->isolate);
-    type_args[0] = value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *type_args[1] = {
+        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
@@ -4307,11 +4265,8 @@ static XrType *xa_sync_runtime_construct_type(XaInferContext *ctx, const char *n
             elem = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
         if (!elem)
             elem = xr_type_new_unknown(NULL);
-        XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
-        if (!arg_copy)
-            return xr_type_new_unknown(NULL);
-        arg_copy[0] = elem;
-        return xr_type_new_generic_instance(ctx->analyzer->isolate, "WorkQueue", NULL, arg_copy, 1);
+        XrType *args[1] = {elem};
+        return xr_type_new_generic_instance(ctx->analyzer->isolate, "WorkQueue", NULL, args, 1);
     }
     return xr_type_new_named_instance(ctx->analyzer->isolate, name);
 }
@@ -6054,12 +6009,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
                 if (!et)
                     et = xr_type_new_unknown(NULL);
-                XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
-                if (arg_copy) {
-                    arg_copy[0] = et;
-                    return xr_type_new_generic_instance(ctx->analyzer->isolate, "Atomic", NULL,
-                                                        arg_copy, 1);
-                }
+                XrType *args[1] = {et};
+                return xr_type_new_generic_instance(ctx->analyzer->isolate, "Atomic", NULL, args,
+                                                    1);
             }
             XaSymbol *visible_class = xa_lookup_visible_symbol(ctx, name);
             if (xa_symbol_is_sync_runtime_class(ctx, visible_class, name)) {

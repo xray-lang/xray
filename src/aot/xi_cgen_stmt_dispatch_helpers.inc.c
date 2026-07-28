@@ -177,6 +177,12 @@ static void xicgen_emit_err_check_arc_cleanups(XiCgenCtx *ctx, FILE *out, const 
         XiValue *owner = check->args[i];
         if (!owner)
             continue;
+        /* await-all scalarization erases the temporary task array and its
+         * pushes.  ARC cleanup metadata is deliberately attached after the
+         * optimization pipeline, so omit a cold-edge drop for storage that
+         * CGen proves has no materialized representation. */
+        if (cg_await_all_inline_literal_value_is_elided(f, owner))
+            continue;
         XiValue *drop_args[1] = {owner};
         XiValue drop = {
             .op = XI_RELEASE,
