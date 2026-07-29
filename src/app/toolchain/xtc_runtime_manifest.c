@@ -111,8 +111,28 @@ static bool xtc_runtime_safe_relative_file(const char *path) {
            strcmp(path, "..") != 0;
 }
 
+static bool xtc_runtime_has_suffix(const char *value, const char *suffix) {
+    size_t value_len = value ? strlen(value) : 0;
+    size_t suffix_len = suffix ? strlen(suffix) : 0;
+    return suffix_len <= value_len && strcmp(value + value_len - suffix_len, suffix) == 0;
+}
+
+static bool xtc_runtime_windows_artifact_matches(const XrToolchainTarget *target,
+                                                 XrToolchainProviderId provider,
+                                                 const char *path) {
+    if (!target || target->os != XR_TOOLCHAIN_TARGET_OS_WINDOWS)
+        return true;
+    if (target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC)
+        return provider == XR_TOOLCHAIN_PROVIDER_MSVC && xtc_runtime_has_suffix(path, ".lib");
+    if (target->abi == XR_TOOLCHAIN_TARGET_ABI_GNU)
+        return provider == XR_TOOLCHAIN_PROVIDER_ZIG && xtc_runtime_has_suffix(path, ".a");
+    return false;
+}
+
 static bool xtc_runtime_parse_artifacts(XrJsonValue *array, const char *dir,
-                                        XrRuntimeArtifactSet *out, char *err, size_t err_size) {
+                                        const XrToolchainTarget *target,
+                                        XrToolchainProviderId provider, XrRuntimeArtifactSet *out,
+                                        char *err, size_t err_size) {
     int count = xjson_array_len(array);
     if (count <= 0 || count > XTC_RUNTIME_MAX_ARTIFACTS) {
         xtc_runtime_error(err, err_size, "runtime manifest has invalid artifact count", NULL);
@@ -124,8 +144,9 @@ static bool xtc_runtime_parse_artifacts(XrJsonValue *array, const char *dir,
         const char *kind = xjson_get_string(item, "kind");
         const char *path = xjson_get_string(item, "path");
         const char *sha256 = xjson_get_string(item, "sha256");
-        if (!id || !kind || !path || !sha256 || strlen(sha256) != 64 ||
-            !xtc_runtime_safe_relative_file(path)) {
+        if (!id || !kind || strcmp(kind, "static-library") != 0 || !path || !sha256 ||
+            strlen(sha256) != 64 || !xtc_runtime_safe_relative_file(path) ||
+            !xtc_runtime_windows_artifact_matches(target, provider, path)) {
             xtc_runtime_error(err, err_size, "runtime manifest contains an invalid artifact", NULL);
             return false;
         }
@@ -195,7 +216,8 @@ static bool xtc_runtime_load_installed(const char *root, const XrToolchainTarget
     XrJsonValue *libraries = xjson_get_array(doc, "systemLibraries");
     if (!manifest_target || strcmp(manifest_target, target->name) != 0 || !object_format ||
         !providers || !artifacts || !libraries ||
-        !xtc_runtime_provider_allowed(providers, provider)) {
+        !xtc_runtime_provider_allowed(providers, provider) ||
+        (target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS && strcmp(object_format, "coff") != 0)) {
         xjson_free(doc);
         xr_free(json);
         xtc_runtime_error(err, err_size, "runtime manifest does not match target/provider ABI",
@@ -226,7 +248,7 @@ static bool xtc_runtime_load_installed(const char *root, const XrToolchainTarget
     char digest_hex[65];
     xtc_sha256_hex(digest, digest_hex);
     snprintf(out->sdk_digest, sizeof(out->sdk_digest), "sha256:%s", digest_hex);
-    bool ok = xtc_runtime_parse_artifacts(artifacts, dir, out, err, err_size) &&
+    bool ok = xtc_runtime_parse_artifacts(artifacts, dir, target, provider, out, err, err_size) &&
               xtc_runtime_parse_system_libraries(libraries, out);
     xjson_free(doc);
     xr_free(json);

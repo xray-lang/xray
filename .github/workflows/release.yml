@@ -99,6 +99,8 @@ jobs:
         $zig = (Get-Command zig).Source
         $ccWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cc.cmd'
         $cxxWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cxx.cmd'
+        $arWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-ar.cmd'
+        $ranlibWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-ranlib.cmd'
         [IO.File]::WriteAllText(
           $ccWrapper,
           "@echo off`r`n`"$zig`" cc -target x86_64-windows-gnu %*`r`n",
@@ -109,12 +111,28 @@ jobs:
           "@echo off`r`n`"$zig`" c++ -target x86_64-windows-gnu %*`r`n",
           [Text.Encoding]::ASCII
         )
+        [IO.File]::WriteAllText(
+          $arWrapper,
+          "@echo off`r`n`"$zig`" ar %*`r`n",
+          [Text.Encoding]::ASCII
+        )
+        [IO.File]::WriteAllText(
+          $ranlibWrapper,
+          "@echo off`r`n`"$zig`" ranlib %*`r`n",
+          [Text.Encoding]::ASCII
+        )
         cmake -S . -B build-zig-sdk -G Ninja `
           -DCMAKE_SYSTEM_NAME=Windows `
           -DCMAKE_BUILD_TYPE=Release `
           "-DCMAKE_C_COMPILER=$ccWrapper" `
           "-DCMAKE_CXX_COMPILER=$cxxWrapper" `
           "-DCMAKE_ASM_COMPILER=$ccWrapper" `
+          "-DCMAKE_AR=$arWrapper" `
+          "-DCMAKE_RANLIB=$ranlibWrapper" `
+          "-DCMAKE_C_COMPILER_AR=$arWrapper" `
+          "-DCMAKE_C_COMPILER_RANLIB=$ranlibWrapper" `
+          "-DCMAKE_CXX_COMPILER_AR=$arWrapper" `
+          "-DCMAKE_CXX_COMPILER_RANLIB=$ranlibWrapper" `
           -DENABLE_TLS=OFF `
           -DBUILD_TESTS=OFF `
           -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE `
@@ -130,19 +148,12 @@ jobs:
       shell: pwsh
       run: |
         cmake --install build --config Release --prefix dist
-        # Keep the MSVC archives available for embedders, but out of the
-        # default -L search directory. Zig prefers the .lib spelling on
-        # Windows, which would otherwise select the MSVC archive instead of
-        # the self-contained GNU ABI archive copied below.
-        New-Item -ItemType Directory -Path dist\lib\msvc -Force | Out-Null
-        foreach ($archive in @('xray_rt_coro.lib', 'xray_aot_core.lib')) {
-          $installed = Join-Path 'dist\lib' $archive
-          if (Test-Path $installed) {
-            Move-Item $installed dist\lib\msvc\ -Force
-          }
-        }
-        Copy-Item build-zig-sdk\libxray_rt_coro.a dist\lib\ -Force
-        Copy-Item build-zig-sdk\libxray_aot_core.a dist\lib\ -Force
+        python scripts\stage_windows_gnu_runtime.py `
+          --root dist `
+          --target x86_64-windows-gnu `
+          --aot-core build-zig-sdk\libxray_aot_core.a `
+          --rt-coro build-zig-sdk\libxray_rt_coro.a
+        if ($LASTEXITCODE -ne 0) { throw 'Windows GNU runtime staging failed' }
         $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
         if (-not $buildExe) {
           throw 'xray.exe was not produced by the release build'
@@ -255,7 +266,7 @@ jobs:
             return 42
         }
 
-        answer()
+        print(answer())
         '@ | Set-Content -Encoding utf8 $smoke\cross.xr
         $xray = Join-Path $env:GITHUB_WORKSPACE 'dist\bin\xray.exe'
         Remove-Item Env:XRAY_INCLUDE -ErrorAction SilentlyContinue
@@ -266,6 +277,11 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw 'installed xray --version failed' }
         & $xray toolchain doctor
         if ($LASTEXITCODE -ne 0) { throw 'installed toolchain doctor failed' }
+        $zig = (Get-Command zig).Source
+        & $xray toolchain doctor --target native --provider zig --zig $zig --refresh
+        if ($LASTEXITCODE -ne 0) { throw 'installed Zig GNU toolchain doctor failed' }
+        python scripts\test_windows_runtime_abi_isolation.py --root dist --zig $zig
+        if ($LASTEXITCODE -ne 0) { throw 'Windows runtime ABI isolation failed' }
         Push-Location $smoke
         try {
           & $xray build --native --dump-link-command runtime_time.xr -o runtime_time.exe
@@ -278,10 +294,12 @@ jobs:
           if ($timeValues.Count -ne 5 -or $timeValues -contains 'false') {
             throw "installed AOT core output was '$($timeValues -join ',')'"
           }
-          & $xray build --native --target x86_64-linux-musl cross.xr -o cross-linux
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path cross-linux)) {
-            throw 'installed cross AOT build failed'
+          & $xray build --native --toolchain zig --zig $zig --target x86_64-windows-gnu cross.xr -o cross-zig.exe
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path cross-zig.exe)) {
+            throw 'installed Zig GNU AOT build failed'
           }
+          $zigValue = (& .\cross-zig.exe).Trim()
+          if ($zigValue -ne '42') { throw "installed Zig GNU output was '$zigValue'" }
         } finally {
           Pop-Location
         }
@@ -485,6 +503,7 @@ jobs:
             "macos-x86_64": ("macos", "x64"),
             "linux-arm64": ("linux", "arm64"),
             "linux-x86_64": ("linux", "x64"),
+            "windows-x86_64": ("windows", "x64"),
         }
         for path in metadata_files:
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -504,8 +523,8 @@ jobs:
                 "sha256": artifact["sha256"],
                 "payloadManifestSha256": value["payloadManifest"]["sha256"],
             })
-        if len(payloads) != 4:
-            raise SystemExit(f"expected four non-Windows payloads, got {len(payloads)}")
+        if len(payloads) != 5:
+            raise SystemExit(f"expected five release payloads, got {len(payloads)}")
         versions = {json.loads(path.read_text(encoding="utf-8"))["version"] for path in metadata_files}
         if len(versions) != 1:
             raise SystemExit("release metadata versions disagree")

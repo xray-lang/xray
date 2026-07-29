@@ -675,6 +675,7 @@ TEST(probe_json_schema_v1_is_valid_and_escaped) {
     options.request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
     options.profile = XR_TOOLCHAIN_PROFILE_HOSTED;
     result.selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-gnu", &result.selection.target, err, sizeof(err)));
     result.selection.ownership = XR_TOOLCHAIN_OWNERSHIP_EXTERNAL;
     result.selection.program = result.selection.program_storage;
     snprintf(result.selection.program_storage, sizeof(result.selection.program_storage), "%s",
@@ -721,6 +722,7 @@ TEST(probe_json_schema_v1_is_valid_and_escaped) {
     ASSERT_NOT_NULL(selection);
     ASSERT_STR_EQ(xjson_get_string(selection, "provider"), "llvm-clang");
     ASSERT_STR_EQ(xjson_get_string(selection, "version"), "clang \"test\"\nline");
+    ASSERT_STR_EQ(xjson_get_string(selection, "targetAbi"), "x86_64-linux-gnu");
     ASSERT_TRUE(xjson_get_bool(selection, "ready"));
     XrJsonValue *capabilities = xjson_get_object(doc, "capabilities");
     ASSERT_NOT_NULL(capabilities);

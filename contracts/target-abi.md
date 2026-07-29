@@ -80,6 +80,12 @@ emission, and native linking:
   native-input, or aggregate public-ABI dependency. Unsupported profiles fail
   before generated C is handed to a host compiler. Dialect identity is part of
   both object and link cache keys.
+- T4e: Windows native provider selection freezes the runtime archive ABI before
+  probe or link. MSVC resolves only `windows-msvc` COFF `.lib` artifacts, while
+  Zig normalizes native Windows to `windows-gnu` and resolves only COFF `.a`
+  artifacts. Runtime manifests reject cross-spelled archives even when their
+  digest is valid. A true cross-target probe may reuse installed host headers,
+  but it never advertises or links the host runtime into the cross artifact.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -119,15 +125,15 @@ anchor-sha256: src/aot/xaot_prepare.c 0a2119ede579c5a66139a24bdb77628679fc97548f
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 16153b0fb4075148ae0ab458dda75b7b8980984f4ee0aed8c6e1b5ac97239c30
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 7bd7f9f776b53e7f1fad6bc594744ec018420917d1d2b62225691cf8d7a27c07
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b487883db6de4c01c33bad0b08d6d4503831872f380b1e8936166d87ea44b59e
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c3bdf62f98453045a363be9d34cec341c74b6ad7919bc62021631a3f661979bd
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bc860359654ec6597cfbebe6fcd3944436af9b085010d3ebc92acac68a7c1601
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c a738267ee076e72538a97bad25162abaf8e53feafa8d2d4649d7413a50e860fb
+anchor-sha256: src/aot/xi_cgen.c 2e04ccc774c8d28cb2356b1dd5bd5a97c476d4fc513bf46f217dd12ed95de40c
 anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
 anchor-sha256: src/aot/xrt_core_freestanding.h eb21695742d968b6cb29e720d60bfc69dff5f1c7fcdc5ca2d7ee2c5c26abf0a8
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c d441773288383d3a1caf926edec49387a7d0988d19e3005f627ce812047f7de2
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e
-anchor-sha256: src/app/toolchain/xtc_probe.c 1feb4ecaa53dbc48ec5242734b6fb87740525b459b70477606f635f4590624a8
+anchor-sha256: src/app/toolchain/xtc_probe.c ab2f2f670f152d557b97835e753c268157b15cd8402c3025efe0adb1dbb88a23
 anchor-sha256: src/ir/xi.h 63b1b248ce49a131e24fd2305789f1641673f5178dc00159757b0fe7565b775f
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

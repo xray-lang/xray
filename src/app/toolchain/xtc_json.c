@@ -81,7 +81,7 @@ XR_FUNC bool xtc_probe_json_write(FILE *out, const char *requested_target,
     fputs("},\"request\":{\"target\":", out);
     xtc_json_write_string(out, requested_target);
     fputs(",\"normalizedTarget\":", out);
-    xtc_json_write_string(out, options->request.target.name);
+    xtc_json_write_string(out, result->selection.target.name);
     fputs(",\"profile\":", out);
     xtc_json_write_string(out, xtc_json_profile_name(options->profile));
     fputs(",\"provider\":", out);
@@ -95,7 +95,7 @@ XR_FUNC bool xtc_probe_json_write(FILE *out, const char *requested_target,
     fputs(",\"version\":", out);
     xtc_json_write_string(out, result->selection.version);
     fputs(",\"targetAbi\":", out);
-    xtc_json_write_string(out, options->request.target.name);
+    xtc_json_write_string(out, result->selection.target.name);
     fputs(",\"runtimeArtifact\":", out);
     xtc_json_write_string(out, result->selection.runtime_artifact);
     fprintf(out, ",\"ready\":%s,\"fallbackUsed\":%s},\"capabilities\":{", ready ? "true" : "false",

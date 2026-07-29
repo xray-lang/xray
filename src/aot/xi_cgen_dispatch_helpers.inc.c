@@ -3910,7 +3910,7 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
 
-    fprintf(out, "(%s[%d] = ({ XrValue _xsv = ", ctx->shared_name, (int) v->aux_int);
+    fprintf(out, "(%s[%d] = xrt_array_ref_ensure_owned(", ctx->shared_name, (int) v->aux_int);
     if (cg_value_plan_is_struct_aggregate(ctx, value)) {
         if (!emit_struct_aggregate_box_expr(ctx, out, f, value, prefix)) {
             fprintf(stderr, "[xi_cgen] ERROR: cannot box aggregate v%u for shared slot %d in %s\n",
@@ -3921,8 +3921,7 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     } else {
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     }
-    fprintf(out, "; (XR_IS_ARRAY_REF(_xsv) && (_xsv.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0) "
-                 "? xrt_array_ref_to_owned(_xsv) : _xsv; }))");
+    fprintf(out, "))");
 }
 
 static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
