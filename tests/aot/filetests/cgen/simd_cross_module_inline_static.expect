@@ -1,3 +1,4 @@
 args=--target x86_64-linux-musl --simd avx2
+c_regex=XRT_INTERNAL XR_FORCEINLINE XRT_TARGET_AVX2 uint8_t _simd_cross_module_inline_lib_[0-9a-f]+_addSeedNarrow_exp\(
 c_regex=XRT_INTERNAL XR_FORCEINLINE XRT_TARGET_AVX2 uint8_t _simd_cross_module_inline_lib_[0-9a-f]+_addSeedWide_exp\(
 c_syntax=pass

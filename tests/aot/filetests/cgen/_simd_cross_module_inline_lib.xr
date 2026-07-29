@@ -1,4 +1,13 @@
-import { Capabilities, U8x32, U64x4 } from simd
+import { Capabilities, U8x16, U8x32, U64x2, U64x4 } from simd
+
+@inline
+export fn addSeedNarrow(destination: ref [byte; 16], source: const Slice<byte>, seed: u64) -> bool {
+    var output: Slice<byte> = destination[:]
+    var delta = U64x2.splat(seed).replace(1, 0 - seed)
+    var block = U8x16.load(source, 0).reinterpretU64().add(delta)
+    block.reinterpretU8().store(ref output, 0)
+    return true
+}
 
 @inline
 fn addSeedWideLeaf(destination: ref [byte; 32], source: const Slice<byte>, seed: u64) -> bool {

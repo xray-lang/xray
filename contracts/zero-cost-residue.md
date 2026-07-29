@@ -57,6 +57,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c da6e2570ddf0819a148d79400bb11eda43eb51c70c0d113c22105011fd1d2d1a
+anchor-sha256: src/aot/xi_cgen.c a738267ee076e72538a97bad25162abaf8e53feafa8d2d4649d7413a50e860fb
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

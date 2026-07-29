@@ -1066,6 +1066,7 @@ static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *
                                             uint8_t width);
 static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
                                                uint8_t width);
+static bool cg_func_requires_static_x86_inline_target(const XiCgenCtx *ctx, const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
     return f && (f->native_callback_kind == XI_NATIVE_CALLBACK_PAR_FOR_I64 ||
@@ -1079,7 +1080,8 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
 
 static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
     if (cg_func_requires_x86_vector_target(ctx, f, 64) ||
-        cg_func_requires_x86_vector_target(ctx, f, 32)) {
+        cg_func_requires_x86_vector_target(ctx, f, 32) ||
+        cg_func_requires_static_x86_inline_target(ctx, f)) {
         if (cg_func_needs_external_linkage(ctx, f, prefix)) {
             if (cg_func_should_noinline(f))
                 return "XRT_INTERNAL XR_NOINLINE ";
@@ -10001,10 +10003,53 @@ static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFun
     return cg_func_requires_x86_vector_target_depth(ctx, f, f, 0, width);
 }
 
+/* A static AVX2 build may intentionally inline a portable 128-bit SIMD helper
+ * into its callers.  Compile that complete direct-call island for the selected
+ * target as well: this gives the native optimizer permission to combine
+ * adjacent baseline vectors without changing the source-level vector width.
+ * Runtime dispatch must keep these helpers baseline because no capability
+ * check guards their ordinary public callers. */
+static bool cg_func_requires_static_x86_inline_target_depth(const XiCgenCtx *ctx,
+                                                            const XiFunc *f,
+                                                            const XiFunc *origin,
+                                                            uint8_t depth) {
+    if (!ctx || !f || depth > 16)
+        return false;
+    if (depth > 0 && cg_func_should_noinline(f))
+        return false;
+    if (f->inline_hint && cg_func_has_native_vector_width(ctx, f, 16))
+        return true;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CALL || value->nargs < 1)
+                continue;
+            const XiFunc *target = cg_target_resolve_static_call(ctx, f, value->args[0]);
+            if (!target || target == origin)
+                continue;
+            if (cg_func_requires_static_x86_inline_target_depth(
+                    ctx, target, origin, (uint8_t) (depth + 1)))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_func_requires_static_x86_inline_target(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !ctx->target || !f || ctx->target->simd_mode == XAOT_SIMD_DISPATCH ||
+        (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) == 0)
+        return false;
+    return cg_func_requires_static_x86_inline_target_depth(ctx, f, f, 0);
+}
+
 static void emit_func_target_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     if (cg_func_requires_x86_vector_target(ctx, f, 64))
         fprintf(out, "XRT_TARGET_AVX512 ");
-    else if (cg_func_requires_x86_vector_target(ctx, f, 32))
+    else if (cg_func_requires_x86_vector_target(ctx, f, 32) ||
+             cg_func_requires_static_x86_inline_target(ctx, f))
         fprintf(out, "XRT_TARGET_AVX2 ");
 }
 
