@@ -1,12 +1,13 @@
 # Zero-cost residue contract
 
 Status: re-frozen after fixed-width x86 SIMD values became first-class CGen
-expressions across module-isolated feature islands. Cross-module declarations
-retain ordinary internal linkage without promising unavailable force-inline
-bodies, while generated target attributes and the W1-W4 verifier remain
-mandatory. The xxHash KAT, source/generated-C/assembly shape gates, and focused
-CGen fixtures were rerun; residue categories and allowance semantics are
-unchanged.
+expressions across module-isolated feature islands. Explicitly source-inlined
+cross-module vector wrappers retain their native force-inline contract in a
+static SIMD build. Runtime-dispatch wrappers remain baseline and call separate
+feature-attributed leaves, while generated target attributes and the W1-W4
+verifier remain mandatory. The xxHash KAT, source/generated-C/assembly shape
+gates, and focused CGen fixtures were rerun; residue categories and allowance
+semantics are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -34,7 +35,11 @@ precondition and an audit marker. Safe calls remain checked unless ordinary AOT
 proof removes only a redundant branch.
 
 Small external-linkage leaf bodies may carry a force-inline hint so native LTO
-can specialize a cross-module caller. The hint does not remove the exported
+can specialize a cross-module caller. A fixed-width vector wrapper explicitly
+marked `@inline` keeps that contract in a static SIMD build, where caller and
+callee share the selected ISA. A runtime-dispatch wrapper never inherits the
+feature target or its instructions into a baseline caller; it reaches a
+separately attributed leaf instead. The hint does not remove the exported
 symbol, does not assert effects, and is withheld when the ordinary inline
 policy observes loops, allocation, suspension, runtime calls, or local stack
 aggregates; reads of already-materialized module/global fixed arrays are not
@@ -52,6 +57,6 @@ affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c 78719ea140a4a23531cdee74c517c5b65617b788e58e7dc82d298a3904886418
+anchor-sha256: src/aot/xi_cgen.c da6e2570ddf0819a148d79400bb11eda43eb51c70c0d113c22105011fd1d2d1a
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2

@@ -1,0 +1,18 @@
+import { Capabilities, U8x32, U64x4 } from simd
+
+@inline
+fn addSeedWideLeaf(destination: ref [byte; 32], source: const Slice<byte>, seed: u64) -> bool {
+    var output: Slice<byte> = destination[:]
+    var delta = U64x4.fromLanes([seed, 0 - seed, seed, 0 - seed])
+    var block = U8x32.load(source, 0).reinterpretU64().add(delta)
+    block.reinterpretU8().store(ref output, 0)
+    return true
+}
+
+@inline
+export fn addSeedWide(destination: ref [byte; 32], source: const Slice<byte>, seed: u64) -> bool {
+    if (Capabilities.nativeBytes() < 32) {
+        return false
+    }
+    return addSeedWideLeaf(ref destination, source, seed)
+}

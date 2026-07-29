@@ -111,7 +111,12 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_USED __attribute__((used))
 #define XRT_ATTR_NAKED __attribute__((naked))
 #if defined(__x86_64__) || defined(__i386__)
+#if defined(__clang__)
+#define XRT_TARGET_AVX2                                                                            \
+    __attribute__((target("avx2"), __min_vector_width__(256), flatten))
+#else
 #define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
+#endif
 /* Clang before 19 rejects the newer evex512 feature name and ignores the
  * entire target attribute, so retain the AVX-512F island with the portable
  * feature spelling on those providers. */

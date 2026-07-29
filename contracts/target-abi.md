@@ -55,6 +55,12 @@ emission, and native linking:
   part of both object and link-output cache identities. Providers that predate
   Clang's `evex512` feature spelling retain the same AVX-512 island through the
   portable `avx512f` function target instead of dropping the whole attribute.
+  Clang AVX2 islands carry a 256-bit minimum-vector-width attribute so explicit
+  256-bit Xi operations are not silently legalized as paired 128-bit work.
+  In a static SIMD build, an explicitly `@inline` cross-module vector wrapper
+  retains hidden external linkage plus the native always-inline contract; a
+  runtime-dispatch wrapper remains baseline and calls separately attributed
+  feature leaves.
 - T4b: `loongarch64-linux-musl` defaults to scalar because LSX is not implied
   by the base target triple. Explicit `--simd lsx` or `--simd native` adds
   `-mlsx`, uses the portable 128-bit lane contract, and may publish native
@@ -116,9 +122,9 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 7bd7f9f776b53e7f1fad6b
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b487883db6de4c01c33bad0b08d6d4503831872f380b1e8936166d87ea44b59e
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bc860359654ec6597cfbebe6fcd3944436af9b085010d3ebc92acac68a7c1601
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c 78719ea140a4a23531cdee74c517c5b65617b788e58e7dc82d298a3904886418
+anchor-sha256: src/aot/xi_cgen.c da6e2570ddf0819a148d79400bb11eda43eb51c70c0d113c22105011fd1d2d1a
 anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
-anchor-sha256: src/aot/xrt_core_freestanding.h 1b65a7607516fdd820508d27b5644e610485f476f2d2a7690c7bb5d91494fba0
+anchor-sha256: src/aot/xrt_core_freestanding.h eb21695742d968b6cb29e720d60bfc69dff5f1c7fcdc5ca2d7ee2c5c26abf0a8
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c d441773288383d3a1caf926edec49387a7d0988d19e3005f627ce812047f7de2
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e

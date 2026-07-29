@@ -1080,8 +1080,19 @@ static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
 static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
     if (cg_func_requires_x86_vector_target(ctx, f, 64) ||
         cg_func_requires_x86_vector_target(ctx, f, 32)) {
-        if (cg_func_needs_external_linkage(ctx, f, prefix))
+        if (cg_func_needs_external_linkage(ctx, f, prefix)) {
+            if (cg_func_should_noinline(f))
+                return "XRT_INTERNAL XR_NOINLINE ";
+            /* In a static SIMD build every caller is compiled for the selected
+             * target, so an explicit source-level @inline contract is safe to
+             * preserve across module ABI boundaries.  Runtime dispatch must
+             * keep the externally linkable ISA island: inlining its body into
+             * a baseline caller would leak target-specific instructions. */
+            if (ctx && ctx->target && ctx->target->simd_mode != XAOT_SIMD_DISPATCH && f &&
+                f->inline_hint)
+                return "XRT_INTERNAL XR_FORCEINLINE ";
             return "XRT_INTERNAL ";
+        }
         if (cg_func_should_noinline(f))
             return "static XR_NOINLINE ";
         /* A direct-vector leaf is already inside the selected ISA island.

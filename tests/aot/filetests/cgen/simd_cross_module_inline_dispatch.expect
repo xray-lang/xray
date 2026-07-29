@@ -1,0 +1,4 @@
+args=--target x86_64-linux-musl --simd dispatch
+c_not_regex=XR_FORCEINLINE XRT_TARGET_AVX2 uint8_t _simd_cross_module_inline_lib_[0-9a-f]+_addSeedWide_exp\(
+c_regex=static XRT_TARGET_AVX2 uint8_t _simd_cross_module_inline_lib_[0-9a-f]+_addSeedWideLeaf_[0-9]+\(
+c_syntax=pass

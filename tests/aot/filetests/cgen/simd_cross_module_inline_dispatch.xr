@@ -1,0 +1,6 @@
+import { addSeedWide } from "./_simd_cross_module_inline_lib"
+
+var source: [byte; 32] = [1; 32]
+var destination: [byte; 32] = [0; 32]
+print(addSeedWide(ref destination, source[:], 7))
+print(destination[0])
