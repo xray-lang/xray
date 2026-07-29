@@ -7477,6 +7477,117 @@ static bool cg_vec_shuffle_only_feeds_fused_widen_mul(XiCgenCtx *ctx, const XiFu
     return cg_vec_shuffle_use_tree_is_fused(ctx, f, v, 0, &saw_fused) && saw_fused;
 }
 
+static bool cg_u64_mul_wide_operand_equivalent(const XiValue *a, const XiValue *b) {
+    a = cg_unwrap_identity_value(a);
+    b = cg_unwrap_identity_value(b);
+    if (a == b)
+        return true;
+    return a && b && a->op == XI_CONST && b->op == XI_CONST && a->type && b->type &&
+           a->type->kind == XR_KIND_INT && b->type->kind == XR_KIND_INT &&
+           a->aux_int == b->aux_int;
+}
+
+static bool cg_u64_mul_wide_operand_is_constant(const XiValue *v) {
+    v = cg_unwrap_identity_value(v);
+    return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_INT &&
+           cg_rep(v) == XR_REP_I64;
+}
+
+static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiValue *v) {
+    if (!ctx || !f || !v || (v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH) || v->nargs != 2 ||
+        !v->args[0] || !v->args[1] || !v->type || v->type->kind != XR_KIND_INT ||
+        v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 ||
+        cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
+        cg_rep(v->args[1]) != XR_REP_I64 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+        cg_value_has_cell(ctx, v) || strcmp(local_ctype_str_ctx(ctx, f, v), "uint64_t") != 0)
+        return false;
+    if (f->phi_coalesce && v->id < f->phi_coalesce_count && f->phi_coalesce[v->id] != v->id)
+        return false;
+    return true;
+}
+
+/* Pair exactly one low-half XI_MUL with exactly one XI_BIT_MUL_HIGH in the
+ * same basic block when one operand is constant.  Windows x86-64 evidence
+ * shows that this narrow profitability shape removes a redundant multiply
+ * without the register-pressure regressions seen for general operand pairs.
+ * Ambiguous repeated products, different operands, non-u64 values, cells, and
+ * cross-CFG pairs retain their ordinary independent lowering. */
+static bool cg_u64_mul_wide_pair(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                 const XiValue **out_partner, bool *out_is_first) {
+    if (!out_partner || !out_is_first || !cg_u64_mul_wide_value_is_eligible(ctx, f, v) ||
+        !v->block ||
+        (!cg_u64_mul_wide_operand_is_constant(v->args[0]) &&
+         !cg_u64_mul_wide_operand_is_constant(v->args[1])))
+        return false;
+
+    const XiValue *partner = NULL;
+    uint32_t equivalent_count = 0;
+    uint32_t partner_count = 0;
+    uint32_t value_index = UINT32_MAX;
+    uint32_t partner_index = UINT32_MAX;
+    uint16_t counterpart_op = v->op == XI_MUL ? XI_BIT_MUL_HIGH : XI_MUL;
+    for (uint32_t i = 0; i < v->block->nvalues; i++) {
+        const XiValue *candidate = v->block->values[i];
+        if (!candidate || !cg_u64_mul_wide_value_is_eligible(ctx, f, candidate))
+            continue;
+        bool same_order =
+            cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[0]) &&
+            cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[1]);
+        bool swapped_order =
+            cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[1]) &&
+            cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[0]);
+        if (!same_order && !swapped_order)
+            continue;
+        equivalent_count++;
+        if (candidate == v) {
+            value_index = i;
+            continue;
+        }
+        if (candidate->op != counterpart_op)
+            continue;
+        partner = candidate;
+        partner_index = i;
+        partner_count++;
+    }
+    if (equivalent_count != 2 || partner_count != 1 || value_index == UINT32_MAX ||
+        partner_index == UINT32_MAX)
+        return false;
+    uint32_t low_index = v->op == XI_MUL ? value_index : partner_index;
+    uint32_t high_index = v->op == XI_BIT_MUL_HIGH ? value_index : partner_index;
+    if (low_index >= high_index)
+        return false;
+    *out_partner = partner;
+    *out_is_first = v->op == XI_MUL;
+    return true;
+}
+
+static void emit_u64_mul_wide_pair_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const XiValue *v, const XiValue *partner) {
+    const XiValue *low = v->op == XI_MUL ? v : partner;
+    const XiValue *high = v->op == XI_BIT_MUL_HIGH ? v : partner;
+    if (!ctx->pre_decl_all) {
+        fprintf(out, "    uint64_t ");
+        emit_vref(out, high);
+        fprintf(out, ";\n    uint64_t ");
+        emit_vref(out, low);
+        fprintf(out, " = ");
+    } else {
+        fprintf(out, "    ");
+        emit_vref(out, low);
+        fprintf(out, " = ");
+    }
+    fprintf(out, "xr_u64_mul_wide((uint64_t) ");
+    emit_value_as_rep_ctx(ctx, out, low->args[0], XR_REP_I64);
+    fprintf(out, ", (uint64_t) ");
+    emit_value_as_rep_ctx(ctx, out, low->args[1], XR_REP_I64);
+    fprintf(out, ", &");
+    emit_vref(out, high);
+    fprintf(out, ");\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
@@ -7535,6 +7646,18 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     if (cg_fixed_array_value_clone_place_store(f, v))
         return;
+
+    const XiValue *wide_mul_partner = NULL;
+    bool wide_mul_is_first = false;
+    if (cg_u64_mul_wide_pair(ctx, f, v, &wide_mul_partner, &wide_mul_is_first)) {
+        if (wide_mul_is_first) {
+            emit_u64_mul_wide_pair_stmt(ctx, out, f, v, wide_mul_partner);
+        } else {
+            emit_value_generated_line_reset(ctx, out, v);
+            emit_debug_source_var_sync(ctx, out, f, v);
+        }
+        return;
+    }
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v)) {

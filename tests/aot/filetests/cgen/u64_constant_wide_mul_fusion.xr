@@ -1,0 +1,46 @@
+const FACTOR: u64 = 0x9E3779B185EBCA87
+
+@noinline
+fn constantPair(value: u64) -> u64 {
+    var low = value * FACTOR
+    var high = value.mulHigh(FACTOR)
+    return low ^ high
+}
+
+@noinline
+fn swappedConstantPair(value: u64) -> u64 {
+    var low = FACTOR * value
+    var high = value.mulHigh(FACTOR)
+    return low ^ high
+}
+
+@noinline
+fn dynamicPair(value: u64, factor: u64) -> u64 {
+    var low = value * factor
+    var high = value.mulHigh(factor)
+    return low ^ high
+}
+
+@noinline
+fn highBeforeLow(value: u64) -> u64 {
+    var high = value.mulHigh(FACTOR)
+    var low = value * FACTOR
+    return low ^ high
+}
+
+@noinline
+fn ambiguousRepeatedProduct(value: u64) -> u64 {
+    var low1 = value * FACTOR
+    var low2 = value * FACTOR
+    var high = value.mulHigh(FACTOR)
+    return low1 ^ low2 ^ high
+}
+
+var words: Array<u64> = [3, 5]
+var value = words[0]
+var factor = words[1]
+print(constantPair(value))
+print(swappedConstantPair(value))
+print(dynamicPair(value, factor))
+print(highBeforeLow(value))
+print(ambiguousRepeatedProduct(value))

@@ -1,0 +1,4 @@
+c_count=2:xr_u64_mul_wide(
+c_count=3:xr_u64_mul_high(
+c_not_contains=xrt_method_
+c_syntax=pass

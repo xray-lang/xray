@@ -15,6 +15,10 @@
 #include <stdint.h>
 #include <limits.h>
 
+#if defined(_MSC_VER) && defined(_M_X64)
+#include <intrin.h>
+#endif
+
 #ifndef XR_HAS_BUILTIN
 #if defined(__has_builtin)
 #define XR_HAS_BUILTIN(x) __has_builtin(x)
@@ -54,6 +58,23 @@ static inline uint64_t xr_u64_mul_high(uint64_t a, uint64_t b) {
     uint64_t hi_hi = a_hi * b_hi;
     uint64_t cross = (lo_lo >> 32) + (uint32_t) hi_lo + lo_hi;
     return hi_hi + (hi_lo >> 32) + (cross >> 32);
+#endif
+}
+
+/* Both halves of a full-width unsigned 64 x 64 product.  Keeping the pair in
+ * one expression lets native compilers select the target's single wide
+ * multiply instruction when AOT CGen proves that low and high Xi operations
+ * consume the same operands. */
+static inline uint64_t xr_u64_mul_wide(uint64_t a, uint64_t b, uint64_t *high) {
+#if defined(__SIZEOF_INT128__)
+    __uint128_t product = (__uint128_t) a * (__uint128_t) b;
+    *high = (uint64_t) (product >> 64);
+    return (uint64_t) product;
+#elif defined(_MSC_VER) && defined(_M_X64)
+    return _umul128(a, b, high);
+#else
+    *high = xr_u64_mul_high(a, b);
+    return a * b;
 #endif
 }
 

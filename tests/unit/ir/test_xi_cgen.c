@@ -33,6 +33,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
 #include "../../../src/base/xglobal_indices.h"
+#include "../../../src/shared/xr_int_arith.h"
 #include "../../../include/xray.h"
 
 #include <stdio.h>
@@ -84,6 +85,23 @@ static void teardown(void) {
         xray_vm_delete(g_iso);
         g_iso = NULL;
     }
+}
+
+TEST(u64_mul_wide_returns_both_exact_halves) {
+    uint64_t high = UINT64_MAX;
+    uint64_t low = xr_u64_mul_wide(UINT64_MAX, UINT64_C(2), &high);
+    TEST_REQUIRE(low == UINT64_MAX - UINT64_C(1) && high == UINT64_C(1),
+                 "max times two returns exact low and high halves");
+
+    high = UINT64_MAX;
+    low = xr_u64_mul_wide(UINT64_C(0x8000000000000000), UINT64_C(2), &high);
+    TEST_REQUIRE(low == UINT64_C(0) && high == UINT64_C(1),
+                 "top bit times two carries into the high half");
+
+    high = UINT64_MAX;
+    low = xr_u64_mul_wide(UINT64_MAX, UINT64_MAX, &high);
+    TEST_REQUIRE(low == UINT64_C(1) && high == UINT64_MAX - UINT64_C(1),
+                 "max squared returns exact low and high halves");
 }
 
 TEST(aot_type_fingerprint_includes_param_modes) {
@@ -10717,6 +10735,7 @@ int main(void) {
 
     setup();
 
+    run_u64_mul_wide_returns_both_exact_halves();
     run_aot_type_fingerprint_includes_param_modes();
     run_aot_type_fingerprint_separates_error_recovery();
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
