@@ -22,4 +22,4 @@ reinterpretation identities without reassigning the existing registry.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def a98ab399724f2b8ec311b8fb41e17f3704430bbf0981361a797abd818ac5fe34
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 2563e3a3d4e9c99b506887a35cc74a8273e31c9e47a1e495235cb6d6a3327c7f

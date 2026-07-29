@@ -4009,6 +4009,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U64x4.reinterpretU8",
+        .signature = "(): U8x32",
+        .summary = "",
+    },
+    {
         .name = "U64x4.shiftLeft",
         .signature = "(bits: int): U64x4",
         .summary = "",
@@ -8875,6 +8880,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x4.load` | `(data: Slice<u64>, offset: int = 0): U64x4` |  |\n"
             "| `U64x4.reduceAdd` | `(): u64` |  |\n"
             "| `U64x4.reinterpretU32` | `(): U32x8` |  |\n"
+            "| `U64x4.reinterpretU8` | `(): U8x32` |  |\n"
             "| `U64x4.shiftLeft` | `(bits: int): U64x4` |  |\n"
             "| `U64x4.shiftRight` | `(bits: int): U64x4` |  |\n"
             "| `U64x4.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"

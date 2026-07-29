@@ -71,6 +71,7 @@ fn run() {
     var combined = wideValue.add(wideValue.swapAdjacent())
     var transformed = wideValue.bitXor(wideValue.shiftRight(1)).shiftLeft(2).reinterpretU32()
     assert_eq(transformed.widenMulEven(U32x8.splat(1)).reduceAdd(), 488)
+    assert_eq(wideValue.reinterpretU8().reinterpretU64().reduceAdd(), 100)
     combined = combined.add(products)
     assert_eq(combined.reduceAdd(), 300)
     var wideOut = Array<u64>(4)
