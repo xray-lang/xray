@@ -107,7 +107,7 @@ order: 019
 | `E0413` | `XR_ERR_NULL_UNWRAP` | 强制解包 null |
 | `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零 |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | 模零 |
-| `E0422` | `XR_ERR_OVERFLOW` | 算术溢出 |
+| `E0422` | `XR_ERR_OVERFLOW` | 算术溢出或数值转换越界（含 NaN / 无穷大转整数） |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 
@@ -267,7 +267,7 @@ order: 019
 | `E0413` | `XR_ERR_NULL_UNWRAP` | force-unwrapping null |
 | `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | modulo by zero |
-| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow |
+| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 

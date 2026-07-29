@@ -279,6 +279,10 @@ XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
                                        struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstNode *node);
+XR_FUNC void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
+                                             const XrConversionWitness *witness);
+XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
+                                             XrConversionWitness *out_witness);
 XR_FUNC void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
                                            const XrCtValue *value);
 XR_FUNC bool xa_analyzer_get_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,

@@ -11319,24 +11319,19 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
-static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                const char *ctype) {
+static void xicgen_convert_i64_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                     const XiValue *v) {
     const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
-    if (arg && ctype) {
-        const char *arg_ctype = local_ctype_str_ctx(ctx, f, arg);
-        if (arg_ctype && strcmp(arg_ctype, ctype) == 0) {
-            const char *res_ctype = local_ctype_str_ctx(ctx, f, v);
-            if (res_ctype && strcmp(res_ctype, ctype) == 0) {
-                emit_vref(out, arg);
-            } else {
-                fprintf(out, "(int64_t)");
-                emit_vref(out, arg);
-            }
-            return;
-        }
+    uint8_t scalar_rep = xi_to_c_template_width_native_type(v->op);
+    (void) f;
+    if (!arg || scalar_rep == UINT8_MAX) {
+        emit_codegen_abort_expr(out);
+        return;
     }
-    fprintf(out, "(int64_t)(%s)", ctype);
+    fprintf(out, "xr_numeric_int_convert_i64(");
     emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
+    fprintf(out, ", %u, %u, (uint8_t)(sizeof(void *) * 8u))", (unsigned) scalar_rep,
+            (unsigned) scalar_rep);
 }
 
 static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -11368,8 +11363,11 @@ static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, cons
 }
 
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
-    fputs(preserve_loaded_float32 ? "" : "(double)(float)", out);
+    if (!preserve_loaded_float32)
+        fputs("xr_numeric_f64_to_f32(", out);
     emit_vref(out, v->args[0]);
+    if (!preserve_loaded_float32)
+        fputs(")", out);
 }
 
 static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -11379,7 +11377,7 @@ static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         case AOT_WIDTH_TEMPLATE_CAST_I64:
             if (xicgen_unsigned_narrow_lowbits_binop(ctx, out, f, v))
                 return;
-            xicgen_cast_i64_arg(ctx, out, f, v, xi_to_c_template_width_cast_type(v->op));
+            xicgen_convert_i64_width(ctx, out, f, v);
             return;
         case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:
             xicgen_f32_roundtrip(out, v,
@@ -12859,6 +12857,34 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     (void) prefix;
     XrRep dst_rep = cg_rep(v);
     XrRep src_rep = cg_rep(v->args[0]);
+    if (xr_conversion_kind_is_numeric(v->conversion.kind)) {
+        uint8_t source_scalar = v->conversion.source_scalar_rep;
+        uint8_t target_scalar = v->conversion.target_scalar_rep;
+        bool source_is_float = source_scalar == XR_NATIVE_F32 || source_scalar == XR_NATIVE_F64;
+        if (v->type->kind == XR_KIND_INT) {
+            fprintf(out, source_is_float ? "xrt_numeric_float_to_int_or_throw("
+                                         : "xr_numeric_int_convert_i64(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0],
+                                  source_is_float ? XR_REP_F64 : XR_REP_I64);
+            if (!source_is_float)
+                fprintf(out, ", %u", (unsigned) source_scalar);
+            fprintf(out, ", %u, (uint8_t)(sizeof(void *) * 8u))", (unsigned) target_scalar);
+            return;
+        }
+        if (v->type->kind == XR_KIND_FLOAT) {
+            fprintf(out, source_is_float ? "xr_numeric_float_convert("
+                                         : "xr_numeric_int_to_float(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0],
+                                  source_is_float ? XR_REP_F64 : XR_REP_I64);
+            if (!source_is_float)
+                fprintf(out, ", %u", (unsigned) source_scalar);
+            fprintf(out, ", %u", (unsigned) target_scalar);
+            if (!source_is_float)
+                fprintf(out, ", (uint8_t)(sizeof(void *) * 8u)");
+            fprintf(out, ")");
+            return;
+        }
+    }
     if (v->type->kind == XR_KIND_FLOAT) {
         if (dst_rep == XR_REP_TAGGED) {
             fprintf(out, "xrt_to_float(");

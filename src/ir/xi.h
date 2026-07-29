@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
+#include "../shared/xr_conversion.h"
 #include "../shared/xr_param_mode.h"
 #include "../runtime/value/xtransfer_mode.h"
 
@@ -244,6 +245,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CALL_METHOD   method name (debug)  (global_symbol_id << 1) | is_super
  *  XI_CALL_METHOD_DIRECT method name      method index
  *  XI_CALL_BUILTIN  —                    builtin_id
+ *  XI_CONVERT       —                     XiValue.type + XiValue.conversion are authoritative
+ *  XI_AS            target name           dynamic checked/nullable evidence only
  *  XI_EXTRACT       —                    obsolete; verifier rejects it
  *  XI_LOAD_UPVAL    —                    upvalue index
  *  XI_STORE_UPVAL   —                    upvalue index
@@ -312,7 +315,7 @@ typedef enum {
     XI_NOT, /* ! (unary) */
 
     /* Type conversion */
-    XI_CONVERT,               /* explicit type cast: aux stores target type */
+    XI_CONVERT,               /* explicit conversion: type + conversion witness are authoritative */
     XI_BOX,                   /* unboxed -> tagged XrValue */
     XI_UNBOX,                 /* tagged -> unboxed (type guard) */
     XI_ENUM_DESCRIPTOR_BOX,   /* typed scalar -> erased {layout, kind, scalar} box */
@@ -941,6 +944,7 @@ typedef struct XiValue {
     struct XrType *type;          /* authoritative compile-time type (never NULL) */
     int64_t aux_int;              /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;                    /* auxiliary pointer: proto, string literal, etc. */
+    XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
     XiCallPlan *call_plan;        /* verified read/ref/move call contract */
     XiViewEvidence view_evidence; /* Slice origin/range lifetime proof */
     struct XiValue **args;        /* operand values (SSA uses) */
@@ -1019,6 +1023,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->param_mode = src->param_mode;
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
+    dst->conversion = src->conversion;
     dst->view_evidence = src->view_evidence;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;

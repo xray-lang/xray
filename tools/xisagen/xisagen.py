@@ -1205,19 +1205,19 @@ XI_VM_TEMPLATE_SWAP_ARGS = {
 }
 
 XI_VM_TEMPLATE_WIDTH = {
-    'xi.narrow.i8': 'int8_t',
-    'xi.narrow.u8': 'uint8_t',
-    'xi.narrow.i16': 'int16_t',
-    'xi.narrow.u16': 'uint16_t',
-    'xi.narrow.i32': 'int32_t',
-    'xi.narrow.u32': 'uint32_t',
+    'xi.narrow.i8': 'XR_NATIVE_I8',
+    'xi.narrow.u8': 'XR_NATIVE_U8',
+    'xi.narrow.i16': 'XR_NATIVE_I16',
+    'xi.narrow.u16': 'XR_NATIVE_U16',
+    'xi.narrow.i32': 'XR_NATIVE_I32',
+    'xi.narrow.u32': 'XR_NATIVE_U32',
     'xi.narrow.f32': '',
-    'xi.widen.i8': 'int8_t',
-    'xi.widen.u8': 'uint8_t',
-    'xi.widen.i16': 'int16_t',
-    'xi.widen.u16': 'uint16_t',
-    'xi.widen.i32': 'int32_t',
-    'xi.widen.u32': 'uint32_t',
+    'xi.widen.i8': 'XR_NATIVE_I8',
+    'xi.widen.u8': 'XR_NATIVE_U8',
+    'xi.widen.i16': 'XR_NATIVE_I16',
+    'xi.widen.u16': 'XR_NATIVE_U16',
+    'xi.widen.i32': 'XR_NATIVE_I32',
+    'xi.widen.u32': 'XR_NATIVE_U32',
     'xi.widen.f32': '',
 }
 
@@ -1709,25 +1709,26 @@ def generate_xi_vm_template_width_dispatch(entries: list[XiLoweringDef]) -> str:
     lines.append('/* Source: xisa/xi/lowering.def */')
     lines.append('/* Included inside xvm.c dispatch switch; relies on i, R, vmcase, vmbreak. */')
     lines.append('')
-    lines.append('#define XVM_TEMPLATE_WIDTH_INT_CASE(op, ctype) \\')
+    lines.append('#define XVM_TEMPLATE_WIDTH_INT_CASE(op, scalar_rep) \\')
     lines.append('    vmcase(op) { \\')
     lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_INT((int64_t) (ctype) XR_TO_INT(R(b))); \\')
+    lines.append('        R(a) = XR_FROM_INT(xr_numeric_int_convert_i64( \\')
+    lines.append('            XR_TO_INT(R(b)), scalar_rep, scalar_rep, 64)); \\')
     lines.append('        vmbreak; \\')
     lines.append('    }')
     lines.append('')
     lines.append('#define XVM_TEMPLATE_WIDTH_F32_CASE(op) \\')
     lines.append('    vmcase(op) { \\')
     lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_FLOAT((double) (float) XR_TO_FLOAT(R(b))); \\')
+    lines.append('        R(a) = XR_FROM_FLOAT(xr_numeric_f64_to_f32(XR_TO_FLOAT(R(b)))); \\')
     lines.append('        vmbreak; \\')
     lines.append('    }')
     lines.append('')
     for entry in width_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        ctype = XI_VM_TEMPLATE_WIDTH[entry.op_name]
-        if ctype:
-            lines.append(f'XVM_TEMPLATE_WIDTH_INT_CASE({opcode}, {ctype})')
+        scalar_rep = XI_VM_TEMPLATE_WIDTH[entry.op_name]
+        if scalar_rep:
+            lines.append(f'XVM_TEMPLATE_WIDTH_INT_CASE({opcode}, {scalar_rep})')
         else:
             lines.append(f'XVM_TEMPLATE_WIDTH_F32_CASE({opcode})')
     lines.append('')
@@ -2062,6 +2063,7 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('#include <stdbool.h>')
     lines.append('#include <stdint.h>')
     lines.append('#include "../ir/xi.h"')
+    lines.append('#include "../shared/xr_native_type_core.h"')
     lines.append('')
     lines.append('#define XI_TO_C_LOWERING_DRIVERS(X) \\')
     for i, entry in enumerate(target_entries):
@@ -2230,6 +2232,18 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
+    lines.append('static inline uint8_t xi_to_c_template_width_native_type(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in width_entries:
+        native_type = XI_VM_TEMPLATE_WIDTH[entry.op_name]
+        if native_type:
+            lines.append(f'        case XI_{entry.ident}: return {native_type};')
+    lines.append('        case XI_OP_COUNT: return UINT8_MAX;')
+    lines.append('        default: return UINT8_MAX;')
+    lines.append('    }')
+    lines.append('    return UINT8_MAX;')
+    lines.append('}')
+    lines.append('')
     lines.append('static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in width_entries:
@@ -2337,10 +2351,15 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
                 f'    assert(xi_to_c_template_compare_swaps_tagged_args(XI_{entry.ident}) == {swaps_c});')
         if 'aot-c' in entry.target_drivers and entry.template in {'narrow', 'widen'}:
             kind, ctype, preserve = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
+            native_type = XI_VM_TEMPLATE_WIDTH[entry.op_name]
             preserve_c = 'true' if preserve else 'false'
             lines.append(f'    assert(xi_to_c_template_width_kind(XI_{entry.ident}) == {kind});')
             lines.append(
                 f'    assert(strcmp(xi_to_c_template_width_cast_type(XI_{entry.ident}), "{ctype}") == 0);')
+            expected_native_type = native_type if native_type else 'UINT8_MAX'
+            lines.append(
+                f'    assert(xi_to_c_template_width_native_type(XI_{entry.ident}) == '
+                f'{expected_native_type});')
             lines.append(
                 f'    assert(xi_to_c_template_width_preserves_loaded_f32(XI_{entry.ident}) == {preserve_c});')
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
@@ -3645,6 +3664,7 @@ def _test_xi_lowering_parser():
     assert 'XiToCWidthTemplateKind' in aot_header
     assert 'xi_to_c_template_width_kind' in aot_header
     assert 'xi_to_c_template_width_cast_type' in aot_header
+    assert 'xi_to_c_template_width_native_type' in aot_header
     stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
                                                      'TEST_STMT')
     assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header

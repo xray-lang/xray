@@ -87,8 +87,10 @@ def load_patterned_entries(root: Path):
     xisagen = load_xisagen(root)
     ops_path = root / "xisa/xi/ops.def"
     lowering_path = root / "xisa/xi/lowering.def"
-    ops = xisagen.parse_xi_ops_def(ops_path.read_text(), str(ops_path))
-    entries = xisagen.parse_xi_lowering_def(lowering_path.read_text(), ops, str(lowering_path))
+    ops = xisagen.parse_xi_ops_def(ops_path.read_text(encoding="utf-8"), str(ops_path))
+    entries = xisagen.parse_xi_lowering_def(
+        lowering_path.read_text(encoding="utf-8"), ops, str(lowering_path)
+    )
     return [entry for entry in entries if entry.template != "custom"]
 
 
@@ -182,7 +184,9 @@ def parse_template_drivers(text: str, macro_names: set[str]) -> set[str]:
 def load_generated_template_drivers(root: Path) -> dict[str, set[str]]:
     generated: dict[str, set[str]] = {}
     for target, (rel, macros) in TARGET_TEMPLATE_MACROS.items():
-        generated[target] = parse_template_drivers((root / rel).read_text(), macros)
+        generated[target] = parse_template_drivers(
+            (root / rel).read_text(encoding="utf-8"), macros
+        )
     return generated
 
 
@@ -191,7 +195,7 @@ def gather_scan_files(root: Path) -> dict[str, str]:
     for rel in CASE_SCAN_FILES:
         for path in root.glob(rel):
             if path.is_file():
-                files[path.relative_to(root).as_posix()] = path.read_text()
+                files[path.relative_to(root).as_posix()] = path.read_text(encoding="utf-8")
     return dict(sorted(files.items()))
 
 
@@ -200,7 +204,7 @@ def read_rel_files(root: Path, rels: tuple[str, ...]) -> dict[str, str]:
     for rel in rels:
         path = root / rel
         if path.is_file():
-            files[rel] = path.read_text()
+            files[rel] = path.read_text(encoding="utf-8")
     return files
 
 
@@ -321,13 +325,17 @@ def run_check(root: Path) -> list[Violation]:
     generated = load_generated_template_drivers(root)
     texts = gather_scan_files(root)
     vm_body_texts = read_rel_files(root, VM_BODY_SCAN_FILES)
-    vm_width_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
-    vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text()
-    vm_bitwise_unary_generated_text = (root / VM_GENERATED_BITWISE_UNARY_FILE).read_text()
-    vm_unary_generated_text = (root / VM_GENERATED_UNARY_FILE).read_text()
-    vm_arith_binary_generated_text = (root / VM_GENERATED_ARITH_BINARY_FILE).read_text()
-    vm_shift_generated_text = (root / VM_GENERATED_SHIFT_FILE).read_text()
-    vm_compare_generated_text = (root / VM_GENERATED_COMPARE_FILE).read_text()
+    vm_width_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text(encoding="utf-8")
+    vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text(encoding="utf-8")
+    vm_bitwise_unary_generated_text = (root / VM_GENERATED_BITWISE_UNARY_FILE).read_text(
+        encoding="utf-8"
+    )
+    vm_unary_generated_text = (root / VM_GENERATED_UNARY_FILE).read_text(encoding="utf-8")
+    vm_arith_binary_generated_text = (root / VM_GENERATED_ARITH_BINARY_FILE).read_text(
+        encoding="utf-8"
+    )
+    vm_shift_generated_text = (root / VM_GENERATED_SHIFT_FILE).read_text(encoding="utf-8")
+    vm_compare_generated_text = (root / VM_GENERATED_COMPARE_FILE).read_text(encoding="utf-8")
     vm_width_opcodes = vm_generated_body_opcodes(root, entries)
     vm_bitwise_opcodes = vm_generated_bitwise_binary_opcodes(root, entries)
     vm_bitwise_unary_opcodes = vm_generated_bitwise_unary_opcodes(root, entries)
@@ -432,7 +440,7 @@ def run_self_test() -> None:
     vm_opcodes = {"OP_NARROW_I8"}
     vm_coverage = check_vm_generated_body_coverage(
         vm_opcodes,
-        "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, int8_t)\n",
+        "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, XR_NATIVE_I8)\n",
         VM_GENERATED_WIDTH_FILE,
         r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "width")

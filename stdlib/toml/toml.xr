@@ -281,9 +281,9 @@ fn _isHexDigit(c: string) -> bool {
 
 fn _hexValue(c: string) -> int {
     var o = c.runes().nth(0).toUInt32()
-    if (o >= 48 && o <= 57) { return o - 48 }
-    if (o >= 65 && o <= 70) { return o - 55 }
-    if (o >= 97 && o <= 102) { return o - 87 }
+    if (o >= 48 && o <= 57) { return (o - 48) as int }
+    if (o >= 65 && o <= 70) { return (o - 55) as int }
+    if (o >= 97 && o <= 102) { return (o - 87) as int }
     return -1
 }
 
@@ -915,7 +915,7 @@ fn _escapeString(value: string) -> string {
         } else if (c == "\t") {
             out.append("\\t")
         } else {
-            var o = c.runes().nth(0).toUInt32()
+            var o = c.runes().nth(0).toUInt32() as int
             if (o < 32 || o == 127) {
                 out.append("\\u")
                 var hex = "0123456789ABCDEF"

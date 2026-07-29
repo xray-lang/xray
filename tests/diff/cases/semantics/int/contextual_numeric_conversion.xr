@@ -1,0 +1,42 @@
+// anchor: contextual-numeric-conversion
+// Task 242: contextual literals, strict widening, and explicit conversions
+// have one VM/AOT value-and-failure contract.
+
+fn takeU64(value: u64) -> u64 {
+    return value
+}
+
+var byteValue: u8 = 255
+var widened: u64 = byteValue
+var mask: u32 = 0x85EBCA77
+var maxU64: u64 = 18446744073709551615
+const constMaxU64: u64 = 18446744073709551615
+const foldedLow: u32 = constMaxU64 as u32
+print(widened == 255)
+print(mask == 2246822519)
+print(takeU64(1) == 1)
+print(foldedLow == 4294967295)
+
+print((maxU64 as u32) == 4294967295)
+print((-1 as u8) == 255)
+
+var rounded32: f32 = 16777217 as f32
+var rounded64: f64 = maxU64 as f64
+print(rounded32 == 16777216.0)
+print(rounded64 == 18446744073709551616.0)
+print((-0.99 as u8) == 0)
+
+try {
+    print(256.0 as u8)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}
+
+try {
+    var nan = 0.0 / 0.0
+    print(nan as int)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}

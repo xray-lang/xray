@@ -446,7 +446,7 @@ fn _parseNDigits(s: string, start: int, count: int) -> int? {
     for (var i = 0; i < count; i++) {
         var c = s.runes().nth(start + i).toUInt32()
         if (c < 48 || c > 57) { return null }
-        out = out * 10 + (c - 48)
+        out = out * 10 + ((c - 48) as int)
     }
     return out
 }
@@ -497,7 +497,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     while (p < len(s) && digits < 3) {
         var c = s.runes().nth(p).toUInt32()
         if (c < 48 || c > 57) { break }
-        ms = ms * 10 + (c - 48)
+        ms = ms * 10 + ((c - 48) as int)
         digits = digits + 1
         p = p + 1
     }

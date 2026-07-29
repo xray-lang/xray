@@ -157,9 +157,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
-- 字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
-- 范围：`i64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `var x: i8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
+- 无唯一数值上下文的整数字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：默认 `int` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `int` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
 
 ```xray
 42
@@ -382,7 +382,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 `==` `!=` `<` `<=` `>` `>=`
 
-- `==` `!=`：值相等（隐式数值转换：int→float）
+- `==` `!=`：值相等；数值操作数必须具有相同类型，或仅需同符号整数加宽 / `f32 → f64`。整数字面量可直接取得另一操作数的数值类型。
 - `<` 等：数字、字符串支持；其他类型不支持
 
 #### 1.7.5 逻辑
@@ -599,9 +599,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
-- Default literal type is `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
-- Range: `i64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: i8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
+- An integer literal without a unique numeric context defaults to `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: the default `int` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `int` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
 ```xray
 42
@@ -824,7 +824,7 @@ Full token table (by category):
 
 `==` `!=` `<` `<=` `>` `>=`
 
-- `==` `!=`: value equality (with implicit numeric promotion: int→float).
+- `==` `!=`: value equality; numeric operands must have the same type or require only same-signed integer widening / `f32 → f64`. An integer literal may directly acquire the other operand's numeric type.
 - `<` etc.: supported by numbers and strings; not supported by other types.
 
 #### 1.7.5 Logical

@@ -198,6 +198,10 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
                                         struct XrType *receiver_type, uint32_t source_span_id);
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
                                                      const char *method_name, bool is_static);
+XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l,
+                                                           struct AstNode *source_node,
+                                                           XiValue *value,
+                                                           struct XrType *target_type);
 
 /* ========== Method Symbol Resolution ========== */
 

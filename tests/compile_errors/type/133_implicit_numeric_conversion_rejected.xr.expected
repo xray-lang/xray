@@ -1,0 +1,7 @@
+Type 'u64' is not assignable to type 'byte'
+Type 'i32' is not assignable to type 'u32'
+Type 'usize' is not assignable to type 'u64'
+Type 'u64' is not assignable to type 'float'
+Type 'float' is not assignable to type 'f32'
+Argument 1: type 'u64' is not assignable to parameter type 'byte'
+Return type mismatch: expected 'byte', got 'u64'

@@ -754,13 +754,19 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
 /* ========== Expression Lowering ========== */
 
 static XiValue *lower_literal(XiLower *l, AstNode *node) {
+    struct XrType *analyzed_type = xa_analyzer_get_node_type(l->analyzer, node);
+    XiValue *value = NULL;
     switch (node->type) {
         case AST_LITERAL_INT:
-            return xi_const_int(l->func, l->cur_block, node->as.literal.raw_value.int_val,
-                                l->type_int);
+            value = xi_const_int(l->func, l->cur_block, node->as.literal.raw_value.int_val,
+                                 analyzed_type && XR_TYPE_IS_NUMERIC(analyzed_type) ? analyzed_type
+                                                                                   : l->type_int);
+            break;
         case AST_LITERAL_FLOAT:
-            return xi_const_float(l->func, l->cur_block, node->as.literal.raw_value.float_val,
-                                  l->type_float);
+            value = xi_const_float(l->func, l->cur_block, node->as.literal.raw_value.float_val,
+                                   analyzed_type && XR_TYPE_IS_FLOAT(analyzed_type) ? analyzed_type
+                                                                                   : l->type_float);
+            break;
         case AST_LITERAL_TRUE:
             return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
         case AST_LITERAL_FALSE:
@@ -776,6 +782,10 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
         default:
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
+    XrConversionWitness conversion = {0};
+    if (value && xa_analyzer_get_node_conversion(l->analyzer, node, &conversion))
+        value->conversion = conversion;
+    return value;
 }
 
 static XiValue *lower_ct_scalar_value(XiLower *l, const XrCtValue *value) {
@@ -797,6 +807,70 @@ static XiValue *lower_ct_scalar_value(XiLower *l, const XrCtValue *value) {
         default:
             return NULL;
     }
+}
+
+XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *source_node,
+                                                           XiValue *value,
+                                                           struct XrType *target_type) {
+    if (!l || !source_node || !value || !value->type || !target_type ||
+        target_type->is_nullable || !XR_TYPE_IS_NUMERIC(value->type) ||
+        !XR_TYPE_IS_NUMERIC(target_type))
+        return value;
+
+    XrConversionWitness witness = {0};
+    bool same_type = xr_type_equals(target_type, value->type);
+    /* Any conversion internal to the source expression (most notably an
+     * explicit `as`) has already been lowered.  An equal boundary type adds no
+     * second conversion; contextual literal evidence is attached by
+     * lower_literal itself. */
+    if (same_type)
+        return value;
+    bool has_witness = xa_analyzer_get_node_conversion(l->analyzer, source_node, &witness);
+    if (!has_witness) {
+        fprintf(stderr,
+                "[LOWER] numeric boundary lacks analyzer conversion evidence at line %d\n",
+                (int) source_node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    if (!xr_conversion_kind_is_numeric(witness.kind) ||
+        witness.kind == XR_CONVERSION_DISALLOWED ||
+        witness.source_scalar_rep != value->type->scalar_rep ||
+        witness.target_scalar_rep != target_type->scalar_rep ||
+        (witness.is_implicit && !xr_conversion_kind_is_implicit(witness.kind))) {
+        fprintf(stderr,
+                "[LOWER] numeric boundary has invalid conversion evidence '%s' at line %d\n",
+                xr_conversion_kind_name(witness.kind), (int) source_node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    if (!witness.is_implicit) {
+        fprintf(stderr,
+                "[LOWER] explicit numeric conversion evidence reached an implicit boundary at "
+                "line %d\n",
+                (int) source_node->line);
+        l->had_error = true;
+        return NULL;
+    }
+
+    /* The only remaining implicit numeric conversion is value-preserving
+     * widening.  It has no runtime arithmetic, but a typed COPY keeps the
+     * analyzer decision visible to Xi verification and backend dumps. */
+    if (witness.kind != XR_CONVERSION_LOSSLESS_WIDEN) {
+        fprintf(stderr,
+                "[LOWER] implicit numeric boundary attempted non-lossless conversion '%s' at "
+                "line %d\n",
+                xr_conversion_kind_name(witness.kind), (int) source_node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+    if (!copy)
+        return NULL;
+    copy->args[0] = value;
+    copy->conversion = witness;
+    copy->line = (uint32_t) source_node->line;
+    return copy;
 }
 
 static uint16_t xi_narrow_op_for_native_type(uint8_t native_type);
@@ -840,19 +914,6 @@ static XiValue *xi_lower_wrap_if_needed(XiLower *l, AstNode *node, XiValue *valu
  * at use (f32->float, f64->double, int->int64) and computes via C's usual
  * arithmetic conversions. The helpers below mirror that in the shared IR so the
  * VM and AOT stay bit-identical on mixed-precision arithmetic. */
-
-/* Promote an int operand to float so a single-precision opcode sees two float
- * operands (C computes `float * int` in float). */
-static XiValue *xi_lower_promote_int_to_float(XiLower *l, AstNode *node, XiValue *v) {
-    if (!v || !v->type || !XR_TYPE_IS_INT(v->type))
-        return v;
-    XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
-    if (!conv)
-        return v;
-    conv->args[0] = v;
-    conv->line = (uint32_t) node->line;
-    return conv;
-}
 
 /* Narrow a float32 operand to single precision before a wider (float64) op,
  * mirroring AOT's `(float)operand` at use. */
@@ -932,12 +993,7 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     // operands by mirroring AOT's per-operand narrowing in the shared IR.
     if (op == XI_ADD || op == XI_SUB || op == XI_MUL || op == XI_DIV) {
         if (result_type && result_type->kind == XR_KIND_FLOAT &&
-            result_type->scalar_rep == XR_NATIVE_F32) {
-            // float32 result: promote int operands to float so the
-            // single-precision opcode operates on two float values.
-            lhs = xi_lower_promote_int_to_float(l, node, lhs);
-            rhs = xi_lower_promote_int_to_float(l, node, rhs);
-        } else if (result_type && result_type->kind == XR_KIND_FLOAT) {
+            result_type->scalar_rep != XR_NATIVE_F32) {
             // float64 result with a float32 operand: narrow the float32 side to
             // single precision before the double op.
             lhs = xi_lower_narrow_f32_operand(l, node, lhs);
@@ -1123,28 +1179,11 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
-        /* Implicit int→float promotion on assignment to a float variable */
         struct XrType *var_type = l->vars[var_id].type;
-        if (var_type && XR_TYPE_IS_FLOAT(var_type) && val->type && XR_TYPE_IS_INT(val->type)) {
-            XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
-            if (conv) {
-                conv->args[0] = val;
-                conv->line = (uint32_t) node->line;
-                val = conv;
-            }
-        }
-        if (var_type && var_type->kind == XR_KIND_INT && var_type->scalar_rep != XR_NATIVE_I64 &&
-            val->type && XR_TYPE_IS_INT(val->type)) {
-            uint16_t narrow_op = xi_narrow_op_for_native_type(var_type->scalar_rep);
-            if (narrow_op) {
-                XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, var_type, 1);
-                if (n) {
-                    n->args[0] = val;
-                    n->line = (uint32_t) node->line;
-                    val = n;
-                }
-            }
-        }
+        val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val,
+                                                        var_type);
+        if (!val)
+            return NULL;
         val = xi_lower_apply_primitive_type_view(l, node, val, var_type);
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
@@ -1197,18 +1236,10 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     /* Check for program-level variable from nested scope */
     XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
     if (xi_top_binding_valid(tb)) {
-        if (tb.type && tb.type->kind == XR_KIND_INT && tb.type->scalar_rep != XR_NATIVE_I64 &&
-            val->type && XR_TYPE_IS_INT(val->type)) {
-            uint16_t narrow_op = xi_narrow_op_for_native_type(tb.type->scalar_rep);
-            if (narrow_op) {
-                XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, tb.type, 1);
-                if (n) {
-                    n->args[0] = val;
-                    n->line = (uint32_t) node->line;
-                    val = n;
-                }
-            }
-        }
+        val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val,
+                                                        tb.type);
+        if (!val)
+            return NULL;
         val = xi_lower_apply_primitive_type_view(l, node, val, tb.type);
         xi_lower_emit_top_store(l, tb, val);
         return val;
@@ -1803,11 +1834,6 @@ static bool lower_math_args_all_int(XiValue **arg_vals, int arg_count) {
             return false;
     }
     return true;
-}
-
-static bool lower_math_preserves_int_arg_shape(const char *member) {
-    return member && (strcmp(member, "abs") == 0 || strcmp(member, "min") == 0 ||
-                      strcmp(member, "max") == 0 || strcmp(member, "clamp") == 0);
 }
 
 static struct XrType *lower_math_call_result_type(XiLower *l, const char *member,
@@ -2919,6 +2945,14 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
         elem_vals[slot] = xi_lower_expr(l, child);
         if (!elem_vals[slot])
             return NULL;
+        struct XrType *elem_type =
+            result_type && XR_TYPE_IS_TUPLE(result_type)
+                ? xr_type_tuple_get(result_type, (int) slot)
+                : NULL;
+        elem_vals[slot] =
+            xi_lower_apply_numeric_conversion_witness(l, child, elem_vals[slot], elem_type);
+        if (!elem_vals[slot])
+            return NULL;
         slot++;
     }
     uint16_t safe_n = slot;
@@ -2942,6 +2976,7 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
 static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrType *result_type) {
     ArrayLiteralNode *arr = &node->as.array_literal;
     int count = arr->count;
+    struct XrType *elem_type = xi_get_container_elem_type(result_type);
 
     /* XI_ARRAY_NEW's argument is the initial LENGTH (both backends preset
      * length and fill slots; the static literal path overwrites them via
@@ -2972,6 +3007,9 @@ static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrT
             ext->line = (uint32_t) node->line;
         } else {
             XiValue *elem = xi_lower_expr(l, child);
+            if (!elem)
+                return NULL;
+            elem = xi_lower_apply_numeric_conversion_witness(l, child, elem, elem_type);
             if (!elem)
                 return NULL;
             XiValue *push = xi_value_new(l->func, l->cur_block, XI_ARRAY_PUSH, l->type_unit, 2);
@@ -3065,6 +3103,10 @@ static XiValue *lower_fixed_array_literal(XiLower *l, AstNode *node, ArrayLitera
         XiValue *repeat_value = xi_lower_expr(l, arr->repeat_value);
         if (!repeat_value)
             return NULL;
+        repeat_value = xi_lower_apply_numeric_conversion_witness(
+            l, arr->repeat_value, repeat_value, result_type->fixed_array.element_type);
+        if (!repeat_value)
+            return NULL;
         XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_FIXED_ARRAY_NEW, result_type, 0);
         if (!arr_val)
             return NULL;
@@ -3099,6 +3141,10 @@ static XiValue *lower_fixed_array_literal(XiLower *l, AstNode *node, ArrayLitera
         return NULL;
     for (int i = 0; i < n; i++) {
         elem_vals[i] = xi_lower_expr(l, arr->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
+        elem_vals[i] = xi_lower_apply_numeric_conversion_witness(
+            l, arr->elements[i], elem_vals[i], result_type->fixed_array.element_type);
         if (!elem_vals[i])
             return NULL;
     }
@@ -3207,6 +3253,10 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
         return NULL;
     for (int i = 0; i < n; i++) {
         elem_vals[i] = xi_lower_expr(l, arr->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
+        elem_vals[i] = xi_lower_apply_numeric_conversion_witness(
+            l, arr->elements[i], elem_vals[i], xi_get_container_elem_type(result_type));
         if (!elem_vals[i])
             return NULL;
     }
@@ -3791,6 +3841,14 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             if (!v)
                 return NULL;
             v->args[0] = arg;
+            if (arg && arg->type && XR_TYPE_IS_NUMERIC(target) && XR_TYPE_IS_NUMERIC(arg->type)) {
+                v->conversion.kind = xr_type_numeric_conversion_kind(target, arg->type);
+                v->conversion.source_scalar_rep = arg->type->scalar_rep;
+                v->conversion.target_scalar_rep = target->scalar_rep;
+                v->conversion.is_implicit = false;
+                if (XR_TYPE_IS_FLOAT(arg->type) && XR_TYPE_IS_INT(target))
+                    v->flags |= XI_FLAG_MAY_THROW;
+            }
             v->line = (uint32_t) line;
             return v;
         }
@@ -4896,15 +4954,6 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                     }
                 }
             }
-            if (pt && XR_TYPE_IS_FLOAT(pt) && XR_TYPE_IS_INT(arg_vals[i]->type) &&
-                !lower_math_preserves_int_arg_shape(math_callee_member)) {
-                XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
-                if (conv) {
-                    conv->args[0] = arg_vals[i];
-                    conv->line = (uint32_t) node->line;
-                    arg_vals[i] = conv;
-                }
-            }
             /* Strict dynamic→concrete argument boundary: a Json/dynamic value passed
              * into a concrete parameter is verified at runtime via OP_CHECKTYPE,
              * exactly like the var-binding / return / map-key boundaries. This keeps
@@ -4912,6 +4961,13 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
              * coercing (e.g. Json int 1 into a `bool` parameter). */
             if (xr_is_json_coercion(pt, arg_vals[i]->type))
                 arg_vals[i] = xi_lower_checktype_for_type(l, node, arg_vals[i], pt);
+            if (i < call->arg_count && call->arguments[i] &&
+                call->arguments[i]->type != AST_SPREAD_EXPR) {
+                arg_vals[i] = xi_lower_apply_numeric_conversion_witness(
+                    l, call->arguments[i], arg_vals[i], pt);
+                if (!arg_vals[i])
+                    return NULL;
+            }
         }
     }
 
@@ -6786,10 +6842,18 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (result_type && XR_TYPE_IS_MAP(result_type)) {
         for (int i = 0; i < n; i++) {
+            key_vals[i] = xi_lower_apply_numeric_conversion_witness(
+                l, map->keys[i], key_vals[i], result_type->map.key_type);
+            val_vals[i] = xi_lower_apply_numeric_conversion_witness(
+                l, map->values[i], val_vals[i], result_type->map.value_type);
+            if (!key_vals[i] || !val_vals[i])
+                return NULL;
             key_vals[i] =
-                xi_lower_narrow_for_static_type(l, node, key_vals[i], result_type->map.key_type);
+                xi_lower_narrow_for_static_type(l, map->keys[i], key_vals[i],
+                                                result_type->map.key_type);
             val_vals[i] =
-                xi_lower_narrow_for_static_type(l, node, val_vals[i], result_type->map.value_type);
+                xi_lower_narrow_for_static_type(l, map->values[i], val_vals[i],
+                                                result_type->map.value_type);
         }
     }
     XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
@@ -8614,7 +8678,11 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (result_type && XR_TYPE_IS_SET(result_type)) {
         for (int i = 0; i < n; i++) {
-            elem_vals[i] = xi_lower_narrow_for_static_type(l, node, elem_vals[i],
+            elem_vals[i] = xi_lower_apply_numeric_conversion_witness(
+                l, sl->elements[i], elem_vals[i], result_type->container.element_type);
+            if (!elem_vals[i])
+                return NULL;
+            elem_vals[i] = xi_lower_narrow_for_static_type(l, sl->elements[i], elem_vals[i],
                                                            result_type->container.element_type);
         }
     }
@@ -8846,15 +8914,55 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     /* Resolve XrTypeRef kind to runtime XrTypeId.
      * AsExprNode.type is XrTypeRef*, not XrType*. */
     XrTypeRef *tref = as->type;
-    struct XrType *cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
+    struct XrType *source_type = xi_lower_node_type(l, as->expr);
+    struct XrType *cast_type = xi_lower_node_type(l, node);
+    if (!cast_type || XR_TYPE_IS_UNKNOWN(cast_type))
+        cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
     cast_type = xi_lower_type_or_any(l, cast_type, "cast target type", node->line);
-    if (!as->is_safe && cast_type) {
-        if (XR_TYPE_IS_INT(cast_type) && val->type && XR_TYPE_IS_INT(val->type)) {
-            return xi_lower_narrow_for_static_type(l, node, val, cast_type);
+    XrConversionWitness conversion = {0};
+    bool has_conversion = xa_analyzer_get_node_conversion(l->analyzer, node, &conversion);
+    if (!as->is_safe && cast_type && source_type && XR_TYPE_IS_NUMERIC(cast_type) &&
+        XR_TYPE_IS_NUMERIC(source_type)) {
+        if (!has_conversion || !xr_conversion_kind_is_numeric(conversion.kind) ||
+            conversion.kind == XR_CONVERSION_DISALLOWED) {
+            fprintf(stderr,
+                    "[LOWER] numeric `as` lacks a valid conversion witness at line %d\n",
+                    (int) node->line);
+            l->had_error = true;
+            return NULL;
         }
-        if (XR_TYPE_IS_FLOAT(cast_type) && val->type && XR_TYPE_IS_FLOAT(val->type)) {
-            return xi_lower_narrow_for_static_type(l, node, val, cast_type);
+        XiValue *result = NULL;
+        if (conversion.kind == XR_CONVERSION_EXPLICIT_TARGET_WIDTH ||
+            (XR_TYPE_IS_INT(cast_type) != XR_TYPE_IS_INT(source_type))) {
+            result = xi_value_new(l->func, l->cur_block, XI_CONVERT, cast_type, 1);
+            if (result)
+                result->args[0] = val;
+        } else if (XR_TYPE_IS_INT(cast_type) && XR_TYPE_IS_INT(source_type)) {
+            result = xi_lower_narrow_for_static_type(l, node, val, cast_type);
+        } else if (XR_TYPE_IS_FLOAT(cast_type) && XR_TYPE_IS_FLOAT(source_type)) {
+            result = xi_lower_narrow_for_static_type(l, node, val, cast_type);
         }
+        if (!result)
+            return NULL;
+        if (result == val) {
+            result = xi_value_new(l->func, l->cur_block, XI_COPY, cast_type, 1);
+            if (!result)
+                return NULL;
+            result->args[0] = val;
+        }
+        result->conversion = conversion;
+        result->line = (uint32_t) node->line;
+        if (XR_TYPE_IS_FLOAT(source_type) && XR_TYPE_IS_INT(cast_type))
+            result->flags |= XI_FLAG_MAY_THROW;
+        return result;
+    }
+    if (!as->is_safe && has_conversion && xr_conversion_kind_is_numeric(conversion.kind)) {
+        fprintf(stderr,
+                "[LOWER] unresolved numeric conversion '%s' must not reach dynamic XI_AS at line "
+                "%d\n",
+                xr_conversion_kind_name(conversion.kind), (int) node->line);
+        l->had_error = true;
+        return NULL;
     }
     int tid = -1;
     const char *tname = "unknown";
@@ -8933,16 +9041,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     }
 
     bool is_safe = as->is_safe;
-    /* If the source is an unresolved import, lowering cannot yet choose the
-     * normal native NARROW/COPY form for a numeric-width cast.  Retain the
-     * analyzer-resolved target type on the fallback XI_AS so link-time import
-     * resolution can canonicalize its representation later.  Runtime type
-     * assertions and safe casts keep their tagged result contract. */
-    struct XrType *result_type =
-        !is_safe && cast_type && (XR_TYPE_IS_INT(cast_type) || XR_TYPE_IS_FLOAT(cast_type))
-            ? cast_type
-            : l->type_any;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, l->type_any, 1);
     if (!v)
         return NULL;
     v->args[0] = val;
@@ -8956,6 +9055,8 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
      * round-trips the sentinel on every two's-complement target. */
     v->aux_int = ((int64_t) (uint32_t) tid << 1) | (is_safe ? 1 : 0);
     v->aux = (void *) arena_strdup(l->func, tname);
+    if (has_conversion)
+        v->conversion = conversion;
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -9092,8 +9193,14 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
                 int fidx = xi_lower_struct_field_index(slayout, sl->field_names[i]);
                 if (fidx < 0)
                     continue;
+                struct XrType *field_type =
+                    xi_lower_struct_field_type(l, val_vals[i]->type, slayout, fidx);
+                val_vals[i] = xi_lower_apply_numeric_conversion_witness(
+                    l, sl->field_values[i], val_vals[i], field_type);
+                if (!val_vals[i])
+                    return NULL;
                 XiValue *field_val = xi_lower_narrow_for_native_field(
-                    l, node, val_vals[i], slayout->fields[fidx].native_type);
+                    l, sl->field_values[i], val_vals[i], slayout->fields[fidx].native_type);
                 XiValue *set = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
                 if (!set)
                     break;

@@ -2594,6 +2594,10 @@ static XiValue *lower_catch_narrow_value(XiLower *l, XiValue *catch_op, XrCatchC
     v->args[0] = catch_op;
     v->aux_int = ((int64_t) (uint32_t) -1 << 1);
     v->aux = (void *) arena_strdup(l->func, cc->type->name ? cc->type->name : "unknown");
+    v->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
+    v->conversion.source_scalar_rep = XR_SCALAR_REP_NONE;
+    v->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
+    v->conversion.is_implicit = false;
     v->line = (uint32_t) (cc->var_line > 0 ? cc->var_line : 0);
     return v;
 }
@@ -3206,16 +3210,10 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                             : node->line;
         stmt_set_missing_line(init_val, init_line);
         lower_mark_decl_captured_by_child(l, var_id, name, init_val);
-        /* Implicit int→float promotion: when the variable is declared as
-         * float but the initializer evaluates to int, insert XI_CONVERT. */
-        if (type && XR_TYPE_IS_FLOAT(type) && init_val->type && XR_TYPE_IS_INT(init_val->type)) {
-            XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
-            if (conv) {
-                conv->args[0] = init_val;
-                conv->line = (uint32_t) node->line;
-                init_val = conv;
-            }
-        }
+        init_val = xi_lower_apply_numeric_conversion_witness(
+            l, node->as.var_decl.initializer, init_val, type);
+        if (!init_val)
+            return;
         init_val = xi_lower_checktype_for_type(l, node, init_val, type);
         init_val = stmt_narrow_for_target_type(l, node, init_val, type);
     } else {
@@ -3418,6 +3416,10 @@ static void lower_return(XiLower *l, AstNode *node) {
                                                   XR_OBJ_STORAGE_SHARED);
         }
         stmt_set_missing_line(val, node->line);
+        val = xi_lower_apply_numeric_conversion_witness(
+            l, ret->values[0], val, l->func ? l->func->return_type : NULL);
+        if (!val)
+            return;
         /* Tail-call detection: mark calls in return position so the emitter
          * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).
          *

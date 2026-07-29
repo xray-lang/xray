@@ -51,6 +51,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
+#include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_sync_core.h"
 #include "xrt_method_symbols.h"
@@ -774,6 +775,9 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 #ifndef XR_ERR_INDEX_OUT_OF_BOUNDS
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #endif
+#ifndef XR_ERR_OVERFLOW
+#define XR_ERR_OVERFLOW 422
+#endif
 #ifndef XR_ERR_OUT_OF_MEMORY
 #define XR_ERR_OUT_OF_MEMORY 441
 #endif
@@ -781,6 +785,14 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 static inline XRT_COLD XRT_NORETURN void xrt_throw_error(int code, const char *message) {
     (void) code;
     xrt_freestanding_trap(message && message[0] ? message : "freestanding runtime error");
+}
+
+static inline int64_t xrt_numeric_float_to_int_or_throw(double source, uint8_t target_rep,
+                                                        uint8_t pointer_bits) {
+    int64_t result = 0;
+    if (!xr_numeric_float_to_int(source, target_rep, pointer_bits, &result))
+        xrt_throw_error(XR_ERR_OVERFLOW, XR_ERROR_CORE_NUMERIC_CONVERSION_RANGE_MSG);
+    return result;
 }
 
 static inline XRT_COLD XRT_NORETURN void xrt_enum_aggregate_shape_fail(const char *what,

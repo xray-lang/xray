@@ -169,6 +169,11 @@ static uint32_t vn_value_hash(const VnTable *vn, const XiValue *v) {
     h = vn_hash_mix(h, v->aux_kind);
     h = vn_hash_mix(h, v->mem_group);
     h = vn_hash_mix(h, v->lowering_flags);
+    h = vn_hash_mix(h, (uint64_t) v->conversion.kind);
+    h = vn_hash_mix(h, v->conversion.source_scalar_rep);
+    h = vn_hash_mix(h, v->conversion.target_scalar_rep);
+    h = vn_hash_mix(h, v->conversion.is_implicit ? 1u : 0u);
+    h = vn_hash_mix(h, v->conversion.is_compile_time ? 1u : 0u);
     h = vn_hash_mix(h, (uint64_t) v->aux_int);
     h = vn_hash_mix(h, (uintptr_t) v->aux);
     h = vn_hash_mix(h, (uintptr_t) v->call_plan);
@@ -204,6 +209,11 @@ static bool vn_same_semantic_metadata(const XiValue *a, const XiValue *b) {
     return a->op == b->op && a->nargs == b->nargs && a->type == b->type && a->flags == b->flags &&
            a->rep == b->rep && a->transfer_mode == b->transfer_mode && a->aux_kind == b->aux_kind &&
            a->mem_group == b->mem_group && a->lowering_flags == b->lowering_flags &&
+           a->conversion.kind == b->conversion.kind &&
+           a->conversion.source_scalar_rep == b->conversion.source_scalar_rep &&
+           a->conversion.target_scalar_rep == b->conversion.target_scalar_rep &&
+           a->conversion.is_implicit == b->conversion.is_implicit &&
+           a->conversion.is_compile_time == b->conversion.is_compile_time &&
            a->aux_int == b->aux_int && a->aux == b->aux && a->call_plan == b->call_plan &&
            a->xa_intrinsic_id == b->xa_intrinsic_id && a->xg_callsite_id == b->xg_callsite_id &&
            a->xg_method_id == b->xg_method_id &&

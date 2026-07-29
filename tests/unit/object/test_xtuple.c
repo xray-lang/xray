@@ -231,14 +231,19 @@ TEST(tuple_type_covariant_assignable) {
     setup();
     XrType *int_t = xr_type_new_int(X);
     XrType *float_t = xr_type_new_float(X);
+    XrType *f32_t = xr_type_new_float_width(X, XR_NATIVE_F32);
 
-    /* int → float is a primitive widening, so (int, int) is assignable
-     * to (float, float) by tuple covariance. */
-    XrType *elems_src[2] = {int_t, int_t};
+    /* f32 -> f64 is value-preserving, so tuple covariance accepts it. */
+    XrType *elems_src[2] = {f32_t, f32_t};
     XrType *elems_tgt[2] = {float_t, float_t};
     XrType *src = xr_type_new_tuple(X, elems_src, 2);
     XrType *tgt = xr_type_new_tuple(X, elems_tgt, 2);
     ASSERT_TRUE(xr_type_assignable(tgt, src));
+
+    XrType *int_elems[2] = {int_t, int_t};
+    XrType *int_tuple = xr_type_new_tuple(X, int_elems, 2);
+    /* Integer/float conversion is explicit even inside a tuple. */
+    ASSERT_TRUE(!xr_type_assignable(tgt, int_tuple));
 
     /* Mismatched arity is rejected regardless of element compatibility. */
     XrType *elems_short[1] = {int_t};

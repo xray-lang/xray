@@ -1,8 +1,9 @@
 # Effect and assertion semantics contract
 
 Status: re-frozen after the xxHash parity work made implicit error propagation
-carry explicit cold-edge ARC cleanup while keeping the ordinary effect product,
-product membership, and fail-closed semantics unchanged.
+carry explicit cold-edge ARC cleanup and Task 242 gave numeric conversions
+typed evidence. The ordinary effect product, product membership, and
+fail-closed semantics remain unchanged.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -50,6 +51,13 @@ product membership, and fail-closed semantics unchanged.
 9. Changing product membership, root substitution, completeness handling,
    resource-failure behavior, subtype direction, or assertion equivalence is a
    contract change.
+10. Numeric conversion effects are witness-dependent rather than inferred from
+    the generic `XI_CONVERT` opcode. Identity, contextual literals, lossless
+    widening, integer-to-integer, integer-to-float, and float-to-float
+    conversions are non-throwing. A runtime float-to-integer conversion is
+    marked `XI_FLAG_MAY_THROW`; its only conversion failure is
+    `XR_ERR_OVERFLOW` (`E0422`), and the Xi verifier rejects missing throw
+    evidence. Optimization must not erase or speculate that failure edge.
 
 ## Digest anchors
 
@@ -65,11 +73,11 @@ anchor-sha256: src/frontend/analyzer/xa_typed_program.c a0cdf15d4053af6bdcce2952
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 19aae957f5cf95f8827641a64eac347a5e943b1bd1525f779f8b3d562f6e83d5
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c c19ad0a9554c49e12c750343c7b826f390d504e1ba8b90048a2be764465ba431
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 703174dd47d5bab2613b281aa4a6cd9591826e93ae1578c7e4b4b99d3895ca31
-anchor-sha256: src/runtime/value/xtype.h 8d160aa422b68e0b3c4ab080fe30385bd920d3106a36ca7445bfb0944d4504ff
-anchor-sha256: src/ir/xi.h 63b1b248ce49a131e24fd2305789f1641673f5178dc00159757b0fe7565b775f
+anchor-sha256: src/runtime/value/xtype.h e65e138ed364a5c4b80de5b320e6475c7fdfd6852a79526b51b38b74c9cac438
+anchor-sha256: src/ir/xi.h ac43b08d755cc69956a14d78d4db751fbb213ff6669eec8890c22847eda77587
 anchor-sha256: src/ir/xi_lower.c f49c7ddaad290f3fd6644ca7e1ed0228fbd59760430cf55602cc21b81e6c5f16
 anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
 anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3
-anchor-sha256: tests/unit/analyzer/test_analyzer.c d81126e387fb50edb0002fc996263b89423464ee2f51923e68d5ac81bf2930ca
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 19efd9e9c11d25b3aebec697e8c8765d3a7ea3103e63a4743d173f9ca663d140
 anchor-sha256: tests/unit/analyzer/test_effect_db.c d444b5476930dcda7f57fc331faea237abecba18021ea28091c032cde3d4d865
-anchor-sha256: tests/unit/ir/test_xi_lower.c ef94011e6a1829503c067577a5b8acbeb44fd07c993d203321d1c8463ebd6967
+anchor-sha256: tests/unit/ir/test_xi_lower.c 25c89c157dff0f335fadc7e677be77419050da7f7b90ad633156d41ec31cd8a6

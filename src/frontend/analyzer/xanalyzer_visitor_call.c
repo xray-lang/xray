@@ -3848,6 +3848,14 @@ static bool xa_expr_needs_parameter_context(AstNode *expr) {
         return false;
     if (expr->type == AST_GROUPING)
         return xa_expr_needs_parameter_context(expr->as.grouping);
+    /* Numeric literals are typed by the resolved parameter contract.  The
+     * eager symbol-resolution walk below must not first analyze them as the
+     * default int/float, otherwise a valid u64-only magnitude leaves a stale
+     * range diagnostic before the authoritative call-argument pass runs. */
+    if (expr->type == AST_LITERAL_INT || expr->type == AST_LITERAL_FLOAT)
+        return true;
+    if (expr->type == AST_UNARY_NEG)
+        return xa_expr_needs_parameter_context(expr->as.unary.operand);
     if (expr->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(expr))
         return true;
     /* Every array literal can be a fixed array when the parameter contract

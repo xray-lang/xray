@@ -27,6 +27,7 @@
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_json_type.h"
 #include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_conversion.h"
 
 /* ========== XrRep - Machine Representation ========== */
 /*
@@ -877,6 +878,16 @@ XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, in
 XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
+// Classify a conversion between concrete numeric types.  This does not grant
+// contextual-literal or dynamic-cast semantics; the analyzer upgrades those
+// cases using the same XrConversionKind domain.
+XR_FUNC XrConversionKind xr_type_numeric_conversion_kind(const XrType *target,
+                                                         const XrType *source);
+XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target,
+                                                    const XrType *source);
+// Returns one operand type when both numeric operands have a unique implicit
+// common type, otherwise NULL.  No C usual-arithmetic-conversion fallback.
+XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);
 /* Exact function signature compatibility with covariant throw effect:
  * NO_THROW implements/overrides MAY_THROW, never the reverse. */
 XR_FUNC bool xr_type_function_signature_assignable(XrType *target, XrType *source);

@@ -1208,37 +1208,8 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
     if (op == AST_BINARY_MOD && (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)))
         return NULL;
 
-    if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)) {
-        if ((XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_INT(left)) &&
-            (XR_TYPE_IS_FLOAT(right) || XR_TYPE_IS_INT(right))) {
-            // Preserve float32 width when no operand forces float64, so the
-            // emitter selects single-precision opcodes that match AOT's
-            // per-operand float narrowing. Like C, an int operand promotes to
-            // the float operand's type (float32 * int -> float32), while any
-            // float64 operand widens the result to float64. Scoped to the ops
-            // that have single-precision opcodes (+, -, *, /).
-            if (op == AST_BINARY_ADD || op == AST_BINARY_SUB || op == AST_BINARY_MUL ||
-                op == AST_BINARY_DIV) {
-                bool left_f32 = XR_TYPE_IS_FLOAT(left) && left->scalar_rep == XR_NATIVE_F32;
-                bool right_f32 = XR_TYPE_IS_FLOAT(right) && right->scalar_rep == XR_NATIVE_F32;
-                bool left_f64 = XR_TYPE_IS_FLOAT(left) && left->scalar_rep != XR_NATIVE_F32;
-                bool right_f64 = XR_TYPE_IS_FLOAT(right) && right->scalar_rep != XR_NATIVE_F32;
-                if ((left_f32 || right_f32) && !left_f64 && !right_f64)
-                    return xr_type_new_float_width(NULL, XR_NATIVE_F32);
-            }
-            return xr_type_new_float(NULL);
-        }
-        return NULL;
-    }
-    if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right)) {
-        uint8_t lw = left->scalar_rep;
-        uint8_t rw = right->scalar_rep;
-        if (lw != XR_NATIVE_I64 && (rw == XR_NATIVE_I64 || rw == lw))
-            return xr_type_new_int_width(NULL, lw);
-        if (rw != XR_NATIVE_I64 && lw == XR_NATIVE_I64)
-            return xr_type_new_int_width(NULL, rw);
-        return xr_type_new_int(NULL);
-    }
+    if (XR_TYPE_IS_NUMERIC(left) && XR_TYPE_IS_NUMERIC(right))
+        return xr_type_numeric_common_type(left, right);
 
     // Generic body: preserve type parameter through arithmetic so
     // `fn add_one<T>(x: T): T { return x + 1 }` type-checks before
@@ -1257,13 +1228,7 @@ static XrType *binary_int_result_pair(XrType *left, XrType *right, bool shift) {
     if (shift) {
         return xr_type_new_int_width(NULL, left->scalar_rep);
     }
-    uint8_t lw = left->scalar_rep;
-    uint8_t rw = right->scalar_rep;
-    if (lw != XR_NATIVE_I64 && (rw == XR_NATIVE_I64 || rw == lw))
-        return xr_type_new_int_width(NULL, lw);
-    if (rw != XR_NATIVE_I64 && lw == XR_NATIVE_I64)
-        return xr_type_new_int_width(NULL, rw);
-    return xr_type_new_int(NULL);
+    return xr_type_numeric_common_type(left, right);
 }
 
 // Distribute a binary arithmetic op over union members so e.g.
@@ -1406,15 +1371,79 @@ static void xa_check_removed_typeof_string_compare(XaInferContext *ctx, AstNode 
                                &loc);
 }
 
+static AstNode *xa_contextual_numeric_literal_node(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    if (!node)
+        return NULL;
+    if (node->type == AST_LITERAL_INT || node->type == AST_LITERAL_FLOAT)
+        return node;
+    if (node->type != AST_UNARY_NEG)
+        return NULL;
+    AstNode *operand = node->as.unary.operand;
+    while (operand && operand->type == AST_GROUPING)
+        operand = operand->as.grouping;
+    return operand && (operand->type == AST_LITERAL_INT || operand->type == AST_LITERAL_FLOAT)
+               ? node
+               : NULL;
+}
+
+static bool xa_binary_has_numeric_context(int op) {
+    switch (op) {
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
 
     XrType *saved_expected = ctx->expected_type;
-    ctx->expected_type = NULL;
-    XrType *left = xa_visit_infer_expr(ctx, node->as.binary.left);
-    XrType *right;
-    if ((node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) && ctx->flow &&
+    AstNode *left_node = node->as.binary.left;
+    AstNode *right_node = node->as.binary.right;
+    XrType *left = NULL;
+    XrType *right = NULL;
+    bool numeric_context = xa_binary_has_numeric_context(node->type);
+    bool outer_numeric = saved_expected && XR_TYPE_IS_NUMERIC(saved_expected);
+    bool left_literal = xa_contextual_numeric_literal_node(left_node) != NULL;
+    bool right_literal = xa_contextual_numeric_literal_node(right_node) != NULL;
+    bool use_outer_literal_context = outer_numeric && left_literal && right_literal;
+
+    if (numeric_context && left_literal && !right_literal) {
+        // Visit the non-literal side first so `1 + value_u32` gives the literal
+        // the unique u32 context without C-style promotion guessing.
+        ctx->expected_type = NULL;
+        right = xa_visit_infer_expr(ctx, right_node);
+        ctx->expected_type = right && XR_TYPE_IS_NUMERIC(right) ? right : NULL;
+        left = xa_visit_infer_expr(ctx, left_node);
+    } else {
+        ctx->expected_type = use_outer_literal_context ? saved_expected : NULL;
+        left = xa_visit_infer_expr(ctx, left_node);
+        if (numeric_context && right_literal && left && XR_TYPE_IS_NUMERIC(left))
+            ctx->expected_type = left;
+        else
+            ctx->expected_type = use_outer_literal_context ? saved_expected : NULL;
+    }
+
+    if (!right && (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) && ctx->flow &&
         ctx->flow->current_flow) {
         // Short-circuit narrowing: the right operand only runs once the left's
         // truthiness is known. `a && b` evaluates b assuming a is true; `a || b`
@@ -1424,11 +1453,10 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         XaFlowNode *saved_flow = ctx->flow->current_flow;
         ctx->flow->current_flow =
             xa_flow_create_condition(ctx->flow, node->as.binary.left, node->type == AST_BINARY_AND);
-        right = xa_visit_infer_expr(ctx, node->as.binary.right);
+        right = xa_visit_infer_expr(ctx, right_node);
         ctx->flow->current_flow = saved_flow;
-    } else {
-        right = xa_visit_infer_expr(ctx, node->as.binary.right);
-    }
+    } else if (!right)
+        right = xa_visit_infer_expr(ctx, right_node);
     ctx->expected_type = saved_expected;
 
     if (XR_TYPE_IS_ERROR(left))
@@ -1450,11 +1478,21 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_NE:
             xa_check_null_comparison(ctx, node, left, right);
             xa_check_removed_typeof_string_compare(ctx, node);
+            if (XR_TYPE_IS_NUMERIC(left) && XR_TYPE_IS_NUMERIC(right) &&
+                !xr_type_numeric_common_type(left, right)) {
+                xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
             return xr_type_new_bool(NULL);
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
         case AST_BINARY_GE:
+            if (XR_TYPE_IS_NUMERIC(left) && XR_TYPE_IS_NUMERIC(right) &&
+                !xr_type_numeric_common_type(left, right)) {
+                xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
             return xr_type_new_bool(NULL);
         // Logical → always bool
         case AST_BINARY_AND:
@@ -1523,6 +1561,9 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_UNARY_NEG:
+            if (saved_expected && XR_TYPE_IS_NUMERIC(saved_expected) &&
+                xa_contextual_numeric_literal_node(node))
+                return saved_expected;
             return operand;  // -x has same type as x
         case AST_UNARY_NOT:
             xa_check_logical_operand_type(ctx, node, operand);
@@ -4392,12 +4433,30 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
     // is an explicit conversion, so do not use the target as assignment
     // context; casts such as `2147483648 as int32` intentionally truncate.
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = NULL;
     XrType *source = xa_visit_infer_expr(ctx, node->as.as_expr.expr);
+    ctx->expected_type = saved_expected;
     XrType *target = node->as.as_expr.type
                          ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)
                          : NULL;
     if (!target)
         return xr_type_new_error(NULL);
+    XrConversionWitness conversion = {0};
+    if (source && XR_TYPE_IS_NUMERIC(source) && XR_TYPE_IS_NUMERIC(target) &&
+        !node->as.as_expr.is_safe) {
+        conversion.kind = xr_type_numeric_conversion_kind(target, source);
+        conversion.source_scalar_rep = source->scalar_rep;
+        conversion.target_scalar_rep = target->scalar_rep;
+        conversion.is_implicit = false;
+    } else {
+        conversion.kind = node->as.as_expr.is_safe ? XR_CONVERSION_DYNAMIC_NULLABLE
+                                                   : XR_CONVERSION_DYNAMIC_CHECKED;
+        conversion.source_scalar_rep = XR_SCALAR_REP_NONE;
+        conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
+        conversion.is_implicit = false;
+    }
+    xa_analyzer_set_node_conversion(ctx->analyzer, node, &conversion);
     if (!xa_cast_types_may_overlap(source, target)) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Cannot cast type '%s' to unrelated type '%s'",

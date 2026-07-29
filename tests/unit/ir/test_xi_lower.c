@@ -2853,6 +2853,80 @@ TEST(as_to_scalar_rep_int_lowers_to_narrow) {
     xi_func_free(f);
 }
 
+TEST(numeric_as_carries_typed_conversion_evidence) {
+    XiFunc *f = lower_source("fn run(x: float, y: u64) -> u8 {\n"
+                             "    var rounded = y as f64\n"
+                             "    return x as u8\n"
+                             "}\n"
+                             "print(run(1.5, 3))\n");
+    assert(f != NULL);
+    XiValue *convert = func_tree_find_op(f, XI_CONVERT);
+    assert(convert && convert->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
+           convert->conversion.source_scalar_rep == XR_NATIVE_U64 &&
+           convert->conversion.target_scalar_rep == XR_NATIVE_F64 &&
+           "integer-to-float lowering must retain the analyzer conversion witness");
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    XiValue *float_to_int = NULL;
+    for (uint32_t b = 0; run && b < run->nblocks; b++) {
+        XiBlock *block = run->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->op == XI_CONVERT && value->type &&
+                value->type->scalar_rep == XR_NATIVE_U8)
+                float_to_int = value;
+        }
+    }
+    assert(float_to_int &&
+           float_to_int->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
+           (float_to_int->flags & XI_FLAG_MAY_THROW) != 0 &&
+           "float-to-int lowering must retain overflow behavior in Xi");
+    assert(!func_tree_has_op(f, XI_AS) && "numeric casts must never lower through XI_AS");
+    xi_func_free(f);
+}
+
+TEST(implicit_numeric_boundaries_carry_lossless_widen_evidence) {
+    XiFunc *f = lower_source("fn accept(value: u64) -> u64 { return value }\n"
+                             "fn widenReturn(source: u8) -> u64 { return source }\n"
+                             "fn run(source: u8) -> u64 {\n"
+                             "    var local: u64 = source\n"
+                             "    var values: Array<u64> = [source]\n"
+                             "    return accept(source) + local + values[0]\n"
+                             "}\n"
+                             "print(run(3))\n");
+    assert(f != NULL);
+
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    XiFunc *widen_return = func_tree_find_func_name(f, "widenReturn");
+    int run_widens = 0;
+    int return_widens = 0;
+    for (uint32_t b = 0; run && b < run->nblocks; b++) {
+        XiBlock *block = run->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->op == XI_COPY &&
+                value->conversion.kind == XR_CONVERSION_LOSSLESS_WIDEN) {
+                assert(value->conversion.is_implicit &&
+                       value->conversion.source_scalar_rep == XR_NATIVE_U8 &&
+                       value->conversion.target_scalar_rep == XR_NATIVE_U64);
+                run_widens++;
+            }
+        }
+    }
+    for (uint32_t b = 0; widen_return && b < widen_return->nblocks; b++) {
+        XiBlock *block = widen_return->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->op == XI_COPY &&
+                value->conversion.kind == XR_CONVERSION_LOSSLESS_WIDEN)
+                return_widens++;
+        }
+    }
+    assert(run_widens >= 3 &&
+           "binding, array-element, and call boundaries must retain widening evidence");
+    assert(return_widens >= 1 && "return boundaries must retain widening evidence");
+    xi_func_free(f);
+}
+
 TEST(force_unwrap) {
     XiFunc *f = lower_source("var x: int? = 42\n"
                              "var y = x!\n"
@@ -3058,6 +3132,8 @@ int main(void) {
     run_struct_method_fixed_array_args_preserve_caller_places();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
+    run_numeric_as_carries_typed_conversion_evidence();
+    run_implicit_numeric_boundaries_carry_lossless_widen_evidence();
     run_force_unwrap();
     run_destructure_decl();
     run_multi_assign();

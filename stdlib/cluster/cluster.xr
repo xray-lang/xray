@@ -53,7 +53,7 @@ fn _parsePort(raw: string) -> int {
     for (var i = 0; i < len(raw); i++) {
         var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return 0 }
-        out = out * 10 + (c - 48)
+        out = out * 10 + ((c - 48) as int)
         if (out > 65535) { return 0 }
     }
     return out

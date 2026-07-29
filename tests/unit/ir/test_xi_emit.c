@@ -27,6 +27,8 @@ static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_uint64 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U64};
+static XrType stub_float64 = {
+    .kind = XR_KIND_FLOAT, .id = 9, .frozen = true, .scalar_rep = XR_NATIVE_F64};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -494,6 +496,44 @@ TEST(emit_copy_becomes_move) {
         }
     }
     assert(found_move && "COPY should emit MOVE");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_numeric_conversion_packs_typed_witness) {
+    XiFunc *f = make_func("convert", &stub_float64);
+    XiBlock *entry = f->entry;
+    XiValue *source = xi_param(f, entry, 0, &stub_uint64);
+    XiValue *convert = xi_value_new(f, entry, XI_CONVERT, &stub_float64, 1);
+    convert->args[0] = source;
+    convert->conversion = (XrConversionWitness) {
+        .kind = XR_CONVERSION_EXPLICIT_INT_FLOAT,
+        .source_scalar_rep = XR_NATIVE_U64,
+        .target_scalar_rep = XR_NATIVE_F64,
+        .is_implicit = false,
+        .is_compile_time = false,
+    };
+    xi_block_set_return(entry, convert);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) != OP_TOFLOAT)
+            continue;
+        uint16_t packed = (uint16_t) GETARG_C(inst);
+        assert(xr_conversion_bytecode_is_numeric(packed));
+        assert(xr_conversion_bytecode_kind(packed) == XR_CONVERSION_EXPLICIT_INT_FLOAT);
+        assert(xr_conversion_bytecode_source_rep(packed) == XR_NATIVE_U64);
+        assert(xr_conversion_bytecode_target_rep(packed) == XR_NATIVE_F64);
+        assert(xr_conversion_bytecode_pointer_bits(packed) == 64);
+        found = true;
+    }
+    assert(found && "typed integer-to-float witness must reach VM bytecode");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -1250,6 +1290,7 @@ int main(void) {
 
     /* Copy / Move */
     run_emit_copy_becomes_move();
+    run_emit_numeric_conversion_packs_typed_witness();
 
     /* Float constants */
     run_emit_const_float_small();

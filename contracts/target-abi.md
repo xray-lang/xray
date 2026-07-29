@@ -97,6 +97,16 @@ emission, and native linking:
 - T7: shared-library format, suffix, link flags, and symbol visibility derive
   from the selected target rather than the compiler host. A default C export
   is externally visible; a hidden C export must not leak into the public image.
+- T8: typed numeric conversion carries source and target scalar identities plus
+  the selected target pointer width from analysis through Xi and VM bytecode.
+  Integer conversion is modulo the target width followed by an explicit
+  two's-complement interpretation; integer-to-float and binary64-to-binary32
+  use round-to-nearest, ties-to-even; binary32 NaNs use the canonical Xray
+  payload; float-to-integer truncates toward zero only after a range proof and
+  otherwise raises `XR_ERR_OVERFLOW`. VM and AOT C consume the shared numeric
+  conversion core and must not substitute host-language signed casts, the host
+  floating-point environment, canonical type spellings, or compiler-host
+  pointer width for this evidence.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -125,15 +135,15 @@ anchor-sha256: src/aot/xaot_prepare.c 0a2119ede579c5a66139a24bdb77628679fc97548f
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 16153b0fb4075148ae0ab458dda75b7b8980984f4ee0aed8c6e1b5ac97239c30
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 7bd7f9f776b53e7f1fad6bc594744ec018420917d1d2b62225691cf8d7a27c07
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c3bdf62f98453045a363be9d34cec341c74b6ad7919bc62021631a3f661979bd
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 6369434ddc572b4e1a9bd6cec05302340bff2856e3d44275730fbed0ba4b3731
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bc860359654ec6597cfbebe6fcd3944436af9b085010d3ebc92acac68a7c1601
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
 anchor-sha256: src/aot/xi_cgen.c 2e04ccc774c8d28cb2356b1dd5bd5a97c476d4fc513bf46f217dd12ed95de40c
-anchor-sha256: src/aot/xrt_coll.h 6d5cb458264d4594c3a301fae439f5cced30ff4cbbd407b36fa24d780be84c3d
-anchor-sha256: src/aot/xrt_core_freestanding.h eb21695742d968b6cb29e720d60bfc69dff5f1c7fcdc5ca2d7ee2c5c26abf0a8
+anchor-sha256: src/aot/xrt_coll.h 0e5a8d95fbfa1b91e94a58d568cf70d09c8a6b2ac913f753e1f9b69b880947eb
+anchor-sha256: src/aot/xrt_core_freestanding.h 0bc07a44d027e6a9a048f54104687f33ea0a18c45f4224482a9f6af7fb7a7ec1
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c d441773288383d3a1caf926edec49387a7d0988d19e3005f627ce812047f7de2
 anchor-sha256: src/app/toolchain/xtc_model.c ec2ddd6e5bdfb3373691bfa5b4470bc4a86ebac2ebe98d61d27e3472a254231e
 anchor-sha256: src/app/toolchain/xtc_probe.c ab2f2f670f152d557b97835e753c268157b15cd8402c3025efe0adb1dbb88a23
-anchor-sha256: src/ir/xi.h 63b1b248ce49a131e24fd2305789f1641673f5178dc00159757b0fe7565b775f
+anchor-sha256: src/ir/xi.h ac43b08d755cc69956a14d78d4db751fbb213ff6669eec8890c22847eda77587
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

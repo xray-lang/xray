@@ -36,6 +36,7 @@
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_native_type_core.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 
 #if defined(__GNUC__) || defined(__clang__)

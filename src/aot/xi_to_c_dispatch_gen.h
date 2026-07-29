@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../ir/xi.h"
+#include "../shared/xr_native_type_core.h"
 
 #define XI_TO_C_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xicgen_const) \
@@ -404,6 +405,26 @@ static inline const char *xi_to_c_template_width_cast_type(uint16_t op) {
         default: return "";
     }
     return "";
+}
+
+static inline uint8_t xi_to_c_template_width_native_type(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return XR_NATIVE_I8;
+        case XI_NARROW_U8: return XR_NATIVE_U8;
+        case XI_NARROW_I16: return XR_NATIVE_I16;
+        case XI_NARROW_U16: return XR_NATIVE_U16;
+        case XI_NARROW_I32: return XR_NATIVE_I32;
+        case XI_NARROW_U32: return XR_NATIVE_U32;
+        case XI_WIDEN_I8: return XR_NATIVE_I8;
+        case XI_WIDEN_U8: return XR_NATIVE_U8;
+        case XI_WIDEN_I16: return XR_NATIVE_I16;
+        case XI_WIDEN_U16: return XR_NATIVE_U16;
+        case XI_WIDEN_I32: return XR_NATIVE_I32;
+        case XI_WIDEN_U32: return XR_NATIVE_U32;
+        case XI_OP_COUNT: return UINT8_MAX;
+        default: return UINT8_MAX;
+    }
+    return UINT8_MAX;
 }
 
 static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {

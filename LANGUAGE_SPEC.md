@@ -262,9 +262,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
-- Default literal type is `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
-- Range: `i64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `var x: i8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
+- An integer literal without a unique numeric context defaults to `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: the default `int` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `int` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
 ```xray
 42
@@ -487,7 +487,7 @@ Full token table (by category):
 
 `==` `!=` `<` `<=` `>` `>=`
 
-- `==` `!=`: value equality (with implicit numeric promotion: int→float).
+- `==` `!=`: value equality; numeric operands must have the same type or require only same-signed integer widening / `f32 → f64`. An integer literal may directly acquire the other operand's numeric type.
 - `<` etc.: supported by numbers and strings; not supported by other types.
 
 #### 1.7.5 Logical
@@ -600,11 +600,11 @@ Xray is statically typed; every expression has a determined type at compile time
 | `i64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `byte`..`u64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `i32` variable), but a direct literal must fit the target range (`var x: i8 = 200` is rejected at compile time).
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`byte + byte -> byte`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- An integer literal without a unique numeric context defaults to `int`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`byte + byte -> byte`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
 - Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: byte = 255 + 1` evaluates to `0`.
+- An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -1067,10 +1067,16 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 
 #### 2.10.1 Implicit Conversion
 
-| From | To | Allowed |
+| From | To | Allowed and condition |
 |--|--|--|
-| `int` | `float` | ✅ |
-| `i8` | `int` (= `i64`) | ✅ |
+| `T` | `T` (including `int`=`i64`, `float`=`f64`) | ✅ identity |
+| `i8 → i16 → i32 → i64` | a wider type on the chain | ✅ lossless widening |
+| `u8/byte → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
+| `f32` | `f64` (=`float`) | ✅ lossless widening |
+| Integer literal | a unique integer / floating context | ✅ direct typing; the integer target represents it, or the floating target represents it exactly |
+| Typed integer | another signedness, a narrower type, or fixed-width ↔ `isize`/`usize` | ❌ explicit `as` required |
+| Typed integer | any floating type | ❌ explicit `as` required |
+| Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
 | `T` | `Json` (if T is Json-compatible) | ✅ |
 | `null` | `T?` | ✅ |
@@ -1095,6 +1101,10 @@ Applies to:
 - Between numeric types (including `Json → int`, checked at runtime).
 - `Json → User` (structural narrowing).
 - Parent → child (downcast).
+
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+
+`expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
 #### 2.10.3 `is` Check
 
@@ -1294,13 +1304,15 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.1 Arithmetic Operators
 
-| Operator | int×int | float×float | int×float | string | other |
+| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×float | string / other |
 |--|--|--|--|--|--|
-| `+` | int | float | float (int→float promotion) | string concatenation | ❌ |
-| `-` | int | float | float | ❌ | ❌ |
-| `*` | int | float | float | ❌ | ❌ |
-| `/` | int (truncating) | float | float | ❌ | ❌ |
-| `%` | int | ❌ | ❌ | ❌ | ❌ |
+| `+` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | `string + string` concatenates; other ❌ |
+| `-` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `*` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `/` | original integer type (truncating) | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `%` | original integer type | ❌ | unique wider integer type | ❌ | ❌ |
+
+“Losslessly widenable” means only a same-signed integer chain or `f32 → f64`. A direct numeric literal may acquire the unique context of the other already-typed operand; two already-typed operands never use C-style usual arithmetic conversions.
 
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
@@ -1325,11 +1337,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-float and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
-**Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.
+**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔float promotion, or implicit signedness changes.
 
 #### 3.3.4 Logical Operators
 
@@ -1452,10 +1464,10 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 | Form | Failure behavior | Use case |
 |--|--|--|
 | `expr as T` | throws `XR_ERR_TYPE_MISMATCH` (E0404) | a cast that must succeed |
-| `expr as T?` | returns `null` | a cast that may or may not succeed |
+| `expr as T?` | returns `null` | a fallible dynamic / structural cast; not a numeric conversion |
 
 **Supported conversions**:
-- Between numeric types (`int → float` lossless, `float → int` truncating).
+- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
 - `Json → T` (runtime structural check against `T`).
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
@@ -4166,7 +4178,7 @@ When inference fails or precision is needed:
 ```xray
 var empty = Array<int>()              // no element to infer from
 var m = Map<string, int>()
-var result = identity<float>(0)            // 0 defaults to int; force float
+var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float
 ```
 
 ### 9.4 Specialization and Monomorphization
@@ -5762,7 +5774,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0413` | `XR_ERR_NULL_UNWRAP` | force-unwrapping null |
 | `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | modulo by zero |
-| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow |
+| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 

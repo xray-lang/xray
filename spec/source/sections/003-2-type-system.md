@@ -55,11 +55,11 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `i64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `byte`..`u64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `i32` 变量），但直接字面量必须落在目标范围内（`var x: i8 = 200` 编译拒绝）。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`byte + byte -> byte`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
+- 无唯一数值上下文的整数字面量默认 `int`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`byte + byte -> byte`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
 - 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
-- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `var x: byte = 255 + 1` 得到 `0`。
+- 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
@@ -516,10 +516,16 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 
 #### 2.10.1 隐式转换
 
-| 源 | 目标 | 允许 |
+| 源 | 目标 | 允许与条件 |
 |--|--|--|
-| `int` | `float` | ✅ |
-| `i8` | `int` (= `i64`) | ✅ |
+| `T` | `T`（含 `int`=`i64`、`float`=`f64`） | ✅ identity |
+| `i8 → i16 → i32 → i64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `u8/byte → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `f32` | `f64`（=`float`） | ✅ 无损加宽 |
+| 整数字面量 | 唯一整数 / 浮点上下文 | ✅ 直接定型；目标整数可表示，或目标浮点精确可表示 |
+| 已定型整数 | 不同符号、较窄或 `isize`/`usize` 与固定宽度之间 | ❌ 必须显式 `as` |
+| 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
+| 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
 | `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
 | `null` | `T?` | ✅ |
@@ -544,6 +550,10 @@ var n = x as int?       // 失败返回 null（安全转换）
 - 数值之间（含 `Json → int`，运行时检查）。
 - `Json → User`（结构化 narrowing）。
 - 父类 → 子类（向下转）。
+
+数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
+
+`expr as T?` 仅用于可能失败的动态 / 结构化转换；它不是数值 checked-cast 语法。数值转换必须写 `expr as T`，并遵循上面的确定性规则。
 
 #### 2.10.3 `is` 检查
 
@@ -688,11 +698,11 @@ Xray is statically typed; every expression has a determined type at compile time
 | `i64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `byte`..`u64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `i32` variable), but a direct literal must fit the target range (`var x: i8 = 200` is rejected at compile time).
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`byte + byte -> byte`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- An integer literal without a unique numeric context defaults to `int`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`byte + byte -> byte`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
 - Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
-- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `var x: byte = 255 + 1` evaluates to `0`.
+- An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
@@ -1155,10 +1165,16 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 
 #### 2.10.1 Implicit Conversion
 
-| From | To | Allowed |
+| From | To | Allowed and condition |
 |--|--|--|
-| `int` | `float` | ✅ |
-| `i8` | `int` (= `i64`) | ✅ |
+| `T` | `T` (including `int`=`i64`, `float`=`f64`) | ✅ identity |
+| `i8 → i16 → i32 → i64` | a wider type on the chain | ✅ lossless widening |
+| `u8/byte → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
+| `f32` | `f64` (=`float`) | ✅ lossless widening |
+| Integer literal | a unique integer / floating context | ✅ direct typing; the integer target represents it, or the floating target represents it exactly |
+| Typed integer | another signedness, a narrower type, or fixed-width ↔ `isize`/`usize` | ❌ explicit `as` required |
+| Typed integer | any floating type | ❌ explicit `as` required |
+| Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
 | `T` | `Json` (if T is Json-compatible) | ✅ |
 | `null` | `T?` | ✅ |
@@ -1183,6 +1199,10 @@ Applies to:
 - Between numeric types (including `Json → int`, checked at runtime).
 - `Json → User` (structural narrowing).
 - Parent → child (downcast).
+
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+
+`expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
 #### 2.10.3 `is` Check
 

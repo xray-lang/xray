@@ -1,0 +1,19 @@
+fn takeByte(value: byte) {
+    print(value)
+}
+
+fn narrowReturn(value: u64) -> u8 {
+    return value
+}
+
+var unsignedWide: u64 = 255
+var signedValue: i32 = 1
+var targetSized: usize = 1
+var floatWide: f64 = 1.0
+
+var narrow: u8 = unsignedWide
+var signChange: u32 = signedValue
+var targetChange: u64 = targetSized
+var approximate: f64 = unsignedWide
+var floatNarrow: f32 = floatWide
+takeByte(unsignedWide)

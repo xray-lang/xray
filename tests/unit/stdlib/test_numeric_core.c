@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "shared/xr_bits_core.h"
+#include "shared/xr_numeric_conversion_core.h"
 #include "shared/xr_numeric_core.h"
 #include "shared/xr_raw_scalar_core.h"
 #include <stdint.h>
@@ -91,6 +92,65 @@ TEST(numeric_core_shift_counts_are_mod64) {
     ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(1, -1), INT64_MIN);
     ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(-8, 1), -4);
     ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(INT64_MIN, 63), -1);
+}
+
+TEST(numeric_conversion_integer_matrix_is_bit_defined) {
+    ASSERT_EQ_INT(xr_numeric_int_convert_i64(-1, XR_NATIVE_I8, XR_NATIVE_U8, 64), 255);
+    ASSERT_EQ_INT(xr_numeric_int_convert_i64(255, XR_NATIVE_U8, XR_NATIVE_I8, 64), -1);
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
+                       xr_numeric_i64_from_bits(UINT64_MAX), XR_NATIVE_U64, XR_NATIVE_U32, 64)),
+                   UINT32_MAX);
+    ASSERT_EQ_INT(xr_numeric_int_convert_i64(INT64_C(0x100000001), XR_NATIVE_U64,
+                                             XR_NATIVE_USIZE, 32),
+                  1);
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
+                       -1, XR_NATIVE_ISIZE, XR_NATIVE_USIZE, 64)),
+                   UINT64_MAX);
+}
+
+TEST(numeric_conversion_integer_to_float_is_round_to_even) {
+    ASSERT(xr_numeric_int_to_float(INT64_C(16777217), XR_NATIVE_U64, XR_NATIVE_F32, 64) ==
+           16777216.0);
+    ASSERT(xr_numeric_int_to_float(INT64_C(16777219), XR_NATIVE_U64, XR_NATIVE_F32, 64) ==
+           16777220.0);
+    ASSERT(xr_numeric_int_to_float(xr_numeric_i64_from_bits(UINT64_MAX), XR_NATIVE_U64,
+                                   XR_NATIVE_F64, 64) ==
+           18446744073709551616.0);
+    ASSERT(xr_numeric_int_to_float(INT64_MIN, XR_NATIVE_I64, XR_NATIVE_F64, 64) ==
+           -9223372036854775808.0);
+}
+
+TEST(numeric_conversion_f64_to_f32_has_frozen_edges) {
+    double min_subnormal = xr_numeric_double_from_bits(UINT64_C(874) << 52);
+    double half_min_subnormal = xr_numeric_double_from_bits(UINT64_C(873) << 52);
+    ASSERT(xr_numeric_f64_to_f32(min_subnormal) == min_subnormal);
+    ASSERT_EQ_UINT(xr_numeric_double_to_bits(xr_numeric_f64_to_f32(half_min_subnormal)), 0);
+    ASSERT_EQ_UINT(xr_numeric_double_to_bits(xr_numeric_f64_to_f32(
+                       xr_numeric_double_from_bits(UINT64_C(0x7ff123456789abcd)))),
+                   xr_numeric_double_to_bits(
+                       (double) xr_numeric_float_from_bits(XR_NUMERIC_CANONICAL_F32_NAN)));
+    ASSERT_EQ_UINT(xr_numeric_double_to_bits(xr_numeric_f64_to_f32(
+                       xr_numeric_double_from_bits(UINT64_C(0x7ff0000000000000)))),
+                   UINT64_C(0x7ff0000000000000));
+}
+
+TEST(numeric_conversion_float_to_integer_checks_before_cast) {
+    int64_t out = 123;
+    ASSERT_TRUE(xr_numeric_float_to_int(255.99, XR_NATIVE_U8, 64, &out));
+    ASSERT_EQ_INT(out, 255);
+    ASSERT_TRUE(xr_numeric_float_to_int(-0.99, XR_NATIVE_U8, 64, &out));
+    ASSERT_EQ_INT(out, 0);
+    ASSERT_FALSE(xr_numeric_float_to_int(256.0, XR_NATIVE_U8, 64, &out));
+    ASSERT_TRUE(xr_numeric_float_to_int(-128.99, XR_NATIVE_I8, 64, &out));
+    ASSERT_EQ_INT(out, -128);
+    ASSERT_FALSE(xr_numeric_float_to_int(-129.0, XR_NATIVE_I8, 64, &out));
+    ASSERT_FALSE(xr_numeric_float_to_int(
+        xr_numeric_double_from_bits(UINT64_C(0x7ff8000000000000)), XR_NATIVE_I64, 64, &out));
+    ASSERT_FALSE(xr_numeric_float_to_int(
+        xr_numeric_double_from_bits(UINT64_C(0x7ff0000000000000)), XR_NATIVE_I64, 64, &out));
+    ASSERT_TRUE(xr_numeric_float_to_int(18446744073709549568.0, XR_NATIVE_U64, 64, &out));
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(out), UINT64_C(0xfffffffffffff800));
+    ASSERT_FALSE(xr_numeric_float_to_int(18446744073709551616.0, XR_NATIVE_U64, 64, &out));
 }
 
 TEST(bits_core_exact_width_queries) {
@@ -208,6 +268,10 @@ RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
+RUN_TEST(numeric_conversion_integer_matrix_is_bit_defined);
+RUN_TEST(numeric_conversion_integer_to_float_is_round_to_even);
+RUN_TEST(numeric_conversion_f64_to_f32_has_frozen_edges);
+RUN_TEST(numeric_conversion_float_to_integer_checks_before_cast);
 RUN_TEST(bits_core_exact_width_queries);
 RUN_TEST(bits_core_exact_width_preserves_type_pattern);
 RUN_TEST(bits_core_rotate_count_is_euclidean_mod_width);

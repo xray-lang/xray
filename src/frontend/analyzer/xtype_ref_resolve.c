@@ -26,6 +26,7 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../shared/xr_numeric_conversion_core.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../../stdlib/prelude/prelude.h"
@@ -73,6 +74,59 @@ static double ct_as_double(const XrCtValue *v) {
 
 static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                          const char **err, uint32_t *stack, int depth);
+
+static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                               const char **err, uint32_t *stack, int depth) {
+    if (!analyzer || !expr || expr->type != AST_AS_EXPR || !out || expr->as.as_expr.is_safe)
+        return ct_fail(err, "dynamic casts are not consteval-safe");
+
+    XrConversionWitness conversion = {0};
+    if (!xa_analyzer_get_node_conversion(analyzer, expr, &conversion) ||
+        !xr_conversion_kind_is_numeric(conversion.kind))
+        return ct_fail(err, "cast lacks numeric conversion evidence");
+
+    XrCtValue source = {0};
+    if (!ct_eval_impl(analyzer, expr->as.as_expr.expr, &source, err, stack, depth + 1))
+        return false;
+
+    bool source_is_float = conversion.source_scalar_rep == XR_NATIVE_F32 ||
+                           conversion.source_scalar_rep == XR_NATIVE_F64;
+    bool target_is_float = conversion.target_scalar_rep == XR_NATIVE_F32 ||
+                           conversion.target_scalar_rep == XR_NATIVE_F64;
+    uint8_t pointer_bits = (uint8_t) (sizeof(void *) * 8u);
+    if (target_is_float) {
+        out->kind = XR_CT_FLOAT;
+        if (source_is_float) {
+            if (source.kind != XR_CT_FLOAT)
+                return ct_fail(err, "numeric conversion source is not a float constant");
+            out->as.float_val =
+                xr_numeric_float_convert(source.as.float_val, conversion.target_scalar_rep);
+        } else {
+            if (source.kind != XR_CT_INT)
+                return ct_fail(err, "numeric conversion source is not an integer constant");
+            out->as.float_val = xr_numeric_int_to_float(
+                source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
+                pointer_bits);
+        }
+        return true;
+    }
+
+    out->kind = XR_CT_INT;
+    if (source_is_float) {
+        if (source.kind != XR_CT_FLOAT)
+            return ct_fail(err, "numeric conversion source is not a float constant");
+        if (!xr_numeric_float_to_int(source.as.float_val, conversion.target_scalar_rep,
+                                     pointer_bits, &out->as.int_val))
+            return ct_fail(err, "numeric conversion is out of range");
+    } else {
+        if (source.kind != XR_CT_INT)
+            return ct_fail(err, "numeric conversion source is not an integer constant");
+        out->as.int_val = xr_numeric_int_convert_i64(
+            source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
+            pointer_bits);
+    }
+    return true;
+}
 
 static bool ct_object_is_module(XaAnalyzer *analyzer, const AstNode *object,
                                 const char *module_name) {
@@ -829,6 +883,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
         }
         case AST_GROUPING:
             ok = ct_eval_impl(analyzer, expr->as.grouping, out, err, stack, depth + 1);
+            break;
+        case AST_AS_EXPR:
+            ok = ct_eval_numeric_as(analyzer, expr, out, err, stack, depth);
             break;
         case AST_LITERAL_INT:
             out->kind = XR_CT_INT;

@@ -1388,16 +1388,16 @@ fn _parseStatusCode(raw: string) -> int {
     for (var i = 0; i < len(raw); i++) {
         var o = raw.runes().nth(i).toUInt32()
         if (o < 48 || o > 57) { return -1 }
-        code = code * 10 + (o - 48)
+        code = code * 10 + ((o - 48) as int)
     }
     return code
 }
 
 fn _hexValue(c: rune) -> int {
     var o = c.toUInt32()
-    if (o >= 48 && o <= 57) { return o - 48 }
-    if (o >= 65 && o <= 70) { return 10 + o - 65 }
-    if (o >= 97 && o <= 102) { return 10 + o - 97 }
+    if (o >= 48 && o <= 57) { return (o - 48) as int }
+    if (o >= 65 && o <= 70) { return (10 + o - 65) as int }
+    if (o >= 97 && o <= 102) { return (10 + o - 97) as int }
     return -1
 }
 
@@ -1680,7 +1680,7 @@ fn _parsePortStrict(raw: string) -> int? {
     for (var i = 0; i < len(raw); i++) {
         var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return null }
-        port = port * 10 + (c - 48)
+        port = port * 10 + ((c - 48) as int)
     }
     if (port <= 0 || port > 65535) { return null }
     return port

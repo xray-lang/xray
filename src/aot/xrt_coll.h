@@ -423,6 +423,14 @@ static inline void xrt_throw_error(int code, const char *message) {
     xrt_throw_exc(xrt_structured_error_value(code, message));
 }
 
+static inline int64_t xrt_numeric_float_to_int_or_throw(double source, uint8_t target_rep,
+                                                        uint8_t pointer_bits) {
+    int64_t result = 0;
+    if (!xr_numeric_float_to_int(source, target_rep, pointer_bits, &result))
+        xrt_throw_error(XR_ERR_OVERFLOW, XR_ERROR_CORE_NUMERIC_CONVERSION_RANGE_MSG);
+    return result;
+}
+
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     xrt_array_check_store_or_abort(a, val, "xrt_array_push");

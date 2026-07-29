@@ -841,6 +841,61 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
     return true;
 }
 
+static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                       const XiValue *v) {
+    XrConversionKind kind = v->conversion.kind;
+    if (v->op == XI_AS) {
+        if (kind != XR_CONVERSION_DYNAMIC_CHECKED && kind != XR_CONVERSION_DYNAMIC_NULLABLE) {
+            verr(ctx,
+                 "func '%s': v%u XI_AS in b%u lacks dynamic conversion evidence; numeric XI_AS "
+                 "is forbidden",
+                 f->name, v->id, blk->id);
+            return false;
+        }
+        bool safe = (v->aux_int & 1) != 0;
+        if (safe != (kind == XR_CONVERSION_DYNAMIC_NULLABLE)) {
+            verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence",
+                 f->name, v->id, blk->id);
+            return false;
+        }
+        return true;
+    }
+
+    if (v->op == XI_CONVERT && v->nargs == 1 && v->args[0] && v->args[0]->type && v->type &&
+        XR_TYPE_IS_NUMERIC(v->args[0]->type) && XR_TYPE_IS_NUMERIC(v->type)) {
+        if (!xr_conversion_kind_is_numeric(kind) || kind == XR_CONVERSION_DISALLOWED ||
+            v->conversion.source_scalar_rep != v->args[0]->type->scalar_rep ||
+            v->conversion.target_scalar_rep != v->type->scalar_rep) {
+            verr(ctx, "func '%s': v%u numeric XI_CONVERT in b%u has invalid conversion evidence",
+                 f->name, v->id, blk->id);
+            return false;
+        }
+        if (XR_TYPE_IS_FLOAT(v->args[0]->type) && XR_TYPE_IS_INT(v->type) &&
+            (v->flags & XI_FLAG_MAY_THROW) == 0) {
+            verr(ctx,
+                 "func '%s': v%u float-to-int XI_CONVERT in b%u lacks numeric-overflow effect",
+                 f->name, v->id, blk->id);
+            return false;
+        }
+        return true;
+    }
+
+    if (kind == XR_CONVERSION_DYNAMIC_CHECKED || kind == XR_CONVERSION_DYNAMIC_NULLABLE) {
+        verr(ctx, "func '%s': v%u %s in b%u carries dynamic evidence outside XI_AS", f->name,
+             v->id, xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (xr_conversion_kind_is_numeric(kind) && v->nargs > 0 && v->args[0] && v->args[0]->type &&
+        v->type && XR_TYPE_IS_NUMERIC(v->args[0]->type) && XR_TYPE_IS_NUMERIC(v->type) &&
+        (v->conversion.source_scalar_rep != v->args[0]->type->scalar_rep ||
+         v->conversion.target_scalar_rep != v->type->scalar_rep)) {
+        verr(ctx, "func '%s': v%u %s in b%u carries stale numeric conversion evidence", f->name,
+             v->id, xi_op_name(v->op), blk->id);
+        return false;
+    }
+    return true;
+}
+
 static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -864,6 +919,8 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             uint16_t op = v->op;
 
             if (!verify_exact_bit_contract(ctx, f, blk, v))
+                return;
+            if (!verify_conversion_contract(ctx, f, blk, v))
                 return;
 
             if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_OBSOLETE)) {

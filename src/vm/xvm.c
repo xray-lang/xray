@@ -57,6 +57,9 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_error_core.h"
+#include "../shared/xr_error_messages.h"
+#include "../shared/xr_conversion.h"
+#include "../shared/xr_numeric_conversion_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"

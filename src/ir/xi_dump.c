@@ -239,6 +239,14 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [enum_owner=%s kind=%u field=%u]", owner_name ? owner_name : "?",
                 (unsigned) v->enum_metadata_kind, (unsigned) v->enum_metadata_field);
     }
+    if (v->conversion.kind != XR_CONVERSION_NONE) {
+        const char *source = xr_scalar_rep_canonical_name(v->conversion.source_scalar_rep);
+        const char *target = xr_scalar_rep_canonical_name(v->conversion.target_scalar_rep);
+        fprintf(out, " [conversion=%s %s->%s%s%s]",
+                xr_conversion_kind_name(v->conversion.kind), source ? source : "dynamic",
+                target ? target : "dynamic", v->conversion.is_implicit ? ",implicit" : ",explicit",
+                v->conversion.is_compile_time ? ",compile-time" : "");
+    }
 
     /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));

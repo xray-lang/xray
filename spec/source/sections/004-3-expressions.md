@@ -113,13 +113,15 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.1 算术运算符
 
-| 运算符 | int×int | float×float | int×float | string | 其他 |
+| 运算符 | 同类整数 | 同类浮点 | 可无损加宽的数值 | 整数×浮点 | string / 其他 |
 |--|--|--|--|--|--|
-| `+` | int | float | float（int→float 提升） | 字符串拼接 | ❌ |
-| `-` | int | float | float | ❌ | ❌ |
-| `*` | int | float | float | ❌ | ❌ |
-| `/` | int（整除） | float | float | ❌ | ❌ |
-| `%` | int | ❌ | ❌ | ❌ | ❌ |
+| `+` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | `string + string` 拼接；其他 ❌ |
+| `-` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `*` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `/` | 原整数类型（整除） | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `%` | 原整数类型 | ❌ | 唯一较宽整数类型 | ❌ | ❌ |
+
+“可无损加宽”仅指同符号整数链和 `f32 → f64`。一个直接数值字面量可由另一已定型操作数取得唯一上下文；两个已定型操作数不存在 C 风格 usual arithmetic conversions。
 
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
@@ -144,11 +146,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | 运算符 | 语义 |
 |--|--|
-| `==` | 值相等。`int` 与 `float` 可比较（int→float 隐式）。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
+| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
 | `!=` | `==` 的反 |
 | `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
 
-**与 JS 的区别**：xray 的 `==` **不**做 string↔number 转换；只做数值之间的 int↔float 提升。
+**与 JS / C 的区别**：xray 的 `==` 不做 string↔number 转换，也不做整数↔浮点或符号变化的隐式提升。
 
 #### 3.3.4 逻辑运算符
 
@@ -271,10 +273,10 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 | 形式 | 失败行为 | 用途 |
 |--|--|--|
 | `expr as T` | 抛 `XR_ERR_TYPE_MISMATCH` (E0404) | 必须成功的转换 |
-| `expr as T?` | 返回 `null` | 不确定能否转换的尝试 |
+| `expr as T?` | 返回 `null` | 不确定能否成功的动态 / 结构化转换；不适用于数值转换 |
 
 **支持的转换**：
-- 数值之间（`int → float` 不丢失，`float → int` 截断）。
+- 数值之间：整数到整数按目标位宽取模后按目标有符号性解释；整数到浮点和 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even；浮点到整数向零截断，NaN、无穷大或越界抛 `XR_ERR_OVERFLOW` (E0422)。数值转换只使用 `expr as T`，不用 nullable 形式。
 - `Json → T`（运行时按 T 结构检查）。
 - 父类 → 子类（运行时 instanceof）。
 - Union 成员 → 具体成员。
@@ -696,13 +698,15 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.1 Arithmetic Operators
 
-| Operator | int×int | float×float | int×float | string | other |
+| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×float | string / other |
 |--|--|--|--|--|--|
-| `+` | int | float | float (int→float promotion) | string concatenation | ❌ |
-| `-` | int | float | float | ❌ | ❌ |
-| `*` | int | float | float | ❌ | ❌ |
-| `/` | int (truncating) | float | float | ❌ | ❌ |
-| `%` | int | ❌ | ❌ | ❌ | ❌ |
+| `+` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | `string + string` concatenates; other ❌ |
+| `-` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `*` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `/` | original integer type (truncating) | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `%` | original integer type | ❌ | unique wider integer type | ❌ | ❌ |
+
+“Losslessly widenable” means only a same-signed integer chain or `f32 → f64`. A direct numeric literal may acquire the unique context of the other already-typed operand; two already-typed operands never use C-style usual arithmetic conversions.
 
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
@@ -727,11 +731,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-float and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
-**Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.
+**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔float promotion, or implicit signedness changes.
 
 #### 3.3.4 Logical Operators
 
@@ -854,10 +858,10 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 | Form | Failure behavior | Use case |
 |--|--|--|
 | `expr as T` | throws `XR_ERR_TYPE_MISMATCH` (E0404) | a cast that must succeed |
-| `expr as T?` | returns `null` | a cast that may or may not succeed |
+| `expr as T?` | returns `null` | a fallible dynamic / structural cast; not a numeric conversion |
 
 **Supported conversions**:
-- Between numeric types (`int → float` lossless, `float → int` truncating).
+- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
 - `Json → T` (runtime structural check against `T`).
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.

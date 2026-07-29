@@ -250,8 +250,33 @@ TEST(type_assignable) {
     // int assignable to int
     ASSERT(xr_type_assignable(t_int, t_int));
 
-    // int assignable to float (numeric coercion)
-    ASSERT(xr_type_assignable(t_float, t_int));
+    // Integer/float conversion is always explicit.
+    ASSERT(!xr_type_assignable(t_float, t_int));
+
+    XrType *t_i8 = xr_type_new_int_width(NULL, XR_NATIVE_I8);
+    XrType *t_i16 = xr_type_new_int_width(NULL, XR_NATIVE_I16);
+    XrType *t_u8 = xr_type_new_int_width(NULL, XR_NATIVE_U8);
+    XrType *t_isize = xr_type_new_int_width(NULL, XR_NATIVE_ISIZE);
+    XrType *t_f32 = xr_type_new_float_width(NULL, XR_NATIVE_F32);
+
+    ASSERT(xr_type_numeric_conversion_kind(t_i8, t_i8) == XR_CONVERSION_IDENTITY);
+    ASSERT(xr_type_numeric_conversion_kind(t_i16, t_i8) == XR_CONVERSION_LOSSLESS_WIDEN);
+    ASSERT(xr_type_numeric_conversion_kind(t_i8, t_i16) == XR_CONVERSION_EXPLICIT_TRUNCATE);
+    ASSERT(xr_type_numeric_conversion_kind(t_u8, t_i8) == XR_CONVERSION_EXPLICIT_SIGN_CHANGE);
+    ASSERT(xr_type_numeric_conversion_kind(t_isize, t_int) ==
+           XR_CONVERSION_EXPLICIT_TARGET_WIDTH);
+    ASSERT(xr_type_numeric_conversion_kind(t_float, t_f32) ==
+           XR_CONVERSION_LOSSLESS_WIDEN);
+    ASSERT(xr_type_numeric_conversion_kind(t_f32, t_float) ==
+           XR_CONVERSION_EXPLICIT_TRUNCATE);
+    ASSERT(xr_type_numeric_conversion_kind(t_float, t_int) ==
+           XR_CONVERSION_EXPLICIT_INT_FLOAT);
+    ASSERT(xr_type_assignable(t_i16, t_i8));
+    ASSERT(!xr_type_assignable(t_i8, t_i16));
+    ASSERT(!xr_type_assignable(t_u8, t_i8));
+    ASSERT(!xr_type_assignable(t_isize, t_int));
+    ASSERT(xr_type_assignable(t_float, t_f32));
+    ASSERT(!xr_type_assignable(t_f32, t_float));
 
     // Internal lattice keeps unknown as a permissive top type.
     ASSERT(xr_type_assignable(t_unknown, t_int));
@@ -1595,6 +1620,23 @@ TEST(analyzer_inferred_effects_accept_function_values) {
     xa_analyzer_get_diagnostics(a, &diagnostic_count);
     ASSERT(diagnostic_count == 0);
     check_throw_effect_consistency(a, "increment", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_call_context_accepts_u64_only_literals) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "fn take(value: u64) -> u64 { return value }\n"
+        "fn check(got: u64, want: u64) { print(got == want) }\n"
+        "check(take(11400714785074694791), 15845353736191888555)\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "contextual_u64_call.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -6186,6 +6228,7 @@ int main(void) {
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
     RUN_TEST(analyzer_inferred_effects_accept_function_values);
+    RUN_TEST(analyzer_call_context_accepts_u64_only_literals);
     RUN_TEST(analyzer_effect_inference_handles_redundant_try_catch);
     RUN_TEST(analyzer_deprecated_message_reaches_use_diagnostic);
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);

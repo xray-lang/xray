@@ -141,7 +141,7 @@ fn isUnreserved(c: int) -> bool {
 
 fn byteString(b: int) -> string {
     var one = Array<byte>(1)
-    one[0] = b
+    one[0] = b as byte
     return string.fromUtf8(one[:])!
 }
 
@@ -149,7 +149,7 @@ fn encodeImpl(s: string, form: bool) -> string {
     var src = s.copyBytes()
     var out = ""
     for (var i = 0; i < len(src); i++) {
-        var b = src[i]
+        var b = src[i] as int
         if (form && b == 32) {
             out = out + "+"
         } else if (isUnreserved(b)) {
@@ -168,8 +168,8 @@ fn decodedLen(src: Array<byte>) -> int {
     var i = 0
     while (i < len(src)) {
         if (src[i] == 37 && i + 2 < len(src)) {
-            var hi = hexVal(src[i + 1])
-            var lo = hexVal(src[i + 2])
+            var hi = hexVal(src[i + 1] as int)
+            var lo = hexVal(src[i + 2] as int)
             if (hi >= 0 && lo >= 0) { i = i + 2 }
         }
         n = n + 1
@@ -185,10 +185,10 @@ fn decodeImpl(s: string, form: bool) -> string {
     var i = 0
     while (i < len(src)) {
         if (src[i] == 37 && i + 2 < len(src)) {
-            var hi = hexVal(src[i + 1])
-            var lo = hexVal(src[i + 2])
+            var hi = hexVal(src[i + 1] as int)
+            var lo = hexVal(src[i + 2] as int)
             if (hi >= 0 && lo >= 0) {
-                out[oi] = (hi << 4) | lo
+                out[oi] = ((hi << 4) | lo) as byte
                 oi = oi + 1
                 i = i + 3
                 continue
@@ -215,12 +215,12 @@ fn decodeQueryComponent(s: string, baseOffset: int) -> string {
             if (i + 2 >= len(src)) {
                 throw UrlError.InvalidPercentEncoding(baseOffset + i)
             }
-            var hi = hexVal(src[i + 1])
-            var lo = hexVal(src[i + 2])
+            var hi = hexVal(src[i + 1] as int)
+            var lo = hexVal(src[i + 2] as int)
             if (hi < 0 || lo < 0) {
                 throw UrlError.InvalidPercentEncoding(baseOffset + i)
             }
-            out[oi] = (hi << 4) | lo
+            out[oi] = ((hi << 4) | lo) as byte
             oi = oi + 1
             i = i + 3
             continue
@@ -275,7 +275,7 @@ fn portIsValid(port: string) -> bool {
     for (var i = 0; i < len(port); i++) {
         var c = port.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return false }
-        v = v * 10 + (c - 48)
+        v = v * 10 + ((c - 48) as int)
     }
     return v <= 65535
 }

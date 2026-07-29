@@ -32,6 +32,8 @@ typedef struct XaNodeEntry {
     struct XaSymbol *symbol;  // resolved symbol (NULL for non-binding nodes)
     bool has_ct_value;
     XrCtValue ct_value;
+    bool has_conversion;
+    XrConversionWitness conversion;
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -159,7 +161,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 }
 
 static bool entry_has_no_facts(const XaNodeEntry *e) {
-    return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value;
+    return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -259,5 +261,38 @@ bool xa_node_table_get_ct_value(const XaNodeTable *t, const struct AstNode *node
         return false;
     if (out_value)
         *out_value = e->ct_value;
+    return true;
+}
+
+void xa_node_table_set_conversion(XaNodeTable *t, const struct AstNode *node,
+                                  const XrConversionWitness *witness) {
+    if (!t || !node)
+        return;
+    if (!witness || witness->kind == XR_CONVERSION_NONE) {
+        XaNodeEntry *e = (XaNodeEntry *) find_entry(t, node->node_id);
+        if (!e)
+            return;
+        e->has_conversion = false;
+        e->conversion = (XrConversionWitness) {0};
+        if (entry_has_no_facts(e))
+            remove_entry_by_id(t, node->node_id);
+        return;
+    }
+    XaNodeEntry *e = find_or_create(t, node->node_id);
+    if (!e)
+        return;
+    e->has_conversion = true;
+    e->conversion = *witness;
+}
+
+bool xa_node_table_get_conversion(const XaNodeTable *t, const struct AstNode *node,
+                                  XrConversionWitness *out_witness) {
+    if (!t || !node)
+        return false;
+    const XaNodeEntry *e = find_entry(t, node->node_id);
+    if (!e || !e->has_conversion)
+        return false;
+    if (out_witness)
+        *out_witness = e->conversion;
     return true;
 }

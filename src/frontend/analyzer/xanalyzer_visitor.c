@@ -32,6 +32,8 @@
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../toolchain/xcompiler_session.h"
+#include <float.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -1421,6 +1423,110 @@ static bool int_literal_fits_scalar_rep(const XaContextualIntLiteral *value, uin
         default:
             return true;
     }
+}
+
+static uint64_t contextual_int_literal_magnitude(const XaContextualIntLiteral *value) {
+    if (!value)
+        return 0;
+    if (!value->negative)
+        return value->unsigned_value;
+    if (value->signed_valid) {
+        if (value->signed_value == INT64_MIN)
+            return (uint64_t) INT64_MAX + 1u;
+        return (uint64_t) (-value->signed_value);
+    }
+    return value->unsigned_value;
+}
+
+static bool unsigned_integer_exact_in_binary_float(uint64_t magnitude, int precision_bits) {
+    if (magnitude == 0)
+        return true;
+    int bit_count = 0;
+    for (uint64_t n = magnitude; n != 0; n >>= 1)
+        bit_count++;
+    if (bit_count <= precision_bits)
+        return true;
+    int discarded_bits = bit_count - precision_bits;
+    uint64_t mask = discarded_bits >= 64 ? UINT64_MAX : ((UINT64_C(1) << discarded_bits) - 1u);
+    return (magnitude & mask) == 0;
+}
+
+static bool contextual_int_literal_fits_float(const XaContextualIntLiteral *value,
+                                              uint8_t scalar_rep) {
+    int precision_bits = scalar_rep == XR_NATIVE_F32 ? FLT_MANT_DIG : DBL_MANT_DIG;
+    return unsigned_integer_exact_in_binary_float(contextual_int_literal_magnitude(value),
+                                                  precision_bits);
+}
+
+static bool node_is_contextual_numeric_literal(AstNode *node) {
+    node = unwrap_grouping(node);
+    if (!node)
+        return false;
+    if (node->type == AST_LITERAL_INT || node->type == AST_LITERAL_FLOAT)
+        return true;
+    if (node->type != AST_UNARY_NEG)
+        return false;
+    AstNode *operand = unwrap_grouping(node->as.unary.operand);
+    return operand && (operand->type == AST_LITERAL_INT || operand->type == AST_LITERAL_FLOAT);
+}
+
+static void record_expected_numeric_conversion(XaInferContext *ctx, AstNode *node, XrType *source,
+                                               XrType *result) {
+    if (!ctx || !ctx->analyzer || !node || !ctx->expected_type || !source || !result ||
+        !XR_TYPE_IS_NUMERIC(ctx->expected_type) || !XR_TYPE_IS_NUMERIC(source))
+        return;
+    XrConversionWitness existing = {0};
+    if (xa_analyzer_get_node_conversion(ctx->analyzer, node, &existing))
+        return;
+    XrConversionWitness witness = {0};
+    witness.kind = node_is_contextual_numeric_literal(node)
+                       ? XR_CONVERSION_CONTEXTUAL_LITERAL
+                       : xr_type_numeric_conversion_kind(ctx->expected_type, source);
+    witness.source_scalar_rep = source->scalar_rep;
+    witness.target_scalar_rep = ctx->expected_type->scalar_rep;
+    witness.is_implicit = true;
+    witness.is_compile_time = node_is_contextual_numeric_literal(node);
+    xa_analyzer_set_node_conversion(ctx->analyzer, node, &witness);
+}
+
+static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *node,
+                                               XrType *fallback) {
+    XrType *target = ctx ? ctx->expected_type : NULL;
+    if (!target || !XR_TYPE_IS_NUMERIC(target) || target->is_nullable)
+        return fallback;
+    if (node->type == AST_LITERAL_INT) {
+        XaContextualIntLiteral value;
+        if (!extract_contextual_int_literal(node, &value))
+            return fallback;
+        if (XR_TYPE_IS_INT(target))
+            return target; /* range diagnostics are emitted by the shared contextual check */
+        if (XR_TYPE_IS_FLOAT(target)) {
+            if (!contextual_int_literal_fits_float(&value, target->scalar_rep)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Integer literal is not exactly representable in contextual type '%s'; "
+                         "use an explicit `as %s` conversion to accept rounding",
+                         xr_type_to_string(target), xr_type_to_string(target));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
+            return target;
+        }
+    }
+    if (node->type == AST_LITERAL_FLOAT && XR_TYPE_IS_FLOAT(target)) {
+        double value = node->as.literal.raw_value.float_val;
+        if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "Floating literal is out of range for contextual type 'f32'",
+                                       &loc);
+        }
+        return target;
+    }
+    return fallback;
 }
 
 static void format_contextual_int_literal(const XaContextualIntLiteral *value, char *buf,
@@ -4640,10 +4746,10 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_LITERAL_INT:
-            result = xr_type_new_int(NULL);
+            result = contextual_numeric_literal_type(ctx, node, xr_type_new_int(NULL));
             break;
         case AST_LITERAL_FLOAT:
-            result = xr_type_new_float(NULL);
+            result = contextual_numeric_literal_type(ctx, node, xr_type_new_float(NULL));
             break;
         case AST_LITERAL_RUNE:
             result = xr_type_new_rune(NULL);
@@ -5012,7 +5118,12 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         ctx->analyzer->unresolved_inference_count++;
     }
 
-    check_contextual_int_literal_range(ctx, node, ctx->expected_type);
+    /* Validate against the type the literal actually acquired.  In an
+     * untyped context that is the canonical default `int`; using only the
+     * expected type let u64-only magnitudes silently become negative i64
+     * bit patterns before an explicit conversion. */
+    check_contextual_int_literal_range(ctx, node, result);
+    record_expected_numeric_conversion(ctx, node, result, result);
 
     // Cache inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, result);

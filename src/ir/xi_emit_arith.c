@@ -300,12 +300,14 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    uint16_t conversion = xr_conversion_bytecode_pack(
+        &v->conversion, (uint8_t) (ctx->target_data_layout->pointer.size * 8u));
     switch (target->kind) {
         case XR_KIND_INT:
-            emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, conversion));
             break;
         case XR_KIND_FLOAT:
-            emit_inst(ctx, CREATE_ABC(OP_TOFLOAT, dst, src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TOFLOAT, dst, src, conversion));
             break;
         case XR_KIND_STRING:
             emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src,

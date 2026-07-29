@@ -391,9 +391,9 @@ fn _isHexDigit(c: string) -> bool {
 
 fn _hexValue(c: string) -> int {
     var o = c.runes().nth(0).toUInt32()
-    if (o >= 48 && o <= 57) { return o - 48 }
-    if (o >= 65 && o <= 70) { return o - 55 }
-    if (o >= 97 && o <= 102) { return o - 87 }
+    if (o >= 48 && o <= 57) { return (o - 48) as int }
+    if (o >= 65 && o <= 70) { return (o - 55) as int }
+    if (o >= 97 && o <= 102) { return (o - 87) as int }
     return -1
 }
 
@@ -489,22 +489,22 @@ fn _utf8Len(cp: int) -> int {
 
 fn _putUtf8(out: ref Array<byte>, oi: int, cp: int) -> int {
     if (cp < 0x80) {
-        out[oi] = cp
+        out[oi] = cp as byte
         return oi + 1
     } else if (cp < 0x800) {
-        out[oi] = 0xC0 | (cp >> 6)
-        out[oi + 1] = 0x80 | (cp & 0x3F)
+        out[oi] = (0xC0 | (cp >> 6)) as byte
+        out[oi + 1] = (0x80 | (cp & 0x3F)) as byte
         return oi + 2
     } else if (cp < 0x10000) {
-        out[oi] = 0xE0 | (cp >> 12)
-        out[oi + 1] = 0x80 | ((cp >> 6) & 0x3F)
-        out[oi + 2] = 0x80 | (cp & 0x3F)
+        out[oi] = (0xE0 | (cp >> 12)) as byte
+        out[oi + 1] = (0x80 | ((cp >> 6) & 0x3F)) as byte
+        out[oi + 2] = (0x80 | (cp & 0x3F)) as byte
         return oi + 3
     }
-    out[oi] = 0xF0 | (cp >> 18)
-    out[oi + 1] = 0x80 | ((cp >> 12) & 0x3F)
-    out[oi + 2] = 0x80 | ((cp >> 6) & 0x3F)
-    out[oi + 3] = 0x80 | (cp & 0x3F)
+    out[oi] = (0xF0 | (cp >> 18)) as byte
+    out[oi + 1] = (0x80 | ((cp >> 12) & 0x3F)) as byte
+    out[oi + 2] = (0x80 | ((cp >> 6) & 0x3F)) as byte
+    out[oi + 3] = (0x80 | (cp & 0x3F)) as byte
     return oi + 4
 }
 

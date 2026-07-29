@@ -106,14 +106,14 @@ fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, in
     }
 
     for (var i = 0; i < end; i++) {
-        if (_decodeChar(src[i], options.alphabet) < 0) {
+        if (_decodeChar(src[i] as int, options.alphabet) < 0) {
             return (2, i, src[i], 0, 0, 0)
         }
     }
-    if (rem == 2 && (_decodeChar(src[end - 1], options.alphabet) & 15) != 0) {
+    if (rem == 2 && (_decodeChar(src[end - 1] as int, options.alphabet) & 15) != 0) {
         return (4, end - 1, zero, 0, 0, 0)
     }
-    if (rem == 3 && (_decodeChar(src[end - 1], options.alphabet) & 3) != 0) {
+    if (rem == 3 && (_decodeChar(src[end - 1] as int, options.alphabet) & 3) != 0) {
         return (4, end - 1, zero, 0, 0, 0)
     }
 
@@ -128,9 +128,9 @@ fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
     var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
-        var b0 = data[i]
-        var b1 = data[i + 1]
-        var b2 = data[i + 2]
+        var b0 = data[i] as int
+        var b1 = data[i + 1] as int
+        var b2 = data[i + 2] as int
         out.append(alpha.runes().nth(b0 >> 2))
         out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(alpha.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
@@ -139,13 +139,13 @@ fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
     }
     var rem = n - i
     if (rem == 1) {
-        var b0 = data[i]
+        var b0 = data[i] as int
         out.append(alpha.runes().nth(b0 >> 2))
         out.append(alpha.runes().nth((b0 & 3) << 4))
         if (padding) { out.append("==") }
     } else if (rem == 2) {
-        var b0 = data[i]
-        var b1 = data[i + 1]
+        var b0 = data[i] as int
+        var b1 = data[i + 1] as int
         out.append(alpha.runes().nth(b0 >> 2))
         out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(alpha.runes().nth((b1 & 15) << 2))
@@ -160,26 +160,26 @@ fn _decodeValidated(src: Slice<byte>, end: int, rem: int, outLen: int,
     var oi = 0
     var i = 0
     while (i + 4 <= end) {
-        var c0 = _decodeChar(src[i], options.alphabet)
-        var c1 = _decodeChar(src[i + 1], options.alphabet)
-        var c2 = _decodeChar(src[i + 2], options.alphabet)
-        var c3 = _decodeChar(src[i + 3], options.alphabet)
-        out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
-        out[oi + 1] = (((c1 & 15) << 4) | (c2 >> 2)) & 255
-        out[oi + 2] = (((c2 & 3) << 6) | c3) & 255
+        var c0 = _decodeChar(src[i] as int, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
+        var c2 = _decodeChar(src[i + 2] as int, options.alphabet)
+        var c3 = _decodeChar(src[i + 3] as int, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
+        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as byte
+        out[oi + 2] = ((((c2 & 3) << 6) | c3) & 255) as byte
         oi = oi + 3
         i = i + 4
     }
     if (rem == 2) {
-        var c0 = _decodeChar(src[i], options.alphabet)
-        var c1 = _decodeChar(src[i + 1], options.alphabet)
-        out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
+        var c0 = _decodeChar(src[i] as int, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
     } else if (rem == 3) {
-        var c0 = _decodeChar(src[i], options.alphabet)
-        var c1 = _decodeChar(src[i + 1], options.alphabet)
-        var c2 = _decodeChar(src[i + 2], options.alphabet)
-        out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
-        out[oi + 1] = (((c1 & 15) << 4) | (c2 >> 2)) & 255
+        var c0 = _decodeChar(src[i] as int, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
+        var c2 = _decodeChar(src[i + 2] as int, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
+        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as byte
     }
     return out
 }

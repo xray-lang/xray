@@ -30,6 +30,7 @@
 
 #include "xconsteval.h"
 #include "../../base/xdefs.h"
+#include "../../shared/xr_conversion.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -65,6 +66,13 @@ XR_FUNC void xa_node_table_set_ct_value(XaNodeTable *t, const struct AstNode *no
                                         const XrCtValue *value);
 XR_FUNC bool xa_node_table_get_ct_value(const XaNodeTable *t, const struct AstNode *node,
                                         XrCtValue *out_value);
+
+// Store / retrieve the analyzer's canonical conversion classification for an
+// expression.  The witness is POD and owns no pointers across stage lifetimes.
+XR_FUNC void xa_node_table_set_conversion(XaNodeTable *t, const struct AstNode *node,
+                                          const XrConversionWitness *witness);
+XR_FUNC bool xa_node_table_get_conversion(const XaNodeTable *t, const struct AstNode *node,
+                                          XrConversionWitness *out_witness);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.

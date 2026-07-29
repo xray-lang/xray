@@ -1389,6 +1389,106 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
 
 // Check if source type is assignable to target type
 // This is the core type compatibility check, migrated from sema/ct_compatible
+static int xr_numeric_scalar_width(uint8_t scalar_rep) {
+    switch ((XrNativeType) scalar_rep) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+            return 8;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 16;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 32;
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_F64:
+            return 64;
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return 0; /* Target dependent: never implicitly mix with fixed width. */
+        default:
+            return -1;
+    }
+}
+
+const char *xr_conversion_kind_name(XrConversionKind kind) {
+    switch (kind) {
+        case XR_CONVERSION_NONE:
+            return "none";
+        case XR_CONVERSION_IDENTITY:
+            return "identity";
+        case XR_CONVERSION_CONTEXTUAL_LITERAL:
+            return "contextual_literal";
+        case XR_CONVERSION_LOSSLESS_WIDEN:
+            return "lossless_widen";
+        case XR_CONVERSION_EXPLICIT_TRUNCATE:
+            return "explicit_truncate";
+        case XR_CONVERSION_EXPLICIT_SIGN_CHANGE:
+            return "explicit_sign_change";
+        case XR_CONVERSION_EXPLICIT_TARGET_WIDTH:
+            return "explicit_target_width";
+        case XR_CONVERSION_EXPLICIT_INT_FLOAT:
+            return "explicit_int_float";
+        case XR_CONVERSION_DYNAMIC_CHECKED:
+            return "dynamic_checked";
+        case XR_CONVERSION_DYNAMIC_NULLABLE:
+            return "dynamic_nullable";
+        case XR_CONVERSION_DISALLOWED:
+            return "disallowed";
+        default:
+            return "invalid";
+    }
+}
+
+XrConversionKind xr_type_numeric_conversion_kind(const XrType *target, const XrType *source) {
+    if (!target || !source || !XR_TYPE_IS_NUMERIC(target) || !XR_TYPE_IS_NUMERIC(source) ||
+        target->is_nullable || source->is_nullable)
+        return XR_CONVERSION_DISALLOWED;
+    if (xr_type_equals((XrType *) target, (XrType *) source))
+        return XR_CONVERSION_IDENTITY;
+    if (XR_TYPE_IS_INT(target) != XR_TYPE_IS_INT(source))
+        return XR_CONVERSION_EXPLICIT_INT_FLOAT;
+
+    if (XR_TYPE_IS_FLOAT(target)) {
+        int target_width = xr_numeric_scalar_width(target->scalar_rep);
+        int source_width = xr_numeric_scalar_width(source->scalar_rep);
+        return target_width > source_width ? XR_CONVERSION_LOSSLESS_WIDEN
+                                           : XR_CONVERSION_EXPLICIT_TRUNCATE;
+    }
+
+    bool target_sized = target->scalar_rep == XR_NATIVE_ISIZE ||
+                        target->scalar_rep == XR_NATIVE_USIZE;
+    bool source_sized = source->scalar_rep == XR_NATIVE_ISIZE ||
+                        source->scalar_rep == XR_NATIVE_USIZE;
+    if (target_sized || source_sized)
+        return XR_CONVERSION_EXPLICIT_TARGET_WIDTH;
+    if (xr_scalar_rep_is_unsigned(target->scalar_rep) !=
+        xr_scalar_rep_is_unsigned(source->scalar_rep))
+        return XR_CONVERSION_EXPLICIT_SIGN_CHANGE;
+
+    int target_width = xr_numeric_scalar_width(target->scalar_rep);
+    int source_width = xr_numeric_scalar_width(source->scalar_rep);
+    return target_width > source_width ? XR_CONVERSION_LOSSLESS_WIDEN
+                                       : XR_CONVERSION_EXPLICIT_TRUNCATE;
+}
+
+bool xr_type_numeric_implicitly_convertible(const XrType *target, const XrType *source) {
+    XrConversionKind kind = xr_type_numeric_conversion_kind(target, source);
+    return kind == XR_CONVERSION_IDENTITY || kind == XR_CONVERSION_LOSSLESS_WIDEN;
+}
+
+XrType *xr_type_numeric_common_type(XrType *left, XrType *right) {
+    if (!left || !right || !XR_TYPE_IS_NUMERIC(left) || !XR_TYPE_IS_NUMERIC(right))
+        return NULL;
+    if (xr_type_numeric_implicitly_convertible(left, right))
+        return left;
+    if (xr_type_numeric_implicitly_convertible(right, left))
+        return right;
+    return NULL;
+}
+
 bool xr_type_assignable(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
@@ -1450,14 +1550,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (xr_type_equals(target, source))
         return true;
 
-    // Integer storage assignment: native-width integer types are distinct
-    // static views, but values can move between integer slots. Lowering
-    // inserts explicit truncation or type-view copies at typed write points.
-    if (XR_TYPE_IS_INT(target) && XR_TYPE_IS_INT(source))
-        return true;
-    if (XR_TYPE_IS_FLOAT(target) && XR_TYPE_IS_FLOAT(source))
-        return true;
-
     // Enum / class-name alias: the parser cannot distinguish an enum
     // type annotation `Color` from a class annotation, so it produces
     // XR_KIND_CLASS (or XR_KIND_INSTANCE for generic forms like
@@ -1504,9 +1596,13 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return false;
     }
 
-    // Numeric promotion: int -> float
-    if (XR_TYPE_IS_FLOAT(target) && XR_TYPE_IS_INT(source))
-        return true;
+    // Numeric language assignment is intentionally stricter than slot
+    // storage. Only value-preserving widening is implicit; narrowing,
+    // signedness/target-width changes and int/float conversion require `as`.
+    // Nullable structure has already been handled above, so classification
+    // always sees the actual scalar types.
+    if (XR_TYPE_IS_NUMERIC(target) && XR_TYPE_IS_NUMERIC(source))
+        return xr_type_numeric_implicitly_convertible(target, source);
 
     // Json value-domain compatibility. External heap/container values do not
     // implicitly cross into Json; literal contexts must type them as Json.

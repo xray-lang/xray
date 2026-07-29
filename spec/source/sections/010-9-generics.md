@@ -118,7 +118,7 @@ Pair("key", 100)            // K=string, V=int
 ```xray @id=generics-explicit-instantiation
 var empty = Array<int>()              // 无元素可推
 var m = Map<string, int>()
-var result = identity<float>(0)            // 0 默认 int，强制 float
+var result = identity<float>(0)            // 泛型实参提供唯一上下文，0 直接定型为 float
 ```
 
 ### 9.4 特化与 monomorphization
@@ -320,7 +320,7 @@ When inference fails or precision is needed:
 ```xray @id=generics-explicit-instantiation
 var empty = Array<int>()              // no element to infer from
 var m = Map<string, int>()
-var result = identity<float>(0)            // 0 defaults to int; force float
+var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float
 ```
 
 ### 9.4 Specialization and Monomorphization

@@ -2300,7 +2300,12 @@ static bool sr_same_value_shape(const XiValue *a, const XiValue *b, uint8_t dept
         case XI_WIDEN_U32:
         case XI_NARROW_F32:
         case XI_WIDEN_F32:
-            return a->nargs >= 1 && b->nargs >= 1 &&
+            return a->conversion.kind == b->conversion.kind &&
+                   a->conversion.source_scalar_rep == b->conversion.source_scalar_rep &&
+                   a->conversion.target_scalar_rep == b->conversion.target_scalar_rep &&
+                   a->conversion.is_implicit == b->conversion.is_implicit &&
+                   a->conversion.is_compile_time == b->conversion.is_compile_time &&
+                   a->nargs >= 1 && b->nargs >= 1 &&
                    sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
         default:
             return false;

@@ -137,9 +137,9 @@ fn _trim(s: string) -> string {
 
 fn _hexNibble(c: rune) -> int {
     var n = c.toUInt32()
-    if (n >= 48 && n <= 57) { return n - 48 }
-    if (n >= 65 && n <= 70) { return n - 55 }
-    if (n >= 97 && n <= 102) { return n - 87 }
+    if (n >= 48 && n <= 57) { return (n - 48) as int }
+    if (n >= 65 && n <= 70) { return (n - 55) as int }
+    if (n >= 97 && n <= 102) { return (n - 87) as int }
     return -1
 }
 
@@ -152,7 +152,7 @@ fn _hexBytes(hex: string) -> Array<byte> {
         var hi = _hexNibble(hex.runes().nth(i))
         var lo = _hexNibble(hex.runes().nth(i + 1))
         if (hi < 0 || lo < 0) { return Array<byte>(0) }
-        out[oi] = ((hi << 4) | lo) & 255
+        out[oi] = (((hi << 4) | lo) & 255) as byte
         oi = oi + 1
         i = i + 2
     }
@@ -164,9 +164,9 @@ fn _base64Encode(data: Array<byte>) -> string {
     var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
-        var b0 = data[i]
-        var b1 = data[i + 1]
-        var b2 = data[i + 2]
+        var b0 = data[i] as int
+        var b1 = data[i + 1] as int
+        var b2 = data[i + 2] as int
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(_B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
@@ -175,13 +175,13 @@ fn _base64Encode(data: Array<byte>) -> string {
     }
     var rem = n - i
     if (rem == 1) {
-        var b0 = data[i]
+        var b0 = data[i] as int
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth((b0 & 3) << 4))
         out.append("==")
     } else if (rem == 2) {
-        var b0 = data[i]
-        var b1 = data[i + 1]
+        var b0 = data[i] as int
+        var b1 = data[i + 1] as int
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(_B64_STD.runes().nth((b1 & 15) << 2))
@@ -201,7 +201,7 @@ fn _parsePort(s: string, start: int, end: int) -> int {
     for (var i = start; i < end; i++) {
         var c = s.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        n = n * 10 + (c.toUInt32() - 48)
+        n = n * 10 + ((c.toUInt32() - 48) as int)
         if (n > 65535) { return -1 }
     }
     if (n <= 0) { return -1 }
@@ -215,53 +215,53 @@ fn _isContinuationByte(b: int) -> bool {
 fn _validUtf8Bytes(data: Array<byte>, start: int, end: int) -> bool {
     var i = start
     while (i < end) {
-        var b = data[i] & 255
+        var b = data[i] as int
         if (b <= 0x7F) {
             i = i + 1
         } else if (b >= 0xC2 && b <= 0xDF) {
-            if (i + 1 >= end || !_isContinuationByte(data[i + 1] & 255)) { return false }
+            if (i + 1 >= end || !_isContinuationByte(data[i + 1] as int)) { return false }
             i = i + 2
         } else if (b == 0xE0) {
             if (i + 2 >= end) { return false }
-            var b1 = data[i + 1] & 255
-            var b2 = data[i + 2] & 255
+            var b1 = data[i + 1] as int
+            var b2 = data[i + 2] as int
             if (b1 < 0xA0 || b1 > 0xBF || !_isContinuationByte(b2)) { return false }
             i = i + 3
         } else if (b >= 0xE1 && b <= 0xEC) {
             if (i + 2 >= end ||
-                !_isContinuationByte(data[i + 1] & 255) ||
-                !_isContinuationByte(data[i + 2] & 255)) { return false }
+                !_isContinuationByte(data[i + 1] as int) ||
+                !_isContinuationByte(data[i + 2] as int)) { return false }
             i = i + 3
         } else if (b == 0xED) {
             if (i + 2 >= end) { return false }
-            var b1 = data[i + 1] & 255
-            var b2 = data[i + 2] & 255
+            var b1 = data[i + 1] as int
+            var b2 = data[i + 2] as int
             if (b1 < 0x80 || b1 > 0x9F || !_isContinuationByte(b2)) { return false }
             i = i + 3
         } else if (b >= 0xEE && b <= 0xEF) {
             if (i + 2 >= end ||
-                !_isContinuationByte(data[i + 1] & 255) ||
-                !_isContinuationByte(data[i + 2] & 255)) { return false }
+                !_isContinuationByte(data[i + 1] as int) ||
+                !_isContinuationByte(data[i + 2] as int)) { return false }
             i = i + 3
         } else if (b == 0xF0) {
             if (i + 3 >= end) { return false }
-            var b1 = data[i + 1] & 255
+            var b1 = data[i + 1] as int
             if (b1 < 0x90 || b1 > 0xBF ||
-                !_isContinuationByte(data[i + 2] & 255) ||
-                !_isContinuationByte(data[i + 3] & 255)) { return false }
+                !_isContinuationByte(data[i + 2] as int) ||
+                !_isContinuationByte(data[i + 3] as int)) { return false }
             i = i + 4
         } else if (b >= 0xF1 && b <= 0xF3) {
             if (i + 3 >= end ||
-                !_isContinuationByte(data[i + 1] & 255) ||
-                !_isContinuationByte(data[i + 2] & 255) ||
-                !_isContinuationByte(data[i + 3] & 255)) { return false }
+                !_isContinuationByte(data[i + 1] as int) ||
+                !_isContinuationByte(data[i + 2] as int) ||
+                !_isContinuationByte(data[i + 3] as int)) { return false }
             i = i + 4
         } else if (b == 0xF4) {
             if (i + 3 >= end) { return false }
-            var b1 = data[i + 1] & 255
+            var b1 = data[i + 1] as int
             if (b1 < 0x80 || b1 > 0x8F ||
-                !_isContinuationByte(data[i + 2] & 255) ||
-                !_isContinuationByte(data[i + 3] & 255)) { return false }
+                !_isContinuationByte(data[i + 2] as int) ||
+                !_isContinuationByte(data[i + 3] as int)) { return false }
             i = i + 4
         } else {
             return false
@@ -339,7 +339,7 @@ fn _parseStatusCode(line: string) -> int {
     for (var i = 9; i < 12; i++) {
         var c = line.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        code = code * 10 + (c.toUInt32() - 48)
+        code = code * 10 + ((c.toUInt32() - 48) as int)
     }
     return code
 }
@@ -624,8 +624,8 @@ export fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
     if (len(payload) > 125 || len(payload) == 1) { return null }
     if (len(payload) == 0) { return ClosePayload(1005, "") }
 
-    var codeHi: int = payload[0] & 255
-    var codeLo: int = payload[1] & 255
+    var codeHi: int = payload[0] as int
+    var codeLo: int = payload[1] as int
     var code = (codeHi << 8) | codeLo
     if (!isValidCloseCode(code)) { return null }
     if (!_validUtf8Bytes(payload, 2, len(payload))) { return null }
@@ -662,8 +662,8 @@ export fn parseFrame(
 ) -> ParsedFrame? {
     if (len(raw) < 2) { return null }
 
-    var first: int = raw[0] & 255
-    var second: int = raw[1] & 255
+    var first: int = raw[0] as int
+    var second: int = raw[1] as int
     var rsv1 = (first & 64) != 0
     var rsv23 = (first & 48) != 0
     if (rsv23 || (rsv1 && !allowRsv1)) { return null }
@@ -685,8 +685,8 @@ export fn parseFrame(
 
     if (payloadLen == 126) {
         if (len(raw) < 4) { return null }
-        var lenHi: int = raw[2] & 255
-        var lenLo: int = raw[3] & 255
+        var lenHi: int = raw[2] as int
+        var lenLo: int = raw[3] as int
         payloadLen = (lenHi << 8) | lenLo
         if (payloadLen < 126) { return null }
         offset = 4
@@ -695,7 +695,7 @@ export fn parseFrame(
         if ((raw[2] & 128) != 0) { return null }
         var n = 0
         for (var i = 0; i < 8; i++) {
-            n = (n << 8) | (raw[2 + i] & 255)
+            n = (n << 8) | (raw[2 + i] as int)
         }
         if (n <= 65535) { return null }
         payloadLen = n
@@ -713,11 +713,11 @@ export fn parseFrame(
     if (len(raw) < offset + payloadLen) { return null }
     var payload = Array<byte>(payloadLen)
     for (var i = 0; i < payloadLen; i++) {
-        var b = raw[offset + i] & 255
+        var b = raw[offset + i] as int
         if (maskMode == 1) {
-            b = (b ^ raw[maskStart + (i % 4)]) & 255
+            b = (b ^ (raw[maskStart + (i % 4)] as int)) & 255
         }
-        payload[i] = b
+        payload[i] = b as byte
     }
 
     return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
@@ -730,20 +730,20 @@ export fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true)
     var maskLen = mask ? 4 : 0
     var headerLen = 2 + ext + maskLen
     var out = Array<byte>(headerLen + len(payload))
-    out[0] = (128 | (opcode & 15)) & 255
+    out[0] = ((128 | (opcode & 15)) & 255) as byte
     if (ext == 8) {
-        out[1] = (mask ? 128 : 0) | 127
+        out[1] = ((mask ? 128 : 0) | 127) as byte
         var n = len(payload)
         for (var i = 7; i >= 0; i = i - 1) {
-            out[2 + i] = n & 255
+            out[2 + i] = (n & 255) as byte
             n = n >> 8
         }
     } else if (ext == 2) {
-        out[1] = (mask ? 128 : 0) | 126
-        out[2] = (len(payload) >> 8) & 255
-        out[3] = len(payload) & 255
+        out[1] = ((mask ? 128 : 0) | 126) as byte
+        out[2] = ((len(payload) >> 8) & 255) as byte
+        out[3] = (len(payload) & 255) as byte
     } else {
-        out[1] = (mask ? 128 : 0) | len(payload)
+        out[1] = ((mask ? 128 : 0) | len(payload)) as byte
     }
 
     var body = payload
@@ -767,8 +767,8 @@ export fn binaryFrame(data: Array<byte>, mask: bool = true) -> Array<byte> {
 export fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array<byte> {
     var reasonBytes = reason.copyBytes()
     var payload = Array<byte>(2 + len(reasonBytes))
-    payload[0] = (code >> 8) & 255
-    payload[1] = code & 255
+    payload[0] = ((code >> 8) & 255) as byte
+    payload[1] = (code & 255) as byte
     _copyInto(ref payload, 2, reasonBytes)
     return frame(payload, _OP_CLOSE, mask)
 }

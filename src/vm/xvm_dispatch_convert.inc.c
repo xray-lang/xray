@@ -219,7 +219,26 @@ vmcase(OP_DUMP) {
 vmcase(OP_TOINT) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    uint16_t conversion = (uint16_t) GETARG_C(i);
     XrValue val = R(b);
+    if (xr_conversion_bytecode_is_numeric(conversion)) {
+        uint8_t source_rep = xr_conversion_bytecode_source_rep(conversion);
+        uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
+        uint8_t pointer_bits = xr_conversion_bytecode_pointer_bits(conversion);
+        if (source_rep == XR_NATIVE_F32 || source_rep == XR_NATIVE_F64) {
+            int64_t converted = 0;
+            if (!XR_IS_FLOAT(val) ||
+                !xr_numeric_float_to_int(XR_TO_FLOAT(val), target_rep, pointer_bits, &converted))
+                VM_RUNTIME_ERROR(XR_ERR_OVERFLOW, XR_ERROR_CORE_NUMERIC_CONVERSION_RANGE_MSG);
+            R(a) = xr_int(converted);
+        } else {
+            if (!XR_IS_INT(val))
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "numeric conversion requires integer");
+            R(a) = xr_int(xr_numeric_int_convert_i64(XR_TO_INT(val), source_rep, target_rep,
+                                                     pointer_bits));
+        }
+        vmbreak;
+    }
     if (XR_IS_INT(val)) {
         R(a) = val;
     } else if (XR_IS_FLOAT(val)) {
@@ -242,7 +261,24 @@ vmcase(OP_TOINT) {
 vmcase(OP_TOFLOAT) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    uint16_t conversion = (uint16_t) GETARG_C(i);
     XrValue val = R(b);
+    if (xr_conversion_bytecode_is_numeric(conversion)) {
+        uint8_t source_rep = xr_conversion_bytecode_source_rep(conversion);
+        uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
+        uint8_t pointer_bits = xr_conversion_bytecode_pointer_bits(conversion);
+        if (source_rep == XR_NATIVE_F32 || source_rep == XR_NATIVE_F64) {
+            if (!XR_IS_FLOAT(val))
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "numeric conversion requires float");
+            R(a) = xr_float(xr_numeric_float_convert(XR_TO_FLOAT(val), target_rep));
+        } else {
+            if (!XR_IS_INT(val))
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "numeric conversion requires integer");
+            R(a) = xr_float(
+                xr_numeric_int_to_float(XR_TO_INT(val), source_rep, target_rep, pointer_bits));
+        }
+        vmbreak;
+    }
     if (XR_IS_FLOAT(val)) {
         R(a) = val;
     } else if (XR_IS_INT(val)) {

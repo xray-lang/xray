@@ -379,6 +379,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->type = type;
     v->aux_int = 0;
     v->aux = NULL;
+    memset(&v->conversion, 0, sizeof(v->conversion));
     v->args = NULL;
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
