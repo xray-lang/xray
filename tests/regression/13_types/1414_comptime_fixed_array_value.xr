@@ -20,7 +20,7 @@ fn test_comptime_fixed_array_list_value() {
 @test
 fn test_comptime_fixed_array_const_cache() {
     const local = comptime [5; COUNT]
-    var cached: [int; COUNT] = comptime local
+    var cached: [int; COUNT] = copy(comptime local)
     assert_eq(cached[0], 5)
     assert_eq(cached[3], 5)
 }

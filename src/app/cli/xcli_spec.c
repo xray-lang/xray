@@ -200,10 +200,16 @@ static const XrCliOptionSpec explain_options[] = {
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
     XR_CLI_OPT_END};
 
-static const XrCliOptionSpec verify_options[] = {{"contract", 0, XR_CLI_VALUE_STRING, true, false,
-                                                  "FILE",
-                                                  "Verify a versioned semantic/backend contract"},
-                                                 XR_CLI_OPT_END};
+static const XrCliOptionSpec verify_options[] = {
+    {"contract", 0, XR_CLI_VALUE_STRING, true, false, "FILE",
+     "Verify a versioned semantic/backend contract"},
+    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
+     "Explicit native compiler for realized code-shape verification"},
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
+     "Explicit Zig executable available as a capability fallback"},
+    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Bypass cached provider probes for realized verification"},
+    XR_CLI_OPT_END};
 
 #ifdef XR_HAS_LSP
 static const XrCliOptionSpec lsp_options[] = {
@@ -264,6 +270,8 @@ static const XrCliCommandSpec toolchain_subcommands[] = {
 static const XrCliCommandSpec language_subcommands[] = {
     {"attributes", "List the complete public attribute registry", NULL, language_options, 0, 0,
      false, false, NULL, NULL, 0},
+    {"conversions", "Inventory analyzer-classified source conversions", NULL, language_options,
+     1, 1, false, false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
 /* ========== Top-level Command Table ========== */
@@ -285,7 +293,7 @@ static XrCliCommandSpec cli_commands[] = {
     {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
      toolchain_subcommands, 7},
     {"language", "Inspect the public language surface", NULL, language_options, 0, -1, false, false,
-     NULL, language_subcommands, 1},
+     NULL, language_subcommands, 2},
     {"explain", "Explain compiler evidence and native provenance", NULL, explain_options, 1, 2,
      false, false, NULL, NULL, 0},
     {"verify", "Verify semantic and backend contracts", NULL, verify_options, 0, 0, false, false,

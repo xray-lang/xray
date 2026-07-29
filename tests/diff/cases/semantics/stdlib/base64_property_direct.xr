@@ -28,7 +28,7 @@ fn fuzzBytes(length: int, seed: int) -> Array<byte> {
     var state = seed
     for (var i = 0; i < length; i++) {
         state = nextState(state)
-        out[i] = state & 255
+        out[i] = (state & 255) as byte
     }
     return out
 }
@@ -64,11 +64,11 @@ fn errorCode(text: string) -> int {
 var aggregate = 0
 for (var value = 0; value < 256; value++) {
     var one = Array<byte>(1)
-    one[0] = value
+    one[0] = value as byte
     var encoded = base64.encode(one[:])
     var encodedBytes: Slice<byte> = encoded.bytes()
     for (var i = 0; i < len(encodedBytes); i++) {
-        var encodedByte: int = encodedBytes[i]
+        var encodedByte: int = encodedBytes[i] as int
         aggregate = ((aggregate * 257) + encodedByte) % 1000000007
     }
 }

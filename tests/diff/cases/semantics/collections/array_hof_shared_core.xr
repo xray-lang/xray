@@ -51,7 +51,7 @@ bytes.push(1)
 bytes.push(2)
 bytes.push(3)
 
-var byte_mapped = bytes.map(fn(x: byte) -> int { return x + 10 })
+var byte_mapped = bytes.map(fn(x: byte) -> int { return (x as int) + 10 })
 print(len(byte_mapped))
 print(byte_mapped[0])
 print(byte_mapped[2])

@@ -14,7 +14,7 @@ fn methodTagged() -> int {
 
     if (hasAda) {
         if (sawAda) {
-            return one
+            return one!
         }
     }
     return 0

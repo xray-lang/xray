@@ -628,6 +628,18 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
 }
 
+/* VM execution has no native optimizer to constrain.  Keep the canonical Xi
+ * nodes for explain/verification, then realize their observable identity/no-op
+ * semantics in bytecode. */
+static void emit_codegen_opaque(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_copy(ctx, v, dst);
+}
+
+static void emit_codegen_compiler_fence(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+}
+
 /* Conditional select: dst = cond ? true_val : false_val.
  * OP_TEST skips the next instruction when truthiness differs from B.  The
  * alias cases are important for coalesced source variables: default-parameter

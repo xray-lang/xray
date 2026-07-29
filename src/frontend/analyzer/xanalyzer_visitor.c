@@ -1473,7 +1473,8 @@ static bool node_is_contextual_numeric_literal(AstNode *node) {
 static void record_expected_numeric_conversion(XaInferContext *ctx, AstNode *node, XrType *source,
                                                XrType *result) {
     if (!ctx || !ctx->analyzer || !node || !ctx->expected_type || !source || !result ||
-        !XR_TYPE_IS_NUMERIC(ctx->expected_type) || !XR_TYPE_IS_NUMERIC(source))
+        !XR_TYPE_IS_NUMERIC(ctx->expected_type) || !XR_TYPE_IS_NUMERIC(source) ||
+        ctx->expected_type->is_nullable || source->is_nullable)
         return;
     XrConversionWitness existing = {0};
     if (xa_analyzer_get_node_conversion(ctx->analyzer, node, &existing))
@@ -3766,6 +3767,9 @@ static void xa_clear_ct_value_cache_expr(XaAnalyzer *analyzer, AstNode *expr) {
         case AST_GROUPING:
             xa_clear_ct_value_cache_expr(analyzer, expr->as.grouping);
             break;
+        case AST_AS_EXPR:
+            xa_clear_ct_value_cache_expr(analyzer, expr->as.as_expr.expr);
+            break;
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
@@ -5122,8 +5126,10 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
      * untyped context that is the canonical default `int`; using only the
      * expected type let u64-only magnitudes silently become negative i64
      * bit patterns before an explicit conversion. */
-    check_contextual_int_literal_range(ctx, node, result);
-    record_expected_numeric_conversion(ctx, node, result, result);
+    if (!ctx->contextual_unary_numeric_literal_operand) {
+        check_contextual_int_literal_range(ctx, node, result);
+        record_expected_numeric_conversion(ctx, node, result, result);
+    }
 
     // Cache inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, result);

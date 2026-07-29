@@ -11,9 +11,10 @@ struct Rect {
 }
 
 fn move_value(v: Vec2) -> Vec2 {
-    v.x = v.x + 10.0
-    v.y = v.y + 20.0
-    return v
+    var result = copy(v)
+    result.x = result.x + 10.0
+    result.y = result.y + 20.0
+    return result
 }
 fn length_sq(v: Vec2) -> float {
     return v.x * v.x + v.y * v.y

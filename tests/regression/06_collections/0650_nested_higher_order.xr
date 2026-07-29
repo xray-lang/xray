@@ -167,8 +167,9 @@ fn test_reduce_to_map() {
     var pairs = [["a", 1], ["b", 2], ["c", 3]]
     var seed: Json = {}
     var obj = pairs.reduce(fn(acc, pair) {
-        acc[pair[0]] = pair[1]
-        return acc
+        var next = copy(acc)
+        next[pair[0]] = pair[1]
+        return next
     }, seed)
     assert_eq(obj.a, 1)
     assert_eq(obj.b, 2)
@@ -427,11 +428,12 @@ fn test_count_by_reduce() {
     var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
     var seed: Json = {}
     var counts = words.reduce(fn(acc, word) {
-        if (acc[word] == null) {
-            acc[word] = 0
+        var next = copy(acc)
+        if (next[word] == null) {
+            next[word] = 0
         }
-        acc[word] = int(acc[word]) + 1
-        return acc
+        next[word] = int(next[word]) + 1
+        return next
     }, seed)
     assert_eq(counts.apple, 3)
     assert_eq(counts.banana, 2)

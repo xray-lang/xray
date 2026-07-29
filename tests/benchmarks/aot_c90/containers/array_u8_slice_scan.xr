@@ -2,7 +2,7 @@ fn run(n: int) -> int {
     var bytes: Array<byte> = []
     var i = 0
     while (i < n) {
-        bytes.push(i)
+        bytes.push(i as byte)
         i = i + 1
     }
 
@@ -10,7 +10,7 @@ fn run(n: int) -> int {
     var sum = 0
     i = 0
     while (i < len(mid)) {
-        sum = sum + mid[i]
+        sum = sum + (mid[i] as int)
         i = i + 1
     }
     return sum

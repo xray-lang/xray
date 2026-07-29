@@ -1,0 +1,12 @@
+// codegen — semantic-neutral native code-shape controls.
+//
+// These source bodies are the VM/reference semantics.  The analyzer binds the
+// declarations to compiler-owned intrinsic identities, so AOT never discovers
+// them by module or function spelling.
+
+export fn opaque<T>(value: T) -> T {
+    return value
+}
+
+export fn compilerFence() {
+}

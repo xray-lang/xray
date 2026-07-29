@@ -873,6 +873,55 @@ static void test_arc_err_check_without_throwing_source_stays_operand_free(void) 
     xi_func_free(f);
 }
 
+static void test_arc_err_check_cleanup_requires_dominating_owner(void) {
+    XiFunc *f = make_func("arc_err_check_cleanup_dominance", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *left = xi_block_new(f);
+    XiBlock *right = xi_block_new(f);
+    XiBlock *join = xi_block_new(f);
+    left->sealed = true;
+    right->sealed = true;
+    join->sealed = true;
+
+    XiValue *cond = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, cond, left, right);
+
+    XiValue *left_builder = xi_value_new(f, left, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    left_builder->aux = (void *) "StringBuilder";
+    left_builder->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_jump(left, join);
+
+    XiValue *right_builder = xi_value_new(f, right, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    right_builder->aux = (void *) "StringBuilder";
+    right_builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *fallible = xi_value_new(f, right, XI_CALL_BUILTIN, &t_int, 0);
+    fallible->aux = (void *) "fallible";
+    fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *check = xi_value_new(f, right, XI_ERR_CHECK, &t_unit, 0);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_jump(right, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_stringbuilder, join->npreds);
+    for (uint16_t i = 0; i < join->npreds; i++)
+        merged->value.args[i] = join->preds[i] == left ? left_builder : right_builder;
+    XiValue *length = xi_value_new(f, join, XI_LEN, &t_int, 1);
+    length->args[0] = &merged->value;
+    xi_block_set_return(join, length);
+
+    xi_arc_insert(f);
+    xi_arc_elim(f);
+    xi_arc_attach_error_cleanups(f);
+
+    ASSERT_EQ(check->nargs, 1,
+              "error edge should clean only the branch-local owner available on its path");
+    ASSERT_EQ(check->args[0] == right_builder, true,
+              "non-dominating sibling owner must not enter ERR_CHECK cleanup metadata");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "dominance-filtered error cleanup must preserve the ARC contract");
+    xi_func_free(f);
+}
+
 /* ========== Test: borrowed Slice lifetime flows through a phi ========== */
 
 static void test_arc_span_borrow_flows_through_phi(void) {
@@ -1220,6 +1269,7 @@ int main(void) {
     test_arc_custom_iterator_method_stays_alias_uncertain();
     test_arc_err_check_carries_cold_edge_cleanup();
     test_arc_err_check_without_throwing_source_stays_operand_free();
+    test_arc_err_check_cleanup_requires_dominating_owner();
     test_arc_span_borrow_flows_through_phi();
     test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();

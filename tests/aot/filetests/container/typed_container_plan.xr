@@ -70,7 +70,7 @@ fn local_arrays() -> int {
     bytes[1] = 5
     bytes[2] = 6
 
-    return mid[0] + mapped[0] + kept[0] + bytes[2] + bag.scan() + bag.refill(4)
+    return mid[0] + mapped[0] + kept[0] + (bytes[2] as int) + bag.scan() + bag.refill(4)
 }
 
 fn loop_sum(n: int) -> int {
@@ -94,14 +94,14 @@ fn bytes_index(n: int) -> int {
     var bytes = Array<byte>(n)
     var i = 0
     while (i < len(bytes)) {
-        bytes[i] = i * 3 + 1
+        bytes[i] = (i * 3 + 1) as byte
         i = i + 1
     }
 
     var total = 0
     i = 0
     while (i < len(bytes)) {
-        total = total + bytes[i]
+        total = total + (bytes[i] as int)
         i = i + 1
     }
     return total
@@ -135,4 +135,5 @@ class Bag {
 }
 
 var bag = Bag()
-print(bytes[0] + values.get(1) + len(seen) + len(chars) + bag.fill() + local_arrays() + loop_sum(4) + bytes_index(4) + char_ord_sum())
+print((bytes[0] as int) + values.get(1)! + len(seen) + len(chars) + bag.fill() +
+    local_arrays() + loop_sum(4) + bytes_index(4) + char_ord_sum())

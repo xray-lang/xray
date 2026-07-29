@@ -499,9 +499,18 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
 
     XaSymbol *callee_symbol = memory_call_symbol(scan->pass, call->callee);
     const XaMemoryEffectSummary *callee = memory_callee_summary(scan->pass, callee_symbol);
+    const XaResolvedCall *resolved =
+        xa_analyzer_get_resolved_call(scan->pass->analyzer, node);
+    const XaIntrinsicDesc *intrinsic =
+        resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
+    if (!intrinsic && callee_symbol)
+        intrinsic = xa_intrinsic_by_id(callee_symbol->links.intrinsic_id);
+    bool semantic_neutral_codegen_control =
+        intrinsic && intrinsic->family == XA_INTRINSIC_FAMILY_CODEGEN;
     bool compiler_builtin_function =
         (callee_symbol && callee_symbol->is_builtin && callee_symbol->kind == XA_SYM_FUNCTION) ||
         memory_call_is_mem_intrinsic(scan->pass, call) ||
+        semantic_neutral_codegen_control ||
         (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
          strcmp(call->callee->as.variable.name, "len") == 0);
     if (callee) {

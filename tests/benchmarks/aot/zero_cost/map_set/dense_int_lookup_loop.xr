@@ -7,7 +7,7 @@ fn run(n: int) -> int {
     while (i < n) {
         if (scores.containsKey(3)) {
             if (seen.contains(1)) {
-                sum = sum + scores.get(4) + scores[2]
+                sum = sum + scores.get(4)! + scores[2]
             }
         }
         i = i + 1

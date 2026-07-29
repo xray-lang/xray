@@ -3,7 +3,7 @@ const DOUBLE = BASE * 2
 const SHIFTED = 1 << 3
 
 fn last_scaled(xs: [byte; DOUBLE]) -> int {
-    return xs[7]
+    return xs[7] as int
 }
 
 @test

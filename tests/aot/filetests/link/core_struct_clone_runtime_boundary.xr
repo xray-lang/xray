@@ -20,7 +20,7 @@ print(p.y)
 print(p == q)
 
 var b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
-b.p.x = b.p.x + b.tag
+b.p.x = b.p.x + (b.tag as i32)
 print(b.p.x)
 print(b.p.y)
 print(b.tag)

@@ -1814,6 +1814,23 @@ TEST(gvn_uses_complete_semantic_identity) {
     xi_func_free(f);
 }
 
+TEST(gvn_never_merges_codegen_opaque_values) {
+    XiFunc *f = make_func("opaque", &stub_int);
+    XiBlock *entry = f->entry;
+    XiValue *input = xi_param(f, entry, 0, &stub_int);
+    XiValue *first = xi_value_new(f, entry, XI_CODEGEN_OPAQUE, &stub_int, 1);
+    first->args[0] = input;
+    XiValue *second = xi_value_new(f, entry, XI_CODEGEN_OPAQUE, &stub_int, 1);
+    second->args[0] = input;
+    xi_block_set_return(entry, second);
+
+    xi_opt_gvn_pre(f);
+
+    assert(first->op == XI_CODEGEN_OPAQUE && second->op == XI_CODEGEN_OPAQUE &&
+           "independent opacity requests must not share a value number");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1911,6 +1928,7 @@ int main(void) {
     run_dom_mul_cross_block();
     run_verify_full_pipeline_diamond();
     run_gvn_uses_complete_semantic_identity();
+    run_gvn_never_merges_codegen_opaque_values();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

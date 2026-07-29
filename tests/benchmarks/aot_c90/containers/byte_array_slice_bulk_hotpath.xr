@@ -2,7 +2,7 @@ fn run(n: int, rounds: int) -> int {
     var seed = Array<byte>(n)
     var i = 0
     while (i < n) {
-        seed[i] = i * 17 + 3
+        seed[i] = (i * 17 + 3) as byte
         i = i + 1
     }
 

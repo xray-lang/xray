@@ -24,7 +24,7 @@ fn userHashEqPlan() -> int {
     if (values.containsKey(token) && seen.contains(token)) {
         seen.delete(token)
         if (!seen.contains(token)) {
-            return strict + values.get(token)
+            return strict + values.get(token)!
         }
     }
     return 0

@@ -13,8 +13,9 @@ fn run() -> int {
     u32s.push(4294967295)
     u32s.push(4294967295 + 1)
 
-    return i8s[0] + i8s[1] + i16s[0] + i16s[1] +
-        u16s[0] + u16s[1] + u32s[0] + u32s[1]
+    return (i8s[0] as int) + (i8s[1] as int) + (i16s[0] as int) +
+        (i16s[1] as int) + (u16s[0] as int) + (u16s[1] as int) +
+        (u32s[0] as int) + (u32s[1] as int)
 }
 
 print(run())

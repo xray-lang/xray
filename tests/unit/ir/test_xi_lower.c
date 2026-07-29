@@ -2853,6 +2853,26 @@ TEST(as_to_scalar_rep_int_lowers_to_narrow) {
     xi_func_free(f);
 }
 
+TEST(codegen_controls_lower_to_first_class_semantic_ops) {
+    XiFunc *f = lower_source("import codegen\n"
+                             "fn guarded(value: u64) -> u64 {\n"
+                             "  var hidden = codegen.opaque(value)\n"
+                             "  codegen.compilerFence()\n"
+                             "  return hidden\n"
+                             "}\n"
+                             "print(guarded(7))\n");
+    assert(f != NULL);
+    XiValue *opaque = func_tree_find_op(f, XI_CODEGEN_OPAQUE);
+    XiValue *fence = func_tree_find_op(f, XI_CODEGEN_COMPILER_FENCE);
+    assert(opaque && opaque->xa_intrinsic_id == XA_INTRINSIC_CODEGEN_OPAQUE &&
+           "codegen.opaque must retain canonical semantic identity");
+    assert(fence && fence->xa_intrinsic_id == XA_INTRINSIC_CODEGEN_COMPILER_FENCE &&
+           "codegen.compilerFence must retain canonical semantic identity");
+    assert(!func_tree_find_method(f, "opaque") && !func_tree_find_method(f, "compilerFence") &&
+           "codegen controls must not survive as spelling-dispatched calls");
+    xi_func_free(f);
+}
+
 TEST(numeric_as_carries_typed_conversion_evidence) {
     XiFunc *f = lower_source("fn run(x: float, y: u64) -> u8 {\n"
                              "    var rounded = y as f64\n"
@@ -3077,6 +3097,7 @@ int main(void) {
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
+    run_codegen_controls_lower_to_first_class_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();
     run_nullish_coalesce();

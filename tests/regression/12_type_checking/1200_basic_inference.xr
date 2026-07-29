@@ -107,8 +107,8 @@ fn test_arithmetic_float() {
 fn test_arithmetic_mixed() {
     var a = 10
     var b = 3.0
-    var result = a + b
-    // int + float = float
+    var result = (a as float) + b
+    // Mixed numeric variables require an explicit direction choice.
     assert_eq(typeName(result), "float")
 }
 

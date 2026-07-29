@@ -28,6 +28,29 @@ static const char *xtc_json_capability_name(XrToolchainCapabilityState state) {
     return "unsupported";
 }
 
+static void xtc_json_write_required_codegen(FILE *out, uint32_t required) {
+    static const struct {
+        uint32_t bit;
+        const char *name;
+    } capabilities[] = {
+        {XR_TOOLCHAIN_CODEGEN_FORCE_INLINE, "forceInline"},
+        {XR_TOOLCHAIN_CODEGEN_PRESERVE_CALL, "preserveCall"},
+        {XR_TOOLCHAIN_CODEGEN_VALUE_OPAQUE, "valueOpaque"},
+        {XR_TOOLCHAIN_CODEGEN_COMPILER_FENCE, "compilerFence"},
+    };
+    bool first = true;
+    fputc('[', out);
+    for (size_t i = 0; i < sizeof(capabilities) / sizeof(capabilities[0]); i++) {
+        if ((required & capabilities[i].bit) == 0)
+            continue;
+        if (!first)
+            fputc(',', out);
+        xtc_json_write_string(out, capabilities[i].name);
+        first = false;
+    }
+    fputc(']', out);
+}
+
 XR_FUNC void xtc_json_write_string(FILE *out, const char *text) {
     if (!out)
         return;
@@ -86,6 +109,8 @@ XR_FUNC bool xtc_probe_json_write(FILE *out, const char *requested_target,
     xtc_json_write_string(out, xtc_json_profile_name(options->profile));
     fputs(",\"provider\":", out);
     xtc_json_write_string(out, xtc_selector_name(options->request.selector));
+    fputs(",\"requiredCodegenCapabilities\":", out);
+    xtc_json_write_required_codegen(out, options->required_codegen_capabilities);
     fputs("},\"selection\":{\"provider\":", out);
     xtc_json_write_string(out, xtc_provider_name(result->selection.provider));
     fputs(",\"ownership\":", out);
@@ -112,6 +137,14 @@ XR_FUNC bool xtc_probe_json_write(FILE *out, const char *requested_target,
     xtc_json_write_string(out, xtc_json_capability_name(result->cross));
     fputs(",\"lto\":", out);
     xtc_json_write_string(out, xtc_json_capability_name(result->lto));
+    fputs(",\"forceInline\":", out);
+    xtc_json_write_string(out, xtc_json_capability_name(result->force_inline));
+    fputs(",\"preserveCall\":", out);
+    xtc_json_write_string(out, xtc_json_capability_name(result->preserve_call));
+    fputs(",\"valueOpaque\":", out);
+    xtc_json_write_string(out, xtc_json_capability_name(result->value_opaque));
+    fputs(",\"compilerFence\":", out);
+    xtc_json_write_string(out, xtc_json_capability_name(result->compiler_fence));
     fputs("},\"diagnostics\":[", out);
     for (size_t i = 0; i < result->diagnostic_count; i++) {
         if (i)

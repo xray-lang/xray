@@ -1282,6 +1282,22 @@ static const char *binary_operator_spelling(int op) {
             return "<<";
         case AST_BINARY_RSHIFT:
             return ">>";
+        case AST_BINARY_EQ:
+            return "==";
+        case AST_BINARY_NE:
+            return "!=";
+        case AST_BINARY_LT:
+            return "<";
+        case AST_BINARY_LE:
+            return "<=";
+        case AST_BINARY_GT:
+            return ">";
+        case AST_BINARY_GE:
+            return ">=";
+        case AST_BINARY_AND:
+            return "&&";
+        case AST_BINARY_OR:
+            return "||";
         default:
             return "?";
     }
@@ -1412,6 +1428,31 @@ static bool xa_binary_has_numeric_context(int op) {
     }
 }
 
+/* A numeric literal compared with T? is still a T literal.  Nullability belongs
+ * to the value container, not to the literal conversion witness: teaching the
+ * literal that it has type T? would manufacture a forbidden conversion across
+ * the nullable boundary and would lose the unique non-null numeric context. */
+static XrType *xa_binary_numeric_literal_context(XaInferContext *ctx, XrType *type) {
+    if (!type || !XR_TYPE_IS_NUMERIC(type))
+        return NULL;
+    if (!type->is_nullable)
+        return type;
+    return xr_type_non_nullable(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL, type);
+}
+
+static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left,
+                                               XrType *right) {
+    if (!left || !right || !XR_TYPE_IS_NUMERIC(left) || !XR_TYPE_IS_NUMERIC(right))
+        return NULL;
+    XrType *left_value = left->is_nullable
+                             ? xr_type_non_nullable(ctx->analyzer->isolate, left)
+                             : left;
+    XrType *right_value = right->is_nullable
+                              ? xr_type_non_nullable(ctx->analyzer->isolate, right)
+                              : right;
+    return xr_type_numeric_common_type(left_value, right_value);
+}
+
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -1432,13 +1473,13 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         // the unique u32 context without C-style promotion guessing.
         ctx->expected_type = NULL;
         right = xa_visit_infer_expr(ctx, right_node);
-        ctx->expected_type = right && XR_TYPE_IS_NUMERIC(right) ? right : NULL;
+        ctx->expected_type = xa_binary_numeric_literal_context(ctx, right);
         left = xa_visit_infer_expr(ctx, left_node);
     } else {
         ctx->expected_type = use_outer_literal_context ? saved_expected : NULL;
         left = xa_visit_infer_expr(ctx, left_node);
-        if (numeric_context && right_literal && left && XR_TYPE_IS_NUMERIC(left))
-            ctx->expected_type = left;
+        if (numeric_context && right_literal)
+            ctx->expected_type = xa_binary_numeric_literal_context(ctx, left);
         else
             ctx->expected_type = use_outer_literal_context ? saved_expected : NULL;
     }
@@ -1479,7 +1520,7 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
             xa_check_null_comparison(ctx, node, left, right);
             xa_check_removed_typeof_string_compare(ctx, node);
             if (XR_TYPE_IS_NUMERIC(left) && XR_TYPE_IS_NUMERIC(right) &&
-                !xr_type_numeric_common_type(left, right)) {
+                !xa_equality_numeric_common_type(ctx, left, right)) {
                 xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
@@ -1555,14 +1596,20 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     XrType *saved_expected = ctx->expected_type;
-    ctx->expected_type = NULL;
+    bool saved_contextual_unary_operand = ctx->contextual_unary_numeric_literal_operand;
+    bool unary_numeric_literal =
+        node->type == AST_UNARY_NEG && xa_contextual_numeric_literal_node(node);
+    bool contextual_literal =
+        unary_numeric_literal && saved_expected && XR_TYPE_IS_NUMERIC(saved_expected);
+    ctx->expected_type = contextual_literal ? saved_expected : NULL;
+    ctx->contextual_unary_numeric_literal_operand = unary_numeric_literal;
     XrType *operand = xa_visit_infer_expr(ctx, node->as.unary.operand);
     ctx->expected_type = saved_expected;
+    ctx->contextual_unary_numeric_literal_operand = saved_contextual_unary_operand;
 
     switch (node->type) {
         case AST_UNARY_NEG:
-            if (saved_expected && XR_TYPE_IS_NUMERIC(saved_expected) &&
-                xa_contextual_numeric_literal_node(node))
+            if (contextual_literal)
                 return saved_expected;
             return operand;  // -x has same type as x
         case AST_UNARY_NOT:
@@ -4430,18 +4477,27 @@ static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
-    // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
-    // is an explicit conversion, so do not use the target as assignment
-    // context; casts such as `2147483648 as int32` intentionally truncate.
-    XrType *saved_expected = ctx->expected_type;
-    ctx->expected_type = NULL;
-    XrType *source = xa_visit_infer_expr(ctx, node->as.as_expr.expr);
-    ctx->expected_type = saved_expected;
     XrType *target = node->as.as_expr.type
                          ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)
                          : NULL;
     if (!target)
         return xr_type_new_error(NULL);
+    // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
+    // is an explicit conversion, so do not use the target as assignment
+    // context; casts such as `2147483648 as int32` intentionally truncate.
+    // A positive literal above INT64_MAX is the one exception: preserve its
+    // parsed u64 magnitude as the explicit conversion source instead of
+    // rejecting it while fabricating the default signed `int` type.
+    XrType *saved_expected = ctx->expected_type;
+    AstNode *operand = node->as.as_expr.expr;
+    if (operand && operand->type == AST_LITERAL_INT && operand->as.literal.int_overflows_i64 &&
+        XR_TYPE_IS_NUMERIC(target)) {
+        ctx->expected_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U64);
+    } else {
+        ctx->expected_type = NULL;
+    }
+    XrType *source = xa_visit_infer_expr(ctx, node->as.as_expr.expr);
+    ctx->expected_type = saved_expected;
     XrConversionWitness conversion = {0};
     if (source && XR_TYPE_IS_NUMERIC(source) && XR_TYPE_IS_NUMERIC(target) &&
         !node->as.as_expr.is_safe) {

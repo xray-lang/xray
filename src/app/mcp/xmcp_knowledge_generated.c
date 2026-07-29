@@ -676,6 +676,19 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_codegen[] = {
+    {
+        .name = "compilerFence",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "opaque",
+        .signature = "(value: T): T",
+        .summary = "",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     {
         .name = "adler32",
@@ -2731,16 +2744,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "compare",
         .signature = "(a: Ptr<byte>, b: Ptr<byte>, n: int): int",
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
-    },
-    {
-        .name = "compilerGuard",
-        .signature = "(value: u64): u64",
-        .summary = "Return value unchanged while creating a best-effort native compiler scheduling barrier",
-    },
-    {
-        .name = "compilerOpaque",
-        .signature = "(value: u64): u64",
-        .summary = "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier",
     },
     {
         .name = "copy",
@@ -7067,7 +7070,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "var empty = Array<int>()              // no element to infer from\n"
             "var m = Map<string, int>()\n"
-            "var result = identity<float>(0)            // 0 defaults to int; force float\n"
+            "var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float\n"
             "```\n"
             "\n"
             "### Type identity\n"
@@ -7390,6 +7393,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Attributes\n"
             "```xray\n"
+            "import codegen\n"
+            "\n"
             "@test                                 // mark as a test\n"
             "fn test_basic() { return }\n"
             "\n"
@@ -7407,6 +7412,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "@noinline\n"
             "fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n"
+            "\n"
+            "fn measuredKernel(value: u64) -> u64 {\n"
+            "    var hidden = codegen.opaque(value)\n"
+            "    codegen.compilerFence()\n"
+            "    return measuredDispatchBoundary(hidden)\n"
+            "}\n"
             "```\n"
             "\n"
             "### Run tests\n"
@@ -7807,6 +7818,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "",
         .symbols = _symbols_cluster,
         .symbol_count = (int)(sizeof(_symbols_cluster) / sizeof(_symbols_cluster[0])),
+    },
+    {
+        .module = "codegen",
+        .summary = "Semantic-neutral native code-shape controls for measured low-level paths",
+        .body =
+            "# codegen module\n"
+            "\n"
+            "Compiler-owned controls for the rare low-level path whose native shape is part of a verified performance contract. `opaque<T>(value)` preserves the exact integer or pointer type and value while hiding it from native constant propagation; `compilerFence()` blocks compiler reordering across the point but is not a CPU memory fence.\n"
+            "\n"
+            "Usage: `import codegen` then call `codegen.function()`.\n"
+            "\n"
+            "### Scope and verification\n"
+            "- `opaque` accepts integer scalars and `Ptr<T>`/`MutPtr<T>` only; it allocates nothing and does not change ownership, provenance, effects, or ABI.\n"
+            "- `compilerFence` affects compiler scheduling only. Use synchronization or atomic APIs for inter-thread ordering.\n"
+            "- These controls must be justified by benchmark and generated-code evidence. They are not a mechanism for enabling ordinary language optimizations.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `codegen.compilerFence` | `(): ()` |  |\n"
+            "| `codegen.opaque` | `(value: T): T` |  |\n"
+            "",
+        .symbols = _symbols_codegen,
+        .symbol_count = (int)(sizeof(_symbols_codegen) / sizeof(_symbols_codegen[0])),
     },
     {
         .module = "compress",
@@ -8416,8 +8452,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
-            "| `mem.compilerGuard` | `(value: u64): u64` | Return value unchanged while creating a best-effort native compiler scheduling barrier |\n"
-            "| `mem.compilerOpaque` | `(value: u64): u64` | Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
             "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
@@ -9502,7 +9536,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 32;
+XR_DATADEF const int xmcp_generated_stdlib_count = 33;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"

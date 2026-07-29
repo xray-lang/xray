@@ -169,6 +169,10 @@ TEST(rotates_header_value_from_generated_speculation_policy) {
     ASSERT(make_counted_loop(&fx));
     XiValue *converted = xi_unary(fx.f, fx.header, XI_CONVERT, &stub_int, fx.start);
     ASSERT(converted != NULL);
+    converted->conversion.kind = XR_CONVERSION_IDENTITY;
+    converted->conversion.source_scalar_rep = stub_int.scalar_rep;
+    converted->conversion.target_scalar_rep = stub_int.scalar_rep;
+    converted->conversion.is_implicit = true;
     ASSERT(verify_func(fx.f));
 
     XiPassChange chg = xi_opt_loop_rotate(fx.f);

@@ -60,8 +60,8 @@ class BoolIntMapBag {
     }
     probe() -> int {
         var sum = 0
-        if (this.values.containsKey(true)) { sum = sum + this.values.get(true) }
-        if (this.values.containsKey(false)) { sum = sum + this.values.get(false) }
+        if (this.values.containsKey(true)) { sum = sum + this.values.get(true)! }
+        if (this.values.containsKey(false)) { sum = sum + this.values.get(false)! }
         return sum
     }
 }

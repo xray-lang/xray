@@ -94,6 +94,12 @@ typedef struct XaInferContext {
     // Propagated from declaration to initializer expression
     XrType *expected_type;
 
+    // The operand of a contextual `-<integer-literal>` is an implementation
+    // detail of the signed literal, not an independently range-checked positive
+    // value.  In particular, the magnitude of INT64_MIN is one larger than
+    // INT64_MAX.  The enclosing unary node owns the range check and witness.
+    bool contextual_unary_numeric_literal_operand;
+
     // Analyzer-owned inference variables. These are not XrTypeKind values:
     // unresolved variables must be diagnosed and converted to ErrorType recovery
     // before any semantic XrType is exposed to later phases.

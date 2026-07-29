@@ -26,7 +26,7 @@ fn run(n: int) -> int {
     while (i < n) {
         if (values.containsKey(token)) {
             if (seen.contains(token)) {
-                sum = sum + values.get(token)
+                sum = sum + values.get(token)!
             }
         }
         i = i + 1

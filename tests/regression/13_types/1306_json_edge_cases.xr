@@ -98,11 +98,11 @@ fn test_object_as_parameter() {
 
 @test
 fn test_object_modification_in_function() {
-    fn addField(obj: Json, key: string, val: int) {
+    fn addField(obj: ref Json, key: string, val: int) {
         obj[key] = val
     }
     var obj: Json = {}
-    addField(obj, "added", 123)
+    addField(ref obj, "added", 123)
     assert_eq(obj.added, 123)
 }
 

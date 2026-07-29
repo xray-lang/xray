@@ -523,6 +523,13 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
     AstNode *callee = alloc_identity_expr(call->callee);
     if (!callee)
         return;
+    const XaResolvedCall *resolved =
+        xa_analyzer_get_resolved_call(scan->pass->analyzer, node);
+    const XaIntrinsicDesc *intrinsic =
+        resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
+    if (intrinsic && intrinsic->family == XA_INTRINSIC_FAMILY_CODEGEN &&
+        intrinsic->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC)
+        return;
     XrType *callee_type = xa_analyzer_get_node_type(scan->pass->analyzer, call->callee);
     if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
         int count = call->arg_count < callee_type->function.param_count

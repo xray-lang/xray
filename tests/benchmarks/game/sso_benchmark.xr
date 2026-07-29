@@ -6,7 +6,7 @@ import time
 var ITERATIONS = 100000
 
 fn elapsed_ms(start: int, end: int): float {
-    return (end - start) / 1000000.0
+    return ((end - start) as f64) / 1000000.0
 }
 
 // ============================================================

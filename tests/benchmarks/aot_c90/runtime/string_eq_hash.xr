@@ -11,7 +11,7 @@ fn run(n: int) -> int {
     while (i < n) {
         var k = keys[i]
         if (counts.containsKey(k)) {
-            counts.set(k, counts.get(k) + 1)
+            counts.set(k, counts.get(k)! + 1)
         } else {
             counts.set(k, 1)
         }
@@ -27,7 +27,7 @@ fn run(n: int) -> int {
         i = i + 1
     }
 
-    return len(counts) + eq + counts.get("key-0")
+    return len(counts) + eq + counts.get("key-0")!
 }
 
 print(run(400000))

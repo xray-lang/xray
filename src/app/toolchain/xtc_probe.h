@@ -28,6 +28,14 @@ typedef enum XrToolchainCapabilityState {
     XR_TOOLCHAIN_CAPABILITY_OK,
 } XrToolchainCapabilityState;
 
+typedef enum XrToolchainCodegenCapability {
+    XR_TOOLCHAIN_CODEGEN_FORCE_INLINE = 1u << 0,
+    XR_TOOLCHAIN_CODEGEN_PRESERVE_CALL = 1u << 1,
+    XR_TOOLCHAIN_CODEGEN_VALUE_OPAQUE = 1u << 2,
+    XR_TOOLCHAIN_CODEGEN_COMPILER_FENCE = 1u << 3,
+    XR_TOOLCHAIN_CODEGEN_ALL = (1u << 4) - 1u,
+} XrToolchainCodegenCapability;
+
 typedef struct XrToolchainDiagnostic {
     XrToolchainReasonCode code;
     char stage[32];
@@ -42,6 +50,9 @@ typedef struct XrToolchainProbeOptions {
     bool no_run;
     bool refresh;
     bool keep_probe;
+    /* Native builds and doctor require the complete public code-shape surface.
+     * A focused hard contract may request the exact subset it realizes. */
+    uint32_t required_codegen_capabilities;
 } XrToolchainProbeOptions;
 
 typedef struct XrToolchainProbeResult {
@@ -53,6 +64,10 @@ typedef struct XrToolchainProbeResult {
     XrToolchainCapabilityState native_run;
     XrToolchainCapabilityState cross;
     XrToolchainCapabilityState lto;
+    XrToolchainCapabilityState force_inline;
+    XrToolchainCapabilityState preserve_call;
+    XrToolchainCapabilityState value_opaque;
+    XrToolchainCapabilityState compiler_fence;
     XrToolchainDiagnostic diagnostics[XTC_MAX_DIAGNOSTICS];
     size_t diagnostic_count;
     char probe_id[40];

@@ -4,7 +4,7 @@ fn run(n: int, rounds: int) -> int {
 
     var i = 0
     while (i < limit) {
-        bytes[i] = i * 3 + 1
+        bytes[i] = (i * 3 + 1) as byte
         i = i + 1
     }
 
@@ -13,7 +13,7 @@ fn run(n: int, rounds: int) -> int {
     while (r < rounds) {
         var j = 0
         while (j < limit) {
-            sum = sum + bytes[j]
+            sum = sum + (bytes[j] as int)
             j = j + 1
         }
         r = r + 1

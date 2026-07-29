@@ -2,7 +2,7 @@ fn makeByteArray(n: int) -> Array<byte> {
     var out = Array<byte>(0)
     var i = 0
     while (i < n) {
-        out.push(i & 0xFF)
+        out.push((i & 0xFF) as byte)
         i = i + 1
     }
     return out

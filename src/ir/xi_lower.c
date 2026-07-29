@@ -1755,9 +1755,9 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         for (int i = 0; i < fdecl->attr_count; i++) {
             XrAttribute *a = fdecl->attributes[i];
             if (a && a->kind == ATTR_INLINE)
-                l.func->inline_hint = true;
+                l.func->inline_policy = XI_INLINE_PREFER;
             if (a && a->kind == ATTR_NOINLINE)
-                l.func->noinline_hint = true;
+                l.func->inline_policy = XI_INLINE_PRESERVE_CALL;
             if (a && (a->kind == ATTR_TEST || a->kind == ATTR_TEST_SKIP ||
                       a->kind == ATTR_TEST_TIMEOUT || a->kind == ATTR_BEFORE_EACH ||
                       a->kind == ATTR_AFTER_EACH || a->kind == ATTR_BEFORE_ALL ||

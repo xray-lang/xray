@@ -21,5 +21,5 @@ const OPS: Array<Op> = [opConst, opReturn]
 
 fn run_thread() -> i32 {
     var stack = unsafe { malloc(64) }
-    return OPS[0](0, stack, 0)
+    return OPS[0](0, stack, 0) as i32
 }

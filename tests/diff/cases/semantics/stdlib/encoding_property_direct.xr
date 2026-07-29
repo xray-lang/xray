@@ -24,7 +24,7 @@ fn fuzzBytes(length: int, seed: int) -> Array<byte> {
     var state = seed
     for (var i = 0; i < length; i++) {
         state = nextState(state)
-        out[i] = state & 255
+        out[i] = (state & 255) as byte
     }
     return out
 }
@@ -68,7 +68,7 @@ fn utf16ErrorCode(data: Slice<byte>) -> int {
 }
 
 var allBytes = Array<byte>(256)
-for (var i = 0; i < 256; i++) { allBytes[i] = i }
+for (var i = 0; i < 256; i++) { allBytes[i] = i as byte }
 print(encoding.hexEncode(allBytes[:]) == ALL_BYTES_HEX)
 
 var roundtripOk = true
@@ -82,7 +82,7 @@ print(roundtripOk)
 var singleByteUtf8Ok = true
 var one = Array<byte>(1)
 for (var value = 0; value < 256; value++) {
-    one[0] = value
+    one[0] = value as byte
     if (encoding.utf8Valid(one[:]) != (value < 128)) { singleByteUtf8Ok = false }
 }
 print(singleByteUtf8Ok)
@@ -90,9 +90,9 @@ print(singleByteUtf8Ok)
 var twoByteUtf8Ok = true
 var pair = Array<byte>(2)
 for (var lead = 0xC2; lead <= 0xDF; lead++) {
-    pair[0] = lead
+    pair[0] = lead as byte
     for (var trail = 0x80; trail <= 0xBF; trail++) {
-        pair[1] = trail
+        pair[1] = trail as byte
         if (!encoding.utf8Valid(pair[:])) { twoByteUtf8Ok = false }
     }
 }

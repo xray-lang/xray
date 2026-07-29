@@ -6,7 +6,7 @@ import path
 fn allBytes() -> Array<byte> {
     var out = Array<byte>(256)
     for (var i = 0; i < 256; i++) {
-        out[i] = i
+        out[i] = i as byte
     }
     return out
 }
@@ -14,7 +14,7 @@ fn allBytes() -> Array<byte> {
 fn rollingHash(data: Array<byte>) -> int {
     var acc = 0
     for (var i = 0; i < len(data); i++) {
-        var value: int = data[i]
+        var value: int = data[i] as int
         acc = ((acc * 131) + value) % 1000000007
     }
     return acc

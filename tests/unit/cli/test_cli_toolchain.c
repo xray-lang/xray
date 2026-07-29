@@ -157,6 +157,29 @@ TEST(msvc_command_plan_fails_closed_for_gnu_only_intent) {
     ASSERT_TRUE(strstr(err, "unsupported by MSVC") != NULL);
 }
 
+TEST(assembly_oracle_io_maps_provider_dialects) {
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+    ASSERT_TRUE(xtc_command_emit_assembly_io(XR_TOOLCHAIN_PROVIDER_ZIG, "generated.c",
+                                             "generated.s", "generated.o", &sink, err,
+                                             sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-S"));
+    ASSERT_TRUE(command_capture_has(&capture, "generated.c"));
+    ASSERT_TRUE(command_capture_has(&capture, "-o"));
+    ASSERT_TRUE(command_capture_has(&capture, "generated.s"));
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_command_emit_assembly_io(XR_TOOLCHAIN_PROVIDER_MSVC, "generated.c",
+                                             "generated.asm", "generated.obj", &sink, err,
+                                             sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/c"));
+    ASSERT_TRUE(command_capture_has(&capture, "/FAs"));
+    ASSERT_TRUE(command_capture_has(&capture, "/Fagenerated.asm"));
+    ASSERT_TRUE(command_capture_has(&capture, "/Fogenerated.obj"));
+    ASSERT_TRUE(command_capture_has(&capture, "generated.c"));
+}
+
 TEST(semantic_simd_intent_maps_provider_dialects) {
     XrToolchainSelection selection = {0};
     XrNativeCompileSpec compile = {0};
@@ -360,6 +383,8 @@ TEST(selector_and_provider_names_are_stable) {
     ASSERT_STR_EQ(xtc_provider_name(XR_TOOLCHAIN_PROVIDER_APPLE_CLANG), "apple-clang");
     ASSERT_STR_EQ(xtc_provider_name(XR_TOOLCHAIN_PROVIDER_LLVM_CLANG), "llvm-clang");
     ASSERT_STR_EQ(xtc_reason_code_name(XR_TOOLCHAIN_REASON_LINK_PROBE_FAILED), "LINK_PROBE_FAILED");
+    ASSERT_STR_EQ(xtc_reason_code_name(XR_TOOLCHAIN_REASON_CODEGEN_CAPABILITY_UNSUPPORTED),
+                  "CODEGEN_CAPABILITY_UNSUPPORTED");
 }
 
 TEST(find_missing_executable) {
@@ -669,6 +694,7 @@ TEST(process_diagnostic_redacts_secret_environment_values) {
 
 TEST(probe_json_schema_v1_is_valid_and_escaped) {
     XrToolchainProbeOptions options = {0};
+    options.required_codegen_capabilities = XR_TOOLCHAIN_CODEGEN_ALL;
     XrToolchainProbeResult result = {0};
     char err[256];
     ASSERT_TRUE(xtc_target_parse("native", &options.request.target, err, sizeof(err)));
@@ -694,6 +720,10 @@ TEST(probe_json_schema_v1_is_valid_and_escaped) {
     result.native_run = XR_TOOLCHAIN_CAPABILITY_OK;
     result.cross = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
     result.lto = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.force_inline = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.preserve_call = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.value_opaque = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
+    result.compiler_fence = XR_TOOLCHAIN_CAPABILITY_OK;
     snprintf(result.cache, sizeof(result.cache), "%s", "miss");
     result.diagnostic_count = 1;
     result.diagnostics[0].code = XR_TOOLCHAIN_REASON_EXTERNAL_INSTALL_REQUIRED;
@@ -726,7 +756,16 @@ TEST(probe_json_schema_v1_is_valid_and_escaped) {
     ASSERT_TRUE(xjson_get_bool(selection, "ready"));
     XrJsonValue *capabilities = xjson_get_object(doc, "capabilities");
     ASSERT_NOT_NULL(capabilities);
+    XrJsonValue *request = xjson_get_object(doc, "request");
+    ASSERT_NOT_NULL(request);
+    XrJsonValue *required_codegen = xjson_get_array(request, "requiredCodegenCapabilities");
+    ASSERT_NOT_NULL(required_codegen);
+    ASSERT_EQ(xjson_array_len(required_codegen), 4);
     ASSERT_STR_EQ(xjson_get_string(capabilities, "runtimeLink"), "ok");
+    ASSERT_STR_EQ(xjson_get_string(capabilities, "forceInline"), "ok");
+    ASSERT_STR_EQ(xjson_get_string(capabilities, "preserveCall"), "ok");
+    ASSERT_STR_EQ(xjson_get_string(capabilities, "valueOpaque"), "unsupported");
+    ASSERT_STR_EQ(xjson_get_string(capabilities, "compilerFence"), "ok");
     xjson_free(doc);
     free(json);
 }
@@ -759,6 +798,10 @@ TEST(probe_cache_list_reports_recent_success) {
     result.native_run = XR_TOOLCHAIN_CAPABILITY_OK;
     result.cross = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;
     result.lto = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.force_inline = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.preserve_call = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.value_opaque = XR_TOOLCHAIN_CAPABILITY_OK;
+    result.compiler_fence = XR_TOOLCHAIN_CAPABILITY_OK;
 
     ASSERT_TRUE(xtc_probe_cache_store(&options, &result, err, sizeof(err)));
     ASSERT_TRUE(
@@ -791,6 +834,7 @@ RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
+RUN_TEST(assembly_oracle_io_maps_provider_dialects);
 RUN_TEST(semantic_simd_intent_maps_provider_dialects);
 RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 

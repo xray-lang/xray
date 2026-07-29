@@ -25,8 +25,8 @@ print(all >> 33)                      // 2147483647
 print(all >> n63)                     // 1
 
 // xxHash64 avalanche 形状（乘出高位后异或右移）
-var p2: u64 = (0xC2B2_AE3D << 32) | 0x27D4_EB4F
-var h: u64 = (0x27D4_EB2F << 32) | 0x1656_67C5
+var p2: u64 = ((0xC2B2_AE3D as u64) << 32) | 0x27D4_EB4F
+var h: u64 = ((0x27D4_EB2F as u64) << 32) | 0x1656_67C5
 h ^= h >> 33
 h *= p2
 h ^= h >> 29

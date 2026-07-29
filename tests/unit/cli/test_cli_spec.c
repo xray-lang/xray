@@ -77,8 +77,9 @@ TEST(spec_find_command_language_attributes) {
     const XrCliCommandSpec *spec = xr_cli_find_command("language");
     ASSERT_NOT_NULL(spec);
     ASSERT_NOT_NULL(spec->subcommands);
-    ASSERT_EQ_INT(spec->subcommand_count, 1);
+    ASSERT_EQ_INT(spec->subcommand_count, 2);
     ASSERT_STR_EQ(spec->subcommands[0].name, "attributes");
+    ASSERT_STR_EQ(spec->subcommands[1].name, "conversions");
     ASSERT_EQ_INT(xr_cli_option_count(spec->options), 1);
     ASSERT_STR_EQ(spec->options[0].long_name, "json");
 }

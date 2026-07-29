@@ -16,6 +16,7 @@ typedef struct XrPublicAttributeInfo {
     const char *spelling;
     const char *targets;
     const char *arguments;
+    const char *category;
     const char *phase;
     bool production;
     const char *impact;

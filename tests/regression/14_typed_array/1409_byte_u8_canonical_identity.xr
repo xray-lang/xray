@@ -1,25 +1,25 @@
 fn takeByte(x: byte) -> int {
-    return x
+    return x as int
 }
 
 fn takeU8(x: u8) -> int {
-    return x
+    return x as int
 }
 
 fn firstByteArray(xs: Array<byte>) -> int {
-    return xs[0]
+    return xs[0] as int
 }
 
 fn secondU8Array(xs: Array<u8>) -> int {
-    return xs[1]
+    return xs[1] as int
 }
 
 fn sumByteSlice(xs: Slice<byte>) -> int {
-    return xs[0] + xs[1]
+    return (xs[0] as int) + (xs[1] as int)
 }
 
 fn sumU8Slice(xs: Slice<u8>) -> int {
-    return xs[0] + xs[1]
+    return (xs[0] as int) + (xs[1] as int)
 }
 
 @test

@@ -15,7 +15,7 @@ packed struct PackedAligned align(16) {
 }
 
 fn sum_packed(p: PackedPair) -> i32 {
-    return p.tag as i32 + p.value as i32
+    return (p.tag as i32) + (p.value as i32)
 }
 
 fn make_packed(tag: byte, value: u32) -> PackedPair {
@@ -31,7 +31,7 @@ fn make_aligned(value: i32) -> AlignedWord {
 }
 
 fn sum_packed_aligned(p: PackedAligned) -> i32 {
-    return p.tag as i32 + p.value as i32
+    return (p.tag as i32) + (p.value as i32)
 }
 
 fn make_packed_aligned(tag: byte, value: u32) -> PackedAligned {

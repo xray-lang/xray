@@ -3,7 +3,7 @@ import { Capabilities, U8x16, U8x32, U8x64, U8xNative, U32x4, U32x8, U32x16, U64
 fn run() {
     var bytes = Array<byte>(32)
     for (i in 0..32) {
-        bytes[i] = (i * 17 + 3) & 255
+        bytes[i] = ((i * 17 + 3) & 255) as byte
     }
     var byteView: Slice<byte> = bytes[:]
     var b = U8x16.load(byteView, 3)
@@ -86,7 +86,7 @@ fn run() {
     assert_eq(wideOut[0], 0)
     var bytes512 = Array<byte>(64)
     for (i in 0..64) {
-        bytes512[i] = (i * 13 + 5) & 255
+        bytes512[i] = ((i * 13 + 5) & 255) as byte
     }
     var bytes512View: Slice<byte> = bytes512[:]
     var zero512 = U8x64.load(bytes512View).bitXor(U8x64.load(bytes512View))

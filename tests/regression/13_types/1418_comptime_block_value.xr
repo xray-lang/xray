@@ -83,11 +83,11 @@ fn test_comptime_block_returns_tuple_value() {
 
 @test
 fn test_comptime_block_returns_fixed_array_value() {
-    var runtime: [int; 3] = comptime {
+    var runtime: [int; 3] = copy(comptime {
         var base = comptime 30
         const values: [int; 3] = comptime [base, base + 1, base + 2]
         return values
-    }
+    })
     assert_eq(runtime[0], 30)
     assert_eq(runtime[1], 31)
     assert_eq(runtime[2], 32)

@@ -88,11 +88,15 @@ xray 的公开注解来自唯一 attribute registry；可用 `xray language attr
 | `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
 | `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
 
-其它公开注解包括 `@deprecated("...")`、`@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`），以及实验性的原生代码生成提示 `@inline` / `@noinline`。后两者只能标注函数或方法、不能带参数，也不能同时标注同一声明；它们不改变语言语义、effect 或 ABI，VM 会忽略它们，AOT 则分别请求展开或保留原生调用边界。它们用于有真实基准与汇编形态门禁的低层热路径，不应代替编译器的一般内联策略。
+其它公开注解包括 `@deprecated("...")`、`@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`），以及稳定但仅面向低层代码的 AOT code-shape directive：`@inline` / `@noinline`。公开表面是 7 个普通/test/metadata 注解加 2 个 code-shape directive；数量不是兼容目标，类别与语义正交性才是约束。后两者只能标注函数或方法、不能带参数，也不能同时标注同一声明；它们不改变语言语义、effect 或 ABI，VM 会忽略它们，AOT 则分别优先请求展开或保留原生调用边界。它们只应用于有真实基准与生成代码形态门禁的低层热路径，不会解锁普通优化，也不保证所有调用边均可兑现。
+
+`codegen.opaque(value)` 与 `codegen.compilerFence()` 属于同一专家控制层，但它们是标准库 intrinsic，不是注解。前者在保持整数或指针的静态类型、值、ownership 与 provenance 不变的同时阻断原生常量传播；后者只阻止有内存效果的操作跨越该编译器调度点。`compilerFence` 不是 CPU memory fence，不建立 happens-before，也不能用于修复 data race。普通代码无需使用这些控制；硬形状要求由 `xray verify --contract` 验证，而不是由源码请求自行宣称成功。
 
 effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
 
 ```xray @id=testing-attributes
+import codegen
+
 @test                                 // 标记测试
 fn test_basic() { return }
 
@@ -110,6 +114,12 @@ fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
 
 @noinline
 fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
+
+fn measuredKernel(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return measuredDispatchBoundary(hidden)
+}
 ```
 
 > `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
@@ -210,11 +220,15 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
-Other public attributes include `@deprecated("...")`, `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`), and the experimental native-codegen hints `@inline` / `@noinline`. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively requests expansion or preservation of a native call boundary. They are intended for low-level hot paths backed by real benchmarks and assembly-shape gates, not as a substitute for the compiler's general inlining policy.
+Other public attributes include `@deprecated("...")`, `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`), plus the stable, low-level AOT code-shape directives `@inline` / `@noinline`. The public surface is seven ordinary/test/metadata attributes plus two code-shape directives; the count is not a compatibility goal, while category and semantic orthogonality are constraints. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively prefers expansion or preservation of a native call boundary. They are only for low-level hot paths backed by real benchmarks and generated-code shape gates; they neither unlock ordinary optimization nor guarantee that every call edge is eligible.
+
+`codegen.opaque(value)` and `codegen.compilerFence()` belong to the same expert-control layer but are standard-library intrinsics, not attributes. The former blocks native constant propagation while preserving an integer or pointer's exact static type, value, ownership, and provenance. The latter only prevents memory-effecting operations from moving across that compiler scheduling point. `compilerFence` is not a CPU memory fence, establishes no happens-before relation, and cannot repair a data race. Ordinary code does not need these controls; hard shape requirements are checked by `xray verify --contract`, not self-certified by the source request.
 
 Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
 ```xray @id=testing-attributes
+import codegen
+
 @test                                 // mark as a test
 fn test_basic() { return }
 
@@ -232,6 +246,12 @@ fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
 
 @noinline
 fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
+
+fn measuredKernel(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return measuredDispatchBoundary(hidden)
+}
 ```
 
 > `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.

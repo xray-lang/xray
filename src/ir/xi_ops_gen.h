@@ -36,13 +36,13 @@ typedef enum {
     XI_GEN_CLASS_CONSTANT = 0,
     XI_GEN_CLASS_ARITHMETIC = 1,
     XI_GEN_CLASS_BITWISE = 2,
-    XI_GEN_CLASS_COMPARISON = 3,
-    XI_GEN_CLASS_TYPE = 4,
-    XI_GEN_CLASS_CONVERSION = 5,
-    XI_GEN_CLASS_ALLOCATION = 6,
-    XI_GEN_CLASS_MEMORY_READ = 7,
-    XI_GEN_CLASS_MEMORY_WRITE = 8,
-    XI_GEN_CLASS_PURE = 9,
+    XI_GEN_CLASS_PURE = 3,
+    XI_GEN_CLASS_MEMORY_WRITE = 4,
+    XI_GEN_CLASS_COMPARISON = 5,
+    XI_GEN_CLASS_TYPE = 6,
+    XI_GEN_CLASS_CONVERSION = 7,
+    XI_GEN_CLASS_ALLOCATION = 8,
+    XI_GEN_CLASS_MEMORY_READ = 9,
     XI_GEN_CLASS_CALL = 10,
     XI_GEN_CLASS_SIDE_EFFECT = 11,
     XI_GEN_CLASS_COROUTINE = 12,
@@ -174,7 +174,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 219 };
+enum { XI_GEN_OP_COUNT = 221 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -234,6 +234,8 @@ typedef struct {
     X(BIT_CLZ, "xi.bit.clz", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BIT_CTZ, "xi.bit.ctz", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BIT_MUL_HIGH, "xi.bit.mul-high", XI_GEN_CLASS_BITWISE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(CODEGEN_OPAQUE, "xi.codegen.opaque", XI_GEN_CLASS_PURE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(CODEGEN_COMPILER_FENCE, "xi.codegen.compiler-fence", XI_GEN_CLASS_MEMORY_WRITE, 0, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_READ | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(EQ, "xi.eq", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_NE, 0, XI_GEN_ALGEBRAIC_COMMUTATIVE, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(NE, "xi.ne", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_EQ, 0, XI_GEN_ALGEBRAIC_COMMUTATIVE, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(LT, "xi.lt", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_GE, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -457,6 +459,8 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_BIT_CLZ: return "BIT_CLZ";
         case XI_BIT_CTZ: return "BIT_CTZ";
         case XI_BIT_MUL_HIGH: return "BIT_MUL_HIGH";
+        case XI_CODEGEN_OPAQUE: return "CODEGEN_OPAQUE";
+        case XI_CODEGEN_COMPILER_FENCE: return "CODEGEN_COMPILER_FENCE";
         case XI_EQ: return "EQ";
         case XI_NE: return "NE";
         case XI_LT: return "LT";
@@ -683,6 +687,8 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_BIT_CLZ: return 1;
         case XI_BIT_CTZ: return 1;
         case XI_BIT_MUL_HIGH: return 2;
+        case XI_CODEGEN_OPAQUE: return 1;
+        case XI_CODEGEN_COMPILER_FENCE: return 0;
         case XI_EQ: return 2;
         case XI_NE: return 2;
         case XI_LT: return 2;
@@ -909,6 +915,8 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_CLASS_BITWISE;
         case XI_BIT_CTZ: return XI_GEN_CLASS_BITWISE;
         case XI_BIT_MUL_HIGH: return XI_GEN_CLASS_BITWISE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_CLASS_PURE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_CLASS_MEMORY_WRITE;
         case XI_EQ: return XI_GEN_CLASS_COMPARISON;
         case XI_NE: return XI_GEN_CLASS_COMPARISON;
         case XI_LT: return XI_GEN_CLASS_COMPARISON;
@@ -1135,6 +1143,8 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_RESULT_VALUE;
         case XI_BIT_CTZ: return XI_GEN_RESULT_VALUE;
         case XI_BIT_MUL_HIGH: return XI_GEN_RESULT_VALUE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_RESULT_VALUE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_RESULT_VOID;
         case XI_EQ: return XI_GEN_RESULT_VALUE;
         case XI_NE: return XI_GEN_RESULT_VALUE;
         case XI_LT: return XI_GEN_RESULT_VALUE;
@@ -1361,6 +1371,8 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BIT_CTZ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BIT_MUL_HIGH: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_EQ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_NE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_LT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1587,6 +1599,8 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_BIT_CLZ: return NULL;
         case XI_BIT_CTZ: return NULL;
         case XI_BIT_MUL_HIGH: return NULL;
+        case XI_CODEGEN_OPAQUE: return NULL;
+        case XI_CODEGEN_COMPILER_FENCE: return NULL;
         case XI_EQ: return NULL;
         case XI_NE: return NULL;
         case XI_LT: return NULL;
@@ -1813,6 +1827,8 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_LOWERING_GENERATED;
         case XI_BIT_CTZ: return XI_GEN_LOWERING_GENERATED;
         case XI_BIT_MUL_HIGH: return XI_GEN_LOWERING_GENERATED;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_LOWERING_GENERATED;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_LOWERING_GENERATED;
         case XI_EQ: return XI_GEN_LOWERING_GENERATED;
         case XI_NE: return XI_GEN_LOWERING_GENERATED;
         case XI_LT: return XI_GEN_LOWERING_GENERATED;
@@ -2039,6 +2055,8 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_SPECULATION_SAFE;
         case XI_BIT_CTZ: return XI_GEN_SPECULATION_SAFE;
         case XI_BIT_MUL_HIGH: return XI_GEN_SPECULATION_SAFE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_SPECULATION_NEVER;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_SPECULATION_NEVER;
         case XI_EQ: return XI_GEN_SPECULATION_SAFE;
         case XI_NE: return XI_GEN_SPECULATION_SAFE;
         case XI_LT: return XI_GEN_SPECULATION_SAFE;
@@ -2265,6 +2283,8 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_VN_PURE;
         case XI_BIT_CTZ: return XI_GEN_VN_PURE;
         case XI_BIT_MUL_HIGH: return XI_GEN_VN_PURE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_VN_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_VN_NONE;
         case XI_EQ: return XI_GEN_VN_PURE;
         case XI_NE: return XI_GEN_VN_PURE;
         case XI_LT: return XI_GEN_VN_PURE;
@@ -2491,6 +2511,8 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_TBAA_NONE;
         case XI_BIT_CTZ: return XI_GEN_TBAA_NONE;
         case XI_BIT_MUL_HIGH: return XI_GEN_TBAA_NONE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_TBAA_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_TBAA_NONE;
         case XI_EQ: return XI_GEN_TBAA_NONE;
         case XI_NE: return XI_GEN_TBAA_NONE;
         case XI_LT: return XI_GEN_TBAA_NONE;
@@ -2717,6 +2739,8 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BIT_CTZ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BIT_MUL_HIGH: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_EQ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_LT: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2943,6 +2967,8 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_BIT_CLZ: return NULL;
         case XI_BIT_CTZ: return NULL;
         case XI_BIT_MUL_HIGH: return NULL;
+        case XI_CODEGEN_OPAQUE: return NULL;
+        case XI_CODEGEN_COMPILER_FENCE: return NULL;
         case XI_EQ: return NULL;
         case XI_NE: return NULL;
         case XI_LT: return NULL;
@@ -3174,6 +3200,8 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BIT_CTZ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BIT_MUL_HIGH: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_EQ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_LT: return XI_GEN_ESCAPE_USE_NONE;
@@ -3400,6 +3428,8 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BIT_CTZ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BIT_MUL_HIGH: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_EQ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_LT: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -3626,6 +3656,8 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_OWN_USE_BORROW;
         case XI_BIT_CTZ: return XI_GEN_OWN_USE_BORROW;
         case XI_BIT_MUL_HIGH: return XI_GEN_OWN_USE_BORROW;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_OWN_USE_BORROW;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_OWN_USE_BORROW;
         case XI_EQ: return XI_GEN_OWN_USE_BORROW;
         case XI_NE: return XI_GEN_OWN_USE_BORROW;
         case XI_LT: return XI_GEN_OWN_USE_BORROW;
@@ -3852,6 +3884,8 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_BIT_CLZ: return XI_GEN_IC_SITE_NONE;
         case XI_BIT_CTZ: return XI_GEN_IC_SITE_NONE;
         case XI_BIT_MUL_HIGH: return XI_GEN_IC_SITE_NONE;
+        case XI_CODEGEN_OPAQUE: return XI_GEN_IC_SITE_NONE;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_GEN_IC_SITE_NONE;
         case XI_EQ: return XI_GEN_IC_SITE_NONE;
         case XI_NE: return XI_GEN_IC_SITE_NONE;
         case XI_LT: return XI_GEN_IC_SITE_NONE;
@@ -4078,6 +4112,8 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_BIT_CLZ: return XI_OP_COUNT;
         case XI_BIT_CTZ: return XI_OP_COUNT;
         case XI_BIT_MUL_HIGH: return XI_OP_COUNT;
+        case XI_CODEGEN_OPAQUE: return XI_OP_COUNT;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_OP_COUNT;
         case XI_EQ: return XI_NE;
         case XI_NE: return XI_EQ;
         case XI_LT: return XI_GE;
@@ -4304,6 +4340,8 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_BIT_CLZ: return 0;
         case XI_BIT_CTZ: return 0;
         case XI_BIT_MUL_HIGH: return 0;
+        case XI_CODEGEN_OPAQUE: return 0;
+        case XI_CODEGEN_COMPILER_FENCE: return 0;
         case XI_EQ: return XI_GEN_ALGEBRAIC_COMMUTATIVE;
         case XI_NE: return XI_GEN_ALGEBRAIC_COMMUTATIVE;
         case XI_LT: return 0;
@@ -4530,6 +4568,8 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_BIT_CLZ: return 0;
         case XI_BIT_CTZ: return 0;
         case XI_BIT_MUL_HIGH: return 0;
+        case XI_CODEGEN_OPAQUE: return 0;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
         case XI_EQ: return 0;
         case XI_NE: return 0;
         case XI_LT: return 0;
@@ -4756,6 +4796,8 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_BIT_CLZ: return 0;
         case XI_BIT_CTZ: return 0;
         case XI_BIT_MUL_HIGH: return 0;
+        case XI_CODEGEN_OPAQUE: return 0;
+        case XI_CODEGEN_COMPILER_FENCE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_READ | XI_EFFECT_MEMORY_WRITE;
         case XI_EQ: return 0;
         case XI_NE: return 0;
         case XI_LT: return 0;

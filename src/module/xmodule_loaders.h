@@ -32,6 +32,7 @@ XR_FUNC struct XrModule *xr_load_module_runtime(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_sync(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_parallel(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_simd(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_codegen(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_sys(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_probe(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_url(struct XrVMRuntime *isolate);

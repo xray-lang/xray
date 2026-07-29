@@ -84,6 +84,7 @@ static bool cg_direct_ref_param_noescape(XiCgenCtx *ctx, const XiFunc *target, u
                                          uint8_t depth);
 static bool cg_static_direct_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v);
+static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
 static const char *ctype_str(XrRep rep) {
     switch (rep) {
@@ -1091,7 +1092,7 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
              * keep the externally linkable ISA island: inlining its body into
              * a baseline caller would leak target-specific instructions. */
             if (ctx && ctx->target && ctx->target->simd_mode != XAOT_SIMD_DISPATCH && f &&
-                f->inline_hint)
+                f->inline_policy == XI_INLINE_PREFER)
                 return "XRT_INTERNAL XR_FORCEINLINE ";
             return "XRT_INTERNAL ";
         }
@@ -1119,7 +1120,7 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
     if (ctx && ctx->extern_linkage) {
         if (cg_func_should_noinline(f))
             return "static XR_NOINLINE ";
-        if (f && f->inline_hint)
+        if (f && f->inline_policy == XI_INLINE_PREFER)
             return "static XR_AINLINE ";
         if (cg_func_contains_stack_array(f) && !cg_func_stack_arrays_force_inline_safe(f))
             return "static XR_NOINLINE ";
@@ -1127,7 +1128,7 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
     }
     if (cg_func_should_noinline(f))
         return "static XR_NOINLINE ";
-    if (f && f->inline_hint)
+    if (f && f->inline_policy == XI_INLINE_PREFER)
         return "static XR_AINLINE ";
     return cg_linkage(ctx);
 }
@@ -5750,6 +5751,8 @@ static bool cg_struct_ptr_load_only_feeds_raw_deref_address(XiCgenCtx *ctx, cons
                 }
                 if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
                     continue;
+                if (user->op == XI_ERR_CHECK && xi_err_check_has_arc_cleanups(user))
+                    continue;
                 return false;
             }
         }
@@ -6661,6 +6664,11 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             /* xicgen_as routes scalar operands through emit_value_as_rep_ctx()
              * for both representation-only and runtime-checked casts. */
             return arg_index == 0;
+        case XI_CONVERT:
+            /* Typed numeric conversions likewise consume scalar literals
+             * directly; their conversion witness controls semantics without
+             * requiring a separate source C local. */
+            return arg_index == 0;
         case XI_PLACE_STORE:
             /* Scalar place stores convert the stored value with the
              * literal-aware representation emitter. */
@@ -6739,10 +6747,6 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                     user, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
                 cg_array_value_storage_info(ctx, f, user->args[0], &array_info,
                                             CG_ARRAY_STORAGE_MUTABLE))
-                return true;
-            if (arg_index == 1 && user->nargs == 2 && user->aux &&
-                strcmp((const char *) user->aux, "compilerGuard") == 0 &&
-                cg_value_is_module_import_ctx(ctx, f, user->args[0], "mem"))
                 return true;
             if (arg_index >= 1 && user->nargs > 1 && user->aux) {
                 const XiEnumData *recv_enum = cg_enum_for_namespace_value(user->args[0]);
@@ -8361,7 +8365,7 @@ static uint32_t cg_func_inlineable_call_block_count_up_to(XiCgenCtx *ctx, const 
             /* An explicit native boundary cannot be flattened transitively,
              * so it does not contribute to the fanout hazard. Unresolved and
              * ordinary direct targets remain conservatively counted. */
-            if (!target || !target->noinline_hint) {
+            if (!target || target->inline_policy != XI_INLINE_PRESERVE_CALL) {
                 if (++call_blocks >= limit)
                     return call_blocks;
                 break;
@@ -8386,7 +8390,7 @@ static bool cg_func_has_branching_call_fanout(XiCgenCtx *ctx, const XiFunc *f) {
 }
 
 static bool cg_func_should_noinline(const XiFunc *f) {
-    return f && f->noinline_hint;
+    return f && f->inline_policy == XI_INLINE_PRESERVE_CALL;
 }
 
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f) {
@@ -8399,7 +8403,7 @@ static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f) {
         return false;
     if (cg_func_should_noinline(f))
         return false;
-    if (f->inline_hint)
+    if (f->inline_policy == XI_INLINE_PREFER)
         return true;
     uint32_t value_count = cg_func_value_count(f);
     bool proven_noalloc =
@@ -10017,7 +10021,7 @@ static bool cg_func_requires_static_x86_inline_target_depth(const XiCgenCtx *ctx
         return false;
     if (depth > 0 && cg_func_should_noinline(f))
         return false;
-    if (f->inline_hint && cg_func_has_native_vector_width(ctx, f, 16))
+    if (f->inline_policy == XI_INLINE_PREFER && cg_func_has_native_vector_width(ctx, f, 16))
         return true;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *block = f->blocks[bi];

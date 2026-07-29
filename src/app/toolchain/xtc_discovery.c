@@ -451,6 +451,8 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
                               XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cc");
 #elif defined(XR_OS_WINDOWS)
+    (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
+                              XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "clang");
     xtc_windows_add_msvc(NULL, out);
 #endif
 

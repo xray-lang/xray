@@ -4254,7 +4254,8 @@ static bool cg_class_native_ctor_can_inline(XiCgenCtx *ctx, const XiFunc *f, con
     if (origin != v || !cg_class_native_ctor_uses_safe(ctx, f, v, origin, 0))
         return false;
     const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL);
-    if (cd && cg_class_native_needs_type_id_instance(ctx, cd))
+    if (cd && (!cd->instance_layout || cg_class_native_layout_has_ref_fields(cd->instance_layout) ||
+               cg_class_native_needs_type_id_instance(ctx, cd)))
         return false;
     return true;
 }

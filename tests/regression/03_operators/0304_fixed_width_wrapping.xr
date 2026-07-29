@@ -87,7 +87,7 @@ fn test_uint64_wrapping() {
     var a: u64 = 18446744073709551615
     assert_eq(a.wrappingAdd(1), 0)
     var b: u64 = 0
-    assert_eq(b.wrappingSub(1), 18446744073709551615)
+    assert_eq(b.wrappingSub(1), 18446744073709551615 as u64)
 }
 
 // ===== 结果保持接收者宽度（可继续链式定宽运算）=====

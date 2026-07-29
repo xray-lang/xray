@@ -2762,34 +2762,6 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn compilerGuard {
-    signature: "(value: u64): u64"
-    doc: "Return value unchanged while creating a best-effort native compiler scheduling barrier"
-    effect: "nothrow"
-    vm: "mem_compiler_guard_u64"
-    aot: "xrt_mem_compiler_guard_u64"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-    allocation: "no_heap"
-  }
-
-  fn compilerOpaque {
-    signature: "(value: u64): u64"
-    doc: "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier"
-    effect: "nothrow"
-    vm: "mem_compiler_opaque_u64"
-    aot: "xrt_mem_compiler_opaque_u64"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-    allocation: "no_heap"
-  }
-
   fn cacheFlush {
     signature: "(ptr: Ptr<byte>, n: int): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"

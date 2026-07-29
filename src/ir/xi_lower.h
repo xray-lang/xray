@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Translates an AstNode tree (from the parser) into XiFunc (typed SSA IR)
  *   using the Braun SSA construction algorithm. Types are carried from the
- *   semantic analyzer's XaNodeTable on every XiValue.
+ *   immutable XaTypedProgram semantic sidecars on every XiValue.
  *
  *   Braun Algorithm (Simple and Efficient SSA Construction):
  *   - writeVariable(var, block, value): records the current SSA def

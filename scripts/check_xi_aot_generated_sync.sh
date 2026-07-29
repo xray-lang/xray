@@ -17,6 +17,26 @@ TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/xray_xi_aot_sync.XXXXXX")
 GEN_LOG=$(mktemp "${TMPDIR:-/tmp}/xray_xi_aot_sync_log.XXXXXX")
 trap 'rm -rf "${TMP_ROOT}"; rm -f "${GEN_LOG}"' EXIT
 
+PYTHON_BIN="${XRAY_PYTHON:-}"
+if [ -n "${PYTHON_BIN}" ]; then
+    if ! "${PYTHON_BIN}" -c 'import sys' >/dev/null 2>&1; then
+        printf 'FAIL: XRAY_PYTHON is not an executable Python interpreter: %s\n' "${PYTHON_BIN}" >&2
+        exit 1
+    fi
+else
+    for candidate in python3 python; do
+        if command -v "${candidate}" >/dev/null 2>&1 &&
+           "${candidate}" -c 'import sys' >/dev/null 2>&1; then
+            PYTHON_BIN="${candidate}"
+            break
+        fi
+    done
+    if [ -z "${PYTHON_BIN}" ]; then
+        printf 'FAIL: no usable Python interpreter found (tried python3 and python)\n' >&2
+        exit 1
+    fi
+fi
+
 red() { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 section() { printf '\n=== %s ===\n' "$*"; }
@@ -65,11 +85,11 @@ if require_file tools/xisagen/xisagen.py &&
    require_file xisa/xi/ops.def &&
    require_file xisa/xi/lowering.def &&
    require_file xisa/xi/verifier.def; then
-    if run_gen python3 tools/xisagen/xisagen.py xi-ops \
+    if run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py xi-ops \
             xisa/xi/ops.def "${TMP_ROOT}/src/ir/xi_ops_gen.h" &&
-       run_gen python3 tools/xisagen/xisagen.py xi-verify \
+       run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py xi-verify \
             xisa/xi/ops.def xisa/xi/verifier.def "${TMP_ROOT}/src/ir/xi_verify_gen.h" &&
-       run_gen python3 tools/xisagen/xisagen.py xi-lowering \
+       run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py xi-lowering \
             xisa/xi/ops.def xisa/xi/lowering.def "${TMP_ROOT}"; then
         compare_artifacts "Xi" \
             src/ir/xi_ops_gen.h \
@@ -94,11 +114,11 @@ if require_file tools/xisagen/xisagen.py &&
    require_file xisa/aot/rep.def &&
    require_file xisa/aot/abi.def &&
    require_file xisa/aot/layout.def; then
-    if run_gen python3 tools/xisagen/xisagen.py aot-rep \
+    if run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py aot-rep \
             xisa/aot/rep.def "${TMP_ROOT}/src/aot/xaot_rep_gen.h" &&
-       run_gen python3 tools/xisagen/xisagen.py aot-abi \
+       run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py aot-abi \
             xisa/aot/rep.def xisa/aot/abi.def "${TMP_ROOT}/src/aot/xaot_abi_gen.h" &&
-       run_gen python3 tools/xisagen/xisagen.py aot-layout \
+       run_gen "${PYTHON_BIN}" tools/xisagen/xisagen.py aot-layout \
             xisa/aot/rep.def xisa/aot/layout.def "${TMP_ROOT}/src/aot/xaot_layout_gen.h"; then
         compare_artifacts "AOT" \
             src/aot/xaot_rep_gen.h \

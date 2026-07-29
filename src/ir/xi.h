@@ -303,6 +303,10 @@ typedef enum {
     XI_BIT_CTZ,
     XI_BIT_MUL_HIGH,
 
+    /* Semantic-neutral native code-shape controls. */
+    XI_CODEGEN_OPAQUE,
+    XI_CODEGEN_COMPILER_FENCE,
+
     /* Comparison (result is always bool) */
     XI_EQ,
     XI_NE,
@@ -1396,6 +1400,12 @@ struct XiBorrowSig;
  * a simple bump allocator (arena). The arena is freed as a whole when
  * the XiFunc is destroyed, so individual frees are not needed.
  */
+typedef enum XiInlinePolicy {
+    XI_INLINE_AUTO = 0,
+    XI_INLINE_PREFER,
+    XI_INLINE_PRESERVE_CALL,
+} XiInlinePolicy;
+
 typedef struct XiFunc {
     const char *name;           /* function name (debug, not owned) */
     const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
@@ -1546,8 +1556,7 @@ typedef struct XiFunc {
      * not executable.  Function-level generics instead keep a canonical
      * erased ABI and do not set this bit. */
     bool is_generic_template;
-    bool inline_hint;   /* source @inline; optimization-only, semantics-neutral */
-    bool noinline_hint; /* source @noinline; optimization-only, semantics-neutral */
+    uint8_t inline_policy; /* XiInlinePolicy; canonical source code-shape policy */
 
     /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend

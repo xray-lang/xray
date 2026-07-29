@@ -12,6 +12,7 @@
 #define XA_TYPED_PROGRAM_H
 
 #include "../../base/xdefs.h"
+#include "../../shared/xr_conversion.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -62,6 +63,9 @@ xa_typed_program_global_evidence(const XaTypedProgram *program);
 XR_FUNC uint32_t xa_typed_program_module_id(const XaTypedProgram *program);
 XR_FUNC const struct XaResolvedCall *
 xa_typed_program_resolved_call(const XaTypedProgram *program, const struct AstNode *call_node);
+XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program,
+                                         const struct AstNode *node,
+                                         XrConversionWitness *out_witness);
 XR_FUNC const struct XaEffectSummary *
 xa_typed_program_effect_summary(const XaTypedProgram *program, const struct XaSymbol *symbol);
 XR_FUNC const struct XaMemoryEffectSummary *

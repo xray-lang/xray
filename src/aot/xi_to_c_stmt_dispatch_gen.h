@@ -5,6 +5,7 @@
 #define XI_TO_C_STMT_DISPATCH_GEN_H
 
 #define XI_TO_C_STMT_LOWERING_DRIVERS(X) \
+    X(CODEGEN_COMPILER_FENCE, "xi.codegen.compiler-fence", xicgen_stmt_codegen_compiler_fence) \
     X(TRY, "xi.try", xicgen_stmt_try) \
     X(CATCH, "xi.catch", xicgen_stmt_catch) \
     X(END_TRY, "xi.end.try", xicgen_stmt_end_try) \

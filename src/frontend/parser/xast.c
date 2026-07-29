@@ -1458,6 +1458,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralInt";
         case AST_LITERAL_FLOAT:
             return "LiteralFloat";
+        case AST_LITERAL_BIGINT:
+            return "LiteralBigInt";
         case AST_LITERAL_STRING:
             return "LiteralString";
         case AST_FIXED_BYTES_LITERAL:
@@ -1482,6 +1484,16 @@ const char *xr_ast_typename(AstNodeType type) {
             return "BinaryDiv";
         case AST_BINARY_MOD:
             return "BinaryMod";
+        case AST_BINARY_BAND:
+            return "BinaryBitAnd";
+        case AST_BINARY_BOR:
+            return "BinaryBitOr";
+        case AST_BINARY_BXOR:
+            return "BinaryBitXor";
+        case AST_BINARY_LSHIFT:
+            return "BinaryLeftShift";
+        case AST_BINARY_RSHIFT:
+            return "BinaryRightShift";
         case AST_BINARY_EQ:
             return "BinaryEq";
         case AST_BINARY_NE:
@@ -1498,10 +1510,26 @@ const char *xr_ast_typename(AstNodeType type) {
             return "BinaryAnd";
         case AST_BINARY_OR:
             return "BinaryOr";
+        case AST_TERNARY:
+            return "Ternary";
+        case AST_NULLISH_COALESCE:
+            return "NullishCoalesce";
+        case AST_OPTIONAL_CHAIN:
+            return "OptionalChain";
+        case AST_FORCE_UNWRAP:
+            return "ForceUnwrap";
+        case AST_AS_EXPR:
+            return "AsExpr";
+        case AST_RANGE:
+            return "Range";
+        case AST_IS_EXPR:
+            return "IsExpr";
         case AST_UNARY_NEG:
             return "UnaryNeg";
         case AST_UNARY_NOT:
             return "UnaryNot";
+        case AST_UNARY_BNOT:
+            return "UnaryBitNot";
         case AST_GROUPING:
             return "Grouping";
         case AST_EXPR_STMT:
@@ -1514,8 +1542,6 @@ const char *xr_ast_typename(AstNodeType type) {
             return "VarDecl";
         case AST_CONST_DECL:
             return "ConstDecl";
-            return "SharedDecl";
-            return "OwnedDecl";
         case AST_VARIABLE:
             return "Variable";
         case AST_ASSIGNMENT:
@@ -1557,10 +1583,14 @@ const char *xr_ast_typename(AstNodeType type) {
             return "MapLiteral";
         case AST_SET_LITERAL:
             return "SetLiteral";
+        case AST_TUPLE_LITERAL:
+            return "TupleLiteral";
         case AST_INDEX_GET:
             return "IndexGet";
         case AST_INDEX_SET:
             return "IndexSet";
+        case AST_SLICE_EXPR:
+            return "SliceExpr";
         case AST_MEMBER_ACCESS:
             return "MemberAccess";
         case AST_TEMPLATE_STRING:
@@ -1573,6 +1603,12 @@ const char *xr_ast_typename(AstNodeType type) {
             return "UnionDecl";
         case AST_STRUCT_LITERAL:
             return "StructLiteral";
+        case AST_INTERFACE_DECL:
+            return "InterfaceDecl";
+        case AST_INTERFACE_METHOD:
+            return "InterfaceMethod";
+        case AST_INTERFACE_PROPERTY:
+            return "InterfaceProperty";
         case AST_FIELD_DECL:
             return "FieldDecl";
         case AST_METHOD_DECL:
@@ -1623,10 +1659,40 @@ const char *xr_ast_typename(AstNodeType type) {
             return "PatternTuple";
         case AST_PATTERN_ADT:
             return "PatternAdt";
+        case AST_PATTERN_OBJECT:
+            return "PatternObject";
+        case AST_PATTERN_ARRAY:
+            return "PatternArray";
         case AST_PATTERN_TYPE:
             return "PatternType";
+        case AST_SPREAD_EXPR:
+            return "SpreadExpr";
         case AST_TYPE_ALIAS:
             return "TypeAlias";
+        case AST_GO_EXPR:
+            return "GoExpr";
+        case AST_AWAIT_EXPR:
+            return "AwaitExpr";
+        case AST_CHANNEL_NEW:
+            return "ChannelNew";
+        case AST_CHAN_SEND:
+            return "ChannelSend";
+        case AST_CHAN_RECV:
+            return "ChannelRecv";
+        case AST_SELECT_STMT:
+            return "SelectStmt";
+        case AST_SELECT_CASE:
+            return "SelectCase";
+        case AST_DEFER_STMT:
+            return "DeferStmt";
+        case AST_SCOPE_BLOCK:
+            return "ScopeBlock";
+        case AST_YIELD_STMT:
+            return "YieldStmt";
+        case AST_CANCELLED_EXPR:
+            return "CancelledExpr";
+        case AST_MOVE_EXPR:
+            return "MoveExpr";
         case AST_UNSAFE_EXPR:
             return "UnsafeExpr";
         case AST_PROGRAM:

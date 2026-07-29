@@ -7,9 +7,9 @@
 #include <string.h>
 
 static const XrPublicAttributeInfo g_public_attributes[] = {
-#define XR_PUBLIC_ATTRIBUTE(id, spelling, targets, arguments, phase, production, impact,           \
+#define XR_PUBLIC_ATTRIBUTE(id, spelling, targets, arguments, category, phase, production, impact, \
                             stability)                                                             \
-    {ATTR_##id, spelling, targets, arguments, phase, production, impact, stability},
+    {ATTR_##id, spelling, targets, arguments, category, phase, production, impact, stability},
 #include "xattribute_registry.def"
 #undef XR_PUBLIC_ATTRIBUTE
 };

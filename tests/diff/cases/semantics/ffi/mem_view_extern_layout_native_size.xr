@@ -13,7 +13,7 @@ extern "C" {
 }
 
 fn main() {
-    var raw = unsafe { malloc(mem.sizeOf<NativeSizeHeader>()) }
+    var raw = unsafe { malloc(mem.sizeOf<NativeSizeHeader>() as usize) }
     var headers = unsafe { mem.slice<NativeSizeHeader>(raw, 1, raw) }
 
     unsafe {

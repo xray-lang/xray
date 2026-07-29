@@ -4976,11 +4976,15 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
-Other public attributes include `@deprecated("...")`, `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`), and the experimental native-codegen hints `@inline` / `@noinline`. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively requests expansion or preservation of a native call boundary. They are intended for low-level hot paths backed by real benchmarks and assembly-shape gates, not as a substitute for the compiler's general inlining policy.
+Other public attributes include `@deprecated("...")`, `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`), plus the stable, low-level AOT code-shape directives `@inline` / `@noinline`. The public surface is seven ordinary/test/metadata attributes plus two code-shape directives; the count is not a compatibility goal, while category and semantic orthogonality are constraints. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively prefers expansion or preservation of a native call boundary. They are only for low-level hot paths backed by real benchmarks and generated-code shape gates; they neither unlock ordinary optimization nor guarantee that every call edge is eligible.
+
+`codegen.opaque(value)` and `codegen.compilerFence()` belong to the same expert-control layer but are standard-library intrinsics, not attributes. The former blocks native constant propagation while preserving an integer or pointer's exact static type, value, ownership, and provenance. The latter only prevents memory-effecting operations from moving across that compiler scheduling point. `compilerFence` is not a CPU memory fence, establishes no happens-before relation, and cannot repair a data race. Ordinary code does not need these controls; hard shape requirements are checked by `xray verify --contract`, not self-certified by the source request.
 
 Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
 ```xray
+import codegen
+
 @test                                 // mark as a test
 fn test_basic() { return }
 
@@ -4998,6 +5002,12 @@ fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
 
 @noinline
 fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
+
+fn measuredKernel(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return measuredDispatchBoundary(hidden)
+}
 ```
 
 > `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.

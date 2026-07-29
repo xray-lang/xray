@@ -404,7 +404,7 @@ TEST(completion_inferred_int_members) {
     xlsp_server_free(server);
 }
 
-TEST(completion_explicit_u32_preserves_receiver_type) {
+TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
@@ -424,6 +424,22 @@ TEST(completion_explicit_u32_preserves_receiver_type) {
     ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): u32");
 
     xjson_free(items);
+
+    const char *hover_content = "fn value() -> u32 {\n"
+                                "    var a: u32 = 10\n"
+                                "    return a.rotateLeft(1)\n"
+                                "}\n";
+    XrLspDocument *hover_doc =
+        xlsp_document_open(server, "file:///hover_contextual_u32.xr", hover_content, 1);
+    ASSERT(hover_doc != NULL);
+    xlsp_parse_document(hover_doc, server);
+    XrJsonValue *hover = xlsp_analyze_hover(server, hover_doc, (XrLspPosition) {2, 15});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "u32.rotateLeft") != NULL);
+    xjson_free(hover);
+
     xlsp_server_free(server);
 }
 
@@ -1195,7 +1211,7 @@ int main(int argc, char **argv) {
     printf("\nCompletion tests:\n");
     RUN_TEST(completion_shared_channel_member);
     RUN_TEST(completion_inferred_int_members);
-    RUN_TEST(completion_explicit_u32_preserves_receiver_type);
+    RUN_TEST(contextual_u32_literal_preserves_completion_and_hover_type);
     RUN_TEST(completion_enum_static_variants_descriptor);
     RUN_TEST(completion_enum_descriptor_properties);
     RUN_TEST(completion_enum_iteration_variable_is_descriptor);

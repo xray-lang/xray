@@ -2,7 +2,7 @@ fn run(n: int) -> int {
     var vals: Array<i16> = []
     var i = 0
     while (i < n) {
-        vals.push((i % 65536) - 32768)
+        vals.push(((i % 65536) - 32768) as i16)
         i = i + 1
     }
 

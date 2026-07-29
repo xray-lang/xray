@@ -10,7 +10,7 @@ p.x = p.x + 1
 p.b = p.b + 1
 
 if (p.ok) {
-    print(p.x + p.b)
+    print(p.x + (p.b as int))
 } else {
     print(0)
 }

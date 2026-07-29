@@ -1,4 +1,5 @@
 import mem
+import codegen
 
 struct XrayMemHeader {
     tag: byte
@@ -37,12 +38,14 @@ fn xray_mem_bits(x: int, n: int) -> int {
         x.wrappingSub(n) + x.wrappingMul(n)
 }
 
-fn xray_mem_compiler_guard(value: u64) -> u64 {
-    return mem.compilerGuard(value)
+fn xray_codegen_fenced_opaque(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return hidden
 }
 
-fn xray_mem_compiler_opaque(value: u64) -> u64 {
-    return mem.compilerOpaque(value)
+fn xray_codegen_opaque(value: u64) -> u64 {
+    return codegen.opaque(value)
 }
 
 fn xray_mem_bulk(dst: int, src: int, n: int) -> int {

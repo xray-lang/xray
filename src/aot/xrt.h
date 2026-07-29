@@ -48,6 +48,7 @@
 #include "xrt_crypto.h"     // L2: freestanding crypto helpers
 #include "xrt_regex.h"      // L2: freestanding regex helpers
 #include "xrt_math.h"       // L2: freestanding math helpers
+#include "xrt_codegen.h"    // L2: semantic-neutral native code-shape controls
 #include "xrt_mem.h"        // L2: freestanding mem bit intrinsics
 #include "xrt_sys.h"        // L2: sys.* OS-domain primitives
 #include "xrt_time.h"       // L2: freestanding time query helpers

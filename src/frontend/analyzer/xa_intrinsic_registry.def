@@ -341,3 +341,11 @@ XA_INTRINSIC(PARALLEL_PLAN_MAP_INTO, 4013, "parallel.Plan.mapInto", PARALLEL, PA
              MAY_THROW, NO_ALLOC, SAFE, 3, 3, PLAN_RECEIVER, NONE, 0, NONE, 0)
 XA_INTRINSIC(PARALLEL_PLAN_REDUCE, 4014, "parallel.Plan.reduce", PARALLEL, PAR_REDUCE, MAY_THROW,
              MAY_ALLOC, SAFE, 4, 4, PLAN_RECEIVER, NONE, 0, NONE, 0)
+
+/* Semantic-neutral native code-shape controls.  The stdlib declarations are
+ * generic/reference bodies for VM execution; resolved calls always lower to
+ * these canonical identities before optimizer or backend selection. */
+XA_INTRINSIC(CODEGEN_OPAQUE, 5001, "codegen.opaque", CODEGEN, CODEGEN_OPAQUE, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(CODEGEN_COMPILER_FENCE, 5002, "codegen.compilerFence", CODEGEN,
+             CODEGEN_COMPILER_FENCE, PURE, NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)

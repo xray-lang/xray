@@ -1,0 +1,13 @@
+// Code-shape controls are observable identities in every backend. Native AOT
+// lowers them to provider constructs; the VM preserves only source semantics.
+import codegen
+
+var zero: u64 = 0
+var high: u64 = 18446744073709551615
+var mixed: u64 = 1609587791953885689
+
+print(codegen.opaque(zero) == zero)
+print(codegen.opaque(high) == high)
+print(codegen.opaque(mixed) == mixed)
+codegen.compilerFence()
+print(zero == 0)

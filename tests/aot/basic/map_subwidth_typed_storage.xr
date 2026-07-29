@@ -28,7 +28,7 @@ class ByteMapBag {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.set(i, i * 2 + 1)
+            this.values.set(i as byte, (i * 2 + 1) as i32)
             i = i + 1
         }
         return len(this.values)
@@ -38,8 +38,8 @@ class ByteMapBag {
         var i = 0
         var sum = 0
         while (i < n) {
-            if (this.values.containsKey(i)) {
-                sum = sum + this.values.get(i)
+            if (this.values.containsKey(i as byte)) {
+                sum = sum + this.values.get(i as byte)!
             }
             i = i + 1
         }
@@ -50,7 +50,7 @@ class ByteMapBag {
         var i = 0
         var removed = 0
         while (i < n) {
-            if (this.values.delete(i)) {
+            if (this.values.delete(i as byte)) {
                 removed = removed + 1
             }
             i = i + 2

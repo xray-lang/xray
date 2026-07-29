@@ -25,7 +25,7 @@ fn sum_float32(n: int) -> float {
     var i = 0
     var x = 1.0
     while (i < n) {
-        values.push(x)
+        values.push(x as f32)
         x = x + 0.25
         if (x > 2.0) {
             x = 1.0

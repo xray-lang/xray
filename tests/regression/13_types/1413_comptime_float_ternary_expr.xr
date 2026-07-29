@@ -11,20 +11,20 @@ fn test_comptime_float_numeric_ops() {
     var sum = comptime (1.5 + 2.5)
     assert_eq(sum, 4.0)
 
-    var mixed = comptime (1 + 2.5 * 2)
+    var mixed = comptime ((1 as float) + 2.5 * 2)
     assert_eq(mixed, 6.0)
 
     var neg = comptime -1.5
     assert_eq(neg, -1.5)
 
-    var div = comptime (5 / 2.0)
+    var div = comptime ((5 as float) / 2.0)
     assert_eq(div, 2.5)
 }
 
 @test
 fn test_comptime_numeric_text_and_char_comparisons() {
-    assert_eq(comptime (1 == 1.0), true)
-    assert_eq(comptime (3.5 > 2), true)
+    assert_eq(comptime ((1 as float) == 1.0), true)
+    assert_eq(comptime (3.5 > (2 as float)), true)
     assert_eq(comptime ("abc" < "abd"), true)
     assert_eq(comptime ('b' == 'b'), true)
 }

@@ -110,6 +110,7 @@ static bool xcmd_toolchain_request(const XrCliInvocation *inv, const char **requ
     options->no_run = xr_cli_opt_bool(&inv->options, "no-run");
     options->refresh = xr_cli_opt_bool(&inv->options, "refresh");
     options->keep_probe = xr_cli_opt_bool(&inv->options, "keep-probe");
+    options->required_codegen_capabilities = XR_TOOLCHAIN_CODEGEN_ALL;
     return true;
 }
 
@@ -128,6 +129,10 @@ static void xcmd_toolchain_print_probe_human(const XrToolchainProbeOptions *opti
     printf("  Runtime link: %s\n", xtc_capability_state_name(result->runtime_link));
     printf("  Native run: %s\n", xtc_capability_state_name(result->native_run));
     printf("  LTO:        %s\n", xtc_capability_state_name(result->lto));
+    printf("  Force inline: %s\n", xtc_capability_state_name(result->force_inline));
+    printf("  Preserve call: %s\n", xtc_capability_state_name(result->preserve_call));
+    printf("  Value opaque: %s\n", xtc_capability_state_name(result->value_opaque));
+    printf("  Compiler fence: %s\n", xtc_capability_state_name(result->compiler_fence));
     for (size_t i = 0; i < result->diagnostic_count; i++)
         printf("  [%s] %s: %s\n", xtc_reason_code_name(result->diagnostics[i].code),
                result->diagnostics[i].stage, result->diagnostics[i].message);

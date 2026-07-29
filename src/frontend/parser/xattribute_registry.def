@@ -1,27 +1,27 @@
 /*
  * Public Xray attribute registry.
  *
- * XR_PUBLIC_ATTRIBUTE(enum_id, spelling, targets, arguments, phase,
+ * XR_PUBLIC_ATTRIBUTE(enum_id, spelling, targets, arguments, category, phase,
  *                     production, impact, stability)
  *
  * This is the sole registry for parser acceptance, formatter spelling, LSP
  * completion, CLI inventory, generated reference documentation, and tests.
  */
-XR_PUBLIC_ATTRIBUTE(TEST, "test", "function", "none | skip | timeout:seconds", "test-selection",
+XR_PUBLIC_ATTRIBUTE(TEST, "test", "function", "none | skip | timeout:seconds", "test", "test-selection",
                     false, "test-only; no production ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(BEFORE_EACH, "before_each", "function", "none", "test-selection", false,
+XR_PUBLIC_ATTRIBUTE(BEFORE_EACH, "before_each", "function", "none", "test", "test-selection", false,
                     "test-only; no production ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(AFTER_EACH, "after_each", "function", "none", "test-selection", false,
+XR_PUBLIC_ATTRIBUTE(AFTER_EACH, "after_each", "function", "none", "test", "test-selection", false,
                     "test-only; no production ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(BEFORE_ALL, "before_all", "function", "none", "test-selection", false,
+XR_PUBLIC_ATTRIBUTE(BEFORE_ALL, "before_all", "function", "none", "test", "test-selection", false,
                     "test-only; no production ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(AFTER_ALL, "after_all", "function", "none", "test-selection", false,
+XR_PUBLIC_ATTRIBUTE(AFTER_ALL, "after_all", "function", "none", "test", "test-selection", false,
                     "test-only; no production ABI/effect/codegen impact", "stable")
 XR_PUBLIC_ATTRIBUTE(DEPRECATED, "deprecated", "declaration", "optional message:string",
-                    "diagnostic", true, "API metadata only; no ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(DERIVE, "derive", "class | struct | enum", "sealed target list", "analysis",
+                    "metadata", "diagnostic", true, "API metadata only; no ABI/effect/codegen impact", "stable")
+XR_PUBLIC_ATTRIBUTE(DERIVE, "derive", "class | struct | enum", "sealed target list", "derivation", "analysis",
                     true, "generates ordinary checked implementations", "stable")
-XR_PUBLIC_ATTRIBUTE(INLINE, "inline", "function | method", "none", "native-codegen", true,
-                    "optimization hint only; no semantic, effect, or ABI impact", "experimental")
-XR_PUBLIC_ATTRIBUTE(NOINLINE, "noinline", "function | method", "none", "native-codegen", true,
-                    "optimization hint only; no semantic, effect, or ABI impact", "experimental")
+XR_PUBLIC_ATTRIBUTE(INLINE, "inline", "function | method", "none", "native-code-shape", "native-codegen", true,
+                    "prefer native call-edge elimination; no semantic, effect, or ABI impact", "stable")
+XR_PUBLIC_ATTRIBUTE(NOINLINE, "noinline", "function | method", "none", "native-code-shape", "native-codegen", true,
+                    "preserve a native call boundary; no semantic, effect, or ABI impact", "stable")

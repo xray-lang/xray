@@ -85,7 +85,7 @@ fn compute(seed: int) -> int {
     if (seed <= 0) { return 0 }
     var answer = seed + 1
     var doubled = answer * 2
-    var ratio = doubled / 2.0
+    var ratio = (doubled as f64) / 2.0
     var ok = ratio == 21.0
     if (!ok) { return 0 }
     print(doubled)
@@ -250,7 +250,7 @@ fn worker(seed: int) -> int {
     var answer = await task
     yield
     var doubled = answer * 2
-    var ratio = doubled / 2.0
+    var ratio = (doubled as f64) / 2.0
     var ok = ratio == 21.0
     if (!ok) { return 0 }
     return doubled

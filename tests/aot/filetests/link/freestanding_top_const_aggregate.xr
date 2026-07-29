@@ -327,7 +327,7 @@ fn xray_top_const_struct_array_nested_string_field_print(i: int) -> int {
 }
 
 fn xray_top_const_packed_struct_runtime() -> int {
-    return PACKED.tag as int + PACKED.value as int
+    return (PACKED.tag as int) + (PACKED.value as int)
 }
 
 fn xray_top_const_aligned_struct_runtime() -> int {
@@ -335,7 +335,7 @@ fn xray_top_const_aligned_struct_runtime() -> int {
 }
 
 fn xray_top_const_packed_aligned_struct_runtime() -> int {
-    return PACKED_ALIGNED.tag as int + PACKED_ALIGNED.value as int
+    return (PACKED_ALIGNED.tag as int) + (PACKED_ALIGNED.value as int)
 }
 
 fn xray_top_const_union_u32_runtime() -> int {

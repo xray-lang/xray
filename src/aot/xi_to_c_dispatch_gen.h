@@ -17,6 +17,7 @@
     X(TARGET_SIMD_BYTES, "xi.target.simd.bytes", xicgen_target_simd_bytes) \
     X(TARGET_SIMD_ACCELERATED, "xi.target.simd.accelerated", xicgen_target_simd_accelerated) \
     X(TARGET_SIMD_RUNTIME_SELECTED, "xi.target.simd.runtime-selected", xicgen_target_simd_runtime_selected) \
+    X(CODEGEN_OPAQUE, "xi.codegen.opaque", xicgen_codegen_opaque) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(SOURCE_MOVE, "xi.source.move", xicgen_move) \
     X(OWNER_FORWARD, "xi.owner.forward", xicgen_move) \

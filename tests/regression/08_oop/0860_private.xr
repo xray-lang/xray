@@ -98,7 +98,7 @@ class SavingsAccount extends BankAccount {
         this.interestRate = rate
     }
 
-    applyInterest() {        var interest = (this.getBalance() * this.interestRate).floor()
+    applyInterest() {        var interest = ((this.getBalance() as float) * this.interestRate).floor()
         this.addAmount(interest)
     }
 }

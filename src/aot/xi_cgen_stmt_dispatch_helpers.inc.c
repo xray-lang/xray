@@ -23,6 +23,16 @@ static uint32_t xicgen_stmt_bound_try_id(const XiFunc *f, const XiValue *v) {
     return try_id;
 }
 
+static bool xicgen_stmt_codegen_compiler_fence(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiValue *v, const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) v;
+    (void) prefix;
+    fprintf(out, "    xrt_codegen_compiler_fence();\n");
+    return true;
+}
+
 static bool xicgen_stmt_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     (void) ctx;

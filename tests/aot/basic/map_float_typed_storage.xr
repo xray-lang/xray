@@ -31,7 +31,7 @@ var by_bool: Map<bool, f32> = #{}
 by_bool.set(true, 1.5)
 by_bool.set(false, 2.25)
 print(len(by_bool))
-print(by_bool.get(true) + by_bool.get(false))
+print(by_bool.get(true)! + by_bool.get(false)!)
 
 class BoolFloatMapBag {
     values: Map<bool, f32>
@@ -52,10 +52,10 @@ class BoolFloatMapBag {
         var sum = 0.0
         while (r < rounds) {
             if (this.values.containsKey(true)) {
-                sum = sum + this.values.get(true)
+                sum = sum + this.values.get(true)!
             }
             if (this.values.containsKey(false)) {
-                sum = sum + this.values.get(false)
+                sum = sum + this.values.get(false)!
             }
             r = r + 1
         }
@@ -88,7 +88,7 @@ class FloatMapBag {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.set(i + 0.5, i * 0.25 + 1.0)
+            this.values.set((i as f32) + 0.5, (i as f32) * 0.25 + 1.0)
             i = i + 1
         }
         return len(this.values)
@@ -98,9 +98,9 @@ class FloatMapBag {
         var i = 0
         var sum = 0.0
         while (i < n) {
-            var key = i + 0.5
+            var key = (i as f32) + 0.5
             if (this.values.containsKey(key)) {
-                sum = sum + this.values.get(key)
+                sum = sum + this.values.get(key)!
             }
             i = i + 1
         }
@@ -111,7 +111,7 @@ class FloatMapBag {
         var i = 0
         var removed = 0
         while (i < n) {
-            if (this.values.delete(i + 0.5)) {
+            if (this.values.delete((i as f32) + 0.5)) {
                 removed = removed + 1
             }
             i = i + 2

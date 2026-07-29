@@ -299,6 +299,7 @@ XR_FUNC const char *xtc_reason_code_name(XrToolchainReasonCode reason) {
         "PROVIDER_EXPLICIT_NO_FALLBACK",
         "MANAGED_ZIG_AVAILABLE",
         "EXTERNAL_INSTALL_REQUIRED",
+        "CODEGEN_CAPABILITY_UNSUPPORTED",
     };
     size_t count = sizeof(names) / sizeof(names[0]);
     return (size_t) reason < count ? names[reason] : "TOOLCHAIN_ENV_INCOMPLETE";

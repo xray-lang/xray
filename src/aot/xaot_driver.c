@@ -45,6 +45,7 @@
 #include "xi_backend_plan_contract.h"
 #include "xi_lto.h"
 #include "xaot_bundle.h"
+#include "xaot_boundary.h"
 #include "xaot_link.h"
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
@@ -57,6 +58,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <limits.h>
 #include <time.h>
 
@@ -176,7 +178,86 @@ static void xaot_dump_func_view_evidence(FILE *out, const XiFunc *func) {
     }
 }
 
-static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_t depth) {
+static const char *xaot_codegen_policy_name(uint8_t policy) {
+    switch ((XiInlinePolicy) policy) {
+        case XI_INLINE_PREFER:
+            return "inline";
+        case XI_INLINE_PRESERVE_CALL:
+            return "noinline";
+        case XI_INLINE_AUTO:
+        default:
+            return NULL;
+    }
+}
+
+static const char *xaot_codegen_policy_capability(uint8_t policy) {
+    return policy == XI_INLINE_PREFER ? "forceInline" : "preserveCall";
+}
+
+static void xaot_dump_codegen_value(FILE *out, const XaotBundle *bundle, const XiFunc *func,
+                                    const XiValue *value) {
+    if (!out || !func || !value)
+        return;
+    if (value->op == XI_CODEGEN_OPAQUE) {
+        fprintf(out,
+                "codegen-control function=%s kind=opaque value=v%u source-line=%u "
+                "stage=lowered backend=aot-c provider-capability=valueOpaque "
+                "lowering=xrt_codegen_opaque reason=canonical-xi-op\n",
+                func->name ? func->name : "<anonymous>", value->id, value->line);
+        return;
+    }
+    if (value->op == XI_CODEGEN_COMPILER_FENCE) {
+        fprintf(out,
+                "codegen-control function=%s kind=compilerFence value=v%u source-line=%u "
+                "stage=lowered backend=aot-c provider-capability=compilerFence "
+                "lowering=xrt_codegen_compiler_fence reason=canonical-xi-op\n",
+                func->name ? func->name : "<anonymous>", value->id, value->line);
+        return;
+    }
+    if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+        value->op == XI_CALL_METHOD_DIRECT) {
+        const XiFunc *target = xaot_boundary_resolve_direct_call_target(bundle, func, value, NULL);
+        const char *policy = target ? xaot_codegen_policy_name(target->inline_policy) : NULL;
+        if (!policy)
+            return;
+        fprintf(out,
+                "codegen-edge function=%s caller=%s callee=%s kind=%s call=v%u source-line=%u "
+                "stage=lowered backend=aot-c provider-capability=%s "
+                "lowering=%s reason=surviving-direct-edge\n",
+                func->name ? func->name : "<anonymous>",
+                func->name ? func->name : "<anonymous>",
+                target->name ? target->name : "<anonymous>", policy, value->id, value->line,
+                xaot_codegen_policy_capability(target->inline_policy),
+                target->inline_policy == XI_INLINE_PREFER ? "XR_AINLINE" : "XR_NOINLINE");
+    }
+}
+
+static void xaot_dump_func_codegen_evidence(FILE *out, const XaotBundle *bundle,
+                                            const XiFunc *func) {
+    const char *policy;
+    if (!out || !func)
+        return;
+    policy = xaot_codegen_policy_name(func->inline_policy);
+    if (policy) {
+        fprintf(out,
+                "codegen-control function=%s kind=%s stage=lowered backend=aot-c "
+                "provider-capability=%s lowering=%s reason=source-policy\n",
+                func->name ? func->name : "<anonymous>", policy,
+                xaot_codegen_policy_capability(func->inline_policy),
+                func->inline_policy == XI_INLINE_PREFER ? "XR_AINLINE" : "XR_NOINLINE");
+    }
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++)
+            xaot_dump_codegen_value(out, bundle, func, block->values[vi]);
+        xaot_dump_codegen_value(out, bundle, func, block->control);
+    }
+}
+
+static void xaot_dump_func_local_evidence(FILE *out, const XaotBundle *bundle,
+                                          const XiFunc *func, uint32_t depth) {
     if (!out || !func)
         return;
     fprintf(out, "xi-evidence function=%s depth=%u stage=%s revision=%llu/%llu/%llu/%llu\n",
@@ -185,18 +266,19 @@ static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_
             (unsigned long long) func->memory_revision, (unsigned long long) func->call_revision);
     xi_evidence_dump(func, out);
     xaot_dump_func_view_evidence(out, func);
+    xaot_dump_func_codegen_evidence(out, bundle, func);
     for (uint16_t i = 0; i < func->nchildren; i++)
-        xaot_dump_func_local_evidence(out, func->children[i], depth + 1);
+        xaot_dump_func_local_evidence(out, bundle, func->children[i], depth + 1);
 }
 
-static char *xaot_dump_local_evidence(XiFunc **funcs, int nfuncs) {
+static char *xaot_dump_local_evidence(const XaotBundle *bundle, XiFunc **funcs, int nfuncs) {
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *out = xr_open_memstream(&buf, &bufsz);
     if (!out)
         return NULL;
     for (int i = 0; funcs && i < nfuncs; i++)
-        xaot_dump_func_local_evidence(out, funcs[i], 0);
+        xaot_dump_func_local_evidence(out, bundle, funcs[i], 0);
     bool write_failed = ferror(out) != 0;
     int close_status = xr_close_memstream(out, &buf, &bufsz);
     if (write_failed || close_status != 0) {
@@ -1975,7 +2057,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
     if (emit_local_evidence_dump) {
-        local_evidence_dump = xaot_dump_local_evidence(ir_funcs, nmodules);
+        local_evidence_dump = xaot_dump_local_evidence(&aot_bundle, ir_funcs, nmodules);
         if (!local_evidence_dump) {
             fprintf(stderr, "Error: failed to dump local Xi evidence\n");
             goto fail_free_ir;
@@ -2295,6 +2377,127 @@ fail_free_graph:
     xr_free(paths);
     xr_free(mod_names);
     return 1;
+}
+
+static void xaot_amalgamate_unit(FILE *out, const char *source, int module_ordinal) {
+    enum {
+        XAOT_AMALGAMATE_NORMAL = 0,
+        XAOT_AMALGAMATE_STRING,
+        XAOT_AMALGAMATE_CHAR,
+        XAOT_AMALGAMATE_LINE_COMMENT,
+        XAOT_AMALGAMATE_BLOCK_COMMENT,
+    } state = XAOT_AMALGAMATE_NORMAL;
+    const char *p = source ? source : "";
+    while (*p) {
+        if (state == XAOT_AMALGAMATE_NORMAL) {
+            if (p[0] == '/' && p[1] == '/') {
+                fputs("//", out);
+                p += 2;
+                state = XAOT_AMALGAMATE_LINE_COMMENT;
+                continue;
+            }
+            if (p[0] == '/' && p[1] == '*') {
+                fputs("/*", out);
+                p += 2;
+                state = XAOT_AMALGAMATE_BLOCK_COMMENT;
+                continue;
+            }
+            if (*p == '"') {
+                fputc(*p++, out);
+                state = XAOT_AMALGAMATE_STRING;
+                continue;
+            }
+            if (*p == '\'') {
+                fputc(*p++, out);
+                state = XAOT_AMALGAMATE_CHAR;
+                continue;
+            }
+            bool token_start = p == source || (!isalnum((unsigned char) p[-1]) && p[-1] != '_');
+            if (token_start && strncmp(p, "_xstr_", 6) == 0 && isdigit((unsigned char) p[6])) {
+                fprintf(out, "_xstr_m%d_", module_ordinal);
+                p += 6;
+                continue;
+            }
+            if (token_start && strncmp(p, "_xbytes_", 8) == 0 && isdigit((unsigned char) p[8])) {
+                fprintf(out, "_xbytes_m%d_", module_ordinal);
+                p += 8;
+                continue;
+            }
+            fputc(*p++, out);
+            continue;
+        }
+        if (state == XAOT_AMALGAMATE_STRING || state == XAOT_AMALGAMATE_CHAR) {
+            char quote = state == XAOT_AMALGAMATE_STRING ? '"' : '\'';
+            if (*p == '\\' && p[1]) {
+                fputc(*p++, out);
+                fputc(*p++, out);
+                continue;
+            }
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == quote)
+                state = XAOT_AMALGAMATE_NORMAL;
+            continue;
+        }
+        if (state == XAOT_AMALGAMATE_LINE_COMMENT) {
+            char ch = *p++;
+            fputc(ch, out);
+            if (ch == '\n')
+                state = XAOT_AMALGAMATE_NORMAL;
+            continue;
+        }
+        if (p[0] == '*' && p[1] == '/') {
+            fputs("*/", out);
+            p += 2;
+            state = XAOT_AMALGAMATE_NORMAL;
+            continue;
+        }
+        fputc(*p++, out);
+    }
+}
+
+XR_FUNC char *xaot_build_result_amalgamate(const XaotBuildResult *result, size_t *out_size) {
+    char *text = NULL;
+    size_t size = 0;
+    if (out_size)
+        *out_size = 0;
+    if (!result || !result->sources || result->n_sources <= 0)
+        return NULL;
+    FILE *out = xr_open_memstream(&text, &size);
+    if (!out)
+        return NULL;
+    int impl_source = -1;
+    for (int i = 0; i < result->n_sources; i++) {
+        if (strstr(result->sources[i].c_source, "#define XRT_IMPL")) {
+            impl_source = i;
+            break;
+        }
+    }
+    if (impl_source >= 0) {
+        if (result->n_sources > 1)
+            fprintf(out, "/* ==== module: %s ==== */\n",
+                    result->sources[impl_source].name ? result->sources[impl_source].name : "?");
+        xaot_amalgamate_unit(out, result->sources[impl_source].c_source, impl_source);
+        fputc('\n', out);
+    }
+    for (int i = 0; i < result->n_sources; i++) {
+        if (i == impl_source)
+            continue;
+        if (result->n_sources > 1)
+            fprintf(out, "/* ==== module: %s ==== */\n",
+                    result->sources[i].name ? result->sources[i].name : "?");
+        xaot_amalgamate_unit(out, result->sources[i].c_source, i);
+        fputc('\n', out);
+    }
+    bool write_failed = ferror(out) != 0;
+    int close_status = xr_close_memstream(out, &text, &size);
+    if (write_failed || close_status != 0) {
+        xr_free(text);
+        return NULL;
+    }
+    if (out_size)
+        *out_size = size;
+    return text;
 }
 
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {

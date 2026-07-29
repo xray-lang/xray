@@ -10,7 +10,7 @@ fn score() -> int {
     p.x = p.x + 1
     p.b = p.b + 1
     if (p.ok) {
-        return p.x + p.b
+        return p.x + (p.b as int)
     }
     return 0
 }

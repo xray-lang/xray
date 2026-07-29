@@ -121,19 +121,24 @@ XR_FUNC bool xtc_probe_cache_load(const XrToolchainProbeOptions *options,
     const char *provider = doc ? xjson_get_string(doc, "provider") : NULL;
     const char *compiler_fingerprint = doc ? xjson_get_string(doc, "compilerFingerprint") : NULL;
     const char *runtime_artifact = doc ? xjson_get_string(doc, "runtimeArtifact") : NULL;
-    bool valid = doc && xjson_is_object(doc) && xjson_get_int(doc, "schema") == 1 && fingerprint &&
+    bool valid = doc && xjson_is_object(doc) && xjson_get_int(doc, "schema") == 2 && fingerprint &&
                  strcmp(fingerprint, result->selection.probe_fingerprint) == 0 && provider &&
                  strcmp(provider, xtc_provider_name(result->selection.provider)) == 0 &&
                  compiler_fingerprint && runtime_artifact &&
                  strcmp(runtime_artifact, result->selection.runtime_artifact) == 0 &&
                  xjson_get_bool(doc, "ready");
     XrToolchainCapabilityState c_compile, sdk_compile, runtime_link, native_run, cross, lto;
+    XrToolchainCapabilityState force_inline, preserve_call, value_opaque, compiler_fence;
     valid = valid && xtc_cache_capability(xjson_get_int(doc, "cCompile"), &c_compile) &&
             xtc_cache_capability(xjson_get_int(doc, "sdkCompile"), &sdk_compile) &&
             xtc_cache_capability(xjson_get_int(doc, "runtimeLink"), &runtime_link) &&
             xtc_cache_capability(xjson_get_int(doc, "nativeRun"), &native_run) &&
             xtc_cache_capability(xjson_get_int(doc, "cross"), &cross) &&
-            xtc_cache_capability(xjson_get_int(doc, "lto"), &lto);
+            xtc_cache_capability(xjson_get_int(doc, "lto"), &lto) &&
+            xtc_cache_capability(xjson_get_int(doc, "forceInline"), &force_inline) &&
+            xtc_cache_capability(xjson_get_int(doc, "preserveCall"), &preserve_call) &&
+            xtc_cache_capability(xjson_get_int(doc, "valueOpaque"), &value_opaque) &&
+            xtc_cache_capability(xjson_get_int(doc, "compilerFence"), &compiler_fence);
     if (valid) {
         snprintf(result->selection.compiler_fingerprint,
                  sizeof(result->selection.compiler_fingerprint), "%s", compiler_fingerprint);
@@ -145,6 +150,10 @@ XR_FUNC bool xtc_probe_cache_load(const XrToolchainProbeOptions *options,
         result->native_run = native_run;
         result->cross = cross;
         result->lto = lto;
+        result->force_inline = force_inline;
+        result->preserve_call = preserve_call;
+        result->value_opaque = value_opaque;
+        result->compiler_fence = compiler_fence;
         snprintf(result->cache, sizeof(result->cache), "%s", "hit");
         if (hit)
             *hit = true;
@@ -195,7 +204,7 @@ XR_FUNC bool xtc_probe_cache_store(const XrToolchainProbeOptions *options,
         return false;
     }
     XrJsonValue *doc = xjson_new_object();
-    XJSON_SET_INT(doc, "schema", 1);
+    XJSON_SET_INT(doc, "schema", 2);
     XJSON_SET_STRING(doc, "fingerprint", result->selection.probe_fingerprint);
     XJSON_SET_STRING(doc, "provider", xtc_provider_name(result->selection.provider));
     XJSON_SET_STRING(doc, "compilerFingerprint", result->selection.compiler_fingerprint);
@@ -207,6 +216,10 @@ XR_FUNC bool xtc_probe_cache_store(const XrToolchainProbeOptions *options,
     XJSON_SET_INT(doc, "nativeRun", result->native_run);
     XJSON_SET_INT(doc, "cross", result->cross);
     XJSON_SET_INT(doc, "lto", result->lto);
+    XJSON_SET_INT(doc, "forceInline", result->force_inline);
+    XJSON_SET_INT(doc, "preserveCall", result->preserve_call);
+    XJSON_SET_INT(doc, "valueOpaque", result->value_opaque);
+    XJSON_SET_INT(doc, "compilerFence", result->compiler_fence);
     size_t size = 0;
     char *json = xjson_stringify(doc, &size);
     bool ok = json && xtc_cache_write_atomic(path, json, size, err, err_size);
@@ -277,7 +290,7 @@ XR_FUNC bool xtc_probe_cache_list(const char *normalized_target,
         const char *provider = doc ? xjson_get_string(doc, "provider") : NULL;
         const char *fingerprint = doc ? xjson_get_string(doc, "fingerprint") : NULL;
         const char *runtime = doc ? xjson_get_string(doc, "runtimeArtifact") : NULL;
-        if (doc && xjson_is_object(doc) && xjson_get_int(doc, "schema") == 1 && provider &&
+        if (doc && xjson_is_object(doc) && xjson_get_int(doc, "schema") == 2 && provider &&
             fingerprint && runtime) {
             XrToolchainProbeCacheEntry *item = &entries[(*out_count)++];
             memset(item, 0, sizeof(*item));

@@ -59,12 +59,14 @@ fn test_is_prime() {
 @test
 fn test_gcd() {
     fn gcd(a: int, b: int) -> int {
-        while (b != 0) {
-            var temp = b
-            b = a % b
-            a = temp
+        var x = a
+        var y = b
+        while (y != 0) {
+            var temp = y
+            y = x % y
+            x = temp
         }
-        return a
+        return x
     }
     
     assert_eq(gcd(12, 8), 4)
@@ -102,7 +104,7 @@ fn test_binary_search() {
 
 @test
 fn test_bubble_sort() {
-    fn bubbleSort(arr: Array<int>) -> Array<int> {
+    fn bubbleSort(arr: ref Array<int>) {
         var n = len(arr)
         for (i in 0..n) {
             for (j in 0..(n - i - 1)) {
@@ -113,11 +115,10 @@ fn test_bubble_sort() {
                 }
             }
         }
-        return arr
     }
     
     var arr = [64, 34, 25, 12, 22, 11, 90]
-    bubbleSort(arr)
+    bubbleSort(ref arr)
     assert_eq(arr[0], 11)
     assert_eq(arr[6], 90)
 }

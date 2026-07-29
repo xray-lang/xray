@@ -168,6 +168,9 @@ typedef struct XaotBuildOptions {
  * Caller frees the result via xaot_build_result_free(). */
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result);
+/* Produce the same single, compilable translation unit as `xray build
+ * --native --c-only`, including collision-free module-local literal names. */
+XR_FUNC char *xaot_build_result_amalgamate(const XaotBuildResult *result, size_t *out_size);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

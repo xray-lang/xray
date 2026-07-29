@@ -17,10 +17,10 @@ class BoolIntMapBag {
         var sum = 0
         while (r < rounds) {
             if (this.values.containsKey(true)) {
-                sum = sum + this.values.get(true)
+                sum = sum + this.values.get(true)!
             }
             if (this.values.containsKey(false)) {
-                sum = sum + this.values.get(false)
+                sum = sum + this.values.get(false)!
             }
             r = r + 1
         }

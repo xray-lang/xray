@@ -21,16 +21,16 @@ fn grow_outer(p: Outer) -> Outer {
 }
 
 fn sum_buf(p: Buf) -> i32 {
-    return p.data[0] as i32 + p.data[1] as i32 + p.bias
+    return (p.data[0] as i32) + (p.data[1] as i32) + p.bias
 }
 
 fn pick_buf(p: Buf, i: int) -> i32 {
-    return p.data[i] as i32 + p.bias
+    return (p.data[i] as i32) + p.bias
 }
 
 fn patch_buf(p: Buf) -> i32 {
     p.data[1] = 9
-    return p.data[0] as i32 + p.data[1] as i32 + p.bias
+    return (p.data[0] as i32) + (p.data[1] as i32) + p.bias
 }
 
 var outer = Outer{inner: Inner{x: 35}, y: 7}

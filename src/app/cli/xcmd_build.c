@@ -1836,6 +1836,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         probe_options.profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                     ? XR_TOOLCHAIN_PROFILE_FREESTANDING
                                     : XR_TOOLCHAIN_PROFILE_HOSTED;
+        probe_options.required_codegen_capabilities = XR_TOOLCHAIN_CODEGEN_ALL;
         memset(&toolchain_probe, 0, sizeof(toolchain_probe));
         if (!xtc_probe(&probe_options, &toolchain_probe, parse_err, sizeof(parse_err))) {
             fprintf(stderr, "Error: %s\n", parse_err);
@@ -3066,87 +3067,6 @@ static int xaot_write_c_export_header(const XaotBuildResult *result, const char 
     return 0;
 }
 
-/* Per-module C sources intentionally use compact file-static literal names.
- * When --c-only combines those sources into one translation unit, give just
- * those generated identifiers a module ordinal while leaving user string and
- * character contents byte-for-byte unchanged. */
-static void xaot_write_amalgamated_unit(FILE *out, const char *source, int module_ordinal) {
-    enum {
-        XAOT_C_NORMAL = 0,
-        XAOT_C_STRING,
-        XAOT_C_CHAR,
-        XAOT_C_LINE_COMMENT,
-        XAOT_C_BLOCK_COMMENT,
-    } state = XAOT_C_NORMAL;
-    const char *p = source ? source : "";
-    while (*p) {
-        if (state == XAOT_C_NORMAL) {
-            if (p[0] == '/' && p[1] == '/') {
-                fputs("//", out);
-                p += 2;
-                state = XAOT_C_LINE_COMMENT;
-                continue;
-            }
-            if (p[0] == '/' && p[1] == '*') {
-                fputs("/*", out);
-                p += 2;
-                state = XAOT_C_BLOCK_COMMENT;
-                continue;
-            }
-            if (*p == '"') {
-                fputc(*p++, out);
-                state = XAOT_C_STRING;
-                continue;
-            }
-            if (*p == '\'') {
-                fputc(*p++, out);
-                state = XAOT_C_CHAR;
-                continue;
-            }
-            bool token_start = p == source || (!isalnum((unsigned char) p[-1]) && p[-1] != '_');
-            if (token_start && strncmp(p, "_xstr_", 6) == 0 && isdigit((unsigned char) p[6])) {
-                fprintf(out, "_xstr_m%d_", module_ordinal);
-                p += 6;
-                continue;
-            }
-            if (token_start && strncmp(p, "_xbytes_", 8) == 0 && isdigit((unsigned char) p[8])) {
-                fprintf(out, "_xbytes_m%d_", module_ordinal);
-                p += 8;
-                continue;
-            }
-            fputc(*p++, out);
-            continue;
-        }
-        if (state == XAOT_C_STRING || state == XAOT_C_CHAR) {
-            char quote = state == XAOT_C_STRING ? '"' : '\'';
-            if (*p == '\\' && p[1]) {
-                fputc(*p++, out);
-                fputc(*p++, out);
-                continue;
-            }
-            char ch = *p++;
-            fputc(ch, out);
-            if (ch == quote)
-                state = XAOT_C_NORMAL;
-            continue;
-        }
-        if (state == XAOT_C_LINE_COMMENT) {
-            char ch = *p++;
-            fputc(ch, out);
-            if (ch == '\n')
-                state = XAOT_C_NORMAL;
-            continue;
-        }
-        if (p[0] == '*' && p[1] == '/') {
-            fputs("*/", out);
-            p += 2;
-            state = XAOT_C_NORMAL;
-            continue;
-        }
-        fputc(*p++, out);
-    }
-}
-
 static bool xaot_cli_fast_test_build_enabled(void) {
     const char *flag = getenv("XRAY_AOT_FAST_TEST_BUILD");
     return flag && flag[0] && strcmp(flag, "0") != 0;
@@ -3523,37 +3443,19 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
      * runtime headers' include guards; all remaining units then contribute
      * declarations and module-local code only. */
     if (c_only) {
-        FILE *f = fopen(output, "w");
-        if (!f) {
+        size_t amalgamated_size = 0;
+        char *amalgamated = xaot_build_result_amalgamate(&aot_result, &amalgamated_size);
+        FILE *f = amalgamated ? fopen(output, "wb") : NULL;
+        bool write_ok = f && fwrite(amalgamated, 1, amalgamated_size, f) == amalgamated_size;
+        if (f && fclose(f) != 0)
+            write_ok = false;
+        if (!write_ok) {
             fprintf(stderr, "Error: cannot create '%s'\n", output);
+            xr_free(amalgamated);
             xaot_build_result_free(&aot_result);
             return 1;
         }
-        int impl_source = -1;
-        for (int i = 0; i < n_sources; i++) {
-            if (strstr(aot_result.sources[i].c_source, "#define XRT_IMPL")) {
-                impl_source = i;
-                break;
-            }
-        }
-        if (impl_source >= 0) {
-            if (n_sources > 1)
-                fprintf(f, "/* ==== module: %s ==== */\n",
-                        aot_result.sources[impl_source].name ? aot_result.sources[impl_source].name
-                                                             : "?");
-            xaot_write_amalgamated_unit(f, aot_result.sources[impl_source].c_source, impl_source);
-            fputc('\n', f);
-        }
-        for (int i = 0; i < n_sources; i++) {
-            if (i == impl_source)
-                continue;
-            if (n_sources > 1)
-                fprintf(f, "/* ==== module: %s ==== */\n",
-                        aot_result.sources[i].name ? aot_result.sources[i].name : "?");
-            xaot_write_amalgamated_unit(f, aot_result.sources[i].c_source, i);
-            fputc('\n', f);
-        }
-        fclose(f);
+        xr_free(amalgamated);
         printf("Generated: %s\n", output);
         xaot_build_result_free(&aot_result);
         return 0;

@@ -17,7 +17,7 @@ extern "C" {
 }
 
 fn main() {
-    var raw = unsafe { malloc(mem.sizeOf<Header>()) }
+    var raw = unsafe { malloc(mem.sizeOf<Header>() as usize) }
     unsafe {
         mem.withSliceMut<Header>(raw, 1, ref raw, fn(headers: ref Slice<Header>) {
             headers[0].tag = 7

@@ -700,6 +700,42 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
+    (void) prefix;
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    /* Opaque is a typed identity and deliberately has no generic value-plan
+     * rewrite.  Its declaration storage is therefore the authoritative
+     * machine representation; asking only for an optional backend value plan
+     * incorrectly falls back to TAGGED for otherwise native u64/pointer values. */
+    XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+    if (rep == XR_REP_I64) {
+        bool is_unsigned = v->type && xr_type_is_exact_unsigned_integer(v->type);
+        fprintf(out, "%s(", is_unsigned ? "xrt_codegen_opaque_u64"
+                                         : "xrt_codegen_opaque_i64");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
+    if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR) {
+        bool is_mut = v->type && v->type->kind == XR_KIND_POINTER && v->type->ptr_is_mut;
+        fprintf(out, "%s(", is_mut ? "xrt_codegen_opaque_ptr"
+                                    : "xrt_codegen_opaque_const_ptr");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], rep);
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(stderr, "[xi_cgen] ERROR: unsupported codegen.opaque representation at line %u\n",
+            (unsigned) v->line);
+    ctx->error = true;
+    emit_codegen_abort_expr(out);
+}
+
 static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     xicgen_identity(ctx, out, f, v, prefix);
@@ -10925,6 +10961,16 @@ static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_ownership_call: need arg");
     const XiValue *arg = v->args[0];
+    /* ARC cleanups are attached after every value-rewriting pass.  Some of
+     * their semantic owners are compile-time tokens or otherwise have no C
+     * local by design.  Ownership of an unmaterialized value is likewise a C
+     * no-op; emitting vN here would manufacture a forward reference.  Use the
+     * same authoritative predicate as function-scope declaration planning so
+     * ordinary and cold-edge RETAIN/RELEASE stay in lockstep with emission. */
+    if (cg_value_skips_predecl(ctx, f, arg)) {
+        fprintf(out, "((void)0)");
+        return;
+    }
     if (cg_value_plan_is_aggregate(ctx, cg_unwrap_identity_value(arg)) ||
         cg_value_plan_is_vector(ctx, cg_unwrap_identity_value(arg))) {
         fprintf(out, "((void)0)");
@@ -12852,7 +12898,6 @@ static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XrRep dst_rep = cg_rep(v);
@@ -12888,31 +12933,31 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (v->type->kind == XR_KIND_FLOAT) {
         if (dst_rep == XR_REP_TAGGED) {
             fprintf(out, "xrt_to_float(");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ")");
         } else if (src_rep == XR_REP_TAGGED) {
             fprintf(out, "XR_TO_FLOAT(xrt_to_float(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         } else {
             fprintf(out, "(double)");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
         }
     } else if (v->type->kind == XR_KIND_INT) {
         if (dst_rep == XR_REP_TAGGED) {
             fprintf(out, "xrt_to_int(");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ")");
         } else if (src_rep == XR_REP_TAGGED) {
             fprintf(out, "XR_TO_INT(xrt_to_int(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         } else if (src_rep == XR_REP_RAWPTR) {
             fprintf(out, "(int64_t)(uintptr_t)");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
         } else {
             fprintf(out, "(int64_t)");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
         }
     } else if (v->type->kind == XR_KIND_STRING) {
         if (xicgen_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL)) {
@@ -12921,34 +12966,34 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_to_string(");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ")");
         }
     } else if (v->type->kind == XR_KIND_BOOL) {
         if (dst_rep == XR_REP_TAGGED) {
             fprintf(out, "xrt_to_bool(");
-            emit_boxed_value_ref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ")");
         } else if (src_rep == XR_REP_TAGGED) {
             fprintf(out, "XR_TO_INT(xrt_to_bool(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         } else {
             fprintf(out, "(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
             fprintf(out, " != 0)");
         }
     } else if (v->type->kind == XR_KIND_RUNE) {
         /* char(x): tagged XR_TAG_RUNE result, validated Unicode scalar. */
         fprintf(out, "xrt_to_rune(");
-        emit_boxed_value_ref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (v->type->kind == XR_KIND_POINTER) {
         const char *suffix = emit_conversion_prefix(out, v->type, src_rep, dst_rep);
-        emit_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
         emit_conversion_suffix(out, suffix);
     } else {
-        emit_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], dst_rep);
     }
 }
 

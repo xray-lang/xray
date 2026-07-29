@@ -7,8 +7,10 @@
  */
 
 #include "xa_typed_program.h"
+#include "xa_node_table.h"
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
+#include "../parser/xast_nodes.h"
 #include "../../base/xmalloc.h"
 
 struct XaTypedProgram {
@@ -17,6 +19,8 @@ struct XaTypedProgram {
     const struct XgGlobalEvidence *global_evidence;
     uint64_t semantic_revision;
     uint32_t module_id;
+    XaNodeConversionEntry *conversions;
+    uint32_t conversion_count;
     bool verified;
 };
 
@@ -130,6 +134,14 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     program->global_evidence = global_evidence;
     program->semantic_revision = analyzer->semantic_revision;
     program->module_id = module_id;
+    if (!xa_node_table_snapshot_conversions((const XaNodeTable *) analyzer->node_table,
+                                            &program->conversions,
+                                            &program->conversion_count)) {
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
+        result.detail = "conversion snapshot allocation failed (AnalysisResourceFailure)";
+        return result;
+    }
     program->verified = true;
     result.program = program;
     result.reason = XA_TYPED_PROGRAM_REASON_NONE;
@@ -137,6 +149,9 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
 }
 
 void xa_typed_program_free(XaTypedProgram *program) {
+    if (!program)
+        return;
+    xr_free(program->conversions);
     xr_free(program);
 }
 
@@ -174,6 +189,28 @@ const struct XaResolvedCall *xa_typed_program_resolved_call(const XaTypedProgram
     if (!xa_typed_program_is_current(program) || !call_node)
         return NULL;
     return xa_analyzer_get_resolved_call(program->semantics, call_node);
+}
+
+bool xa_typed_program_conversion(const XaTypedProgram *program, const struct AstNode *node,
+                                 XrConversionWitness *out_witness) {
+    if (!xa_typed_program_is_current(program) || !node)
+        return false;
+    uint32_t low = 0;
+    uint32_t high = program->conversion_count;
+    while (low < high) {
+        uint32_t mid = low + (high - low) / 2;
+        const XaNodeConversionEntry *entry = &program->conversions[mid];
+        if (entry->node_id < node->node_id) {
+            low = mid + 1;
+        } else if (entry->node_id > node->node_id) {
+            high = mid;
+        } else {
+            if (out_witness)
+                *out_witness = entry->witness;
+            return true;
+        }
+    }
+    return false;
 }
 
 const XaEffectSummary *xa_typed_program_effect_summary(const XaTypedProgram *program,

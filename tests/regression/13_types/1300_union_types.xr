@@ -59,7 +59,7 @@ fn test_union_types() {
     var n: int | null = 42
     assert_eq(typeName(n), "int")
 
-    // Test 5: numeric promotion preserved (int | float -> float)
+    // Test 5: numeric alternatives remain distinct; the runtime value is float.
     var f: int | float = 3.14
     assert_eq(typeName(f), "float")
 

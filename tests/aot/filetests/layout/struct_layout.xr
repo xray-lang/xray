@@ -7,7 +7,7 @@ struct Pair {
 fn score() -> int {
     var p = Pair{left: 40, right: 2, ok: true}
     if (p.ok) {
-        return p.left + p.right
+        return p.left + (p.right as int)
     }
     return 0
 }

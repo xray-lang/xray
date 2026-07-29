@@ -53,7 +53,7 @@ fn storeCopy(data: Array<int>, holder: ref Holder) {
 }
 
 // === 6. move: transfer ownership ===
-fn takeBytes(data: Array<byte>) -> int {
+fn takeBytes(data: move Array<byte>) -> int {
     return len(data)
 }
 

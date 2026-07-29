@@ -11,14 +11,14 @@ comptime {
 
     var sum = comptime 0
     for (index, value in BYTE_BLOB) {
-        sum += index + value
+        sum += index + (value as int)
     }
     compile_assert(sum == 323, "compact byte blob comptime for-in")
 }
 
 @test
 fn test_comptime_fixed_byte_blob_materialization() {
-    var copied: [byte; 3] = comptime BYTE_BLOB
+    var copied: [byte; 3] = copy(comptime BYTE_BLOB)
     assert_eq(copied[0], 0)
     assert_eq(copied[1], 65)
     assert_eq(copied[2], 255)

@@ -117,6 +117,10 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_PAR_MAP;
         case XA_INTRINSIC_LOWERING_PAR_REDUCE:
             return XI_PAR_REDUCE;
+        case XA_INTRINSIC_LOWERING_CODEGEN_OPAQUE:
+            return XI_CODEGEN_OPAQUE;
+        case XA_INTRINSIC_LOWERING_CODEGEN_COMPILER_FENCE:
+            return XI_CODEGEN_COMPILER_FENCE;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -210,7 +214,11 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                                    value->nargs == 1;
     bool lowered_parallel_arity = desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
                                   value->nargs >= (expected == XI_PAR_FOR ? 4u : 5u);
+    bool lowered_codegen_arity =
+        desc->family == XA_INTRINSIC_FAMILY_CODEGEN && value->nargs >= desc->min_arity &&
+        value->nargs <= desc->max_arity;
     if (!backend_static_arity && !backend_encoded_shuffle && !lowered_parallel_arity &&
+        !lowered_codegen_arity &&
         (value->nargs < min_nargs || value->nargs > max_nargs))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
@@ -279,6 +287,17 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
         if (expected_aux == XI_AUX_KIND_NONE || value->aux_kind != expected_aux || !value->aux)
             return set_error(error, error_size,
                              "canonical parallel intrinsic id %u has invalid lowering contract",
+                             value->xa_intrinsic_id);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_CODEGEN) {
+        if (value->op == XI_CODEGEN_OPAQUE &&
+            (!value->args || !value->args[0] || !value->type || !value->args[0]->type ||
+             !xr_type_equals(value->type, value->args[0]->type)))
+            return set_error(error, error_size,
+                             "canonical codegen intrinsic id %u is not type preserving",
+                             value->xa_intrinsic_id);
+        if (value->aux || value->aux_int != 0)
+            return set_error(error, error_size,
+                             "canonical codegen intrinsic id %u has unexpected metadata",
                              value->xa_intrinsic_id);
     } else {
         return set_error(error, error_size, "canonical intrinsic id %u has unsupported family %u",

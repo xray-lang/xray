@@ -8,7 +8,7 @@ extern "C" {
 }
 
 fn main() {
-    var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>()) }
+    var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>() as usize) }
     unsafe {
         mem.withSliceMut<ImportedNativeSize>(raw, 1, ref raw,
             fn(values: ref Slice<ImportedNativeSize>) {

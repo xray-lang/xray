@@ -38,7 +38,7 @@ class IntMapBag {
         var sum = 0
         while (i < n) {
             if (this.values.containsKey(i)) {
-                sum = sum + this.values.get(i)
+                sum = sum + this.values.get(i)!
             }
             i = i + 1
         }

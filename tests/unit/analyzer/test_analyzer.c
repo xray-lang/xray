@@ -209,6 +209,16 @@ TEST(type_union) {
     XrType *t_int2 = xr_type_new_int(NULL);
     XrType *same = xr_type_union(g_isolate, t_int, t_int2);
     ASSERT(XR_TYPE_IS_INT(same));
+
+    // Numeric unions preserve the source-level alternatives.  Converting
+    // int to float is explicit and union construction must not reintroduce
+    // the removed implicit promotion rule.
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *numeric = xr_type_union(g_isolate, t_int, t_float);
+    ASSERT(XR_TYPE_IS_UNION(numeric));
+    ASSERT(xr_type_union_count(numeric) == 2);
+    ASSERT(xr_type_union_contains(numeric, XR_KIND_INT));
+    ASSERT(xr_type_union_contains(numeric, XR_KIND_FLOAT));
 }
 
 TEST(type_error_recovery) {
@@ -1620,6 +1630,52 @@ TEST(analyzer_inferred_effects_accept_function_values) {
     xa_analyzer_get_diagnostics(a, &diagnostic_count);
     ASSERT(diagnostic_count == 0);
     check_throw_effect_consistency(a, "increment", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    AstNode *program = xr_parse(
+        g_session,
+        "import codegen\n"
+        "fn guarded(value: u64, pointer: Ptr<byte>) -> u64 {\n"
+        "  var hidden = codegen.opaque(value)\n"
+        "  var samePointer = codegen.opaque(pointer)\n"
+        "  codegen.compilerFence()\n"
+        "  return hidden\n"
+        "}\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "codegen_controls_positive.xr", program);
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+    const XaEffectSummary *effects = analyzer_function_effect_summary(a, "guarded");
+    const XaMemoryEffectSummary *memory = analyzer_function_memory_effect_summary(a, "guarded");
+    const XaAllocationSummary *allocation = analyzer_function_allocation_summary(a, "guarded");
+    ASSERT(effects != NULL && effects->semantic_effects == 0);
+    ASSERT(memory != NULL && xa_memory_effect_summary_is_complete(memory) &&
+           memory->root_count == 0);
+    ASSERT(allocation != NULL && allocation->state == XA_ALLOC_PROVEN_NONE);
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session,
+                       "import codegen\n"
+                       "var text = codegen.opaque(\"x\")\n"
+                       "var floating = codegen.opaque(1.25)\n"
+                       "var truth = codegen.opaque(true)\n"
+                       "var aggregate = codegen.opaque([1, 2])\n"
+                       "var nullable: u64? = null\n"
+                       "var maybe = codegen.opaque(nullable)\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "codegen_controls_negative.xr", program);
+    ASSERT(analyzer_diag_contains(a, "codegen.opaque accepts only non-null integer scalars"));
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count >= 5);
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -5808,6 +5864,25 @@ TEST(analyzer_operator_and_index_failures_use_error_recovery) {
     setup_pool();
 }
 
+TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "fn value() -> int? { return 7 }\n"
+                                           "var a = value() == 7\n"
+                                           "var b = -7 == value()\n"
+                                           "var c = value() != null\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "nullable_numeric_equality.xr", program);
+
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_non_callable_failure_uses_error_recovery) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -6222,6 +6297,7 @@ int main(void) {
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
     RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
+    RUN_TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed);
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
@@ -6294,6 +6370,7 @@ int main(void) {
     RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);
+    RUN_TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context);
     RUN_TEST(analyzer_non_callable_failure_uses_error_recovery);
     RUN_TEST(analyzer_container_recovery_rejects_poisoned_success_types);
     RUN_TEST(analyzer_weak_containers_use_identity_keys);

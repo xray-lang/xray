@@ -1032,6 +1032,25 @@ TEST(dce_keeps_side_effects) {
     xi_func_free(f);
 }
 
+TEST(codegen_opaque_blocks_constant_folding_and_fence_survives_dce) {
+    XiFunc *f = make_func("codegen_controls", &stub_int);
+    XiBlock *blk = f->entry;
+    XiValue *constant = xi_const_int(f, blk, 42, &stub_int);
+    XiValue *opaque = xi_value_new(f, blk, XI_CODEGEN_OPAQUE, &stub_int, 1);
+    opaque->args[0] = constant;
+    XiValue *fence = xi_value_new(f, blk, XI_CODEGEN_COMPILER_FENCE, &stub_void, 0);
+    xi_block_set_return(blk, opaque);
+
+    xi_opt_const_fold(f);
+    xi_opt_dce(f);
+
+    assert(opaque->op == XI_CODEGEN_OPAQUE &&
+           "constant folding must not replace opacity with its known input");
+    assert(fence->op == XI_CODEGEN_COMPILER_FENCE &&
+           "the scheduling barrier must survive dead-code elimination");
+    xi_func_free(f);
+}
+
 TEST(dce_cascading) {
     /* a = 1; b = a + 2; (b unused) -> both removed */
     XiFunc *f = make_func("test", &stub_int);
@@ -1964,6 +1983,7 @@ int main(void) {
     /* Dead code elimination */
     run_dce_removes_unused();
     run_dce_keeps_side_effects();
+    run_codegen_opaque_blocks_constant_folding_and_fence_survives_dce();
     run_dce_cascading();
 
     /* Phi simplification */

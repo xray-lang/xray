@@ -3,7 +3,7 @@ fn denseLookup() -> int {
     var seen: Set<int> = #[0, 1, 2, 3, 4]
     var fromIndex = scores[2]
     var viaGet = scores.get(4)
-    var total = fromIndex + viaGet
+    var total = fromIndex + viaGet!
     if (scores.containsKey(3)) {
         if (seen.contains(1)) {
             return total

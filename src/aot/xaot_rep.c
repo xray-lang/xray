@@ -260,6 +260,8 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
         return call_bound_raw_view_rep(value);
     if (value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
         return value_rep_make(value->type, XAOT_REP_TAGGED);
+    if (value->op == XI_CODEGEN_OPAQUE)
+        return xaot_value_rep_for_type(value->type);
     if (rep_from_native_name(xi_generated_op_result_native_type(value->op), &rep))
         return value_rep_make(value->type, rep);
     if (value->op == XI_WIDEN_F32)

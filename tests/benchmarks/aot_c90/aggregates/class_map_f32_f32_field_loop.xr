@@ -9,7 +9,7 @@ class FloatMapBag {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.set(i + 0.5, i * 0.25 + 1.0)
+            this.values.set((i as f32) + 0.5, (i as f32) * 0.25 + 1.0)
             i = i + 1
         }
         return len(this.values)
@@ -21,9 +21,9 @@ class FloatMapBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                var key = i + 0.5
+                var key: f32 = (i as f32) + 0.5
                 if (this.values.containsKey(key)) {
-                    sum = sum + this.values.get(key)
+                    sum = sum + this.values.get(key)!
                 }
                 i = i + 1
             }
@@ -36,7 +36,7 @@ class FloatMapBag {
 fn class_map_f32_f32_field_loop_run(n: int, rounds: int) -> float {
     var bag = FloatMapBag()
     var count = bag.fill(n)
-    return bag.scan(n, rounds) + count
+    return bag.scan(n, rounds) + (count as float)
 }
 
 print(class_map_f32_f32_field_loop_run(64, 5000))

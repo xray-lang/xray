@@ -62,6 +62,7 @@ static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *cal
                                                AstNode *arg_node, int slot, XrParamMode mode);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
+static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *object);
 static bool xa_type_is_pod_span_elem(XrType *type);
 static bool xa_type_layout_has_flexible_tail(const XrType *type);
 
@@ -262,6 +263,18 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
         intrinsic_id = xa_intrinsic_compiler_receiver_method(
             receiver_type,
             callee && callee->type == AST_MEMBER_ACCESS ? callee->as.member_access.name : NULL);
+    if (intrinsic_id == XA_INTRINSIC_NONE && callee && callee->type == AST_MEMBER_ACCESS) {
+        const char *module_name = xa_call_object_module_name(ctx, callee->as.member_access.object);
+        const char *member_name = callee->as.member_access.name;
+        if (module_name && member_name && module_name[0] != '.' && module_name[0] != '/') {
+            char key[192];
+            int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
+            const XaIntrinsicDesc *desc =
+                key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+            if (desc)
+                intrinsic_id = desc->id;
+        }
+    }
     if (intrinsic_id == XA_INTRINSIC_NONE && (!target || target->is_builtin))
         intrinsic_id = xa_builtin_receiver_intrinsic_id(receiver_type, callee);
     if (intrinsic_id == XA_INTRINSIC_NONE)
@@ -277,6 +290,48 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
     xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
                                &resolved);
     return xa_analyzer_get_resolved_call(ctx->analyzer, node);
+}
+
+static bool xa_codegen_opaque_type_supported(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    if (type->kind == XR_KIND_POINTER)
+        return true;
+    if (type->kind != XR_KIND_INT)
+        return false;
+    switch ((XrNativeType) type->scalar_rep) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void xa_check_codegen_intrinsic_call(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                            const XaIntrinsicDesc *desc) {
+    if (!ctx || !ctx->analyzer || !node || !call || !desc ||
+        desc->id != XA_INTRINSIC_CODEGEN_OPAQUE || call->arg_count != 1 || !call->arguments[0])
+        return;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
+    if (xa_codegen_opaque_type_supported(type))
+        return;
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = call->arguments[0]->line,
+                      .column = call->arguments[0]->column};
+    xa_analyzer_add_diagnostic(
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+        "codegen.opaque accepts only non-null integer scalars and Ptr<T>/MutPtr<T>; "
+        "aggregate, managed, floating-point, boolean, rune, and nullable values are rejected",
+        &loc);
 }
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
@@ -2334,16 +2389,21 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
 
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
                                      const char *module_name) {
-    if (!ctx || !ctx->analyzer || !object || object->type != AST_VARIABLE || !module_name)
-        return false;
+    const char *actual = xa_call_object_module_name(ctx, object);
+    return actual && module_name && strcmp(actual, module_name) == 0;
+}
+
+static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *object) {
+    if (!ctx || !ctx->analyzer || !object || object->type != AST_VARIABLE)
+        return NULL;
     const char *name = object->as.variable.name;
     if (!name)
-        return false;
+        return NULL;
     XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
     if (!sym || sym->kind != XA_SYM_MODULE)
-        return false;
+        return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    return links && links->module_name && strcmp(links->module_name, module_name) == 0;
+    return links ? links->module_name : NULL;
 }
 
 static bool xa_runtime_module_call_matches(XaInferContext *ctx, CallExprNode *call,
@@ -5194,7 +5254,7 @@ static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNo
     if (!member)
         return NULL;
     if (strcmp(member, "abs") == 0 && arg_count == 1 && xa_all_args_are_int(arg_types, 1))
-        return xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+        return xr_type_new_int(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
     if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count == 0)
         return xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
     if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) &&
@@ -5951,7 +6011,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
+    xa_check_codegen_intrinsic_call(ctx, node, call, intrinsic_desc);
     xa_check_intrinsic_shuffle_lanes(ctx, node, call, intrinsic_desc);
+    if (intrinsic_desc && intrinsic_desc->id == XA_INTRINSIC_CODEGEN_OPAQUE &&
+        call->arg_count == 1 && call->arguments[0]) {
+        /* The compiler intrinsic is definitionally type-preserving.  Resolve it
+         * before generic-call recovery paths so a rebuilt imported stdlib graph
+         * cannot turn Ptr<T> into an error merely because its source-level T
+         * declaration is no longer the same type-parameter object. */
+        XrType *opaque_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
+        return opaque_type ? opaque_type : xr_type_new_error(ctx->analyzer->isolate);
+    }
 
     if (payload_variant) {
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
@@ -6323,6 +6393,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * slot per element of the source tuple. Each slot is checked
      * against the next parameter; non-tuple spread sources contribute
      * zero slots (the diagnostic was already emitted above). */
+    const char *math_member = xa_math_call_member(ctx, call, fn_links);
+    bool math_preserves_numeric_shape =
+        math_member && (strcmp(math_member, "abs") == 0 || strcmp(math_member, "min") == 0 ||
+                        strcmp(math_member, "max") == 0 || strcmp(math_member, "clamp") == 0);
+    bool math_first_arg_seen = false;
+    bool math_int_shape = false;
     int slot = 0;
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg_node = call->arguments[i];
@@ -6415,7 +6491,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                          effective_arg_types, slot, param_type);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
-        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
+        if (math_preserves_numeric_shape && !math_first_arg_seen) {
+            ctx->expected_type = NULL;
+        } else if (math_preserves_numeric_shape && math_int_shape) {
+            ctx->expected_type = xr_type_new_int(ctx->analyzer->isolate);
+        } else if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
         }
         if (xa_call_is_copy_builtin(call) && slot == 0)
@@ -6428,6 +6508,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                             access, param_mode);
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
+        if (math_preserves_numeric_shape && !math_first_arg_seen) {
+            math_first_arg_seen = true;
+            math_int_shape = arg_type && XR_TYPE_IS_INT(arg_type);
+        }
+        if (math_preserves_numeric_shape && math_int_shape)
+            param_type = xr_type_new_int(ctx->analyzer->isolate);
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
         xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,

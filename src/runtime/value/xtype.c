@@ -907,8 +907,6 @@ static void union_sort_by_kind(XrType **members, int count) {
 // Returns final count. If any member is `any`, returns -1 (caller should return any).
 static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nullable) {
     bool has_null = false;
-    bool has_int = false;
-    bool has_float = false;
     int out_count = 0;
 
     for (int i = 0; i < in_count; i++) {
@@ -924,11 +922,6 @@ static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nu
         if (t->is_nullable) {
             has_null = true;
         }
-        if (XR_TYPE_IS_INT(t))
-            has_int = true;
-        if (XR_TYPE_IS_FLOAT(t))
-            has_float = true;
-
         // Dedup by xr_type_equals
         bool dup = false;
         for (int j = 0; j < out_count; j++) {
@@ -939,17 +932,6 @@ static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nu
         }
         if (!dup && out_count < XR_UNION_MAX_MEMBERS * 2)
             out[out_count++] = t;
-    }
-
-    // Numeric promotion: int | float -> keep float only
-    if (has_int && has_float) {
-        for (int i = 0; i < out_count; i++) {
-            if (XR_TYPE_IS_INT(out[i])) {
-                out[i] = out[out_count - 1];
-                out_count--;
-                i--;
-            }
-        }
     }
 
     *out_nullable = has_null;
@@ -1030,7 +1012,7 @@ XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count) {
 }
 
 // Merge two types into a union (or apply special rules).
-// Type union rules: int|float->float, T|null->T?
+// Numeric members remain distinct; only T|null receives nullable sugar.
 XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b) {
     if (!a)
         return b;
@@ -1051,12 +1033,6 @@ XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b) {
     if (XR_TYPE_IS_NEVER(a))
         return b;
     if (XR_TYPE_IS_NEVER(b))
-        return a;
-
-    // Numeric promotion: int | float -> float
-    if (XR_TYPE_IS_INT(a) && XR_TYPE_IS_FLOAT(b))
-        return b;
-    if (XR_TYPE_IS_FLOAT(a) && XR_TYPE_IS_INT(b))
         return a;
 
     // T | null = T? (nullable shortcut)

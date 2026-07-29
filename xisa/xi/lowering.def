@@ -43,6 +43,18 @@
   :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
   :aot-c (driver xicgen_target_simd_runtime_selected))
 
+(lower xi.codegen.opaque
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver emit_codegen_opaque)
+  :aot-c (driver xicgen_codegen_opaque))
+
+(lower xi.codegen.compiler-fence
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver emit_codegen_compiler_fence)
+  :aot-c-stmt (driver xicgen_stmt_codegen_compiler_fence))
+
 (lower xi.copy
   :match ()
   :required-targets (vm-bytecode aot-c)

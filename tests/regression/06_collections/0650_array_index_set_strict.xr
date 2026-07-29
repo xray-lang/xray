@@ -4,7 +4,7 @@
 //   - negative indexes never wrap from the end (that is slice-only).
 // Every out-of-range assignment raises E0430 (array index out of range).
 
-fn set_at(xs: Array<int>, i: int, v: int) -> int {
+fn set_at(xs: ref Array<int>, i: int, v: int) -> int {
     // Returns the panic code on out-of-range assignment, or -1 on success.
     try {
         xs[i] = v
@@ -25,14 +25,14 @@ fn test_index_set_strict() {
     assert_eq(len(a), 3)
 
     // Assignment at exactly length is out of bounds (no append).
-    assert_eq(set_at(a, 3, 9), 430)
+    assert_eq(set_at(ref a, 3, 9), 430)
     assert_eq(len(a), 3)
 
     // Beyond length is out of bounds (no sparse growth).
-    assert_eq(set_at(a, 10, 9), 430)
+    assert_eq(set_at(ref a, 10, 9), 430)
     assert_eq(len(a), 3)
 
     // Negative index does not wrap from the end.
-    assert_eq(set_at(a, -1, 9), 430)
+    assert_eq(set_at(ref a, -1, 9), 430)
     assert_eq(a[2], 30)
 }

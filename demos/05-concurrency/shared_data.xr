@@ -43,7 +43,7 @@ ch.close()
 
 // === Rule 3: Explicit copy or move ===
 // Crossing a go boundary requires copy(...), move of an owned source, or shared identity.
-fn processData(data: Array<int>) {
+fn processData(data: move Array<int>) {
     // This is a separate copy — mutations don't affect the original
     data.push(999)
     print("child sees: ${data}")

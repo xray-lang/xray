@@ -25,7 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef XR_OS_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -39,12 +41,32 @@ static const char xtc_probe_minimal_c[] = "int main(void) { return 0; }\n";
 static const char xtc_probe_sdk_c[] =
     "#include \"xray.h\"\n"
     "#include \"xrt_core_freestanding.h\"\n"
-    "int xray_cgen_dialect_probe(void) { return ({ int value = 0; value; }); }\n"
+    "typedef struct XtcDialectPair { int first; int second; } XtcDialectPair;\n"
+    "static XtcDialectPair xtc_pair(int value) {\n"
+    "  return (XtcDialectPair){ value, value + 1 };\n"
+    "}\n"
+    "int xray_cgen_dialect_probe(void) {\n"
+    "  XtcDialectPair pair = xtc_pair(0);\n"
+    "  int expression_value = ({ int local = pair.second; local; });\n"
+    "  goto done;\n"
+    "done:\n"
+    "  return pair.first + expression_value - 1;\n"
+    "}\n"
     "int xray_sdk_probe(void) { return XRAY_VERSION_MAJOR >= 0 && sizeof(XrValue) > 0 "
     "? xray_cgen_dialect_probe() : 1; }\n";
 static const char xtc_probe_freestanding_sdk_c[] =
     "#include \"xrt_core_freestanding.h\"\n"
-    "int xray_cgen_dialect_probe(void) { return ({ int value = 0; value; }); }\n"
+    "typedef struct XtcDialectPair { int first; int second; } XtcDialectPair;\n"
+    "static XtcDialectPair xtc_pair(int value) {\n"
+    "  return (XtcDialectPair){ value, value + 1 };\n"
+    "}\n"
+    "int xray_cgen_dialect_probe(void) {\n"
+    "  XtcDialectPair pair = xtc_pair(0);\n"
+    "  int expression_value = ({ int local = pair.second; local; });\n"
+    "  goto done;\n"
+    "done:\n"
+    "  return pair.first + expression_value - 1;\n"
+    "}\n"
     "int xray_sdk_probe(void) { return sizeof(XrValue) > 0 ? xray_cgen_dialect_probe() : 1; }\n";
 static const char xtc_probe_runtime_c[] =
     "#include <stddef.h>\n"
@@ -53,6 +75,44 @@ static const char xtc_probe_runtime_c[] =
     "extern void xr_config_init(void *);\n"
     "int main(void) { uint8_t out[32]; xr_config_init((void *)0); "
     "xr_sha256((const uint8_t *)\"a\", 1, out); return out[0] == 0xca ? 0 : 1; }\n";
+static const char xtc_probe_force_inline_c[] =
+    "#if defined(_MSC_VER)\n"
+    "#define XTC_FORCE_INLINE __forceinline\n"
+    "#else\n"
+    "#define XTC_FORCE_INLINE __attribute__((always_inline)) inline\n"
+    "#endif\n"
+    "static XTC_FORCE_INLINE int plus_one(int value) { return value + 1; }\n"
+    "int main(void) { return plus_one(0) != 1; }\n";
+static const char xtc_probe_preserve_call_c[] =
+    "#if defined(_MSC_VER)\n"
+    "#define XTC_PRESERVE_CALL __declspec(noinline)\n"
+    "#else\n"
+    "#define XTC_PRESERVE_CALL __attribute__((noinline))\n"
+    "#endif\n"
+    "static XTC_PRESERVE_CALL int plus_one(int value) { return value + 1; }\n"
+    "int main(void) { return plus_one(0) != 1; }\n";
+static const char xtc_probe_value_opaque_c[] =
+    "#include <stdint.h>\n"
+    "static int64_t opaque(int64_t value) {\n"
+    "#if defined(__GNUC__) || defined(__clang__)\n"
+    "  __asm__ __volatile__(\"\" : \"+r\"(value));\n"
+    "#else\n"
+    "#error provider_has_no_register_opacity_construct\n"
+    "#endif\n"
+    "  return value;\n"
+    "}\n"
+    "int main(void) { return opaque(7) != 7; }\n";
+static const char xtc_probe_compiler_fence_c[] =
+    "#if defined(_MSC_VER)\n"
+    "#include <intrin.h>\n"
+    "#pragma intrinsic(_ReadWriteBarrier)\n"
+    "static void fence(void) { _ReadWriteBarrier(); }\n"
+    "#elif defined(__GNUC__) || defined(__clang__)\n"
+    "static void fence(void) { __asm__ __volatile__(\"\" ::: \"memory\"); }\n"
+    "#else\n"
+    "#error provider_has_no_compiler_fence_construct\n"
+    "#endif\n"
+    "int main(void) { fence(); return 0; }\n";
 
 #define XTC_PROBE_COMPILE_TIMEOUT_MS 30000u
 #define XTC_PROBE_CROSS_ZIG_TIMEOUT_MS 60000u
@@ -206,6 +266,39 @@ static bool xtc_probe_command_init(const XrToolchainSelection *selection, XtcPro
     return xtc_command_emit_driver(selection, &selection->target, &sink, detail, detail_size);
 }
 
+static bool xtc_probe_line_has_token(const char *line, size_t line_len, const char *token) {
+    size_t token_len = strlen(token);
+    if (!line || token_len == 0 || line_len < token_len)
+        return false;
+    for (size_t i = 0; i + token_len <= line_len; i++)
+        if (strncmp(line + i, token, token_len) == 0)
+            return true;
+    return false;
+}
+
+static void xtc_probe_select_diagnostic_line(const char *output, const char **selected,
+                                             size_t *selected_len) {
+    *selected = output;
+    *selected_len = output ? strcspn(output, "\r\n") : 0;
+    const char *line = output;
+    for (unsigned inspected = 0; line && *line && inspected < 12; inspected++) {
+        size_t len = strcspn(line, "\r\n");
+        if (xtc_probe_line_has_token(line, len, "error") ||
+            xtc_probe_line_has_token(line, len, "fatal")) {
+            const char *stable = line;
+            for (size_t i = 0; i < len; i++)
+                if (line[i] == '/' || line[i] == '\\')
+                    stable = line + i + 1;
+            *selected = stable;
+            *selected_len = len - (size_t) (stable - line);
+            return;
+        }
+        line += len;
+        while (*line == '\r' || *line == '\n')
+            line++;
+    }
+}
+
 static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process, char *detail,
                                   size_t detail_size) {
     char process_err[256];
@@ -220,11 +313,13 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
     if (process->exit_code != 0) {
         const char *output = process->stderr_data && process->stderr_data[0] ? process->stderr_data
                                                                              : process->stdout_data;
-        size_t len = output ? strcspn(output, "\r\n") : 0;
+        const char *diagnostic = NULL;
+        size_t len = 0;
+        xtc_probe_select_diagnostic_line(output, &diagnostic, &len);
         if (len > detail_size - 1)
             len = detail_size - 1;
         if (len > 0) {
-            xtc_process_redact_output(output, len, detail, detail_size);
+            xtc_process_redact_output(diagnostic, len, detail, detail_size);
         } else {
             snprintf(detail, detail_size, "process exited with status %d", process->exit_code);
         }
@@ -452,8 +547,8 @@ static void xtc_probe_fingerprint(const XrToolchainProbeOptions *options,
     char identity[4096];
     int written = snprintf(
         identity, sizeof(identity),
-        "xtc-probe-v2|xray=%s|build=%s|provider=%s|compiler=%s|size=%llu|mtime=%lld|version=%s|"
-        "target=%s|sdk=%s|runtime=%s|systemSdk=%s|profile=%s|noRun=%d|"
+        "xtc-probe-v5|xray=%s|build=%s|provider=%s|compiler=%s|size=%llu|mtime=%lld|version=%s|"
+        "target=%s|sdk=%s|runtime=%s|systemSdk=%s|profile=%s|noRun=%d|requiredCodegen=0x%x|"
         "options=semantic-v1|PATH=%s|SDKROOT=%s",
         XRAY_VERSION_STRING, XRAY_BUILD_COMMIT, xtc_provider_name(result->selection.provider),
         result->selection.program ? result->selection.program : "",
@@ -461,6 +556,7 @@ static void xtc_probe_fingerprint(const XrToolchainProbeOptions *options,
         result->selection.version, result->selection.target.name, result->runtime.sdk_digest,
         result->selection.runtime_artifact, result->selection.system_sdk,
         xtc_profile_name(options->profile), options->no_run ? 1 : 0,
+        options->required_codegen_capabilities,
         getenv("PATH") ? getenv("PATH") : "", getenv("SDKROOT") ? getenv("SDKROOT") : "");
     if (written < 0 || (size_t) written >= sizeof(identity))
         identity[0] = '\0';
@@ -568,8 +664,11 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     char runtime_source[1300] = {0};
     char runtime_object[1300] = {0};
     char runtime_executable[1300] = {0};
-    const char *cleanup_files[] = {minimal_source, minimal_object, sdk_source,        sdk_object,
-                                   lto_object,     runtime_source, runtime_object,    runtime_executable};
+    char codegen_source[1300] = {0};
+    char codegen_object[1300] = {0};
+    const char *cleanup_files[] = {minimal_source, minimal_object, sdk_source, sdk_object,
+                                   lto_object, runtime_source, runtime_object, runtime_executable,
+                                   codegen_source, codegen_object};
 
     memset(result, 0, sizeof(*result));
     snprintf(result->cache, sizeof(result->cache), "%s", "miss");
@@ -624,11 +723,11 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         return false;
     }
 
-    /* The provider-normalized target owns a native Windows runtime ABI. Zig
-     * therefore selects windows-gnu for both `native` and the explicit host
-     * GNU spelling. A true cross-target probe may borrow the installed host
-     * manifest only for SDK header identity; its minimal link never consumes
-     * those runtime archives, and runtime-dependent cross builds fail closed. */
+    /* Native probing preserves the target ABI selected before provider
+     * discovery, including windows-msvc when Zig is the fallback. A true
+     * cross-target probe may borrow a provider-native host manifest only for
+     * SDK header identity; its minimal link never consumes those runtime
+     * archives, and runtime-dependent cross builds fail closed. */
     XrToolchainTarget sdk_target = result->selection.target;
     bool exact_runtime_target = options->request.target.is_native;
 #ifdef XR_OS_WINDOWS
@@ -693,6 +792,8 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         !xtc_probe_join(lto_object, sizeof(lto_object), temp_dir, "lto.o") ||
         !xtc_probe_join(runtime_source, sizeof(runtime_source), temp_dir, "runtime.c") ||
         !xtc_probe_join(runtime_object, sizeof(runtime_object), temp_dir, "runtime.o") ||
+        !xtc_probe_join(codegen_source, sizeof(codegen_source), temp_dir, "codegen.c") ||
+        !xtc_probe_join(codegen_object, sizeof(codegen_object), temp_dir, "codegen.o") ||
         !xtc_probe_join(runtime_executable, sizeof(runtime_executable), temp_dir,
                         options->request.target.os == XR_TOOLCHAIN_TARGET_OS_WINDOWS ? "runtime.exe"
                                                                                      : "runtime")) {
@@ -731,6 +832,47 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     }
     result->sdk_compile = XR_TOOLCHAIN_CAPABILITY_OK;
     result->selection.readiness = XR_TOOLCHAIN_SDK_COMPILE_OK;
+
+#define XTC_PROBE_CODEGEN_CAP(field, source_text)                                                   \
+    do {                                                                                           \
+        if (!xtc_probe_write_file(codegen_source, (source_text))) {                               \
+            result->field = XR_TOOLCHAIN_CAPABILITY_FAILED;                                       \
+        } else if (xtc_probe_compile(&result->selection, codegen_source, codegen_object, NULL,     \
+                                     false, false, detail, sizeof(detail))) {                       \
+            result->field = XR_TOOLCHAIN_CAPABILITY_OK;                                           \
+        } else {                                                                                   \
+            result->field = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;                                  \
+        }                                                                                          \
+        (void) xr_fs_remove(codegen_object);                                                       \
+    } while (0)
+    XTC_PROBE_CODEGEN_CAP(force_inline, xtc_probe_force_inline_c);
+    XTC_PROBE_CODEGEN_CAP(preserve_call, xtc_probe_preserve_call_c);
+    XTC_PROBE_CODEGEN_CAP(value_opaque, xtc_probe_value_opaque_c);
+    XTC_PROBE_CODEGEN_CAP(compiler_fence, xtc_probe_compiler_fence_c);
+#undef XTC_PROBE_CODEGEN_CAP
+    uint32_t missing_codegen = 0;
+    if (result->force_inline != XR_TOOLCHAIN_CAPABILITY_OK)
+        missing_codegen |= XR_TOOLCHAIN_CODEGEN_FORCE_INLINE;
+    if (result->preserve_call != XR_TOOLCHAIN_CAPABILITY_OK)
+        missing_codegen |= XR_TOOLCHAIN_CODEGEN_PRESERVE_CALL;
+    if (result->value_opaque != XR_TOOLCHAIN_CAPABILITY_OK)
+        missing_codegen |= XR_TOOLCHAIN_CODEGEN_VALUE_OPAQUE;
+    if (result->compiler_fence != XR_TOOLCHAIN_CAPABILITY_OK)
+        missing_codegen |= XR_TOOLCHAIN_CODEGEN_COMPILER_FENCE;
+    missing_codegen &= options->required_codegen_capabilities;
+    if (missing_codegen != 0) {
+        result->selection.reason = XR_TOOLCHAIN_REASON_CODEGEN_CAPABILITY_UNSUPPORTED;
+        snprintf(detail, sizeof(detail),
+                 "provider lacks required native code-shape capabilities 0x%x "
+                 "(forceInline=%s preserveCall=%s valueOpaque=%s compilerFence=%s)",
+                 missing_codegen,
+                 xtc_capability_state_name(result->force_inline),
+                 xtc_capability_state_name(result->preserve_call),
+                 xtc_capability_state_name(result->value_opaque),
+                 xtc_capability_state_name(result->compiler_fence));
+        xtc_probe_add_diagnostic(result, result->selection.reason, "codegen-capability", detail);
+        goto failed;
+    }
 
     if (options->profile == XR_TOOLCHAIN_PROFILE_FREESTANDING) {
         result->runtime_link = XR_TOOLCHAIN_CAPABILITY_SKIPPED;
@@ -833,6 +975,25 @@ XR_FUNC bool xtc_probe(const XrToolchainProbeOptions *options, XrToolchainProbeR
         if (ready) {
             *out = candidate_result;
             out->selection.program = out->selection.program_storage;
+            if (i > 0 && have_best) {
+                const char *rejected_detail =
+                    best.diagnostic_count > 0
+                        ? best.diagnostics[best.diagnostic_count - 1].message
+                        : xtc_reason_code_name(best.selection.reason);
+                char fallback_detail[512];
+                snprintf(fallback_detail, sizeof(fallback_detail),
+                         "provider '%s' did not satisfy the generated-C contract (%.*s); "
+                         "selected '%s' with the same target ABI",
+                         xtc_provider_name(best.selection.provider), 260,
+                         rejected_detail ? rejected_detail : "unknown reason",
+                         xtc_provider_name(out->selection.provider));
+                xtc_probe_add_diagnostic(
+                    out,
+                    best.selection.reason == XR_TOOLCHAIN_REASON_NONE
+                        ? XR_TOOLCHAIN_REASON_COMPILE_PROBE_FAILED
+                        : best.selection.reason,
+                    "fallback", fallback_detail);
+            }
             return true;
         }
         if (!have_best || candidate_result.selection.readiness > best.selection.readiness) {

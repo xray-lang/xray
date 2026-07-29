@@ -13,5 +13,5 @@ fn test_fixed_array_local_length_index_and_set() {
 }
 
 fn first_fixed_array_lane(key: [byte; 4]) -> int {
-    return key[0]
+    return key[0] as int
 }

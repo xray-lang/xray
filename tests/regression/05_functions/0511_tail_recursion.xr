@@ -248,7 +248,7 @@ fn test_method_cross_tail() {
 // ===== Static method tail recursion (top-level class) =====
 class MathUtil {
     static factorial(n: int, acc: int) -> float {
-        if (n <= 1) { return acc }
+        if (n <= 1) { return acc as float }
         return MathUtil.factorial(n - 1, n * acc)
     }
     static countdown(n: int) -> string {

@@ -110,17 +110,17 @@ fn test_array_last() {
 
 @test
 fn test_array_swap_elements() {
-    fn swapElements<T>(arr: Array<T>, i: int, j: int) {
-        var temp = arr[i]
-        arr[i] = arr[j]
+    fn swapElements<T>(arr: ref Array<T>, i: int, j: int) {
+        var temp = copy(arr[i])
+        arr[i] = copy(arr[j])
         arr[j] = temp
     }
     var nums = [1, 2, 3]
-    swapElements(nums, 0, 2)
+    swapElements(ref nums, 0, 2)
     assert_eq(nums[0], 3)
     assert_eq(nums[2], 1)
     var strs = ["a", "b", "c"]
-    swapElements(strs, 0, 1)
+    swapElements(ref strs, 0, 1)
     assert_eq(strs[0], "b")
     assert_eq(strs[1], "a")
 }

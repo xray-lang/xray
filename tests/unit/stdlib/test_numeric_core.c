@@ -106,6 +106,20 @@ TEST(numeric_conversion_integer_matrix_is_bit_defined) {
     ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
                        -1, XR_NATIVE_ISIZE, XR_NATIVE_USIZE, 64)),
                    UINT64_MAX);
+
+    /* Target-sized conversions use the requested ABI width, never host sizeof(void *). */
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
+                       xr_numeric_i64_from_bits(UINT64_C(0xffffffff80000000)), XR_NATIVE_U64,
+                       XR_NATIVE_ISIZE, 32)),
+                   UINT64_C(0xffffffff80000000));
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
+                       xr_numeric_i64_from_bits(UINT64_C(0x100000000)), XR_NATIVE_U64,
+                       XR_NATIVE_USIZE, 32)),
+                   0);
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(xr_numeric_int_convert_i64(
+                       xr_numeric_i64_from_bits(UINT64_C(0x100000000)), XR_NATIVE_U64,
+                       XR_NATIVE_USIZE, 64)),
+                   UINT64_C(0x100000000));
 }
 
 TEST(numeric_conversion_integer_to_float_is_round_to_even) {

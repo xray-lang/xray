@@ -67,6 +67,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 30
 
+// codegen module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
+    {"opaque", XLSP_SYM_FUNCTION, "fn(value: T): T", "", NULL, 0},
+    {"compilerFence", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_CODEGEN_SYMBOL_COUNT 2
+
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
     {"crc32", XLSP_SYM_FUNCTION, "fn(data: string): int", "Compute CRC-32 checksum", NULL, 0},
@@ -310,8 +317,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
-    {"compilerGuard", XLSP_SYM_FUNCTION, "fn(value: u64): u64", "Return value unchanged while creating a best-effort native compiler scheduling barrier", NULL, 0},
-    {"compilerOpaque", XLSP_SYM_FUNCTION, "fn(value: u64): u64", "Return value unchanged while hiding its concrete bits from native constant propagation; not a memory barrier", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
     {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
@@ -344,7 +349,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 35
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 33
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
@@ -735,6 +740,7 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"Coro", "Coro standard library module", g_xlsp_stdlib_coro_symbols, GEN_XLSP_STDLIB_CORO_SYMBOL_COUNT},
     {"base64", "base64 standard library module", g_xlsp_stdlib_base64_symbols, GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT},
     {"cluster", "cluster standard library module", g_xlsp_stdlib_cluster_symbols, GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT},
+    {"codegen", "codegen standard library module", g_xlsp_stdlib_codegen_symbols, GEN_XLSP_STDLIB_CODEGEN_SYMBOL_COUNT},
     {"compress", "compress standard library module", g_xlsp_stdlib_compress_symbols, GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT},
     {"crypto", "crypto standard library module", g_xlsp_stdlib_crypto_symbols, GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT},
     {"csv", "csv standard library module", g_xlsp_stdlib_csv_symbols, GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT},

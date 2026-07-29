@@ -296,3 +296,49 @@ bool xa_node_table_get_conversion(const XaNodeTable *t, const struct AstNode *no
         *out_witness = e->conversion;
     return true;
 }
+
+static int compare_node_conversion_entry(const void *left, const void *right) {
+    const XaNodeConversionEntry *a = (const XaNodeConversionEntry *) left;
+    const XaNodeConversionEntry *b = (const XaNodeConversionEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_conversions(const XaNodeTable *t,
+                                        XaNodeConversionEntry **out_entries,
+                                        uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (entry->has_conversion)
+                count++;
+        }
+    }
+    if (count == 0)
+        return true;
+
+    XaNodeConversionEntry *entries =
+        (XaNodeConversionEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_conversion)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].witness = entry->conversion;
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_conversion_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}

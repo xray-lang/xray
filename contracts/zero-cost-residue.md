@@ -1,13 +1,11 @@
 # Zero-cost residue contract
 
-Status: re-frozen after fixed-width x86 SIMD values became first-class CGen
-expressions across module-isolated feature islands. Explicitly source-inlined
-cross-module vector wrappers retain their native force-inline contract in a
-static SIMD build. Runtime-dispatch wrappers remain baseline and call separate
-feature-attributed leaves, while generated target attributes and the W1-W4
-verifier remain mandatory. The xxHash KAT, source/generated-C/assembly shape
-gates, and focused CGen fixtures were rerun; residue categories and allowance
-semantics are unchanged.
+Status: re-frozen after Task 245 introduced a small semantic-neutral native
+code-shape control layer. Ordinary optimization remains automatic and inferred;
+source controls never assert zero cost, effects, allocation, safety, ownership,
+linkage, or ABI. A request may alter one native shape dimension, while typed
+verification assets determine whether the requested stage was actually
+reached. Residue categories and allowance semantics are unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -34,6 +32,13 @@ unchecked memory access, borrowed view, or bounded copy with an `XR_ASSUME`
 precondition and an audit marker. Safe calls remain checked unless ordinary AOT
 proof removes only a redundant branch.
 
+The header-inline provider adapters for `codegen.opaque` and
+`codegen.compilerFence` are likewise not R1 runtime-helper residue. Their Xi
+nodes must lower without boxing, heap allocation, error edges, or hosted runtime
+objects. `opaque` preserves the exact integer/pointer type and provenance while
+blocking exact-value propagation; `compilerFence` is a compiler scheduling
+barrier, not a hardware or synchronization fence.
+
 Small external-linkage leaf bodies may carry a force-inline hint so native LTO
 can specialize a cross-module caller. A fixed-width vector wrapper explicitly
 marked `@inline` keeps that contract in a static SIMD build, where caller and
@@ -48,15 +53,18 @@ local stack aggregates.
 The default allowance set is empty. A backend contract may name explicit
 categories in its typed `shape.allow` list; unknown names are rejected.
 Allowances are narrow, reviewable semantic exemptions, not pattern-based
-suppression. Source code has no production performance annotation and cannot
-change code generation by asserting a desired result. Category definitions,
-scanner boundaries, allowance semantics, and the post-CGen measurement point
-are frozen. A change migrates shape filetests and all ports that cite the
-affected category.
+suppression. Ordinary code cannot unlock optimization by asserting a desired
+performance result. The only public shape requests are `@inline`, `@noinline`,
+`codegen.opaque`, and `codegen.compilerFence`; each is semantic-neutral,
+provider-aware, and independently explainable. `xray verify --contract` checks
+their lowered/realized evidence but never enables or rewrites them. Category
+definitions, scanner boundaries, allowance semantics, and the post-CGen
+measurement point are frozen. A change migrates shape filetests and all ports
+that cite the affected category.
 
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c 2e04ccc774c8d28cb2356b1dd5bd5a97c476d4fc513bf46f217dd12ed95de40c
+anchor-sha256: src/aot/xi_cgen.c 64706974b4b11ab4114d9f9c740c5034e004359f8eb74a7cfb022f4d55e6fb1c
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
-anchor-sha256: src/app/cli/xcmd_verify.c f890d8419073137ec0bdc74595c555d3ffaf7bbb866a1b1432337e5e7df66fd2
+anchor-sha256: src/app/cli/xcmd_verify.c ca9b1e734649830c52da8060b0bba68afffb031257cd8aaf75208f277b5fc153

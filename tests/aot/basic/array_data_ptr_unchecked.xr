@@ -5,7 +5,7 @@ fn fill(out: ref Array<byte>, src: ref Array<byte>) -> int {
         var sp = src.ptr()
         p.copyFromNonOverlapping(sp, 4)
     }
-    return out[2]
+    return out[2] as int
 }
 
 var src = Array<byte>(4)

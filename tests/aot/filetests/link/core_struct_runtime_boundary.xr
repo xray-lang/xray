@@ -20,7 +20,7 @@ fn sample_score() -> int {
     s.x = s.x + 1
     s.b = s.b + 1
     if (s.ok) {
-        return s.x + s.b
+        return s.x + (s.b as int)
     }
     return 0
 }
@@ -30,9 +30,9 @@ fn fixed_layout_score() -> int {
     p.x = p.x + 2
 
     var b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
-    b.p.x = b.p.x + b.tag
+    b.p.x = b.p.x + (b.tag as i32)
 
-    return p.x + p.y + b.p.x + b.p.y + b.tag
+    return p.x + p.y + b.p.x + b.p.y + (b.tag as i32)
 }
 
 print(sample_score())

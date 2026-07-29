@@ -83,6 +83,40 @@ TEST(reanalysis_invalidates_old_snapshot) {
     xr_program_destroy(first);
 }
 
+TEST(conversion_snapshot_is_owned_and_immutable) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program = parse_and_analyze(analyzer, "conversion.xr", "var value = 42\n");
+    ASSERT_NOT_NULL(program);
+
+    XrConversionWitness original = {
+        .kind = XR_CONVERSION_LOSSLESS_WIDEN,
+        .source_scalar_rep = XR_NATIVE_U8,
+        .target_scalar_rep = XR_NATIVE_U64,
+        .is_implicit = true,
+    };
+    xa_analyzer_set_node_conversion(analyzer, program, &original);
+    XaTypedProgramPublishResult result = xa_typed_program_publish(analyzer, program, NULL, 0);
+    ASSERT_NOT_NULL(result.program);
+
+    XrConversionWitness replacement = {
+        .kind = XR_CONVERSION_EXPLICIT_TRUNCATE,
+        .source_scalar_rep = XR_NATIVE_U64,
+        .target_scalar_rep = XR_NATIVE_U8,
+    };
+    xa_analyzer_set_node_conversion(analyzer, program, &replacement);
+
+    XrConversionWitness published = {0};
+    ASSERT_TRUE(xa_typed_program_conversion(result.program, program, &published));
+    ASSERT_EQ_INT(published.kind, original.kind);
+    ASSERT_EQ_INT(published.source_scalar_rep, original.source_scalar_rep);
+    ASSERT_EQ_INT(published.target_scalar_rep, original.target_scalar_rep);
+    ASSERT_TRUE(published.is_implicit);
+
+    xa_typed_program_free(result.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 TEST(error_diagnostic_blocks_publication) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(analyzer, "error.xr", "var value = 42\n");
@@ -107,6 +141,7 @@ setup();
 RUN_TEST_SUITE("typed program publication");
 RUN_TEST(publishes_verified_current_snapshot);
 RUN_TEST(reanalysis_invalidates_old_snapshot);
+RUN_TEST(conversion_snapshot_is_owned_and_immutable);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();
 TEST_MAIN_END()

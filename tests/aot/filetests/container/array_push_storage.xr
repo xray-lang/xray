@@ -5,4 +5,4 @@ fn write_bytes(out: ref Array<byte>) {
 
 var out: Array<byte> = Array.withCapacity(2)
 write_bytes(ref out)
-print(len(out) + out[0] + out[1])
+print(len(out) + (out[0] as int) + (out[1] as int))

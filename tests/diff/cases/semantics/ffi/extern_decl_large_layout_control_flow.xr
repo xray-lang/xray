@@ -29,7 +29,7 @@ fn functionReleaseLike(count: usize) -> usize {
     var released: usize = 0
     var index: usize = 0
     while (index < count) {
-        var block = unsafe { malloc(mem.sizeOf<Task208Function>()) }
+        var block = unsafe { malloc(mem.sizeOf<Task208Function>() as usize) }
         unsafe {
             free(block)
         }
@@ -41,5 +41,5 @@ fn functionReleaseLike(count: usize) -> usize {
 
 const utf8 = b"wasm3"
 print(mem.sizeOf<Task208Function>())
-print(readUtf8Like(unsafe { utf8.ptr() }, len(utf8)))
+print(readUtf8Like(unsafe { utf8.ptr() }, len(utf8) as usize))
 print(functionReleaseLike(5))

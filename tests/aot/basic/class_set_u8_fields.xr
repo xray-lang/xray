@@ -9,7 +9,7 @@ class ByteSetBag implements Lengthable {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.add(i)
+            this.values.add(i as byte)
             i = i + 1
         }
         return len(this.values)
@@ -19,7 +19,7 @@ class ByteSetBag implements Lengthable {
         var i = 0
         var hits = 0
         while (i < n) {
-            if (this.values.contains(i)) {
+            if (this.values.contains(i as byte)) {
                 hits = hits + i
             }
             i = i + 1
@@ -31,7 +31,7 @@ class ByteSetBag implements Lengthable {
         var i = 0
         var removed = 0
         while (i < n) {
-            if (this.values.delete(i)) {
+            if (this.values.delete(i as byte)) {
                 removed = removed + 1
             }
             i = i + 2

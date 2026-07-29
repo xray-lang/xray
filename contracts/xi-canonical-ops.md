@@ -33,5 +33,5 @@ borrowed views instead of accidental owners.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def d7adb59818202606d535943923ccb5f3aefbc3b98ab2e7ac9fe229718dd041de
-anchor-sha256: xisa/xi/lowering.def 3f497bdba9f651908ba7d7e5d500eb82806b0861244638a282b737eb6893fdf9
+anchor-sha256: xisa/xi/ops.def 3c9676f5351ac63aeac0160f9e26a4c4a3bec9ac720426d06e8abe1fa294f30b
+anchor-sha256: xisa/xi/lowering.def e57b4b7cf84e3dadf3e03f39c68279c87b298820cf1cfa5e4b687826d2bc98b0

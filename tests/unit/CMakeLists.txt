@@ -69,9 +69,7 @@ add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
 add_xray_unit_test(test_formatter_comments frontend/test_formatter_comments.c)
 add_xray_unit_test(test_formatter_strings frontend/test_formatter_strings.c)
-if(NOT WIN32)
-    add_xray_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
-endif()
+add_xray_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 add_xray_unit_test(test_xa_typed_program frontend/test_xa_typed_program.c)
@@ -493,8 +491,8 @@ if(XR_BUILD_LSP)
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
 
-    # LSP full-source tests require POSIX pipe/fcntl (not yet ported to Windows)
-    if(NOT WIN32)
+    # The full-source LSP tests exercise the same Windows CRT-pipe adapters as
+    # the production server; keep them enabled on every host.
     add_executable(test_lsp_document
         lsp/test_lsp_document.c
         ${LSP_SOURCES}
@@ -552,7 +550,6 @@ if(XR_BUILD_LSP)
     )
     target_link_libraries(test_lsp_diagnostics PRIVATE xray_core)
     add_test(NAME test_lsp_diagnostics COMMAND test_lsp_diagnostics)
-    endif() # NOT WIN32
 endif()
 
 # ============================================================================
@@ -669,6 +666,18 @@ target_include_directories(test_cli_fs PRIVATE
 target_link_libraries(test_cli_fs PRIVATE xray_core)
 add_test(NAME test_cli_fs COMMAND test_cli_fs)
 
+add_test(NAME test_conversion_inventory
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/tests/unit/api/test_conversion_inventory.py
+        $<TARGET_FILE:xray>
+        ${CMAKE_SOURCE_DIR}/tests/diff/cases/semantics/int/contextual_numeric_conversion.xr
+)
+set_tests_properties(test_conversion_inventory PROPERTIES
+    LABELS "api;cli;analyzer;numeric;task-242"
+    PROCESSORS 1
+    TIMEOUT 30
+)
+
 add_executable(test_cli_spec
     cli/test_cli_spec.c
     ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_spec.c
@@ -737,13 +746,13 @@ set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
 # ============================================================================
 add_test(
     NAME check_xi_invariants
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.sh
+    COMMAND ${XRAY_TEST_BASH} ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.sh
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 add_test(
     NAME check_rc_naming
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_rc_naming.sh
+    COMMAND ${XRAY_TEST_BASH} ${CMAKE_SOURCE_DIR}/scripts/check_rc_naming.sh
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 set_tests_properties(check_rc_naming PROPERTIES

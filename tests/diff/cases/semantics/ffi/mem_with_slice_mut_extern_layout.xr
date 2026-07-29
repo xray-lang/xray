@@ -12,7 +12,7 @@ extern "C" {
 }
 
 fn main() {
-    var raw = unsafe { malloc(mem.sizeOf<Header>()) }
+    var raw = unsafe { malloc(mem.sizeOf<Header>() as usize) }
     var result = unsafe {
         mem.withSliceMut<Header>(raw, 1, ref raw, fn(view: ref Slice<Header>) -> i64 {
             view[0].length = 73

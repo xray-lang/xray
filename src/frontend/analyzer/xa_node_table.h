@@ -41,6 +41,14 @@ struct XaSymbol;
 
 typedef struct XaNodeTable XaNodeTable;
 
+/* Pointer-free conversion fact used when publishing an immutable
+ * XaTypedProgram snapshot.  The snapshot owns the returned array; node_id is
+ * the only syntax identity retained across the analyzer/publication boundary. */
+typedef struct XaNodeConversionEntry {
+    uint32_t node_id;
+    XrConversionWitness witness;
+} XaNodeConversionEntry;
+
 XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);
 
@@ -73,6 +81,13 @@ XR_FUNC void xa_node_table_set_conversion(XaNodeTable *t, const struct AstNode *
                                           const XrConversionWitness *witness);
 XR_FUNC bool xa_node_table_get_conversion(const XaNodeTable *t, const struct AstNode *node,
                                           XrConversionWitness *out_witness);
+
+/* Copy every conversion fact into a deterministic node_id-sorted array.
+ * The caller owns *out_entries and releases it with xr_free().  Empty tables
+ * succeed with a NULL array and zero count; allocation failure returns false. */
+XR_FUNC bool xa_node_table_snapshot_conversions(const XaNodeTable *t,
+                                                XaNodeConversionEntry **out_entries,
+                                                uint32_t *out_count);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.

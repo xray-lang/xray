@@ -8,9 +8,9 @@ fn getFirst<T>(arr: Array<T>) -> T? {
     }
     return null
 }
-fn swap<T>(arr: Array<T>, i: int, j: int) {
-    var temp = arr[i]
-    arr[i] = arr[j]
+fn swap<T>(arr: ref Array<T>, i: int, j: int) {
+    var temp = copy(arr[i])
+    arr[i] = copy(arr[j])
     arr[j] = temp
 }
 fn contains<T>(arr: Array<T>, target: T) -> bool {
@@ -37,7 +37,7 @@ fn test_generic_container() {
     // Generic swap function
 
     var nums = [1, 2, 3]
-    swap(nums, 0, 2)
+    swap(ref nums, 0, 2)
     print(nums)                // [3, 2, 1]
 
     // Generic contains function

@@ -14,4 +14,4 @@ fn readUtf8Like(bytes: Ptr<byte>, length: usize) -> usize {
 }
 
 const utf8 = b"wasm3"
-print(readUtf8Like(unsafe { utf8.ptr() }, len(utf8)))
+print(readUtf8Like(unsafe { utf8.ptr() }, len(utf8) as usize))

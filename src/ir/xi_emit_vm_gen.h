@@ -17,6 +17,8 @@
     X(TARGET_SIMD_BYTES, xi_emit_semantic_intrinsic_call) \
     X(TARGET_SIMD_ACCELERATED, xi_emit_semantic_intrinsic_call) \
     X(TARGET_SIMD_RUNTIME_SELECTED, xi_emit_semantic_intrinsic_call) \
+    X(CODEGEN_OPAQUE, emit_codegen_opaque) \
+    X(CODEGEN_COMPILER_FENCE, emit_codegen_compiler_fence) \
     X(COPY, emit_copy) \
     X(SOURCE_MOVE, xi_emit_move) \
     X(OWNER_FORWARD, xi_emit_move) \

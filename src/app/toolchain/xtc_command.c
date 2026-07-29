@@ -396,6 +396,22 @@ XR_FUNC bool xtc_command_emit_compile_io(XrToolchainProviderId provider, const c
            add(sink, "-o", err, err_size) && add(sink, object, err, err_size);
 }
 
+XR_FUNC bool xtc_command_emit_assembly_io(XrToolchainProviderId provider, const char *source,
+                                          const char *assembly, const char *object,
+                                          XrToolchainArgSink *sink, char *err, size_t err_size) {
+    if (!source || !source[0] || !assembly || !assembly[0])
+        return command_error(err, err_size, "missing native assembly input or output");
+    if (provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
+        if (!object || !object[0])
+            return command_error(err, err_size, "MSVC assembly emission requires an object path");
+        return add(sink, "/c", err, err_size) && add(sink, "/FAs", err, err_size) &&
+               joined(sink, "/Fa", assembly, err, err_size) &&
+               joined(sink, "/Fo", object, err, err_size) && add(sink, source, err, err_size);
+    }
+    return add(sink, "-S", err, err_size) && add(sink, source, err, err_size) &&
+           add(sink, "-o", err, err_size) && add(sink, assembly, err, err_size);
+}
+
 XR_FUNC bool xtc_command_emit_link_output(XrToolchainProviderId provider, const char *output,
                                           XrToolchainArgSink *sink, char *err, size_t err_size) {
     if (provider == XR_TOOLCHAIN_PROVIDER_MSVC)

@@ -13,7 +13,7 @@ fn run(n: int) -> int {
     while (i < n) {
         var key = "user:" + i.toString()
         if (m.containsKey(key)) {
-            sum = sum + m.get(key)
+            sum = sum + m.get(key)!
         }
         i = i + 1
     }

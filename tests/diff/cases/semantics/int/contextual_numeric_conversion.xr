@@ -6,6 +6,11 @@ fn takeU64(value: u64) -> u64 {
     return value
 }
 
+fn optionalInt() -> int? {
+    var value = 0
+    return value
+}
+
 var byteValue: u8 = 255
 var widened: u64 = byteValue
 var mask: u32 = 0x85EBCA77

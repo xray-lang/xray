@@ -3,7 +3,7 @@
 import { Result, Traffic, makeByteArray } from "./modules/generic_result_lib"
 
 fn byteScore(payload: Array<byte>) -> int {
-    return len(payload) + payload[0]
+    return len(payload) + (payload[0] as int)
 }
 
 @test

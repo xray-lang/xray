@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/base/xmalloc.h"
 #include "../test_win_compat.h"
@@ -206,8 +205,8 @@ TEST(ignore_null_safety) {
 
 // Helper: create a temporary directory with a xray.toml file
 static char *create_temp_toml(const char *content) {
-    char template[] = "/tmp/xray_test_XXXXXX";
-    char *tmpdir = mkdtemp(template);
+    char template[] = "xray_lsp_config_XXXXXX";
+    char *tmpdir = xr_test_mkdtemp(template);
     if (!tmpdir)
         return NULL;
 
@@ -234,8 +233,8 @@ static void cleanup_temp_toml(char *dir) {
         return;
     char path[256];
     snprintf(path, sizeof(path), "%s/xray.toml", dir);
-    unlink(path);
-    rmdir(dir);
+    xr_test_unlink(path);
+    xr_test_rmdir(dir);
     xr_free(dir);
 }
 
@@ -337,7 +336,7 @@ TEST(toml_load_no_lsp_section) {
 }
 
 TEST(toml_load_partial_config) {
-    // Only some fields present â€?others should remain at their preset values
+    // Only some fields present â€”others should remain at their preset values
     char *dir = create_temp_toml("[lsp]\n"
                                  "format_tab_size = 8\n");
     ASSERT(dir != NULL);

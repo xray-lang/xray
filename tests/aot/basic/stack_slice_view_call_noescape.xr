@@ -2,7 +2,7 @@ fn readWhileOwnerGrows(view: Slice<byte>, owner: ref Array<byte>) -> int {
     var before = int(view[0])
     var i = 0
     while (i < 4096) {
-        owner.push(i & 0xFF)
+        owner.push((i & 0xFF) as byte)
         i = i + 1
     }
     return before + int(view[0]) + len(view)

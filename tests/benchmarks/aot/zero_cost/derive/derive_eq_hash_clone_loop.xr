@@ -31,7 +31,7 @@ fn run(n: int) -> int {
     while (i < n) {
         var equal = Key(7, "alpha")
         if (values.containsKey(equal)) {
-            sum = sum + values.get(equal)
+            sum = sum + values.get(equal)!
         }
         if (keys.contains(equal)) {
             sum = sum + 1

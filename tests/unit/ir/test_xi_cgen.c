@@ -46,6 +46,7 @@
 static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
+static const char *g_test_filter = NULL;
 
 typedef struct TestAotPlan {
     XaotBundle bundle;
@@ -65,6 +66,8 @@ typedef struct TestAotPlan {
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
+        if (g_test_filter && !strstr(#name, g_test_filter))                                        \
+            return;                                                                                \
         printf("--- " #name " ---\n");                                                             \
         test_##name();                                                                             \
         tests_passed++;                                                                            \
@@ -1817,8 +1820,9 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     TEST_REQUIRE(fn_end != NULL, "manual shared-literal function end emitted");
     TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit("),
                  "a shared string literal must not leave a dead C local");
-    TEST_REQUIRE(contains_between(fn, fn_end, "_xsv = xr_str_lit("),
-                 "the shared-slot ownership handoff must retain the exact string literal");
+    TEST_REQUIRE(
+        contains_between(fn, fn_end, "xrt_array_ref_ensure_owned(xr_str_lit("),
+        "the portable shared-slot ownership handoff must retain the exact string literal");
 
     printf("  Generated immediate shared string literal %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2253,10 +2257,16 @@ TEST(cgen_immediate_scalar_constant_inlines_into_as_cast) {
 
     XiValue *literal = xi_const_int(ir, entry, 64, &int_type);
     TEST_REQUIRE(literal != NULL, "manual const-as literal allocated");
-    XiValue *cast = xi_value_new(ir, entry, XI_AS, &u64_type, 1);
+    XiValue *cast = xi_value_new(ir, entry, XI_CONVERT, &u64_type, 1);
     TEST_REQUIRE(cast != NULL, "manual const-as cast allocated");
     cast->args[0] = literal;
-    cast->aux_int = -2; /* unresolved semantic cast: tid == -1 */
+    cast->conversion = (XrConversionWitness) {
+        .kind = XR_CONVERSION_EXPLICIT_SIGN_CHANGE,
+        .source_scalar_rep = XR_NATIVE_I64,
+        .target_scalar_rep = XR_NATIVE_U64,
+        .is_implicit = false,
+        .is_compile_time = true,
+    };
     xi_block_set_return(entry, cast);
 
     bool had_error = false;
@@ -2268,11 +2278,31 @@ TEST(cgen_immediate_scalar_constant_inlines_into_as_cast) {
     const char *fn_end = strstr(fn, "\n}\n");
     TEST_REQUIRE(fn_end != NULL, "manual const-as function end emitted");
     TEST_REQUIRE(!contains_between(fn, fn_end, "int64_t v0 = INT64_C(64);"),
-                 "literal-aware XI_AS must not require a source constant local");
+                 "literal-aware XI_CONVERT must not require a source constant local");
     TEST_REQUIRE(contains_between(fn, fn_end, "INT64_C(64)"),
-                 "XI_AS result must still contain the exact scalar literal");
+                 "XI_CONVERT result must still contain the exact scalar literal");
 
     printf("  Generated immediate scalar cast %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_dynamic_conversion_inlines_null_literal_without_forward_ref) {
+    const char *source = "fn nullToBool() -> bool { return bool(null) }\n"
+                         "print(nullToBool())\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "null-to-bool source compiled to Xi");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "null-to-bool C generation failed");
+    TEST_REQUIRE(!had_error, "null-to-bool fixture should generate");
+    TEST_REQUIRE(!contains(code, "xrt_to_bool(v"),
+                 "elided null literal must not be referenced through a source C local");
+    TEST_REQUIRE(contains(code, "xrt_to_bool(XR_NULL_VAL)"),
+                 "dynamic conversion must consume the exact null immediate");
+
+    printf("  Generated immediate dynamic conversion %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -3080,7 +3110,7 @@ TEST(cgen_noinline_attribute_preserves_native_boundary) {
             break;
         }
     }
-    TEST_REQUIRE(boundary != NULL && boundary->noinline_hint,
+    TEST_REQUIRE(boundary != NULL && boundary->inline_policy == XI_INLINE_PRESERVE_CALL,
                  "@noinline must survive AST-to-Xi lowering");
 
     bool had_error = false;
@@ -3118,7 +3148,7 @@ TEST(cgen_inline_attribute_forces_native_expansion) {
             break;
         }
     }
-    TEST_REQUIRE(expansion != NULL && expansion->inline_hint,
+    TEST_REQUIRE(expansion != NULL && expansion->inline_policy == XI_INLINE_PREFER,
                  "@inline must survive AST-to-Xi lowering");
 
     bool had_error = false;
@@ -3244,7 +3274,7 @@ TEST(cgen_emits_debug_source_var_slots) {
     const char *src = "fn compute(seed: int) -> int {\n"
                       "    var answer = seed + 1\n"
                       "    var doubled = answer * 2\n"
-                      "    var ratio = doubled / 2.0\n"
+                      "    var ratio = (doubled as f64) / 2.0\n"
                       "    var ok = ratio == 21.0\n"
                       "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
@@ -3365,7 +3395,6 @@ TEST(cgen_struct_field_only_place_loads_are_debug_guarded) {
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
-
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "C code generation failed");
@@ -3702,7 +3731,7 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
                       "    var answer = seed + 1\n"
                       "    Coro.yield()\n"
                       "    var doubled = answer * 2\n"
-                      "    var ratio = doubled / 2.0\n"
+                      "    var ratio = (doubled as f64) / 2.0\n"
                       "    var ok = ratio == 21.0\n"
                       "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
@@ -4357,7 +4386,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
                       "        var value = 42\n"
                       "        bytes.set(0, value as u8)\n"
                       "    }\n"
-                      "    return bytes[0] + len(bytes)\n"
+                      "    return int(bytes[0]) + len(bytes)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -4391,7 +4420,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
     const char *src = "fn first(s: string) -> int {\n"
                       "    var bytes = s.copyBytes()\n"
-                      "    return bytes[0]\n"
+                      "    return int(bytes[0])\n"
                       "}\n"
                       "print(first(\"A\"))\n";
 
@@ -4466,7 +4495,7 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
                       "    var v32: u32 = view.load<u32>(0, Endian.LE)\n"
                       "    var v64: u64 = view.load<u64>(0, Endian.LE)\n"
                       "    view.store<u16>(8, v16, Endian.LE)\n"
-                      "    return int(v16) + int(v32) + int(v64) + dst[5] + dst[9] + prefix\n"
+                      "    return int(v16) + int(v32) + int(v64) + int(dst[5]) + int(dst[9]) + prefix\n"
                       "}\n"
                       "print(run())\n";
 
@@ -5300,7 +5329,7 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
                       "    var u32s: Array<u32> = []\n"
                       "    i16s.push(32767)\n"
                       "    u32s.push(4294967295)\n"
-                      "    return i16s[0] + u32s[0] + len(i16s) + len(u32s)\n"
+                      "    return int(i16s[0]) + int(u32s[0]) + len(i16s) + len(u32s)\n"
                       "}\n"
                       "print(mix())\n";
 
@@ -5340,7 +5369,7 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
                       "    samples.push(1.25)\n"
                       "    flags.push(true)\n"
                       "    if (flags[0]) {\n"
-                      "        return values[0] + samples[0] + len(values)\n"
+                      "        return values[0] + samples[0] + (len(values) as f64)\n"
                       "    }\n"
                       "    return 0.0\n"
                       "}\n"
@@ -5420,7 +5449,7 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
                       "    p.x = p.x + 1\n"
                       "    p.octet = p.octet + 1\n"
                       "    if (p.ok) {\n"
-                      "        return p.x + p.octet\n"
+                      "        return p.x + int(p.octet)\n"
                       "    }\n"
                       "    return 0\n"
                       "}\n"
@@ -5459,7 +5488,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
                       "p.x = p.x + 1\n"
                       "p.octet = p.octet + 1\n"
                       "if (p.ok) {\n"
-                      "    print(p.x + p.octet)\n"
+                      "    print(p.x + int(p.octet))\n"
                       "} else {\n"
                       "    print(0)\n"
                       "}\n"
@@ -5565,7 +5594,7 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
                       "}\n"
                       "var p = CPair{a: 41, b: 1}\n"
                       "p.a = p.a + 1\n"
-                      "print(p.a + p.b)\n";
+                      "print(p.a + (p.b as i32))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -5642,11 +5671,11 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
                       "fn run(n: int) -> int {\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
-                      "        buf.data[0] = i\n"
+                      "        buf.data[0] = i as u8\n"
                       "        buf.data[1] = buf.data[0]\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    return buf.data[1]\n"
+                      "    return int(buf.data[1])\n"
                       "}\n"
                       "print(run(10))\n";
 
@@ -5690,15 +5719,15 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
 
 TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
     const char *src = "fn first(key: [u8; 4]) -> int {\n"
-                      "    return key[0]\n"
+                      "    return int(key[0])\n"
                       "}\n"
                       "fn at(key: [u8; 4], i: int) -> int {\n"
-                      "    return key[i]\n"
+                      "    return int(key[i])\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var key: [u8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
-                      "    return len(key) + first(key) + key[1] + at(key, 2)\n"
+                      "    return len(key) + first(key) + int(key[1]) + at(key, 2)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -5769,7 +5798,7 @@ TEST(cgen_fixed_array_index_ops_elide_boxed_operands) {
     const char *src = "fn run(i: int) -> int {\n"
                       "    var lanes: [u64; 4] = [1, 2, 3, 4]\n"
                       "    lanes[1] = lanes[i]\n"
-                      "    return lanes[1]\n"
+                      "    return lanes[1] as int\n"
                       "}\n"
                       "print(run(2))\n";
 
@@ -6321,7 +6350,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "    fill(n: int) -> int {\n"
                       "        var i = 0\n"
                       "        while (i < n) {\n"
-                      "            this.values.add(i)\n"
+                      "            this.values.add(i as u8)\n"
                       "            i = i + 1\n"
                       "        }\n"
                       "        return len(this.values)\n"
@@ -6330,7 +6359,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        var i = 0\n"
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
-                      "            if (this.values.contains(i)) {\n"
+                      "            if (this.values.contains(i as u8)) {\n"
                       "                hits = hits + i\n"
                       "            }\n"
                       "            i = i + 1\n"
@@ -6341,7 +6370,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        var i = 0\n"
                       "        var removed = 0\n"
                       "        while (i < n) {\n"
-                      "            if (this.values.delete(i)) {\n"
+                      "            if (this.values.delete(i as u8)) {\n"
                       "                removed = removed + 1\n"
                       "            }\n"
                       "            i = i + 2\n"
@@ -6411,7 +6440,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
                       "            if (this.values.containsKey(i)) {\n"
-                      "                hits = hits + this.values.get(i)\n"
+                      "                hits = hits + this.values.get(i)!\n"
                       "            }\n"
                       "            i = i + 1\n"
                       "        }\n"
@@ -6488,16 +6517,16 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
         "this.values.set(false, 2.25); return len(this.values) } "
         "scan() -> float { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
-        "this.values.get(true) }; if (this.values.containsKey(false)) { sum = sum + "
-        "this.values.get(false) "
+        "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
+        "this.values.get(false)! "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
         "len(this.values) }; return 0 }\n"
         "} class IntBag { values: Map<bool, int>\n"
         "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 11); "
         "this.values.set(false, 23); return len(this.values) } "
         "scan() -> int { var sum = 0; if (this.values.containsKey(true)) { sum = sum + "
-        "this.values.get(true) }; if (this.values.containsKey(false)) { sum = sum + "
-        "this.values.get(false) "
+        "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
+        "this.values.get(false)! "
         "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
         "len(this.values) }; return 0 }\n"
         "} var bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
@@ -6703,7 +6732,7 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
                       "    var mid: Slice<u8> = bytes[1:3]\n"
-                      "    return mid[0] + len(mid)\n"
+                      "    return int(mid[0]) + len(mid)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -6801,14 +6830,14 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
                       "    var bytes: Array<u8> = []\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
-                      "        bytes.push(i)\n"
+                      "        bytes.push(i as u8)\n"
                       "        i = i + 1\n"
                       "    }\n"
                       "    var mid: Slice<u8> = bytes[1:n - 1]\n"
                       "    var total = 0\n"
                       "    i = 0\n"
                       "    while (i < len(mid)) {\n"
-                      "        total = total + mid[i]\n"
+                      "        total = total + int(mid[i])\n"
                       "        i = i + 1\n"
                       "    }\n"
                       "    return total\n"
@@ -6912,7 +6941,7 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
                       "    bytes.push(3)\n"
                       "    var kept = bytes.filter(fn(x: u8) -> bool { return x > 1 })\n"
                       "    kept.push(9)\n"
-                      "    return kept[0] + kept[2] + len(kept)\n"
+                      "    return int(kept[0]) + int(kept[2]) + len(kept)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -7720,29 +7749,48 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
     xi_func_free(ir);
 }
 
-TEST(cgen_declared_nothrow_stdlib_call_elides_pending_error_check) {
-    const char *src = "import mem\n"
-                      "fn guarded(value: u64) -> u64 {\n"
-                      "    return mem.compilerGuard(value)\n"
-                      "}\n"
-                      "print(guarded(123))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
+    XrType u64_type = {
+        .kind = XR_KIND_INT, .id = 964, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 965, .frozen = true};
+    XiFunc *ir = xi_func_new("manual_codegen_controls", &u64_type);
+    TEST_REQUIRE(ir != NULL, "manual codegen-controls function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "manual codegen-controls entry allocated");
+    entry->sealed = true;
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    TEST_REQUIRE(ir->params != NULL, "manual codegen-controls parameter table allocated");
+    XiValue *value = xi_param(ir, entry, 0, &u64_type);
+    TEST_REQUIRE(value != NULL, "manual codegen-controls parameter allocated");
+    ir->params[0] = value;
+    XiValue *opaque = xi_value_new(ir, entry, XI_CODEGEN_OPAQUE, &u64_type, 1);
+    XiValue *fence = xi_value_new(ir, entry, XI_CODEGEN_COMPILER_FENCE, &unit_type, 0);
+    TEST_REQUIRE(opaque != NULL && fence != NULL, "manual codegen controls allocated");
+    opaque->args[0] = value;
+    opaque->xa_intrinsic_id = XA_INTRINSIC_CODEGEN_OPAQUE;
+    fence->xa_intrinsic_id = XA_INTRINSIC_CODEGEN_COMPILER_FENCE;
+    xi_block_set_return(entry, opaque);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL && !had_error, "declared nothrow stdlib call should generate");
+    TEST_REQUIRE(code != NULL && !had_error, "codegen controls should generate");
 
-    const char *guarded = find_static_function_definition(code, "test_guarded_");
+    const char *guarded = find_static_function_definition(code, "manual_codegen_controls");
     TEST_REQUIRE(guarded != NULL, "guarded function should be generated");
-    const char *guarded_end = next_static_after(guarded);
-    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_mem_compiler_guard_u64(") == 1,
-                 "compiler guard must use its direct AOT helper");
+    const char *guarded_end = strstr(guarded, "\n}\n");
+    TEST_REQUIRE(guarded_end != NULL, "guarded function end should be generated");
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_codegen_opaque_u64(") == 1,
+                 "opaque must use its typed provider adapter");
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_codegen_compiler_fence()") == 1,
+                 "compilerFence must use its provider scheduling adapter");
+    TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_mem_compiler") == 0,
+                 "removed mem compiler controls must not survive in generated C");
     TEST_REQUIRE(count_between(guarded, guarded_end, "xrt_has_pending_error") == 0,
-                 "declared nothrow stdlib call must not poll the pending-error channel");
+                 "codegen controls must not poll the pending-error channel");
 
-    printf("  Generated declared no-throw stdlib call %zu bytes of C code\n", strlen(code));
+    printf("  Generated first-class codegen controls %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -10625,7 +10673,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
                       "    if (!ok) { return -1 }\n"
                       "    if (queue.isClosed) { return -2 }\n"
                       "    queue.close()\n"
-                      "    return value + len(queue) + queue.shardCount\n"
+                      "    return value! + len(queue) + queue.shardCount\n"
                       "}\n"
                       "print(use_queue())\n";
 
@@ -10771,6 +10819,7 @@ TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
 int main(void) {
     printf("=== Xi CGen Unit Tests ===\n\n");
 
+    g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
 
     run_u64_mul_wide_returns_both_exact_halves();
@@ -10807,6 +10856,7 @@ int main(void) {
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_shared_store_uses_portable_owned_value_helper();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
+    run_cgen_dynamic_conversion_inlines_null_literal_without_forward_ref();
     run_cgen_immediate_scalar_constant_inlines_into_place_store();
     run_cgen_native_signed_i64_constant_emits_immediate_without_local();
     run_cgen_runtime_string_slice_constant_emits_immediate_without_local();
@@ -10939,7 +10989,7 @@ int main(void) {
     run_cgen_unsigned_const_shift_uses_native_op();
     run_cgen_unsigned_arith_uses_native_unsigned_expr();
     run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
-    run_cgen_declared_nothrow_stdlib_call_elides_pending_error_check();
+    run_cgen_codegen_controls_emit_provider_constructs_without_runtime_calls();
     run_cgen_uses_closed_world_effects_for_conservative_direct_call_checks();
     run_cgen_defer_isolates_existing_pending_error();
     run_cgen_err_return_stops_unreachable_tail();

@@ -130,6 +130,9 @@ static bool explain_dump_has_function(const char *dump, const char *subject) {
 }
 
 static bool explain_record_prefix_matches(const char *topic, const char *line, size_t line_len) {
+    if (strcmp(topic, "codegen") == 0)
+        return explain_line_has_prefix(line, line_len, "codegen-control ") ||
+               explain_line_has_prefix(line, line_len, "codegen-edge ");
     if (strcmp(topic, "view") == 0)
         return explain_line_has_prefix(line, line_len, "view-param ") ||
                explain_line_has_prefix(line, line_len, "view-return ") ||
@@ -143,17 +146,64 @@ static bool explain_record_prefix_matches(const char *topic, const char *line, s
     return strcmp(topic, "alias") == 0 && explain_line_has_prefix(line, line_len, "alias ");
 }
 
+static bool explain_codegen_record_matches_subject(const char *subject, const char *line,
+                                                    size_t line_len) {
+    static const char *fields[] = {"function=", "caller=", "callee="};
+    char candidate[256];
+    if (!explain_record_prefix_matches("codegen", line, line_len))
+        return false;
+    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+        if (explain_line_field(line, line_len, fields[i], candidate, sizeof(candidate)) &&
+            explain_symbol_name_matches(subject, candidate))
+            return true;
+    }
+    return false;
+}
+
+static bool explain_dump_has_codegen_subject(const char *dump, const char *subject) {
+    const char *line = dump;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t line_len = end ? (size_t) (end - line) : strlen(line);
+        if (explain_codegen_record_matches_subject(subject, line, line_len))
+            return true;
+        line = end ? end + 1 : NULL;
+    }
+    return false;
+}
+
+static bool explain_codegen_record_seen_before(const char *dump, const char *current,
+                                               size_t current_len) {
+    const char *line = dump;
+    while (line && line < current) {
+        const char *end = strchr(line, '\n');
+        size_t line_len = end ? (size_t) (end - line) : strlen(line);
+        if (line_len == current_len && memcmp(line, current, current_len) == 0)
+            return true;
+        line = end ? end + 1 : NULL;
+    }
+    return false;
+}
+
 static uint32_t explain_print_records(const char *topic, const char *subject, const char *dump) {
     const char *line = dump;
     uint32_t count = 0;
-    const char *field = strcmp(topic, "view") == 0 ? "function=" : "func=";
+    const char *field =
+        strcmp(topic, "view") == 0 || strcmp(topic, "codegen") == 0 ? "function=" : "func=";
     while (line && *line) {
         const char *end = strchr(line, '\n');
         size_t line_len = end ? (size_t) (end - line) : strlen(line);
         char function[256];
-        if (explain_record_prefix_matches(topic, line, line_len) &&
-            explain_line_field(line, line_len, field, function, sizeof(function)) &&
-            explain_symbol_name_matches(subject, function)) {
+        bool matches = strcmp(topic, "codegen") == 0
+                           ? explain_codegen_record_matches_subject(subject, line, line_len)
+                           : explain_record_prefix_matches(topic, line, line_len) &&
+                                 explain_line_field(line, line_len, field, function,
+                                                    sizeof(function)) &&
+                                 explain_symbol_name_matches(subject, function);
+        if (matches && strcmp(topic, "codegen") == 0 &&
+            explain_codegen_record_seen_before(dump, line, line_len))
+            matches = false;
+        if (matches) {
             fwrite(line, 1, line_len, stdout);
             fputc('\n', stdout);
             count++;
@@ -163,7 +213,137 @@ static uint32_t explain_print_records(const char *topic, const char *subject, co
     return count;
 }
 
-static int explain_backend_topic(const char *topic, const char *subject) {
+static void explain_print_json_string(const char *text, size_t len) {
+    fputc('"', stdout);
+    for (size_t i = 0; text && i < len; i++) {
+        unsigned char ch = (unsigned char) text[i];
+        switch (ch) {
+            case '"':
+                fputs("\\\"", stdout);
+                break;
+            case '\\':
+                fputs("\\\\", stdout);
+                break;
+            case '\b':
+                fputs("\\b", stdout);
+                break;
+            case '\f':
+                fputs("\\f", stdout);
+                break;
+            case '\n':
+                fputs("\\n", stdout);
+                break;
+            case '\r':
+                fputs("\\r", stdout);
+                break;
+            case '\t':
+                fputs("\\t", stdout);
+                break;
+            default:
+                if (ch < 0x20)
+                    printf("\\u%04x", (unsigned) ch);
+                else
+                    fputc(ch, stdout);
+                break;
+        }
+    }
+    fputc('"', stdout);
+}
+
+static bool explain_codegen_json_key(const char *key, size_t key_len, const char **json_key,
+                                     bool *is_number) {
+    static const struct {
+        const char *ledger;
+        const char *json;
+        bool number;
+    } fields[] = {
+        {"function", "function", false},
+        {"caller", "caller", false},
+        {"callee", "callee", false},
+        {"kind", "kind", false},
+        {"value", "value", false},
+        {"call", "call", false},
+        {"source-line", "sourceLine", true},
+        {"stage", "stage", false},
+        {"backend", "backend", false},
+        {"provider-capability", "providerCapability", false},
+        {"lowering", "lowering", false},
+        {"reason", "reason", false},
+    };
+    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+        if (strlen(fields[i].ledger) == key_len &&
+            strncmp(key, fields[i].ledger, key_len) == 0) {
+            *json_key = fields[i].json;
+            *is_number = fields[i].number;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void explain_print_codegen_json_record(const char *line, size_t line_len) {
+    const char *end = line + line_len;
+    const char *cursor = (const char *) memchr(line, ' ', line_len);
+    const bool is_edge = explain_line_has_prefix(line, line_len, "codegen-edge ");
+    fputs("{\"type\":", stdout);
+    explain_print_json_string(is_edge ? "edge" : "control", is_edge ? 4 : 7);
+    if (!cursor) {
+        fputc('}', stdout);
+        return;
+    }
+    cursor++;
+    while (cursor < end) {
+        while (cursor < end && *cursor == ' ')
+            cursor++;
+        const char *token_end = cursor;
+        while (token_end < end && *token_end != ' ')
+            token_end++;
+        const char *equal =
+            (const char *) memchr(cursor, '=', (size_t) (token_end - cursor));
+        if (equal) {
+            const char *json_key = NULL;
+            bool is_number = false;
+            if (explain_codegen_json_key(cursor, (size_t) (equal - cursor), &json_key,
+                                         &is_number)) {
+                fputc(',', stdout);
+                explain_print_json_string(json_key, strlen(json_key));
+                fputc(':', stdout);
+                if (is_number) {
+                    fwrite(equal + 1, 1, (size_t) (token_end - equal - 1), stdout);
+                } else {
+                    explain_print_json_string(equal + 1, (size_t) (token_end - equal - 1));
+                }
+            }
+        }
+        cursor = token_end;
+    }
+    fputc('}', stdout);
+}
+
+static uint32_t explain_print_codegen_json(const char *subject, const char *dump) {
+    const char *line = dump;
+    uint32_t count = 0;
+    fputs("{\"schemaVersion\":1,\"topic\":\"codegen\",\"subject\":", stdout);
+    explain_print_json_string(subject, strlen(subject));
+    fputs(",\"records\":[", stdout);
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t line_len = end ? (size_t) (end - line) : strlen(line);
+        if (explain_codegen_record_matches_subject(subject, line, line_len) &&
+            !explain_codegen_record_seen_before(dump, line, line_len)) {
+            if (count)
+                fputc(',', stdout);
+            explain_print_codegen_json_record(line, line_len);
+            count++;
+        }
+        line = end ? end + 1 : NULL;
+    }
+    printf("],\"count\":%u}\n", count);
+    return count;
+}
+
+static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
+                                 const char *subject) {
     char root[XR_CLI_PATH_MAX];
     XrProject *project = NULL;
     char *entry = NULL;
@@ -198,15 +378,23 @@ static int explain_backend_topic(const char *topic, const char *subject) {
         xr_cli_error("explain", "could not build evidence for '%s'", subject);
         goto cleanup;
     }
-    if (!explain_dump_has_function(result.local_evidence_dump, subject)) {
+    if (!explain_dump_has_function(result.local_evidence_dump, subject) &&
+        !(strcmp(topic, "codegen") == 0 &&
+          explain_dump_has_codegen_subject(result.local_evidence_dump, subject))) {
         xr_cli_error("explain", "function '%s' is missing", subject);
         goto cleanup_result;
     }
-    records = strcmp(topic, "view") == 0 ? result.local_evidence_dump : result.plan_dump;
-    printf("%s subject=%s\n", topic, subject);
-    count = explain_print_records(topic, subject, records);
-    if (count == 0)
-        printf("%s-evidence: none\n", topic);
+    records = strcmp(topic, "view") == 0 || strcmp(topic, "codegen") == 0
+                  ? result.local_evidence_dump
+                  : result.plan_dump;
+    if (strcmp(topic, "codegen") == 0 && xr_cli_opt_bool(&inv->options, "json")) {
+        count = explain_print_codegen_json(subject, records);
+    } else {
+        printf("%s subject=%s\n", topic, subject);
+        count = explain_print_records(topic, subject, records);
+        if (count == 0)
+            printf("%s-evidence: none\n", topic);
+    }
     rc = XR_CLI_EXIT_OK;
 
 cleanup_result:
@@ -399,16 +587,17 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv) {
         }
         return explain_effect(input);
     }
-    if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 || strcmp(topic, "alias") == 0) {
+    if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 ||
+        strcmp(topic, "alias") == 0 || strcmp(topic, "codegen") == 0) {
         if (inv->positional_count < 2) {
             xr_cli_error("explain", "%s requires a function symbol", topic);
             return XR_CLI_EXIT_USAGE;
         }
-        return explain_backend_topic(topic, input);
+        return explain_backend_topic(inv, topic, input);
     }
     xr_cli_error("explain",
                  "unknown evidence topic '%s' (expected native, storage, transfer, ownership, "
-                 "view, bounds, alias, effect, or residue)",
+                 "view, bounds, alias, codegen, effect, or residue)",
                  topic);
     return XR_CLI_EXIT_USAGE;
 }

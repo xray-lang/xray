@@ -8,45 +8,43 @@
 //
 // NOTE: This starts a real server. Press Ctrl+C to stop.
 //
-// Handler API: each handler is `fn(req: Json) -> X` and the return value
-// becomes the HTTP response. Supported X shapes:
-//   - string                 -> 200 text/plain
-//   - Json / Map / number    -> 200 application/json (auto-stringified)
-//   - null                   -> 204 No Content
-//   - [status, contentType, body]                -> custom status
-//   - [status, contentType, body, headers: Map]  -> custom status + headers
+// Handler API: each dynamic handler is typed
+// `fn(req: HttpRequest) -> HttpResponse`.
 
 import http
+import { Headers, HttpRequest, HttpResponse } from http
 
 // Simple text response
-http.route("GET", "/", fn(req: Json) -> string {
-    return "Welcome to Xray HTTP Server!"
+http.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
+    return http.textResponse("Welcome to Xray HTTP Server!")
 })
 
-// JSON response (returning a Json object auto-serialises)
-http.route("GET", "/api/hello", fn(req: Json) -> Json {
-    return {
+// JSON response
+http.routeHandler("GET", "/api/hello", fn(req: HttpRequest) -> HttpResponse {
+    return http.jsonResponse({
         message: "Hello from Xray!",
-        method: req.method,
+        method: string(req.method),
         path: req.path
-    }
+    })
 })
 
 // Echo back request body
-http.route("POST", "/api/echo", fn(req: Json) -> Json {
-    var body = req.body ?? ""
-    return { echo: body, length: len(body) }
+http.routeHandler("POST", "/api/echo", fn(req: HttpRequest) -> HttpResponse {
+    var body = req.text()
+    return http.jsonResponse({ echo: body, length: len(body) })
 })
 
 // Dynamic path (query params)
-http.route("GET", "/api/greet", fn(req: Json) -> Json {
-    var name = req.query.name ?? "World"
-    return { greeting: "Hello, ${name}!" }
+http.routeHandler("GET", "/api/greet", fn(req: HttpRequest) -> HttpResponse {
+    var name = req.query.get("name") ?? "World"
+    return http.jsonResponse({ greeting: "Hello, ${name}!" })
 })
 
 // 302 redirect with Location header
-http.route("GET", "/api/redirect", fn(req: Json) -> Array<Json> {
-    return [302, "text/plain", "Redirecting...", #{"Location": "/api/hello"}]
+http.routeHandler("GET", "/api/redirect", fn(req: HttpRequest) -> HttpResponse {
+    var headers = Headers()
+    headers.add("Location", "/api/hello")
+    return http.textResponse("Redirecting...", 302, headers)
 })
 
 print("Server starting on http://localhost:3000")

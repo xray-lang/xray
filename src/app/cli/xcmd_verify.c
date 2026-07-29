@@ -25,7 +25,10 @@
 #include "../../module/xproject.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../toolchain/xtc_shape_oracle.h"
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct VerifyAnalysis {
@@ -62,19 +65,30 @@ static bool verify_table_schema(XrTomlValue *table, const char *label, const cha
 }
 
 static bool verify_contract_schema(XrTomlValue *contract) {
-    static const char *const root_keys[] = {"version", "function"};
+    static const char *const root_keys[] = {"version", "function", "codegen"};
     static const char *const function_keys[] = {"symbol",  "scope",    "backend", "target",
                                                 "profile", "requires", "shape"};
     static const char *const shape_keys[] = {"forbid", "allow"};
+    static const char *const codegen_keys[] = {"control", "edge"};
+    static const char *const control_keys[] = {"subject", "kind", "minimum_stage", "target",
+                                               "provider", "profile"};
+    static const char *const edge_keys[] = {"caller", "callee", "expect", "minimum_stage",
+                                            "target", "provider", "profile"};
     if (!verify_table_schema(contract, "contract", root_keys,
                              sizeof(root_keys) / sizeof(root_keys[0])))
         return false;
     XrTomlValue *functions = xtoml_get_array(contract, "function");
-    if (!functions || xtoml_array_len(functions) == 0) {
-        xr_cli_error("verify", "contract requires at least one [[function]]");
+    XrTomlValue *codegen = xtoml_get_table(contract, "codegen");
+    XrTomlValue *controls = codegen ? xtoml_get_array(codegen, "control") : NULL;
+    XrTomlValue *edges = codegen ? xtoml_get_array(codegen, "edge") : NULL;
+    if ((!functions || xtoml_array_len(functions) == 0) &&
+        (!controls || xtoml_array_len(controls) == 0) &&
+        (!edges || xtoml_array_len(edges) == 0)) {
+        xr_cli_error("verify",
+                     "contract requires [[function]], [[codegen.control]], or [[codegen.edge]]");
         return false;
     }
-    for (int i = 0; i < xtoml_array_len(functions); i++) {
+    for (int i = 0; functions && i < xtoml_array_len(functions); i++) {
         XrTomlValue *item = xtoml_array_get(functions, i);
         if (!verify_table_schema(item, "function", function_keys,
                                  sizeof(function_keys) / sizeof(function_keys[0])))
@@ -94,6 +108,33 @@ static bool verify_contract_schema(XrTomlValue *contract) {
                 xr_cli_error("verify", "function requires must contain only strings");
                 return false;
             }
+        }
+    }
+    if (codegen && !verify_table_schema(codegen, "codegen", codegen_keys,
+                                        sizeof(codegen_keys) / sizeof(codegen_keys[0])))
+        return false;
+    for (int i = 0; controls && i < xtoml_array_len(controls); i++) {
+        XrTomlValue *item = xtoml_array_get(controls, i);
+        if (!verify_table_schema(item, "codegen.control", control_keys,
+                                 sizeof(control_keys) / sizeof(control_keys[0])))
+            return false;
+        if (!xtoml_get_string(item, "subject") || !xtoml_get_string(item, "kind") ||
+            !xtoml_get_string(item, "minimum_stage")) {
+            xr_cli_error("verify",
+                         "codegen.control requires subject, kind, and minimum_stage strings");
+            return false;
+        }
+    }
+    for (int i = 0; edges && i < xtoml_array_len(edges); i++) {
+        XrTomlValue *item = xtoml_array_get(edges, i);
+        if (!verify_table_schema(item, "codegen.edge", edge_keys,
+                                 sizeof(edge_keys) / sizeof(edge_keys[0])))
+            return false;
+        if (!xtoml_get_string(item, "caller") || !xtoml_get_string(item, "callee") ||
+            !xtoml_get_string(item, "expect") || !xtoml_get_string(item, "minimum_stage")) {
+            xr_cli_error("verify",
+                         "codegen.edge requires caller, callee, expect, and minimum_stage strings");
+            return false;
         }
     }
     return true;
@@ -453,6 +494,612 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
     return ok;
 }
 
+static int verify_codegen_stage_rank(const char *stage) {
+    if (stage && strcmp(stage, "requested") == 0)
+        return 0;
+    if (stage && strcmp(stage, "planned") == 0)
+        return 1;
+    if (stage && strcmp(stage, "lowered") == 0)
+        return 2;
+    if (stage && strcmp(stage, "realized") == 0)
+        return 3;
+    return -1;
+}
+
+static bool verify_codegen_line_field(const char *line, size_t line_len, const char *field,
+                                      char *out, size_t out_size) {
+    const char *limit = line + line_len;
+    size_t field_len = strlen(field);
+    const char *match = line;
+    if (!out || out_size < 2)
+        return false;
+    while (match + field_len <= limit) {
+        match = strstr(match, field);
+        if (!match || match + field_len > limit)
+            return false;
+        if (match == line || match[-1] == ' ') {
+            const char *start = match + field_len;
+            const char *end = start;
+            while (end < limit && *end != ' ' && *end != '\t' && *end != '\r')
+                end++;
+            size_t len = (size_t) (end - start);
+            if (len == 0 || len >= out_size)
+                return false;
+            memcpy(out, start, len);
+            out[len] = '\0';
+            return true;
+        }
+        match += field_len;
+    }
+    return false;
+}
+
+static bool verify_codegen_symbol_matches(const char *expected, const char *actual) {
+    return expected && actual &&
+           (strcmp(expected, actual) == 0 ||
+            strcmp(verify_final_component(expected), verify_final_component(actual)) == 0);
+}
+
+static const char *verify_codegen_ledger_kind(const char *contract_kind) {
+    if (!contract_kind)
+        return NULL;
+    if (strcmp(contract_kind, "prefer_inline") == 0 || strcmp(contract_kind, "force_inline") == 0 ||
+        strcmp(contract_kind, "inline") == 0)
+        return "inline";
+    if (strcmp(contract_kind, "preserve_call") == 0 || strcmp(contract_kind, "noinline") == 0)
+        return "noinline";
+    if (strcmp(contract_kind, "value_opaque") == 0 || strcmp(contract_kind, "opaque") == 0)
+        return "opaque";
+    if (strcmp(contract_kind, "compiler_fence") == 0 ||
+        strcmp(contract_kind, "compilerFence") == 0)
+        return "compilerFence";
+    return NULL;
+}
+
+static bool verify_codegen_scope_supported(XrTomlValue *item, const char *label) {
+    const char *minimum_stage = xtoml_get_string(item, "minimum_stage");
+    const char *profile = xtoml_get_string(item, "profile");
+    const char *provider = xtoml_get_string(item, "provider");
+    int minimum_rank = verify_codegen_stage_rank(minimum_stage);
+    if (minimum_rank < 0) {
+        xr_cli_error("verify", "%s has unknown minimum_stage '%s'", label,
+                     minimum_stage ? minimum_stage : "");
+        return false;
+    }
+    if (profile && strcmp(profile, "native") != 0 && strcmp(profile, "hosted") != 0 &&
+        strcmp(profile, "freestanding") != 0 && strcmp(profile, "*") != 0) {
+        xr_cli_error("verify", "%s has unsupported profile '%s'", label, profile);
+        return false;
+    }
+    if (provider && strcmp(provider, "*") != 0) {
+        XrToolchainSelector ignored;
+        char parse_err[128];
+        if (!xtc_selector_parse(provider, &ignored, parse_err, sizeof(parse_err))) {
+            xr_cli_error("verify", "%s has unsupported provider '%s'", label, provider);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool verify_codegen_control(const char *dump, XrTomlValue *item) {
+    const char *subject = xtoml_get_string(item, "subject");
+    const char *contract_kind = xtoml_get_string(item, "kind");
+    const char *ledger_kind = verify_codegen_ledger_kind(contract_kind);
+    char label[512];
+    snprintf(label, sizeof(label), "codegen.control '%s:%s'", subject ? subject : "",
+             contract_kind ? contract_kind : "");
+    if (!ledger_kind) {
+        xr_cli_error("verify", "%s has unknown kind", label);
+        return false;
+    }
+    if (!verify_codegen_scope_supported(item, label))
+        return false;
+    int required_rank = verify_codegen_stage_rank(xtoml_get_string(item, "minimum_stage"));
+    int ledger_rank = required_rank > 2 ? 2 : required_rank;
+    const char *line = dump;
+    unsigned matches = 0;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t len = end ? (size_t) (end - line) : strlen(line);
+        char function[256], kind[64], stage[32];
+        if (len >= 16 && strncmp(line, "codegen-control ", 16) == 0 &&
+            verify_codegen_line_field(line, len, "function=", function, sizeof(function)) &&
+            verify_codegen_line_field(line, len, "kind=", kind, sizeof(kind)) &&
+            verify_codegen_line_field(line, len, "stage=", stage, sizeof(stage)) &&
+            verify_codegen_symbol_matches(subject, function) && strcmp(kind, ledger_kind) == 0 &&
+            verify_codegen_stage_rank(stage) >= ledger_rank)
+            matches++;
+        line = end ? end + 1 : NULL;
+    }
+    if (matches == 0) {
+        xr_cli_error("verify", "%s failed: no canonical control reached minimum stage", label);
+        return false;
+    }
+    printf("verified %s stage=%s matches=%u\n", label,
+           required_rank > 2 ? "lowered (realization pending)"
+                             : xtoml_get_string(item, "minimum_stage"),
+           matches);
+    return true;
+}
+
+static bool verify_codegen_edge(const char *dump, XrTomlValue *item) {
+    const char *caller = xtoml_get_string(item, "caller");
+    const char *callee = xtoml_get_string(item, "callee");
+    const char *expect = xtoml_get_string(item, "expect");
+    char label[600];
+    snprintf(label, sizeof(label), "codegen.edge '%s->%s:%s'", caller ? caller : "",
+             callee ? callee : "", expect ? expect : "");
+    if (!verify_codegen_scope_supported(item, label))
+        return false;
+    bool expects_preserved =
+        expect && (strcmp(expect, "preserved") == 0 || strcmp(expect, "preserve_call") == 0);
+    bool expects_eliminated = expect && strcmp(expect, "eliminated") == 0;
+    int required_rank = verify_codegen_stage_rank(xtoml_get_string(item, "minimum_stage"));
+    if (!expects_preserved && !expects_eliminated) {
+        xr_cli_error("verify", "%s has unknown edge expectation", label);
+        return false;
+    }
+    if (expects_eliminated && required_rank < 3) {
+        xr_cli_error("verify",
+                     "%s cannot be proven before native realization; eliminated edges require "
+                     "the realized object/assembly oracle",
+                     label);
+        return false;
+    }
+    if (expects_eliminated) {
+        printf("verified %s stage=Xi absence (realization pending) matches=0\n", label);
+        return true;
+    }
+    const char *line = dump;
+    unsigned matches = 0;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t len = end ? (size_t) (end - line) : strlen(line);
+        char line_caller[256], line_callee[256], stage[32];
+        if (len >= 13 && strncmp(line, "codegen-edge ", 13) == 0 &&
+            verify_codegen_line_field(line, len, "caller=", line_caller, sizeof(line_caller)) &&
+            verify_codegen_line_field(line, len, "callee=", line_callee, sizeof(line_callee)) &&
+            verify_codegen_line_field(line, len, "stage=", stage, sizeof(stage)) &&
+            verify_codegen_symbol_matches(caller, line_caller) &&
+            verify_codegen_symbol_matches(callee, line_callee) &&
+            verify_codegen_stage_rank(stage) >= (required_rank > 2 ? 2 : required_rank))
+            matches++;
+        line = end ? end + 1 : NULL;
+    }
+    if (matches == 0) {
+        xr_cli_error("verify", "%s failed: no surviving canonical direct edge", label);
+        return false;
+    }
+    printf("verified %s stage=%s matches=%u\n", label,
+           required_rank > 2 ? "lowered (realization pending)"
+                             : xtoml_get_string(item, "minimum_stage"),
+           matches);
+    return true;
+}
+
+typedef struct VerifyRealizedConfig {
+    bool needed;
+    char target[128];
+    char provider[32];
+    char profile[32];
+    uint32_t required_capabilities;
+} VerifyRealizedConfig;
+
+static bool verify_codegen_merge_scope(char *slot, size_t slot_size, const char *value,
+                                       const char *field) {
+    if (!value || !value[0] || strcmp(value, "*") == 0)
+        return true;
+    if (slot[0] && strcmp(slot, value) != 0) {
+        xr_cli_error("verify", "realized codegen contracts mix %s '%s' and '%s'", field, slot,
+                     value);
+        return false;
+    }
+    snprintf(slot, slot_size, "%s", value);
+    return true;
+}
+
+static uint32_t verify_codegen_capability_for_kind(const char *kind) {
+    const char *ledger = verify_codegen_ledger_kind(kind);
+    if (!ledger)
+        return 0;
+    if (strcmp(ledger, "inline") == 0)
+        return XR_TOOLCHAIN_CODEGEN_FORCE_INLINE;
+    if (strcmp(ledger, "noinline") == 0)
+        return XR_TOOLCHAIN_CODEGEN_PRESERVE_CALL;
+    if (strcmp(ledger, "opaque") == 0)
+        return XR_TOOLCHAIN_CODEGEN_VALUE_OPAQUE;
+    if (strcmp(ledger, "compilerFence") == 0)
+        return XR_TOOLCHAIN_CODEGEN_COMPILER_FENCE;
+    return 0;
+}
+
+static bool verify_codegen_realized_config(XrTomlValue *controls, XrTomlValue *edges,
+                                           VerifyRealizedConfig *config) {
+    memset(config, 0, sizeof(*config));
+    for (int group = 0; group < 2; group++) {
+        XrTomlValue *items = group == 0 ? controls : edges;
+        for (int i = 0; items && i < xtoml_array_len(items); i++) {
+            XrTomlValue *item = xtoml_array_get(items, i);
+            if (verify_codegen_stage_rank(xtoml_get_string(item, "minimum_stage")) < 3)
+                continue;
+            config->needed = true;
+            if (!verify_codegen_merge_scope(config->target, sizeof(config->target),
+                                            xtoml_get_string(item, "target"), "target") ||
+                !verify_codegen_merge_scope(config->provider, sizeof(config->provider),
+                                            xtoml_get_string(item, "provider"), "provider") ||
+                !verify_codegen_merge_scope(config->profile, sizeof(config->profile),
+                                            xtoml_get_string(item, "profile"), "profile"))
+                return false;
+            if (group == 0)
+                config->required_capabilities |=
+                    verify_codegen_capability_for_kind(xtoml_get_string(item, "kind"));
+        }
+    }
+    return true;
+}
+
+static bool verify_codegen_ident_char(char ch) {
+    return isalnum((unsigned char) ch) || ch == '_';
+}
+
+static bool verify_codegen_generated_symbol(const char *generated_c, const char *subject,
+                                            char *out, size_t out_size, char *reason,
+                                            size_t reason_size) {
+    const char *component = verify_final_component(subject);
+    size_t component_len = component ? strlen(component) : 0;
+    const char *scan = generated_c;
+    char unique[512] = {0};
+    if (!generated_c || component_len == 0) {
+        snprintf(reason, reason_size, "missing generated C or subject");
+        return false;
+    }
+    while ((scan = strstr(scan, component)) != NULL) {
+        const char *start = scan;
+        const char *end = scan + component_len;
+        while (start > generated_c && verify_codegen_ident_char(start[-1]))
+            start--;
+        while (verify_codegen_ident_char(*end))
+            end++;
+        bool component_boundary = (scan == start || scan[-1] == '_') &&
+                                  (scan[component_len] == '_' ||
+                                   !verify_codegen_ident_char(scan[component_len]));
+        const char *after = end;
+        while (*after == ' ' || *after == '\t')
+            after++;
+        size_t len = (size_t) (end - start);
+        if (component_boundary && *after == '(' && len > component_len && len < sizeof(unique)) {
+            char candidate[512];
+            memcpy(candidate, start, len);
+            candidate[len] = '\0';
+            if (!strstr(candidate, "_cfn") && !strstr(candidate, "_bridge")) {
+                if (!unique[0])
+                    snprintf(unique, sizeof(unique), "%s", candidate);
+                else if (strcmp(unique, candidate) != 0) {
+                    snprintf(reason, reason_size,
+                             "subject maps to multiple generated symbols ('%s', '%s')", unique,
+                             candidate);
+                    return false;
+                }
+            }
+        }
+        scan += component_len;
+    }
+    if (!unique[0]) {
+        snprintf(reason, reason_size, "no unique generated symbol for '%s'", subject);
+        return false;
+    }
+    if (strlen(unique) >= out_size) {
+        snprintf(reason, reason_size, "generated symbol is too long");
+        return false;
+    }
+    snprintf(out, out_size, "%s", unique);
+    return true;
+}
+
+static const char *verify_codegen_line_end(const char *line) {
+    const char *end = strchr(line, '\n');
+    return end ? end : line + strlen(line);
+}
+
+static bool verify_codegen_line_contains_token(const char *line, size_t len, const char *token) {
+    size_t token_len = strlen(token);
+    for (const char *p = line; p + token_len <= line + len; p++) {
+        if (memcmp(p, token, token_len) != 0)
+            continue;
+        bool left = p == line || !verify_codegen_ident_char(p[-1]);
+        bool right = p + token_len == line + len || !verify_codegen_ident_char(p[token_len]);
+        if (left && right)
+            return true;
+    }
+    return false;
+}
+
+static bool verify_codegen_asm_function(const char *assembly, const char *symbol,
+                                        const char **out_start, const char **out_end) {
+    const char *line = assembly;
+    size_t symbol_len = strlen(symbol);
+    while (line && *line) {
+        const char *end = verify_codegen_line_end(line);
+        const char *trim = line;
+        while (trim < end && (*trim == ' ' || *trim == '\t'))
+            trim++;
+        const char *name = trim[0] == '_' ? trim + 1 : trim;
+        bool label = (size_t) (end - name) > symbol_len &&
+                     memcmp(name, symbol, symbol_len) == 0 && name[symbol_len] == ':';
+        bool proc = verify_codegen_line_contains_token(trim, (size_t) (end - trim), symbol) &&
+                    verify_codegen_line_contains_token(trim, (size_t) (end - trim), "PROC");
+        if (label || proc) {
+            const char *body = end < line + strlen(line) ? end + 1 : end;
+            const char *cursor = body;
+            while (cursor && *cursor) {
+                const char *cursor_end = verify_codegen_line_end(cursor);
+                size_t cursor_len = (size_t) (cursor_end - cursor);
+                bool terminal =
+                    verify_codegen_line_contains_token(cursor, cursor_len, ".seh_endproc") ||
+                    verify_codegen_line_contains_token(cursor, cursor_len, ".cfi_endproc") ||
+                    (verify_codegen_line_contains_token(cursor, cursor_len, symbol) &&
+                     verify_codegen_line_contains_token(cursor, cursor_len, "ENDP")) ||
+                    (verify_codegen_line_contains_token(cursor, cursor_len, ".size") &&
+                     verify_codegen_line_contains_token(cursor, cursor_len, symbol));
+                if (terminal) {
+                    *out_start = body;
+                    *out_end = cursor_end;
+                    return true;
+                }
+                cursor = *cursor_end ? cursor_end + 1 : NULL;
+            }
+            *out_start = body;
+            *out_end = assembly + strlen(assembly);
+            return true;
+        }
+        line = *end ? end + 1 : NULL;
+    }
+    return false;
+}
+
+static unsigned verify_codegen_asm_direct_edges(const char *start, const char *end,
+                                                const char *callee) {
+    unsigned matches = 0;
+    const char *line = start;
+    static const char *const mnemonics[] = {"call", "callq", "jmp", "jmpq", "bl", "b"};
+    while (line && line < end) {
+        const char *line_end = strchr(line, '\n');
+        if (!line_end || line_end > end)
+            line_end = end;
+        const char *comment = memchr(line, '#', (size_t) (line_end - line));
+        const char *semicolon = memchr(line, ';', (size_t) (line_end - line));
+        const char *code_end = line_end;
+        if (comment && comment < code_end)
+            code_end = comment;
+        if (semicolon && semicolon < code_end)
+            code_end = semicolon;
+        size_t code_len = (size_t) (code_end - line);
+        bool instruction = false;
+        for (size_t i = 0; i < sizeof(mnemonics) / sizeof(mnemonics[0]); i++)
+            instruction |= verify_codegen_line_contains_token(line, code_len, mnemonics[i]);
+        if (instruction && verify_codegen_line_contains_token(line, code_len, callee))
+            matches++;
+        line = line_end < end ? line_end + 1 : NULL;
+    }
+    return matches;
+}
+
+static unsigned verify_codegen_asm_inbound_edges(const char *assembly, const char *callee) {
+    return verify_codegen_asm_direct_edges(assembly, assembly + strlen(assembly), callee);
+}
+
+static bool verify_codegen_realized_control(const char *generated_c,
+                                            const XrToolchainAssemblyArtifact *artifact,
+                                            XrTomlValue *item) {
+    const char *subject = xtoml_get_string(item, "subject");
+    const char *kind = verify_codegen_ledger_kind(xtoml_get_string(item, "kind"));
+    char symbol[512], reason[768];
+    bool shape_ok = true;
+    unsigned inbound = 0;
+    const char *body_start = NULL, *body_end = NULL;
+    bool has_generated_symbol =
+        strcmp(kind, "inline") != 0 && strcmp(kind, "noinline") != 0
+            ? false
+            : verify_codegen_generated_symbol(generated_c, subject, symbol, sizeof(symbol), reason,
+                                               sizeof(reason));
+    if (strcmp(kind, "noinline") == 0 && !has_generated_symbol) {
+        xr_cli_error("verify", "realized control '%s:%s' failed: %s", subject, kind, reason);
+        return false;
+    }
+    if (strcmp(kind, "inline") == 0 || strcmp(kind, "noinline") == 0) {
+        bool has_body = has_generated_symbol &&
+                        verify_codegen_asm_function(artifact->text, symbol, &body_start, &body_end);
+        inbound = has_generated_symbol ? verify_codegen_asm_inbound_edges(artifact->text, symbol)
+                                       : 0;
+        shape_ok = strcmp(kind, "noinline") == 0 ? (has_body && inbound > 0) : inbound == 0;
+        if (!shape_ok) {
+            xr_cli_error("verify",
+                         "realized control '%s:%s' failed: symbol=%s body=%s inbound-direct=%u",
+                         subject, kind, symbol, has_body ? "present" : "absent", inbound);
+            return false;
+        }
+    }
+    printf("verified codegen.control '%s:%s' stage=realized provider=%s target=%s%s%u\n",
+           subject, kind, xtc_provider_name(artifact->probe.selection.provider),
+           artifact->probe.selection.target.name,
+           strcmp(kind, "inline") == 0 || strcmp(kind, "noinline") == 0
+               ? " inbound-direct="
+               : " provider-capability=ok matches=",
+           inbound);
+    return true;
+}
+
+static bool verify_codegen_realized_edge(const char *generated_c,
+                                         const XrToolchainAssemblyArtifact *artifact,
+                                         XrTomlValue *item) {
+    const char *caller = xtoml_get_string(item, "caller");
+    const char *callee = xtoml_get_string(item, "callee");
+    const char *expect = xtoml_get_string(item, "expect");
+    char caller_symbol[512], callee_symbol[512], reason[768];
+    const char *body_start = NULL, *body_end = NULL;
+    bool preserved = strcmp(expect, "preserved") == 0 || strcmp(expect, "preserve_call") == 0;
+    if (!verify_codegen_generated_symbol(generated_c, caller, caller_symbol, sizeof(caller_symbol),
+                                         reason, sizeof(reason))) {
+        xr_cli_error("verify", "realized edge '%s->%s' failed: %s", caller, callee, reason);
+        return false;
+    }
+    bool has_callee = verify_codegen_generated_symbol(generated_c, callee, callee_symbol,
+                                                       sizeof(callee_symbol), reason,
+                                                       sizeof(reason));
+    if (preserved && !has_callee) {
+        xr_cli_error("verify", "realized edge '%s->%s' failed: %s", caller, callee, reason);
+        return false;
+    }
+    if (!verify_codegen_asm_function(artifact->text, caller_symbol, &body_start, &body_end)) {
+        xr_cli_error("verify", "realized edge '%s->%s' failed: caller symbol '%s' is absent",
+                     caller, callee, caller_symbol);
+        return false;
+    }
+    unsigned matches = has_callee
+                           ? verify_codegen_asm_direct_edges(body_start, body_end, callee_symbol)
+                           : 0;
+    if ((preserved && matches == 0) || (!preserved && matches != 0)) {
+        xr_cli_error("verify",
+                     "realized edge '%s->%s:%s' failed: caller=%s callee=%s direct=%u", caller,
+                     callee, expect, caller_symbol, callee_symbol, matches);
+        return false;
+    }
+    printf("verified codegen.edge '%s->%s:%s' stage=realized provider=%s target=%s direct=%u\n",
+           caller, callee, expect, xtc_provider_name(artifact->probe.selection.provider),
+           artifact->probe.selection.target.name, matches);
+    return true;
+}
+
+static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildResult *result,
+                                   XrTomlValue *controls, XrTomlValue *edges,
+                                   const VerifyRealizedConfig *config, int *failures) {
+    if (!config->needed)
+        return true;
+    XrToolchainProbeOptions options = {0};
+    XrToolchainAssemblyArtifact artifact = {0};
+    char err[1024];
+    const char *target_name = config->target[0] ? config->target : "native";
+    const char *provider_name = config->provider[0] ? config->provider : "auto";
+    const char *profile_name = config->profile[0] ? config->profile : "hosted";
+    if (strcmp(profile_name, "native") == 0)
+        profile_name = "hosted";
+    if (!xtc_target_parse(target_name, &options.request.target, err, sizeof(err)) ||
+        !xtc_selector_parse(provider_name, &options.request.selector, err, sizeof(err)) ||
+        !xtc_profile_parse(profile_name, &options.profile, err, sizeof(err))) {
+        xr_cli_error("verify", "invalid realized provider scope: %s", err);
+        (*failures)++;
+        return false;
+    }
+    options.request.cc = xr_cli_opt_string(&inv->options, "cc", getenv("CC"));
+    options.request.zig = xr_cli_opt_string(&inv->options, "zig", getenv("XRAY_ZIG"));
+    options.request.program_hint = inv->ctx ? inv->ctx->program : NULL;
+    options.refresh = xr_cli_opt_bool(&inv->options, "refresh");
+    options.required_codegen_capabilities = config->required_capabilities;
+    size_t generated_size = 0;
+    char *generated_c = xaot_build_result_amalgamate(result, &generated_size);
+    (void) generated_size;
+    if (!generated_c)
+        snprintf(err, sizeof(err), "cannot create the canonical generated-C realization unit");
+    bool realized_ok = generated_c &&
+                       xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
+    if (!realized_ok && options.request.selector == XR_TOOLCHAIN_SELECTOR_AUTO) {
+        char primary_err[1024];
+        snprintf(primary_err, sizeof(primary_err), "%s", err);
+        xtc_shape_oracle_free(&artifact);
+        options.request.selector = XR_TOOLCHAIN_SELECTOR_ZIG;
+        options.refresh = false;
+        realized_ok =
+            xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
+        if (!realized_ok) {
+            char fallback_err[1024];
+            snprintf(fallback_err, sizeof(fallback_err), "%s", err);
+            snprintf(err, sizeof(err), "primary provider: %.430s; Zig fallback: %.430s",
+                     primary_err, fallback_err);
+        }
+    }
+    if (!realized_ok) {
+        xr_cli_error("verify", "realized object/assembly oracle failed: %s", err);
+        xr_free(generated_c);
+        xtc_shape_oracle_free(&artifact);
+        (*failures)++;
+        return false;
+    }
+    for (int i = 0; controls && i < xtoml_array_len(controls); i++) {
+        XrTomlValue *item = xtoml_array_get(controls, i);
+        if (verify_codegen_stage_rank(xtoml_get_string(item, "minimum_stage")) >= 3 &&
+            !verify_codegen_realized_control(generated_c, &artifact, item))
+            (*failures)++;
+    }
+    for (int i = 0; edges && i < xtoml_array_len(edges); i++) {
+        XrTomlValue *item = xtoml_array_get(edges, i);
+        if (verify_codegen_stage_rank(xtoml_get_string(item, "minimum_stage")) >= 3 &&
+            !verify_codegen_realized_edge(generated_c, &artifact, item))
+            (*failures)++;
+    }
+    printf("realized-oracle probe=%s fingerprint=%s\n", artifact.probe.probe_id,
+           artifact.probe.selection.probe_fingerprint);
+    xr_free(generated_c);
+    xtc_shape_oracle_free(&artifact);
+    return true;
+}
+
+static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAnalysis *state,
+                                     XrTomlValue *controls, XrTomlValue *edges, int *failures) {
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    bool wants_freestanding = false;
+    bool wants_hosted = false;
+    for (int group = 0; group < 2; group++) {
+        XrTomlValue *items = group == 0 ? controls : edges;
+        for (int i = 0; items && i < xtoml_array_len(items); i++) {
+            const char *profile = xtoml_get_string(xtoml_array_get(items, i), "profile");
+            wants_freestanding |= profile && strcmp(profile, "freestanding") == 0;
+            wants_hosted |= !profile || strcmp(profile, "freestanding") != 0;
+        }
+    }
+    if (wants_freestanding && wants_hosted) {
+        xr_cli_error("verify", "codegen contracts cannot mix hosted/native and freestanding profiles");
+        (*failures)++;
+        return false;
+    }
+    if (!xaot_target_init(&target, "native-c90")) {
+        xr_cli_error("verify", "cannot initialize native-c90 codegen contract target");
+        (*failures)++;
+        return false;
+    }
+    options.target = &target;
+    options.native_package_plan = state->project->native_plan;
+    options.profile = wants_freestanding ? XAOT_BUILD_PROFILE_FREESTANDING
+                                         : XAOT_BUILD_PROFILE_HOSTED;
+    options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
+    options.emit_local_evidence_dump = true;
+    options.quiet = true;
+    bool built = xaot_build(state->entry, &options, &result) == 0 && result.local_evidence_dump;
+    if (!built) {
+        xr_cli_error("verify", "could not build canonical codegen evidence");
+        (*failures)++;
+    } else {
+        for (int i = 0; controls && i < xtoml_array_len(controls); i++)
+            if (!verify_codegen_control(result.local_evidence_dump,
+                                        xtoml_array_get(controls, i)))
+                (*failures)++;
+        for (int i = 0; edges && i < xtoml_array_len(edges); i++)
+            if (!verify_codegen_edge(result.local_evidence_dump, xtoml_array_get(edges, i)))
+                (*failures)++;
+        VerifyRealizedConfig realized;
+        if (!verify_codegen_realized_config(controls, edges, &realized)) {
+            (*failures)++;
+        } else {
+            (void) verify_codegen_realize(inv, &result, controls, edges, &realized, failures);
+        }
+    }
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    return built;
+}
+
 XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
     const char *contract_path = xr_cli_opt_string(&inv->options, "contract", NULL);
     size_t size = 0;
@@ -473,6 +1120,9 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_USAGE;
     }
     XrTomlValue *functions = xtoml_get_array(contract, "function");
+    XrTomlValue *codegen = xtoml_get_table(contract, "codegen");
+    XrTomlValue *controls = codegen ? xtoml_get_array(codegen, "control") : NULL;
+    XrTomlValue *edges = codegen ? xtoml_get_array(codegen, "edge") : NULL;
     char root[XR_CLI_PATH_MAX];
     if (!xr_cli_find_project_root(".", root, sizeof(root))) {
         xr_cli_error("verify", "no xray.toml found");
@@ -486,7 +1136,7 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_FAIL;
     }
     int failures = 0;
-    for (int i = 0; i < xtoml_array_len(functions); i++) {
+    for (int i = 0; functions && i < xtoml_array_len(functions); i++) {
         int item_failures = failures;
         XrTomlValue *item = xtoml_array_get(functions, i);
         const char *symbol_name = xtoml_get_string(item, "symbol");
@@ -522,6 +1172,8 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
         if (failures == item_failures)
             printf("verified symbol-id=%u symbol=%s scope=%s\n", symbol->id, symbol_name, scope);
     }
+    if ((controls && xtoml_array_len(controls) > 0) || (edges && xtoml_array_len(edges) > 0))
+        (void) verify_codegen_contracts(inv, &state, controls, edges, &failures);
     verify_analysis_clear(&state);
     xtoml_free(contract);
     if (failures) {

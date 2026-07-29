@@ -1,0 +1,15 @@
+{
+  "module": "codegen",
+  "summary": "Semantic-neutral native code-shape controls for measured low-level paths",
+  "lead": "Compiler-owned controls for the rare low-level path whose native shape is part of a verified performance contract. `opaque<T>(value)` preserves the exact integer or pointer type and value while hiding it from native constant propagation; `compilerFence()` blocks compiler reordering across the point but is not a CPU memory fence.",
+  "sections": [
+    {
+      "heading": "Scope and verification",
+      "bullets": [
+        "`opaque` accepts integer scalars and `Ptr<T>`/`MutPtr<T>` only; it allocates nothing and does not change ownership, provenance, effects, or ABI.",
+        "`compilerFence` affects compiler scheduling only. Use synchronization or atomic APIs for inter-thread ordering.",
+        "These controls must be justified by benchmark and generated-code evidence. They are not a mechanism for enabling ordinary language optimizations."
+      ]
+    }
+  ]
+}

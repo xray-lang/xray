@@ -9,7 +9,7 @@ class ScratchByteArray {
         this.out.resize(0, 0)
         this.out.push(7)
         this.out.push(9)
-        return len(this.out) + this.out[0] + this.out[1]
+        return len(this.out) + (this.out[0] as int) + (this.out[1] as int)
     }
 }
 

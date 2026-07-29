@@ -6,9 +6,10 @@ struct Point {
     y: float
 }
 fn move_point(p: Point, dx: float, dy: float) -> Point {
-    p.x = p.x + dx
-    p.y = p.y + dy
-    return p
+    var result = copy(p)
+    result.x = result.x + dx
+    result.y = result.y + dy
+    return result
 }
 struct Vec2 {
     x: float
@@ -19,9 +20,10 @@ struct Vec2 {
     }
 }
 fn double_and_offset(v: Vec2) -> Vec2 {
-    v.x = v.x * 2.0
-    v.y = v.y * 2.0
-    return v
+    var result = copy(v)
+    result.x = result.x * 2.0
+    result.y = result.y * 2.0
+    return result
 }
 fn make_point(x: float, y: float) -> Point {
     return Point{x: x, y: y}

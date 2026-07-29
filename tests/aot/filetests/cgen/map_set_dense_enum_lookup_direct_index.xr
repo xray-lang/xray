@@ -17,7 +17,7 @@ fn denseEnumLookup() -> int {
     var seen: Set<Color> = #[Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Purple]
     var fromIndex = scores[Color.Blue]
     var viaGet = scores.get(Color.Purple)
-    var total = fromIndex + viaGet
+    var total = fromIndex + viaGet!
     if (scores.containsKey(Color.Green)) {
         if (seen.contains(Color.Yellow)) {
             return total

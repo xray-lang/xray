@@ -1825,8 +1825,13 @@ static bool arc_value_is_defined_before_block_index(const XiValue *target, const
                                                     uint32_t index) {
     if (!target || !blk)
         return false;
+    /* A definition in another block is available on the error edge only when
+     * it dominates the check.  Treating every cross-block definition as
+     * available lets branch-local owners leak into an unrelated cold cleanup;
+     * CGen would then emit a release of a temporary that is not declared on
+     * that path. */
     if (target->block != blk)
-        return true;
+        return target->block && xi_dominates(target->block, blk);
     if (target->op == XI_PHI)
         return true;
     for (uint32_t i = 0; i < index; i++) {
@@ -1850,6 +1855,11 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
     XiValueVec targets = {0};
     const XiBorrowSig *own_sig = arc_get_borrow_sig(f);
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
+
+    /* The optimization pipeline may have invalidated CFG analysis after the
+     * ordinary ARC pass.  Error-cleanup publication performs dominance
+     * queries of its own, so refresh the cached tree at the final IR shape. */
+    xi_ensure_dominators(f);
 
     for (uint16_t p = 0; p < f->nparams; p++) {
         if (f->params[p] && tracks_rc(f->params[p]) &&

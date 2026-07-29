@@ -11,7 +11,7 @@ fn run(n: int) -> int {
     i = 0
     while (i < n * 2) {
         if (m.containsKey(i)) {
-            sum = sum + m.get(i)
+            sum = sum + m.get(i)!
         }
         i = i + 1
     }

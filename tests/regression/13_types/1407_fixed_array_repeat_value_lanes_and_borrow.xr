@@ -8,7 +8,7 @@ struct Holder {
 }
 
 fn sum_fixed_in(xs: [byte; 4]) -> int {
-    return xs[0] + xs[1]
+    return (xs[0] as int) + (xs[1] as int)
 }
 
 fn bump_fixed_ref(xs: ref [byte; 4]) {

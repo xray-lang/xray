@@ -14,7 +14,7 @@ fn methodPlan() -> int {
 
     if (hasOne) {
         if (sawTwo) {
-            return one
+            return one!
         }
     }
     return 0

@@ -783,7 +783,7 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
     XrConversionWitness conversion = {0};
-    if (value && xa_analyzer_get_node_conversion(l->analyzer, node, &conversion))
+    if (value && xa_typed_program_conversion(l->typed_program, node, &conversion))
         value->conversion = conversion;
     return value;
 }
@@ -825,7 +825,7 @@ XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *
      * lower_literal itself. */
     if (same_type)
         return value;
-    bool has_witness = xa_analyzer_get_node_conversion(l->analyzer, source_node, &witness);
+    bool has_witness = xa_typed_program_conversion(l->typed_program, source_node, &witness);
     if (!has_witness) {
         fprintf(stderr,
                 "[LOWER] numeric boundary lacks analyzer conversion evidence at line %d\n",
@@ -1834,6 +1834,15 @@ static bool lower_math_args_all_int(XiValue **arg_vals, int arg_count) {
             return false;
     }
     return true;
+}
+
+static bool lower_math_call_preserves_int_args(const char *member, XiValue **arg_vals,
+                                               int arg_count) {
+    if (!member || !lower_math_args_all_int(arg_vals, arg_count))
+        return false;
+    return (strcmp(member, "abs") == 0 && arg_count == 1) ||
+           strcmp(member, "min") == 0 || strcmp(member, "max") == 0 ||
+           (strcmp(member, "clamp") == 0 && arg_count == 3);
 }
 
 static struct XrType *lower_math_call_result_type(XiLower *l, const char *member,
@@ -4933,6 +4942,8 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
          strcmp(callee_import->module_path, "math") == 0 && callee_import->member_name)
             ? callee_import->member_name
             : NULL;
+    bool math_preserves_int_args =
+        lower_math_call_preserves_int_args(math_callee_member, arg_vals, n);
 
     if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
         int pc = callee_type->function.param_count;
@@ -4940,6 +4951,14 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
             struct XrType *pt = xr_type_function_param_type(callee_type, i);
             if (!pt || !arg_vals[i] || !arg_vals[i]->type)
                 continue;
+            /* The public math registry uses a float-shaped callable signature,
+             * while abs/min/max/clamp deliberately preserve an all-int call.
+             * Analyzer inference has already selected that effective domain.
+             * Mirror it for imported-member aliases so lowering does not
+             * manufacture an int->float boundary absent from the typed
+             * program's conversion snapshot. */
+            if (math_preserves_int_args)
+                pt = l->type_int;
             if (pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
                 callee_type->function.type_param_names) {
                 const char *tp_name = pt->type_param.name;
@@ -5705,6 +5724,68 @@ static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprN
     return true;
 }
 
+static bool lower_codegen_opaque_type_supported(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    if (type->kind == XR_KIND_POINTER)
+        return true;
+    if (type->kind != XR_KIND_INT)
+        return false;
+    switch ((XrNativeType) type->scalar_rep) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XiValue *lower_codegen_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                             const XaIntrinsicDesc *desc) {
+    if (!l || !node || !call || !desc || desc->family != XA_INTRINSIC_FAMILY_CODEGEN)
+        return NULL;
+    XiOp op = xi_semantic_intrinsic_op(desc);
+    uint16_t nargs = (uint16_t) call->arg_count;
+    XrType *result_type = xi_lower_node_type(l, node);
+    if (op == XI_CODEGEN_OPAQUE) {
+        if (nargs != 1 || !call->arguments[0] ||
+            !lower_codegen_opaque_type_supported(result_type)) {
+            l->had_error = true;
+            return NULL;
+        }
+    } else if (op != XI_CODEGEN_COMPILER_FENCE || nargs != 0) {
+        l->had_error = true;
+        return NULL;
+    }
+    /* Lower operands before inserting their user into the block.  Bytecode
+     * emission follows block value order, so creating CODEGEN_OPAQUE first
+     * would make opaque(integer-literal) read the literal's register before
+     * the CONST instruction initialized it. */
+    XiValue *args[1] = {NULL};
+    for (uint16_t i = 0; i < nargs; i++) {
+        args[i] = xi_lower_expr(l, call->arguments[i]);
+        if (!args[i])
+            return NULL;
+    }
+    XiValue *value = xi_value_new(l->func, l->cur_block, op, result_type, nargs);
+    if (!value)
+        return NULL;
+    for (uint16_t i = 0; i < nargs; i++)
+        value->args[i] = args[i];
+    value->xa_intrinsic_id = (uint32_t) desc->id;
+    value->flags = xi_op_default_effects(op);
+    value->line = (uint32_t) node->line;
+    return value;
+}
+
 static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                               const XaResolvedCall *resolved) {
     if (!l || !node || !call || !resolved || resolved->reason != XA_RESOLVED_CALL_REASON_RESOLVED)
@@ -5715,6 +5796,8 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         l->had_error = true;
         return NULL;
     }
+    if (desc->family == XA_INTRINSIC_FAMILY_CODEGEN)
+        return lower_codegen_intrinsic_call(l, node, call, desc);
     MemberAccessNode *member = &call->callee->as.member_access;
     XiOp op = xi_semantic_intrinsic_op(desc);
     bool typed_byte_slice = desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD ||
@@ -8905,6 +8988,81 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
     return xi_lower_is_test(l, val, is->type, node->line);
 }
 
+static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **out_name) {
+    int tid = -1;
+    const char *name = "unknown";
+    if (!tref) {
+        *out_tid = tid;
+        *out_name = name;
+        return;
+    }
+
+    XrTypeRef *inner = tref;
+    if (tref->kind == XR_TREF_OPTIONAL && tref->nchildren > 0)
+        inner = tref->children[0];
+    switch (inner->kind) {
+        case XR_TREF_INT:
+            tid = 8;
+            name = "int";
+            break;
+        case XR_TREF_FLOAT:
+            tid = 11;
+            name = "float";
+            break;
+        case XR_TREF_STRING:
+            tid = 12;
+            name = "string";
+            break;
+        case XR_TREF_BOOL:
+            tid = 1;
+            name = "bool";
+            break;
+        case XR_TREF_RUNE:
+            tid = XR_TID_RUNE;
+            name = "rune";
+            break;
+        case XR_TREF_NULL:
+            tid = 0;
+            name = "null";
+            break;
+        case XR_TREF_ERROR:
+        case XR_TREF_INT_WIDTH:
+        case XR_TREF_FLOAT_WIDTH:
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:
+        case XR_TREF_OPTIONAL:
+        case XR_TREF_UNION:
+        case XR_TREF_FUNCTION:
+        case XR_TREF_TUPLE:
+        case XR_TREF_OBJECT:
+        case XR_TREF_FIXED_ARRAY:
+        case XR_TREF_TYPE_PARAM:
+            break;
+    }
+    if (tid < 0 && inner->kind == XR_TREF_NAMED && inner->name) {
+        name = inner->name;
+        if (strcmp(inner->name, "Array") == 0)
+            tid = 14;
+        else if (strcmp(inner->name, "Map") == 0)
+            tid = 16;
+        else if (strcmp(inner->name, "Set") == 0)
+            tid = 15;
+        else if (strcmp(inner->name, "Json") == 0)
+            tid = 18;
+    }
+    if (tid < 0 && inner->kind == XR_TREF_GENERIC && inner->name) {
+        name = inner->name;
+        if (strcmp(inner->name, "Array") == 0)
+            tid = 14;
+        else if (strcmp(inner->name, "Map") == 0)
+            tid = 16;
+        else if (strcmp(inner->name, "Set") == 0)
+            tid = 15;
+    }
+    *out_tid = tid;
+    *out_name = name;
+}
+
 static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     AsExprNode *as = &node->as.as_expr;
     XiValue *val = xi_lower_expr(l, as->expr);
@@ -8920,7 +9078,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
     cast_type = xi_lower_type_or_any(l, cast_type, "cast target type", node->line);
     XrConversionWitness conversion = {0};
-    bool has_conversion = xa_analyzer_get_node_conversion(l->analyzer, node, &conversion);
+    bool has_conversion = xa_typed_program_conversion(l->typed_program, node, &conversion);
     if (!as->is_safe && cast_type && source_type && XR_TYPE_IS_NUMERIC(cast_type) &&
         XR_TYPE_IS_NUMERIC(source_type)) {
         if (!has_conversion || !xr_conversion_kind_is_numeric(conversion.kind) ||
@@ -8964,81 +9122,9 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         l->had_error = true;
         return NULL;
     }
-    int tid = -1;
-    const char *tname = "unknown";
-    if (tref) {
-        /* Optional wrapper: unwrap to get inner type */
-        XrTypeRef *inner = tref;
-        if (tref->kind == XR_TREF_OPTIONAL && tref->nchildren > 0)
-            inner = tref->children[0];
-        switch (inner->kind) {
-            case XR_TREF_INT:
-                tid = 8;
-                tname = "int";
-                break; /* XR_TID_INT */
-            case XR_TREF_FLOAT:
-                tid = 11;
-                tname = "float";
-                break; /* XR_TID_FLOAT */
-            case XR_TREF_STRING:
-                tid = 12;
-                tname = "string";
-                break; /* XR_TID_STRING */
-            case XR_TREF_BOOL:
-                tid = 1;
-                tname = "bool";
-                break; /* XR_TID_BOOL */
-            case XR_TREF_RUNE:
-                tid = XR_TID_RUNE;
-                tname = "rune";
-                break;
-            case XR_TREF_NULL:
-                tid = 0;
-                tname = "null";
-                break; /* XR_TID_NULL */
-            case XR_TREF_ERROR:
-            case XR_TREF_INT_WIDTH:
-            case XR_TREF_FLOAT_WIDTH:
-            case XR_TREF_NAMED:
-            case XR_TREF_GENERIC:
-            case XR_TREF_OPTIONAL:
-            case XR_TREF_UNION:
-            case XR_TREF_FUNCTION:
-            case XR_TREF_TUPLE:
-            case XR_TREF_OBJECT:
-            case XR_TREF_FIXED_ARRAY:
-            case XR_TREF_TYPE_PARAM:
-                break;
-        }
-        if (tid < 0 && inner->kind == XR_TREF_NAMED && inner->name) {
-            if (strcmp(inner->name, "Array") == 0) {
-                tid = 14;
-                tname = "Array";
-            } else if (strcmp(inner->name, "Map") == 0) {
-                tid = 16;
-                tname = "Map";
-            } else if (strcmp(inner->name, "Set") == 0) {
-                tid = 15;
-                tname = "Set";
-            } else if (strcmp(inner->name, "Json") == 0) {
-                tid = 18;
-                tname = "Json";
-            } else
-                tname = inner->name;
-        }
-        if (tid < 0 && inner->kind == XR_TREF_GENERIC && inner->name) {
-            if (strcmp(inner->name, "Array") == 0) {
-                tid = 14;
-                tname = "Array";
-            } else if (strcmp(inner->name, "Map") == 0) {
-                tid = 16;
-                tname = "Map";
-            } else if (strcmp(inner->name, "Set") == 0) {
-                tid = 15;
-                tname = "Set";
-            }
-        }
-    }
+    int tid;
+    const char *tname;
+    lower_dynamic_as_target(tref, &tid, &tname);
 
     bool is_safe = as->is_safe;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, l->type_any, 1);

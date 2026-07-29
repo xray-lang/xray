@@ -29,7 +29,7 @@ fn fuzzBytes(length: int, seed: int) -> Array<byte> {
     var state = seed
     for (var i = 0; i < length; i++) {
         state = nextState(state)
-        out[i] = state & 255
+        out[i] = (state & 255) as byte
     }
     return out
 }
@@ -81,11 +81,11 @@ fn test_base64_independent_all_byte_aggregate() {
     var aggregate = 0
     for (var value = 0; value < 256; value++) {
         var one = Array<byte>(1)
-        one[0] = value
+        one[0] = value as byte
         var encoded = base64.encode(one[:])
         var encodedBytes: Slice<byte> = encoded.bytes()
         for (var i = 0; i < len(encodedBytes); i++) {
-            var encodedByte: int = encodedBytes[i]
+            var encodedByte: int = encodedBytes[i] as int
             aggregate = ((aggregate * 257) + encodedByte) % 1000000007
         }
     }
@@ -109,7 +109,7 @@ fn test_base64_deterministic_roundtrip_fuzz() {
 @test
 fn test_hex_full_byte_kat() {
     var allBytes = Array<byte>(256)
-    for (var i = 0; i < 256; i++) { allBytes[i] = i }
+    for (var i = 0; i < 256; i++) { allBytes[i] = i as byte }
     assert_eq(encoding.hexEncode(allBytes[:]), ALL_BYTES_HEX)
     assert(sameBytes(encoding.hexDecode(ALL_BYTES_HEX), allBytes))
 }
@@ -127,15 +127,15 @@ fn test_hex_deterministic_roundtrip_fuzz() {
 fn test_utf8_exhaustive_single_and_two_byte_space() {
     var one = Array<byte>(1)
     for (var value = 0; value < 256; value++) {
-        one[0] = value
+        one[0] = value as byte
         assert_eq(encoding.utf8Valid(one[:]), value < 128)
     }
 
     var pair = Array<byte>(2)
     for (var lead = 0xC2; lead <= 0xDF; lead++) {
-        pair[0] = lead
+        pair[0] = lead as byte
         for (var trail = 0x80; trail <= 0xBF; trail++) {
-            pair[1] = trail
+            pair[1] = trail as byte
             assert(encoding.utf8Valid(pair[:]))
         }
     }

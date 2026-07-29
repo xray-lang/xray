@@ -1,17 +1,17 @@
 // anchor: int-as-truncation
-// `as` casts to narrow integer types must truncate exactly like annotated
-// assignment/parameter narrowing. This protects C-port casts such as
+// `as` casts to narrow integer types must use the frozen modulo/two's-complement
+// rule. Annotated assignment no longer performs implicit narrowing. This protects C-port casts such as
 // `(uint32_t)x` from silently staying in the wider int domain.
 
 var big = 4294967297
 var castU32 = big as u32
-var assignedU32: u32 = big
+var assignedU32: u32 = big as u32
 print(castU32)
 print(assignedU32)
 
 var neg = -1
 var castU8 = neg as byte
-var assignedU8: byte = neg
+var assignedU8: byte = neg as byte
 print(castU8)
 print(assignedU8)
 

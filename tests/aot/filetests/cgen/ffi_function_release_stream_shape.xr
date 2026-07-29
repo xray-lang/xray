@@ -17,7 +17,7 @@ fn functionReleaseLike(count: usize) -> usize {
     var released: usize = 0
     var index: usize = 0
     while (index < count) {
-        var block = unsafe { malloc(mem.sizeOf<Task208Function>()) }
+        var block = unsafe { malloc(mem.sizeOf<Task208Function>() as usize) }
         unsafe {
             free(block)
         }

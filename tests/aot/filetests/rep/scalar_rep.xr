@@ -3,7 +3,7 @@ fn narrow(x: byte) -> byte {
 }
 
 fn total(a: int, b: int) -> int {
-    return a + b + narrow(41)
+    return a + b + (narrow(41) as int)
 }
 
 print(total(1, 2))

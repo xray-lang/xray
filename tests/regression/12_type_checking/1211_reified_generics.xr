@@ -92,7 +92,7 @@ fn test_reified_generics() {
     assert_eq(len(int_arr), 4)
     assert_eq(int_arr[3], 40)
 
-    var mapped_bytes = byte_arr.map(fn(x: byte) -> int { return x + 1 })
+    var mapped_bytes = byte_arr.map(fn(x: byte) -> int { return (x as int) + 1 })
     assert_eq(typeName(mapped_bytes), "Array")
     assert_eq(mapped_bytes[0], 66)
 

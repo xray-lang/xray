@@ -291,6 +291,31 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Semantic-neutral native code-shape controls.  OPAQUE is deliberately not
+; value-numberable or speculation-safe: its output must not inherit exact
+; constant knowledge.  COMPILER_FENCE carries only Xi scheduling effects; the
+; analyzer effect summary remains pure/nothrow.
+(define-xi-op xi.codegen.opaque
+  :class pure
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects ()
+  :requires ()
+  :observable (codegen-control)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.codegen.compiler-fence
+  :class memory-write
+  :arity 0
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable (compiler-order)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.eq
   :class comparison
   :arity 2

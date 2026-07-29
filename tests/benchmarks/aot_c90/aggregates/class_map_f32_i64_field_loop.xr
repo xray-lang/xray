@@ -9,7 +9,7 @@ class FloatIntMapBag {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.set(i + 0.5, i * 3 + 1)
+            this.values.set((i as f32) + 0.5, i * 3 + 1)
             i = i + 1
         }
         return len(this.values)
@@ -21,9 +21,9 @@ class FloatIntMapBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                var key = i + 0.5
+                var key: f32 = (i as f32) + 0.5
                 if (this.values.containsKey(key)) {
-                    sum = sum + this.values.get(key)
+                    sum = sum + this.values.get(key)!
                 }
                 i = i + 1
             }

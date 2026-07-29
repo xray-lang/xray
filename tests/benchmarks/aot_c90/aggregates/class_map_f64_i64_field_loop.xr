@@ -9,7 +9,7 @@ class DoubleIntMapBag {
     fill(n: int) -> int {
         var i = 0
         while (i < n) {
-            this.values.set(i + 0.5, i * 5 + 7)
+            this.values.set((i as float) + 0.5, i * 5 + 7)
             i = i + 1
         }
         return len(this.values)
@@ -21,9 +21,9 @@ class DoubleIntMapBag {
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                var key = i + 0.5
+                var key = (i as float) + 0.5
                 if (this.values.containsKey(key)) {
-                    sum = sum + this.values.get(key)
+                    sum = sum + this.values.get(key)!
                 }
                 i = i + 1
             }

@@ -30,8 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dirent.h>
 #include <sys/stat.h>
+#endif
 
 /* ====================================================================== */
 /* Fixtures                                                                */
@@ -151,6 +155,36 @@ static int check_idempotent(const char *path) {
 
 /* Recursively scan a directory for .xr files and check idempotency. */
 static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped) {
+#ifdef _WIN32
+    char pattern[1024];
+    snprintf(pattern, sizeof(pattern), "%s\\*", dir_path);
+    WIN32_FIND_DATAA entry;
+    HANDLE search = FindFirstFileA(pattern, &entry);
+    if (search == INVALID_HANDLE_VALUE)
+        return 0;
+
+    do {
+        if (entry.cFileName[0] == '.')
+            continue;
+        char path[1024];
+        snprintf(path, sizeof(path), "%s\\%s", dir_path, entry.cFileName);
+        if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            scan_dir(path, total, passed, skipped);
+            continue;
+        }
+        size_t nlen = strlen(entry.cFileName);
+        if (nlen > 3 && strcmp(entry.cFileName + nlen - 3, ".xr") == 0) {
+            (*total)++;
+            int result = check_idempotent(path);
+            if (result == 1)
+                (*passed)++;
+            else if (result == -1)
+                (*skipped)++;
+        }
+    } while (FindNextFileA(search, &entry));
+    FindClose(search);
+    return 1;
+#else
     DIR *d = opendir(dir_path);
     if (!d)
         return 0;
@@ -184,6 +218,18 @@ static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped)
     }
     closedir(d);
     return 1;
+#endif
+}
+
+static bool path_is_directory(const char *path) {
+#ifdef _WIN32
+    DWORD attributes = GetFileAttributesA(path);
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+#else
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+#endif
 }
 
 TEST(idempotency_regression_corpus) {
@@ -195,9 +241,8 @@ TEST(idempotency_regression_corpus) {
                           "../../../tests/regression", NULL};
 
     const char *regression_dir = NULL;
-    struct stat st;
     for (int i = 0; dirs[i]; i++) {
-        if (stat(dirs[i], &st) == 0 && S_ISDIR(st.st_mode)) {
+        if (path_is_directory(dirs[i])) {
             regression_dir = dirs[i];
             break;
         }
@@ -399,6 +444,27 @@ TEST(inline_control_attributes_roundtrip) {
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "@inline\nfn hot"));
     ASSERT_TRUE(contains(fmt1, "@noinline\n    cold"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
+TEST(explicit_numeric_conversions_roundtrip) {
+    setup();
+    const char *src = "fn convert(wide: u64, signed: i32) -> u8 {\n"
+                      "  var narrowed = wide as u8\n"
+                      "  var reinterpreted = signed as u32\n"
+                      "  var approximate = wide as f64\n"
+                      "  return narrowed\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "wide as u8"));
+    ASSERT_TRUE(contains(fmt1, "signed as u32"));
+    ASSERT_TRUE(contains(fmt1, "wide as f64"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -943,6 +1009,7 @@ RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
 RUN_TEST(method_deprecated_attribute_roundtrip);
 RUN_TEST(inline_control_attributes_roundtrip);
+RUN_TEST(explicit_numeric_conversions_roundtrip);
 RUN_TEST(deprecated_message_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);

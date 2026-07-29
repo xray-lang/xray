@@ -155,12 +155,13 @@ fn test_reduce_build_nested_map() {
     // Group by category
     var seed: Json = {}
     var grouped = entries.reduce(fn(acc, e) {
-        if (acc[e.group] == null) {
+        var next = copy(acc)
+        if (next[e.group] == null) {
             var emptyItems: Json = []
-            acc[e.group] = emptyItems
+            next[e.group] = emptyItems
         }
-        acc[e.group].push(e.item)
-        return acc
+        next[e.group].push(e.item)
+        return next
     }, seed)
     assert_eq(len(grouped.fruit), 2)
     assert_eq(len(grouped.veg), 2)
@@ -294,13 +295,14 @@ fn test_reduce_builds_grouped_arrays() {
     // Group into chunks of 3
     var seed: Array<int> = []
     var chunks = nums.reduce(fn(acc, val) {
-        var last = acc[len(acc) - 1]
+        var next = copy(acc)
+        var last = next[len(next) - 1]
         if (len(last) < 3) {
             last.push(val)
         } else {
-            acc.push([val])
+            next.push([val])
         }
-        return acc
+        return next
     }, [seed])
     assert_eq(len(chunks), 3)
     assert_eq(len(chunks[0]), 3)
