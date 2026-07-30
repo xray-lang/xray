@@ -11176,10 +11176,17 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
             if (receiver_class && receiver_class->methods && receiver_class->child_idx) {
                 const XiModule *class_mod = cg_class_native_module_for_data(ctx, receiver_class);
                 if (class_mod && class_mod->init) {
+                    /* Instance methods count too, not just static ones.  On a
+                     * monomorphized class the call resolves to the generic
+                     * template -- correctly non-executable -- while cgen emits
+                     * the specialization's symbol, so the template edge marks
+                     * nothing and the body that was actually named gets pruned.
+                     * The receiver's class data is the specialization, so its
+                     * own method table names exactly the body cgen emits. */
                     for (uint16_t mi = 0; mi < receiver_class->nmethod; mi++) {
                         const XiClassMethod *candidate = &receiver_class->methods[mi];
-                        if (!candidate->is_static || candidate->is_static_constructor ||
-                            !candidate->name || strcmp(candidate->name, method) != 0)
+                        if (candidate->is_static_constructor || !candidate->name ||
+                            strcmp(candidate->name, method) != 0)
                             continue;
                         uint16_t child_idx = receiver_class->child_idx[mi];
                         if (child_idx < class_mod->init->nchildren)
@@ -11191,6 +11198,19 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         }
         changed |=
             cg_func_reach_mark_edge(ctx, cg_class_native_resolve_method_call(ctx, owner, v, NULL));
+
+        /* A parallel.Plan lifecycle call is emitted through the monomorphized
+         * specialization, not through the Plan<T> skeleton the call resolves to,
+         * so the ordinary method edge above marks a generic template body that
+         * is correctly non-executable while cgen names the specialization.  Ask
+         * the emitter's own resolver for the body it will name. */
+        if (v->nargs >= 1) {
+            const XiClassData *plan_class = xicgen_parallel_plan_lifecycle_class(
+                ctx, owner, v, method, (uint16_t) (v->nargs - 1));
+            if (plan_class)
+                changed |= cg_func_reach_mark_edge(
+                    ctx, xicgen_parallel_plan_lifecycle_target(ctx, plan_class, method, NULL));
+        }
     }
 
     /* A getter reads as a field, so `dt.day` is a LOAD_FIELD rather than a

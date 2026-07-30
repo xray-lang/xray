@@ -7958,13 +7958,18 @@ static const XiFunc *xicgen_parallel_plan_lifecycle_target(XiCgenCtx *ctx,
     return NULL;
 }
 
-static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                       const XiValue *v, const char *prefix,
-                                                       const char *method, uint16_t nargs) {
+/* The one place that decides which Plan a lifecycle call belongs to.  A Plan<T>
+ * call resolves through Plan's generic skeleton, but what cgen emits is the
+ * monomorphized specialization found by scanning the closed world -- so anything
+ * that needs to know the callee, reachability included, must ask here rather
+ * than re-derive it from the receiver's class data. */
+static const XiClassData *xicgen_parallel_plan_lifecycle_class(XiCgenCtx *ctx, const XiFunc *f,
+                                                               const XiValue *v, const char *method,
+                                                               uint16_t nargs) {
     if (!method || nargs != 0 ||
         (strcmp(method, "_begin") != 0 && strcmp(method, "_end") != 0 &&
          strcmp(method, "close") != 0))
-        return false;
+        return NULL;
     const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
     if (class_data && class_data->is_generic_skeleton &&
         (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE)) {
@@ -7975,6 +7980,13 @@ static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out
     if (!class_data && (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE) &&
         v->xg_callsite_id == XG_NO_ID && v->xg_method_id == XG_NO_ID)
         class_data = xicgen_find_parallel_plan_class_data(ctx);
+    return class_data;
+}
+
+static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                       const XiValue *v, const char *prefix,
+                                                       const char *method, uint16_t nargs) {
+    const XiClassData *class_data = xicgen_parallel_plan_lifecycle_class(ctx, f, v, method, nargs);
     if (!class_data)
         return false;
     const char *method_prefix = NULL;
@@ -11445,9 +11457,18 @@ XI_TO_C_TEMPLATE_WIDTH_DRIVERS(XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER)
 
 static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
+    /* A PTR-rep `T?` keeps null as the NULL pointer rather than a tagged
+     * XrValue (see xr_type_rep: "null(0) vs non-null(ptr) distinguishable by
+     * payload"), so its C storage is a bare pointer and `.tag` would not even
+     * compile. Test the pointer instead. Tagged storage keeps the tag test. */
+    XrRep rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
+    if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR || rep == XR_REP_STR) {
+        fprintf(out, "(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, " == NULL)");
+        return;
+    }
     fprintf(out, "(");
     emit_vref(out, v->args[0]);
     fprintf(out, ".tag == XR_TAG_NULL)");
