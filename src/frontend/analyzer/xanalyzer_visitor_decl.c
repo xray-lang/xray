@@ -3455,6 +3455,7 @@ skip_interfaces:
             field_sym->is_private = fd->is_private;
             field_sym->is_protected = fd->is_protected;
             field_sym->is_const = fd->is_const;
+            field_sym->has_declared_default = (fd->initializer != NULL);
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);

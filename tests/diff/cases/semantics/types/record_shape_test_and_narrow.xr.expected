@@ -1,0 +1,10 @@
+ok is User=true
+missing is User=false
+extra is User=true
+wrongKind is User=false
+narrowed=Alice/30
+safe reject=true
+safe accept=true
+scalar is User=false
+tagged:9
+user:Eve

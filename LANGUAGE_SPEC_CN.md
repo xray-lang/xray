@@ -564,7 +564,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
+5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`Record` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -800,7 +800,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | `Json` / `Object`（结构化） | 见 §2.4.6 |
+| `{ key: value }`（无前缀） | sealed `Record`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.6 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -868,6 +868,24 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 **Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
+**字面量的域必须在书写处可见**：对象字面量的语义域由期望类型决定，而两个域在"是否检查字段"上完全相反。因此期望类型只能来自**与字面量同处声明内可见**的标注——变量声明的类型标注、函数返回类型标注，以及从这些标注沿字面量结构（嵌套对象、数组元素、Map 值）向内的传播。**期望类型不跨调用边界传播**：对象字面量作为函数实参时恒为 `Record`，要进入 `Json` 参数必须显式写 `Json.encode({...})` 或先绑定到 `Json` 标注的变量。
+
+```xray
+fn submit(o: Json) { }
+
+// submit({ itemId: 1, qty: 3 })              // 编译错误：域不能来自参数类型
+submit(Json.encode({ itemId: 1, qty: 3 }))    // OK：显式跨域
+var payload: Json = { itemId: 1, qty: 3 }     // OK：标注与字面量同处
+submit(payload)
+
+var cfg: Json = {}                            // OK
+var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK：嵌套沿结构继承
+fn build() -> Json { return { ok: true } }    // OK：返回类型同处可见
+var arr: Array<Json> = [{ a: 1 }]             // OK：沿字面量结构传播
+```
+
+这条规则的目的是消除一条静默通道：把某个参数的类型从 Record 改成 `Json` 时，所有调用点的字面量会从"静态检查"退化为"完全不检查"，而调用点本身没有任何 diff 与诊断。规则生效后，这类签名改动会在每个调用点立即报错。
+
 ```xray
 type User = { name: string, age: int }
 
@@ -881,6 +899,17 @@ var u2 = { name: "Alice", age: 30 }      // sealed Record
 var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
+
+**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+
+| | 身份 | 字段集 | 用户可定义方法 | 用途 |
+|---|---|---|---|---|
+| `Record` | 结构化 | 声明的，编译期精确检查 | **否** | options、多字段返回值、普通业务数据 |
+| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
+| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
+
+**规范性承诺**：`Record` 与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
 
 #### 2.4.7 `BigInt`
 
@@ -1073,17 +1102,25 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
+| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 子集对象类型 | 超集对象类型 | ❌（结构化兼容是 superset → subset） |
+| 字段集不同的 Record | Record | ❌ sealed Record 要求精确字段集 |
 
-> **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
+> **sealed Record 的宽度规则**：Record 赋值要求**精确字段集**——源的字段名集合必须与目标一致。目标中类型可空的字段允许缺省，其余字段既不能少也不能多。Xray 不提供 width subtyping，`superset → subset` 与 `subset → superset` 两个方向都被拒绝。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK：full 是 User 的超集
+> // var u: User = full            // 编译错误 E0352：多了字段 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
+
+> **Record 与 Json 是两个互不连通的语义域**：`Record` 是编译期检查的封闭字段集，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
+> - `Json.encode(value)`：typed value → `Json`
+> - `json as T` / `json as T?`：`Json` → Record 或其它 typed value（结构化 narrowing）
 
 #### 2.10.2 显式 `as`
 
@@ -1101,6 +1138,8 @@ var n = x as int?       // 失败返回 null（安全转换）
 
 `expr as T?` 仅用于可能失败的动态 / 结构化转换；它不是数值 checked-cast 语法。数值转换必须写 `expr as T`，并遵循上面的确定性规则。
 
+**结构化 narrowing 是被校验的转换**：目标是 sealed Record 时，运行时逐字段确认目标声明的每个字段都存在且类型匹配（递归检查嵌套 Record），确认后构造一个只含目标字段集的新值。源中多出的字段被丢弃——narrowing 是从开放文档中**投影**出声明的字段，不要求源字段集精确相等。校验失败时 `as T` 抛 `E0404`、`as T?` 返回 `null`。VM 与 AOT 对接受 / 拒绝的判定一致。
+
 #### 2.10.3 `is` 检查
 
 ```xray
@@ -1110,6 +1149,16 @@ if (v is User) {
 ```
 
 仅作类型守卫；不改变值。
+
+`is` 与 `as` 比对的是**运行时类型身份**（§2.11）。可比对的目标：原始类型、`Array` / `Map` / `Set`、`Json`、tuple 元数、名义 class / struct / interface / enum，以及 sealed Record 的字段集（与 §2.10.2 同一套检查）。
+
+运行时**不保留**可空性、union 成员身份与函数签名，因此这三类目标不是合法的类型测试，编译期拒绝（`E0352`）：
+
+```xray
+// v is int?              // 编译错误：可空性不属于运行时类型身份；先测 v != null
+// v is int | string      // 编译错误：union 不是运行时类型；分别测每个成员
+// v is (int) -> int      // 编译错误：函数类型没有运行时身份
+```
 
 ### 2.11 typeOf / typeName / Type 枚举
 
@@ -2773,6 +2822,24 @@ b.x = 99.0
 // q.x 仍为 3.0
 ```
 
+**聚合字面量的字段规则**（与 sealed Record 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
+```
+
 **与 `class` 的差异**：
 
 | 维度 | `class` | `struct` |
@@ -4230,15 +4297,16 @@ render(Square())     // OK
 
 #### 结构化对象
 
-仅`object literal` 与 `type T = {...}` 是结构化匹配：
+仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK：字面量结构匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字段
+describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0352：sealed 类型多了字段 'z'
+describe({ x: 1.0 })                  // 编译错误 E0352：缺少字段 'y'
 ```
 
 ### 9.6 方差（Variance）
@@ -5286,7 +5354,11 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+`keys()` / `values()` / `entries()` / `toString()` 也有实例形态。Json 的字段只能承载数据、永远不能承载函数，所以 `j.keys` 恒为字段读取、`j.keys()` 恒为内置成员调用，两者始终可判定。但当数据里可能存在与内置成员同名的字段时，**优先使用静态形态**，让读者不必依赖调用括号来区分意图。
+
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。字面量取得 `Json` 域的位置受 §2.4.6 的可见性规则约束。
+
+**格式化前应先提交类型**：`Json` 内在含 `null`，缺失字段读出来是 `null`，直接插值会格式化成 `"null"`——一个拼错的字段名因此看起来像一个合理结果。把 `Json` 值直接放进模板字符串会产生警告；写 `${j.field as string}` 提交类型，或写 `${j.field ?? "-"}` 给默认值。这与语言对 `T?` 的解包纪律一致。
 
 ### 14.12 `Range`
 
@@ -5761,6 +5833,8 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
 
 ### 18.3 运行时
 

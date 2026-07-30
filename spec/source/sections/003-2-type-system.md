@@ -18,7 +18,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
+5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`Record` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -254,7 +254,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | `Json` / `Object`（结构化） | 见 §2.4.6 |
+| `{ key: value }`（无前缀） | sealed `Record`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.6 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -322,6 +322,24 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 **Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
+**字面量的域必须在书写处可见**：对象字面量的语义域由期望类型决定，而两个域在"是否检查字段"上完全相反。因此期望类型只能来自**与字面量同处声明内可见**的标注——变量声明的类型标注、函数返回类型标注，以及从这些标注沿字面量结构（嵌套对象、数组元素、Map 值）向内的传播。**期望类型不跨调用边界传播**：对象字面量作为函数实参时恒为 `Record`，要进入 `Json` 参数必须显式写 `Json.encode({...})` 或先绑定到 `Json` 标注的变量。
+
+```xray
+fn submit(o: Json) { }
+
+// submit({ itemId: 1, qty: 3 })              // 编译错误：域不能来自参数类型
+submit(Json.encode({ itemId: 1, qty: 3 }))    // OK：显式跨域
+var payload: Json = { itemId: 1, qty: 3 }     // OK：标注与字面量同处
+submit(payload)
+
+var cfg: Json = {}                            // OK
+var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK：嵌套沿结构继承
+fn build() -> Json { return { ok: true } }    // OK：返回类型同处可见
+var arr: Array<Json> = [{ a: 1 }]             // OK：沿字面量结构传播
+```
+
+这条规则的目的是消除一条静默通道：把某个参数的类型从 Record 改成 `Json` 时，所有调用点的字面量会从"静态检查"退化为"完全不检查"，而调用点本身没有任何 diff 与诊断。规则生效后，这类签名改动会在每个调用点立即报错。
+
 ```xray
 type User = { name: string, age: int }
 
@@ -335,6 +353,17 @@ var u2 = { name: "Alice", age: 30 }      // sealed Record
 var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
+
+**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+
+| | 身份 | 字段集 | 用户可定义方法 | 用途 |
+|---|---|---|---|---|
+| `Record` | 结构化 | 声明的，编译期精确检查 | **否** | options、多字段返回值、普通业务数据 |
+| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
+| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
+
+**规范性承诺**：`Record` 与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
 
 #### 2.4.7 `BigInt`
 
@@ -527,17 +556,25 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
+| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 子集对象类型 | 超集对象类型 | ❌（结构化兼容是 superset → subset） |
+| 字段集不同的 Record | Record | ❌ sealed Record 要求精确字段集 |
 
-> **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
+> **sealed Record 的宽度规则**：Record 赋值要求**精确字段集**——源的字段名集合必须与目标一致。目标中类型可空的字段允许缺省，其余字段既不能少也不能多。Xray 不提供 width subtyping，`superset → subset` 与 `subset → superset` 两个方向都被拒绝。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK：full 是 User 的超集
+> // var u: User = full            // 编译错误 E0352：多了字段 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
+
+> **Record 与 Json 是两个互不连通的语义域**：`Record` 是编译期检查的封闭字段集，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
+> - `Json.encode(value)`：typed value → `Json`
+> - `json as T` / `json as T?`：`Json` → Record 或其它 typed value（结构化 narrowing）
 
 #### 2.10.2 显式 `as`
 
@@ -555,6 +592,8 @@ var n = x as int?       // 失败返回 null（安全转换）
 
 `expr as T?` 仅用于可能失败的动态 / 结构化转换；它不是数值 checked-cast 语法。数值转换必须写 `expr as T`，并遵循上面的确定性规则。
 
+**结构化 narrowing 是被校验的转换**：目标是 sealed Record 时，运行时逐字段确认目标声明的每个字段都存在且类型匹配（递归检查嵌套 Record），确认后构造一个只含目标字段集的新值。源中多出的字段被丢弃——narrowing 是从开放文档中**投影**出声明的字段，不要求源字段集精确相等。校验失败时 `as T` 抛 `E0404`、`as T?` 返回 `null`。VM 与 AOT 对接受 / 拒绝的判定一致。
+
 #### 2.10.3 `is` 检查
 
 ```xray
@@ -564,6 +603,16 @@ if (v is User) {
 ```
 
 仅作类型守卫；不改变值。
+
+`is` 与 `as` 比对的是**运行时类型身份**（§2.11）。可比对的目标：原始类型、`Array` / `Map` / `Set`、`Json`、tuple 元数、名义 class / struct / interface / enum，以及 sealed Record 的字段集（与 §2.10.2 同一套检查）。
+
+运行时**不保留**可空性、union 成员身份与函数签名，因此这三类目标不是合法的类型测试，编译期拒绝（`E0352`）：
+
+```xray
+// v is int?              // 编译错误：可空性不属于运行时类型身份；先测 v != null
+// v is int | string      // 编译错误：union 不是运行时类型；分别测每个成员
+// v is (int) -> int      // 编译错误：函数类型没有运行时身份
+```
 
 ### 2.11 typeOf / typeName / Type 枚举
 
@@ -661,7 +710,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
+5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `Record` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -897,7 +946,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | `Json` / `Object` (structural) | see §2.4.6 |
+| `{ key: value }` (no prefix) | sealed `Record` (`Json` when the expected type is `Json`) | see §2.4.6 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -965,6 +1014,24 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 **Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
+**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a call boundary**: an object literal in argument position is always a `Record`, and reaching a `Json` parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first.
+
+```xray
+fn submit(o: Json) { }
+
+// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a parameter type
+submit(Json.encode({ itemId: 1, qty: 3 }))    // OK: explicit domain crossing
+var payload: Json = { itemId: 1, qty: 3 }     // OK: annotation sits with the literal
+submit(payload)
+
+var cfg: Json = {}                            // OK
+var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK: nesting inherits along structure
+fn build() -> Json { return { ok: true } }    // OK: return type is visible here
+var arr: Array<Json> = [{ a: 1 }]             // OK: propagates along literal structure
+```
+
+The rule closes a silent channel: retyping a parameter from a Record to `Json` would otherwise downgrade every call site's literal from statically checked to unchecked, with no diagnostic and nothing in the diff at those sites. Under the rule, such a signature change fails at every call site immediately.
+
 ```xray
 type User = { name: string, age: int }
 
@@ -978,6 +1045,17 @@ var u2 = { name: "Alice", age: 30 }      // sealed Record
 var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
+
+**Responsibilities of the product types**: the line between the structural and nominal domains is whether a type carries methods.
+
+| | Identity | Field set | User-defined methods | Use for |
+|---|---|---|---|---|
+| `Record` | structural | declared, exact at compile time | **no** | options, multi-field returns, ordinary business data |
+| `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
+| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
+| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
+
+**Normative commitment**: `Record` and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
 
 #### 2.4.7 `BigInt`
 
@@ -1176,17 +1254,25 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | Typed integer | any floating type | ❌ explicit `as` required |
 | Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `T` | `Json` (if T is Json-compatible) | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON scalar enters the value domain |
+| Any other type | `Json` | ❌ `Json.encode(value)` required |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| Subset object type | Superset object type | ❌ (structural compatibility goes superset → subset) |
+| Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
 
-> **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
+> **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK: full is a superset of User
+> // var u: User = full            // compile error E0352: extra field 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
+
+> **Record and Json are two disconnected semantic domains**: `Record` is a closed field set checked at compile time; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
+> - `Json.encode(value)`: typed value → `Json`
+> - `json as T` / `json as T?`: `Json` → a Record or other typed value (structural narrowing)
 
 #### 2.10.2 Explicit `as`
 
@@ -1204,6 +1290,8 @@ Numeric `as` is independent of the host C compiler, optimization level, and VM/A
 
 `expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
+**Structural narrowing is a validated conversion**: when the target is a sealed Record, the runtime confirms field by field that every declared field is present with a matching type (recursively for nested Records), then builds a new value holding exactly the target's field set. Extra fields in the source are dropped — narrowing **projects** the declared fields out of an open document and does not require the source field set to match exactly. On rejection `as T` raises `E0404` and `as T?` yields `null`. VM and AOT agree on the accept/reject decision.
+
 #### 2.10.3 `is` Check
 
 ```xray
@@ -1213,6 +1301,16 @@ if (v is User) {
 ```
 
 Acts only as a type guard; does not change the value.
+
+`is` and `as` compare **runtime type identity** (§2.11). Testable targets: primitives, `Array` / `Map` / `Set`, `Json`, tuple arity, nominal class / struct / interface / enum, and the field set of a sealed Record (the same check as §2.10.2).
+
+Runtime identity does **not** record nullability, union membership or function signatures, so those three are not valid type tests and are rejected at compile time (`E0352`):
+
+```xray
+// v is int?              // compile error: nullability is not part of runtime identity; test v != null first
+// v is int | string      // compile error: a union is not a runtime type; test each member
+// v is (int) -> int      // compile error: function types carry no runtime identity
+```
 
 ### 2.11 typeOf / typeName / Type Enum
 

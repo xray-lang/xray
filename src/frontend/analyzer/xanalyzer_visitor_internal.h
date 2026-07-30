@@ -272,6 +272,11 @@ XR_FUNC bool xa_type_contains_float(XrType *type);
 XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
                                           XrType *right);
 XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type);
+/* Reject `is` / `as` targets the runtime carries no identity for. Without
+ * this the lowering emits a type test with no target operand, which is
+ * malformed Xi IR rather than a user-facing diagnostic. */
+XR_FUNC void xa_check_runtime_testable_type(XaInferContext *ctx, AstNode *node, XrTypeRef *tref,
+                                            const char *op_name);
 XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
 struct XrClassInfo;
 XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,

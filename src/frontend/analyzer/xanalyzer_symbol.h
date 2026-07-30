@@ -322,24 +322,25 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;             // const declaration / immutable field
-    bool is_rebindable;        // binding name may be assigned again
-    bool is_readonly_binding;  // binding exposes deep-readonly semantics
-    bool is_exported;          // export modifier
-    bool is_static;            // static member
-    bool is_private;           // private member (class-only visibility)
-    bool is_protected;         // protected member (class + subclass visibility)
-    bool is_override;          // analyzer-inferred exact-signature method override
-    bool is_imported;          // selective import binding; kind remains the exported semantic kind
-    bool is_builtin;           // built-in type member (Array.push, etc.)
-    bool mutates_receiver;     // method body writes through `this`
-    XrParamMode passing_mode;  // read / ref / move parameter contract
+    bool is_const;              // const declaration / immutable field
+    bool is_rebindable;         // binding name may be assigned again
+    bool is_readonly_binding;   // binding exposes deep-readonly semantics
+    bool is_exported;           // export modifier
+    bool is_static;             // static member
+    bool is_private;            // private member (class-only visibility)
+    bool is_protected;          // protected member (class + subclass visibility)
+    bool is_override;           // analyzer-inferred exact-signature method override
+    bool is_imported;           // selective import binding; kind remains the exported semantic kind
+    bool is_builtin;            // built-in type member (Array.push, etc.)
+    bool mutates_receiver;      // method body writes through `this`
+    bool has_declared_default;  // field declaration carries an initializer expression
+    XrParamMode passing_mode;   // read / ref / move parameter contract
     uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing
 
     // Parent references
-    XaScope *scope;               // Owning scope
-    XaSymbol *scope_owned_next;   // Intrusive link for scope-owned lifetime
-    XaSymbol *parent;             // Parent symbol (for methods/fields)
+    XaScope *scope;              // Owning scope
+    XaSymbol *scope_owned_next;  // Intrusive link for scope-owned lifetime
+    XaSymbol *parent;            // Parent symbol (for methods/fields)
 
     // For type aliases: declaration-backed TypeRef plus optional resolved cache.
     struct AstNode *type_alias_node;

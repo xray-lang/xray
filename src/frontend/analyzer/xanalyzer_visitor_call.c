@@ -660,10 +660,10 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
     XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth = type_param_count <= 8
-                            ? stack_synth
-                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
-                                                       (size_t) type_param_count);
+    XrTypeRef **synth =
+        type_param_count <= 8
+            ? stack_synth
+            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
@@ -1026,10 +1026,13 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
 
         XrType *param_type = variant->payload_types ? variant->payload_types[i] : NULL;
         XrType *saved_expected = ctx->expected_type;
+        XrType *saved_from_signature = ctx->expected_from_signature;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type))
             ctx->expected_type = param_type;
+        ctx->expected_from_signature = ctx->expected_type;
         XrType *arg_type = xa_visit_infer_expr(ctx, arg);
         ctx->expected_type = saved_expected;
+        ctx->expected_from_signature = saved_from_signature;
         if (xa_type_contains_span_view(arg_type)) {
             char context[160];
             snprintf(context, sizeof(context), "store Slice view in enum payload '%s.%s'",
@@ -2446,8 +2449,7 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *type_args[1] = {
-        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
+    XrType *type_args[1] = {value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
@@ -6498,6 +6500,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         } else if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
         }
+        XrType *saved_from_signature = ctx->expected_from_signature;
+        ctx->expected_from_signature = ctx->expected_type;
         if (xa_call_is_copy_builtin(call) && slot == 0)
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =
@@ -6508,6 +6512,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                             access, param_mode);
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
+        ctx->expected_from_signature = saved_from_signature;
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
             math_first_arg_seen = true;
             math_int_shape = arg_type && XR_TYPE_IS_INT(arg_type);

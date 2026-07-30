@@ -94,6 +94,16 @@ typedef struct XaInferContext {
     // Propagated from declaration to initializer expression
     XrType *expected_type;
 
+    // The expectation currently in force when it was installed from a callee's
+    // signature rather than from an annotation visible at the expression.  An
+    // object literal decides its semantic domain from the expectation, so this
+    // distinguishes `var j: Json = {...}` (the domain is stated right there)
+    // from `f({...})` where the domain lives in another declaration and a
+    // signature edit would silently retype every call site.  Compared by
+    // pointer identity: an expectation derived for a nested position is a
+    // different type object and no longer counts as coming from the signature.
+    XrType *expected_from_signature;
+
     // The operand of a contextual `-<integer-literal>` is an implementation
     // detail of the signed literal, not an independently range-checked positive
     // value.  In particular, the magnitude of INT64_MIN is one larger than

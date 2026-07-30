@@ -653,6 +653,24 @@ b.x = 99.0
 // q.x 仍为 3.0
 ```
 
+**聚合字面量的字段规则**（与 sealed Record 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
+```
+
 **与 `class` 的差异**：
 
 | 维度 | `class` | `struct` |
@@ -1728,6 +1746,24 @@ var pt = Point{x: 1.0, y: 2.0}
 var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
+```
+
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
 ```
 
 **Differences from `class`**:

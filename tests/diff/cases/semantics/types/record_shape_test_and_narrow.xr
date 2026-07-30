@@ -1,0 +1,39 @@
+// `is` and `as` against a sealed Record compare field sets. Both backends must
+// agree on the accept/reject decision, on the null result of a rejected safe
+// cast, and on the value read back after an accepted narrowing.
+type User = { name: string, age: int }
+type Tagged = { kind: string, n: int }
+
+var ok: Json = { name: "Alice", age: 30 }
+var missingField: Json = { name: "Bob" }
+// Narrowing projects the declared fields out of an open document, so a source
+// carrying extra fields is accepted and the extras are dropped; the result
+// still holds exactly the target's field set.
+var extraField: Json = { name: "Carol", age: 7, extra: true }
+var wrongKind: Json = { name: "Dan", age: "not an int" }
+
+print("ok is User=" + (ok is User).toString())
+print("missing is User=" + (missingField is User).toString())
+print("extra is User=" + (extraField is User).toString())
+print("wrongKind is User=" + (wrongKind is User).toString())
+
+var narrowed = ok as User
+print("narrowed=" + narrowed.name + "/" + narrowed.age.toString())
+
+print("safe reject=" + ((missingField as User?) == null).toString())
+print("safe accept=" + ((ok as User?) != null).toString())
+
+// A non-object value carries no field set and must simply answer false.
+var scalar: Json = 42
+print("scalar is User=" + (scalar is User).toString())
+
+// A union of Records is discriminated by the same check.
+fn describe(v: User | Tagged) -> string {
+    if (v is Tagged) { return "tagged:" + (v as Tagged).n.toString() }
+    if (v is User) { return "user:" + (v as User).name }
+    return "neither"
+}
+var t: User | Tagged = { kind: "t", n: 9 }
+var u: User | Tagged = { name: "Eve", age: 1 }
+print(describe(t))
+print(describe(u))

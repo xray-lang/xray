@@ -1,1 +1,1 @@
-field 'a' not declared in class 'QueryParams'
+type 'QueryParams' has no member 'a'

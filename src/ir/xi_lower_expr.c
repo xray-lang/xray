@@ -8910,6 +8910,39 @@ static XiValue *lower_typed_enum_metadata_is_test(XiLower *l, XiValue *value, Xr
 
 /* Emit an XI_IS test against the given XrTypeRef for an existing value.
  * Used both by `expr is T` and by `is T` patterns in match arms. */
+static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrType *result_type,
+                                          const char *message, int line);
+static XiValue *lower_record_shape_narrow(XiLower *l, XiValue *val, struct XrType *record_type,
+                                          int line);
+static bool xi_type_is_checkable_record(struct XrType *type);
+static bool xi_type_may_carry_record_shape(struct XrType *type);
+
+/* A Record test compares field sets, not a type id: every object-shaped value
+ * carries the same runtime type id, so the shared structural check is the only
+ * thing that can answer it. Reuse the validated narrowing the cast path uses
+ * and keep just its success bit. Returns NULL when the target is not a Record
+ * whose field set is known, leaving the type-id path to handle it. */
+static XiValue *lower_record_shape_is_test(XiLower *l, XiValue *val, struct XrType *target_type,
+                                           int line) {
+    if (!val || !xi_type_is_checkable_record(target_type) ||
+        !xi_type_may_carry_record_shape(val->type))
+        return NULL;
+    XiValue *narrowed = lower_record_shape_narrow(l, val, target_type, line);
+    if (!narrowed)
+        return NULL;
+    XiValue *isnull = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    if (!isnull)
+        return NULL;
+    isnull->args[0] = narrowed;
+    isnull->line = (uint32_t) line;
+    XiValue *matched = xi_value_new(l->func, l->cur_block, XI_NOT, l->type_bool, 1);
+    if (!matched)
+        return NULL;
+    matched->args[0] = isnull;
+    matched->line = (uint32_t) line;
+    return matched;
+}
+
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int line) {
     if (!val)
         return NULL;
@@ -8922,6 +8955,10 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     XiValue *enum_metadata_test = lower_typed_enum_metadata_is_test(l, val, target_type);
     if (enum_metadata_test)
         return enum_metadata_test;
+
+    XiValue *record_shape_test = lower_record_shape_is_test(l, val, target_type, line);
+    if (record_shape_test)
+        return record_shape_test;
 
     /* Resolve the target type to a runtime value so the VM can use it
      * directly from a register:
@@ -9199,6 +9236,26 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         l->had_error = true;
         return NULL;
     }
+    /* Structural narrowing to a sealed Record is a checked conversion. A bare
+     * XI_AS only compares the runtime type id, which every object-shaped value
+     * shares, so the result would keep a foreign field layout while the static
+     * type promises the target's — later field reads would address unverified
+     * slots. Route both `as T` and `as T?` through the validated decode and
+     * differ only in how a rejected value is reported. */
+    if (cast_type && xi_type_is_checkable_record(cast_type) &&
+        xi_type_may_carry_record_shape(source_type)) {
+        XiValue *narrowed = lower_record_shape_narrow(l, val, cast_type, node->line);
+        if (!narrowed)
+            return NULL;
+        if (as->is_safe)
+            return narrowed;
+        char msg[192];
+        snprintf(msg, sizeof(msg), "E0404: value does not match the field set of '%s'",
+                 xr_type_to_string(cast_type));
+        return lower_null_guard_or_throw(l, narrowed, cast_type, arena_strdup(l->func, msg),
+                                         node->line);
+    }
+
     int tid;
     const char *tname;
     lower_dynamic_as_target(tref, &tid, &tname);
@@ -9478,21 +9535,16 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
 
 /* expr! — force unwrap nullable; runtime null-check then pass-through.
  * Throws Exception(E0413, "Attempted to unwrap a null value") on null. */
-static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
-    XiValue *val = xi_lower_expr(l, node->as.unary.operand);
+/* Guard `val` against null: on the null path raise `message` through the active
+ * error channel, on the ok path yield the value typed as `result_type`. Shared
+ * by force unwrap and by the validated structural narrowing below so both
+ * failures reach the same channel with the same shape. */
+static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrType *result_type,
+                                          const char *message, int line) {
+    XR_DCHECK(l != NULL, "null guard: NULL lowering context");
+    XR_DCHECK(message != NULL, "null guard: NULL message");
     if (!val)
         return NULL;
-    struct XrType *result_type = xi_lower_node_type(l, node);
-    struct XrType *operand_type = xi_lower_node_type(l, node->as.unary.operand);
-    bool operand_may_be_null = !operand_type || XR_TYPE_IS_UNKNOWN(operand_type) ||
-                               operand_type->is_nullable || operand_type->kind == XR_KIND_NULL ||
-                               xr_type_intrinsically_includes_null(operand_type);
-    if (!operand_may_be_null) {
-        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
-        if (copy)
-            copy->args[0] = val;
-        return copy ? copy : val;
-    }
 
     XiValue *chk = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
     if (!chk)
@@ -9515,7 +9567,7 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
         if (thr) {
             thr->args[0] = panic_arg;
             thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-            thr->line = (uint32_t) node->line;
+            thr->line = (uint32_t) line;
         }
         l->cur_block->kind = XI_BLOCK_UNREACHABLE;
         l->cur_block->control = thr;
@@ -9537,8 +9589,7 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     cls->aux_int = XR_GLOBAL_VAR_PANIC_INFO;
     cls->aux = (void *) "PanicInfo";
 
-    XiValue *msg = xi_const_str(l->func, l->cur_block, "E0413: Attempted to unwrap a null value",
-                                l->type_string);
+    XiValue *msg = xi_const_str(l->func, l->cur_block, message, l->type_string);
     XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
     if (!exc) {
         l->cur_block->kind = XI_BLOCK_UNREACHABLE;
@@ -9550,16 +9601,16 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     exc->aux = (void *) "constructor";
     exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
     exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-    exc->line = (uint32_t) node->line;
+    exc->line = (uint32_t) line;
 
     if (l->try_depth > 0) {
         XiValue *set = xi_value_new(l->func, l->cur_block, XI_ERR_SET, l->type_unit, 1);
         if (set) {
             set->args[0] = exc;
             set->flags |= XI_FLAG_SIDE_EFFECT;
-            set->line = (uint32_t) node->line;
+            set->line = (uint32_t) line;
         }
-        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], node->line);
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
@@ -9568,7 +9619,7 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
         if (thr) {
             thr->args[0] = exc;
             thr->flags |= XI_FLAG_SIDE_EFFECT;
-            thr->line = (uint32_t) node->line;
+            thr->line = (uint32_t) line;
         }
         l->cur_block->kind = XI_BLOCK_RETURN;
         l->cur_block->control = thr;
@@ -9581,6 +9632,75 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     if (copy)
         copy->args[0] = val;
     return copy ? copy : val;
+}
+
+static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
+    XiValue *val = xi_lower_expr(l, node->as.unary.operand);
+    if (!val)
+        return NULL;
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    struct XrType *operand_type = xi_lower_node_type(l, node->as.unary.operand);
+    bool operand_may_be_null = !operand_type || XR_TYPE_IS_UNKNOWN(operand_type) ||
+                               operand_type->is_nullable || operand_type->kind == XR_KIND_NULL ||
+                               xr_type_intrinsically_includes_null(operand_type);
+    if (!operand_may_be_null) {
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+        if (copy)
+            copy->args[0] = val;
+        return copy ? copy : val;
+    }
+    return lower_null_guard_or_throw(l, val, result_type, "E0413: Attempted to unwrap a null value",
+                                     node->line);
+}
+
+/* A sealed Record has a closed field set, so narrowing an object-shaped value
+ * to one is a validated conversion, not a reinterpretation: field reads on the
+ * result address slots by ordinal, and an unchecked source with a different
+ * layout would hand back a value of the wrong type from a slot that was never
+ * verified. The typed-decode path already confirms every declared field is
+ * present and of the declared kind (recursively) and yields null otherwise, so
+ * `is` and `as` both route through it and share one definition of the rule. */
+static XiValue *lower_record_shape_narrow(XiLower *l, XiValue *val, struct XrType *record_type,
+                                          int line) {
+    XR_DCHECK(l != NULL, "record narrow: NULL lowering context");
+    if (!val || !record_type)
+        return NULL;
+    int fc = record_type->object.field_count;
+    if (fc <= 0 || !record_type->object.field_names)
+        return NULL;
+
+    const char **names =
+        (const char **) xi_func_arena_alloc(l->func, (uint32_t) (fc * (int) sizeof(const char *)));
+    if (!names)
+        return NULL;
+    for (int i = 0; i < fc; i++)
+        names[i] = arena_strdup(l->func, record_type->object.field_names[i]);
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE, record_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = val;
+    v->aux = (void *) names;
+    v->aux_int = fc;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) line;
+    return v;
+}
+
+/* True when `type` is a Record whose full field set is known at compile time,
+ * i.e. the only form a runtime shape check can be built from. */
+static bool xi_type_is_checkable_record(struct XrType *type) {
+    return type && XR_TYPE_IS_RECORD(type) && type->object.is_sealed &&
+           type->object.field_count > 0 && type->object.field_names != NULL;
+}
+
+/* Any source may be compared against a Record layout: the check answers false
+ * for a value that carries no matching field set, which is exactly what a test
+ * against an int or a class instance should report. A union of Records reaches
+ * the check this way too. `string` is the one exclusion — the shared decode
+ * path parses a string as JSON text, and a cast is not a parse request. */
+static bool xi_type_may_carry_record_shape(struct XrType *type) {
+    return !type || !XR_TYPE_IS_STRING(type);
 }
 
 static XiValue *lower_this_expr(XiLower *l, AstNode *node) {

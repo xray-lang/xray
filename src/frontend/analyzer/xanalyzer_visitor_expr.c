@@ -1440,16 +1440,13 @@ static XrType *xa_binary_numeric_literal_context(XaInferContext *ctx, XrType *ty
     return xr_type_non_nullable(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL, type);
 }
 
-static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left,
-                                               XrType *right) {
+static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left, XrType *right) {
     if (!left || !right || !XR_TYPE_IS_NUMERIC(left) || !XR_TYPE_IS_NUMERIC(right))
         return NULL;
-    XrType *left_value = left->is_nullable
-                             ? xr_type_non_nullable(ctx->analyzer->isolate, left)
-                             : left;
-    XrType *right_value = right->is_nullable
-                              ? xr_type_non_nullable(ctx->analyzer->isolate, right)
-                              : right;
+    XrType *left_value =
+        left->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, left) : left;
+    XrType *right_value =
+        right->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, right) : right;
     return xr_type_numeric_common_type(left_value, right_value);
 }
 
@@ -2607,13 +2604,29 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         if (obj_type->object.is_sealed) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
-            snprintf(msg, sizeof(msg), "类型 '%s' 没有字段 '%s'", object_shape_type_label(obj_type),
-                     ma->name);
+            snprintf(msg, sizeof(msg), "type '%s' has no field '%s'",
+                     object_shape_type_label(obj_type), ma->name);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                       XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_unknown(NULL);
+    }
+
+    /* A declared class or struct has a closed member set, so an unmatched name
+     * is decidable here.  Falling through to `unknown` deferred the failure to
+     * a runtime "field not declared" panic, which made a nominal type weaker
+     * than the structural Record above it.  Only receivers whose declaration
+     * was resolved are diagnosed; an unresolved receiver already reported its
+     * own error. */
+    if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_ref && ma->name) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "type '%s' has no member '%s'",
+                 obj_type->instance.class_name ? obj_type->instance.class_name : "?", ma->name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNKNOWN_FIELD,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     return xr_type_new_unknown(NULL);
@@ -3399,6 +3412,26 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     XrType *expected = ctx->expected_type;
     bool json_context = expected && XR_TYPE_IS_JSON(expected);
     bool record_context = expected && XR_TYPE_IS_RECORD(expected);
+
+    /* An object literal takes its semantic domain from the expected type, and
+     * the two domains differ in whether fields are checked at all.  When the
+     * expectation comes from a callee's signature that choice is invisible at
+     * the literal: retyping a parameter from a Record to `Json` would silently
+     * drop field checking at every call site, with no diagnostic and nothing in
+     * the diff at those sites.  The domain must therefore be stated where the
+     * literal is written — an annotation on the binding, or the explicit
+     * `Json.encode(...)` bridge. */
+    if (json_context && expected == ctx->expected_from_signature) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "an object literal cannot take the Json domain from a parameter type; the domain must "
+            "be stated where the literal is written: bind it to a `Json`-annotated variable, or "
+            "wrap it as Json.encode({...})",
+            &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
     bool result_is_json = json_context;
 
     if (obj->count == 0) {
@@ -4053,6 +4086,75 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     return xr_type_new_unknown(NULL);
 }
 
+static void xa_report_aggregate_literal_error(XaInferContext *ctx, AstNode *node, int code,
+                                              const char *msg) {
+    XR_DCHECK(ctx != NULL, "aggregate literal diagnostic: NULL context");
+    XR_DCHECK(node != NULL, "aggregate literal diagnostic: NULL node");
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+}
+
+static bool aggregate_literal_names_field(const StructLiteralNode *sl, const char *name) {
+    if (!sl || !name)
+        return false;
+    for (int i = 0; i < sl->field_count; i++) {
+        if (sl->field_names[i] && strcmp(sl->field_names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* An aggregate literal names every field it sets, so the complete field set is
+ * decidable during analysis.  Left unchecked, an undeclared name is dropped by
+ * lowering and only surfaces as a runtime "field not declared" panic on the
+ * first read, and an omitted field silently becomes a zero value.  Both are
+ * rejected here so a nominal literal carries the guarantees a sealed Record
+ * literal already has.  A field is optional only when its declaration supplies
+ * a default or its type admits null. */
+static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node,
+                                              const char *type_name, XrClassInfo *class_info,
+                                              const StructLiteralNode *sl) {
+    if (!ctx || !node || !class_info || !sl)
+        return;
+    const char *label = type_name ? type_name : "?";
+
+    for (int i = 0; i < sl->field_count; i++) {
+        const char *name = sl->field_names[i];
+        if (!name)
+            continue;
+        XaSymbol *member = xa_class_info_lookup_instance_member(class_info, name);
+        char msg[224];
+        if (!member) {
+            snprintf(msg, sizeof(msg), "type '%s' has no field '%s'", label, name);
+            xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_UNKNOWN_FIELD, msg);
+        } else if (member->kind == XA_SYM_METHOD) {
+            snprintf(msg, sizeof(msg), "'%s.%s' is a method and cannot be set by a literal", label,
+                     name);
+            xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_UNKNOWN_FIELD, msg);
+        }
+    }
+
+    for (XrClassInfo *info = class_info; info; info = info->base) {
+        for (int i = 0; i < info->field_count; i++) {
+            XaSymbol *field = info->fields[i];
+            if (!field || !field->name || field->has_declared_default)
+                continue;
+            XrType *field_type = field->links.type ? field->links.type : field->links.declared_type;
+            if (field_type &&
+                (field_type->is_nullable || xr_type_intrinsically_includes_null(field_type)))
+                continue;
+            if (aggregate_literal_names_field(sl, field->name))
+                continue;
+            char msg[224];
+            snprintf(msg, sizeof(msg),
+                     "literal for type '%s' is missing field '%s'; every field without a "
+                     "declared default or nullable type must be set",
+                     label, field->name);
+            xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_MISSING_FIELD, msg);
+        }
+    }
+}
+
 XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -4102,6 +4204,8 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
                                                   sl->type_arg_count);
         }
     }
+
+    xa_check_aggregate_literal_fields(ctx, node, struct_name, class_info, sl);
 
     // Infer field value types (for side effects / type checking), propagating
     // struct field types so nested literals lower to the declared layout.
@@ -4474,6 +4578,44 @@ static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
 }
 
 /* as type cast: expr as T — returns T (non-safe), or T? (safe). */
+/* `is` and `as` compare against runtime type identity. Xray keeps that identity
+ * minimal (§2.11): scalars, containers, Json, tuple arity, nominal class /
+ * struct / enum, and sealed Record field sets. Nullability, union membership
+ * and function signatures are erased, so a test against them has no runtime
+ * answer. They are rejected here because the lowering would otherwise emit a
+ * type test with no target operand — malformed Xi IR, surfacing as an internal
+ * verifier failure instead of a diagnostic. */
+void xa_check_runtime_testable_type(XaInferContext *ctx, AstNode *node, XrTypeRef *tref,
+                                    const char *op_name) {
+    if (!ctx || !node || !tref)
+        return;
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, tref);
+    if (!target || XR_TYPE_IS_ERROR(target) || XR_TYPE_IS_UNKNOWN(target))
+        return;
+
+    const char *reason = NULL;
+    const char *hint = NULL;
+    if (target->is_nullable || tref->kind == XR_TREF_OPTIONAL) {
+        reason = "nullability is not part of runtime type identity";
+        hint = "test `x != null` first, then test the non-null type";
+    } else if (XR_TYPE_IS_UNION(target) || tref->kind == XR_TREF_UNION) {
+        reason = "a union is not a runtime type";
+        hint = "test each member type separately";
+    } else if (XR_TYPE_IS_FUNCTION(target) || tref->kind == XR_TREF_FUNCTION) {
+        reason = "function types carry no runtime identity";
+        hint = "no runtime check exists for a function signature";
+    }
+    if (!reason)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "'%s %s' is not a valid type test: %s; %s", op_name,
+             xr_type_to_string(target), reason, hint);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);

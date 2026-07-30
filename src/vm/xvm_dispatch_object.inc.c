@@ -437,7 +437,10 @@ vmcase(OP_JSON_DECODE) {
             vmbreak;
         }
         src = xr_value_to_json(parsed);
-    } else if (xr_value_is_json(data)) {
+    } else if (xr_value_has_object_shape(data)) {
+        /* Records share Json's dynamic-field representation, so a Record source
+         * is validated against the target field set the same way. This is what
+         * lets `record is T` and `record as T` reach the check at all. */
         src = xr_value_to_json(data);
     } else {
         R(a) = xr_null();

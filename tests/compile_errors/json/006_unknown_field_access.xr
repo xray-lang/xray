@@ -1,6 +1,6 @@
 // 006_unknown_field_access.xr
 // 错误测试：访问严格类型中不存在的字段
-// 期望错误：类型 '...' 没有字段 'z'
+// 期望错误：type '...' has no field 'z'
 type Point = { x: int, y: int }
 var p: Point = { "x": 1, "y": 2 }
 print(p.z)

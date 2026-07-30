@@ -563,7 +563,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
+5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `Record` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -799,7 +799,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | `Json` / `Object` (structural) | see §2.4.6 |
+| `{ key: value }` (no prefix) | sealed `Record` (`Json` when the expected type is `Json`) | see §2.4.6 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -867,6 +867,24 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 **Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
+**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a call boundary**: an object literal in argument position is always a `Record`, and reaching a `Json` parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first.
+
+```xray
+fn submit(o: Json) { }
+
+// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a parameter type
+submit(Json.encode({ itemId: 1, qty: 3 }))    // OK: explicit domain crossing
+var payload: Json = { itemId: 1, qty: 3 }     // OK: annotation sits with the literal
+submit(payload)
+
+var cfg: Json = {}                            // OK
+var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK: nesting inherits along structure
+fn build() -> Json { return { ok: true } }    // OK: return type is visible here
+var arr: Array<Json> = [{ a: 1 }]             // OK: propagates along literal structure
+```
+
+The rule closes a silent channel: retyping a parameter from a Record to `Json` would otherwise downgrade every call site's literal from statically checked to unchecked, with no diagnostic and nothing in the diff at those sites. Under the rule, such a signature change fails at every call site immediately.
+
 ```xray
 type User = { name: string, age: int }
 
@@ -880,6 +898,17 @@ var u2 = { name: "Alice", age: 30 }      // sealed Record
 var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
+
+**Responsibilities of the product types**: the line between the structural and nominal domains is whether a type carries methods.
+
+| | Identity | Field set | User-defined methods | Use for |
+|---|---|---|---|---|
+| `Record` | structural | declared, exact at compile time | **no** | options, multi-field returns, ordinary business data |
+| `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
+| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
+| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
+
+**Normative commitment**: `Record` and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
 
 #### 2.4.7 `BigInt`
 
@@ -1078,17 +1107,25 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | Typed integer | any floating type | ❌ explicit `as` required |
 | Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `T` | `Json` (if T is Json-compatible) | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON scalar enters the value domain |
+| Any other type | `Json` | ❌ `Json.encode(value)` required |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| Subset object type | Superset object type | ❌ (structural compatibility goes superset → subset) |
+| Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
 
-> **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
+> **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK: full is a superset of User
+> // var u: User = full            // compile error E0352: extra field 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
+
+> **Record and Json are two disconnected semantic domains**: `Record` is a closed field set checked at compile time; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
+> - `Json.encode(value)`: typed value → `Json`
+> - `json as T` / `json as T?`: `Json` → a Record or other typed value (structural narrowing)
 
 #### 2.10.2 Explicit `as`
 
@@ -1106,6 +1143,8 @@ Numeric `as` is independent of the host C compiler, optimization level, and VM/A
 
 `expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
+**Structural narrowing is a validated conversion**: when the target is a sealed Record, the runtime confirms field by field that every declared field is present with a matching type (recursively for nested Records), then builds a new value holding exactly the target's field set. Extra fields in the source are dropped — narrowing **projects** the declared fields out of an open document and does not require the source field set to match exactly. On rejection `as T` raises `E0404` and `as T?` yields `null`. VM and AOT agree on the accept/reject decision.
+
 #### 2.10.3 `is` Check
 
 ```xray
@@ -1115,6 +1154,16 @@ if (v is User) {
 ```
 
 Acts only as a type guard; does not change the value.
+
+`is` and `as` compare **runtime type identity** (§2.11). Testable targets: primitives, `Array` / `Map` / `Set`, `Json`, tuple arity, nominal class / struct / interface / enum, and the field set of a sealed Record (the same check as §2.10.2).
+
+Runtime identity does **not** record nullability, union membership or function signatures, so those three are not valid type tests and are rejected at compile time (`E0352`):
+
+```xray
+// v is int?              // compile error: nullability is not part of runtime identity; test v != null first
+// v is int | string      // compile error: a union is not a runtime type; test each member
+// v is (int) -> int      // compile error: function types carry no runtime identity
+```
 
 ### 2.11 typeOf / typeName / Type Enum
 
@@ -2771,6 +2820,24 @@ b.x = 99.0
 // q.x is still 3.0
 ```
 
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
+```
+
 **Differences from `class`**:
 
 | Dimension | `class` | `struct` |
@@ -4232,15 +4299,16 @@ render(Square())     // OK
 
 #### Structural objects
 
-Only `object literal` and `type T = {...}` use structural matching:
+Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK: literal matches structurally
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error: sealed type rejects extra fields
+describe({ x: 1.0, y: 2.0 })          // OK: exact field set
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0352: sealed type rejects extra field 'z'
+describe({ x: 1.0 })                  // compile error E0352: missing field 'y'
 ```
 
 ### 9.6 Variance
@@ -5765,6 +5833,8 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
 
 ### 18.3 Runtime
 
