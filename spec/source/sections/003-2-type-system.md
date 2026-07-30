@@ -564,6 +564,17 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 字段集不同的 Record | Record | ❌ sealed Record 要求精确字段集 |
 
 > **sealed Record 的宽度规则**：Record 赋值要求**精确字段集**——源的字段名集合必须与目标一致。目标中类型可空的字段允许缺省，其余字段既不能少也不能多。Xray 不提供 width subtyping，`superset → subset` 与 `subset → superset` 两个方向都被拒绝。
+>
+> **字段类型不变（invariant）**：Record 是引用值且字段可变，两个视图观察同一份存储。若字段只按加宽方向兼容，宽视图就能写入一个窄视图仍承诺按自身类型持有的值，窄视图随后读回错误类型。因此字段类型必须**双向**兼容，与 `Array<T>`、`Map<K,V>`、`Slice<T>`、`[T; N]` 已有的不变规则一致。
+>
+> ```xray
+> type HasAnimal = { p: Animal }
+> type HasDog    = { p: Dog }        // Dog extends Animal
+> var d: HasDog = { p: Dog("rex") }
+> // var a: HasAnimal = d            // 编译错误 E0352：字段不变
+> ```
+>
+> **为声明形状书写的字面量采用该形状**：`{ limit: 5 }` 用在 `limit: int?` 的位置时其字段类型就是 `int?`。这类字面量没有第二个绑定把它保持在更窄的类型上，因此不存在"按窄类型读回"的一方；已有绑定仍带着自己的字段类型进入不变性检查。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
@@ -1263,6 +1274,17 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
 
 > **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
+>
+> **Field types are invariant**: a Record is a reference value with mutable fields, so two views observe the same storage. If a field were compatible only in the widening direction, the wider view could store a value the narrower view still promises to hold at its own type, and the narrower view would then read back the wrong type. Field types must therefore be compatible in **both** directions, matching the invariance already chosen for `Array<T>`, `Map<K,V>`, `Slice<T>` and `[T; N]`.
+>
+> ```xray
+> type HasAnimal = { p: Animal }
+> type HasDog    = { p: Dog }        // Dog extends Animal
+> var d: HasDog = { p: Dog("rex") }
+> // var a: HasAnimal = d            // compile error E0352: fields are invariant
+> ```
+>
+> **A literal written for a declared shape adopts that shape**: `{ limit: 5 }` used where `limit: int?` is declared has field type `int?`. Such a literal has no second binding holding it at the narrower type, so nothing can read it back that way; an existing binding still carries its own field types into the invariance check.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }

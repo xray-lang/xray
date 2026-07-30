@@ -184,6 +184,7 @@ describe({ x: 1.0 })                  // 编译错误 E0352：缺少字段 'y'
 
 当前不支持显式方差标注（`out T` / `in T`）。默认行为：
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
+- Record 字段：**不变**（`{p: Dog}` 不是 `{p: Animal}` 的子类型，详见 §2.10.1）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
 ### 9.7 泛型与类型身份
@@ -387,6 +388,7 @@ describe({ x: 1.0 })                  // compile error E0352: missing field 'y'
 
 Explicit variance annotations (`out T` / `in T`) are not currently supported. Default behavior:
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
+- Record fields: **invariant** (`{p: Dog}` is not a subtype of `{p: Animal}`; see §2.10.1).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
 ### 9.7 Generics and Type Identity
