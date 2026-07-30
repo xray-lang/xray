@@ -660,10 +660,10 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
     XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth = type_param_count <= 8
-                            ? stack_synth
-                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
-                                                       (size_t) type_param_count);
+    XrTypeRef **synth =
+        type_param_count <= 8
+            ? stack_synth
+            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
@@ -1282,9 +1282,13 @@ static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     return NULL;
 }
 
-static XaSymbol *xa_thread_spawn_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
+XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
         return NULL;
+    /* The id recorded when the reference was resolved is the only scope-
+     * independent answer.  Effect scans walk a body long after its scope was
+     * popped, so a name lookup from the current scope would silently skip the
+     * shadowing declaration and resolve to an outer symbol of the same name. */
     uint32_t symbol_id = node->as.variable.symbol_id;
     if (symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
@@ -1335,16 +1339,6 @@ static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNo
     return member_sym;
 }
 
-static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    const char *module_name = ma->object->as.variable.name;
-    return module_name && strcmp(module_name, "Coro") == 0;
-}
 static bool xa_thread_spawn_path_is_sync_module(const char *path) {
     return path && (strstr(path, "stdlib/sync/sync.xr") || strstr(path, "stdlib\\sync\\sync.xr") ||
                     strstr(path, "<embedded stdlib>/sync/sync.xr"));
@@ -1612,7 +1606,7 @@ xa_thread_spawn_function_value_expr_status(XaInferContext *ctx, AstNode *expr,
     }
 
     if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, expr);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, expr);
         return xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
     }
 
@@ -1641,7 +1635,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
         *out_feature = NULL;
     if (!ctx || !call)
         return false;
-    if (xa_thread_spawn_call_is_coro_yield(call)) {
+    if (xa_call_is_builtin_module_member(ctx, call, "Coro", "yield")) {
         if (out_feature)
             *out_feature = "Coro.yield()";
         return true;
@@ -1656,7 +1650,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
     }
 
     if (callee && callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, callee);
         if (sym && sym->kind == XA_SYM_FUNCTION) {
             if (xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
                 if (out_feature)
@@ -2406,20 +2400,25 @@ static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *obje
     return links ? links->module_name : NULL;
 }
 
-static bool xa_runtime_module_call_matches(XaInferContext *ctx, CallExprNode *call,
-                                           const char *module_name, const char *member_name) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
+                                      const char *module_name, const char *member_name) {
+    if (!ctx || !ctx->analyzer || !call || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS || !module_name || !member_name)
         return false;
-    MemberAccessNode *member = &call->callee->as.member_access;
-    return member->name && strcmp(member->name, member_name) == 0 &&
-           xa_call_object_is_module(ctx, member->object, module_name);
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || strcmp(member->name, member_name) != 0 || !member->object ||
+        member->object->type != AST_VARIABLE || !member->object->as.variable.name)
+        return false;
+    /* Resolved symbol, not spelling: a shadowing declaration resolves to itself. */
+    return xa_symbol_is_builtin_module(
+        ctx->analyzer, xa_resolve_variable_symbol(ctx, member->object), module_name);
 }
 
 static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *node,
                                                CallExprNode *call, bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "Coro", "Local"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "Coro", "Local"))
         return NULL;
     if (handled)
         *handled = true;
@@ -2446,8 +2445,7 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *type_args[1] = {
-        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
+    XrType *type_args[1] = {value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
@@ -2455,7 +2453,7 @@ static XrType *xa_visit_coro_pool_submit(XaInferContext *ctx, AstNode *node, Cal
                                          bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "CoroPool", "submit"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "CoroPool", "submit"))
         return NULL;
     if (handled)
         *handled = true;

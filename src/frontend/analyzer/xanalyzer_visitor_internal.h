@@ -95,6 +95,21 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name);
 
+/* Canonical resolver for a variable reference: prefers the symbol id recorded
+ * when the reference was resolved, so the answer does not depend on which scope
+ * happens to be current when the question is asked. */
+XR_FUNC XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node);
+
+/* Canonical recognizer for a call to a member of a VM-intrinsic built-in module
+ * (`Coro.yield()`, `Coro.Local<T>()`, `CoroPool.submit()`, ...).  The receiver is
+ * resolved through the symbol table and must be the built-in module symbol; a
+ * user declaration that merely spells the same name resolves to that declaration
+ * and is rejected here.  Every site that needs this question must call this
+ * function -- recognizing an intrinsic by comparing the source spelling makes the
+ * same semantic decision twice with two different answers. */
+XR_FUNC bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
+                                              const char *module_name, const char *member_name);
+
 /* Task 216: a function item can carry a precise inferred effect, but storing it
  * in an unannotated variable/field creates a merge point whose type defaults to
  * MAY_THROW. Copy before widening so the declaration symbol's precise function

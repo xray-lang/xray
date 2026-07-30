@@ -592,19 +592,6 @@ static AstNode *xa_parallel_symbol_function_body(XaInferContext *ctx, XaSymbol *
     return NULL;
 }
 
-static XaSymbol *xa_parallel_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
-        return NULL;
-    uint32_t symbol_id = node->as.variable.symbol_id;
-    if (symbol_id != 0) {
-        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
-        if (sym)
-            return sym;
-    }
-    const char *name = node->as.variable.name;
-    return name ? xa_lookup_visible_symbol(ctx, name) : NULL;
-}
-
 static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !sym || !sym->is_imported)
         return sym;
@@ -629,7 +616,7 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
         !ma->object->as.variable.name)
         return NULL;
 
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
 
@@ -642,20 +629,6 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
         return NULL;
     XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     return xa_parallel_import_target_symbol(ctx, member);
-}
-
-static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    const char *module_name = ma->object->as.variable.name;
-    if (!module_name || strcmp(module_name, "Coro") != 0)
-        return false;
-    XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, ma->object) : NULL;
-    return sym && sym->kind == XA_SYM_MODULE && sym->is_builtin;
 }
 
 static XrType *xa_parallel_node_type(XaInferContext *ctx, AstNode *node) {
@@ -771,7 +744,7 @@ static const char *xa_parallel_module_member_yieldable_feature(XaInferContext *c
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
         return NULL;
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
@@ -790,7 +763,7 @@ static const char *xa_parallel_module_member_unknown_effect_feature(XaInferConte
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
         return NULL;
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
@@ -849,7 +822,7 @@ static const char *xa_parallel_stdlib_suspend_call_feature(XaParallelCallbackEff
     if (feature)
         return feature;
     if (call->callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, call->callee);
         return xa_parallel_imported_yieldable_feature(ctx, sym, scan->feature_buf,
                                                       sizeof(scan->feature_buf));
     }
@@ -870,7 +843,7 @@ static const char *xa_parallel_unknown_effect_call_feature(XaParallelCallbackEff
     if (feature)
         return feature;
     if (call->callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, call->callee);
         return xa_parallel_imported_unknown_effect_feature(ctx, sym, scan->feature_buf,
                                                            sizeof(scan->feature_buf));
     }
@@ -916,7 +889,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         return NULL;
 
     XaInferContext *ctx = scan ? scan->ctx : NULL;
-    if (xa_parallel_call_is_coro_yield(ctx, call)) {
+    if (xa_call_is_builtin_module_member(ctx, call, "Coro", "yield")) {
         if (is_suspend)
             *is_suspend = true;
         return "Coro.yield()";
@@ -946,7 +919,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
     if (call->callee->type == AST_VARIABLE &&
         xa_parallel_assert_call_name(call->callee->as.variable.name)) {
         const char *name = call->callee->as.variable.name;
-        XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, call->callee) : NULL;
+        XaSymbol *sym = ctx ? xa_resolve_variable_symbol(ctx, call->callee) : NULL;
         if (sym && sym->kind == XA_SYM_FUNCTION && sym->is_builtin)
             return name ? name : "assert";
     }
@@ -964,7 +937,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
     XaSymbol *callee_sym = NULL;
     const char *callee_name = NULL;
     if (call->callee->type == AST_VARIABLE) {
-        callee_sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        callee_sym = xa_resolve_variable_symbol(ctx, call->callee);
         callee_name = call->callee->as.variable.name;
     } else if (call->callee->type == AST_MEMBER_ACCESS) {
         callee_sym = xa_parallel_module_member_symbol(ctx, call->callee);
@@ -1106,7 +1079,7 @@ xa_parallel_function_value_expr_status(XaInferContext *ctx, AstNode *expr, XaSym
     }
 
     if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, expr);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, expr);
         return xa_parallel_function_value_symbol_status(ctx, sym, call_stack, call_depth,
                                                         out_suspend);
     }
@@ -5477,14 +5450,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                         : false;
                     if (readonly) {
                         char msg[256];
-                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                        snprintf(msg, sizeof(msg),
+                                 "cannot assign to read-only field '%s.%s' (declared const)",
                                  object_shape_type_label_local(obj_type), ms->member);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (obj_type->object.is_sealed) {
                     char msg[256];
-                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                    snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(obj_type), ms->member);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -6475,14 +6449,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                         : false;
                     if (readonly) {
                         char msg[256];
-                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                        snprintf(msg, sizeof(msg),
+                                 "cannot assign to read-only field '%s.%s' (declared const)",
                                  object_shape_type_label_local(array_type), key);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (array_type->object.is_sealed) {
                     char msg[256];
-                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                    snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(array_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
