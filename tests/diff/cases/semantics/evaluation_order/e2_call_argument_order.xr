@@ -8,7 +8,8 @@ fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
 fn withDefault(a: int, b: int = 99) -> int { return a + b }
 
 class Holder {
-    base: int = 10
+    base: int
+    constructor() { this.base = 10 }
     bump(n: int) -> int {
         return this.base + n
     }
