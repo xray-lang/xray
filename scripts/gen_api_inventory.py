@@ -20,6 +20,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import builtin_symbols  # noqa: E402  (repo-local helper, needs the path above)
+
 
 ITEM_SORT_KEY = lambda item: (
     item.get("category", ""),
@@ -87,14 +90,6 @@ GLOBAL_SUMMARIES = {
     "__dir__": "Current source directory.",
 }
 
-PRELUDE_ENUMS = {
-    "Ordering": ["Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"],
-    "Endian": ["Native", "LE", "BE"],
-    "Recv": ["Value", "Empty", "Timeout", "Closed"],
-    "SendResult": ["Sent", "Full", "Timeout", "Closed"],
-    "TaskResult": ["Success", "Failed", "Cancelled", "Timeout", "Pending"],
-    "TaskStatus": ["Pending", "Running", "Success", "Failed", "Cancelled"],
-}
 
 
 def rel(root: Path, path: Path) -> str:
@@ -977,37 +972,34 @@ def collect_globals(root: Path) -> list[dict[str, Any]]:
 
 
 def collect_prelude(root: Path) -> list[dict[str, Any]]:
+    """Prelude types and enums, both read from builtin_symbols.def."""
     out: list[dict[str, Any]] = []
-    path = root / "stdlib/prelude/prelude_types.def"
-    text = path.read_text(encoding="utf-8")
-    for match in re.finditer(r'XR_PRELUDE_TYPE\("([^"]+)",\s*([^,]+),\s*([A-Z0-9_]+)\)', text):
-        name = match.group(1)
+    registry = builtin_symbols.load(root)
+    source = rel(root, registry.path)
+    for symbol in registry.by_category("prelude_type"):
         out.append(
             item(
                 category="prelude",
                 namespace="prelude",
-                name=name,
+                name=symbol.name,
                 kind="type",
-                signature=match.group(3),
-                summary=f"Visible without import; native type {match.group(2).strip()}",
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
+                signature=symbol.prelude_kind or "",
+                summary=f"Visible without import; native type {symbol.native_type}",
+                source=source,
+                line=symbol.line,
             )
         )
-    enum_source = root / "src/frontend/analyzer/xanalyzer.c"
-    enum_text = enum_source.read_text(encoding="utf-8")
-    for name, members in PRELUDE_ENUMS.items():
-        marker = enum_text.find(f'"{name}"')
+    for symbol in registry.by_category("enum"):
         out.append(
             item(
                 category="prelude",
                 namespace="prelude",
-                name=name,
+                name=symbol.name,
                 kind="enum",
-                signature=" | ".join(members),
+                signature=" | ".join(name for name, _payload in symbol.variants),
                 summary="Built-in prelude enum.",
-                source=rel(root, enum_source),
-                line=line_for_offset(enum_text, marker) if marker >= 0 else 1,
+                source=source,
+                line=symbol.line,
             )
         )
     return out

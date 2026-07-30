@@ -1,0 +1,2 @@
+fn size<T: Lengthable>(v: T) -> int { return len(v) }
+print(size("abc"))

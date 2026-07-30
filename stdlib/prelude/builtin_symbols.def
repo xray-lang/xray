@@ -1,0 +1,206 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * builtin_symbols.def - Single source of truth for every symbol the language
+ *                       provides without an explicit import.
+ *
+ * WHY THIS FILE EXISTS:
+ *   These names used to live in four places that drifted independently: the
+ *   prelude type table, a hand-written enum registration function, a builtin
+ *   interface array, and two strcmp arity chains in the type resolver. The
+ *   language specification's built-in symbol table was a fourth, hand-copied
+ *   list, so symbols such as Ordering, Recv<T>, TaskResult<T>, Lengthable and
+ *   Iterator<T> were normative in the compiler but absent from the spec.
+ *   Everything the user can name without importing it is declared here once,
+ *   and scripts/check_builtin_symbol_registry.py reconciles this file with the
+ *   spec section generated from it.
+ *
+ * USAGE:
+ *   This file is not a normal header. Define the categories you consume before
+ *   including it; the undefined ones expand to nothing.
+ *
+ *     #define XR_BUILTIN_IFACE(name, arity) {name, arity},
+ *     #include "builtin_symbols.def"
+ *
+ *   The file undefines every category on the way out, so a translation unit may
+ *   include it repeatedly with different definitions.
+ *
+ * CATEGORIES:
+ *   XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind)
+ *       User-visible type carried in the process-wide prelude symbol table.
+ *       native_type   XrObjType GC type id (XR_TARRAY etc.), or 0 if none.
+ *       prelude_kind  XrPreludeKind suffix (SIMPLE / GENERIC_1 / GENERIC_2 /
+ *                     SINGLETON) selecting the parser/constructor path.
+ *
+ *   XR_BUILTIN_TYPE(name, arity)
+ *       User-visible type head the resolver knows but that is not constructed
+ *       through the prelude symbol table.
+ *
+ *   XR_BUILTIN_ENUM(name, arity, vm_slot, variants)
+ *       Prelude enum.
+ *       vm_slot   XR_GLOBAL_VAR_* suffix naming the VM builtin slot that holds
+ *                 the canonical XrEnumType, or NONE for enums the runtime does
+ *                 not bind (their values never cross a module boundary).
+ *       variants  a parenthesis-free sequence of
+ *                 XR_BUILTIN_ENUM_VARIANT(name, payload) with payload one of:
+ *                   NONE          no payload
+ *                   TYPE_PARAM_0  payload typed as the enum's first type parameter
+ *                   UNKNOWN       payload with no static type
+ *       An enum is an ADT exactly when some variant carries a payload.
+ *
+ *   XR_BUILTIN_IFACE(name, arity)
+ *       Built-in constraint interface usable in `T: Name` and `implements`.
+ *
+ *   XR_BUILTIN_UNDEFINED_HINT(name, hint)
+ *       Not a symbol: a name that is *deliberately absent* and that users keep
+ *       reaching for. When resolution of this name fails, the resolver reports
+ *       `hint` instead of the bare "undefined type". A user declaration of the
+ *       same name still wins — the hint is only reached when nothing resolves.
+ */
+
+#ifndef XR_BUILTIN_PRELUDE_TYPE
+#define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind)
+#endif
+#ifndef XR_BUILTIN_TYPE
+#define XR_BUILTIN_TYPE(name, arity)
+#endif
+#ifndef XR_BUILTIN_ENUM
+#define XR_BUILTIN_ENUM(name, arity, vm_slot, variants)
+#endif
+#ifndef XR_BUILTIN_ENUM_VARIANT
+#define XR_BUILTIN_ENUM_VARIANT(name, payload)
+#endif
+#ifndef XR_BUILTIN_IFACE
+#define XR_BUILTIN_IFACE(name, arity)
+#endif
+#ifndef XR_BUILTIN_UNDEFINED_HINT
+#define XR_BUILTIN_UNDEFINED_HINT(name, hint)
+#endif
+
+/* ========== Prelude types ==========
+ *            name             arity  native_type    prelude_kind */
+XR_BUILTIN_PRELUDE_TYPE("Array",         1, XR_TARRAY,    GENERIC_1)
+XR_BUILTIN_PRELUDE_TYPE("Atomic",        1, XR_TATOMIC,   GENERIC_1)
+XR_BUILTIN_PRELUDE_TYPE("BigInt",        0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Channel",       1, XR_TCHANNEL,  GENERIC_1)
+XR_BUILTIN_PRELUDE_TYPE("Json",          0, 0,            SINGLETON)
+XR_BUILTIN_PRELUDE_TYPE("Map",           2, XR_TMAP,      GENERIC_2)
+XR_BUILTIN_PRELUDE_TYPE("NetConn",       0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("NetListener",   0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("OsBarrier",     0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("OsCondvar",     0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("OsMutex",       0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("OsOnce",        0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("OsRwLock",      0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("PanicInfo",     0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Path",          0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Range",         0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Regex",         0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Set",           1, XR_TSET,      GENERIC_1)
+XR_BUILTIN_PRELUDE_TYPE("StringBuilder", 0, XR_TINSTANCE, SIMPLE)
+XR_BUILTIN_PRELUDE_TYPE("Thread",        1, XR_TTHREAD,   GENERIC_1)
+
+/* ========== Resolver-known type heads ==========
+ * Constructed by the analyzer rather than through the prelude symbol table. */
+XR_BUILTIN_TYPE("CFn",       1)
+XR_BUILTIN_TYPE("CoroLocal", 1)
+XR_BUILTIN_TYPE("MutPtr",    1)
+XR_BUILTIN_TYPE("Ptr",       1)
+XR_BUILTIN_TYPE("Slice",     1)
+XR_BUILTIN_TYPE("Task",      1)
+XR_BUILTIN_TYPE("WeakMap",   2)
+XR_BUILTIN_TYPE("WeakSet",   1)
+
+/* ========== Enum reflection views ==========
+ * Static types of `E.variants` / `E.payloads` and their elements. Writable as
+ * annotations over a concrete enum: `var v: EnumVariant<Color> = ...`. */
+XR_BUILTIN_TYPE("EnumVariants",     1)
+XR_BUILTIN_TYPE("EnumVariant",      1)
+XR_BUILTIN_TYPE("EnumPayloads",     1)
+XR_BUILTIN_TYPE("EnumPayloadField", 1)
+
+/* ========== Prelude enums ========== */
+XR_BUILTIN_ENUM("Ordering", 0, ORDERING,
+                XR_BUILTIN_ENUM_VARIANT("Relaxed", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Acquire", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Release", NONE)
+                XR_BUILTIN_ENUM_VARIANT("AcquireRelease", NONE)
+                XR_BUILTIN_ENUM_VARIANT("SeqCst", NONE))
+
+XR_BUILTIN_ENUM("Endian", 0, ENDIAN,
+                XR_BUILTIN_ENUM_VARIANT("Native", NONE)
+                XR_BUILTIN_ENUM_VARIANT("LE", NONE)
+                XR_BUILTIN_ENUM_VARIANT("BE", NONE))
+
+XR_BUILTIN_ENUM("Utf8Error", 0, NONE,
+                XR_BUILTIN_ENUM_VARIANT("InvalidUtf8", NONE))
+
+XR_BUILTIN_ENUM("StringSliceError", 0, NONE,
+                XR_BUILTIN_ENUM_VARIANT("InvalidByteRange", NONE))
+
+XR_BUILTIN_ENUM("CompressionError", 0, NONE,
+                XR_BUILTIN_ENUM_VARIANT("InvalidData", NONE))
+
+XR_BUILTIN_ENUM("CryptoError", 0, NONE,
+                XR_BUILTIN_ENUM_VARIANT("InvalidLength", NONE))
+
+XR_BUILTIN_ENUM("Recv", 1, RECV,
+                XR_BUILTIN_ENUM_VARIANT("Value", TYPE_PARAM_0)
+                XR_BUILTIN_ENUM_VARIANT("Empty", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Closed", NONE))
+
+XR_BUILTIN_ENUM("SendResult", 0, SEND_RESULT,
+                XR_BUILTIN_ENUM_VARIANT("Sent", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Full", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Closed", NONE))
+
+XR_BUILTIN_ENUM("TaskResult", 1, TASK_RESULT,
+                XR_BUILTIN_ENUM_VARIANT("Success", TYPE_PARAM_0)
+                XR_BUILTIN_ENUM_VARIANT("Failed", UNKNOWN)
+                XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Pending", NONE))
+
+XR_BUILTIN_ENUM("TaskStatus", 0, TASK_STATUS,
+                XR_BUILTIN_ENUM_VARIANT("Pending", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Running", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Success", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Failed", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE))
+
+/* ========== Built-in constraint interfaces ==========
+ * Method signatures live in xanalyzer_builtin_interfaces.c; the name and arity
+ * that the parser, resolver and generic-constraint checker agree on live here. */
+XR_BUILTIN_IFACE("Callable",   1)
+XR_BUILTIN_IFACE("Closeable",  0)
+XR_BUILTIN_IFACE("Comparable", 0)
+XR_BUILTIN_IFACE("Equatable",  0)
+XR_BUILTIN_IFACE("Hashable",   0)
+XR_BUILTIN_IFACE("Indexable",  2)
+XR_BUILTIN_IFACE("Iterable",   1)
+XR_BUILTIN_IFACE("Iterator",   1)
+XR_BUILTIN_IFACE("Lengthable", 0)
+XR_BUILTIN_IFACE("Stringable", 0)
+
+/* ========== Deliberately absent names ==========
+ * Reported with an actionable hint instead of a bare "undefined type". A user
+ * declaration of the same name resolves normally and never reaches the hint. */
+XR_BUILTIN_UNDEFINED_HINT("Self",
+                          "Xray has no 'Self' type; write the declaring type's own name, "
+                          "e.g. operator==(other: Token) -> bool")
+XR_BUILTIN_UNDEFINED_HINT("Box",
+                          "'Box' is not a built-in type; indirect recursive data through a "
+                          "class node or a container slot such as Array<T>")
+
+#undef XR_BUILTIN_PRELUDE_TYPE
+#undef XR_BUILTIN_TYPE
+#undef XR_BUILTIN_ENUM
+#undef XR_BUILTIN_ENUM_VARIANT
+#undef XR_BUILTIN_IFACE
+#undef XR_BUILTIN_UNDEFINED_HINT

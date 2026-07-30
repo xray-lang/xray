@@ -1,0 +1,2 @@
+var w = WeakSet<string>()
+print(len(w))

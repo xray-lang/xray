@@ -1,0 +1,2 @@
+var b: BigInt = 123n
+print(b.toString())

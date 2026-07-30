@@ -1,0 +1,2 @@
+fn use(l: OsRwLock) -> bool { return true }
+print(true)

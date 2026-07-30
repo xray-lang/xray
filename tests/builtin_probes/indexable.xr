@@ -1,0 +1,2 @@
+fn use(v: Indexable<int, string>) -> bool { return true }
+print(true)

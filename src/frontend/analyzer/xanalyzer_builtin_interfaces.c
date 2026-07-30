@@ -382,6 +382,18 @@ static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1},
 };
 
+/* The table above binds each interface to its method signatures; the language
+ * surface (which names exist, and how many type arguments each takes) is owned
+ * by builtin_symbols.def, which the resolver, the LSP and the specification
+ * generator all read. Neither list may grow a name the other lacks. */
+static const char *const g_builtin_iface_surface[] = {
+#define XR_BUILTIN_IFACE(name, arity) name,
+#include "../../../stdlib/prelude/builtin_symbols.def"
+};
+
+#define XA_IFACE_SURFACE_COUNT                                                                     \
+    (sizeof(g_builtin_iface_surface) / sizeof(g_builtin_iface_surface[0]))
+
 static xr_once_t builtin_interface_methods_once = XR_ONCE_INITIALIZER;
 
 static void init_builtin_interface_methods(void) {
@@ -392,6 +404,16 @@ static void init_builtin_interface_methods(void) {
     iterator_methods[1].return_type = xr_type_new_bool(NULL);
     nth_params[0] = xr_type_new_int(NULL);
     iterator_methods[2].param_types = nth_params;
+
+    XR_STATIC_ASSERT(XA_IFACE_SURFACE_COUNT == (size_t) XA_IFACE_COUNT,
+                     "builtin_symbols.def and builtin_interfaces[] disagree on interface count");
+    for (size_t i = 0; i < XA_IFACE_SURFACE_COUNT; i++) {
+        bool found = false;
+        for (int j = 0; j < XA_IFACE_COUNT && !found; j++)
+            found = builtin_interfaces[j].name &&
+                    strcmp(builtin_interfaces[j].name, g_builtin_iface_surface[i]) == 0;
+        XR_DCHECK(found, "builtin_symbols.def declares an interface with no method table");
+    }
 }
 
 // ============================================================================

@@ -299,61 +299,93 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     }
 }
 
-static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const char **member_names,
-                                  int member_count, const int *payload_counts, bool is_adt) {
-    register_prelude_enum_full(analyzer, name, NULL, 0, member_names, member_count, payload_counts,
-                               NULL, is_adt);
-}
+/* Prelude enum registry, generated from builtin_symbols.def. A variant payload
+ * is either absent, typed as the enum's first type parameter, or statically
+ * unknown; those three shapes cover every prelude enum. */
+typedef enum {
+    XA_PRELUDE_PAYLOAD_NONE,
+    XA_PRELUDE_PAYLOAD_TYPE_PARAM_0,
+    XA_PRELUDE_PAYLOAD_UNKNOWN,
+} XaPreludePayloadKind;
+
+typedef struct {
+    const char *name;
+    uint8_t payload;
+} XaPreludeVariantDesc;
+
+typedef struct {
+    const char *name;
+    int arity;
+    int variant_count;
+} XaPreludeEnumDesc;
+
+/* All variants of all prelude enums, flattened in declaration order. Each
+ * enum's slice starts where the previous one ended. */
+static const XaPreludeVariantDesc g_prelude_enum_variants[] = {
+#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants) evariants
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XA_PRELUDE_PAYLOAD_##payload},
+#include "../../../stdlib/prelude/builtin_symbols.def"
+};
+
+static const XaPreludeEnumDesc g_prelude_enums[] = {
+#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants)                                        \
+    {(ename), (earity),                                                                            \
+     (int) (sizeof((const XaPreludeVariantDesc[]) {evariants}) / sizeof(XaPreludeVariantDesc))},
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XA_PRELUDE_PAYLOAD_##payload},
+#include "../../../stdlib/prelude/builtin_symbols.def"
+};
+
+#define XA_PRELUDE_ENUM_COUNT (sizeof(g_prelude_enums) / sizeof(g_prelude_enums[0]))
+/* Widest prelude enum; sizes the per-enum scratch arrays below. */
+#define XA_PRELUDE_ENUM_MAX_VARIANTS 8
 
 // Register prelude enums so they are available without a
 // per-module declaration.  The runtime binds the matching canonical
 // XrEnumType into builtin VM slots.
 static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
-    static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
-                                             "SeqCst"};
-    register_prelude_enum(analyzer, "Ordering", ordering_members, 5, NULL, false);
+    static const char *const type_param_names[] = {"T"};
+    int variant_base = 0;
 
-    static const char *endian_members[] = {"Native", "LE", "BE"};
-    register_prelude_enum(analyzer, "Endian", endian_members, 3, NULL, false);
+    for (size_t e = 0; e < XA_PRELUDE_ENUM_COUNT; e++) {
+        const XaPreludeEnumDesc *desc = &g_prelude_enums[e];
+        const XaPreludeVariantDesc *variants = &g_prelude_enum_variants[variant_base];
+        variant_base += desc->variant_count;
 
-    static const char *utf8_error_members[] = {"InvalidUtf8"};
-    register_prelude_enum(analyzer, "Utf8Error", utf8_error_members, 1, NULL, false);
+        XR_DCHECK(desc->variant_count <= XA_PRELUDE_ENUM_MAX_VARIANTS,
+                  "prelude enum exceeds XA_PRELUDE_ENUM_MAX_VARIANTS");
+        if (desc->variant_count > XA_PRELUDE_ENUM_MAX_VARIANTS)
+            continue;
 
-    static const char *string_slice_error_members[] = {"InvalidByteRange"};
-    register_prelude_enum(analyzer, "StringSliceError", string_slice_error_members, 1, NULL, false);
+        const char *member_names[XA_PRELUDE_ENUM_MAX_VARIANTS];
+        int payload_counts[XA_PRELUDE_ENUM_MAX_VARIANTS];
+        XrType *payload_slots[XA_PRELUDE_ENUM_MAX_VARIANTS];
+        XrType **payload_types[XA_PRELUDE_ENUM_MAX_VARIANTS];
+        bool is_adt = false;
 
-    static const char *compression_error_members[] = {"InvalidData"};
-    register_prelude_enum(analyzer, "CompressionError", compression_error_members, 1, NULL, false);
+        for (int v = 0; v < desc->variant_count; v++) {
+            member_names[v] = variants[v].name;
+            switch ((XaPreludePayloadKind) variants[v].payload) {
+                case XA_PRELUDE_PAYLOAD_TYPE_PARAM_0:
+                    payload_slots[v] = xr_type_new_type_param(analyzer->isolate, "T", 0);
+                    break;
+                case XA_PRELUDE_PAYLOAD_UNKNOWN:
+                    payload_slots[v] = xr_type_new_unknown(analyzer->isolate);
+                    break;
+                case XA_PRELUDE_PAYLOAD_NONE:
+                default:
+                    payload_slots[v] = NULL;
+                    break;
+            }
+            payload_counts[v] = payload_slots[v] ? 1 : 0;
+            payload_types[v] = payload_slots[v] ? &payload_slots[v] : NULL;
+            is_adt = is_adt || payload_counts[v] > 0;
+        }
 
-    static const char *crypto_error_members[] = {"InvalidLength"};
-    register_prelude_enum(analyzer, "CryptoError", crypto_error_members, 1, NULL, false);
-
-    static const char *recv_type_params[] = {"T"};
-    static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
-    static const int recv_payload_counts[] = {1, 0, 0, 0};
-    XrType *recv_value_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
-    XrType **recv_payload_types[] = {recv_value_payload, NULL, NULL, NULL};
-    register_prelude_enum_full(analyzer, "Recv", recv_type_params, 1, recv_members, 4,
-                               recv_payload_counts, recv_payload_types, true);
-
-    static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
-    register_prelude_enum(analyzer, "SendResult", send_result_members, 4, NULL, false);
-
-    static const char *task_result_type_params[] = {"T"};
-    static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
-                                                "Pending"};
-    static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
-    XrType *task_success_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
-    XrType *task_failed_payload[] = {xr_type_new_unknown(analyzer->isolate)};
-    XrType **task_result_payload_types[] = {task_success_payload, task_failed_payload, NULL, NULL,
-                                            NULL};
-    register_prelude_enum_full(analyzer, "TaskResult", task_result_type_params, 1,
-                               task_result_members, 5, task_result_payload_counts,
-                               task_result_payload_types, true);
-
-    static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
-                                                "Cancelled"};
-    register_prelude_enum(analyzer, "TaskStatus", task_status_members, 5, NULL, false);
+        register_prelude_enum_full(
+            analyzer, desc->name, desc->arity > 0 ? (const char **) type_param_names : NULL,
+            desc->arity, member_names, desc->variant_count, is_adt ? payload_counts : NULL,
+            is_adt ? payload_types : NULL, is_adt);
+    }
 }
 
 // Create analyzer
@@ -1589,10 +1621,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
      * so allocate them from the program's arena and keep their lifetime tied
      * to xr_program_destroy(). */
     XrCompilerSessionScope ast_scope;
-    bool has_ast_scope =
-        ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(analyzer->compiler_session, ast->as.program.arena, file,
-                                       &ast_scope);
+    bool has_ast_scope = ast->type == AST_PROGRAM && ast->as.program.arena &&
+                         xr_compiler_session_push_arena(analyzer->compiler_session,
+                                                        ast->as.program.arena, file, &ast_scope);
 
     // Set current type pool and symbol ID counter (eliminates global state)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);

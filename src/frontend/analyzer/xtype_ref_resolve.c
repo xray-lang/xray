@@ -104,9 +104,9 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
         } else {
             if (source.kind != XR_CT_INT)
                 return ct_fail(err, "numeric conversion source is not an integer constant");
-            out->as.float_val = xr_numeric_int_to_float(
-                source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
-                pointer_bits);
+            out->as.float_val =
+                xr_numeric_int_to_float(source.as.int_val, conversion.source_scalar_rep,
+                                        conversion.target_scalar_rep, pointer_bits);
         }
         return true;
     }
@@ -121,9 +121,9 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
     } else {
         if (source.kind != XR_CT_INT)
             return ct_fail(err, "numeric conversion source is not an integer constant");
-        out->as.int_val = xr_numeric_int_convert_i64(
-            source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
-            pointer_bits);
+        out->as.int_val =
+            xr_numeric_int_convert_i64(source.as.int_val, conversion.source_scalar_rep,
+                                       conversion.target_scalar_rep, pointer_bits);
     }
     return true;
 }
@@ -1072,56 +1072,33 @@ static void xa_report_fixed_array_length_diag(XaAnalyzer *analyzer, const AstNod
 static int builtin_interface_type_arity(const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "Iterable") == 0 || strcmp(name, "Iterator") == 0 ||
-        strcmp(name, "Callable") == 0)
-        return 1;
-    if (strcmp(name, "Indexable") == 0)
-        return 2;
-    if (strcmp(name, "Comparable") == 0 || strcmp(name, "Hashable") == 0 ||
-        strcmp(name, "Stringable") == 0 || strcmp(name, "Equatable") == 0 ||
-        strcmp(name, "Lengthable") == 0 || strcmp(name, "Closeable") == 0)
-        return 0;
+#define XR_BUILTIN_IFACE(iface_name, iface_arity)                                                  \
+    if (strcmp(name, iface_name) == 0)                                                             \
+        return (iface_arity);
+#include "../../../stdlib/prelude/builtin_symbols.def"
     return -1;
 }
 
-static int known_type_head_arity(XrVMRuntime *X, const char *name) {
+/* Arity of every built-in type head, taken from builtin_symbols.def. The
+ * prelude rows are listed there with their arity too, so no second lookup
+ * through the prelude symbol table is needed. */
+static int known_type_head_arity(const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SLICE) == 0 ||
-        strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 || strcmp(name, "Channel") == 0 ||
-        strcmp(name, "Task") == 0 || strcmp(name, "CoroLocal") == 0 || strcmp(name, "Ptr") == 0 ||
-        strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0 ||
-        strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
-        strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0)
-        return 1;
-    if (strcmp(name, "Map") == 0 || strcmp(name, "WeakMap") == 0)
-        return 2;
-
-    int iface_arity = builtin_interface_type_arity(name);
-    if (iface_arity >= 0)
-        return iface_arity;
-
-    const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
-    const XrPreludeTypeEntry *entry =
-        symbols ? xr_prelude_lookup_type(symbols, name, strlen(name)) : NULL;
-    if (!entry)
-        return -1;
-    switch ((XrPreludeKind) entry->kind) {
-        case XR_PRELUDE_KIND_GENERIC_1:
-            return 1;
-        case XR_PRELUDE_KIND_GENERIC_2:
-            return 2;
-        case XR_PRELUDE_KIND_SIMPLE:
-        case XR_PRELUDE_KIND_SINGLETON:
-            return 0;
-    }
-    return -1;
+#define XR_BUILTIN_PRELUDE_TYPE(type_name, type_arity, native_type, prelude_kind)                  \
+    if (strcmp(name, type_name) == 0)                                                              \
+        return (type_arity);
+#define XR_BUILTIN_TYPE(type_name, type_arity)                                                     \
+    if (strcmp(name, type_name) == 0)                                                              \
+        return (type_arity);
+#include "../../../stdlib/prelude/builtin_symbols.def"
+    return builtin_interface_type_arity(name);
 }
 
 static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     XR_DCHECK(name != NULL, "resolve_named: NULL name");
 
-    int arity = known_type_head_arity(X, name);
+    int arity = known_type_head_arity(name);
     if (arity > 0)
         return xr_type_new_error(NULL);
 
@@ -1191,7 +1168,7 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
 
     /* Dispatch to known container constructors */
     XrType *result = NULL;
-    int expected_arity = known_type_head_arity(X, name);
+    int expected_arity = known_type_head_arity(name);
     if (expected_arity >= 0 && nargs != expected_arity) {
         result = xr_type_new_error(NULL);
     } else if (strcmp(name, "Array") == 0 && nargs == 1) {
@@ -1228,10 +1205,8 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         } else {
             result = xr_type_new_error(NULL);
         }
-    } else if ((strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
-                strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0) &&
-               nargs == 1 && args[0] && args[0]->kind == XR_KIND_ENUM &&
-               args[0]->enum_type.layout) {
+    } else if (xr_type_is_enum_metadata_type_name(name) && nargs == 1 && args[0] &&
+               args[0]->kind == XR_KIND_ENUM && args[0]->enum_type.layout) {
         result = xr_type_new_enum_metadata(X, name, args[0]);
     } else if (xa_is_builtin_interface_name(name)) {
         /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
@@ -1480,12 +1455,29 @@ static void report_removed_enum_runtime_wrapper_type(XaAnalyzer *analyzer, const
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
 }
 
+/* Names users keep reaching for that Xray deliberately does not define. Only
+ * consulted once nothing else resolved, so a user declaration of the same name
+ * still wins. See builtin_symbols.def for the list and the rationale. */
+static const char *undefined_type_hint(const char *name) {
+    if (!name)
+        return NULL;
+#define XR_BUILTIN_UNDEFINED_HINT(hint_name, hint_text)                                            \
+    if (strcmp(name, hint_name) == 0)                                                              \
+        return (hint_text);
+#include "../../../stdlib/prelude/builtin_symbols.def"
+    return NULL;
+}
+
 static void report_undefined_public_type(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return;
     XrLocation loc = {.file = analyzer->current_file, .line = 0, .column = 0};
-    char msg[128];
-    snprintf(msg, sizeof(msg), "undefined type '%s'", name);
+    char msg[256];
+    const char *hint = undefined_type_hint(name);
+    if (hint)
+        snprintf(msg, sizeof(msg), "undefined type '%s': %s", name, hint);
+    else
+        snprintf(msg, sizeof(msg), "undefined type '%s'", name);
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
 }
 
@@ -1624,12 +1616,8 @@ static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSym
     return resolved;
 }
 
-static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
-    if (!name)
-        return false;
-    if (known_type_head_arity(X, name) >= 0)
-        return true;
-    return false;
+static bool is_known_generic_head(const char *name) {
+    return name && known_type_head_arity(name) >= 0;
 }
 
 static bool generic_head_is_container_like(const char *name) {
@@ -1654,7 +1642,7 @@ static bool reject_error_type_args(XaAnalyzer *analyzer, XrType **args, int coun
 }
 
 static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
-    if (!analyzer || !tref || !tref->name || !is_known_generic_head(analyzer->isolate, tref->name))
+    if (!analyzer || !tref || !tref->name || !is_known_generic_head(tref->name))
         return NULL;
 
     int nargs = tref->nchildren;
@@ -1668,7 +1656,7 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
 
     XrVMRuntime *X = analyzer->isolate;
     const char *name = tref->name;
-    int expected_arity = known_type_head_arity(X, name);
+    int expected_arity = known_type_head_arity(name);
     if (expected_arity >= 0 && nargs != expected_arity) {
         if (args != stack_args)
             xr_free(args);
@@ -1714,10 +1702,8 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
             result = report_generic_type_argument_error(analyzer, name,
                                                         "requires a function type argument");
         }
-    } else if ((strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
-                strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0) &&
-               nargs == 1 && args[0] && args[0]->kind == XR_KIND_ENUM &&
-               args[0]->enum_type.layout) {
+    } else if (xr_type_is_enum_metadata_type_name(name) && nargs == 1 && args[0] &&
+               args[0]->kind == XR_KIND_ENUM && args[0]->enum_type.layout) {
         result = xr_type_new_enum_metadata(X, name, args[0]);
     } else if (xa_is_builtin_interface_name(name)) {
         result = xr_type_new_generic_interface(X, name, args, nargs);
@@ -1785,7 +1771,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         int type_param_index = active_type_param_index(analyzer, tref->name);
         if (type_param_index >= 0)
             return xr_type_new_type_param(analyzer->isolate, tref->name, type_param_index);
-        int expected_arity = known_type_head_arity(analyzer->isolate, tref->name);
+        int expected_arity = known_type_head_arity(tref->name);
         if (expected_arity > 0)
             return report_generic_arity_error(analyzer, tref->name, expected_arity, 0);
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
@@ -1812,7 +1798,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             report_undefined_public_type(analyzer, tref->name);
             return xr_type_new_error(NULL);
         }
-        int expected_arity = known_type_head_arity(analyzer->isolate, tref->name);
+        int expected_arity = known_type_head_arity(tref->name);
         if (expected_arity >= 0 && tref->nchildren != expected_arity)
             return report_generic_arity_error(analyzer, tref->name, expected_arity,
                                               tref->nchildren);

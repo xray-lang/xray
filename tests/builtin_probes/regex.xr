@@ -1,0 +1,2 @@
+var re: Regex = /a+/
+print(re.test("aaa"))

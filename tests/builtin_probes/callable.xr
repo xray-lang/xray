@@ -1,0 +1,2 @@
+fn use(f: Callable<int>) -> bool { return true }
+print(true)

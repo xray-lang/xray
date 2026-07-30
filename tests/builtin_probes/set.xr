@@ -1,0 +1,2 @@
+var s: Set<int> = #[1, 2]
+print(len(s))

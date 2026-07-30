@@ -1,0 +1,2 @@
+fn use(e: CompressionError) -> bool { return e == CompressionError.InvalidData }
+print(use(CompressionError.InvalidData))

@@ -1,0 +1,2 @@
+fn use(e: Utf8Error) -> bool { return e == Utf8Error.InvalidUtf8 }
+print(use(Utf8Error.InvalidUtf8))

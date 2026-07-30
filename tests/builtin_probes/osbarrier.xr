@@ -1,0 +1,2 @@
+fn use(b: OsBarrier) -> bool { return true }
+print(true)

@@ -19,7 +19,7 @@
  *
  * WHY THIS DESIGN:
  *   - Single registration point: adding a new built-in type name only
- *     requires one line in prelude_types.def.
+ *     requires one line in builtin_symbols.def.
  *   - User class can shadow prelude entries (Rust prelude semantics):
  *     `class Array { ... }` is consulted first, prelude is the fallback.
  *   - Registry is a process-wide constant (read-only), shared across all
@@ -44,7 +44,7 @@ typedef enum {
 } XrPreludeKind;
 
 /*
- * Single entry in the prelude type table. Populated by prelude_types.def.
+ * Single entry in the prelude type table. Populated by builtin_symbols.def.
  *
  * native_type carries the GC type id (XR_TARRAY etc.) when applicable so
  * downstream consumers (analyzer method tables, runtime registration)

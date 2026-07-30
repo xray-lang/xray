@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import builtin_symbols  # noqa: E402
+
 from check_source_unknown_convergence import (  # noqa: E402
     CATEGORIES,
     build_inventory,
@@ -90,18 +92,24 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         self.assertEqual("Failed(" "unknown)", hits[0].text)
 
     def test_task_payload_registration_matches_typed_native_defs(self) -> None:
-        analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
-        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
+        """`TaskResult.Failed` carries an untyped payload, not a `PanicInfo`.
 
+        The payload shapes live in `stdlib/prelude/builtin_symbols.def`, so the
+        invariant is asserted against the registry rather than against a source
+        snippet in whichever file happens to consume it.
+        """
+        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
         self.assertIn("Failed(" "unknown)", native_defs)
-        self.assertIn(
-            "XrType *task_failed_payload[] = {xr_type_new_unknown(analyzer->isolate)};",
-            analyzer_source,
-        )
-        self.assertNotIn(
-            'task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "PanicInfo")}',
-            analyzer_source,
-        )
+
+        registry = builtin_symbols.load(ROOT)
+        task_result = "Task" "Result"
+        enums = {symbol.name: symbol for symbol in registry.by_category("enum")}
+        self.assertIn(task_result, enums)
+        payloads = dict(enums[task_result].variants)
+        self.assertEqual("UNKNOWN", payloads["Failed"])
+        self.assertEqual("TYPE_PARAM_0", payloads["Success"])
+        for unit_variant in ("Cancelled", "Timeout", "Pending"):
+            self.assertEqual("NONE", payloads[unit_variant])
 
     def test_task_outcome_public_surface_is_removed(self) -> None:
         task_outcome = "Task" "Outcome"

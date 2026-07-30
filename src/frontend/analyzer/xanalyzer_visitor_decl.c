@@ -3317,12 +3317,19 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
          * (member_list_append + hashmap_set are index-0/overwrite based). */
         bool is_nongeneric_aggregate =
             is_aggregate_decl && (!is_struct_decl || node->as.struct_decl.type_param_count == 0);
-        if (is_nongeneric_aggregate && !info->struct_layout && info->field_count > 0) {
+        /* Post-mono re-collect: the mono pass rewrote at least one member type
+         * annotation under this declaration (e.g. a `Box<int>` constructor
+         * parameter is now `Box$i64`). The members collected during the first
+         * analysis pass still carry the pre-mono generic instance type, so every
+         * call checked against them would mismatch the monomorphized argument. */
+        if ((is_nongeneric_aggregate && !info->struct_layout && info->field_count > 0) ||
+            cls->mono_types_rewritten) {
             info->scope = NULL;
             info->field_count = 0;
             info->method_count = 0;
             info->static_field_count = 0;
             info->static_method_count = 0;
+            cls->mono_types_rewritten = false;
             xa_visit_collect_class(ctx, node);
         }
         return;

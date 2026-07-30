@@ -1020,6 +1020,7 @@ void xa_mono_collector_init(XaMonoCollector *c) {
     c->count = 0;
     c->capacity = 0;
     c->analyzer = NULL;
+    c->tref_rewrite_count = 0;
 }
 
 void xa_mono_collector_free(XaMonoCollector *c) {
@@ -1202,6 +1203,7 @@ static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
             tref->name = xr_strdup(mangled);
             tref->children = NULL;
             tref->nchildren = 0;
+            collector->tref_rewrite_count++;
         }
     }
 }
@@ -1987,19 +1989,51 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 rewrite_call_sites(node->as.method_decl.base_args[i], registry, collector,
                                    import_aliases);
             break;
-        case AST_CLASS_DECL: {
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL: {
             // task-221 gap C: rewrite generic call sites inside class method/field
             // bodies (e.g. a monomorphized Router$i64.wrap constructing
             // RouteMatch<int> must become RouteMatch$i64). Mirror the collect
             // pass: only descend into non-generic classes and monomorphized
             // clones (type_param_count == 0); generic skeletons are not emitted.
-            ClassDeclNode *cd = &node->as.class_decl;
+            // AST_STRUCT_DECL shares ClassDeclNode and the same rule.
+            ClassDeclNode *cd =
+                node->type == AST_CLASS_DECL ? &node->as.class_decl : &node->as.struct_decl;
             if (cd->type_param_count == 0) {
+                uint32_t rewrites_before = collector->tref_rewrite_count;
                 for (int i = 0; i < cd->method_count; i++)
                     rewrite_call_sites(cd->methods[i], registry, collector, import_aliases);
                 for (int i = 0; i < cd->field_count; i++)
                     rewrite_call_sites(cd->fields[i], registry, collector, import_aliases);
+                // Member signatures changed under this declaration, so the class
+                // info the first analysis pass collected (which still names the
+                // pre-mono Box<int>) is stale. The post-mono pass re-collects
+                // declarations carrying this flag.
+                if (collector->tref_rewrite_count != rewrites_before)
+                    cd->mono_types_rewritten = true;
             }
+            break;
+        }
+        case AST_FIELD_DECL:
+            mono_rewrite_type_ref(node->as.field_decl.field_type, collector);
+            rewrite_call_sites(node->as.field_decl.initializer, registry, collector,
+                               import_aliases);
+            break;
+        case AST_ENUM_DECL: {
+            EnumDeclNode *ed = &node->as.enum_decl;
+            if (ed->type_param_count == 0) {
+                for (int i = 0; i < ed->member_count; i++)
+                    rewrite_call_sites(ed->members[i], registry, collector, import_aliases);
+                for (int i = 0; i < ed->method_count; i++)
+                    rewrite_call_sites(ed->methods[i], registry, collector, import_aliases);
+            }
+            break;
+        }
+        case AST_ENUM_MEMBER: {
+            EnumMemberNode *em = &node->as.enum_member;
+            for (int i = 0; i < em->payload_count; i++)
+                if (em->payload_types)
+                    mono_rewrite_type_ref(em->payload_types[i], collector);
             break;
         }
         case AST_PRINT_STMT:

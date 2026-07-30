@@ -1,0 +1,2 @@
+fn use(it: Iterator<int>) -> bool { return true }
+print(true)

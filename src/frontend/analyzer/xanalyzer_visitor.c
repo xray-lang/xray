@@ -3369,9 +3369,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                                       .column = mem->column};
                                     char msg[256];
                                     snprintf(msg, sizeof(msg),
-                                             "enum '%s' variant '%s' cannot contain '%s' by value; "
-                                             "use explicit indirection such as Box<%s> or a class "
-                                             "node for recursive data",
+                                             "enum '%s' variant '%s' cannot contain '%s' by "
+                                             "value — this creates infinite size. Use a class "
+                                             "node (classes are references) or a container slot "
+                                             "such as Array<%s> for recursive data",
                                              edecl->name ? edecl->name : "?",
                                              mem->as.enum_member.name ? mem->as.enum_member.name
                                                                       : "?",

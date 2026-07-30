@@ -1,0 +1,5 @@
+var ch = Channel<int>(1)
+ch.send(7)
+var r: Recv<int> = ch.tryRecv()
+print(match (r) { Recv.Value(x) -> x, _ -> -1 })
+ch.close()

@@ -94,6 +94,11 @@ typedef struct {
     int count;
     int capacity;
     XaAnalyzer *analyzer;  // borrowed; enables call-site HOF effect specialization
+    /* Number of declaration type annotations rewritten from a generic instance
+     * (Box<int>) to its mangled name (Box$i64). The rewrite walk snapshots this
+     * around each class/struct body so a declaration whose member signatures
+     * changed can be marked for re-collection in the post-mono analysis pass. */
+    uint32_t tref_rewrite_count;
 } XaMonoCollector;
 
 XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);

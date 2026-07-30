@@ -27,10 +27,12 @@ const char *xr_keywords[] = {
 // Builtin and prelude symbols offered by completion and protected from rename.
 // Prelude names are tied to the same registry used by the analyzer.
 const char *xr_builtins[] = {
-#define XR_PRELUDE_TYPE(name, native_type, kind) name,
-#include "../../../stdlib/prelude/prelude_types.def"
-#undef XR_PRELUDE_TYPE
-    "Coro",   "CoroPool",  "WeakMap",      "WeakSet",   "__dir__",       "__file__",    "process",
-    "assert", "assert_eq", "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",
-    "chr",    "copy",      "dump",         "float",     "int",           "len",         "likely",
-    "print",  "rune",      "string",       "typeName",  "typeOf",        "unlikely",    NULL};
+#define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind) name,
+#define XR_BUILTIN_TYPE(name, arity) name,
+#define XR_BUILTIN_ENUM(name, arity, vm_slot, variants) name,
+#define XR_BUILTIN_IFACE(name, arity) name,
+#include "../../../stdlib/prelude/builtin_symbols.def"
+    "Coro",         "CoroPool",  "__dir__",       "__file__",    "process", "assert", "assert_eq",
+    "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",    "chr",    "copy",
+    "dump",         "float",     "int",           "len",         "likely",  "print",  "rune",
+    "string",       "typeName",  "typeOf",        "unlikely",    NULL};

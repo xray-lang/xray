@@ -294,14 +294,20 @@ struct XrType {
     const char *alias_name;
 };
 
+/* The four enum-reflection view types. All are writable annotations over a
+ * concrete enum (EnumVariants<Color>, EnumVariant<Color>, ...); they are
+ * registered together in stdlib/prelude/builtin_symbols.def. */
+static inline bool xr_type_is_enum_metadata_type_name(const char *name) {
+    return name && (strcmp(name, XR_ENUM_VARIANTS_TYPE_NAME) == 0 ||
+                    strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
+                    strcmp(name, XR_ENUM_PAYLOADS_TYPE_NAME) == 0 ||
+                    strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0);
+}
+
 static inline bool xr_type_is_enum_metadata(const XrType *t) {
     if (!t || t->kind != XR_KIND_INSTANCE || !t->instance.class_name)
         return false;
-    const char *name = t->instance.class_name;
-    return strcmp(name, XR_ENUM_VARIANTS_TYPE_NAME) == 0 ||
-           strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
-           strcmp(name, XR_ENUM_PAYLOADS_TYPE_NAME) == 0 ||
-           strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0;
+    return xr_type_is_enum_metadata_type_name(t->instance.class_name);
 }
 
 static inline bool xr_type_is_enum_metadata_named(const XrType *t, const char *name) {
@@ -883,8 +889,7 @@ XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 // cases using the same XrConversionKind domain.
 XR_FUNC XrConversionKind xr_type_numeric_conversion_kind(const XrType *target,
                                                          const XrType *source);
-XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target,
-                                                    const XrType *source);
+XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target, const XrType *source);
 // Returns one operand type when both numeric operands have a unique implicit
 // common type, otherwise NULL.  No C usual-arithmetic-conversion fallback.
 XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);

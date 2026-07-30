@@ -1,0 +1,2 @@
+fn use(c: NetConn) -> bool { return true }
+print(true)

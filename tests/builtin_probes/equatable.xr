@@ -1,0 +1,2 @@
+fn same<T: Equatable>(a: T, b: T) -> bool { return a == b }
+print(same(1, 1))

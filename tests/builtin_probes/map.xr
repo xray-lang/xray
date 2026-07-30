@@ -1,0 +1,2 @@
+var m: Map<string, int> = #{"a": 1}
+print(m["a"])

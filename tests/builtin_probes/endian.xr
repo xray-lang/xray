@@ -1,0 +1,2 @@
+var e: Endian = Endian.LE
+print(e == Endian.LE)

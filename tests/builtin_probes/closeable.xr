@@ -1,0 +1,2 @@
+fn use<T: Closeable>(v: T) -> bool { return true }
+print(true)
