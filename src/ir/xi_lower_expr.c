@@ -8908,6 +8908,129 @@ static XiValue *lower_typed_enum_metadata_is_test(XiLower *l, XiValue *value, Xr
                          l->type_bool);
 }
 
+/* The public type id `is T` tests against, or -1 when the type does not name
+ * one. Named and generic container spellings resolve to the same ids as their
+ * runtime values so `is Array` and `is Array<int>` agree. */
+static int lower_is_target_type_id(const XrTypeRef *tref) {
+    switch (tref->kind) {
+        case XR_TREF_INT:
+            return XR_TID_INT;
+        case XR_TREF_FLOAT:
+            return XR_TID_FLOAT;
+        case XR_TREF_STRING:
+            return XR_TID_STRING;
+        case XR_TREF_BOOL:
+            return XR_TID_BOOL;
+        case XR_TREF_NULL:
+            return XR_TID_NULL;
+        case XR_TREF_INT_WIDTH:
+        case XR_TREF_FLOAT_WIDTH:
+            /* The erased value carries no width, so the id is turned back into
+             * a representability test at run time. */
+            return (int) xr_scalar_rep_typeid(tref->scalar_rep);
+        case XR_TREF_GENERIC:
+        case XR_TREF_NAMED:
+            break;
+        default:
+            return -1;
+    }
+    if (!tref->name)
+        return -1;
+    if (strcmp(tref->name, "Array") == 0)
+        return XR_TID_ARRAY;
+    if (strcmp(tref->name, "Map") == 0)
+        return XR_TID_MAP;
+    if (strcmp(tref->name, "Set") == 0)
+        return XR_TID_SET;
+    if (tref->kind == XR_TREF_NAMED && strcmp(tref->name, "Json") == 0)
+        return XR_TID_JSON;
+    if (tref->kind == XR_TREF_NAMED && strcmp(tref->name, "PanicInfo") == 0)
+        return XR_TID_PANIC_INFO;
+    return -1;
+}
+
+/* A user-defined name tests against the class or enum value itself, which has
+ * to be read back out of whichever binding currently holds it. */
+static XiValue *lower_is_named_target(XiLower *l, const XrTypeRef *tref, XrType *target_type,
+                                      int line) {
+    XaSymbol *named_symbol = xa_analyzer_lookup(l->analyzer, tref->name);
+    if (!named_symbol)
+        named_symbol =
+            xa_analyzer_lookup_in_scope(l->analyzer, tref->name, l->analyzer->global_scope);
+    if (!named_symbol)
+        named_symbol = xa_analyzer_lookup_deep(l->analyzer, tref->name);
+    if (named_symbol && named_symbol->kind == XA_SYM_ENUM)
+        return xi_lower_enum_namespace_value(l, named_symbol, tref->name, line);
+
+    int var = xi_lower_var_find(l, 0, tref->name);
+    if (var >= 0) {
+        if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
+            XiTopBinding b;
+            b.slot = l->shared_map[var];
+            b.name = l->vars[var].name;
+            b.type = l->vars[var].type;
+            return xi_lower_emit_top_load(l, b, l->type_any);
+        }
+        return xi_lower_braun_read(l, var, l->cur_block);
+    }
+    XiTopBinding tb = xi_lower_find_top_binding(l, 0, tref->name);
+    if (xi_top_binding_valid(tb))
+        return xi_lower_emit_top_load(l, tb, l->type_any);
+
+    int builtin_index = xi_lower_builtin_class_global_index(tref->name);
+    if (builtin_index < 0)
+        return NULL;
+    XiValue *builtin = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN,
+                                    target_type ? target_type : l->type_any, 0);
+    if (builtin) {
+        builtin->aux_int = builtin_index;
+        builtin->aux = (void *) arena_strdup(l->func, tref->name);
+        builtin->line = (uint32_t) line;
+    }
+    return builtin;
+}
+
+/* The operand XI_IS tests against: a type-id constant for scalars and built-in
+ * containers, the tuple class for tuple spellings, a descriptor token for enum
+ * metadata, and the class or enum value for user-defined names. */
+static XiValue *lower_is_target_operand(XiLower *l, const XrTypeRef *tref, XrType *target_type,
+                                        int line) {
+    if (!tref)
+        return NULL;
+
+    if (tref->kind == XR_TREF_TUPLE && l->isolate) {
+        XrClass *tuple_cls = xr_get_or_create_tuple_class(l->isolate, (uint16_t) tref->nchildren);
+        if (!tuple_cls)
+            return NULL;
+        XiValue *type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
+        if (type_val)
+            type_val->aux = (void *) tuple_cls;
+        return type_val;
+    }
+
+    int tid = lower_is_target_type_id(tref);
+    if (tid >= 0) {
+        XiValue *type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+        if (type_val)
+            type_val->aux_int = tid;
+        return type_val;
+    }
+
+    if (xr_type_is_enum_metadata(target_type)) {
+        /* Enum descriptor type tests use a backend-neutral token rather than a
+         * runtime class namespace. The token is consumed only by XI_IS and
+         * never exposed as a source value. */
+        XiValue *type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+        if (type_val)
+            type_val->aux_int = xr_type_enum_metadata_token(target_type);
+        return type_val;
+    }
+
+    if (tref->kind == XR_TREF_NAMED && tref->name)
+        return lower_is_named_target(l, tref, target_type, line);
+    return NULL;
+}
+
 /* Emit an XI_IS test against the given XrTypeRef for an existing value.
  * Used both by `expr is T` and by `is T` patterns in match arms. */
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int line) {
@@ -8923,133 +9046,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     if (enum_metadata_test)
         return enum_metadata_test;
 
-    /* Resolve the target type to a runtime value so the VM can use it
-     * directly from a register:
-     *   - Primitive types → XI_CONST with XrTypeId
-     *   - Named types (classes) → scope-resolved class value */
-    XiValue *type_val = NULL;
-    if (tref) {
-        int tid = -1;
-        switch (tref->kind) {
-            case XR_TREF_INT:
-                tid = XR_TID_INT;
-                break;
-            case XR_TREF_FLOAT:
-                tid = XR_TID_FLOAT;
-                break;
-            case XR_TREF_STRING:
-                tid = XR_TID_STRING;
-                break;
-            case XR_TREF_BOOL:
-                tid = XR_TID_BOOL;
-                break;
-            case XR_TREF_NULL:
-                tid = XR_TID_NULL;
-                break;
-            case XR_TREF_INT_WIDTH:
-            case XR_TREF_FLOAT_WIDTH:
-                /* The erased value carries no width, so the id is turned back
-                 * into a representability test at run time. */
-                tid = (int) xr_scalar_rep_typeid(tref->scalar_rep);
-                break;
-            case XR_TREF_ERROR:
-            case XR_TREF_NAMED:
-            case XR_TREF_GENERIC:
-            case XR_TREF_OPTIONAL:
-            case XR_TREF_UNION:
-            case XR_TREF_FUNCTION:
-            case XR_TREF_TUPLE:
-            case XR_TREF_OBJECT:
-            case XR_TREF_FIXED_ARRAY:
-            case XR_TREF_TYPE_PARAM:
-                break;
-        }
-        /* Generic containers: Array<T> → XR_TID_ARRAY, Map<K,V> → XR_TID_MAP, etc. */
-        if (tid < 0 && tref->kind == XR_TREF_GENERIC && tref->name) {
-            if (strcmp(tref->name, "Array") == 0)
-                tid = 14; /* XR_TID_ARRAY */
-            else if (strcmp(tref->name, "Map") == 0)
-                tid = 16; /* XR_TID_MAP */
-            else if (strcmp(tref->name, "Set") == 0)
-                tid = 15; /* XR_TID_SET */
-        }
-        /* Bare container names without generic args and prelude types */
-        if (tid < 0 && tref->kind == XR_TREF_NAMED && tref->name) {
-            if (strcmp(tref->name, "Array") == 0)
-                tid = 14;
-            else if (strcmp(tref->name, "Map") == 0)
-                tid = 16;
-            else if (strcmp(tref->name, "Set") == 0)
-                tid = 15;
-            else if (strcmp(tref->name, "Json") == 0)
-                tid = 18;
-            else if (strcmp(tref->name, "PanicInfo") == 0)
-                tid = 24; /* XR_TID_PANIC_INFO */
-        }
-        /* Tuple type: (T1, T2, ...) → look up TupleN class by arity */
-        if (tid < 0 && tref->kind == XR_TREF_TUPLE && l->isolate) {
-            uint16_t arity = (uint16_t) tref->nchildren;
-            XrClass *tuple_cls = xr_get_or_create_tuple_class(l->isolate, arity);
-            if (tuple_cls) {
-                type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
-                if (type_val)
-                    type_val->aux = (void *) tuple_cls;
-            }
-        }
-        if (tid >= 0) {
-            type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
-            if (type_val)
-                type_val->aux_int = tid;
-        } else if (xr_type_is_enum_metadata(target_type)) {
-            /* Enum descriptor type tests use a backend-neutral token rather
-             * than a runtime class namespace.  The token is consumed only by
-             * XI_IS and never exposed as a source value. */
-            type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
-            if (type_val)
-                type_val->aux_int = xr_type_enum_metadata_token(target_type);
-        } else if (tref->kind == XR_TREF_NAMED && tref->name) {
-            XaSymbol *named_symbol = xa_analyzer_lookup(l->analyzer, tref->name);
-            if (!named_symbol)
-                named_symbol =
-                    xa_analyzer_lookup_in_scope(l->analyzer, tref->name, l->analyzer->global_scope);
-            if (!named_symbol)
-                named_symbol = xa_analyzer_lookup_deep(l->analyzer, tref->name);
-            if (named_symbol && named_symbol->kind == XA_SYM_ENUM)
-                type_val = xi_lower_enum_namespace_value(l, named_symbol, tref->name, line);
-
-            /* Resolve class from scope chain */
-            int var = type_val ? -1 : xi_lower_var_find(l, 0, tref->name);
-            if (!type_val && var >= 0) {
-                if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
-                    XiTopBinding b;
-                    b.slot = l->shared_map[var];
-                    b.name = l->vars[var].name;
-                    b.type = l->vars[var].type;
-                    type_val = xi_lower_emit_top_load(l, b, l->type_any);
-                } else {
-                    type_val = xi_lower_braun_read(l, var, l->cur_block);
-                }
-            }
-            if (!type_val) {
-                XiTopBinding tb = xi_lower_find_top_binding(l, 0, tref->name);
-                if (xi_top_binding_valid(tb))
-                    type_val = xi_lower_emit_top_load(l, tb, l->type_any);
-            }
-            if (!type_val) {
-                int builtin_index = xi_lower_builtin_class_global_index(tref->name);
-                if (builtin_index >= 0) {
-                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN,
-                                            target_type ? target_type : l->type_any, 0);
-                    if (type_val) {
-                        type_val->aux_int = builtin_index;
-                        type_val->aux = (void *) arena_strdup(l->func, tref->name);
-                        type_val->line = (uint32_t) line;
-                    }
-                }
-            }
-        }
-    }
-
+    XiValue *type_val = lower_is_target_operand(l, tref, target_type, line);
     /* XI_IS always carries its target operand; a missing one is an unresolved
      * type kind, not a valid one-operand form. Failing here names the construct,
      * while emitting the malformed op only surfaces as a verifier arity error
