@@ -597,7 +597,7 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                          const char *prefix) {
     (void) prefix;
     uint16_t param_idx = (uint16_t) v->aux_int;
-    XrRep from_rep = cg_func_param_abi_rep(ctx, f, param_idx);
+    XrRep from_rep = cg_func_param_decl_storage_rep(ctx, f, param_idx);
     XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
     const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
     if (param_value_rep.kind == XAOT_VALUE_TAGGED && value_plan &&

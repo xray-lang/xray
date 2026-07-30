@@ -1354,8 +1354,7 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
  * avoids a stack copy around `callee(ref this.field)` while preserving the
  * same call-bound, nonescaping place contract. */
 static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out,
-                                                              const XiFunc *f,
-                                                              const XiValue *value,
+                                                              const XiFunc *f, const XiValue *value,
                                                               const char *result_c_type) {
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
     const XiValue *load = cg_unwrap_identity_value(value);
@@ -3461,6 +3460,19 @@ static void emit_class_native_param_decl(XiCgenCtx *ctx, FILE *out, const char *
         return;
     }
     fprintf(out, "%s p%u", cg_func_param_abi_c_type(ctx, f, param_idx), (unsigned) param_idx);
+}
+
+/* Storage rep of the emitted C parameter.  Must stay in sync with
+ * emit_class_native_param_decl: the receiver of a native-layout class method is
+ * declared as that class's pointer whatever the ABI plan's slot rep says, so the
+ * function body has to read it as a pointer instead of unboxing it as a tagged
+ * value.  Callers already pass a pointer (the boxed adapter casts p0.ptr), so the
+ * declaration is the authority here and the plan rep alone is not. */
+static XrRep cg_func_param_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
+    CgClassNativeFunc info = cg_class_native_func(ctx, f);
+    if (info.layout && param_idx == 0)
+        return XR_REP_PTR;
+    return cg_func_param_abi_rep(ctx, f, param_idx);
 }
 
 static const XiClassData *cg_class_native_value_type_data(XiCgenCtx *ctx, const XiValue *v) {
