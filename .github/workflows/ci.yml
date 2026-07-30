@@ -9,7 +9,10 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   XRAY_CI_RELEASE09_EXTRA_EXCLUDE_RE: '^(test_vm_exception|sys_thread_vm|stdlib_embedded_layout|parallel_plan_vm_scaling_gate|http_static_route_full_parse|test_stdlib_boundary_manifest|stdlib_migration_contracts|stdlib_self_hosting_consistency|binary_stdlib_surface_inventory|binary_public_native_readiness|query_surface_residue|string_surface_residue|byte_array_aot_c90_hotpath|aot_freestanding_allowlist|aot_freestanding_provider_abi|aot_manifest_sweep|aot_isolate_symbol_gate|install_public_surface|backend_diff|task190_extern_backend_diff|backend_diff_deterministic)$'
-  XRAY_CI_CORE_CTEST_EXCLUDE_RE: '^(test_vm_exception|aot_filetests|aot_link_command_manifest|sys_thread_vm|stdlib_embedded_layout|parallel_plan_vm_scaling_gate|http_static_route_full_parse|test_stdlib_boundary_manifest|stdlib_migration_contracts|stdlib_self_hosting_consistency|binary_stdlib_surface_inventory|binary_public_native_readiness|query_surface_residue|string_surface_residue|byte_array_aot_c90_hotpath|aot_freestanding_allowlist|aot_freestanding_provider_abi|aot_manifest_sweep|aot_isolate_symbol_gate|install_public_surface|backend_diff|task190_extern_backend_diff|backend_diff_deterministic|test_compress_native_error_abi|test_crypto_native_error_abi)$'
+  # aot_filetests was removed from this list on 2026-07-30: it is the only driver
+  # for the 104 `xray verify` contract cases and it now gates every passing case
+  # against tests/aot/filetests_known_failures.txt (a shrink-only ratchet).
+  XRAY_CI_CORE_CTEST_EXCLUDE_RE: '^(test_vm_exception|aot_link_command_manifest|sys_thread_vm|stdlib_embedded_layout|parallel_plan_vm_scaling_gate|http_static_route_full_parse|test_stdlib_boundary_manifest|stdlib_migration_contracts|stdlib_self_hosting_consistency|binary_stdlib_surface_inventory|binary_public_native_readiness|query_surface_residue|string_surface_residue|byte_array_aot_c90_hotpath|aot_freestanding_allowlist|aot_freestanding_provider_abi|aot_manifest_sweep|aot_isolate_symbol_gate|install_public_surface|backend_diff|task190_extern_backend_diff|backend_diff_deterministic|test_compress_native_error_abi|test_crypto_native_error_abi)$'
 
 jobs:
   # ===========================================================================
@@ -148,6 +151,14 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    # aot_filetests runs in this job and 14 of its cases build for a foreign
+    # target. Without a cross toolchain the runner skips them by name and the
+    # suite still passes, but that coverage would then exist in no blocking job.
+    - name: Install Zig
+      run: |
+        ./scripts/install_zig_toolchain.sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: Configure (Debug)
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug

@@ -11,7 +11,7 @@ c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(valu
 c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(value.payloads[1]), "PairResult")
 c_contains=xrt_enum_aggregate_check_known_tag(value.layout_id
 c_contains=out.layout_id =
-c_contains=xrt_enum_aggregate_make(
+c_contains=XRT_ENUM_AGGREGATE_MAKE(
 c_contains=, 0, 2, "PairResult", "Pair"
 c_contains=(const XrValue[2]){
 c_contains=xrt_enum_aggregate_box(

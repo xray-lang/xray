@@ -409,8 +409,12 @@ XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
 XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
     if (!module_name)
         return false;
+    /* `codegen` is admissible because its whole surface is compiler barriers
+     * (opaque / compilerFence) that lower to inline expressions over <stdint.h>
+     * with no runtime, libc, or allocation dependency. */
     return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
-           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0;
+           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0 ||
+           strcmp(module_name, "codegen") == 0;
 }
 
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
@@ -1520,10 +1524,9 @@ static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *nod
         double value = node->as.literal.raw_value.float_val;
         if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Floating literal is out of range for contextual type 'f32'",
-                                       &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "Floating literal is out of range for contextual type 'f32'", &loc);
         }
         return target;
     }
@@ -2123,6 +2126,26 @@ static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *typ
                                         type->instance.type_args, type->instance.type_arg_count);
     xr_free(param_names);
     return result ? result : field_type;
+}
+
+/* Declared type of `obj.field` for a compound assignment target, with the
+ * receiver's type arguments substituted in.  NULL when the field is unknown, so
+ * the caller falls back to inferring the right-hand side without context. */
+static XrType *compound_assign_member_target_type(XaInferContext *ctx, XrType *obj_type,
+                                                  const char *field_name) {
+    if (!ctx || !obj_type || !field_name)
+        return NULL;
+    XaSymbolLinks *class_links = NULL;
+    XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
+    if (!class_info)
+        return NULL;
+    XaSymbol *field = xa_class_info_lookup_member(class_info, field_name);
+    if (!field)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, field);
+    if (!links || !links->type || XR_TYPE_IS_UNKNOWN(links->type))
+        return NULL;
+    return member_set_substitute_field_type(ctx, obj_type, class_links, links->type);
 }
 
 /*
@@ -2965,7 +2988,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                  import->module_name ? import->module_name : "?");
         xa_freestanding_report_unavailable(
             ctx, node, feature,
-            "only prelude, math, mem, and simd are in the freestanding allowlist");
+            "only prelude, math, mem, simd, and codegen are in the freestanding allowlist");
     }
 
     // For whole module import: import math or import math as m
@@ -5230,6 +5253,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XaSymbol *id_sym = xa_scope_lookup(ctx->analyzer->current_scope, id->name);
             if (id_sym)
                 id->symbol_id = id_sym->id;
+            /* Canonicalization rewrites x++ into x = x + 1 and needs the target
+             * type to type the synthesized operand.  Publish it here: the
+             * analyzer owns types, and a literal invented after inference can
+             * never acquire a conversion witness of its own. */
+            if (id_sym && id_sym->links.type)
+                xa_analyzer_set_node_type(ctx->analyzer, node, id_sym->links.type);
             xa_parallel_capture_check(ctx, node, id_sym, true);
             if (id_sym && (id_sym->is_const || !id_sym->is_rebindable)) {
                 XrLocation loc = {
@@ -5242,13 +5271,31 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_COMPOUND_ASSIGNMENT: {
-            // Infer value expression so its type is recorded in the side table
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
-            XrType *ca_value_type = ca->value ? xa_visit_infer_expr(ctx, ca->value) : NULL;
-            // Visit object expression for member compound assign (obj.field += ...)
+            /* Resolve the assignment target *before* the right-hand side, so the
+             * RHS is inferred with the target as its expected type.  `x += 1`
+             * must type its literal exactly as `x = x + 1` does: canonicalization
+             * rewrites it into that form later and cannot re-run inference, so an
+             * operand typed without context here stays wrong all the way down. */
             XrType *ca_obj_type = NULL;
             if (ca->object)
                 ca_obj_type = xa_visit_infer_expr(ctx, ca->object);
+            XaSymbol *ca_sym =
+                ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
+            if (ca_sym)
+                ca->symbol_id = ca_sym->id;
+            XrType *ca_target_type = NULL;
+            if (!ca->object && ca_sym)
+                ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
+            if (ca->object && ca_obj_type && ca->name)
+                ca_target_type = compound_assign_member_target_type(ctx, ca_obj_type, ca->name);
+
+            XrType *ca_saved_expected = ctx->expected_type;
+            if (ca_target_type && !XR_TYPE_IS_UNKNOWN(ca_target_type))
+                ctx->expected_type = ca_target_type;
+            XrType *ca_value_type = ca->value ? xa_visit_infer_expr(ctx, ca->value) : NULL;
+            ctx->expected_type = ca_saved_expected;
+
             // Tuples are immutable: reject compound assignment on tuple fields
             if (ca_obj_type && XR_TYPE_IS_TUPLE(ca_obj_type)) {
                 XrLocation loc = {
@@ -5262,27 +5309,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 break;
             }
             // Check const/in-param immutability
-            XaSymbol *ca_sym =
-                ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
-            if (ca_sym)
-                ca->symbol_id = ca_sym->id;
             xa_parallel_capture_check(ctx, node, ca_sym, true);
-            XrType *ca_target_type = NULL;
-            if (!ca->object && ca_sym)
-                ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
-            if (ca->object && ca_obj_type && ca->name) {
-                XaSymbolLinks *class_links = NULL;
-                XrClassInfo *class_info = member_set_class_info(ctx, ca_obj_type, &class_links);
-                if (class_info) {
-                    XaSymbol *field = xa_class_info_lookup_member(class_info, ca->name);
-                    if (field) {
-                        XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
-                        if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type))
-                            ca_target_type = member_set_substitute_field_type(
-                                ctx, ca_obj_type, class_links, fl->type);
-                    }
-                }
-            }
             if (ca_target_type)
                 xa_analyzer_set_node_type(ctx->analyzer, node, ca_target_type);
             if (ca->op == TK_MOD_ASSIGN && ca_target_type && ca_value_type &&

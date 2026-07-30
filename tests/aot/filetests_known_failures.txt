@@ -1,0 +1,134 @@
+# AOT filetest ratchet baseline
+#
+# Every line is a case that fails today and is tracked, not forgotten.  The
+# suite runs in CI and gates all 534 other cases; these are excluded from the
+# verdict so that a red baseline cannot hide a fresh regression.
+#
+# Rules
+#   - The list may only shrink.  `run_aot_filetests.sh` fails the run when a
+#     case outside this list fails AND when a listed case starts passing, so a
+#     fix must delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green.
+#
+# Established 2026-07-30, when the suite was moved out of the CI exclusion list
+# (it had been excluded from all three workflows and treated as a known-failing
+# "AOT boundary" suite by scripts/run_release_09_gate.sh).  Triage of the 40
+# entries below is recorded per group.
+
+# Group A is empty: all four entries were real compiler defects and were fixed
+# on 2026-07-30 rather than re-baselined.  See the report for the four root
+# causes (math alias domain, freestanding codegen allowlist, nullable narrowing
+# treated as a numeric boundary, redundant CHECKTYPE blocking unboxing).
+
+# ---------------------------------------------------------------------------
+# Group B -- CONFIRMED REGRESSION, not drift: an array with tagged elements
+# loses the unboxed construction chain.
+#
+# An earlier triage recorded this group as expectation drift.  That was wrong.
+# The `_ptr` chain is alive and still selected for scalar element types; only
+# tagged element types fall back to the boxed `XrValue` form.  Minimal repro:
+#
+#     fn f() -> T {
+#         var a: Array<T> = []
+#         a.push(<lit>)
+#         return a[0]
+#     }
+#
+#   T = int   -> xrt_array_new_typed_ptr(...)      (unboxed, correct)
+#   T = byte  -> xrt_array_new_typed_ptr(...)      (unboxed, correct)
+#   T = bool  -> xrt_array_new_typed_ptr(...)      (unboxed, correct)
+#   T = string-> xrt_array_set_storage(xrt_array_new_typed(...), 2)   (boxed)
+#
+# `interface_array_dispatch_plan` also expects the `_ptr` chain and still
+# passes, which confirms the mechanism itself is not gone.  The disqualifier is
+# in the native-local decision for tagged elements: xicgen_value_c_storage_rep
+# -> cg_array_value_uses_native_local (src/aot/xi_cgen_array_helpers.inc.c).
+# Every other assertion in these cases already passes -- typed inline storage,
+# direct `_a->data` indexing, no `xrt_index_get(` -- so only the construction
+# rep regressed.  DO NOT update these expectations: they are the only thing
+# recording the loss.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/cgen/array_push_branch_counted_loop_plan.xr
+tests/aot/filetests/cgen/array_push_reserve_once_plan.xr
+tests/aot/filetests/cgen/array_tagged_direct.xr
+tests/aot/filetests/cgen/generic_array_storage_force_clone_plan.xr
+tests/aot/filetests/cgen/generic_array_storage_typed_plan.xr
+tests/aot/filetests/cgen/generic_tuple_storage_boxed_plan.xr
+tests/aot/filetests/container/byte_array_zero_fill_loop_storage.xr
+tests/aot/filetests/container/typed_container_plan.xr
+
+# ---------------------------------------------------------------------------
+# Group C -- expectation drift: SSA numbering and constant inlining.
+# A folded constant no longer gets its own SSA value, so `(uint64_t)(v0) +
+# (uint64_t)(v4)` is now `(uint64_t)(v0) + (uint64_t)(INT64_C(1))`.  The guarded
+# property (wrapping unsigned add, no pending-error check) is intact; the
+# expectations pin a value number that constant folding removed.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/cgen/function_item_direct_call_vs_value.xr
+tests/aot/filetests/cgen/no_throw_equivalence_asserted.xr
+tests/aot/filetests/cgen/no_throw_equivalence_invariant.xr
+tests/aot/filetests/cgen/no_throw_equivalence_plain.xr
+tests/aot/filetests/cgen/zero_cost_equivalence_invariant.xr
+tests/aot/filetests/link/freestanding_enum_error_channel.xr
+tests/aot/filetests/link/freestanding_enum_static.xr
+tests/aot/filetests/link/freestanding_prelude_enum_static.xr
+
+# ---------------------------------------------------------------------------
+# Group D -- expectation drift: declaration hoisting.
+# A value assigned in more than one branch now gets a hoisted `XrValue vN;`
+# declaration, so the assignment line lost its type prefix: the expectations
+# match `XrValue vN = xrt_json_get_field(...)` but the emission is
+# `vN = xrt_json_get_field(...)`.  Direct index access is still emitted.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/cgen/json_array_ternary_container_receiver_direct_index_plan.xr
+tests/aot/filetests/cgen/json_ternary_assignment_local_direct_index_plan.xr
+tests/aot/filetests/cgen/json_ternary_expression_receiver_direct_index_plan.xr
+tests/aot/filetests/cgen/json_ternary_local_arm_local_direct_index_plan.xr
+tests/aot/filetests/cgen/json_ternary_local_direct_index_plan.xr
+tests/aot/filetests/cgen/json_ternary_local_expression_receiver_direct_index_plan.xr
+
+# ---------------------------------------------------------------------------
+# Group E -- expectation drift: enum aggregate payloads moved inside a macro.
+# `xrt_enum_aggregate_make(...)` is now reached through the
+# `XRT_ENUM_AGGREGATE_MAKE(...)` macro, which exists to keep the payload
+# compound literal alive across the call in both C and C++.  The macro-name
+# assertions were updated on 2026-07-30; these two additionally pin the payload
+# array literal `(const XrValue[2]){`, which the macro now supplies and which
+# therefore no longer appears in pre-preprocessed output.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/cgen/adt_match_multi_payload_aggregate.xr
+tests/aot/filetests/cgen/adt_print_multi_payload_boxed.xr
+
+# ---------------------------------------------------------------------------
+# Group F -- untriaged.  Each needs its actual emission compared against its
+# expectation before it is either fixed or reclassified into a group above.
+# Do not bulk-update these: an expectation that pins a raw-pointer or
+# unboxed-receiver shape may be recording a real regression.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/abi/rawptr_ref_abi.xr
+tests/aot/filetests/boundary/direct_call_closure_u8.xr
+tests/aot/filetests/boundary/tagged_boundary.xr
+tests/aot/filetests/container/byte_slice_index_get_native_rep.xr
+tests/aot/filetests/cgen/direct_method_func_attr_callee_effect.xr
+tests/aot/filetests/cgen/fixed_array_struct_field.xr
+tests/aot/filetests/cgen/generic_map_set_storage_force_clone_plan.xr
+tests/aot/filetests/cgen/rawptr_value_struct_method_receiver.xr
+tests/aot/filetests/cgen/ref_aggregate_scalar_field_direct.xr
+tests/aot/filetests/cgen/ref_casted_native_size_field_materializes.xr
+tests/aot/filetests/cgen/scalar_ref_out_call_plan.xr
+tests/aot/filetests/cgen/stack_native_class_descriptor_elision.xr
+
+# ---------------------------------------------------------------------------
+# Adjacent finding, recorded here because it was located while triaging this
+# suite and belongs to the same AOT surface (it has no filetest of its own):
+#
+# The parallel-range lowering emits xr_parallel_for_range_i64 / xrt_global_ctx /
+# XrParallelRangeI64Fn, all declared in src/coro/xaot_coro.h, but
+# xi_cgen_program_entry.inc.c only emits `#include "xaot_coro.h"` when
+# runtime_bridge is set.  A hosted parallel.map/reduce build therefore produces
+# C that does not compile:
+#     error: call to undeclared function 'xr_parallel_for_range_i64'
+# Reproduce: xray build --native tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr
+# This is why backend_diff reports BUILDFAIL for the four parallel_* cases.
+# ---------------------------------------------------------------------------

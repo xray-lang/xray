@@ -214,8 +214,7 @@ static void xaot_dump_codegen_value(FILE *out, const XaotBundle *bundle, const X
                 func->name ? func->name : "<anonymous>", value->id, value->line);
         return;
     }
-    if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
-        value->op == XI_CALL_METHOD_DIRECT) {
+    if (value->op == XI_CALL || value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) {
         const XiFunc *target = xaot_boundary_resolve_direct_call_target(bundle, func, value, NULL);
         const char *policy = target ? xaot_codegen_policy_name(target->inline_policy) : NULL;
         if (!policy)
@@ -224,8 +223,7 @@ static void xaot_dump_codegen_value(FILE *out, const XaotBundle *bundle, const X
                 "codegen-edge function=%s caller=%s callee=%s kind=%s call=v%u source-line=%u "
                 "stage=lowered backend=aot-c provider-capability=%s "
                 "lowering=%s reason=surviving-direct-edge\n",
-                func->name ? func->name : "<anonymous>",
-                func->name ? func->name : "<anonymous>",
+                func->name ? func->name : "<anonymous>", func->name ? func->name : "<anonymous>",
                 target->name ? target->name : "<anonymous>", policy, value->id, value->line,
                 xaot_codegen_policy_capability(target->inline_policy),
                 target->inline_policy == XI_INLINE_PREFER ? "XR_AINLINE" : "XR_NOINLINE");
@@ -256,8 +254,8 @@ static void xaot_dump_func_codegen_evidence(FILE *out, const XaotBundle *bundle,
     }
 }
 
-static void xaot_dump_func_local_evidence(FILE *out, const XaotBundle *bundle,
-                                          const XiFunc *func, uint32_t depth) {
+static void xaot_dump_func_local_evidence(FILE *out, const XaotBundle *bundle, const XiFunc *func,
+                                          uint32_t depth) {
     if (!out || !func)
         return;
     fprintf(out, "xi-evidence function=%s depth=%u stage=%s revision=%llu/%llu/%llu/%llu\n",
@@ -303,7 +301,7 @@ static const char *xaot_freestanding_stdlib_module_suggestion(const char *module
         return "parallel uses the hosted CPU batch executor; freestanding code must use explicit "
                "raw loops or a platform-specific runtime";
     }
-    return "only prelude, math, mem, and simd are in the freestanding allowlist";
+    return "only prelude, math, mem, simd, and codegen are in the freestanding allowlist";
 }
 
 static bool xaot_reject_freestanding_stdlib_graph(const XrModuleGraph *graph) {
@@ -1526,8 +1524,8 @@ static bool xaot_c90_build_options_supported(const XaotBuildOptions *options) {
     const XaotTarget *target = options ? options->target : NULL;
     if (!options || options->c_dialect != XI_CGEN_C_DIALECT_C90)
         return true;
-    return options->profile == XAOT_BUILD_PROFILE_FREESTANDING &&
-           !options->emit_program_main && target && target->pointer_bits == 64 && target->os &&
+    return options->profile == XAOT_BUILD_PROFILE_FREESTANDING && !options->emit_program_main &&
+           target && target->pointer_bits == 64 && target->os &&
            (strcmp(target->os, "linux") == 0 || strcmp(target->os, "darwin") == 0) &&
            target->simd_mode == XAOT_SIMD_SCALAR && target->simd_features == 0;
 }
@@ -2153,8 +2151,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 fprintf(stderr,
                         "Error: restricted C90 code generation rejected module '%s' at line "
                         "%d: %s\n",
-                        mod_names[m] ? mod_names[m] : "?", c90_result.line,
-                        c90_result.message);
+                        mod_names[m] ? mod_names[m] : "?", c90_result.line, c90_result.message);
                 xr_free(buf);
                 emit_ok = false;
                 break;
@@ -2238,8 +2235,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 "Error: restricted C90 reachable graph requires runtime, stdlib, or native "
                 "capabilities (runtime_caps=%u runtime_objects=%u stdlib_objects=%u "
                 "stdlib_symbols=%u native_inputs=%u)\n",
-                (unsigned) link_manifest.n_runtime_caps,
-                (unsigned) link_manifest.n_runtime_objects,
+                (unsigned) link_manifest.n_runtime_caps, (unsigned) link_manifest.n_runtime_objects,
                 (unsigned) link_manifest.n_stdlib_objects,
                 (unsigned) link_manifest.n_stdlib_symbols,
                 (unsigned) link_manifest.n_native_inputs);

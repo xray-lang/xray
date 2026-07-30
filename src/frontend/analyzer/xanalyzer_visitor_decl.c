@@ -3574,6 +3574,18 @@ skip_interfaces:
 
     // Compute fixed-layout aggregate layout (VALUE_TYPE only, skip generic struct templates)
     int struct_type_param_count = is_struct_decl ? node->as.struct_decl.type_param_count : 0;
+    /* Tell the native plan this program declares the type, before deciding
+     * whether it gets a fixed layout.  A [[native.layout]] assertion naming a
+     * type that no compiled module declares is vacuous for this build; one
+     * naming a type that IS declared but has no fixed layout is a real error.
+     * Without this signal the two are indistinguishable. */
+    if (is_aggregate_decl && cls->name) {
+        XrNativePackagePlan *layout_subject_plan =
+            (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
+                ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+        if (layout_subject_plan)
+            xr_native_package_note_layout_subject(layout_subject_plan, cls->name);
+    }
     if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
         XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));
