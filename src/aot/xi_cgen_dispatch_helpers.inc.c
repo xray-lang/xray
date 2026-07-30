@@ -6630,7 +6630,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
 
     fprintf(out, "({ XrValue _as = ");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, "; (xrt_typeof_id(_as) == %" PRId32 ") ? _as : ", tid);
+    fprintf(out, "; xrt_value_is_type_id(_as, %" PRId32 ") ? _as : ", tid);
     if (is_safe) {
         fprintf(out, "XR_NULL_VAL; })");
     } else {
@@ -6671,7 +6671,7 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     emit_vref(out, arg);
     emit_conversion_suffix(out, arg_suffix);
     fprintf(out, "; int64_t _ct_tid = xrt_typeof_id(_ct); ");
-    fprintf(out, "((_ct_tid == %" PRId32 ")", tid);
+    fprintf(out, "(xrt_value_is_type_id(_ct, %" PRId32 ")", tid);
     if (allow_null)
         fprintf(out, " || (_ct_tid == 0)");
     fprintf(out, ") ? ");
@@ -11658,23 +11658,13 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
     switch (target->kind) {
         case XR_KIND_INT:
-            /* The tag carries the family; the declared width is only recoverable
-             * as a representability question about the payload. Emitting a bare
-             * tag compare would answer `is i32` true for any integer. */
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_I64 && xr_scalar_rep_holds_i64(%u, ",
-                    (unsigned) target->scalar_rep);
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".i))");
-            break;
         case XR_KIND_FLOAT:
-            fprintf(out, "(");
+            /* The tag carries the family; the declared width is only recoverable
+             * as a representability question about the payload. A bare tag
+             * compare would answer `is i32` true for every integer. */
+            fprintf(out, "xrt_value_is_type_id(");
             emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_F64 && xr_scalar_rep_holds_f64(%u, ",
-                    (unsigned) target->scalar_rep);
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".f))");
+            fprintf(out, ", %d)", (int) xr_scalar_rep_typeid(target->scalar_rep));
             break;
         case XR_KIND_BOOL:
             fprintf(out, "(");

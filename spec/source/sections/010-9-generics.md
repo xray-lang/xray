@@ -91,6 +91,20 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
+#### 键等价关系
+
+哈希容器按**键等价关系**存取，它与 `==` 运算符是两个关系：
+
+- 键等价必须**自反、对称、传递**。自反性是容器不变量：存进去的键必须能被它自己找回来，否则插入不再覆盖、查找不再命中、删除不再回收。
+- `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
+- 键等价蕴含 `hash(a) == hash(b)`。
+
+内置 `float` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
+
+按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
+
+用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
+
 **当前限制**：
 - 约束只能位于类型参数后，不支持 where 子句。
 - 不支持**高阶类型**（`F<_>` 作为参数）。
@@ -292,6 +306,20 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()` satisfy this constraint. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+
+#### The key relation
+
+Hash containers store and retrieve by a **key equivalence relation**, which is a different relation from the `==` operator:
+
+- Key equivalence must be **reflexive, symmetric, and transitive**. Reflexivity is a container invariant: a stored key must find itself, or insert stops replacing, lookup stops hitting, and delete stops reclaiming.
+- `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
+- Key equivalence implies `hash(a) == hash(b)`.
+
+Built-in `float` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+
+Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
+
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with float fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.

@@ -530,15 +530,17 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    /* OP_TYPEOF tmp, dst, 0 */
-    if (ctx->next_reg >= MAX_REGS) {
+    /* A safe cast asks the same question `is` does, so it runs the same test:
+     * comparing typeof against the id would answer `int` for every integer and
+     * could never accept a fixed-width target. */
+    if (ctx->next_reg + 1 >= MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-    if (tmp >= ctx->max_reg)
-        ctx->max_reg = (tmp + 1);
-    emit_inst(ctx, CREATE_ABC(OP_TYPEOF, tmp, dst, 0));
+    XiEmitReg tid_reg = (XiEmitReg) ctx->next_reg++;
+    if (tid_reg >= ctx->max_reg)
+        ctx->max_reg = (tid_reg + 1);
 
     int tid_k = add_const_int(ctx, tid);
     if (ctx->status != XI_EMIT_OK)
@@ -546,7 +548,9 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint16_t tid_arg = 0;
     if (!xi_emit_const_index_to_c(ctx, tid_k, &tid_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_EQK, tmp, tid_arg, 1));
+    emit_inst(ctx, CREATE_ABx(OP_LOADK, tid_reg, tid_arg));
+    emit_inst(ctx, CREATE_ABC(OP_IS, tmp, dst, tid_reg));
+    emit_inst(ctx, CREATE_ABC(OP_TEST, tmp, 1, 0));
     int ok_jmp_pc = current_pc(ctx);
     emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
 

@@ -84,6 +84,7 @@ order: 019
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+| `E0380` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
 
 ### 18.3 运行时
 
@@ -244,6 +245,7 @@ order: 019
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (more than one member of a numeric family) |
 
 ### 18.3 Runtime
 

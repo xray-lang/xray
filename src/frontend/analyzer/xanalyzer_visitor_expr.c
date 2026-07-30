@@ -1644,18 +1644,28 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
 // must narrow first (an `if x != null` check, optional-chaining `?.`, or the
 // `!` non-null assertion), all of which strip the nullable flag before we get
 // here. Returns true if an error was reported.
-static bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, XrType *recv_type,
-                                     const char *access_desc) {
+static bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, const AstNode *receiver,
+                                     XrType *recv_type, const char *access_desc) {
     if (!ctx || !ctx->analyzer || !ctx->analyzer->strict_null_checks)
         return false;
     if (!recv_type || XR_TYPE_IS_UNKNOWN(recv_type) || !recv_type->is_nullable)
         return false;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[256];
-    snprintf(msg, sizeof(msg),
-             "%s on a possibly-null value: narrow it first with `if x != null`, use `?.`, "
-             "or assert non-null with `!`",
-             access_desc);
+    /* A receiver produced by `?.` is the one case where the fix is mechanical:
+     * the chain already opted into null handling and the next link just has to
+     * say so too. Naming that beats repeating the generic three-way advice. */
+    if (receiver && receiver->type == AST_OPTIONAL_CHAIN) {
+        snprintf(msg, sizeof(msg),
+                 "%s on a possibly-null value: the result of `?.` is nullable, so this access "
+                 "needs `?.` as well",
+                 access_desc);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "%s on a possibly-null value: narrow it first with `if x != null`, use `?.`, "
+                 "or assert non-null with `!`",
+                 access_desc);
+    }
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL, msg,
                                &loc);
     return true;
@@ -1756,7 +1766,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         obj_type && obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name &&
         member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
     if (!obj_is_enum_namespace)
-        xa_check_nullable_access(ctx, node, obj_type, "member access");
+        xa_check_nullable_access(ctx, node, ma->object, obj_type, "member access");
 
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -2657,7 +2667,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
-    xa_check_nullable_access(ctx, node, container, "index access");
+    xa_check_nullable_access(ctx, node, ig->array, container, "index access");
 
     /* Visit the index expression so variable references get their symbol_id resolved */
     XrType *index_type = NULL;

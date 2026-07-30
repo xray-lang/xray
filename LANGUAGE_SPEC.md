@@ -960,6 +960,7 @@ v = "hello"             // OK
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
 - Members must not be subtypes of each other (otherwise normalized).
+- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one float-family member**. `i16 | i32` and `f32 | float` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0380`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
@@ -969,6 +970,21 @@ match v {
     is string -> print("str: ${v}"),
 }
 ```
+
+**Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
+
+- The source type is **exactly** one member → that member is selected.
+- Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
+- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the float-family member when the union has none (matching "an integer literal types into a unique floating context"); a float literal selects the float-family member. The literal must be exactly representable in the selected member.
+
+```xray
+var a: int | float = 1        // exact match: int
+var b: int | float = 1.0      // exact match: float
+var c: i32 | string = 7       // sole integer-family member: i32
+var d: f32 | string = 1.5     // sole float-family member: f32
+```
+
+`is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
 **Special cases**:
 - `int | null` normalizes to `int?`.
@@ -1415,8 +1431,8 @@ var value = callback?.(input)   // optional function call
 - `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
 - `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
-- **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
+- **`?.` covers exactly one access.** Its result is nullable, so the next link in the chain writes its own `?.`: `a?.b?.c`. A bare `.` on a nullable value is `E0379`, the same as for any other nullable receiver. This keeps every `?.` marking one specific receiver that may be null, instead of letting a single `?.` silently cover several later dereferences.
 
 ### 3.7 Force Unwrap `!`
 
@@ -1448,6 +1464,7 @@ if (v is User) {
 - Result type: `bool`.
 - **Type guard**: the analyzer narrows the static type of `v` inside the branch.
 - Applies to union, nullable, class hierarchies, and `Json` structural matching.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
 
@@ -4155,6 +4172,20 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
+#### The key relation
+
+Hash containers store and retrieve by a **key equivalence relation**, which is a different relation from the `==` operator:
+
+- Key equivalence must be **reflexive, symmetric, and transitive**. Reflexivity is a container invariant: a stored key must find itself, or insert stops replacing, lookup stops hitting, and delete stops reclaiming.
+- `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
+- Key equivalence implies `hash(a) == hash(b)`.
+
+Built-in `float` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+
+Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
+
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with float fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported.
@@ -5247,6 +5278,8 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
+The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<float, V>` is the float key `1.0`, not an int key stored in a float map. Key matching uses the key equivalence relation from §9.2, not `==`.
+
 ### 14.9 `Set<T>` Methods
 
 | Member | Type / Description |
@@ -5765,6 +5798,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (more than one member of a numeric family) |
 
 ### 18.3 Runtime
 

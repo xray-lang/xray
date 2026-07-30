@@ -224,8 +224,8 @@ var value = callback?.(input)   // 可选函数调用
 - `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
 - `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
-- **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
+- **`?.` 只覆盖紧邻的一次访问**。结果可空，所以链上的下一次访问必须自己再写一个 `?.`：`a?.b?.c`。在可空值上写裸 `.` 是 `E0379`，与其它可空接收者一视同仁。这条规则让每个 `?.` 都精确标出一处可能为 null 的接收者，而不是让一个 `?.` 把后面若干次解引用一起隐掉。
 
 ### 3.7 强制解包 `!`
 
@@ -257,6 +257,7 @@ if (v is User) {
 - 结果类型 `bool`。
 - **类型守卫**：分析器在分支内窄化 `v` 的静态类型。
 - 适用于 union、可空、class 层级、`Json` 结构匹配。
+- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
 
@@ -809,8 +810,8 @@ var value = callback?.(input)   // optional function call
 - `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
 - `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
-- **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
+- **`?.` covers exactly one access.** Its result is nullable, so the next link in the chain writes its own `?.`: `a?.b?.c`. A bare `.` on a nullable value is `E0379`, the same as for any other nullable receiver. This keeps every `?.` marking one specific receiver that may be null, instead of letting a single `?.` silently cover several later dereferences.
 
 ### 3.7 Force Unwrap `!`
 
@@ -842,6 +843,7 @@ if (v is User) {
 - Result type: `bool`.
 - **Type guard**: the analyzer narrows the static type of `v` inside the branch.
 - Applies to union, nullable, class hierarchies, and `Json` structural matching.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
 
