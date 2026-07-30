@@ -491,6 +491,8 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
                                           is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
                                           parser->previous.line);
     xr_free(buf);
+    if (node)
+        node->as.literal.is_template_chunk = true;
     return node;
 }
 

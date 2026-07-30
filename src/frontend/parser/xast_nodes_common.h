@@ -55,6 +55,11 @@ typedef struct LiteralNode {
      * older call sites. */
     uint64_t int_bits;
     bool int_overflows_i64;
+    /* String literal produced by splitting a template string: it is a literal
+     * chunk of the template, not an interpolated expression. `${"x"}` also
+     * parses to AST_LITERAL_STRING, so the node type alone cannot tell the
+     * two apart when re-emitting a template. */
+    bool is_template_chunk;
     union {
         int64_t int_val;
         double float_val;
