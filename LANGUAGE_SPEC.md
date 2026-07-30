@@ -1256,7 +1256,7 @@ fn f(a: string?) {
 
 #### 2.13.5 Narrowing and Null Diagnostics
 
-**N-12** When the static type of a receiver can still be `null` (including a type that is always `null`), member access, indexing, calls, arithmetic, and iteration all report `E0379` (`XR_ERR_ANALYZE_POSSIBLY_NULL`); see §18.2.
+**N-12** When the static type of a receiver can still be `null` (including a type that is always `null`), member access, indexing, calls, arithmetic, `len()`, and iteration all report `E0379` (`XR_ERR_ANALYZE_POSSIBLY_NULL`); see §18.2. Three exceptions: `==` / `!=`, which is how narrowing starts; `&&` / `||`, whose operands are checked as conditions; and **string concatenation** — when either side of `+` is a `string`, a null operand renders as `"null"` per §2.5.
 
 **N-13** There are exactly three unwrapping forms, each independent of N-4:
 

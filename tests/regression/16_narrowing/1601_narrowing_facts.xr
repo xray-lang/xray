@@ -303,6 +303,24 @@ fn noop() {
     assert_eq(unused, 1)
 }
 
+// ===== N-12: null-unsafe uses and their exceptions =====
+
+@test
+fn test_n12_string_concatenation_accepts_null() {
+    // §2.5 defines a null operand of string concatenation as "null", so the
+    // N-12 arithmetic rule does not apply to it.
+    var missing: string? = null
+    assert_eq("value: " + missing, "value: null")
+    assert_eq("a" + string(1) + true + null, "a1truenull")
+}
+
+@test
+fn test_n12_equality_with_null_is_allowed() {
+    var a: string? = null
+    assert_eq(a == null, true)
+    assert_eq(a != null, false)
+}
+
 // ===== N-13: unwrapping =====
 
 @test
