@@ -817,8 +817,7 @@ static void require_detached_semantic_snapshot(const XiFunc *func) {
     TEST_REQUIRE(func != NULL, "detached semantic snapshot function exists");
     TEST_REQUIRE(func->semantic_snapshot_detached,
                  "escaped Xi function carries a detached semantic snapshot");
-    TEST_REQUIRE(func->analyzer == NULL,
-                 "escaped Xi function has no analyzer back-pointer");
+    TEST_REQUIRE(func->analyzer == NULL, "escaped Xi function has no analyzer back-pointer");
     for (uint16_t i = 0; i < func->nchildren; i++)
         require_detached_semantic_snapshot(func->children[i]);
 }
@@ -842,9 +841,8 @@ TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
     for (int i = 0; i < 512; i++) {
         XrType *element = xr_type_new_array(g_iso, xr_type_new_string(NULL));
         XrType *params[] = {element};
-        TEST_REQUIRE(element != NULL &&
-                         xr_type_new_function(g_iso, params, 1, xr_type_new_bool(NULL), false) !=
-                             NULL,
+        TEST_REQUIRE(element != NULL && xr_type_new_function(g_iso, params, 1,
+                                                             xr_type_new_bool(NULL), false) != NULL,
                      "type-pool churn allocation succeeded");
     }
     xa_analyzer_free(churn);
@@ -1216,13 +1214,11 @@ TEST(cgen_restricted_c90_header_is_explicit_and_minimal) {
     xi_cgen_ctx_set_freestanding_profile(ctx, true);
     xi_cgen_ctx_set_c_dialect(ctx, XI_CGEN_C_DIALECT_C90);
     xi_cgen_header(ctx, out);
-    TEST_REQUIRE(xr_close_memstream(out, &code, &code_size) == 0,
-                 "C90 header fixture closed");
+    TEST_REQUIRE(xr_close_memstream(out, &code, &code_size) == 0, "C90 header fixture closed");
     TEST_REQUIRE(contains(code, "#include \"xrt_c90.h\""),
                  "restricted C90 selects the minimal kernel header");
     TEST_REQUIRE(!contains(code, "#include \"xrt_core_freestanding.h\"") &&
-                     !contains(code, "#include \"xrt.h\"") &&
-                     !contains(code, "xrt_builtins"),
+                     !contains(code, "#include \"xrt.h\"") && !contains(code, "xrt_builtins"),
                  "restricted C90 excludes the ordinary runtime and builtin table");
     TEST_REQUIRE(!contains(code, "-Wdeclaration-after-statement"),
                  "restricted C90 does not suppress declaration-order diagnostics");
@@ -1820,9 +1816,8 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     TEST_REQUIRE(fn_end != NULL, "manual shared-literal function end emitted");
     TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit("),
                  "a shared string literal must not leave a dead C local");
-    TEST_REQUIRE(
-        contains_between(fn, fn_end, "xrt_array_ref_ensure_owned(xr_str_lit("),
-        "the portable shared-slot ownership handoff must retain the exact string literal");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_array_ref_ensure_owned(xr_str_lit("),
+                 "the portable shared-slot ownership handoff must retain the exact string literal");
 
     printf("  Generated immediate shared string literal %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -1911,8 +1906,7 @@ TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
 }
 
 TEST(cgen_dead_native_box_without_source_storage_is_elided) {
-    XrType u64_type = {
-        .kind = XR_KIND_INT, .id = 162, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 162, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XiFunc *ir = xi_func_new("dead_native_box", &u64_type);
     TEST_REQUIRE(ir != NULL, "dead native box function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2062,8 +2056,7 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     snprintf(dead_decl, sizeof(dead_decl), "XrValue v%u =", (unsigned) import->id);
     TEST_REQUIRE(!contains(code, dead_decl),
                  "direct stdlib function token must not materialize a C local");
-    TEST_REQUIRE(contains(code, "xrt_io_file_close("),
-                 "direct stdlib call must remain emitted");
+    TEST_REQUIRE(contains(code, "xrt_io_file_close("), "direct stdlib call must remain emitted");
 
     printf("  Generated direct stdlib import token elision %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2113,8 +2106,9 @@ TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
     const char *fn = find_static_function_definition(code, "test_slicedLength_");
     TEST_REQUIRE(fn != NULL, "direct span argument function should emit");
     const char *fn_end = next_static_after(fn);
-    TEST_REQUIRE(count_between(fn, fn_end, "_ad") == 0,
-                 "a Slice used only by a direct Slice parameter and error cleanup must not cache data");
+    TEST_REQUIRE(
+        count_between(fn, fn_end, "_ad") == 0,
+        "a Slice used only by a direct Slice parameter and error cleanup must not cache data");
     TEST_REQUIRE(contains_between(fn, fn_end, "xrt_has_pending_error()"),
                  "the direct Slice fixture must exercise an intervening fallible call");
     TEST_REQUIRE(contains_between(fn, fn_end, "test_viewLength_"),
@@ -2822,10 +2816,10 @@ TEST(cgen_while_loop) {
     TEST_REQUIRE(contains_between(hot, hot_end, "while (") &&
                      contains_between(hot, hot_end, "INT64_C(5)"),
                  "structured loop guard must retain its exact literal condition");
-    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(
-                     hot, hot_end, "    int64_t v", " = INT64_C(5);") == 0 &&
-                     count_lines_outside_debug_locals_with_prefix(
-                         hot, hot_end, "    v", " = INT64_C(5);") == 0,
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(hot, hot_end, "    int64_t v",
+                                                              " = INT64_C(5);") == 0 &&
+                     count_lines_outside_debug_locals_with_prefix(hot, hot_end, "    v",
+                                                                  " = INT64_C(5);") == 0,
                  "an inlined structured-loop bound must not leave a release C assignment");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
@@ -4471,33 +4465,34 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
 }
 
 TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
-    const char *src = "fn run() -> int {\n"
-                      "    var src = Array<byte>(16)\n"
-                      "    src[0] = 1\n"
-                      "    src[1] = 2\n"
-                      "    src[2] = 3\n"
-                      "    src[3] = 4\n"
-                      "    var view: Slice<byte> = src[:]\n"
-                      "    var dst: Array<byte> = Array.withCapacity(460)\n"
-                      "    dst.reserve(460)\n"
-                      "    dst.appendFrom(view[0:4])\n"
-                      "    dst.repeatFrom(2, 2)\n"
-                      "    dst.appendFrom(view[0:4])\n"
-                      "    var dstView: Slice<byte> = dst[:]\n"
-                      "    dstView.repeatFrom(6, 2, 2)\n"
-                      "    var dstWindow: Slice<byte> = dstView[8:10]\n"
-                      "    var srcWindow: Slice<byte> = dstView[6:8]\n"
-                      "    dstWindow.copyFrom(srcWindow)\n"
-                      "    var prefixLeft: Slice<byte> = dstView[0:2]\n"
-                      "    var prefixRight: Slice<byte> = dstView[4:6]\n"
-                      "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
-                      "    var v16: u16 = view.load<u16>(0, Endian.LE)\n"
-                      "    var v32: u32 = view.load<u32>(0, Endian.LE)\n"
-                      "    var v64: u64 = view.load<u64>(0, Endian.LE)\n"
-                      "    view.store<u16>(8, v16, Endian.LE)\n"
-                      "    return int(v16) + int(v32) + int(v64) + int(dst[5]) + int(dst[9]) + prefix\n"
-                      "}\n"
-                      "print(run())\n";
+    const char *src =
+        "fn run() -> int {\n"
+        "    var src = Array<byte>(16)\n"
+        "    src[0] = 1\n"
+        "    src[1] = 2\n"
+        "    src[2] = 3\n"
+        "    src[3] = 4\n"
+        "    var view: Slice<byte> = src[:]\n"
+        "    var dst: Array<byte> = Array.withCapacity(460)\n"
+        "    dst.reserve(460)\n"
+        "    dst.appendFrom(view[0:4])\n"
+        "    dst.repeatFrom(2, 2)\n"
+        "    dst.appendFrom(view[0:4])\n"
+        "    var dstView: Slice<byte> = dst[:]\n"
+        "    dstView.repeatFrom(6, 2, 2)\n"
+        "    var dstWindow: Slice<byte> = dstView[8:10]\n"
+        "    var srcWindow: Slice<byte> = dstView[6:8]\n"
+        "    dstWindow.copyFrom(srcWindow)\n"
+        "    var prefixLeft: Slice<byte> = dstView[0:2]\n"
+        "    var prefixRight: Slice<byte> = dstView[4:6]\n"
+        "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
+        "    var v16: u16 = view.load<u16>(0, Endian.LE)\n"
+        "    var v32: u32 = view.load<u32>(0, Endian.LE)\n"
+        "    var v64: u64 = view.load<u64>(0, Endian.LE)\n"
+        "    view.store<u16>(8, v16, Endian.LE)\n"
+        "    return int(v16) + int(v32) + int(v64) + int(dst[5]) + int(dst[9]) + prefix\n"
+        "}\n"
+        "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4895,14 +4890,13 @@ TEST(cgen_rawptr_copy_forwarded_constant_has_no_release_local) {
     TEST_REQUIRE(contains_between(fn, fn_end, "memcpy(") &&
                      contains_between(fn, fn_end, "(size_t)INT64_C(2)"),
                  "forwarded constant copy count must remain literal at memcpy");
-    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(
-                     fn, fn_end, "    int64_t v", " = INT64_C(2);") == 0 &&
-                     count_lines_outside_debug_locals_with_prefix(
-                         fn, fn_end, "    v", " = INT64_C(2);") == 0,
+    TEST_REQUIRE(count_lines_outside_debug_locals_with_prefix(fn, fn_end, "    int64_t v",
+                                                              " = INT64_C(2);") == 0 &&
+                     count_lines_outside_debug_locals_with_prefix(fn, fn_end, "    v",
+                                                                  " = INT64_C(2);") == 0,
                  "forwarded memcpy constants must not leave a release C local or assignment");
 
-    printf("  Elided forwarded raw-pointer-copy constant in %zu bytes of C code\n",
-           strlen(code));
+    printf("  Elided forwarded raw-pointer-copy constant in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -7750,8 +7744,7 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
 }
 
 TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
-    XrType u64_type = {
-        .kind = XR_KIND_INT, .id = 964, .scalar_rep = XR_NATIVE_U64, .frozen = true};
+    XrType u64_type = {.kind = XR_KIND_INT, .id = 964, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 965, .frozen = true};
     XiFunc *ir = xi_func_new("manual_codegen_controls", &u64_type);
     TEST_REQUIRE(ir != NULL, "manual codegen-controls function allocated");
@@ -10278,8 +10271,13 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT ResultGroup fire-and-forget should generate");
-    const char *recv_call = strstr(code, "xr_aot_result_group_recv_value(ctx,");
-    assert(recv_call != NULL);
+    /* `recv()` on a ResultGroup<int> takes the typed optional path: the payload
+     * and its presence flag are separate unboxed frame slots, so nothing is
+     * tagged across the suspend. */
+    const char *recv_call = strstr(code, "xr_aot_result_group_recv_i64_optional(ctx,");
+    assert(recv_call != NULL && "ResultGroup<int>.recv should use the typed optional helper");
+    assert(!contains(code, "xr_aot_result_group_recv_value(") &&
+           "a typed ResultGroup recv must not fall back to the tagged helper");
     assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
            "ResultGroup fire-and-forget producers should use deferred batch submission");
     assert(!contains(code, "xr_aot_spawn_child") &&
@@ -10556,14 +10554,19 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
            "coroutine WorkQueue.push should use the native bool helper");
     assert(contains(code, "xr_aot_work_queue_close_void(ctx,") &&
            "coroutine WorkQueue.close should use the native void helper");
-    assert(contains(code, "xr_aot_work_queue_pop_value(ctx,") &&
-           "initial WorkQueue.pop with tagged optional result must use the value bridge");
+    /* `?? 0` consumes the optional exactly like an explicit null test does, so
+     * WorkQueue<int>.pop keeps the typed has/value slot pair here too — nothing
+     * about the coalescing form justifies a tagged round trip. */
+    assert(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,") &&
+           "WorkQueue<int>.pop feeding ?? must still use the typed optional bridge");
+    assert(!contains(code, "xr_aot_work_queue_pop_value(ctx,") &&
+           "a typed WorkQueue.pop must not write its result through XrValue*");
     assert(contains(code, "S1:;\n    f->state = 1;") &&
            "native WorkQueue.pop resume must restore state after jumping to the label");
-    assert(contains(code, "xr_aot_work_queue_pop_value_resume(ctx, &") &&
+    assert(contains(code, "xr_aot_work_queue_pop_i64_optional_resume(ctx, &") &&
            "native WorkQueue.pop resume must use the rebuilt frame value slot");
     assert(!contains(code, "xr_aot_work_queue_pop(ctx,") &&
-           "tagged optional WorkQueue.pop should not use the generic slot-ref bridge");
+           "typed optional WorkQueue.pop should not use the generic slot-ref bridge");
     assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
            "go-created Task values kept across spawn continuation must be traced");
     assert(!contains(code, "XrValue _wq_push_") &&
