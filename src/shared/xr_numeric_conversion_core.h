@@ -147,11 +147,16 @@ static inline double xr_numeric_unsigned_to_f64(uint64_t magnitude, bool negativ
     uint64_t significand =
         shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (52 - high));
     if (shift && significand == (UINT64_C(1) << 53)) {
+        /* Rounding carried out of the 53-bit significand: renormalize and take
+         * the larger exponent.  The result is exactly 1 << 52, so the fraction
+         * below is zero. */
         significand >>= 1;
         high++;
     }
-    if (shift)
-        significand <<= (52 - high + (int) shift);
+    /* No realignment step here.  When shift is non-zero it equals high - 52, so
+     * round_shift_even_u64 already returns the normalized 53-bit significand and
+     * any realignment amount would be exactly zero -- and -1 after the carry
+     * branch above bumped `high`, which is a negative shift and undefined. */
     uint64_t fraction = significand & ((UINT64_C(1) << 52) - UINT64_C(1));
     uint64_t bits = ((uint64_t) (high + 1023) << 52) | fraction;
     if (negative)
@@ -169,11 +174,13 @@ static inline double xr_numeric_unsigned_to_f32(uint64_t magnitude, bool negativ
     uint64_t significand =
         shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (23 - high));
     if (shift && significand == (UINT64_C(1) << 24)) {
+        /* Same carry renormalization as the f64 path. */
         significand >>= 1;
         high++;
     }
-    if (shift)
-        significand <<= (23 - high + (int) shift);
+    /* Same reason as xr_numeric_unsigned_to_f64: a non-zero shift equals
+     * high - 23, so no realignment is needed and the old expression became a
+     * negative shift after the carry branch. */
     uint32_t fraction = (uint32_t) significand & UINT32_C(0x007fffff);
     uint32_t bits = ((uint32_t) (high + 127) << 23) | fraction;
     if (negative)

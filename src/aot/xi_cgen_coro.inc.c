@@ -1922,6 +1922,22 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
+        /* Edge temporaries for the phi copies.  emit_phi_copies declares them
+         * inline at the assignment unless pre_decl_all is set, in which case it
+         * expects a function-scope declaration -- and the resume prologue never
+         * emitted one, so the assignment referenced an undeclared temporary.
+         * Keyed on the same cg_phi_copy_should_emit predicate as the assignment
+         * and as the ordinary prologue in xi_cgen.c.  A phi that lives in the
+         * frame still lands in a stack temporary on the edge before publication. */
+        for (uint16_t pred_idx = 0; ctx->pre_decl_all && pred_idx < blk->npreds; pred_idx++) {
+            for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
+                    continue;
+                fprintf(out, "    %s ", cg_coro_decl_ctype(ctx, f, &phi->value));
+                emit_phi_tmp_ref(out, blk, phi, pred_idx);
+                fprintf(out, ";\n");
+            }
+        }
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (!cg_phi_has_storage(phi))
                 continue;
