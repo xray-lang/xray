@@ -11,10 +11,20 @@
 
 #include "xr_native_type_core.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #define XR_NUMERIC_CANONICAL_F32_NAN UINT32_C(0x7fc00000)
+
+/* Copy object representations without requiring a hosted C library.  Character
+ * accesses are alias-safe in both C and C++, which keeps this the single
+ * bit-cast primitive shared by the VM and freestanding generated C. */
+static inline void xr_numeric_bit_copy(void *destination, const void *source, size_t byte_count) {
+    unsigned char *dst = (unsigned char *) destination;
+    const unsigned char *src = (const unsigned char *) source;
+    for (size_t index = 0; index < byte_count; index++)
+        dst[index] = src[index];
+}
 
 static inline uint8_t xr_numeric_scalar_bit_width(uint8_t scalar_rep, uint8_t pointer_bits) {
     switch ((XrNativeType) scalar_rep) {
@@ -52,13 +62,13 @@ static inline uint64_t xr_numeric_mask_for_bits(uint8_t bits) {
 
 static inline int64_t xr_numeric_i64_from_bits(uint64_t bits) {
     int64_t value;
-    memcpy(&value, &bits, sizeof(value));
+    xr_numeric_bit_copy(&value, &bits, sizeof(value));
     return value;
 }
 
 static inline uint64_t xr_numeric_i64_to_bits(int64_t value) {
     uint64_t bits;
-    memcpy(&bits, &value, sizeof(bits));
+    xr_numeric_bit_copy(&bits, &value, sizeof(bits));
     return bits;
 }
 
@@ -113,19 +123,19 @@ static inline uint64_t xr_numeric_round_shift_even_u64(uint64_t value, unsigned 
 
 static inline double xr_numeric_double_from_bits(uint64_t bits) {
     double value;
-    memcpy(&value, &bits, sizeof(value));
+    xr_numeric_bit_copy(&value, &bits, sizeof(value));
     return value;
 }
 
 static inline float xr_numeric_float_from_bits(uint32_t bits) {
     float value;
-    memcpy(&value, &bits, sizeof(value));
+    xr_numeric_bit_copy(&value, &bits, sizeof(value));
     return value;
 }
 
 static inline uint64_t xr_numeric_double_to_bits(double value) {
     uint64_t bits;
-    memcpy(&bits, &value, sizeof(bits));
+    xr_numeric_bit_copy(&bits, &value, sizeof(bits));
     return bits;
 }
 
@@ -134,8 +144,8 @@ static inline double xr_numeric_unsigned_to_f64(uint64_t magnitude, bool negativ
         return xr_numeric_double_from_bits(negative ? (UINT64_C(1) << 63) : 0);
     int high = xr_numeric_u64_high_bit(magnitude);
     unsigned shift = high > 52 ? (unsigned) (high - 52) : 0;
-    uint64_t significand = shift ? xr_numeric_round_shift_even_u64(magnitude, shift)
-                                 : (magnitude << (52 - high));
+    uint64_t significand =
+        shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (52 - high));
     if (shift && significand == (UINT64_C(1) << 53)) {
         significand >>= 1;
         high++;
@@ -156,8 +166,8 @@ static inline double xr_numeric_unsigned_to_f32(uint64_t magnitude, bool negativ
     }
     int high = xr_numeric_u64_high_bit(magnitude);
     unsigned shift = high > 23 ? (unsigned) (high - 23) : 0;
-    uint64_t significand = shift ? xr_numeric_round_shift_even_u64(magnitude, shift)
-                                 : (magnitude << (23 - high));
+    uint64_t significand =
+        shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (23 - high));
     if (shift && significand == (UINT64_C(1) << 24)) {
         significand >>= 1;
         high++;
@@ -171,8 +181,8 @@ static inline double xr_numeric_unsigned_to_f32(uint64_t magnitude, bool negativ
     return (double) xr_numeric_float_from_bits(bits);
 }
 
-static inline double xr_numeric_int_to_float(int64_t raw, uint8_t source_rep,
-                                             uint8_t target_rep, uint8_t pointer_bits) {
+static inline double xr_numeric_int_to_float(int64_t raw, uint8_t source_rep, uint8_t target_rep,
+                                             uint8_t pointer_bits) {
     uint8_t source_bits = xr_numeric_scalar_bit_width(source_rep, pointer_bits);
     uint64_t mask = xr_numeric_mask_for_bits(source_bits);
     uint64_t bits = xr_numeric_i64_to_bits(raw) & mask;
@@ -221,9 +231,8 @@ static inline double xr_numeric_f64_to_f32(double source) {
                       ((uint32_t) significand & UINT32_C(0x007fffff));
     } else {
         int shift = -(binary_exponent + 149);
-        uint64_t subnormal = shift > 0
-                                 ? xr_numeric_round_shift_even_u64(mantissa, (unsigned) shift)
-                                 : mantissa << (unsigned) (-shift);
+        uint64_t subnormal = shift > 0 ? xr_numeric_round_shift_even_u64(mantissa, (unsigned) shift)
+                                       : mantissa << (unsigned) (-shift);
         if (subnormal >= (UINT64_C(1) << 23))
             result_bits = sign | UINT32_C(0x00800000);
         else
@@ -242,8 +251,8 @@ static inline double xr_numeric_power_of_two(unsigned exponent) {
 
 /* Returns false for NaN, infinity, or a toward-zero result outside the target
  * integer domain.  No floating-to-integer cast executes before the range proof. */
-static inline bool xr_numeric_float_to_int(double source, uint8_t target_rep,
-                                           uint8_t pointer_bits, int64_t *out) {
+static inline bool xr_numeric_float_to_int(double source, uint8_t target_rep, uint8_t pointer_bits,
+                                           int64_t *out) {
     uint64_t source_bits = xr_numeric_double_to_bits(source);
     if (((source_bits >> 52) & UINT64_C(0x7ff)) == UINT64_C(0x7ff) || !out)
         return false;
