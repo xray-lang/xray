@@ -1,0 +1,29 @@
+// Message passing through task completion.
+//
+// §16.9.2 edge 5: the task body's last action happens-before everything after
+// the await that observes its completion. The task writes `data` and returns;
+// the awaiting side must see the write.
+//
+// Forbidden outcome: await returns while data still reads 0.
+
+const ITERATIONS = 3000
+
+fn publish(data: Atomic<int>) -> int {
+    data.store(99, Ordering.Relaxed)
+    return 1
+}
+
+fn main() {
+    var forbidden = 0
+    for (i in 0..ITERATIONS) {
+        const data = Atomic(0)
+        var t = go publish(data)
+        var token = await t
+        if (token != 1 || data.load(Ordering.Relaxed) != 99) {
+            forbidden = forbidden + 1
+        }
+    }
+    print("mp_task_await forbidden=${forbidden}")
+}
+
+main()

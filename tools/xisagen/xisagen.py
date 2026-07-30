@@ -678,6 +678,19 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                 f"has no memory, side-effect or suspension effect; a "
                 f"synchronisation edge needs an observable operation to "
                 f"attach to")
+        # A barrier that can be speculated or value-numbered is not a barrier:
+        # duplicating it invents an edge and eliminating it removes one. Both
+        # columns must pin the op in place, and both are checked here rather
+        # than per-value in the verifier because they are facts about the op.
+        if sync_order != 'none' and speculation != 'never':
+            die(f"{path}: Xi op '{name}' declares :sync '{sync_order}' with "
+                f":speculation '{speculation}'; a synchronisation edge must "
+                f"not be speculatable, since executing it on a path that "
+                f"would not have reached it invents an ordering edge")
+        if sync_order != 'none' and vn_kind != 'none':
+            die(f"{path}: Xi op '{name}' declares :sync '{sync_order}' with "
+                f":vn-kind '{vn_kind}'; a synchronisation edge must not be "
+                f"value-numbered, since CSE-ing two of them removes an edge")
         escape_use = _xi_get_kw_str(form, ':escape-use', 'none')
         if escape_use not in VALID_XI_ESCAPE_USES:
             die(f"{path}: Xi op '{name}' uses unknown escape-use "
@@ -3671,6 +3684,34 @@ def _test_xi_ops_parser():
       :observable ()
       :targets (vm-bytecode aot-c aot-verify))
     ''', "unknown :sync order must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.speculatable.barrier
+      :class memory-read
+      :arity 1
+      :own-use borrow
+      :effects (memory-read)
+      :tbaa-group top
+      :sync acquire
+      :speculation safe
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', "a speculatable synchronisation edge must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.numbered.barrier
+      :class memory-read
+      :arity 1
+      :own-use borrow
+      :effects (memory-read)
+      :tbaa-group top
+      :sync acquire
+      :vn-kind memory-read
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', "a value-numbered synchronisation edge must fail closed")
     print(" PASS", file=sys.stderr)
 
 def _test_xi_lowering_parser():

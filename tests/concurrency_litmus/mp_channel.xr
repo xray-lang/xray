@@ -1,0 +1,40 @@
+// Message passing through a channel.
+//
+// §16.9.2 edge 1: everything sequenced before a successful send happens-before
+// everything sequenced after the receive that takes that value. The producer
+// publishes into `data` before sending, so the consumer must see it.
+//
+// Forbidden outcome: the receive completes while data still reads 0.
+
+const ITERATIONS = 3000
+
+fn producer(data: Atomic<int>, ch: Channel<int>) {
+    data.store(7, Ordering.Relaxed)
+    ch.send(1)
+}
+
+fn consumer(data: Atomic<int>, ch: Channel<int>) -> int {
+    var got = ch.recvOr(-1)
+    if (got != 1) {
+        return -1
+    }
+    return data.load(Ordering.Relaxed)
+}
+
+fn main() {
+    var forbidden = 0
+    for (i in 0..ITERATIONS) {
+        const data = Atomic(0)
+        const ch = Channel<int>(0)
+        var c = go consumer(data, ch)
+        var p = go producer(data, ch)
+        await p
+        if (await c != 7) {
+            forbidden = forbidden + 1
+        }
+        ch.close()
+    }
+    print("mp_channel forbidden=${forbidden}")
+}
+
+main()
