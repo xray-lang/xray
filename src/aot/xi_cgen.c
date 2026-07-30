@@ -9232,7 +9232,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 }
                 if (debug_only_fixed_wrapper)
                     fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
-                XrRep rep = cg_value_plan_storage_rep(ctx, v);
+                /* The defensive initializer must be chosen from the same rep as
+                 * the declared C type on the next line, not from the planned
+                 * rep: a native-local array is declared xrt_array_t* and needs
+                 * a null pointer, while its plan rep is tagged and would emit
+                 * XR_NULL_VAL into a pointer. */
+                XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
                 if (!needs_defensive_init) {
