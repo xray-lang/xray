@@ -338,6 +338,41 @@ TEST(mono_collector_dedup) {
     xa_mono_collector_free(&c);
 }
 
+/* The mangled name IS instance identity, so it must never drop an argument.
+ * A fixed-size tag array used to make xr_mono_mangle fall back to the bare
+ * generic name past its bound, collapsing every instance of that generic onto
+ * one symbol -- silently, and only for wide parameter lists. */
+TEST(mono_mangle_keeps_every_argument_when_wide) {
+    enum {
+        WIDE = 48
+    };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *args[WIDE];
+    for (int i = 0; i < WIDE; i++)
+        args[i] = (i % 2 == 0) ? &int_t : &str_t;
+
+    char *wide = xr_mono_mangle("wide", args, WIDE);
+    ASSERT(wide != NULL);
+    /* Not the fallback: the base name alone would collide with every other
+     * instantiation of the same generic. */
+    ASSERT(strcmp(wide, "wide") != 0);
+
+    int i64_tags = 0;
+    for (const char *p = wide; (p = strstr(p, "i64")) != NULL; p += 3)
+        i64_tags++;
+    ASSERT_EQ(i64_tags, WIDE / 2);
+
+    /* Changing one argument must change the name. */
+    args[WIDE - 1] = &int_t;
+    char *other = xr_mono_mangle("wide", args, WIDE);
+    ASSERT(other != NULL);
+    ASSERT(strcmp(wide, other) != 0);
+
+    free(wide);
+    free(other);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -351,6 +386,7 @@ int main(void) {
     RUN_TEST(monomorphized_stdlib_type_preserves_sealed_capabilities);
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);
+    RUN_TEST(mono_mangle_keeps_every_argument_when_wide);
 
     RUN_TEST_SUITE("Type Substitution");
     RUN_TEST(type_substitute_type_param);

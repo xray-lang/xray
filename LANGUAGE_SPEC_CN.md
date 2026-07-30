@@ -4396,10 +4396,38 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
+#### `where` 子句
+
+约束也可以写在签名之后。`where` 是**同一机制的另一种拼写**，不是第二套规则：它把约束追加到 `<T: C>` 填的那张列表，因此两种写法由同一条路径检查（`E0358`），并且在同一个参数上**取交集**而非互相覆盖。
+
+```ebnf
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+WhereItem   ::= Identifier ':' ConstraintList
+```
+
+```xray
+// 约束列表长时，写在后面不会把参数挤出一行
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// 内联与 where 在同一参数上取交集：T 必须同时满足 Comparable 与 Stringable
+fn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }
+
+class Registry<K, V> where K: Hashable { ... }
+struct Holder<T> where T: Comparable { ... }
+interface Seq<T> where T: Comparable { ... }
+enum Wrap<T> where T: Comparable { ... }
+```
+
+`where` 只能约束该声明自身的类型参数；命名其他标识符，或在没有类型参数的声明上使用，都是编译错误。
+
 **当前限制**：
-- 约束只能位于类型参数后，不支持 where 子句。
-- 不支持**高阶类型**（`F<_>` 作为参数）。
+- 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
 - 不支持默认类型参数（`<T = int>`）。
+- `where` 只接受与内联约束相同的表达力（`T: A & B`）；不支持对关联类型或嵌套类型的约束（`where T.Item: Hashable`），因为关联类型本身不存在。
+- 同一个类型参数列表中不得出现重名参数（`<T, T>`）。
 - 接口实现仍需**显式 `implements`**（在类声明位置，不是约束位置，详见 §5.4）。
 
 ### 9.3 类型推断与显式实例化
@@ -4428,26 +4456,44 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 ### 9.4 特化与 monomorphization
 
-**实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
+**实现策略**：构建期 monomorphization（单态化）。**具体类型实参元组即实例身份**，函数泛型与 class / struct 泛型适用同一条规则。
 
-- **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
-- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、调试类型名与名义类型语义精确。
-- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
-- 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
+- **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
+- **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
+- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
+#### 单态化预算
+
+两个预算防的是两类不同的风险，互不可替代：
+
+| 预算 | 值 | 防什么 | 超限 |
+|---|:---:|---|---|
+| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<int>` 构造 `RouteMatch<int>` 构造 `Entry<int>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0388` |
+| `XR_MONO_MAX_INSTANCES` | 16384 | **广度**。每个实例克隆一份完整声明，因此这是编译期内存兜底，不是语言规则。取值远高于任何现实程序 | `E0387` |
+
+**超限一律是硬错误，绝不静默降级。** 把调用留在泛型状态会在 `xray verify` 的 `forbid=["box"]` 合同下面重新引入装箱，而合同刚刚"证明"了它不存在——这类不可见的去优化正是版本化 effect 合同要排除的东西。
+
+`E0388` 的诊断会打印完整实例化链（`a$i64 -> b$Box_i64 -> ...`），否则报出的类型是用户从未写过、也无法检索的。
+
 **性能影响**：
-- 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
-- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
+- 单态化让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path。
+- 逐类型特化会增加代码和元数据体积（大致按“类型组合数 × 声明体积”增长），换来精确布局、调试类型名保真和按类型特化；体积回收由上述 AOT 共享计划按阈值完成。
 - 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
 
-**当前缓项**：
-- 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
+**特性状态**（使用 §0.4.3 的状态标记）：
+
+| 特性 | 状态 | 说明 |
+|---|---|---|
+| `where` 子句 | **稳定** | 见 §9.2 |
+| 声明点方差（`out T` / `in T`） | **未实现** | 有前置依赖，见 §9.6 |
+| 默认类型参数（`<T = int>`） | **未实现** | 语法当前是错误，不是被忽略 |
+| 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
 ### 9.5 协议（duck typing）与名义类型
 
@@ -4486,9 +4532,20 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 
 ### 9.6 方差（Variance）
 
-当前不支持显式方差标注（`out T` / `in T`）。默认行为：
+**状态：未实现**（声明点方差标注 `out T` / `in T`）。当前行为是完整且健全的基线，不是占位：
+
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
+
+**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+
+### 9.6.1 高阶类型（HKT）
+
+**状态：明确不提供**（不是"暂缓"）。Xray 不支持类型构造器参数（`F<_>`、`Functor<F>` 之类）。
+
+**为什么是永久决定**：HKT 与全程序单态化在根本上冲突。对类型构造器抽象意味着实例集合在编译期不再有限可枚举，实现只能退回字典传递或类型擦除——两者都会重新引入 Xray 的整条 AOT 路线（无装箱表示、精确布局、`xray verify` 的 shape 合同）明确要消除的间接层。这与"轻量脚本语言"的定位也不一致。
+
+需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: (T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
 
 ### 9.7 泛型与类型身份
 
@@ -6014,6 +6071,8 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
+| `E0387` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
+| `E0388` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
 
 ### 18.3 运行时
 
