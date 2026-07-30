@@ -558,12 +558,18 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node, bool in_stmt_
 /* Forward declaration — the walker calls itself recursively. */
 static void canon_node(XrCanonCtx *ctx, AstNode *node);
 
-/* Canonicalize a block's statements in order. */
+/* Canonicalize a block's statements in order.
+ * Statements in block context can safely be replaced by AST_BLOCK
+ * (e.g. index_set with complex receivers). */
 static void canon_block(XrCanonCtx *ctx, AstNode **stmts, int count) {
     XR_DCHECK(ctx != NULL, "canon_block: NULL ctx");
     for (int i = 0; i < count; i++) {
         if (!stmts[i])
             continue;
+        /* Statement-context canonicalizations that expand to blocks */
+        if (stmts[i]->type == AST_INDEX_SET) {
+            canon_index_set(ctx, stmts[i]);
+        }
         canon_node(ctx, stmts[i]);
     }
 }
@@ -585,10 +591,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_inc_dec(ctx, node);
         /* Node type has changed to AST_ASSIGNMENT; fall through. */
     }
-    if (node->type == AST_INDEX_SET) {
-        canon_index_set(ctx, node);
-        /* May have changed to a canon value block; fall through to walk it. */
-    }
+    /* AST_INDEX_SET extraction runs in statement context only (canon_block).
+     * Hoisting a receiver into a temp is only needed to keep an effectful
+     * subexpression single-evaluated; doing it for every `obj.field[i] = v`
+     * would copy the field out instead of indexing it in place. */
     if ((node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) &&
         !canon_should_keep_eager_bool_logic(ctx, node)) {
         canon_short_circuit(ctx, node);

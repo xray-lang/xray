@@ -101,4 +101,4 @@ anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a
 anchor-sha256: src/coro/xchannel.c 53050362c3fd0681aa791e80479334349655eee7b7340769bb4c399654a1a6fc
 anchor-sha256: src/coro/xtask.c 176329e4a83cda3ade00ef4295c500b2515dd2b50344105ae2ac7855e1604e83
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
-anchor-sha256: src/frontend/canonical/xcanon.c 3cbf5258227fabc577b5e026101e3d19ad578997df8056f747de6cbdc2a91fa3
+anchor-sha256: src/frontend/canonical/xcanon.c 6511de9fd3a2a07df02441ceae660a0e47d1cb784fe0a8c6a0cea674f9785ff3
