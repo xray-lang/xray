@@ -1,0 +1,12 @@
+// Spec §2.13 N-11.4: a binding assigned inside a closure never narrows,
+// even when the closure is written after the narrowing site.
+fn main() {
+    var a: string? = "abc"
+    var clear = fn() { a = null }
+    if (a != null) {
+        clear()
+        print(len(a))
+    }
+}
+
+main()

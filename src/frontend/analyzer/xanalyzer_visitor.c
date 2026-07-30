@@ -5174,12 +5174,51 @@ void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body) {
     if (!body)
         return;
 
+    /* Every function body owns its flow graph. Without a fresh start node the
+     * body would inherit the previous body's final state — including the
+     * unreachable state left behind by a trailing `return`, which silently
+     * disables all narrowing (spec §2.13 N-11.1). This applies uniformly to named
+     * functions, class and enum methods, and lambdas, so it lives here rather
+     * than at the individual declaration sites. */
+    XaFlowNode *saved_flow = NULL;
+    XrFlowLabel *saved_break = NULL;
+    XrFlowLabel *saved_continue = NULL;
+    XrFlowLabel *saved_return = NULL;
+    XrFlowLabel *saved_exception = NULL;
+    if (ctx->flow) {
+        saved_flow = ctx->flow->current_flow;
+        saved_break = ctx->flow->current_break_target;
+        saved_continue = ctx->flow->current_continue_target;
+        saved_return = ctx->flow->current_return_target;
+        saved_exception = ctx->flow->current_exception_target;
+        xa_flow_create_start(ctx->flow);
+        ctx->flow->current_break_target = NULL;
+        ctx->flow->current_continue_target = NULL;
+        ctx->flow->current_return_target = NULL;
+        ctx->flow->current_exception_target = NULL;
+    }
+
     // Collect body declarations (idempotent: safe on both new and reused scopes)
     xa_visit_collect(ctx, body);
+
+    /* Bindings this body's closures write to are excluded from narrowing for
+     * the whole body. The set is scoped to this body: nested bodies extend it
+     * and the entries are dropped again on the way out. */
+    int saved_closure_written = xa_flow_closure_writes_collect(ctx->flow, body);
 
     // Visit body statements directly (skip xa_visit_block_stmt) while still
     // exposing a statement cursor for Slice last-use analysis.
     xa_visit_inline_statement_sequence_with_cursor(ctx, body);
+
+    xa_flow_closure_writes_restore(ctx->flow, saved_closure_written);
+
+    if (ctx->flow) {
+        ctx->flow->current_flow = saved_flow;
+        ctx->flow->current_break_target = saved_break;
+        ctx->flow->current_continue_target = saved_continue;
+        ctx->flow->current_return_target = saved_return;
+        ctx->flow->current_exception_target = saved_exception;
+    }
 }
 
 /* Generator return-type recognition. A generator function declares
@@ -5566,6 +5605,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, inner);
                 xa_warn_discarded_sys_thread_spawn(ctx, inner);
                 xa_warn_discarded_sys_os_resource_factory(ctx, inner);
+                xa_flow_apply_assert_narrowing(ctx->flow, inner);
             }
             break;
         }
@@ -5589,27 +5629,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->return_storage_mixed = false;
             ctx->return_storage_unknown = false;
 
-            // Isolate flow graph: each function gets a fresh start node
-            // so that flow facts from sibling/parent functions (e.g.
-            // `var name = p?.name`) do not leak into this function body.
-            XaFlowNode *saved_flow = NULL;
-            XrFlowLabel *saved_break = NULL;
-            XrFlowLabel *saved_continue = NULL;
-            XrFlowLabel *saved_return = NULL;
-            XrFlowLabel *saved_exception = NULL;
-            if (ctx->flow) {
-                saved_flow = ctx->flow->current_flow;
-                saved_break = ctx->flow->current_break_target;
-                saved_continue = ctx->flow->current_continue_target;
-                saved_return = ctx->flow->current_return_target;
-                saved_exception = ctx->flow->current_exception_target;
-                xa_flow_create_start(ctx->flow);
-                ctx->flow->current_break_target = NULL;
-                ctx->flow->current_continue_target = NULL;
-                ctx->flow->current_return_target = NULL;
-                ctx->flow->current_exception_target = NULL;
-            }
-
+            /* Flow-graph isolation lives in xa_visit_function_body_unified so
+             * every function-like body gets it. */
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
 
             // Call-site inference feedback: update unannotated parameter types
@@ -5757,15 +5778,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_return_type = saved_expected_ret;
 
             xa_analyzer_exit_scope(ctx->analyzer);
-
-            // Restore flow state to outer function's context
-            if (ctx->flow) {
-                ctx->flow->current_flow = saved_flow;
-                ctx->flow->current_break_target = saved_break;
-                ctx->flow->current_continue_target = saved_continue;
-                ctx->flow->current_return_target = saved_return;
-                ctx->flow->current_exception_target = saved_exception;
-            }
 
             // Restore outer function's return type state
             if (ctx->return_types)
@@ -5971,6 +5983,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 } else {
                     coll_type = xa_visit_infer_expr(ctx, fi->collection);
                 }
+                /* Iterating a possibly-null source panics at run time, so it
+                 * is rejected like any other null-unsafe use (spec §2.13 N-12). */
+                if (coll_type && xa_check_nullable_access(ctx, fi->collection, fi->collection,
+                                                          coll_type, "iteration"))
+                    coll_type = xr_type_non_nullable(NULL, coll_type);
             }
 
             /*

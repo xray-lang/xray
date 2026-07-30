@@ -1,0 +1,10 @@
+// Spec §2.13 N-4: the true branch of `||` produces no fact.
+fn main() {
+    var a: string? = "abc"
+    var flag = true
+    if (a == null || flag) {
+        print(len(a))
+    }
+}
+
+main()

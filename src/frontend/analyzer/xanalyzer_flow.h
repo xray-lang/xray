@@ -36,14 +36,14 @@ typedef enum XrFlowFlags {
     XA_FLOW_TRUE_CONDITION = 1 << 5,   // True branch of condition
     XA_FLOW_FALSE_CONDITION = 1 << 6,  // False branch of condition
     XA_FLOW_SWITCH_CLAUSE = 1 << 7,    // Switch case clause
-    XA_FLOW_CALL = 1 << 8,             // Function call (may affect types)
     XA_FLOW_RETURN = 1 << 9,           // Return statement
     XA_FLOW_THROW = 1 << 10,           // Throw statement
     XA_FLOW_MOVE = 1 << 11,            // Variable moved (shared send)
 
     // Internal flags
-    XA_FLOW_REFERENCED = 1 << 16,  // Has been referenced
-    XA_FLOW_SHARED = 1 << 17,      // Multiple references (cache results)
+    XA_FLOW_REFERENCED = 1 << 16,   // Has been referenced
+    XA_FLOW_SHARED = 1 << 17,       // Multiple references (cache results)
+    XA_FLOW_IN_PROGRESS = 1 << 18,  // Loop header currently being resolved
 } XrFlowFlags;
 
 // Forward declaration
@@ -105,6 +105,12 @@ typedef struct XaFlowBuilder {
     XaFlowNode **all_nodes;
     int node_count;
     int node_capacity;
+
+    /* Names written from inside a nested closure of the function body being
+     * analyzed. These never narrow (spec §2.13 N-11.4). */
+    const char **closure_written_names;
+    int closure_written_count;
+    int closure_written_capacity;
 } XaFlowBuilder;
 
 // API: Flow builder lifecycle
@@ -119,16 +125,10 @@ XR_FUNC XaFlowNode *xa_flow_create_assignment(XaFlowBuilder *builder, XrAstNode 
                                               const char *name, XrType *type);
 XR_FUNC XaFlowNode *xa_flow_create_condition(XaFlowBuilder *builder, XrAstNode *expr,
                                              bool is_true_branch);
-XR_FUNC XaFlowNode *xa_flow_create_call(XaFlowBuilder *builder, XrAstNode *call);
 
 // API: Connect flow nodes
 XR_FUNC void xa_flow_add_antecedent(XaFlowNode *label, XaFlowNode *antecedent);
 XR_FUNC XaFlowNode *xa_flow_finish_label(XaFlowBuilder *builder, XaFlowNode *label);
-
-// API: Flow builder operations
-XR_FUNC void xa_flow_set_current(XaFlowBuilder *builder, XaFlowNode *flow);
-XR_FUNC XaFlowNode *xa_flow_get_current(XaFlowBuilder *builder);
-XR_FUNC bool xa_flow_is_unreachable(XaFlowBuilder *builder);
 
 // Type narrowing cache (open-addressing hash table, keyed by node->id)
 typedef struct XaFlowCache {
@@ -154,11 +154,19 @@ XR_FUNC XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name
 XR_FUNC XaBindingUseState xa_flow_binding_use_state(XaFlowBuilder *builder, const char *name,
                                                     XaFlowNode *at_node);
 
-// Narrowing helpers
+// API: closure-written bindings (spec §2.13 N-11.4). Collect before traversing
+// a function body, restore with the returned marker on the way out.
+XR_FUNC int xa_flow_closure_writes_collect(XaFlowBuilder *builder, XrAstNode *body);
+XR_FUNC void xa_flow_closure_writes_restore(XaFlowBuilder *builder, int saved_count);
+XR_FUNC bool xa_flow_narrowing_suppressed(const XaFlowBuilder *builder, const char *name);
+
+// API: inject an `assert(cond)` fact into the following flow (spec §2.13 N-7).
+XR_FUNC void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr);
+
+// Narrowing helpers (fact operators of spec §2.13 N-4)
 XR_FUNC XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true);
-XR_FUNC XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assume_true);
 
 #endif  // XANALYZER_FLOW_H

@@ -937,6 +937,14 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
     int line = parser->previous.line;
 
+    /* `a?.b.c()` — the call continues an optional chain, so it becomes the
+     * chain's method-call link and short-circuits with it (spec §3.6), exactly
+     * like the `a?.c()` the programmer could have written. */
+    if (callee && callee->type == AST_OPTIONAL_CHAIN && callee->as.optional_chain.implicit_link &&
+        callee->as.optional_chain.chain_type == 0 && callee->as.optional_chain.name) {
+        callee->as.optional_chain.chain_type = 2;
+    }
+
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
     int arg_count = 0;
@@ -1420,10 +1428,17 @@ AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
     if (is_slice) {
         // Create slice expression node
         return xr_ast_slice_expr(parser->compiler_session, array, start, end, line);
-    } else {
-        // Create index access node
-        return xr_ast_index_get(parser->compiler_session, array, start, line);
     }
+    /* `[` continuing an optional chain keeps the chain's short-circuit
+     * (spec §3.6), like the `.` case in xr_parse_member_access. */
+    if (array && array->type == AST_OPTIONAL_CHAIN) {
+        AstNode *node =
+            xr_ast_optional_chain(parser->compiler_session, array, NULL, start, 1, line);
+        node->as.optional_chain.implicit_link = true;
+        return node;
+    }
+    // Create index access node
+    return xr_ast_index_get(parser->compiler_session, array, start, line);
 }
 
 /*
@@ -1463,7 +1478,18 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     strncpy(member_name, name, name_len);
     member_name[name_len] = '\0';
 
-    AstNode *node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
+    /* A plain `.` that continues an optional chain keeps the chain's
+     * short-circuit: `a?.b.c` is null when `a` is null, without evaluating
+     * `.c` (spec §3.6). Represent it as another chain link so both backends
+     * reuse the existing lowering; `implicit_link` tells the analyzer that
+     * this link's own member must be non-null. */
+    AstNode *node;
+    if (object && object->type == AST_OPTIONAL_CHAIN) {
+        node = xr_ast_optional_chain(parser->compiler_session, object, member_name, NULL, 0, line);
+        node->as.optional_chain.implicit_link = true;
+    } else {
+        node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
+    }
     node->column = parser->previous.column;
     return node;
 }

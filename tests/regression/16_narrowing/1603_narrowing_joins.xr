@@ -1,0 +1,97 @@
+// 1603_narrowing_joins.xr
+// Conformance: LANGUAGE_SPEC §2.13 N-9 (join points take the union of all
+// predecessor paths; unreachable predecessors contribute `never`) and N-10
+// (loop headers join the entry edge with every back edge).
+
+// ===== N-9: both paths assign a non-null value =====
+
+@test
+fn test_n9_join_of_two_assigned_paths() {
+    var a: string? = null
+    var flag = true
+    if (flag) {
+        a = "abc"
+    } else {
+        a = "de"
+    }
+    // Both predecessors are non-null, so the join is non-null.
+    assert_eq(len(a), 3)
+}
+
+@test
+fn test_n9_join_keeps_null_when_one_path_may_be_null() {
+    var a: string? = null
+    var flag = false
+    if (flag) {
+        a = "abc"
+    }
+    assert_eq(a ?? "fallback", "fallback")
+}
+
+@test
+fn test_n9_unreachable_path_is_absorbed() {
+    var a: string? = "abc"
+    if (a == null) {
+        return
+    }
+    // The then-path is unreachable past the return, so only the
+    // false-condition path reaches here.
+    assert_eq(len(a), 3)
+}
+
+fn n9_pick(flag: bool, x: string?, y: string?) -> int {
+    if (flag) {
+        if (x == null) { return -1 }
+        return len(x)
+    }
+    if (y == null) { return -2 }
+    return len(y)
+}
+
+@test
+fn test_n9_nested_joins() {
+    assert_eq(n9_pick(true, "abcd", null), 4)
+    assert_eq(n9_pick(true, null, "abcd"), -1)
+    assert_eq(n9_pick(false, null, "ab"), 2)
+    assert_eq(n9_pick(false, "ab", null), -2)
+}
+
+// ===== N-10: loop header joins entry and back edges =====
+
+@test
+fn test_n10_narrowing_holds_each_iteration() {
+    var cur: string? = "abc"
+    var rounds = 0
+    while (cur != null) {
+        rounds = rounds + 1
+        if (rounds > 2) {
+            cur = null
+        }
+    }
+    assert_eq(rounds, 3)
+}
+
+@test
+fn test_n10_reassignment_in_body_rejoins() {
+    var cur: string? = "ab"
+    var total = 0
+    var i = 0
+    while (i < 3) {
+        i = i + 1
+        if (cur != null) {
+            total = total + len(cur)
+        }
+        cur = "xyz"
+    }
+    assert_eq(total, 8)
+}
+
+@test
+fn test_n10_condition_false_fact_after_loop() {
+    var cur: string? = "abc"
+    while (cur != null) {
+        cur = null
+    }
+    // After the loop the condition is false, so cur is null here.
+    assert_eq(cur, null)
+}

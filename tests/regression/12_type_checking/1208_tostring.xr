@@ -21,7 +21,9 @@ fn test_tostring() {
     assert_eq(3.14.toString(), "3.14")
     assert_eq(true.toString(), "true")
     assert_eq(false.toString(), "false")
-    assert_eq(null.toString(), "null")
+    // `null.toString()` is a member access on an always-null value, which
+    // spec §2.13 N-12 rejects. `string(null)` is the supported spelling and is
+    // asserted below.
     assert_eq("hello".toString(), "hello")
 
     // === 2. string() conversion function ===

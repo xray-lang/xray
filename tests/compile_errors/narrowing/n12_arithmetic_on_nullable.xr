@@ -1,0 +1,7 @@
+// Spec §2.13 N-12: arithmetic on a possibly-null operand is rejected.
+fn main() {
+    var n: int? = 1
+    print(n + 1)
+}
+
+main()

@@ -1,0 +1,56 @@
+{
+  "id": "narrowing",
+  "title": "Type Narrowing",
+  "spec_anchor": "#213-流敏感类型收窄",
+  "aliases": [
+    "narrowing",
+    "narrow",
+    "smart_cast",
+    "type_guard",
+    "null_check",
+    "possibly_null",
+    "E0379",
+    "flow_analysis",
+    "nullable_unwrap"
+  ],
+  "lead": "Narrowing tightens the static type of a binding at a control-flow position. It is semantics, not a diagnostic optimization: narrowed types drive member lookup, overload resolution, match exhaustiveness, and code generation, and the VM and AOT backends must agree. Normative rules N-1..N-13 live in spec section 2.13.",
+  "sections": [
+    {
+      "heading": "What can be narrowed (N-1, N-2)",
+      "markdown": "Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.\n\nNever narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).",
+      "fences": [
+        "narrowing-extract-binding"
+      ]
+    },
+    {
+      "heading": "Fact table (N-4)",
+      "markdown": "| Condition | True branch | False branch |\n|--|--|--|\n| `x` | remove `null` | no fact |\n| `!e` | false fact of `e` | true fact of `e` |\n| `(e)` | true fact of `e` | false fact of `e` |\n| `x == null` | keep only `null` | remove `null` |\n| `x != null` | remove `null` | keep only `null` |\n| `x is T` | intersect with `T` | remove intersection with `T` |\n| `typeOf(x) == Type.K` | keep kind `K` | remove kind `K` |\n| `e1 && e2` | true facts of both | no fact |\n| `e1 \\|\\| e2` | no fact | false facts of both |\n\nForms not in the table produce no facts."
+    },
+    {
+      "heading": "Short-circuit inheritance (N-5)",
+      "markdown": "`T?` cannot be used directly as a condition, so `&&` / `||` inheritance is the standard way to work with nullable values: the right operand of `&&` is analyzed under the left operand's true fact, and the right operand of `||` under its false fact.",
+      "fences": [
+        "narrowing-short-circuit"
+      ]
+    },
+    {
+      "heading": "Where facts apply (N-7, N-8, N-9, N-10)",
+      "markdown": "`if` then/else bodies, both arms of `c ? a : b`, loop-body entry and the code after `while` / `for`, the right operand of `&&` / `||`, and the code after `assert(c)`. A branch that necessarily terminates gives the following code the opposite fact.",
+      "fences": [
+        "narrowing-early-return",
+        "narrowing-loop"
+      ]
+    },
+    {
+      "heading": "Invalidation (N-11)",
+      "markdown": "Narrowing is invalidated by assignment / compound assignment / `++` / `--`, by passing the binding as a `ref` argument, and by `move`. A binding captured by a closure **and** assigned anywhere never narrows in that function. An ordinary call does not invalidate narrowing, because a narrowable subject cannot be written by a callee.",
+      "fences": [
+        "narrowing-invalidation"
+      ]
+    },
+    {
+      "heading": "Unwrapping and E0379 (N-12, N-13)",
+      "markdown": "`E0379` fires when a receiver's static type can still be `null` (including a type that is always `null`) and the program does member access, indexing, a call, arithmetic, or iteration on it.\n\nThree unwrapping forms: `x!` (statically removes `null`, panics with `NullError` at run time — not undefined behavior), `x ?? d`, and `x?.f` (whole-chain short-circuit, nullable result)."
+    }
+  ]
+}

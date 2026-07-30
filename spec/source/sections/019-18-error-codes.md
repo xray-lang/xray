@@ -83,7 +83,7 @@ order: 019
 | `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件类型非法 |
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
-| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用（触发规则见 §2.13 N-12）|
 
 ### 18.3 运行时
 
@@ -243,7 +243,7 @@ order: 019
 | `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | invalid condition type |
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
-| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
 
 ### 18.3 Runtime
 

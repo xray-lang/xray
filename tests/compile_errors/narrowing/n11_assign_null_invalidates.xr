@@ -1,0 +1,11 @@
+// Spec §2.13 N-11.1: assignment resets the static type to the assigned
+// expression's type; `null` is always null, so the access is rejected.
+fn main() {
+    var a: string? = "abc"
+    if (a != null) {
+        a = null
+        print(len(a))
+    }
+}
+
+main()

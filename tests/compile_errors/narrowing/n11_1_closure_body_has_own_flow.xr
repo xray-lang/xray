@@ -1,0 +1,10 @@
+// Spec §2.13 N-11.1: facts from the enclosing body do not enter a closure.
+fn main() {
+    var a: string? = "abc"
+    if (a != null) {
+        var show = fn() { print(len(a)) }
+        show()
+    }
+}
+
+main()

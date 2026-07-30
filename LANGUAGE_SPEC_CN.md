@@ -938,15 +938,17 @@ var z: int = null       // 编译错误：null 不是 int
 // 1. 空合并
 var v = x ?? 0
 
-// 2. 可选链
-var nameLen = name == null ? null : len(name!)
+// 2. 可选链（整链短路，结果可空）
+var city = user?.address.city
 
 // 3. 强制解包
-var v: int = x!           // 若 x 为 null，运行时抛 NullError
+var v: int = x!           // 若 x 为 null，运行时 panic NullError
 
-// 4. is 检查
+// 4. 流敏感收窄（完整规则见 §2.13）
+if (x != null) {
+    print(x + 1)          // 此分支内 x 已收窄为 int
+}
 if (x is int) {
-    // 此分支内 x 类型窄化为 int
     print(x + 1)
 }
 ```
@@ -1136,7 +1138,128 @@ Xray 默认只保留最小类型身份层：
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
 运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
-### 2.13 完整可运行示例
+
+### 2.13 流敏感类型收窄
+
+> 真值源：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
+
+**收窄（narrowing）**指在特定控制流位置上把一个绑定的**静态类型**收紧为其声明类型的子类型。收窄结果参与成员查找、重载解析、`match` 穷尽性判定与**代码生成**，因此收窄是**语义**而非诊断优化：对同一程序，VM 与 AOT 两条后端必须得到相同的收窄结果。
+
+本节规则编号 `N-1` … `N-13` 是规范性条文，每条在 `tests/compile_errors/narrowing/` 或 `tests/regression/narrowing/` 下有对应的一致性用例。
+
+#### 2.13.1 可收窄主体
+
+**N-1** 只有**简单绑定**可被收窄：局部 `var` / `const` 绑定，以及函数参数的裸标识符。
+
+**N-2** 以下位置**不可收窄**，即使对其做了空检查或 `is` 检查：字段访问 `p.f`、`this.f`、索引 `a[i]`、元组分量 `t.0`、调用结果 `f()`，以及任何其它非标识符表达式。对这些位置的检查只决定该检查表达式自身的类型，不影响后续对同一写法的访问。
+
+> 理由：只有简单绑定的全部写入点可在函数内被静态枚举。字段与元素可经别名、其它协程或方法调用改变；收窄它们需要引入位置（place）等价与别名失效分析，其代价与不确定性超过收益。
+
+**N-3** 需要对不可收窄位置做流敏感处理时，先提取一个局部绑定：
+
+```xray
+class Address { city: string
+    constructor(city: string) { this.city = city } }
+class User { address: Address?
+    constructor(address: Address?) { this.address = address } }
+
+fn show(u: User) {
+    var addr = u.address          // 提取为简单绑定
+    if (addr != null) {
+        print(addr.city)          // OK：addr 已收窄为 Address
+    }
+}
+```
+
+#### 2.13.2 事实与算子
+
+**N-4** 条件表达式在两个方向上产生**事实**：true 事实与 false 事实。下表是完整清单，未列出的形态两个方向都不产生事实。表中 `x` 表示可收窄主体（N-1），`e` 表示任意条件表达式。
+
+| 条件形态 | true 分支 | false 分支 |
+|--|--|--|
+| `x` | 去掉 `null` | 无事实（`0` / `""` / `false` 同样为假）|
+| `!e` | `e` 的 false 事实 | `e` 的 true 事实 |
+| `(e)` | `e` 的 true 事实 | `e` 的 false 事实 |
+| `x == null` / `null == x` | 只保留 `null` | 去掉 `null` |
+| `x != null` / `null != x` | 去掉 `null` | 只保留 `null` |
+| `x is T` | 与 `T` 相交 | 去掉与 `T` 相交的部分 |
+| `typeOf(x) == Type.K` | 保留 kind 为 `K` 的成员 | 去掉 kind 为 `K` 的成员 |
+| `typeOf(x) != Type.K` | 去掉 kind 为 `K` 的成员 | 保留 kind 为 `K` 的成员 |
+| `e1 && e2` | `e1` 与 `e2` 的 true 事实依次施加 | 无事实 |
+| `e1 \|\| e2` | 无事实 | `e1` 与 `e2` 的 false 事实依次施加 |
+
+**N-5（短路继承）** `e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析；`e1 \|\| e2` 的 `e2` 在 `e1` 的 false 事实下分析。由于 `T?` 不能直接作条件（§2.5），这条规则使下面两种写法成为处理可空值的标准形式：
+
+```xray
+fn check(a: string?) -> bool {
+    if (a != null && len(a) > 0) { return true }     // e2 在 a: string 下分析
+    if (a == null || len(a) == 0) { return false }   // e2 在 a: string 下分析
+    return true
+}
+```
+
+**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `never`）；非 union 时若可交则为 `T`，否则为 `never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
+
+#### 2.13.3 传播
+
+**N-7** 事实在以下位置生效：`if` 的 then / else 体、条件表达式 `c ? a : b` 的两支、`while` / `for` 的循环体入口与循环之后（false 事实）、`&&` / `||` 的右操作数、`assert(c)` 之后的后继代码。
+
+**N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
+
+```xray
+fn nameLen(s: string?) -> int {
+    if (s == null) { return 0 }
+    return len(s)                 // 此处 s 已收窄为 string
+}
+```
+
+**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `never` 并被并集吸收。
+
+**N-10（循环）** 循环头的类型是入口边与所有回边的并集；当回边的类型依赖循环头自身时（循环依赖），该回边按绑定的**声明类型**取值——这是并集的保守上界。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算：
+
+```xray
+fn drain(first: string?) {
+    var cur = first
+    while (cur != null) {         // 循环体入口 cur: string
+        print(cur)
+        cur = null                // 回边贡献 null，循环头重新合流
+    }
+}
+```
+
+#### 2.13.4 失效
+
+**N-11** 收窄在以下事件失效：
+
+1. **赋值** / 复合赋值 / `++` / `--`：绑定的静态类型重置为被赋值表达式的静态类型；
+2. 作为 `ref` 实参传出：重置为声明类型；
+3. `move x` 之后：绑定不可用（见 §10）；
+4. **在任意闭包体内被赋值**的绑定：在整个函数体内不可收窄（闭包何时运行不可知）。该规则与闭包在源码中的位置无关——写在收窄点之后同样生效。诊断会指出该原因，修法是改用不被写入的新绑定；
+5. 普通函数调用**不**使收窄失效——N-1 / N-2 保证可收窄主体不可能被被调用方改写。
+
+**N-11.1（函数体边界）** 每个函数体（具名函数、方法、闭包）拥有独立的流图：外层的收窄事实**不**进入闭包体，闭包体内的事实也不流出。闭包内需要收窄时在闭包内重新检查。
+
+```xray
+fn f(a: string?) {
+    if (a != null) {
+        print(len(a))             // OK
+        a = null                  // 赋值使收窄失效
+        print(a ?? "")            // 必须重新解包
+    }
+}
+```
+
+#### 2.13.5 收窄与 null 诊断
+
+**N-12** 当接收者的静态类型仍可能为 `null`（含恒为 `null` 的类型）时，成员访问、索引、调用、算术与迭代都报 `E0379`（`XR_ERR_ANALYZE_POSSIBLY_NULL`），见 §18.2。
+
+**N-13** 解包途径共三条，均在 N-4 之外独立生效：
+
+- `x!`：静态去掉 `null`；运行期若为 `null` 则 panic（`NullError`），**不是未定义行为**；
+- `x ?? d`：结果类型为 `x` 去 `null` 后与 `d` 的并集；
+- `x?.f`：可选链，**整链短路**——链上任意一段为 `null` 时整个后缀链求值为 `null`，结果类型为可空（见 §3.6）。
+
+### 2.14 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -1345,6 +1468,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 两操作数**必须**是 `bool` 类型（编译期检查）。
 - 短路求值：`false && X` 不求值 `X`；`true || X` 不求值 `X`。
 - 结果类型 `bool`（不像 JS 返回操作数）。
+- **收窄继承（§2.13 N-5）**：`e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析，`e1 || e2` 的 `e2` 在 `e1` 的 false 事实下分析。因为 `T?` 不能直接作条件，`a != null && a.f` 与 `a == null || a.f` 是处理可空值的标准写法。
 
 #### 3.3.5 空值合并 `??`
 
@@ -1388,6 +1512,7 @@ var max = a > b ? a : b
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
 - 条件必须是 `bool`。
 - 两分支类型统一：取共同超类型（或 union）。
+- **收窄（§2.13 N-7）**：条件的 true 事实在 `then` 分支生效，false 事实在 `else` 分支生效，与 `if` 一致：`a != null ? len(a) : 0` 合法。
 
 ### 3.6 空合并 `??` 与可选链 `?.` / `?[`
 
@@ -1400,18 +1525,20 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-var nameLen = name == null ? null : len(name!)
+var city = user?.address        // 可选属性访问
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
+var road = user?.address.street // 整链短路：user 为 null 时结果为 null
 ```
 
 **语义**：
-- 若 `?.` 或 `?[` 左侧为 `null`，整个表达式短路返回 `null`。
+- 若 `?.` 或 `?[` 左侧为 `null`，**整条后缀链**短路返回 `null`，链上后续的 `.` / `[` / `(` 一律不求值。
 - `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
 - `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
-- **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
-- 结果类型：原类型加 `?`（若已经 `?` 则保持）。
+- **整链短路**：`a?.b.c.d` 等价于「`a` 为 `null` 时结果为 `null`，否则求值 `a.b.c.d`」。链中每个 `?.` 都是一个短路点；短路点之后的 `.` 不再需要 `?`，也**不会**产生 `E0379`——因为它只在前缀非 null 时求值。
+- 若链中某一段自身返回可空值（`a?.b` 中 `b: T?`），则对该值继续用 `.` 访问仍需 `?.`：短路只覆盖 `?.` 左侧为 null 的情形，不覆盖右侧结果为 null 的情形。
+- 结果类型：整条链的类型加 `?`（若已经 `?` 则保持）。§2.13 N-13。
 
 ### 3.7 强制解包 `!`
 
@@ -1441,7 +1568,7 @@ if (v is User) {
 ```
 
 - 结果类型 `bool`。
-- **类型守卫**：分析器在分支内窄化 `v` 的静态类型。
+- **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
 - 适用于 union、可空、class 层级、`Json` 结构匹配。
 
 #### `as` 类型转换
@@ -5760,7 +5887,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件类型非法 |
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
-| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用（触发规则见 §2.13 N-12）|
 
 ### 18.3 运行时
 

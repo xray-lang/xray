@@ -937,15 +937,17 @@ var z: int = null       // compile error: null is not int
 // 1. Null coalescing
 var v = x ?? 0
 
-// 2. Optional chaining
-var nameLen = name == null ? null : len(name!)
+// 2. Optional chaining (whole-chain short-circuit, nullable result)
+var city = user?.address.city
 
 // 3. Force unwrap
-var v: int = x!           // throws NullError at runtime if x is null
+var v: int = x!           // panics with NullError at runtime if x is null
 
-// 4. `is` check
+// 4. Flow-sensitive narrowing (full rules in §2.13)
+if (x != null) {
+    print(x + 1)          // x is narrowed to int in this branch
+}
 if (x is int) {
-    // In this branch x is narrowed to int
     print(x + 1)
 }
 ```
@@ -1141,7 +1143,128 @@ Xray keeps only the minimal type identity layer by default:
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
 Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
-### 2.13 Worked Examples
+
+### 2.13 Flow-Sensitive Type Narrowing
+
+> Source of truth: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
+
+**Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
+
+Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/narrowing/`.
+
+#### 2.13.1 Narrowable Subjects
+
+**N-1** Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.
+
+**N-2** The following positions **never narrow**, even after a null check or an `is` check: field access `p.f`, `this.f`, index `a[i]`, tuple component `t.0`, call results `f()`, and any other non-identifier expression. A check on such a position determines the type of the check expression itself only; it does not affect later accesses spelled the same way.
+
+> Rationale: only a simple binding has all of its write sites statically enumerable within the function. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
+
+**N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
+
+```xray
+class Address { city: string
+    constructor(city: string) { this.city = city } }
+class User { address: Address?
+    constructor(address: Address?) { this.address = address } }
+
+fn show(u: User) {
+    var addr = u.address          // extract into a simple binding
+    if (addr != null) {
+        print(addr.city)          // OK: addr is narrowed to Address
+    }
+}
+```
+
+#### 2.13.2 Facts and Operators
+
+**N-4** A condition expression produces **facts** in two directions: a true fact and a false fact. The table below is the complete list; forms not listed produce no facts in either direction. `x` is a narrowable subject (N-1); `e` is any condition expression.
+
+| Condition form | True branch | False branch |
+|--|--|--|
+| `x` | remove `null` | no fact (`0` / `""` / `false` are falsy too) |
+| `!e` | false fact of `e` | true fact of `e` |
+| `(e)` | true fact of `e` | false fact of `e` |
+| `x == null` / `null == x` | keep only `null` | remove `null` |
+| `x != null` / `null != x` | remove `null` | keep only `null` |
+| `x is T` | intersect with `T` | remove the part intersecting `T` |
+| `typeOf(x) == Type.K` | keep members of kind `K` | remove members of kind `K` |
+| `typeOf(x) != Type.K` | remove members of kind `K` | keep members of kind `K` |
+| `e1 && e2` | true facts of `e1` then `e2` | no fact |
+| `e1 \|\| e2` | no fact | false facts of `e1` then `e2` |
+
+**N-5 (short-circuit inheritance)** In `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Because `T?` cannot be used directly as a condition (§2.5), this rule makes the two forms below the standard way to work with nullable values:
+
+```xray
+fn check(a: string?) -> bool {
+    if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string
+    if (a == null || len(a) == 0) { return false }   // e2 analyzed with a: string
+    return true
+}
+```
+
+**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `never`); otherwise the result is `T` when the two intersect and `never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
+
+#### 2.13.3 Propagation
+
+**N-7** Facts take effect in: the then / else body of `if`, both arms of a conditional expression `c ? a : b`, the loop-body entry and the code after `while` / `for` (false fact), the right operand of `&&` / `||`, and the code following `assert(c)`.
+
+**N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
+
+```xray
+fn nameLen(s: string?) -> int {
+    if (s == null) { return 0 }
+    return len(s)                 // s is narrowed to string here
+}
+```
+
+**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
+
+**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge; when a back edge's type depends on the header itself (a cyclic dependency) that edge contributes the binding's **declared type**, which is the conservative upper bound of the union. An assignment to the binding inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type:
+
+```xray
+fn drain(first: string?) {
+    var cur = first
+    while (cur != null) {         // cur is string at loop-body entry
+        print(cur)
+        cur = null                // back edge contributes null; header re-joins
+    }
+}
+```
+
+#### 2.13.4 Invalidation
+
+**N-11** Narrowing is invalidated by:
+
+1. **assignment** / compound assignment / `++` / `--`: the static type resets to the static type of the assigned expression;
+2. being passed as a `ref` argument: resets to the declared type;
+3. `move x`: the binding becomes unusable (§10);
+4. being **assigned inside any closure body**: the binding does not narrow anywhere in the function body, because when the closure runs is unknowable. The rule does not depend on where the closure appears — one written after the narrowing site suppresses it just the same. The diagnostic names this cause; the fix is a fresh binding that is never written;
+5. an ordinary function call does **not** invalidate narrowing — N-1 / N-2 guarantee a narrowable subject cannot be written by a callee.
+
+**N-11.1 (function-body boundary)** Every function body — named function, method, or closure — owns its flow graph: facts from the enclosing body do **not** enter a closure body, and facts inside a closure do not escape it. Re-check inside the closure when narrowing is needed there.
+
+```xray
+fn f(a: string?) {
+    if (a != null) {
+        print(len(a))             // OK
+        a = null                  // assignment invalidates the narrowing
+        print(a ?? "")            // must be unwrapped again
+    }
+}
+```
+
+#### 2.13.5 Narrowing and Null Diagnostics
+
+**N-12** When the static type of a receiver can still be `null` (including a type that is always `null`), member access, indexing, calls, arithmetic, and iteration all report `E0379` (`XR_ERR_ANALYZE_POSSIBLY_NULL`); see §18.2.
+
+**N-13** There are exactly three unwrapping forms, each independent of N-4:
+
+- `x!`: statically removes `null`; panics (`NullError`) at run time when the value is `null` — this is **not** undefined behavior;
+- `x ?? d`: the result type is the union of `x` without `null` and `d`;
+- `x?.f`: optional chaining, **whole-chain short-circuit** — when any link is `null` the entire postfix chain evaluates to `null`, and the result type is nullable (§3.6).
+
+### 2.14 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -1350,6 +1473,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Both operands **must** be `bool` (checked at compile time).
 - Short-circuit evaluation: `false && X` does not evaluate `X`; `true || X` does not evaluate `X`.
 - Result type is `bool` (unlike JS, which returns one of the operands).
+- **Narrowing inheritance (§2.13 N-5)**: in `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Since `T?` cannot be used directly as a condition, `a != null && a.f` and `a == null || a.f` are the standard forms for nullable values.
 
 #### 3.3.5 Null Coalescing `??`
 
@@ -1393,6 +1517,7 @@ var max = a > b ? a : b
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
 - The condition must be `bool`.
 - The two branches share a unified type (taken as the common supertype or a union).
+- **Narrowing (§2.13 N-7)**: the true fact of the condition applies to the then arm and the false fact to the else arm, exactly as in `if` — `a != null ? len(a) : 0` is legal.
 
 ### 3.6 Null Coalescing `??` and Optional Chaining `?.` / `?[`
 
@@ -1405,18 +1530,20 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray
-var nameLen = name == null ? null : len(name!)
+var city = user?.address        // optional property access
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
+var road = user?.address.street // whole-chain short-circuit: null when user is null
 ```
 
 **Semantics**:
-- If the LHS of `?.` or `?[` is `null`, the entire expression short-circuits to `null`.
+- If the LHS of `?.` or `?[` is `null`, the **entire postfix chain** short-circuits to `null`; every later `.` / `[` / `(` in the chain is skipped.
 - `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
 - `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
-- **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
-- Result type: the original type plus `?` (already-nullable types remain unchanged).
+- **Whole-chain short-circuit**: `a?.b.c.d` means "`null` when `a` is `null`, otherwise evaluate `a.b.c.d`". Every `?.` is a short-circuit point; a `.` after a short-circuit point needs no `?` and does **not** raise `E0379`, because it is evaluated only when the prefix is non-null.
+- When a link itself yields a nullable value (`b: T?` in `a?.b`), continuing with `.` on that value still requires `?.`: the short-circuit covers a null LHS of `?.`, not a null result on its RHS.
+- Result type: the type of the whole chain plus `?` (already-nullable types remain unchanged). §2.13 N-13.
 
 ### 3.7 Force Unwrap `!`
 
@@ -1446,7 +1573,7 @@ if (v is User) {
 ```
 
 - Result type: `bool`.
-- **Type guard**: the analyzer narrows the static type of `v` inside the branch.
+- **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
 - Applies to union, nullable, class hierarchies, and `Json` structural matching.
 
 #### `as` type cast
@@ -5764,7 +5891,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | invalid condition type |
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
-| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
 
 ### 18.3 Runtime
 

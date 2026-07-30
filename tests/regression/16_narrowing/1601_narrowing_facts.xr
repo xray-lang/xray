@@ -1,0 +1,319 @@
+// 1601_narrowing_facts.xr
+// Conformance: LANGUAGE_SPEC §2.13 narrowing rules N-4, N-5, N-6, N-7, N-8.
+// Every test names the rule it pins.
+
+// ===== N-4: fact table =====
+
+@test
+fn test_n4_null_inequality() {
+    var a: string? = "abc"
+    if (a != null) {
+        assert_eq(len(a), 3)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n4_null_equality_else() {
+    var a: string? = "abcd"
+    if (a == null) {
+        assert(false)
+    } else {
+        assert_eq(len(a), 4)
+    }
+}
+
+@test
+fn test_n4_null_literal_on_left() {
+    var a: string? = "xy"
+    if (null != a) {
+        assert_eq(len(a), 2)
+    }
+}
+
+@test
+fn test_n4_truthiness() {
+    var a: string? = "hello"
+    if (a) {
+        assert_eq(len(a), 5)
+    }
+}
+
+@test
+fn test_n4_negation_of_group() {
+    var a: string? = "hey"
+    if (!(a == null)) {
+        assert_eq(len(a), 3)
+    }
+}
+
+@test
+fn test_n4_double_negation() {
+    var a: string? = "hey"
+    if (!!(a != null)) {
+        assert_eq(len(a), 3)
+    }
+}
+
+@test
+fn test_n4_grouping_is_transparent() {
+    var a: string? = "abcd"
+    if ((a != null)) {
+        assert_eq(len(a), 4)
+    }
+}
+
+@test
+fn test_n4_typeof_equality() {
+    var v: int | string = 7
+    if (typeOf(v) == Type.int) {
+        assert_eq(v + 1, 8)
+    } else {
+        assert(false)
+    }
+}
+
+// ===== N-5: short-circuit inheritance =====
+
+@test
+fn test_n5_and_inherits_left_fact() {
+    var a: string? = "abc"
+    assert_eq(a != null && len(a) == 3, true)
+}
+
+@test
+fn test_n5_or_inherits_negated_left_fact() {
+    var a: string? = null
+    assert_eq(a == null || len(a) == 3, true)
+}
+
+@test
+fn test_n5_and_chain_of_three() {
+    var a: string? = "abc"
+    var b: string? = "de"
+    assert_eq(a != null && b != null && len(a) + len(b) == 5, true)
+}
+
+// ===== N-6: `is` narrows both directions =====
+
+@test
+fn test_n6_is_primitive_true_branch() {
+    var v: int | string = "hello"
+    if (v is string) {
+        assert_eq(len(v), 5)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_primitive_false_branch() {
+    var v: int | string = "hello"
+    if (v is int) {
+        assert(false)
+    } else {
+        assert_eq(len(v), 5)
+    }
+}
+
+@test
+fn test_n6_is_negated() {
+    var v: int | string = "abcd"
+    if (!(v is int)) {
+        assert_eq(len(v), 4)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_nullable_receiver() {
+    var a: string? = "abc"
+    if (a is string) {
+        assert_eq(len(a), 3)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_n6_is_null_is_a_null_check() {
+    var a: string? = "abc"
+    if (a is null) {
+        assert(false)
+    } else {
+        assert_eq(len(a), 3)
+    }
+}
+
+class N6Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+}
+
+class N6Dog extends N6Animal {
+    breed: string
+    constructor(name: string, breed: string) {
+        super(name)
+        this.breed = breed
+    }
+}
+
+fn n6_describe(a: N6Animal) -> string {
+    if (a is N6Dog) {
+        return a.breed
+    }
+    return a.name
+}
+
+@test
+fn test_n6_is_downcasts_to_subclass() {
+    assert_eq(n6_describe(N6Dog("rex", "husky")), "husky")
+    assert_eq(n6_describe(N6Animal("cat")), "cat")
+}
+
+// ===== N-11.1: every function body owns its flow graph =====
+
+class N11Holder {
+    name: string?
+    constructor(name: string?) { this.name = name }
+
+    // A method whose body ends in `return` must not leave the next method
+    // analyzing under an unreachable flow.
+    first() -> int { return 1 }
+
+    show() -> int {
+        var local = this.name
+        if (local != null) {
+            return len(local)
+        }
+        return 0
+    }
+}
+
+@test
+fn test_n11_1_narrowing_works_inside_methods() {
+    assert_eq(N11Holder("abcd").show(), 4)
+    assert_eq(N11Holder(null).show(), 0)
+}
+
+// ===== N-7: where facts apply =====
+
+@test
+fn test_n7_ternary_arms() {
+    var a: string? = "abcde"
+    assert_eq(a != null ? len(a) : 0, 5)
+    var b: string? = null
+    assert_eq(b != null ? len(b) : -1, -1)
+}
+
+@test
+fn test_n7_while_condition() {
+    var cur: string? = "abc"
+    var seen = 0
+    while (cur != null) {
+        seen = seen + len(cur)
+        cur = null
+    }
+    assert_eq(seen, 3)
+}
+
+@test
+fn test_n7_for_condition() {
+    var a: string? = "ab"
+    var total = 0
+    for (var i = 0; i < 3 && a != null; i++) {
+        total = total + len(a)
+    }
+    assert_eq(total, 6)
+}
+
+@test
+fn test_n7_assert_injects_fact() {
+    var a: string? = "abcd"
+    assert(a != null)
+    assert_eq(len(a), 4)
+}
+
+@test
+fn test_n7_assert_true_injects_fact() {
+    var a: string? = "ab"
+    assert_true(a != null)
+    assert_eq(len(a), 2)
+}
+
+@test
+fn test_n7_assert_false_injects_negated_fact() {
+    var a: string? = "abc"
+    assert_false(a == null)
+    assert_eq(len(a), 3)
+}
+
+// ===== N-8: early exit =====
+
+fn n8_len_or_zero(s: string?) -> int {
+    if (s == null) { return 0 }
+    return len(s)
+}
+
+@test
+fn test_n8_early_return() {
+    assert_eq(n8_len_or_zero("abc"), 3)
+    assert_eq(n8_len_or_zero(null), 0)
+}
+
+fn n8_first_len(items: Array<string?>) -> int {
+    var total = 0
+    for (item in items) {
+        if (item == null) { continue }
+        total = total + len(item)
+    }
+    return total
+}
+
+@test
+fn test_n8_continue_narrows_rest_of_body() {
+    assert_eq(n8_first_len(["ab", null, "cde"]), 5)
+}
+
+// ===== N-11: invalidation =====
+
+@test
+fn test_n11_reassignment_renarrows() {
+    var a: string? = "abc"
+    if (a != null) {
+        assert_eq(len(a), 3)
+        a = "de"
+        assert_eq(len(a), 2)
+    }
+}
+
+@test
+fn test_n11_call_does_not_invalidate() {
+    var a: string? = "abc"
+    if (a != null) {
+        noop()
+        assert_eq(len(a), 3)
+    }
+}
+
+fn noop() {
+    var unused = 1
+    assert_eq(unused, 1)
+}
+
+// ===== N-13: unwrapping =====
+
+@test
+fn test_n13_force_unwrap() {
+    var a: string? = "abc"
+    var s: string = a!
+    assert_eq(len(s), 3)
+}
+
+@test
+fn test_n13_coalesce() {
+    var a: string? = null
+    assert_eq(a ?? "fallback", "fallback")
+}

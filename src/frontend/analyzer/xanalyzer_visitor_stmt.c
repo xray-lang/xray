@@ -8833,11 +8833,11 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
     xa_check_condition_type(ctx, if_stmt->condition, cond_type);
 
     // Flow graph handles all type narrowing via TRUE_CONDITION / FALSE_CONDITION
-    // nodes. apply_condition_narrowing() in xanalyzer_flow.c recognizes patterns:
-    //   x != null, typeof(x) == Type.xxx, x is Type, truthiness, &&, ||
-    // Early-return narrowing is automatic: when then-branch terminates,
-    // its flow becomes unreachable → merge label only has the false-condition
-    // path → opposite narrowing applies to subsequent code.
+    // nodes. apply_condition_narrowing() in xanalyzer_flow.c holds the fact
+    // table (spec §2.13 N-4).
+    // Early-exit narrowing (N-8) is automatic: when the then-branch terminates,
+    // its flow becomes unreachable → the merge label only has the
+    // false-condition path → the opposite fact applies to subsequent code.
 
     XaFlowNode *saved = ctx->flow ? ctx->flow->current_flow : NULL;
 
@@ -8885,18 +8885,24 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
 
     WhileStmtNode *while_stmt = &node->as.while_stmt;
 
-    // Create loop label
+    /* Loop header: the entry edge plus every back edge (spec §2.13 N-10).
+     * The header must be the current flow while the condition and body are
+     * analyzed, otherwise the body would see the pre-loop state and an
+     * assignment in the body would not reach the next iteration. */
     XaFlowNode *loop_start = NULL;
     if (ctx->flow) {
         loop_start = xa_flow_create_loop_label(ctx->flow);
+        xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
+        ctx->flow->current_flow = loop_start;
     }
 
     // Analyze condition
     XrType *cond_type = xa_visit_infer_expr(ctx, while_stmt->condition);
     xa_check_condition_type(ctx, while_stmt->condition, cond_type);
 
+    /* Body entry carries the condition's true fact (spec §2.13 N-7). */
     if (ctx->flow) {
-        xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
+        ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
     }
 
     /* Analyze body. A block body goes through xa_visit_block_stmt so it
@@ -8910,10 +8916,9 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
     // Back edge to loop start
     if (ctx->flow && loop_start) {
         xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
-    }
-    // Exit condition
-    if (ctx->flow) {
-        xa_flow_create_condition(ctx->flow, while_stmt->condition, false);
+        /* Code after the loop runs with the condition false. */
+        ctx->flow->current_flow = loop_start;
+        ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, while_stmt->condition, false);
     }
 }
 
@@ -8931,15 +8936,23 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_stmt(ctx, for_stmt->initializer);
     }
 
-    // Create loop label
+    /* Loop header carries the entry edge and the back edge (spec §2.13 N-10). */
+    XaFlowNode *loop_start = NULL;
     if (ctx->flow) {
-        xa_flow_create_loop_label(ctx->flow);
+        loop_start = xa_flow_create_loop_label(ctx->flow);
+        xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
+        ctx->flow->current_flow = loop_start;
     }
 
     // Analyze condition
     if (for_stmt->condition) {
         XrType *cond_type = xa_visit_infer_expr(ctx, for_stmt->condition);
         xa_check_condition_type(ctx, for_stmt->condition, cond_type);
+        /* Body entry carries the condition's true fact (spec §2.13 N-7). */
+        if (ctx->flow) {
+            ctx->flow->current_flow =
+                xa_flow_create_condition(ctx->flow, for_stmt->condition, true);
+        }
     }
 
     // Analyze body - inline block to match Pass 1 scope structure
@@ -8952,6 +8965,16 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     // Analyze increment
     if (for_stmt->increment) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
+    }
+
+    if (ctx->flow && loop_start) {
+        xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
+        ctx->flow->current_flow = loop_start;
+        if (for_stmt->condition) {
+            /* Code after the loop runs with the condition false. */
+            ctx->flow->current_flow =
+                xa_flow_create_condition(ctx->flow, for_stmt->condition, false);
+        }
     }
     xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);

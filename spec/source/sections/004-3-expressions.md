@@ -159,6 +159,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 两操作数**必须**是 `bool` 类型（编译期检查）。
 - 短路求值：`false && X` 不求值 `X`；`true || X` 不求值 `X`。
 - 结果类型 `bool`（不像 JS 返回操作数）。
+- **收窄继承（§2.13 N-5）**：`e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析，`e1 || e2` 的 `e2` 在 `e1` 的 false 事实下分析。因为 `T?` 不能直接作条件，`a != null && a.f` 与 `a == null || a.f` 是处理可空值的标准写法。
 
 #### 3.3.5 空值合并 `??`
 
@@ -202,6 +203,7 @@ var max = a > b ? a : b
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
 - 条件必须是 `bool`。
 - 两分支类型统一：取共同超类型（或 union）。
+- **收窄（§2.13 N-7）**：条件的 true 事实在 `then` 分支生效，false 事实在 `else` 分支生效，与 `if` 一致：`a != null ? len(a) : 0` 合法。
 
 ### 3.6 空合并 `??` 与可选链 `?.` / `?[`
 
@@ -214,18 +216,20 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var nameLen = name == null ? null : len(name!)
+var city = user?.address        // 可选属性访问
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
+var road = user?.address.street // 整链短路：user 为 null 时结果为 null
 ```
 
 **语义**：
-- 若 `?.` 或 `?[` 左侧为 `null`，整个表达式短路返回 `null`。
+- 若 `?.` 或 `?[` 左侧为 `null`，**整条后缀链**短路返回 `null`，链上后续的 `.` / `[` / `(` 一律不求值。
 - `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
 - `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
-- **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
-- 结果类型：原类型加 `?`（若已经 `?` 则保持）。
+- **整链短路**：`a?.b.c.d` 等价于「`a` 为 `null` 时结果为 `null`，否则求值 `a.b.c.d`」。链中每个 `?.` 都是一个短路点；短路点之后的 `.` 不再需要 `?`，也**不会**产生 `E0379`——因为它只在前缀非 null 时求值。
+- 若链中某一段自身返回可空值（`a?.b` 中 `b: T?`），则对该值继续用 `.` 访问仍需 `?.`：短路只覆盖 `?.` 左侧为 null 的情形，不覆盖右侧结果为 null 的情形。
+- 结果类型：整条链的类型加 `?`（若已经 `?` 则保持）。§2.13 N-13。
 
 ### 3.7 强制解包 `!`
 
@@ -255,7 +259,7 @@ if (v is User) {
 ```
 
 - 结果类型 `bool`。
-- **类型守卫**：分析器在分支内窄化 `v` 的静态类型。
+- **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
 - 适用于 union、可空、class 层级、`Json` 结构匹配。
 
 #### `as` 类型转换
@@ -744,6 +748,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Both operands **must** be `bool` (checked at compile time).
 - Short-circuit evaluation: `false && X` does not evaluate `X`; `true || X` does not evaluate `X`.
 - Result type is `bool` (unlike JS, which returns one of the operands).
+- **Narrowing inheritance (§2.13 N-5)**: in `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Since `T?` cannot be used directly as a condition, `a != null && a.f` and `a == null || a.f` are the standard forms for nullable values.
 
 #### 3.3.5 Null Coalescing `??`
 
@@ -787,6 +792,7 @@ var max = a > b ? a : b
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
 - The condition must be `bool`.
 - The two branches share a unified type (taken as the common supertype or a union).
+- **Narrowing (§2.13 N-7)**: the true fact of the condition applies to the then arm and the false fact to the else arm, exactly as in `if` — `a != null ? len(a) : 0` is legal.
 
 ### 3.6 Null Coalescing `??` and Optional Chaining `?.` / `?[`
 
@@ -799,18 +805,20 @@ OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr '
 ```
 
 ```xray @id=expr-optional-chain
-var nameLen = name == null ? null : len(name!)
+var city = user?.address        // optional property access
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
+var road = user?.address.street // whole-chain short-circuit: null when user is null
 ```
 
 **Semantics**:
-- If the LHS of `?.` or `?[` is `null`, the entire expression short-circuits to `null`.
+- If the LHS of `?.` or `?[` is `null`, the **entire postfix chain** short-circuits to `null`; every later `.` / `[` / `(` in the chain is skipped.
 - `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
 - `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
-- **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
-- Result type: the original type plus `?` (already-nullable types remain unchanged).
+- **Whole-chain short-circuit**: `a?.b.c.d` means "`null` when `a` is `null`, otherwise evaluate `a.b.c.d`". Every `?.` is a short-circuit point; a `.` after a short-circuit point needs no `?` and does **not** raise `E0379`, because it is evaluated only when the prefix is non-null.
+- When a link itself yields a nullable value (`b: T?` in `a?.b`), continuing with `.` on that value still requires `?.`: the short-circuit covers a null LHS of `?.`, not a null result on its RHS.
+- Result type: the type of the whole chain plus `?` (already-nullable types remain unchanged). §2.13 N-13.
 
 ### 3.7 Force Unwrap `!`
 
@@ -840,7 +848,7 @@ if (v is User) {
 ```
 
 - Result type: `bool`.
-- **Type guard**: the analyzer narrows the static type of `v` inside the branch.
+- **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
 - Applies to union, nullable, class hierarchies, and `Json` structural matching.
 
 #### `as` type cast
