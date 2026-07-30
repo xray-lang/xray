@@ -233,8 +233,15 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
  * of every runtime global; without it they are extern declarations.  Exactly
  * one object per program must define XRT_IMPL (the entry unit), or globals such
  * as xrt_bump_enabled collide at link time. */
+/* Deliberately not short-circuited on the freestanding profile.  This decides
+ * whether the translation unit declares XrAotContext xrt_global_ctx and includes
+ * the bridge header, and emit_xrt_runtime_init writes xrt_global_ctx whenever the
+ * capability set needs a runtime -- profile independent.  Gating the declaration
+ * on the profile while the use is not left a freestanding provider object
+ * referencing an undeclared xrt_global_ctx.  A freestanding image with no hosted
+ * capability still gets false here, because its capability set is empty. */
 static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
-    if (!ctx || ctx->freestanding_profile)
+    if (!ctx)
         return false;
     uint32_t caps = cg_runtime_caps_from_entry_plan(ctx);
     return cg_entry_uses_resumable_frame(ctx) || cg_entry_uses_root_descriptor(ctx) ||
