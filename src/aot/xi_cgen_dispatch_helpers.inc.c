@@ -11658,14 +11658,28 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
     switch (target->kind) {
         case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-            /* The tag carries the family; the declared width is only recoverable
-             * as a representability question about the payload. A bare tag
+        case XR_KIND_FLOAT: {
+            /* A type that names its whole family is settled by the tag alone:
+             * every integer value is an `int`, every 64-bit pattern a `u64`.
+             * A narrower width is not carried by the erased value at all, so
+             * there the test becomes a representability question and a bare tag
              * compare would answer `is i32` true for every integer. */
+            bool family_wide =
+                target->kind == XR_KIND_FLOAT
+                    ? target->scalar_rep == XR_NATIVE_F64
+                    : (target->scalar_rep == XR_NATIVE_I64 || target->scalar_rep == XR_NATIVE_U64);
+            if (family_wide) {
+                fprintf(out, "(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ".tag == %s)",
+                        target->kind == XR_KIND_FLOAT ? "XR_TAG_F64" : "XR_TAG_I64");
+                break;
+            }
             fprintf(out, "xrt_value_is_type_id(");
             emit_vref(out, v->args[0]);
             fprintf(out, ", %d)", (int) xr_scalar_rep_typeid(target->scalar_rep));
             break;
+        }
         case XR_KIND_BOOL:
             fprintf(out, "(");
             emit_vref(out, v->args[0]);
