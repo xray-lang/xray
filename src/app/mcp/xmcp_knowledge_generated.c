@@ -7249,7 +7249,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "result",
         .title = "Error Handling (throw / catch)",
-        .aliases_csv = "error_handling,throw,catch,try,error,value_return_error",
+        .aliases_csv = "error_handling,throw,catch,try,error,value_return_error,defer,cleanup,E0380,E0443",
         .body =
             "[Language reference](#8-\xe9\x94\x99\xe8\xaf\xaf\xe5\xa4\x84\xe7\x90\x86-error-handling)\n"
             "\n"
@@ -7265,6 +7265,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Error propagation\n"
             "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation.\n"
+            "\n"
+            "### defer must not let errors escape\n"
+            "A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1). The compiler rejects a deferred callable whose inferred error set is non-empty with `E0380`; absorb the error inside the body instead: `defer { try { close(c) } catch (e) { log.warn(\"close failed\") } }`. An error or panic the body catches itself has not escaped. What static analysis cannot decide is backstopped at runtime: an error escaping a defer body terminates the process with `E0443`, exit status 70, uncatchable \xe2\x80\x94 it neither replaces nor suppresses an in-flight error. Go's \"the defer's error wins\" semantics were rejected because xray marks neither signatures nor call sites, so the substitution would be invisible in the source.\n"
             "\n"
             "### Design principles\n"
             "- Errors are values (enum variants), not exceptions\n"
