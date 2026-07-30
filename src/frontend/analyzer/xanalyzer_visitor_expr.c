@@ -1512,22 +1512,23 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
 
     /* A possibly-null operand of an arithmetic, relational, or bitwise operator
      * is a null-safety error, not an operator-typing error (spec §2.13 N-12).
-     * `==` / `!=` are excluded: comparing against null is how narrowing starts. */
-    switch (node->type) {
-        case AST_BINARY_EQ:
-        case AST_BINARY_NE:
-        case AST_BINARY_AND:
-        case AST_BINARY_OR:
-            break;
-        default: {
-            bool reported = xa_check_nullable_access(ctx, node->as.binary.left,
-                                                     node->as.binary.left, left, "arithmetic");
-            reported |= xa_check_nullable_access(ctx, node->as.binary.right, node->as.binary.right,
-                                                 right, "arithmetic");
-            if (reported)
-                return xr_type_new_error(ctx->analyzer->isolate);
-            break;
-        }
+     * Three exclusions: `==` / `!=`, because comparing against null is how
+     * narrowing starts; `&&` / `||`, whose operands are checked as conditions;
+     * and string concatenation, where a null operand renders as "null" by
+     * definition (§2.5). */
+    bool string_concatenation =
+        node->type == AST_BINARY_ADD && (XR_TYPE_IS_STRING(xr_type_non_nullable(NULL, left)) ||
+                                         XR_TYPE_IS_STRING(xr_type_non_nullable(NULL, right)));
+    bool null_operand_allowed = node->type == AST_BINARY_EQ || node->type == AST_BINARY_NE ||
+                                node->type == AST_BINARY_AND || node->type == AST_BINARY_OR ||
+                                string_concatenation;
+    if (!null_operand_allowed) {
+        bool reported = xa_check_nullable_access(ctx, node->as.binary.left, node->as.binary.left,
+                                                 left, "arithmetic");
+        reported |= xa_check_nullable_access(ctx, node->as.binary.right, node->as.binary.right,
+                                             right, "arithmetic");
+        if (reported)
+            return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Deterministic result types: language rules independent of operand types
