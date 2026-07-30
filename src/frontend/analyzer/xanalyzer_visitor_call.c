@@ -6488,9 +6488,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         }
 
-        XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
-        param_type = xa_contextualize_generic_call_param(ctx, fn_links, callee_type, call,
-                                                         effective_arg_types, slot, param_type);
+        XrType *declared_param_type = xr_type_function_param_type(callee_type, param_slot);
+        /* The hazard this guards against is a *user declaration elsewhere in the
+         * program* silently retyping a caller's literal.  Two parameter kinds
+         * cannot do that: a type parameter carries whatever the receiver or the
+         * call site already stated, and a built-in member's signature is fixed
+         * by the language, so `arrayOfJson.push({...})` states its domain
+         * through the receiver's own annotation. */
+        bool param_type_is_generic =
+            (declared_param_type && declared_param_type->kind == XR_KIND_TYPE_PARAM) ||
+            (method_name && callee_obj_type && xa_builtin_is_method(callee_obj_type, method_name));
+        XrType *param_type = xa_contextualize_generic_call_param(
+            ctx, fn_links, callee_type, call, effective_arg_types, slot, declared_param_type);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
@@ -6501,7 +6510,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             ctx->expected_type = param_type;
         }
         XrType *saved_from_signature = ctx->expected_from_signature;
-        ctx->expected_from_signature = ctx->expected_type;
+        if (!param_type_is_generic)
+            ctx->expected_from_signature = ctx->expected_type;
         if (xa_call_is_copy_builtin(call) && slot == 0)
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =

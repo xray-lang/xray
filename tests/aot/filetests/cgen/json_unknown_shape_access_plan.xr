@@ -2,4 +2,5 @@ fn readName(j: Json) -> Json {
     return j.name
 }
 
-print(readName({ name: "ada" }))
+var arg: Json = { name: "ada" }
+print(readName(arg))

@@ -322,12 +322,12 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 **Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
-**字面量的域必须在书写处可见**：对象字面量的语义域由期望类型决定，而两个域在"是否检查字段"上完全相反。因此期望类型只能来自**与字面量同处声明内可见**的标注——变量声明的类型标注、函数返回类型标注，以及从这些标注沿字面量结构（嵌套对象、数组元素、Map 值）向内的传播。**期望类型不跨调用边界传播**：对象字面量作为函数实参时恒为 `Record`，要进入 `Json` 参数必须显式写 `Json.encode({...})` 或先绑定到 `Json` 标注的变量。
+**字面量的域必须在书写处可见**：对象字面量的语义域由期望类型决定，而两个域在"是否检查字段"上完全相反。因此期望类型只能来自**与字面量同处声明内可见**的标注——变量声明的类型标注、函数返回类型标注，以及从这些标注沿字面量结构（嵌套对象、数组元素、Map 值）向内的传播。**期望类型不跨用户声明的具体参数类型传播**：对象字面量传给一个声明为 `Json` 的用户函数参数时恒为 `Record`，要进入这样的参数必须显式写 `Json.encode({...})` 或先绑定到 `Json` 标注的变量。泛型参数与内置成员不在此列——它们的 `Json` 来自调用方自己写下的标注（如 `arrayOfJson.push({...})` 的元素类型来自 `Array<Json>`），不存在"另一处声明改动静默改写此处字面量"的风险。
 
 ```xray
 fn submit(o: Json) { }
 
-// submit({ itemId: 1, qty: 3 })              // 编译错误：域不能来自参数类型
+// submit({ itemId: 1, qty: 3 })              // 编译错误：域不能来自用户声明的 Json 参数
 submit(Json.encode({ itemId: 1, qty: 3 }))    // OK：显式跨域
 var payload: Json = { itemId: 1, qty: 3 }     // OK：标注与字面量同处
 submit(payload)
@@ -336,6 +336,7 @@ var cfg: Json = {}                            // OK
 var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK：嵌套沿结构继承
 fn build() -> Json { return { ok: true } }    // OK：返回类型同处可见
 var arr: Array<Json> = [{ a: 1 }]             // OK：沿字面量结构传播
+arr.push({ a: 2 })                            // OK：元素类型来自本地 Array<Json> 标注
 ```
 
 这条规则的目的是消除一条静默通道：把某个参数的类型从 Record 改成 `Json` 时，所有调用点的字面量会从"静态检查"退化为"完全不检查"，而调用点本身没有任何 diff 与诊断。规则生效后，这类签名改动会在每个调用点立即报错。
@@ -1014,12 +1015,12 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 **Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
-**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a call boundary**: an object literal in argument position is always a `Record`, and reaching a `Json` parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first.
+**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a concrete parameter type declared by a user function**: an object literal passed to a parameter declared `Json` is always a `Record`, and reaching such a parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first. Generic parameters and built-in members are exempt — their `Json` comes from an annotation the caller wrote (the element type in `arrayOfJson.push({...})` comes from `Array<Json>`), so no edit to another declaration can silently retype the literal here.
 
 ```xray
 fn submit(o: Json) { }
 
-// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a parameter type
+// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a user-declared Json parameter
 submit(Json.encode({ itemId: 1, qty: 3 }))    // OK: explicit domain crossing
 var payload: Json = { itemId: 1, qty: 3 }     // OK: annotation sits with the literal
 submit(payload)
@@ -1028,6 +1029,7 @@ var cfg: Json = {}                            // OK
 var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK: nesting inherits along structure
 fn build() -> Json { return { ok: true } }    // OK: return type is visible here
 var arr: Array<Json> = [{ a: 1 }]             // OK: propagates along literal structure
+arr.push({ a: 2 })                            // OK: element type comes from the local Array<Json>
 ```
 
 The rule closes a silent channel: retyping a parameter from a Record to `Json` would otherwise downgrade every call site's literal from statically checked to unchecked, with no diagnostic and nothing in the diff at those sites. Under the rule, such a signature change fails at every call site immediately.
