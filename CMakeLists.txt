@@ -2210,6 +2210,23 @@ if(BUILD_TESTS)
             RUN_SERIAL TRUE
             TIMEOUT 2400
         )
+
+        # Sanitize the compiler's OUTPUT, not the compiler. asan_focused above
+        # instruments xray itself and only emits C for its two real workloads;
+        # nothing ran the generated C under a sanitizer. Since Xray lowers to C,
+        # every UB rule applies to code no human wrote, so that gap was the one
+        # place a miscompile could hide indefinitely. The lane skips cleanly when
+        # the host has no READY AOT toolchain.
+        add_test(
+            NAME aot_ubsan
+            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(aot_ubsan PROPERTIES
+            LABELS "sanitizer;ubsan;aot;codegen"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
     endif()
 
     add_test(
