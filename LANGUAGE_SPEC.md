@@ -867,12 +867,12 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 **Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
-**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a call boundary**: an object literal in argument position is always a `Record`, and reaching a `Json` parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first.
+**A literal's domain must be visible where the literal is written**: an object literal takes its semantic domain from the expected type, and the two domains are opposites on whether fields are checked at all. The expectation may therefore come only from an annotation **visible within the same declaration** as the literal — a variable's type annotation, a function's return type, and propagation from those inward along literal structure (nested objects, array elements, Map values). **The expectation does not cross a concrete parameter type declared by a user function**: an object literal passed to a parameter declared `Json` is always a `Record`, and reaching such a parameter requires an explicit `Json.encode({...})` or a binding annotated `Json` first. Generic parameters and built-in members are exempt — their `Json` comes from an annotation the caller wrote (the element type in `arrayOfJson.push({...})` comes from `Array<Json>`), so no edit to another declaration can silently retype the literal here.
 
 ```xray
 fn submit(o: Json) { }
 
-// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a parameter type
+// submit({ itemId: 1, qty: 3 })              // compile error: the domain cannot come from a user-declared Json parameter
 submit(Json.encode({ itemId: 1, qty: 3 }))    // OK: explicit domain crossing
 var payload: Json = { itemId: 1, qty: 3 }     // OK: annotation sits with the literal
 submit(payload)
@@ -881,6 +881,7 @@ var cfg: Json = {}                            // OK
 var envelope: Json = { ok: true, meta: { ts: 1 } }   // OK: nesting inherits along structure
 fn build() -> Json { return { ok: true } }    // OK: return type is visible here
 var arr: Array<Json> = [{ a: 1 }]             // OK: propagates along literal structure
+arr.push({ a: 2 })                            // OK: element type comes from the local Array<Json>
 ```
 
 The rule closes a silent channel: retyping a parameter from a Record to `Json` would otherwise downgrade every call site's literal from statically checked to unchecked, with no diagnostic and nothing in the diff at those sites. Under the rule, such a signature change fails at every call site immediately.

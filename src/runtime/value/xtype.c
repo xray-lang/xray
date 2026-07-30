@@ -1434,10 +1434,10 @@ XrConversionKind xr_type_numeric_conversion_kind(const XrType *target, const XrT
                                            : XR_CONVERSION_EXPLICIT_TRUNCATE;
     }
 
-    bool target_sized = target->scalar_rep == XR_NATIVE_ISIZE ||
-                        target->scalar_rep == XR_NATIVE_USIZE;
-    bool source_sized = source->scalar_rep == XR_NATIVE_ISIZE ||
-                        source->scalar_rep == XR_NATIVE_USIZE;
+    bool target_sized =
+        target->scalar_rep == XR_NATIVE_ISIZE || target->scalar_rep == XR_NATIVE_USIZE;
+    bool source_sized =
+        source->scalar_rep == XR_NATIVE_ISIZE || source->scalar_rep == XR_NATIVE_USIZE;
     if (target_sized || source_sized)
         return XR_CONVERSION_EXPLICIT_TARGET_WIDTH;
     if (xr_scalar_rep_is_unsigned(target->scalar_rep) !=
@@ -1625,6 +1625,19 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                          * against the nullable target itself. Stripping `?` here
                          * made a contextually typed literal reject its own shape. */
                         if (!xr_type_assignable(target_field_type, source_field_type)) {
+                            return false;
+                        }
+                        /* Object shapes are reference values with mutable
+                         * fields, so a field accepted only in the widening
+                         * direction is unsound: the wider view can store a
+                         * value the narrower view still promises to hold at its
+                         * own type.  Fields are therefore invariant, matching
+                         * Array, Map, Slice and fixed-length arrays.  A literal
+                         * `null` stays acceptable for a nullable field because
+                         * it denotes the absent value rather than a narrower
+                         * field type that could later be read back. */
+                        if (!XR_TYPE_IS_NULL(source_field_type) &&
+                            !xr_type_assignable(source_field_type, target_field_type)) {
                             return false;
                         }
                     }

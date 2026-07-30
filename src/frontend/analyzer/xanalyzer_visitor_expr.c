@@ -3505,6 +3505,17 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             }
             ctx->expected_type = field_expected;
             entry_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
+            /* A literal written for a declared shape *is* of that shape: it has
+             * no other binding that keeps it at the narrower entry type, so
+             * adopting the declared field type is the honest description.  It
+             * also keeps `{ limit: 5 }` usable for a `limit: int?` field now
+             * that Record fields are invariant, without reopening the widening
+             * that invariance exists to close - an existing binding still
+             * carries its own field types into that check. */
+            if (record_context && field_expected && entry_types[i] &&
+                xr_type_assignable(field_expected, entry_types[i])) {
+                entry_types[i] = field_expected;
+            }
             xa_check_span_value_escape(ctx, obj->values[i], entry_types[i],
                                        "store Slice view in object literal");
             xa_check_pointer_borrow_escape(ctx, obj->values[i], obj->values[i], entry_types[i],
