@@ -1065,27 +1065,14 @@ static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle
         features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
 }
 
+/* The parallel requirement is read from the prepared IR, which is also where
+ * the entry plan reads it; sharing one scan keeps the link feature set and the
+ * C emitter's runtime-bridge decision from disagreeing. */
 static void features_apply_ir_intrinsics(XaotFeatureSet *fs, const XaotBundle *bundle) {
     if (!fs || !bundle)
         return;
-    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
-        const XiFunc *func = bundle->func_plans[fi].func;
-        if (!func)
-            continue;
-        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
-            const XiBlock *block = func->blocks[bi];
-            if (!block)
-                continue;
-            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
-                const XiValue *value = block->values[vi];
-                if (value && (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP ||
-                              value->op == XI_PAR_REDUCE)) {
-                    fs->need_parallel = true;
-                    return;
-                }
-            }
-        }
-    }
+    if (xaot_bundle_uses_parallel_intrinsic(bundle))
+        fs->need_parallel = true;
 }
 
 static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {

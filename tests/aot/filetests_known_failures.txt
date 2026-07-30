@@ -71,17 +71,3 @@ tests/aot/filetests/container/typed_container_plan.xr
 #     carry no type prefix;
 #   - containers, strings and receivers are passed unboxed with an explicit
 #     cast, so call sites read `(void *)(vN)` where they used to read `vN`.
-
-# ---------------------------------------------------------------------------
-# Adjacent finding, recorded here because it was located while triaging this
-# suite and belongs to the same AOT surface (it has no filetest of its own):
-#
-# The parallel-range lowering emits xr_parallel_for_range_i64 / xrt_global_ctx /
-# XrParallelRangeI64Fn, all declared in src/coro/xaot_coro.h, but
-# xi_cgen_program_entry.inc.c only emits `#include "xaot_coro.h"` when
-# runtime_bridge is set.  A hosted parallel.map/reduce build therefore produces
-# C that does not compile:
-#     error: call to undeclared function 'xr_parallel_for_range_i64'
-# Reproduce: xray build --native tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr
-# This is why backend_diff reports BUILDFAIL for the four parallel_* cases.
-# ---------------------------------------------------------------------------
