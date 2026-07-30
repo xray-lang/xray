@@ -48,6 +48,12 @@
  *                         divergence from legitimate breadth. This budget is
  *                         load-bearing for termination.
  *
+ *                         A depth counter cannot tell a diverging chain from a
+ *                         deep but finite one, so the limit must clear any
+ *                         plausible real chain by a wide margin -- rejecting
+ *                         honest code to catch divergence sooner is a bad
+ *                         trade when divergence is caught either way.
+ *
  *   XR_MONO_MAX_INSTANCES bounds *breadth*. Each instance clones a whole
  *                         declaration, so this is a compile-time memory
  *                         backstop, not a language rule. It is set far above
@@ -58,7 +64,7 @@
  * leaves a call unspecialized -- a silent fallback would reintroduce boxing
  * underneath an `xray verify` no-box contract that claims it cannot happen.
  */
-#define XR_MONO_MAX_DEPTH 32
+#define XR_MONO_MAX_DEPTH 128
 #define XR_MONO_MAX_INSTANCES 16384
 
 typedef struct XaAnalyzer XaAnalyzer;

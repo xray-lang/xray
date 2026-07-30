@@ -1089,8 +1089,23 @@ static void mono_render_chain(const XaMonoCollector *c, int parent, char *buf, s
     for (int i = parent; i >= 0 && n <= XR_MONO_MAX_DEPTH; i = c->instances[i].parent)
         chain[n++] = i;
 
+    /* A chain at the limit is far too long to print whole, and the middle is
+     * the least informative part: what the reader needs is where the expansion
+     * started and what it is doing now. Keep both ends and elide the rest. */
+    const int edge = 6;
+    bool elide = n > 2 * edge + 1;
+
     size_t used = 0;
-    for (int i = n - 1; i >= 0 && used < cap; i--) {
+    for (int pos = 0; pos < n && used < cap; pos++) {
+        int i = n - 1 - pos; /* root-first */
+        if (elide && pos == edge) {
+            int written = snprintf(buf + used, cap - used, " -> ... (%d more) ...", n - 2 * edge);
+            if (written < 0)
+                return;
+            used += (size_t) written;
+        }
+        if (elide && pos >= edge && pos < n - edge)
+            continue;
         int written = snprintf(buf + used, cap - used, "%s%s", used ? " -> " : "",
                                c->instances[chain[i]].mangled_name);
         if (written < 0)
@@ -1142,11 +1157,12 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
     if (depth > XR_MONO_MAX_DEPTH) {
         char chain[512];
         mono_render_chain(c, parent, chain, sizeof(chain));
-        char msg[832];
+        char msg[896];
         snprintf(msg, sizeof(msg),
-                 "generic instantiation of '%s' nested deeper than %d levels; a generic that "
-                 "instantiates itself at a larger type has no finite specialization\n"
-                 "  instantiated through: %s -> %s",
+                 "generic instantiation of '%s' nested deeper than %d levels\n"
+                 "  instantiated through: %s -> %s\n"
+                 "  note: a generic that instantiates itself at a larger type (f<T> requesting "
+                 "f<Box<T>>) has no finite specialization and always reaches this limit",
                  generic_name, XR_MONO_MAX_DEPTH, chain, candidate_mangled);
         mono_report(c, XR_ERR_ANALYZE_MONO_DEPTH, msg, loc);
         xr_free(candidate_mangled);
