@@ -8343,11 +8343,12 @@ static void xa_forward_return_owner_binding(XaInferContext *ctx, AstNode *return
     } else {
         if (links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot return owned value: ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
         }
         if (links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot return owned value: capability is unknown", &loc);
         } else if (links->value_capability != XA_CAP_MUTABLE) {
             /* Const/synchronization roots use the shared-return path below;
@@ -8360,7 +8361,7 @@ static void xa_forward_return_owner_binding(XaInferContext *ctx, AstNode *return
         }
         if (!links->allocation_plan.complete) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot return owned value: storage/ownership plan is incomplete "
                 "(OWN-E-STORAGE-PLAN)",
                 &loc);
@@ -8379,8 +8380,8 @@ static void xa_forward_return_owner_binding(XaInferContext *ctx, AstNode *return
                      "cannot return '%s': strong alias '%s' remains live "
                      "(OWN-E-LIVE-ALIAS)",
                      name, live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
         } else if (links->root_alias == XA_ROOT_LOCAL_ALIASED) {
             xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_UNIQUE);
         }

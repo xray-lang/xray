@@ -5137,8 +5137,8 @@ static void xa_report_boundary_local_move(XaInferContext *ctx, AstNode *boundary
              "%s move of '%s' requires a proven unique transferable root; end aliases/loans or "
              "use copy(%s)",
              boundary_label ? boundary_label : "cross-coroutine value", name, name);
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                               &loc);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
+                               msg, &loc);
 }
 
 void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
@@ -5365,15 +5365,17 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
     }
     if (links) {
         if (links->root_id == 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot await unique Task: no ownership root exists", &loc);
         } else if (links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot await unique Task: ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
         }
         if (links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot await unique Task: capability is unknown", &loc);
         } else if (links->value_capability != XA_CAP_MUTABLE) {
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
@@ -5385,7 +5387,7 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
         }
         if (!links->allocation_plan.complete) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot await unique Task: storage/ownership plan is incomplete "
                 "(OWN-E-STORAGE-PLAN)",
                 &loc);
@@ -5404,8 +5406,8 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
                      "cannot await '%s': strong alias '%s' remains live "
                      "(OWN-E-LIVE-ALIAS)",
                      name, live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
         } else if (links->root_alias == XA_ROOT_LOCAL_ALIASED) {
             xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_UNIQUE);
         }
@@ -5734,11 +5736,12 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     }
     if (move_links) {
         if (move_links->root_id == 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot move value: no ownership root exists", &loc);
         } else if (move_links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot move value: unique ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
         } else if (move_links->root_alias == XA_ROOT_ESCAPED) {
             char msg[256];
@@ -5746,11 +5749,12 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
                      "cannot move '%s': the value was stored into a heap graph and other "
                      "references to it may still exist (OWN-E-ESCAPED-ROOT); use copy(%s)",
                      move_name ? move_name : "?", move_name ? move_name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
         }
         if (move_links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot move value: capability is unknown", &loc);
         } else if (move_links->value_capability == XA_CAP_CONST) {
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
@@ -5765,7 +5769,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         }
         if (!move_links->allocation_plan.complete) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot move value: storage/ownership plan is incomplete (OWN-E-STORAGE-PLAN)",
                 &loc);
         }
@@ -5781,8 +5785,8 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
             snprintf(msg, sizeof(msg),
                      "cannot move '%s': strong alias '%s' remains live (OWN-E-LIVE-ALIAS)",
                      move_name ? move_name : "?", live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
         } else if (move_links->root_alias == XA_ROOT_LOCAL_ALIASED) {
             xa_mark_root_alias_state(ctx, move_links->root_id, XA_ROOT_UNIQUE);
         }
