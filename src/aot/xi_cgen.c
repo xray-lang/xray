@@ -10954,14 +10954,18 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
         return ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
     if (f->export_plan || f->link_plan || f->entry_plan)
         return true;
-    /* Hosted shared-library class descriptors are open-world ABI tables.
-     * Freestanding images have no dynamic Xray module/class ABI: their public
-     * surface is the explicit C/link/entry manifest handled above, so language
-     * exports stay closed-world just like executable bodies. */
+    /* A hosted shared library publishes class descriptors as open-world ABI
+     * tables, so every member of one stays live.  An executable is closed-world
+     * -- the same rule the module-export case below states -- so an exported
+     * class member is retained only when something reachable uses it.  Keeping
+     * those as forced roots emitted an imported module's unreachable suspendable
+     * methods, whose coroutine machinery then named a runtime the entry never
+     * links.  Freestanding images have no dynamic Xray module/class ABI at all:
+     * their public surface is the explicit C/link/entry manifest handled above. */
     if (cg_func_is_class_member(ctx, f)) {
         if (ctx->freestanding_profile)
             return false;
-        return !ctx->emit_main || cg_func_is_exported_class_member(ctx, f);
+        return !ctx->emit_main;
     }
     /* Executables are closed-world: a language-level export is retained only
      * when a reachable import/shared-slot read consumes it. Hosted shared
@@ -11006,22 +11010,47 @@ static void cg_func_reach_mark_hash_eq_roots(XiCgenCtx *ctx) {
     }
 }
 
-static void cg_func_reach_mark_dispatch_roots(XiCgenCtx *ctx) {
+/* A dispatch plan's targets are edges out of the function that dispatches, not
+ * unconditional roots.  As roots they kept every virtual target of every
+ * imported class alive even when nothing reachable dispatches to it, so an
+ * imported module's methods were emitted and named runtime symbols the entry
+ * never declares.  Runs inside the reachability fixed point and reports whether
+ * it discovered anything new.
+ *
+ * A plan with no owner body cannot be attributed to a caller, so its targets
+ * stay unconditional: under-approximating there would prune a body that a live C
+ * call still references. */
+static bool cg_func_reach_mark_dispatch_edges(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    bool changed = false;
     if (!ctx || !bundle)
-        return;
+        return false;
     for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
         if (plan->target_count == 0 || plan->target_start == 0 ||
             plan->target_start - 1 + plan->target_count > bundle->ndispatch_target_cases)
             continue;
+        if (plan->owner_func_id != XG_NO_ID) {
+            const XiFunc *owner = xaot_bundle_find_body_func(bundle, plan->owner_func_id, NULL);
+            CgFuncReachMemo *owner_memo =
+                owner ? cg_func_reach_memo_entry(ctx, owner, false) : NULL;
+            if (!owner_memo || !owner_memo->reachable)
+                continue;
+        }
         for (uint16_t ti = 0; ti < plan->target_count; ti++) {
             const XaotDispatchTargetCase *target =
                 &bundle->dispatch_target_cases[plan->target_start - 1 + ti];
-            cg_func_reach_mark_root(ctx,
-                                    xaot_bundle_find_dispatch_target_func(bundle, target, NULL));
+            const XiFunc *target_func = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+            if (!target_func)
+                continue;
+            CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target_func, false);
+            if (memo && memo->reachable)
+                continue;
+            cg_func_reach_mark_root(ctx, target_func);
+            changed = true;
         }
     }
+    return changed;
 }
 
 static void cg_func_reach_mark_generic_body_roots(XiCgenCtx *ctx) {
@@ -11198,7 +11227,6 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
         cg_func_reach_collect_tree(ctx, ctx->module->init);
     }
     cg_func_reach_mark_hash_eq_roots(ctx);
-    cg_func_reach_mark_dispatch_roots(ctx);
     cg_func_reach_mark_generic_body_roots(ctx);
 
     bool changed;
@@ -11213,6 +11241,7 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
                 continue;
             changed |= cg_func_reach_mark_body_edges_in_owner_module(ctx, source);
         }
+        changed |= cg_func_reach_mark_dispatch_edges(ctx);
     } while (changed);
 
     for (int i = 0; i < ctx->nfunc_reach_memo; i++)

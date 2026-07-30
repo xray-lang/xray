@@ -4266,9 +4266,16 @@ static bool cg_class_native_ctor_can_inline(XiCgenCtx *ctx, const XiFunc *f, con
     if (origin != v || !cg_class_native_ctor_uses_safe(ctx, f, v, origin, 0))
         return false;
     const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL);
-    if (cd && (!cd->instance_layout || cg_class_native_layout_has_ref_fields(cd->instance_layout) ||
-               cg_class_native_needs_type_id_instance(ctx, cd)))
+    if (cd && (!cd->instance_layout || cg_class_native_needs_type_id_instance(ctx, cd)))
         return false;
+    /* Deliberately silent about RC ref fields.  Whether they are admissible is the
+     * caller's precondition, not this predicate's: the value emitter below refuses
+     * them because it has no drop site, while
+     * cg_class_native_ref_stack_return_info *requires* them and supplies one --
+     * it constructs into _ci, makes the call, runs the class destructor and
+     * returns.  Rejecting them here made that requirement unsatisfiable, so the
+     * whole ref-field stack path was dead and every such instance went to the
+     * heap. */
     return true;
 }
 
@@ -4302,6 +4309,7 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     const char *class_prefix = ctor_prefix ? ctor_prefix : prefix;
     if (!target)
         return emit_class_native_default_ctor_value_stmt(ctx, out, cd, class_prefix, v);
+    /* The ref-field shape is constructed by the return path, not here. */
     if (cg_class_native_layout_has_ref_fields(cd->instance_layout))
         return false;
     fprintf(out, "    ");

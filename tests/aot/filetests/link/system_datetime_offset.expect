@@ -9,6 +9,12 @@ not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["datetime"]
 c_contains=datetime_offset_exp(
 c_contains=xrt_time_local_offset(
-c_contains=xrt_time_local_offset_at(
+# Only datetime.offset() is reachable here.  time.localOffsetAt is used by
+# DateTime's methods, and an executable is closed-world, so those bodies are
+# not emitted and the generated C does not call the helper.  The link
+# dependency plan above still lists the symbol: that plan is derived from the
+# global summary rather than from cgen reachability, so it is a safe superset
+# of what the C references, not a claim that the C references it.
+c_not_contains=xrt_time_local_offset_at(
 c_not_contains=xrt_datetime
 c_not_contains=XR_TAG_DATETIME
