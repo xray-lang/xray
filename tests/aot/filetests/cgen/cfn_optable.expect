@@ -1,4 +1,4 @@
 c_contains=XR_ELEM_RAWPTR
 c_regex=\(\(void \*\*\)_a->data\)\[_idx\] = \(void \*\)cfn_optable_[0-9a-f]+_opConst_1
-c_regex=\(\(int64_t \(\*\)\(xrt_closure_t \*, int64_t, void \*, int64_t\)\) \(void \*\)\(uintptr_t\)
+c_regex=\(\(int64_t \(\*\)\(xrt_closure_t \*, int64_t, void \*, int64_t\)\) v[0-9]+\)\(NULL,
 c_not_contains=unsupported AOT indirect call

@@ -1043,6 +1043,9 @@ static bool emit_checked_tagged_direct_call_scalar_arg(XiCgenCtx *ctx, FILE *out
     return true;
 }
 
+static bool emit_cfn_value_rawptr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                  const XrType *expected_type, const XiValue *value);
+
 static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *call, const XiFunc *target,
                                           uint16_t arg_index, const XiValue *arg) {
@@ -1068,6 +1071,16 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
     arg_plan = cg_value_plan(ctx, arg);
+    const XrType *param_type = cg_func_param_type(target, arg_index);
+    if (param_type && XR_TYPE_IS_C_FUNCTION(param_type)) {
+        if (arg_plan && xaot_value_storage_rep(arg_plan->rep) == XR_REP_RAWPTR && arg->type &&
+            XR_TYPE_IS_C_FUNCTION(arg->type)) {
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_RAWPTR);
+        } else {
+            emit_cfn_value_rawptr(ctx, out, f, param_type, arg);
+        }
+        return;
+    }
     if (slot_rep.kind == XAOT_VALUE_AGGREGATE) {
         if (arg_plan && xaot_value_reps_equal(arg_plan->rep, slot_rep)) {
             emit_vref(out, arg);

@@ -93,6 +93,19 @@ static XaotAbiSlot ptr_slot(const XrType *type) {
     return slot;
 }
 
+static XaotAbiSlot cfn_slot(const XrType *type) {
+    /* CFn is a noncapturing native entry, not an Xray closure object. */
+    XaotAbiSlot slot;
+    memset(&slot, 0, sizeof(slot));
+    slot.cls = XAOT_ARG_PTR;
+    slot.rep.kind = XAOT_VALUE_PTR;
+    slot.rep.rep = XAOT_REP_RAWPTR;
+    slot.rep.type = type;
+    slot.rep.c_type = "void *";
+    slot.c_type = slot.rep.c_type;
+    return slot;
+}
+
 static bool type_is_unit_enum_ordinal(const XaotBundle *bundle, const XrType *type) {
     if (!bundle || !type || type->is_nullable)
         return false;
@@ -354,8 +367,8 @@ static XaotValueRep struct_value_rep_for_slot(const XaotBundle *bundle, const Xi
     rep.rep = XAOT_REP_TAGGED;
     rep.type = type;
     rep.c_type = struct_c_type_for_func(bundle, func, sl);
-    rep.flags = XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_DYNAMIC_C_TYPE |
-                XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    rep.flags =
+        XAOT_VALUE_FLAG_STRUCT | XAOT_VALUE_FLAG_DYNAMIC_C_TYPE | XAOT_VALUE_FLAG_OWNED_C_TYPE;
     return rep;
 }
 
@@ -392,6 +405,8 @@ static XaotAbiSlot native_value_slot_for_type(const XaotBundle *bundle, const Xi
         return enum_ordinal_slot(type);
     if (type_is_class_instance_ptr_boundary(bundle, type))
         return ptr_slot(type);
+    if (type && XR_TYPE_IS_C_FUNCTION(type))
+        return cfn_slot(type);
     struct_rep = struct_value_rep_for_slot(bundle, func, type, value, is_return);
     if (struct_rep.kind == XAOT_VALUE_AGGREGATE) {
         memset(&slot, 0, sizeof(slot));

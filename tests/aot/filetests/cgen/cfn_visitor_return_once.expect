@@ -1,0 +1,2 @@
+c_regex=\(\(int64_t \(\*\)\(xrt_closure_t \*, int64_t, int64_t\)\) .*\)\(NULL, v[0-9]+, v[0-9]+\)
+c_not_contains=__attribute__((musttail)) return

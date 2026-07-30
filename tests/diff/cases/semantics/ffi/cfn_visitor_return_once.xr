@@ -1,0 +1,21 @@
+// A CFn visitor passed to a wider helper must execute once. The helper has
+// hidden-closure + 3 parameters; the visitor has hidden-closure + 2, so AOT
+// must return the stored call result instead of replaying it as musttail.
+type Visitor = CFn<(int, int) -> int>
+
+var visits = 0
+
+fn visit(left: int, right: int) -> int {
+    visits += 1
+    return left + right
+}
+
+fn forEach(left: int, visitor: Visitor, right: int) -> int {
+    var result = visitor(left, right)
+    print("seen=${result}")
+    return result
+}
+
+var result = forEach(20, visit, 22)
+print("result=${result}")
+print("visits=${visits}")

@@ -1063,8 +1063,7 @@ static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_noinline(const XiFunc *f);
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f);
-static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *f,
-                                            uint8_t width);
+static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *f, uint8_t width);
 static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
                                                uint8_t width);
 static bool cg_func_requires_static_x86_inline_target(const XiCgenCtx *ctx, const XiFunc *f);
@@ -1138,8 +1137,8 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
  * diagnoses a call through such a declaration at -O0.  Keep the definition's
  * inline policy in its owning unit, but expose only the stable cross-unit ABI
  * linkage to importers. */
-static const char *cg_func_forward_linkage(XiCgenCtx *ctx, const XiFunc *f,
-                                           const char *prefix, bool cross_module) {
+static const char *cg_func_forward_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
+                                           bool cross_module) {
     const char *linkage = cg_func_linkage(ctx, f, prefix);
     if (cross_module && strcmp(linkage, "XRT_INTERNAL XR_FORCEINLINE ") == 0)
         return "XRT_INTERNAL ";
@@ -6513,9 +6512,11 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
             /* Only unsigned interpolation selects the direct u64 part
              * emitter.  Other scalar parts request TAGGED and therefore still
              * need their BOX local even in a multi-part concat. */
-            return arg_index < user->nargs &&
-                   cg_value_type_is_unsigned_int(user->args[arg_index]);
+            return arg_index < user->nargs && cg_value_type_is_unsigned_int(user->args[arg_index]);
         case XI_CALL:
+            if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
+                XR_TYPE_IS_C_FUNCTION(user->args[0]->type))
+                return true;
             return cg_native_box_direct_call_arg_is_native(ctx, f, user, arg_index);
         default:
             return false;
@@ -6565,8 +6566,7 @@ static bool cg_native_box_value_is_elided_in_aot(XiCgenCtx *ctx, const XiFunc *f
 
 static bool emit_structured_loop_condition_expr_ctx(XiCgenCtx *ctx, FILE *out,
                                                     const XiValue *control);
-static bool cg_structured_counted_loop_block_is_elided(const XiFunc *f,
-                                                       const XiBlock *blk);
+static bool cg_structured_counted_loop_block_is_elided(const XiFunc *f, const XiBlock *blk);
 
 /* A scalar/null constant, or a string literal used only by a multi-part
  * concat, has no required C storage when every consumer
@@ -6629,8 +6629,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
          * statement.  Its comparison is reconstructed directly in the C
          * `while` condition, whose ctx emitter prints scalar operands through
          * emit_value_as_rep_ctx(). */
-        if (user->block && user->block->kind == XI_BLOCK_IF &&
-            user->block->control == user &&
+        if (user->block && user->block->kind == XI_BLOCK_IF && user->block->control == user &&
             cg_structured_counted_loop_block_is_elided(f, user->block) &&
             emit_structured_loop_condition_expr_ctx(ctx, NULL, user))
             return true;
@@ -6726,9 +6725,9 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         case XI_CALL_METHOD_DIRECT: {
             /* string.runes() is emitted as a dynamic method call whose
              * receiver is rendered through emit_value_as_rep_ctx(). */
-            if (arg_index == 0 && user->nargs >= 1 && user->args[0] &&
-                user->args[0]->type && user->args[0]->type->kind == XR_KIND_STRING &&
-                user->aux && strcmp((const char *) user->aux, "runes") == 0)
+            if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&
+                user->args[0]->type->kind == XR_KIND_STRING && user->aux &&
+                strcmp((const char *) user->aux, "runes") == 0)
                 return true;
             /* The runtime string-slice helper and float formatting helper
              * render their scalar arguments with emit_value_as_rep_ctx(). */
@@ -6737,8 +6736,8 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                  user->args[0]->type->kind == XR_KIND_UNKNOWN) &&
                 strcmp((const char *) user->aux, "slice") == 0 && user->nargs <= 3)
                 return true;
-            if (arg_index == 1 && user->nargs == 2 && user->args[0] &&
-                user->args[0]->type && user->args[0]->type->kind == XR_KIND_FLOAT && user->aux &&
+            if (arg_index == 1 && user->nargs == 2 && user->args[0] && user->args[0]->type &&
+                user->args[0]->type->kind == XR_KIND_FLOAT && user->aux &&
                 strcmp((const char *) user->aux, "toFixed") == 0)
                 return true;
             CgArrayElemInfo array_info;
@@ -6772,8 +6771,8 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                 cg_span_elem_info_from_value(ctx, user->args[0], &span_info))
                 return true;
             CgArrayElemInfo array_info;
-            CgArrayStorageUse array_use = user->op == XI_INDEX_GET ? CG_ARRAY_STORAGE_READ
-                                                                   : CG_ARRAY_STORAGE_MUTABLE;
+            CgArrayStorageUse array_use =
+                user->op == XI_INDEX_GET ? CG_ARRAY_STORAGE_READ : CG_ARRAY_STORAGE_MUTABLE;
             if (cg_array_value_storage_info(ctx, f, user->args[0], &array_info, array_use)) {
                 if (user->op == XI_INDEX_GET)
                     return arg_index == 1;
@@ -6823,8 +6822,7 @@ static bool cg_forwarded_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc
                 seen_use = true;
                 if (a == 0 &&
                     (xi_copy_is_identity_alias(user) || xi_op_is_identity_forward(user->op)) &&
-                    cg_forwarded_const_only_emits_immediate(ctx, f, user,
-                                                            (uint8_t) (depth + 1)))
+                    cg_forwarded_const_only_emits_immediate(ctx, f, user, (uint8_t) (depth + 1)))
                     continue;
                 if (!cg_const_use_emits_immediate(ctx, f, user, a))
                     return false;
@@ -6885,8 +6883,7 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                         (user->op == XI_STR_CONCAT && user->nargs > 1) ||
                         (user->op == XI_SET_SHARED && a == 0) ||
                         ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
-                         a == 0 && user->aux &&
-                         strcmp((const char *) user->aux, "runes") == 0);
+                         a == 0 && user->aux && strcmp((const char *) user->aux, "runes") == 0);
                     if (!allowed_string_use)
                         return false;
                 }
@@ -6908,17 +6905,15 @@ static bool cg_static_enum_namespace_uses_are_elidable(XiCgenCtx *ctx, const XiF
 
 static bool cg_module_namespace_field_ignores_receiver(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiValue *load, uint16_t arg_index) {
-    if (!ctx || !f || !load || arg_index != 0 || load->op != XI_LOAD_FIELD ||
-        load->nargs < 1 || !load->args[0] || !load->aux ||
-        !cg_value_is_module_import_ctx(ctx, f, load->args[0], "os"))
+    if (!ctx || !f || !load || arg_index != 0 || load->op != XI_LOAD_FIELD || load->nargs < 1 ||
+        !load->args[0] || !load->aux || !cg_value_is_module_import_ctx(ctx, f, load->args[0], "os"))
         return false;
     const char *field = (const char *) load->aux;
     return strcmp(field, "platform") == 0 || strcmp(field, "arch") == 0 ||
            strcmp(field, "sep") == 0 || strcmp(field, "eol") == 0;
 }
 
-static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
-                                               const XiValue *v) {
+static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!ctx || !f || !v || v->op != XI_IMPORT_REF || !v->aux || cg_value_has_cell(ctx, v))
         return false;
     bool seen_use = false;
@@ -7304,8 +7299,7 @@ static bool cg_panicinfo_constructor_token_is_elided(const XiFunc *f, const XiVa
                 if (user->args[ai] != v)
                     continue;
                 const char *method = user->aux ? (const char *) user->aux : NULL;
-                if (ai != 0 ||
-                    (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) ||
+                if (ai != 0 || (user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) ||
                     !method || strcmp(method, "constructor") != 0)
                     return false;
                 seen_use = true;
@@ -7440,9 +7434,8 @@ static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *
  * Elide it only when every final-graph edge is that exact fused RHS.  Any
  * control, phi, identity, debug, cell, or additional value use retains the
  * materialized shuffle. */
-static bool cg_vec_shuffle_use_tree_is_fused(XiCgenCtx *ctx, const XiFunc *f,
-                                             const XiValue *target, uint8_t depth,
-                                             bool *saw_fused) {
+static bool cg_vec_shuffle_use_tree_is_fused(XiCgenCtx *ctx, const XiFunc *f, const XiValue *target,
+                                             uint8_t depth, bool *saw_fused) {
     if (!ctx || !f || !target || !saw_fused || depth >= 16)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -7472,7 +7465,7 @@ static bool cg_vec_shuffle_use_tree_is_fused(XiCgenCtx *ctx, const XiFunc *f,
                     f->phi_coalesce && user->id < f->phi_coalesce_count &&
                     f->phi_coalesce[user->id] != user->id) {
                     if (!cg_vec_shuffle_use_tree_is_fused(ctx, f, user, (uint8_t) (depth + 1),
-                                                         saw_fused))
+                                                          saw_fused))
                         return false;
                     continue;
                 }
@@ -7500,8 +7493,7 @@ static bool cg_u64_mul_wide_operand_equivalent(const XiValue *a, const XiValue *
     if (a == b)
         return true;
     return a && b && a->op == XI_CONST && b->op == XI_CONST && a->type && b->type &&
-           a->type->kind == XR_KIND_INT && b->type->kind == XR_KIND_INT &&
-           a->aux_int == b->aux_int;
+           a->type->kind == XR_KIND_INT && b->type->kind == XR_KIND_INT && a->aux_int == b->aux_int;
 }
 
 static bool cg_u64_mul_wide_operand_is_constant(const XiValue *v) {
@@ -7510,14 +7502,13 @@ static bool cg_u64_mul_wide_operand_is_constant(const XiValue *v) {
            cg_rep(v) == XR_REP_I64;
 }
 
-static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f,
-                                               const XiValue *v) {
+static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!ctx || !f || !v || (v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH) || v->nargs != 2 ||
         !v->args[0] || !v->args[1] || !v->type || v->type->kind != XR_KIND_INT ||
-        v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 ||
-        cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64 || cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
-        cg_value_has_cell(ctx, v) || strcmp(local_ctype_str_ctx(ctx, f, v), "uint64_t") != 0)
+        v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 || cg_rep(v) != XR_REP_I64 ||
+        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64 ||
+        cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 || cg_value_has_cell(ctx, v) ||
+        strcmp(local_ctype_str_ctx(ctx, f, v), "uint64_t") != 0)
         return false;
     if (f->phi_coalesce && v->id < f->phi_coalesce_count && f->phi_coalesce[v->id] != v->id)
         return false;
@@ -7548,12 +7539,10 @@ static bool cg_u64_mul_wide_pair(XiCgenCtx *ctx, const XiFunc *f, const XiValue 
         const XiValue *candidate = v->block->values[i];
         if (!candidate || !cg_u64_mul_wide_value_is_eligible(ctx, f, candidate))
             continue;
-        bool same_order =
-            cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[0]) &&
-            cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[1]);
-        bool swapped_order =
-            cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[1]) &&
-            cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[0]);
+        bool same_order = cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[0]) &&
+                          cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[1]);
+        bool swapped_order = cg_u64_mul_wide_operand_equivalent(v->args[0], candidate->args[1]) &&
+                             cg_u64_mul_wide_operand_equivalent(v->args[1], candidate->args[0]);
         if (!same_order && !swapped_order)
             continue;
         equivalent_count++;
@@ -8518,6 +8507,65 @@ static bool cg_func_has_cell_releases(const XiCgenCtx *ctx) {
     return false;
 }
 
+static bool cg_block_owns_final_call(const XiBlock *blk, const XiValue *call) {
+    if (!blk || !call || call->block != blk)
+        return false;
+
+    bool saw_call = false;
+    bool saw_error_check = false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        const XiValue *value = blk->values[i];
+        if (!value)
+            continue;
+        if (value == call) {
+            if (saw_call)
+                return false;
+            saw_call = true;
+            continue;
+        }
+        if (!saw_call)
+            continue;
+        if (cg_unwrap_identity_value(value) == call)
+            continue;
+        /* ERR_CHECK deliberately has no producer operand. With every other
+         * post-call instruction rejected, this operand-free check belongs to
+         * the call by Xi's constructive nearest-producer contract. */
+        if (value->op == XI_ERR_CHECK && !saw_error_check &&
+            !xi_err_check_has_arc_cleanups(value)) {
+            saw_error_check = true;
+            continue;
+        }
+        return false;
+    }
+    return saw_call;
+}
+
+static bool cg_cfn_musttail_abi_compatible(XiCgenCtx *ctx, const XiFunc *caller,
+                                           const XrType *callee_type, const XiValue *call) {
+    if (!ctx || !caller || !callee_type || !call || !XR_TYPE_IS_C_FUNCTION(callee_type) ||
+        caller->is_vararg || callee_type->function.is_variadic)
+        return false;
+
+    int callee_nparams = callee_type->function.param_count;
+    if (callee_nparams < 0 || caller->nparams != (uint16_t) callee_nparams ||
+        call->nargs != (uint16_t) (callee_nparams + 1))
+        return false;
+
+    const char *caller_return = cg_func_return_abi_c_type(ctx, caller);
+    const char *callee_return = cg_cfn_value_c_type(callee_type->function.return_type, true);
+    if (!caller_return || !callee_return || strcmp(caller_return, callee_return) != 0)
+        return false;
+
+    for (uint16_t i = 0; i < caller->nparams; i++) {
+        const char *caller_param = cg_func_param_abi_c_type(ctx, caller, i);
+        const XrType *callee_param = xr_type_function_param_type(callee_type, i);
+        const char *callee_param_c = cg_cfn_value_c_type(callee_param, false);
+        if (!caller_param || !callee_param_c || strcmp(caller_param, callee_param_c) != 0)
+            return false;
+    }
+    return true;
+}
+
 static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, const XiBlock *blk) {
     if (!ctx || !f || !blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
         return NULL;
@@ -8526,6 +8574,12 @@ static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, co
         return NULL;
     const XiValue *callee = cg_unwrap_identity_value(call->args[0]);
     if (!callee || !callee->type || !XR_TYPE_IS_C_FUNCTION(callee->type))
+        return NULL;
+    /* Re-emitting a call defined in a predecessor duplicates its side effects.
+     * Clang musttail additionally requires caller/callee native signatures to
+     * match exactly, including the hidden closure parameter and every C type. */
+    if (!cg_block_owns_final_call(blk, call) ||
+        !cg_cfn_musttail_abi_compatible(ctx, f, callee->type, call))
         return NULL;
     /* Nothing may run between the tail call and the return under musttail. */
     if (cg_has_exception_handling(f) || cg_func_has_defer_stmt(f) || cg_func_has_cell_releases(ctx))
@@ -8553,12 +8607,18 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
     const XiValue *mt_call = cg_block_musttail_call(ctx, f, blk);
 
     /* Instructions */
+    bool after_mt_call = false;
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
         if (!v)
             continue;
-        if (mt_call && (v == mt_call || (v->op == XI_ERR_CHECK && v->nargs >= 1 &&
-                                         cg_unwrap_identity_value(v->args[0]) == mt_call)))
+        if (mt_call && v == mt_call) {
+            after_mt_call = true;
+            continue;
+        }
+        if (mt_call && after_mt_call &&
+            (cg_unwrap_identity_value(v) == mt_call ||
+             (v->op == XI_ERR_CHECK && !xi_err_check_has_arc_cleanups(v))))
             continue;
         xicgen_emit_stringbuilder_literal_append_reserve(ctx, out, blk, i);
         emit_value_stmt(ctx, out, f, v, prefix);
@@ -9999,10 +10059,8 @@ static bool cg_func_requires_x86_vector_target_depth(const XiCgenCtx *ctx, const
  * SIMD call chain while unrelated scalar functions remain baseline. */
 static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
                                                uint8_t width) {
-    uint32_t required_feature =
-        width == 64 ? XAOT_SIMD_FEATURE_AVX512 : XAOT_SIMD_FEATURE_AVX2;
-    if (!ctx || !ctx->target || !f ||
-        (ctx->target->simd_features & required_feature) == 0)
+    uint32_t required_feature = width == 64 ? XAOT_SIMD_FEATURE_AVX512 : XAOT_SIMD_FEATURE_AVX2;
+    if (!ctx || !ctx->target || !f || (ctx->target->simd_features & required_feature) == 0)
         return false;
     return cg_func_requires_x86_vector_target_depth(ctx, f, f, 0, width);
 }
@@ -10013,10 +10071,8 @@ static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFun
  * adjacent baseline vectors without changing the source-level vector width.
  * Runtime dispatch must keep these helpers baseline because no capability
  * check guards their ordinary public callers. */
-static bool cg_func_requires_static_x86_inline_target_depth(const XiCgenCtx *ctx,
-                                                            const XiFunc *f,
-                                                            const XiFunc *origin,
-                                                            uint8_t depth) {
+static bool cg_func_requires_static_x86_inline_target_depth(const XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiFunc *origin, uint8_t depth) {
     if (!ctx || !f || depth > 16)
         return false;
     if (depth > 0 && cg_func_should_noinline(f))
@@ -10034,8 +10090,8 @@ static bool cg_func_requires_static_x86_inline_target_depth(const XiCgenCtx *ctx
             const XiFunc *target = cg_target_resolve_static_call(ctx, f, value->args[0]);
             if (!target || target == origin)
                 continue;
-            if (cg_func_requires_static_x86_inline_target_depth(
-                    ctx, target, origin, (uint8_t) (depth + 1)))
+            if (cg_func_requires_static_x86_inline_target_depth(ctx, target, origin,
+                                                                (uint8_t) (depth + 1)))
                 return true;
         }
     }
@@ -10088,8 +10144,8 @@ static void emit_aot_entry_attrs(FILE *out, const XiFunc *f) {
     fprintf(out, "XRT_ATTR_USED ");
 }
 
-static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                    const char *prefix, bool cross_module) {
+static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix,
+                                    bool cross_module) {
     fprintf(out, "%s%s ", cg_func_forward_linkage(ctx, f, prefix, cross_module),
             cg_cfn_value_c_type(f->return_type, true));
     emit_cfn_stub_fname(ctx, out, prefix, f);
@@ -10279,8 +10335,7 @@ static const char *cg_c_export_func_prefix(XiCgenCtx *ctx, const XiFunc *f) {
     return module && module->name && module->name[0] ? module->name : "mod";
 }
 
-static const char *cg_c_export_scalar_c_type(XiCgenCtx *ctx, const XrType *type,
-                                             bool is_return) {
+static const char *cg_c_export_scalar_c_type(XiCgenCtx *ctx, const XrType *type, bool is_return) {
     const char *scalar_type = cg_cfn_value_c_type(type, is_return);
     if (!scalar_type || !ctx || ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
         return scalar_type;
@@ -10331,8 +10386,7 @@ static void emit_c_export_value_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
 static void emit_c_export_return_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const char *prefix) {
-    const char *scalar_type =
-        cg_c_export_scalar_c_type(ctx, f ? f->return_type : NULL, true);
+    const char *scalar_type = cg_c_export_scalar_c_type(ctx, f ? f->return_type : NULL, true);
     if (scalar_type) {
         fprintf(out, "%s", scalar_type);
         return;
@@ -10516,9 +10570,8 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
         cg_c_export_collect_signature_typedefs(ctx, modules[i]->init, typedefs, &typedef_count);
     }
     if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90 && typedef_count > 0) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: restricted C90 does not support aggregate public C ABI "
-                "signatures\n");
+        fprintf(stderr, "[xi_cgen] ERROR: restricted C90 does not support aggregate public C ABI "
+                        "signatures\n");
         ctx->error = true;
         return;
     }
@@ -11420,8 +11473,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
      * declaration-at-definition code shape.  This must be decided before the
      * storage-planning helpers because they mirror declaration versus assignment
      * choices made by emit_value_stmt. */
-    ctx->pre_decl_all = ctx->c_dialect == XI_CGEN_C_DIALECT_C90 || f->nblocks > 1 ||
-                        cg_has_exception_handling(f);
+    ctx->pre_decl_all =
+        ctx->c_dialect == XI_CGEN_C_DIALECT_C90 || f->nblocks > 1 || cg_has_exception_handling(f);
     cg_prepare_cell_vars(ctx, f);
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
