@@ -6415,8 +6415,13 @@ static bool xicgen_emit_static_map_new(XiCgenCtx *ctx, FILE *out, const XiValue 
     }
     uint32_t slots = xicgen_static_table_slots(data->count);
     uint32_t entries_cap = (uint32_t) ((uint64_t) slots * 2u / 3u);
+    const char *key_elem = "XR_ELEM_ANY";
     const char *value_elem = "XR_ELEM_ANY";
+    XaotContainerElemPlan key_plan;
     XaotContainerElemPlan value_plan;
+    if (v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.key_type &&
+        xaot_container_elem_plan_for_type(v->type->map.key_type, &key_plan))
+        key_elem = key_plan.elem_name;
     if (v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.value_type &&
         xaot_container_elem_plan_for_type(v->type->map.value_type, &value_plan))
         value_elem = value_plan.elem_name;
@@ -6425,9 +6430,9 @@ static bool xicgen_emit_static_map_new(XiCgenCtx *ctx, FILE *out, const XiValue 
             "static int32_t _xrt_sm_indices_%u[%u]; static XrMapEntry _xrt_sm_entries_%u[%u]; "
             "static uint8_t _xrt_sm_init_%u; if (!_xrt_sm_init_%u) { "
             "(void)xrt_map_static_storage_init(&_xrt_sm_%u, _xrt_sm_ctrl_%u, "
-            "_xrt_sm_indices_%u, _xrt_sm_entries_%u, %u, %u, %s); ",
+            "_xrt_sm_indices_%u, _xrt_sm_entries_%u, %u, %u, %s, %s); ",
             v->id, v->id, slots + XR_SWISS_GROUP, v->id, slots, v->id, entries_cap, v->id, v->id,
-            v->id, v->id, v->id, v->id, slots, entries_cap, value_elem);
+            v->id, v->id, v->id, v->id, slots, entries_cap, key_elem, value_elem);
     for (uint32_t i = 0; i < data->count; i++) {
         const XgMapEntrySummary *entry = xicgen_static_map_entry(ctx, plan, i);
         if (!entry) {
@@ -6506,13 +6511,19 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, "xrt_map_set_storage(");
     if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap)) {
-        /* Untyped storage (e.g. string keys) with a scalar declared value
-         * type: record the value elem so values() returns lanes matching
-         * the consumer's static Array<V> layout. */
+        /* Untyped storage (one side is not a scalar) with a scalar declared key
+         * or value type: record the scalar elems so keys()/values() return lanes
+         * matching the consumer's static Array<K> / Array<V> layout. */
+        XaotContainerElemPlan kplan;
         XaotContainerElemPlan vplan;
-        if (v && v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.value_type &&
-            xaot_container_elem_plan_for_type(v->type->map.value_type, &vplan)) {
-            fprintf(out, "xrt_map_new_vt(%" PRId64 ", %s)", cap, vplan.elem_name);
+        bool has_key_elem = v && v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.key_type &&
+                            xaot_container_elem_plan_for_type(v->type->map.key_type, &kplan);
+        bool has_value_elem = v && v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.value_type &&
+                              xaot_container_elem_plan_for_type(v->type->map.value_type, &vplan);
+        if (has_key_elem || has_value_elem) {
+            fprintf(out, "xrt_map_new_declared(%" PRId64 ", %s, %s)", cap,
+                    has_key_elem ? kplan.elem_name : "XR_ELEM_ANY",
+                    has_value_elem ? vplan.elem_name : "XR_ELEM_ANY");
         } else {
             fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
         }
@@ -11647,14 +11658,23 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
     switch (target->kind) {
         case XR_KIND_INT:
+            /* The tag carries the family; the declared width is only recoverable
+             * as a representability question about the payload. Emitting a bare
+             * tag compare would answer `is i32` true for any integer. */
             fprintf(out, "(");
             emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_I64)");
+            fprintf(out, ".tag == XR_TAG_I64 && xr_scalar_rep_holds_i64(%u, ",
+                    (unsigned) target->scalar_rep);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".i))");
             break;
         case XR_KIND_FLOAT:
             fprintf(out, "(");
             emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_F64)");
+            fprintf(out, ".tag == XR_TAG_F64 && xr_scalar_rep_holds_f64(%u, ",
+                    (unsigned) target->scalar_rep);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".f))");
             break;
         case XR_KIND_BOOL:
             fprintf(out, "(");

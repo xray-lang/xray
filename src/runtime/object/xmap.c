@@ -29,6 +29,7 @@
 #include "../mem/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
+#include "../../shared/xr_hash_core.h"
 #include "../../base/xmalloc.h"
 #include "xarray.h"
 #include "xtuple.h"
@@ -88,12 +89,12 @@ static inline int entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_
     if (XR_TID_IS_INT(tid))
         return XR_TO_INT(e->key) == XR_TO_INT(key);
     if (XR_TID_IS_FLOAT(tid))
-        return XR_TO_FLOAT(e->key) == XR_TO_FLOAT(key);
+        return xr_hash_core_key_eq_f64(XR_TO_FLOAT(e->key), XR_TO_FLOAT(key)) != 0;
     if (tid == XR_TID_BOOL)
         return XR_TO_BOOL(e->key) == XR_TO_BOOL(key);
     if (tid == XR_TID_NULL)
         return true;
-    return xr_value_eq(e->key, key);
+    return xr_value_key_eq(e->key, key);
 }
 
 static inline bool map_is_weak(const XrMap *map) {
@@ -559,7 +560,7 @@ bool xr_map_has_value(XrMap *map, XrValue value) {
     for (uint32_t i = 0; i < map->nentries; i++) {
         XrMapEntry *e = &map->entries[i];
         if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
-            if (xr_value_eq(e->value, value))
+            if (xr_value_key_eq(e->value, value))
                 return true;
         }
     }

@@ -333,6 +333,7 @@ static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int
 // public entry, so the guard bounds type nesting depth.
 static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
+    Token annotation_start = parser->current;
     XrTypeRef *base = parse_type_annotation_base(parser);
 
     /* Optional type suffix: T? */
@@ -359,7 +360,9 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
         }
 
         reject_redundant_null_union(parser, members, count);
-        return xr_tref_union(parser->compiler_session, members, count);
+        XrTypeRef *union_ref = xr_tref_union(parser->compiler_session, members, count);
+        xr_tref_set_source_position(union_ref, annotation_start.line, annotation_start.column);
+        return union_ref;
     }
 
     return base;

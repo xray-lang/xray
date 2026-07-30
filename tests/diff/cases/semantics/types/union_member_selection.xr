@@ -1,0 +1,39 @@
+// anchor: union-member-selection
+// A union value carries the member selected at the assignment point. Exact type
+// matches win over implicit conversion, so the selection never depends on the
+// order the members were written, and `is` tests are mutually exclusive.
+var a: int | float = 1
+print("a=${a} is int=${a is int} is float=${a is float}")
+
+var b: int | float = 1.0
+print("b=${b} is int=${b is int} is float=${b is float}")
+
+var c: i32 | string = 7
+print("c=${c} is i32=${c is i32} is string=${c is string}")
+
+var d: f32 | string = 1.5
+print("d=${d} is f32=${d is f32} is string=${d is string}")
+
+var e: i32 | string = "s"
+print("e=${e} is i32=${e is i32} is string=${e is string}")
+
+var narrow: i16 = 3
+var widened: i32 | string = narrow
+print("widened=${widened} is i32=${widened is i32} is string=${widened is string}")
+
+// Reassignment reselects the member.
+var switched: int | float = 1
+switched = 2.5
+print("switched=${switched} is int=${switched is int} is float=${switched is float}")
+
+// Arm order does not affect which arm matches.
+var m1: int | float = 3
+match (m1) {
+    is float -> print("m1 float"),
+    is int -> print("m1 int"),
+}
+var m2: int | float = 3.5
+match (m2) {
+    is int -> print("m2 int"),
+    is float -> print("m2 float"),
+}

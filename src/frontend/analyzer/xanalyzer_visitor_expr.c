@@ -767,14 +767,30 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
     return xr_type_new_unknown(ctx->analyzer->isolate);
 }
 
-static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
-                                 XrType *expected_type) {
+XR_FUNC void xa_add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
+                                     XrType *expected_type) {
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[256];
     snprintf(msg, sizeof(msg), "Index type '%s' is not assignable to expected type '%s'",
              xr_type_to_string(index_type), xr_type_to_string(expected_type));
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
+}
+
+/* The key position of an index expression is typed by the container, exactly
+ * like the value position of an index write. Without this, `m[1]` on a
+ * Map<float, V> keeps the literal's default `int` type and stores an int key in
+ * a float map — a value no reader of that map can produce or match. */
+XR_FUNC XrType *xa_index_key_expected_type(XaInferContext *ctx, XrType *container) {
+    if (!ctx || !container || XR_TYPE_IS_UNKNOWN(container))
+        return NULL;
+    if (XR_TYPE_IS_MAP(container))
+        return container->map.key_type;
+    if (XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_SLICE(container) ||
+        container->kind == XR_KIND_FIXED_ARRAY || XR_TYPE_IS_POINTER(container) ||
+        xr_type_is_named_class(container, "Range"))
+        return xr_type_new_int(ctx->analyzer->isolate);
+    return NULL;
 }
 
 XR_FUNC bool xa_type_contains_float(XrType *type) {
@@ -1440,16 +1456,13 @@ static XrType *xa_binary_numeric_literal_context(XaInferContext *ctx, XrType *ty
     return xr_type_non_nullable(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL, type);
 }
 
-static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left,
-                                               XrType *right) {
+static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left, XrType *right) {
     if (!left || !right || !XR_TYPE_IS_NUMERIC(left) || !XR_TYPE_IS_NUMERIC(right))
         return NULL;
-    XrType *left_value = left->is_nullable
-                             ? xr_type_non_nullable(ctx->analyzer->isolate, left)
-                             : left;
-    XrType *right_value = right->is_nullable
-                              ? xr_type_non_nullable(ctx->analyzer->isolate, right)
-                              : right;
+    XrType *left_value =
+        left->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, left) : left;
+    XrType *right_value =
+        right->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, right) : right;
     return xr_type_numeric_common_type(left_value, right_value);
 }
 
@@ -2649,7 +2662,12 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     /* Visit the index expression so variable references get their symbol_id resolved */
     XrType *index_type = NULL;
     if (ig->index) {
+        XrType *saved_expected = ctx->expected_type;
+        XrType *key_expected = xa_index_key_expected_type(ctx, container);
+        if (key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
+            ctx->expected_type = key_expected;
         index_type = xa_visit_infer_expr(ctx, ig->index);
+        ctx->expected_type = saved_expected;
     }
 
     if (container && XR_TYPE_IS_ERROR(container))
@@ -2668,7 +2686,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                 "raw pointer index `p[i]` must be inside an `unsafe { }` block", &loc);
         }
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+            xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         XrType *pointee = container->container.element_type;
         return pointee ? pointee : xr_type_new_unknown(NULL);
     }
@@ -2676,7 +2694,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (xr_type_is_enum_metadata_named(container, XR_ENUM_VARIANTS_TYPE_NAME) ||
         xr_type_is_enum_metadata_named(container, XR_ENUM_PAYLOADS_TYPE_NAME)) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+            xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         XrType *owner = xr_type_enum_metadata_owner(container);
         return xr_type_new_enum_metadata(
             ctx->analyzer->isolate,
@@ -2689,24 +2707,24 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if ((XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_SLICE(container)) &&
         container->container.element_type) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+            xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xa_const_projection_type(ctx, container, container->container.element_type);
     }
     if (container && container->kind == XR_KIND_FIXED_ARRAY &&
         container->fixed_array.element_type) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+            xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xa_const_projection_type(ctx, container, container->fixed_array.element_type);
     }
     if (XR_TYPE_IS_MAP(container) && container->map.value_type) {
         if (index_type && container->map.key_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
             !xa_typecheck_assignable(container->map.key_type, index_type))
-            add_index_type_error(ctx, node, index_type, container->map.key_type);
+            xa_add_index_type_error(ctx, node, index_type, container->map.key_type);
         return xa_const_projection_type(ctx, container, container->map.value_type);
     }
     if (xr_type_is_named_class(container, "Range")) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
-            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+            xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xr_type_new_int(ctx->analyzer->isolate);
     }
     if (XR_TYPE_IS_STRING(container)) {
@@ -2819,7 +2837,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                                          : NULL;
             if (expected_index && index_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
                 !xa_typecheck_assignable(expected_index, index_type))
-                add_index_type_error(ctx, node, index_type, expected_index);
+                xa_add_index_type_error(ctx, node, index_type, expected_index);
             XrType *result = member_type->function.return_type
                                  ? member_type->function.return_type
                                  : xr_type_new_unknown(ctx->analyzer->isolate);
@@ -4381,7 +4399,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             base_type->container.element_type) {
             if (index_type && !xa_optional_is_legacy_unknown(index_type) &&
                 !XR_TYPE_IS_INT(index_type)) {
-                add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+                xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
                 return xa_optional_error(ctx);
             }
             return xa_optional_nullable_result(ctx, base_type->container.element_type);
@@ -4390,7 +4408,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             if (index_type && base_type->map.key_type &&
                 !xa_optional_is_legacy_unknown(index_type) &&
                 !xa_typecheck_assignable(base_type->map.key_type, index_type)) {
-                add_index_type_error(ctx, node, index_type, base_type->map.key_type);
+                xa_add_index_type_error(ctx, node, index_type, base_type->map.key_type);
                 return xa_optional_error(ctx);
             }
             return xa_optional_nullable_result(ctx, base_type->map.value_type);
@@ -4399,7 +4417,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             base_type->fixed_array.element_type) {
             if (index_type && !xa_optional_is_legacy_unknown(index_type) &&
                 !XR_TYPE_IS_INT(index_type)) {
-                add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+                xa_add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
                 return xa_optional_error(ctx);
             }
             return xa_optional_nullable_result(ctx, base_type->fixed_array.element_type);

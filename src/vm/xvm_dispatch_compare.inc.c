@@ -264,7 +264,7 @@ vmcase(OP_IS) {
     if (XR_IS_INT(type_val)) {
         /* Primitive type ID check */
         int expected_type = (int) XR_TO_INT(type_val);
-        result = (xr_value_typeid(val) == (XrTypeId) expected_type);
+        result = xr_value_is_type_id(val, (XrTypeId) expected_type);
     } else if (xr_value_is_class(type_val)) {
         /* Class instanceof check via inheritance chain */
         XrClass *target_cls = xr_value_to_class(type_val);

@@ -971,7 +971,7 @@ static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, in
                 return -1;
             const float *d = (const float *) a->data;
             for (int64_t i = 0; i < a->length; i++)
-                if ((double) d[i] == v.f)
+                if (xr_hash_core_key_eq_f64((double) d[i], v.f))
                     return i;
             return -1;
         }
@@ -980,7 +980,7 @@ static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, in
                 return -1;
             const double *d = (const double *) a->data;
             for (int64_t i = 0; i < a->length; i++)
-                if (d[i] == v.f)
+                if (xr_hash_core_key_eq_f64(d[i], v.f))
                     return i;
             return -1;
         }

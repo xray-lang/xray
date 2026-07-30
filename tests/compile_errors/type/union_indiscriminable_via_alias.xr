@@ -1,0 +1,6 @@
+// The collision is a property of the resolved members, so an alias that expands
+// to a member already in the union is rejected the same way.
+type Small = i16
+
+var a: Small | i32 = 3
+print("${a}")

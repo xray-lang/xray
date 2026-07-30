@@ -35,6 +35,10 @@ typedef struct {
 typedef struct {
     int depth;
     int seen_count;
+    /* Hash containers need a reflexive relation: a stored key must find itself.
+     * Under this mode NaN equals NaN so a NaN-carrying key stays reachable,
+     * while the `==` operator keeps IEEE semantics. */
+    bool key_equivalence;
     DeepEqPair seen[DEEP_EQ_MAX_DEPTH];
 } DeepEqCtx;
 
@@ -45,7 +49,7 @@ static bool xr_map_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
 static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
     if (a.tag == b.tag && a.i == b.i) {
         if (a.tag == XR_TAG_F64 && isnan(a.f))
-            return false;
+            return ctx->key_equivalence;
         if (a.tag == XR_TAG_PTR && a.ptr != NULL)
             goto deep_compare;
         return true;
@@ -67,7 +71,7 @@ static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
             return a.i == b.i;
         case XR_TAG_F64:
             if (isnan(a.f) && isnan(b.f))
-                return false;
+                return ctx->key_equivalence;
             return a.f == b.f;
         case XR_TAG_PTR:
             goto deep_compare;
@@ -143,6 +147,12 @@ deep_compare: {
     }
     return result;
 }
+}
+
+bool xr_value_deep_key_eq(XrValue a, XrValue b) {
+    DeepEqCtx ctx = {0};
+    ctx.key_equivalence = true;
+    return deep_eq_ctx(&ctx, a, b);
 }
 
 bool xr_value_deep_eq(XrValue a, XrValue b) {

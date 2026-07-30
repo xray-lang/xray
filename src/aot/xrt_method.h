@@ -764,7 +764,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
                 return XR_FROM_INT(idx);
             for (int64_t i = 0; i < a->length; i++) {
                 XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                if (xrt_eq(elem, arg0))
+                if (xrt_key_eq(elem, arg0))
                     return XR_FROM_INT(i);
             }
             return XR_FROM_INT(-1);
@@ -776,7 +776,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
                 return XR_FROM_BOOL(idx >= 0);
             for (int64_t i = 0; i < a->length; i++) {
                 XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                if (xrt_eq(elem, arg0))
+                if (xrt_key_eq(elem, arg0))
                     return XR_FROM_BOOL(1);
             }
             return XR_FROM_BOOL(0);

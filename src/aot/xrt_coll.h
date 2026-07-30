@@ -1513,15 +1513,13 @@ static inline int xrt_swar_first(uint64_t bits) {
 /* xrt_hash_mix_u64 / xrt_hash_bytes live in xrt_value.h (shared with the
  * compile-time literal hashing in the C backend). */
 
+/* Keys hash on the canonical bits so every NaN lands in one bucket and -0.0
+ * shares +0.0's bucket, matching xrt_key_eq. */
 static inline uint64_t xrt_hash_f64(double d) {
-    uint64_t bits;
-    if (d == 0.0)
-        d = 0.0; /* canonicalize -0.0: IEEE == treats them equal */
-    memcpy(&bits, &d, sizeof(bits));
-    return xr_hash_core_mix_u64(bits);
+    return xr_hash_core_mix_u64(xr_hash_core_f64_key_bits(d));
 }
 
-/* Hash for tagged values, consistent with xrt_eq: strings hash content
+/* Hash for tagged values, consistent with xrt_key_eq: strings hash content
  * through the header cache (literals carry a precomputed hash). */
 static inline uint64_t xrt_hash_value(XrValue v) {
     uint32_t tag = (v.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : v.tag;
@@ -1732,14 +1730,14 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
 }
 
 /* Candidate comparators for the shared Swiss probe (xr_{map,set}_lookup_slot):
- * type tag then canonical equality. xrt_eq is type-aware, so the tag pre-check
+ * type tag then key equivalence. xrt_key_eq is type-aware, so the tag pre-check
  * only short-circuits type-mismatched hash collisions. Return int (not bool) to
  * match the runtime's bool-free generated-C convention. */
 static inline int xrt_map_key_eq(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
-    return e->key_tt == key_tt && xrt_eq(e->key, key) != 0;
+    return e->key_tt == key_tt && xrt_key_eq(e->key, key) != 0;
 }
 static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
-    return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
+    return e->val_tt == val_tt && xrt_key_eq(e->value, value) != 0;
 }
 
 typedef struct xrt_closure xrt_closure_t;
@@ -1775,10 +1773,10 @@ static inline int xrt_user_eq_value(XrValue a, XrValue b, uint16_t expected_type
     int a_exact = xrt_user_hash_eq_exact(a, expected_type_id, expected_class_name);
     int b_exact = xrt_user_hash_eq_exact(b, expected_type_id, expected_class_name);
     if (a_exact && b_exact)
-        return eq_fn ? eq_fn(NULL, a.ptr, b.ptr) != 0 : xrt_eq(a, b) != 0;
+        return eq_fn ? eq_fn(NULL, a.ptr, b.ptr) != 0 : xrt_key_eq(a, b) != 0;
     if (a_exact || b_exact)
         return 0;
-    return xrt_eq(a, b) != 0;
+    return xrt_key_eq(a, b) != 0;
 }
 
 static inline uint32_t xrt_map_find_entry_slot(xrt_map_t *m, XrValue key, uint32_t hash,
@@ -1952,21 +1950,25 @@ static inline XrValue xrt_map_set_class_name(XrValue map_value, const char *clas
     return map_value;
 }
 
-/* Untyped-storage map that still records its declared value element type
- * (e.g. Map<string, int>: string keys force tagged entry storage, but the
- * static value type is scalar). values() uses the recorded type so its
- * result array lanes match the Array<V> layout consumers were planned
- * with. key_type stays XR_ELEM_ANY, so xrt_map_is_typed remains false. */
-static inline XrValue xrt_map_new_vt(int64_t cap, uint8_t value_type) {
+/* Untyped-storage map that still records whichever of its declared element
+ * types is a scalar (e.g. Map<string, int> or Map<int, string>: the non-scalar
+ * side forces tagged entry storage). keys() and values() use the recorded types
+ * so their result lanes match the Array<K> / Array<V> layout consumers were
+ * planned with. Typed storage needs both sides scalar, so at least one stays
+ * XR_ELEM_ANY here and xrt_map_is_typed remains false. */
+static inline XrValue xrt_map_new_declared(int64_t cap, uint8_t key_type, uint8_t value_type) {
     XrValue mv = xrt_map_new_flags(cap, 0);
-    if (mv.ptr)
+    if (mv.ptr) {
+        ((xrt_map_t *) mv.ptr)->key_type = key_type;
         ((xrt_map_t *) mv.ptr)->value_type = value_type;
+    }
     return mv;
 }
 
 static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, int32_t *indices,
                                                   XrMapEntry *entries, uint32_t indices_size,
-                                                  uint32_t entries_cap, uint8_t value_type) {
+                                                  uint32_t entries_cap, uint8_t key_type,
+                                                  uint8_t value_type) {
     xrt_map_init_header(m);
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < indices_size; i++)
@@ -1978,6 +1980,7 @@ static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, i
     m->indices_size = indices_size;
     m->entries_cap = entries_cap;
     m->flags = XR_MAP_FLAG_NODES_ON_STACK;
+    m->key_type = key_type;
     m->value_type = value_type;
     return xr_mkptr(m, XR_TAG_MAP);
 }
@@ -2282,7 +2285,7 @@ static inline int xrt_map_has_value(xrt_map_t *m, XrValue value) {
     if (xrt_map_is_boolmap(m)) {
         XrValue keys[2] = {XR_FROM_BOOL(0), XR_FROM_BOOL(1)};
         for (int i = 0; i < 2; i++) {
-            if (xrt_map_has(m, keys[i]) && xrt_eq(xrt_map_get(m, keys[i]), value))
+            if (xrt_map_has(m, keys[i]) && xrt_key_eq(xrt_map_get(m, keys[i]), value))
                 return 1;
         }
         return 0;
@@ -2291,7 +2294,7 @@ static inline int xrt_map_has_value(xrt_map_t *m, XrValue value) {
         for (int64_t i = 0; i < m->order_len; i++) {
             int64_t slot = m->order[i];
             if (slot >= 0 && slot < m->cap && xrt_map_slot_is_full(m, slot) &&
-                xrt_eq(xrt_map_slot_value(m, slot), value))
+                xrt_key_eq(xrt_map_slot_value(m, slot), value))
                 return 1;
         }
         return 0;
@@ -2300,7 +2303,7 @@ static inline int xrt_map_has_value(xrt_map_t *m, XrValue value) {
         return 0;
     for (uint32_t i = 0; i < m->nentries; i++) {
         XrMapEntry *entry = &m->entries[i];
-        if (entry->key_tt != XR_MAP_ENTRY_NIL_KEY && xrt_eq(entry->value, value))
+        if (entry->key_tt != XR_MAP_ENTRY_NIL_KEY && xrt_key_eq(entry->value, value))
             return 1;
     }
     return 0;
@@ -3284,7 +3287,10 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_keys((xrt_boolmap_t *) m);
     if (!xrt_map_is_typed(m)) {
-        XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
+        /* Untyped storage may still carry a declared scalar key type
+         * (xrt_map_new_declared); honor it so the result lanes match the
+         * consumer's static Array<K> layout. */
+        XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->key_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xrt_array_push(arr, m->entries[i].key);
@@ -3305,7 +3311,7 @@ static inline XrValue xrt_map_values(xrt_map_t *m) {
         return xrt_boolmap_values((xrt_boolmap_t *) m);
     if (!xrt_map_is_typed(m)) {
         /* Untyped storage may still carry a declared scalar value type
-         * (xrt_map_new_vt); honor it so the result lanes match the
+         * (xrt_map_new_declared); honor it so the result lanes match the
          * consumer's static Array<V> layout. */
         XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->value_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {

@@ -6613,14 +6613,25 @@ static uint32_t body_const_expr_id(XgBodyCollect *bc, const AstNode *expr) {
 }
 
 static uint32_t body_map_runtime_hash_f64(double value) {
-    uint64_t bits;
-    if (value == 0.0)
-        value = 0.0;
-    memcpy(&bits, &value, sizeof(bits));
-    return (uint32_t) xr_hash_core_mix_u64(bits);
+    return (uint32_t) xr_hash_core_mix_u64(xr_hash_core_f64_key_bits(value));
 }
 
-static uint64_t body_map_const_prehash(const AstNode *expr) {
+static bool body_map_key_type_is_float(uint32_t key_type_key) {
+    static const uint8_t float_widths[] = {XR_NATIVE_F32, XR_NATIVE_F64};
+    if (key_type_key == hash_synthetic_tref32(XR_TREF_FLOAT, NULL, NULL, 0))
+        return true;
+    for (uint32_t i = 0; i < sizeof(float_widths) / sizeof(float_widths[0]); i++) {
+        if (key_type_key == hash_synthetic_width_tref32(XR_TREF_FLOAT_WIDTH, float_widths[i]))
+            return true;
+    }
+    return false;
+}
+
+/* The precomputed hash must be the hash of the key the program actually stores.
+ * The container's key type decides that: an integer literal keying a float map
+ * is the float it converts to, so hashing its integer form would place the
+ * entry in a slot no lookup of that map ever probes. */
+static uint64_t body_map_const_prehash(const AstNode *expr, uint32_t key_type_key) {
     const char *s;
     uint32_t string_hash;
     if (!expr)
@@ -6633,6 +6644,8 @@ static uint64_t body_map_const_prehash(const AstNode *expr) {
             string_hash = xr_hash_core_str_hash_bytes(s, strlen(s));
             return (uint32_t) xr_hash_core_mix_u64((uint64_t) string_hash);
         case AST_LITERAL_INT:
+            if (body_map_key_type_is_float(key_type_key))
+                return body_map_runtime_hash_f64((double) (int64_t) expr->as.literal.int_bits);
             return (uint32_t) xr_hash_core_mix_u64((uint64_t) expr->as.literal.int_bits);
         case AST_LITERAL_FLOAT:
             return body_map_runtime_hash_f64(expr->as.literal.raw_value.float_val);
@@ -7204,7 +7217,7 @@ static XgMapShapeId body_add_map_shape_for_literal(
         const_ids[i] = body_const_expr_id(bc, keys ? keys[i] : NULL);
         if (const_ids[i] == 0 || (values && body_const_expr_id(bc, values[i]) == 0))
             all_entries_const = false;
-        if (body_map_const_prehash(keys ? keys[i] : NULL) == 0)
+        if (body_map_const_prehash(keys ? keys[i] : NULL, key_type_key) == 0)
             all_keys_have_static_prehash = false;
     }
     if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0)) {
@@ -7261,7 +7274,7 @@ static XgMapShapeId body_add_map_shape_for_literal(
         entry.entry_ordinal = (uint32_t) i;
         entry.key_const_id = key_const_id;
         entry.value_const_id = value_const_id;
-        entry.prehash = body_map_const_prehash(keys[i]);
+        entry.prehash = body_map_const_prehash(keys[i], key_type_key);
         if (key_const_id != 0)
             entry.flags |= XG_MAP_ENTRY_CONST_KEY;
         if (keys && keys[i] && keys[i]->type == AST_LITERAL_INT &&
@@ -7923,7 +7936,7 @@ static void body_add_map_key_access_row(XgBodyCollect *bc, const AstNode *node,
     row.key_type_key = local->map_key_type_key;
     row.value_type_key = local->map_value_type_key;
     row.key_const_id = key_const_id;
-    row.key_prehash = body_map_const_prehash(key);
+    row.key_prehash = body_map_const_prehash(key, row.key_type_key);
     if (key_const_id != 0)
         row.flags |= XG_KEY_ACCESS_CONST_KEY;
     if (missing_panics)

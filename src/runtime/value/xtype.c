@@ -1073,6 +1073,49 @@ bool xr_type_union_contains(XrType *type, XrTypeKind kind) {
     return false;
 }
 
+bool xr_type_union_indiscriminable_pair(const XrType *type, XrType **out_first,
+                                        XrType **out_second) {
+    if (!type || !XR_TYPE_IS_UNION(type))
+        return false;
+    for (int i = 0; i < type->union_type.member_count; i++) {
+        XrType *a = type->union_type.members[i];
+        if (!a || (a->kind != XR_KIND_INT && a->kind != XR_KIND_FLOAT))
+            continue;
+        for (int j = i + 1; j < type->union_type.member_count; j++) {
+            XrType *b = type->union_type.members[j];
+            if (!b || b->kind != a->kind)
+                continue;
+            if (out_first)
+                *out_first = a;
+            if (out_second)
+                *out_second = b;
+            return true;
+        }
+    }
+    return false;
+}
+
+XrType *xr_type_union_numeric_member_for_literal(XrType *type, XrTypeKind literal_kind) {
+    if (!type || !XR_TYPE_IS_UNION(type) || type->is_const)
+        return NULL;
+    if (literal_kind != XR_KIND_INT && literal_kind != XR_KIND_FLOAT)
+        return NULL;
+    XrType *integer_member = NULL;
+    XrType *float_member = NULL;
+    for (int i = 0; i < type->union_type.member_count; i++) {
+        XrType *member = type->union_type.members[i];
+        if (!member || member->is_nullable)
+            continue;
+        if (member->kind == XR_KIND_INT && !integer_member)
+            integer_member = member;
+        else if (member->kind == XR_KIND_FLOAT && !float_member)
+            float_member = member;
+    }
+    if (literal_kind == XR_KIND_FLOAT)
+        return float_member;
+    return integer_member ? integer_member : float_member;
+}
+
 // Remove all members with given kind from union; return simplified type
 XrType *xr_type_union_remove(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!type)
@@ -1434,10 +1477,10 @@ XrConversionKind xr_type_numeric_conversion_kind(const XrType *target, const XrT
                                            : XR_CONVERSION_EXPLICIT_TRUNCATE;
     }
 
-    bool target_sized = target->scalar_rep == XR_NATIVE_ISIZE ||
-                        target->scalar_rep == XR_NATIVE_USIZE;
-    bool source_sized = source->scalar_rep == XR_NATIVE_ISIZE ||
-                        source->scalar_rep == XR_NATIVE_USIZE;
+    bool target_sized =
+        target->scalar_rep == XR_NATIVE_ISIZE || target->scalar_rep == XR_NATIVE_USIZE;
+    bool source_sized =
+        source->scalar_rep == XR_NATIVE_ISIZE || source->scalar_rep == XR_NATIVE_USIZE;
     if (target_sized || source_sized)
         return XR_CONVERSION_EXPLICIT_TARGET_WIDTH;
     if (xr_scalar_rep_is_unsigned(target->scalar_rep) !=

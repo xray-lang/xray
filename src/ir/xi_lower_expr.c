@@ -8932,23 +8932,27 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
         int tid = -1;
         switch (tref->kind) {
             case XR_TREF_INT:
-                tid = 8;
-                break; /* XR_TID_INT */
+                tid = XR_TID_INT;
+                break;
             case XR_TREF_FLOAT:
-                tid = 11;
-                break; /* XR_TID_FLOAT */
+                tid = XR_TID_FLOAT;
+                break;
             case XR_TREF_STRING:
-                tid = 12;
-                break; /* XR_TID_STRING */
+                tid = XR_TID_STRING;
+                break;
             case XR_TREF_BOOL:
-                tid = 1;
-                break; /* XR_TID_BOOL */
+                tid = XR_TID_BOOL;
+                break;
             case XR_TREF_NULL:
-                tid = 0;
-                break; /* XR_TID_NULL */
-            case XR_TREF_ERROR:
+                tid = XR_TID_NULL;
+                break;
             case XR_TREF_INT_WIDTH:
             case XR_TREF_FLOAT_WIDTH:
+                /* The erased value carries no width, so the id is turned back
+                 * into a representability test at run time. */
+                tid = (int) xr_scalar_rep_typeid(tref->scalar_rep);
+                break;
+            case XR_TREF_ERROR:
             case XR_TREF_NAMED:
             case XR_TREF_GENERIC:
             case XR_TREF_OPTIONAL:
@@ -9046,13 +9050,20 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
         }
     }
 
-    uint16_t nargs = (type_val != NULL) ? 2 : 1;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, nargs);
+    /* XI_IS always carries its target operand; a missing one is an unresolved
+     * type kind, not a valid one-operand form. Failing here names the construct,
+     * while emitting the malformed op only surfaces as a verifier arity error
+     * with no way back to the source line. */
+    if (!type_val) {
+        fprintf(stderr, "[LOWER] unresolved `is` target type at line %d\n", line);
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, 2);
     if (!v)
         return NULL;
     v->args[0] = val;
-    if (type_val)
-        v->args[1] = type_val;
+    v->args[1] = type_val;
     v->aux = (void *) target_type;
     v->line = (uint32_t) line;
     return v;
@@ -9080,19 +9091,19 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
         inner = tref->children[0];
     switch (inner->kind) {
         case XR_TREF_INT:
-            tid = 8;
+            tid = XR_TID_INT;
             name = "int";
             break;
         case XR_TREF_FLOAT:
-            tid = 11;
+            tid = XR_TID_FLOAT;
             name = "float";
             break;
         case XR_TREF_STRING:
-            tid = 12;
+            tid = XR_TID_STRING;
             name = "string";
             break;
         case XR_TREF_BOOL:
-            tid = 1;
+            tid = XR_TID_BOOL;
             name = "bool";
             break;
         case XR_TREF_RUNE:
@@ -9100,12 +9111,19 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
             name = "rune";
             break;
         case XR_TREF_NULL:
-            tid = 0;
+            tid = XR_TID_NULL;
             name = "null";
             break;
-        case XR_TREF_ERROR:
         case XR_TREF_INT_WIDTH:
-        case XR_TREF_FLOAT_WIDTH:
+        case XR_TREF_FLOAT_WIDTH: {
+            /* A dynamic cast checks the same representability the `is` test
+             * does, so it carries the same width-bearing id. */
+            XrTypeId width_tid = xr_scalar_rep_typeid(inner->scalar_rep);
+            tid = (int) width_tid;
+            name = xr_typeid_name(width_tid);
+            break;
+        }
+        case XR_TREF_ERROR:
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
         case XR_TREF_OPTIONAL:

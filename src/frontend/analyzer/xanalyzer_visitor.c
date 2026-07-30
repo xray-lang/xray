@@ -1474,11 +1474,22 @@ static bool node_is_contextual_numeric_literal(AstNode *node) {
     return operand && (operand->type == AST_LITERAL_INT || operand->type == AST_LITERAL_FLOAT);
 }
 
+/* The numeric type a contextual literal is typed into. A union target names at
+ * most one member per numeric family, so the literal has a single candidate and
+ * the member it is stored as is decided here rather than left to the type the
+ * literal would default to on its own. */
+static XrType *contextual_numeric_target(XrType *expected, XrTypeKind literal_kind) {
+    if (expected && XR_TYPE_IS_UNION(expected))
+        return xr_type_union_numeric_member_for_literal(expected, literal_kind);
+    return expected;
+}
+
 static void record_expected_numeric_conversion(XaInferContext *ctx, AstNode *node, XrType *source,
                                                XrType *result) {
-    if (!ctx || !ctx->analyzer || !node || !ctx->expected_type || !source || !result ||
-        !XR_TYPE_IS_NUMERIC(ctx->expected_type) || !XR_TYPE_IS_NUMERIC(source) ||
-        ctx->expected_type->is_nullable || source->is_nullable)
+    if (!ctx || !ctx->analyzer || !node || !source || !result || !XR_TYPE_IS_NUMERIC(source))
+        return;
+    XrType *target = contextual_numeric_target(ctx->expected_type, source->kind);
+    if (!target || !XR_TYPE_IS_NUMERIC(target) || target->is_nullable || source->is_nullable)
         return;
     XrConversionWitness existing = {0};
     if (xa_analyzer_get_node_conversion(ctx->analyzer, node, &existing))
@@ -1486,9 +1497,9 @@ static void record_expected_numeric_conversion(XaInferContext *ctx, AstNode *nod
     XrConversionWitness witness = {0};
     witness.kind = node_is_contextual_numeric_literal(node)
                        ? XR_CONVERSION_CONTEXTUAL_LITERAL
-                       : xr_type_numeric_conversion_kind(ctx->expected_type, source);
+                       : xr_type_numeric_conversion_kind(target, source);
     witness.source_scalar_rep = source->scalar_rep;
-    witness.target_scalar_rep = ctx->expected_type->scalar_rep;
+    witness.target_scalar_rep = target->scalar_rep;
     witness.is_implicit = true;
     witness.is_compile_time = node_is_contextual_numeric_literal(node);
     xa_analyzer_set_node_conversion(ctx->analyzer, node, &witness);
@@ -1496,7 +1507,8 @@ static void record_expected_numeric_conversion(XaInferContext *ctx, AstNode *nod
 
 static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *node,
                                                XrType *fallback) {
-    XrType *target = ctx ? ctx->expected_type : NULL;
+    XrType *target = contextual_numeric_target(ctx ? ctx->expected_type : NULL,
+                                               fallback ? fallback->kind : XR_KIND_UNKNOWN);
     if (!target || !XR_TYPE_IS_NUMERIC(target) || target->is_nullable)
         return fallback;
     if (node->type == AST_LITERAL_INT) {
@@ -6322,8 +6334,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *index_type = NULL;
             if (is->array)
                 array_type = xa_visit_infer_expr(ctx, is->array);
-            if (is->index)
+            if (is->index) {
+                /* The key is typed and checked against the container just like
+                 * the value below. Leaving the key untyped let a write install a
+                 * key of a type the container's own reads can never match. */
+                XrType *key_expected = xa_index_key_expected_type(ctx, array_type);
+                XrType *saved_key_expected = ctx->expected_type;
+                if (key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
+                    ctx->expected_type = key_expected;
                 index_type = xa_visit_infer_expr(ctx, is->index);
+                ctx->expected_type = saved_key_expected;
+                if (key_expected && index_type && !XR_TYPE_IS_UNKNOWN(key_expected) &&
+                    !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_ERROR(index_type) &&
+                    !xa_typecheck_assignable(key_expected, index_type))
+                    xa_add_index_type_error(ctx, node, index_type, key_expected);
+            }
             XrType *value_expected = NULL;
             if (array_type) {
                 if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||

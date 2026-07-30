@@ -90,8 +90,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_NAKED __attribute__((naked))
 #if defined(__x86_64__) || defined(__i386__)
 #if defined(__clang__)
-#define XRT_TARGET_AVX2                                                                            \
-    __attribute__((target("avx2"), __min_vector_width__(256), flatten))
+#define XRT_TARGET_AVX2 __attribute__((target("avx2"), __min_vector_width__(256), flatten))
 #else
 #define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
 #endif
@@ -102,8 +101,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_TARGET_AVX512                                                                          \
     __attribute__((target("avx512f,evex512"), __min_vector_width__(512), flatten))
 #elif defined(__clang__)
-#define XRT_TARGET_AVX512                                                                          \
-    __attribute__((target("avx512f"), __min_vector_width__(512), flatten))
+#define XRT_TARGET_AVX512 __attribute__((target("avx512f"), __min_vector_width__(512), flatten))
 #else
 #define XRT_TARGET_AVX512 __attribute__((target("avx512f"), flatten))
 #endif
@@ -808,15 +806,15 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
 /* C compound-literal arrays and C++ temporary arrays have different address
  * rules.  Keep the payload alive for the complete make call in either mode. */
 #if defined(__cplusplus)
-#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)        \
     ([&]() {                                                                                       \
-        const XrValue _xrt_enum_payloads[(payload_count)] = {__VA_ARGS__};                          \
+        const XrValue _xrt_enum_payloads[(payload_count)] = {__VA_ARGS__};                         \
         return xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name),           \
-                                       (member_name), _xrt_enum_payloads);                          \
+                                       (member_name), _xrt_enum_payloads);                         \
     }())
 #else
-#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
-    xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name), (member_name),        \
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)        \
+    xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name), (member_name),       \
                             (const XrValue[(payload_count)]) {__VA_ARGS__})
 #endif
 
@@ -919,8 +917,12 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
  * Value equality — single authoritative implementation for the AOT runtime.
  * Mirrors the VM's xr_value_eq semantics: strings compare by content
  * (XR_TAG_STR and XR_TAG_STR_ARC are interchangeable), numbers by value,
- * other heap objects by identity. Used by ==, map/set key lookup, and
- * array indexOf/includes — these must never diverge.
+ * other heap objects by identity. This is the `==` operator relation, so it
+ * is IEEE on floats and not reflexive on NaN.
+ *
+ * Container keying and membership use xrt_key_eq instead: identical except
+ * that it is reflexive on NaN, which is what keeps a stored key reachable.
+ * Both must track their VM counterparts (xr_value_eq / xr_value_key_eq).
  * ========================================================================= */
 
 static inline int64_t xrt_eq(XrValue a, XrValue b) {
@@ -970,6 +972,12 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         return memcmp(a.ptr, b.ptr, (size_t) sa) == 0;
     }
     return a.ptr == b.ptr;
+}
+
+static inline int64_t xrt_key_eq(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_F64 && b.tag == XR_TAG_F64)
+        return xr_hash_core_key_eq_f64(a.f, b.f);
+    return xrt_eq(a, b);
 }
 
 /* =========================================================================

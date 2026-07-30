@@ -24,6 +24,7 @@
 #define XR_TYPED_OPS_H
 
 #include "xr_elem_type.h"
+#include "xr_numeric_conversion_core.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -294,12 +295,19 @@ static inline bool xr_typed_scalar_bits_i64(int64_t value, uint8_t elem_type, ui
     }
 }
 
+/* Unboxed float keys hash on their canonical bits: every NaN collapses to one
+ * key and -0.0 shares +0.0's key, so hashing agrees with the reflexive key
+ * relation the tagged containers use. */
 static inline bool xr_typed_scalar_bits_f64(double value, uint8_t elem_type, uint64_t *out_bits) {
     if (!out_bits)
         return false;
     if (elem_type == XR_ELEM_F32) {
         float f = (float) value;
         uint32_t b32;
+        if (f != f) {
+            *out_bits = XR_NUMERIC_CANONICAL_F32_NAN;
+            return true;
+        }
         if (f == 0.0f)
             f = 0.0f;
         memcpy(&b32, &f, sizeof(b32));
@@ -307,6 +315,10 @@ static inline bool xr_typed_scalar_bits_f64(double value, uint8_t elem_type, uin
         return true;
     }
     if (elem_type == XR_ELEM_F64) {
+        if (value != value) {
+            *out_bits = XR_NUMERIC_CANONICAL_F64_NAN;
+            return true;
+        }
         if (value == 0.0)
             value = 0.0;
         memcpy(out_bits, &value, sizeof(*out_bits));

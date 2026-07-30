@@ -1,0 +1,29 @@
+// anchor: map-float-key-identity
+// Hash containers key on an equivalence relation that stays reflexive for every
+// float value, so `==` and key identity deliberately disagree on NaN: all NaNs
+// are one key, and -0.0 and +0.0 are the same key.
+var nan = 0.0 / 0.0
+
+var s: Set<float> = #[]
+s.add(nan)
+s.add(nan)
+print("nan set size=${len(s)}")
+print("nan set contains=${s.contains(nan)}")
+
+var m: Map<float, string> = #{}
+m[nan] = "first"
+m[nan] = "second"
+print("nan map size=${len(m)}")
+print("nan map containsKey=${m.containsKey(nan)}")
+print("nan map get=${m[nan]}")
+m.delete(nan)
+print("nan map size after delete=${len(m)}")
+
+m[0.0] = "pos"
+m[-0.0] = "neg"
+print("zero map size=${len(m)}")
+print("zero get=${m[0.0]}")
+print("neg zero get=${m[-0.0]}")
+
+print("0.0 == -0.0 -> ${0.0 == -0.0}")
+print("nan == nan -> ${nan == nan}")

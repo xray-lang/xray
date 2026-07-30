@@ -70,8 +70,13 @@ typedef enum {
 /* ========== The Type Reference ========== */
 
 typedef struct XrTypeRef {
-    uint8_t kind;                      /* XrTypeRefKind                    */
-    uint8_t nchildren;                 /* number of child type refs        */
+    uint8_t kind;      /* XrTypeRefKind                    */
+    uint8_t nchildren; /* number of child type refs        */
+    /* Source position of the annotation, 0 when synthesized. Type-level
+     * diagnostics are raised long after the AST node that carried the
+     * annotation is out of reach, so the position travels with the ref. */
+    int line;
+    int column;
     uint8_t scalar_rep;                /* XrNativeType scalar representation */
     uint8_t builtin_spelling;          /* XrSourceTypeSpelling or NONE       */
     bool extensible;                   /* OBJECT: has ... marker           */
@@ -123,6 +128,9 @@ XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef
 
 /* Union: T | U | ... */
 XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **members, int count);
+
+/* Attach the source position of the annotation this ref was parsed from. */
+XR_FUNC void xr_tref_set_source_position(XrTypeRef *tref, int line, int column);
 
 /* Function type: (P1, ...) -> R.
  * |params| has |nparam| entries; |ret| is the return type. */

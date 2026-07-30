@@ -775,6 +775,18 @@ XR_FUNC XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b);
 XR_FUNC int xr_type_union_count(XrType *type);
 XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
+/* Union members must be tellable apart at run time, because that is all `is` and
+ * `match` have to work with. A dynamically erased value keeps only its i64 or
+ * f64 family, so two integer members (or two float members) are one runtime
+ * type wearing two static names: no value could ever select between them, and
+ * no assignment could say which one it stored. Reports the first such pair. */
+XR_FUNC bool xr_type_union_indiscriminable_pair(const XrType *type, XrType **out_first,
+                                                XrType **out_second);
+/* The single member of `type` in the numeric family a literal of `kind`
+ * naturally belongs to, or NULL. Integer literals fall back to the float member
+ * when the union has no integer one, mirroring the plain contextual rule that
+ * types `1` into a float target. */
+XR_FUNC XrType *xr_type_union_numeric_member_for_literal(XrType *type, XrTypeKind literal_kind);
 XR_FUNC XrType *xr_type_union_remove(XrVMRuntime *X, XrType *type, XrTypeKind kind);
 
 // Whether a type's value domain natively includes null, as a property
@@ -883,8 +895,7 @@ XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 // cases using the same XrConversionKind domain.
 XR_FUNC XrConversionKind xr_type_numeric_conversion_kind(const XrType *target,
                                                          const XrType *source);
-XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target,
-                                                    const XrType *source);
+XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target, const XrType *source);
 // Returns one operand type when both numeric operands have a unique implicit
 // common type, otherwise NULL.  No C usual-arithmetic-conversion fallback.
 XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);

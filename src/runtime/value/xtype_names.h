@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include "../../base/xdefs.h"
+#include "../../shared/xr_scalar_type.h"
 
 /* ========== Compile-time String Length ========== */
 
@@ -191,6 +192,68 @@ typedef enum {
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
 #define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
 #define XR_TID_IS_NUMBER(tid) (XR_TID_IS_INT(tid) || XR_TID_IS_FLOAT(tid))
+
+/* The dynamic tag carries only the i64/f64 family; the static width lives in
+ * the scalar representation. Fixed-width type tests need the way back from a
+ * public type id to that representation. Returns XR_SCALAR_REP_NONE for ids
+ * that name no scalar. */
+static inline uint8_t xr_typeid_scalar_rep(XrTypeId tid) {
+    switch (tid) {
+        case XR_TID_I8:
+            return XR_NATIVE_I8;
+        case XR_TID_U8:
+            return XR_NATIVE_U8;
+        case XR_TID_I16:
+            return XR_NATIVE_I16;
+        case XR_TID_U16:
+            return XR_NATIVE_U16;
+        case XR_TID_I32:
+            return XR_NATIVE_I32;
+        case XR_TID_U32:
+            return XR_NATIVE_U32;
+        case XR_TID_INT:
+            return XR_NATIVE_I64;
+        case XR_TID_U64:
+            return XR_NATIVE_U64;
+        case XR_TID_F32:
+            return XR_NATIVE_F32;
+        case XR_TID_FLOAT:
+            return XR_NATIVE_F64;
+        default:
+            return XR_SCALAR_REP_NONE;
+    }
+}
+
+/* Inverse of xr_typeid_scalar_rep. isize/usize have no public id of their own
+ * and collapse onto the widest id of their signedness, which is exact on 64-bit
+ * targets and the closest available answer elsewhere. */
+static inline XrTypeId xr_scalar_rep_typeid(uint8_t scalar_rep) {
+    switch ((XrNativeType) scalar_rep) {
+        case XR_NATIVE_I8:
+            return XR_TID_I8;
+        case XR_NATIVE_U8:
+            return XR_TID_U8;
+        case XR_NATIVE_I16:
+            return XR_TID_I16;
+        case XR_NATIVE_U16:
+            return XR_TID_U16;
+        case XR_NATIVE_I32:
+            return XR_TID_I32;
+        case XR_NATIVE_U32:
+            return XR_TID_U32;
+        case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
+            return XR_TID_U64;
+        case XR_NATIVE_F32:
+            return XR_TID_F32;
+        case XR_NATIVE_F64:
+            return XR_TID_FLOAT;
+        case XR_NATIVE_I64:
+        case XR_NATIVE_ISIZE:
+        default:
+            return XR_TID_INT;
+    }
+}
 
 /* ========== Utility Functions ========== */
 
