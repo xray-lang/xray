@@ -1042,6 +1042,7 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
                      enum_name ? enum_name : "?", variant_name ? variant_name : "?");
             xa_check_pointer_borrow_escape(ctx, arg, arg, arg_type, context);
         }
+        xa_note_owner_escapes_into_heap(ctx, arg);
         if (!param_type || XR_TYPE_IS_UNKNOWN(param_type) || !arg_type ||
             XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
@@ -4107,8 +4108,8 @@ static void xa_check_call_memory_effect_actual(XaInferContext *ctx, AstNode *cal
         snprintf(operation, sizeof(operation), "calling mutating function '%s'",
                  callee_name ? callee_name : "callee");
     }
-    xa_check_active_span_borrow_owner_path_mutation(ctx, call_node, owner,
-                                                    owner_path[0] ? owner_path : NULL, operation);
+    xa_check_active_loan_owner_path_mutation(ctx, call_node, owner,
+                                             owner_path[0] ? owner_path : NULL, operation);
 }
 
 XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
@@ -4264,6 +4265,7 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
         xa_check_span_value_escape(ctx, arg_node, arg_type, context);
         return;
     }
+    xa_note_owner_escapes_into_heap(ctx, arg_node);
     if (!xa_type_needs_borrow_escape_guard(arg_type))
         return;
     XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, arg_node);
@@ -5811,7 +5813,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (!owner)
                 owner = xa_span_borrow_owner_receiver_symbol(ctx, ma->object, callee_obj_type);
             if (owner)
-                xa_check_active_span_borrow_owner_path_mutation(
+                xa_check_active_loan_owner_path_mutation(
                     ctx, call->callee, owner, owner_path[0] ? owner_path : NULL, method_name);
         }
 

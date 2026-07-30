@@ -6038,12 +6038,11 @@ XR_FUNC bool xa_expr_yields_shared_provenance(XaInferContext *ctx, AstNode *expr
     return xa_symbol_has_shared_provenance(root);
 }
 
-static XaActiveSliceBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx,
-                                                           XaSymbol *view_sym) {
+static XaActiveLoan *xa_active_loan_for_borrower(XaInferContext *ctx, XaSymbol *view_sym) {
     if (!ctx || !view_sym)
         return NULL;
-    for (XaActiveSliceBorrow *b = ctx->active_span_borrows; b; b = b->next) {
-        if (b->view_symbol == view_sym)
+    for (XaActiveLoan *b = ctx->active_loans; b; b = b->next) {
+        if (b->borrower_symbol == view_sym)
             return b;
     }
     return NULL;
@@ -6078,8 +6077,8 @@ static bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr)
     if (expr->type == AST_VARIABLE) {
         XaSymbol *sym =
             expr->as.variable.name ? xa_lookup_visible_symbol(ctx, expr->as.variable.name) : NULL;
-        XaActiveSliceBorrow *borrow = xa_active_span_borrow_for_view(ctx, sym);
-        return borrow && borrow->is_pointer_borrow;
+        XaActiveLoan *borrow = xa_active_loan_for_borrower(ctx, sym);
+        return borrow && XA_LOAN_KIND_IS_RAW(borrow->loan.kind);
     }
     if (expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
         expr->as.call_expr.callee->type != AST_MEMBER_ACCESS)
@@ -6126,6 +6125,20 @@ static bool xa_path_is_same_or_nested(const char *path, const char *prefix) {
     return path[len] == '\0' || path[len] == '.' || path[len] == '[';
 }
 
+static const char *xa_loan_kind_label(XaLoanKind kind) {
+    switch (kind) {
+        case XA_LOAN_RAW_READ:
+        case XA_LOAN_RAW_WRITE:
+            return "raw pointer borrow";
+        case XA_LOAN_CAPTURE:
+            return "closure capture";
+        case XA_LOAN_READ:
+        case XA_LOAN_WRITE:
+            break;
+    }
+    return "Slice view";
+}
+
 static bool xa_owner_paths_may_overlap(const char *borrow_path, const char *mutation_path) {
     if (!borrow_path || !mutation_path)
         return true;
@@ -6151,8 +6164,8 @@ static XaSymbol *xa_root_path_for_expr(XaInferContext *ctx, AstNode *expr, char 
             XaSymbol *sym = expr->as.variable.name
                                 ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
                                 : NULL;
-            XaActiveSliceBorrow *active =
-                follow_active_view ? xa_active_span_borrow_for_view(ctx, sym) : NULL;
+            XaActiveLoan *active =
+                follow_active_view ? xa_active_loan_for_borrower(ctx, sym) : NULL;
             if (active) {
                 if (active->owner_path) {
                     xa_path_copy(path_buf, path_buf_size, active->owner_path);
@@ -6569,13 +6582,13 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
     }
 }
 
-static bool xa_active_span_borrow_may_be_live_after_mutation(XaInferContext *ctx,
-                                                             XaActiveSliceBorrow *borrow) {
-    if (!ctx || !ctx->analyzer || !borrow || !borrow->view_symbol || !borrow->view_symbol->name)
+static bool xa_active_loan_may_be_live_after_mutation(XaInferContext *ctx, XaActiveLoan *borrow) {
+    if (!ctx || !ctx->analyzer || !borrow || !borrow->borrower_symbol ||
+        !borrow->borrower_symbol->name)
         return true;
     if (ctx->loop_depth > 0 && borrow->loop_depth_at_creation < ctx->loop_depth)
         return true;
-    const char *name = borrow->view_symbol->name;
+    const char *name = borrow->borrower_symbol->name;
     if (ctx->block_cursor_depth > 0) {
         int deepest = ctx->block_cursor_depth - 1;
         for (int depth = deepest; depth >= 0; depth--) {
@@ -6741,6 +6754,10 @@ XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx,
         if (cursor_slot >= 0)
             ctx->block_cursor_indices[cursor_slot] = i;
         xa_visit_infer_stmt(ctx, statements[i]);
+        /* Captures still pending here belong to a closure that never became a
+         * binding — a call argument. Such a closure cannot outlive the call,
+         * so its captures do not loan anything past this statement. */
+        xa_discard_pending_captures(ctx);
     }
     xa_warn_sys_thread_lifecycle_in_sequence(ctx, statements, count, error_count_before);
     xa_warn_os_resource_lifecycle_in_sequence(ctx, statements, count, error_count_before);
@@ -6756,13 +6773,13 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
     return xa_root_variable_symbol_for_expr(ctx, expr);
 }
 
-XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
-    if (!ctx || !view_sym)
+XR_FUNC void xa_clear_active_loans_for_borrower(XaInferContext *ctx, XaSymbol *borrower_sym) {
+    if (!ctx || !borrower_sym)
         return;
-    XaActiveSliceBorrow **link = &ctx->active_span_borrows;
+    XaActiveLoan **link = &ctx->active_loans;
     while (*link) {
-        XaActiveSliceBorrow *cur = *link;
-        if (cur->view_symbol == view_sym) {
+        XaActiveLoan *cur = *link;
+        if (cur->borrower_symbol == borrower_sym) {
             *link = cur->next;
             xr_free(cur->owner_path);
             xr_free(cur);
@@ -6772,13 +6789,13 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
     }
 }
 
-XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope) {
+XR_FUNC void xa_clear_active_loans_in_scope(XaInferContext *ctx, XaScope *scope) {
     if (!ctx || !scope)
         return;
-    XaActiveSliceBorrow **link = &ctx->active_span_borrows;
+    XaActiveLoan **link = &ctx->active_loans;
     while (*link) {
-        XaActiveSliceBorrow *cur = *link;
-        if (cur->view_scope == scope) {
+        XaActiveLoan *cur = *link;
+        if (cur->borrower_scope == scope) {
             *link = cur->next;
             xr_free(cur->owner_path);
             xr_free(cur);
@@ -6872,11 +6889,47 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_index_write(XaInferContext *ctx,
     return root;
 }
 
-XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_sym, AstNode *value,
-                                            XrType *value_type) {
-    if (!ctx || !view_sym)
+/* Record one live loan of `owner` (or of the place `owner_path` inside it)
+ * held by `borrower_sym`. The loan ends at the borrower's last use. */
+static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, XaSymbol *owner,
+                               const char *owner_path, XaLoanKind kind, AstNode *site) {
+    if (!ctx || !borrower_sym || !owner || owner == borrower_sym)
         return;
-    xa_clear_active_span_borrow_for_view(ctx, view_sym);
+    XaActiveLoan *loan = xr_calloc(1, sizeof(XaActiveLoan));
+    if (!loan) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = site ? site->line : 0,
+                          .column = site ? site->column : 0};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+                                   "loan evidence allocation failed (AnalysisResourceFailure)",
+                                   &loc);
+        return;
+    }
+    loan->owner_symbol = owner;
+    if (owner_path && owner_path[0] != '\0')
+        loan->owner_path = xr_strdup(owner_path);
+    loan->borrower_symbol = borrower_sym;
+    loan->borrower_scope = borrower_sym->scope;
+    loan->loop_depth_at_creation = ctx->loop_depth;
+    loan->loan.id = borrower_sym->id;
+    loan->loan.root = owner->links.root_id;
+    loan->loan.path.root = owner->links.root_id;
+    loan->loan.path.precise = loan->owner_path != NULL;
+    loan->loan.kind = kind;
+    loan->loan.begin = site ? site->node_id + 1u : 0u;
+    loan->loan.provenance = borrower_sym->id;
+    loan->loan.borrower_symbol_id = borrower_sym->id;
+    loan->loan.owner_symbol_id = owner->id;
+    loan->loan.loop_depth_at_creation = (uint16_t) ctx->loop_depth;
+    loan->next = ctx->active_loans;
+    ctx->active_loans = loan;
+}
+
+XR_FUNC void xa_register_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, AstNode *value,
+                                     XrType *value_type) {
+    if (!ctx || !borrower_sym)
+        return;
+    xa_clear_active_loans_for_borrower(ctx, borrower_sym);
     bool is_pointer_borrow = false;
     bool is_span_borrow = xa_type_contains_span_view(value_type);
     if (!is_span_borrow && value_type && XR_TYPE_IS_POINTER(value_type)) {
@@ -6898,87 +6951,83 @@ XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_
     char owner_path[512];
     XaSymbol *owner =
         xa_span_borrow_owner_path_for_expr(ctx, value, owner_path, sizeof(owner_path));
-    if (!owner || owner == view_sym)
+    if (!owner)
         return;
-    XaActiveSliceBorrow *borrow = xr_calloc(1, sizeof(XaActiveSliceBorrow));
-    if (!borrow) {
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = value ? value->line : 0,
-                          .column = value ? value->column : 0};
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                   "loan evidence allocation failed (AnalysisResourceFailure)",
-                                   &loc);
-        return;
-    }
-    borrow->owner_symbol = owner;
-    if (owner_path[0] != '\0')
-        borrow->owner_path = xr_strdup(owner_path);
-    borrow->view_symbol = view_sym;
-    borrow->view_scope = view_sym->scope;
-    borrow->loop_depth_at_creation = ctx->loop_depth;
-    borrow->is_pointer_borrow = is_pointer_borrow;
-    borrow->loan.id = view_sym->id;
-    borrow->loan.root = owner->links.root_id;
-    borrow->loan.path.root = owner->links.root_id;
-    borrow->loan.path.precise = owner_path[0] != '\0';
-    borrow->loan.kind =
-        is_pointer_borrow
-            ? (value_type && value_type->ptr_is_mut ? XA_LOAN_RAW_WRITE : XA_LOAN_RAW_READ)
-            : XA_LOAN_READ;
-    borrow->loan.begin = value->node_id + 1u;
-    borrow->loan.provenance = view_sym->id;
-    borrow->loan.borrower_symbol_id = view_sym->id;
-    borrow->loan.owner_symbol_id = owner->id;
-    borrow->loan.loop_depth_at_creation = (uint16_t) ctx->loop_depth;
-    borrow->next = ctx->active_span_borrows;
-    ctx->active_span_borrows = borrow;
+    XaLoanKind kind = is_pointer_borrow ? (value_type && value_type->ptr_is_mut ? XA_LOAN_RAW_WRITE
+                                                                                : XA_LOAN_RAW_READ)
+                                        : XA_LOAN_READ;
+    xa_add_active_loan(ctx, borrower_sym, owner, owner_path, kind, value);
 }
 
-XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
-                                                             XaSymbol *owner_sym,
-                                                             const char *owner_path,
-                                                             const char *operation) {
+XR_FUNC void xa_record_pending_capture(XaInferContext *ctx, XaSymbol *captured) {
+    if (!ctx || !captured)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, captured);
+    if (!links || links->root_id == 0)
+        return;
+    for (int i = 0; i < ctx->pending_capture_count; i++) {
+        if (ctx->pending_captures[i] == captured)
+            return;
+    }
+    if (ctx->pending_capture_count >= XA_PENDING_CAPTURE_MAX) {
+        /* The list cannot record this capture, so the root's alias state can
+         * no longer be tracked. Fail closed instead of dropping it. */
+        xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_ESCAPED);
+        return;
+    }
+    ctx->pending_captures[ctx->pending_capture_count++] = captured;
+}
+
+XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *borrower_sym,
+                                               AstNode *site) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->pending_capture_count; i++) {
+        XaSymbol *captured = ctx->pending_captures[i];
+        if (borrower_sym && captured)
+            xa_add_active_loan(ctx, borrower_sym, captured, NULL, XA_LOAN_CAPTURE, site);
+    }
+    ctx->pending_capture_count = 0;
+}
+
+XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx) {
+    if (ctx && ctx->closure_body_depth == 0)
+        ctx->pending_capture_count = 0;
+}
+
+XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                      XaSymbol *owner_sym, const char *owner_path,
+                                                      const char *operation) {
     if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
         return;
-    for (XaActiveSliceBorrow *b = ctx->active_span_borrows; b; b = b->next) {
+    for (XaActiveLoan *b = ctx->active_loans; b; b = b->next) {
         if (b->owner_symbol != owner_sym)
             continue;
         if (!xa_owner_paths_may_overlap(b->owner_path, owner_path))
             continue;
-        if (!xa_active_span_borrow_may_be_live_after_mutation(ctx, b)) {
+        if (!xa_active_loan_may_be_live_after_mutation(ctx, b)) {
             b->loan.last_use = loc_node->node_id + 1u;
             continue;
         }
         XrLocation loc = {
             .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
         char msg[256];
-        if (b->is_pointer_borrow) {
-            snprintf(msg, sizeof(msg),
-                     "cannot mutate owner '%s' while raw pointer borrow '%s' is active; end the "
-                     "borrow scope before %s",
-                     owner_sym->name ? owner_sym->name : "?",
-                     b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
-                     operation ? operation : "mutating the owner");
-        } else {
-            snprintf(msg, sizeof(msg),
-                     "cannot mutate owner '%s' while Slice view '%s' is active; end the view scope "
-                     "before %s",
-                     owner_sym->name ? owner_sym->name : "?",
-                     b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
-                     operation ? operation : "mutating the owner");
-        }
+        snprintf(msg, sizeof(msg),
+                 "cannot mutate owner '%s' while %s '%s' is active (OWN-E-LIVE-LOAN); end its "
+                 "scope before %s",
+                 owner_sym->name ? owner_sym->name : "?", xa_loan_kind_label(b->loan.kind),
+                 b->borrower_symbol && b->borrower_symbol->name ? b->borrower_symbol->name : "?",
+                 operation ? operation : "mutating the owner");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_CONFLICT,
                                    msg, &loc);
         return;
     }
 }
 
-XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
-                                                        XaSymbol *owner_sym,
-                                                        const char *operation) {
+XR_FUNC void xa_check_active_loan_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                 XaSymbol *owner_sym, const char *operation) {
     const char *owner_path = owner_sym && owner_sym->name ? owner_sym->name : NULL;
-    xa_check_active_span_borrow_owner_path_mutation(ctx, loc_node, owner_sym, owner_path,
-                                                    operation);
+    xa_check_active_loan_owner_path_mutation(ctx, loc_node, owner_sym, owner_path, operation);
 }
 
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
@@ -7127,6 +7176,23 @@ bool xa_type_has_movable_root(XrType *type) {
         default:
             return false;
     }
+}
+
+XR_FUNC void xa_note_owner_escapes_into_heap(XaInferContext *ctx, AstNode *value) {
+    if (!ctx || !ctx->analyzer || !value)
+        return;
+    /* `move x` into a heap slot transfers the root instead of aliasing it, and
+     * `copy(x)` stores an independent graph. Neither escapes the source. */
+    AstNode *identity = xa_whole_binding_value(value);
+    if (!identity || identity->type == AST_MOVE_EXPR)
+        return;
+    XaSymbol *source = xa_whole_binding_symbol(ctx, identity);
+    if (!source)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, source);
+    if (!links || links->root_id == 0 || !xa_type_has_movable_root(links->type))
+        return;
+    xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_ESCAPED);
 }
 
 static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
@@ -8319,7 +8385,7 @@ static void xa_forward_return_owner_binding(XaInferContext *ctx, AstNode *return
             xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_UNIQUE);
         }
     }
-    xa_check_active_span_borrow_owner_mutation(ctx, return_node, source, "returning the owner");
+    xa_check_active_loan_owner_mutation(ctx, return_node, source, "returning the owner");
 
     if (ctx->analyzer->diagnostic_count != diagnostic_count_before || !links)
         return;
@@ -8666,7 +8732,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_ownership_from_value(ctx, sym, var->initializer, var_type, node, false);
     xa_check_decl_return_storage_boundary(ctx, node);
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
-    xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
+    xa_register_active_loan(ctx, sym, var->initializer, var_type);
+    xa_register_pending_capture_loans(ctx, sym, var->initializer);
     xa_record_pointer_provenance(ctx, sym, var->initializer, var_type);
 
     /* Synchronization handles derive their interior-mutable/shareable
@@ -8783,7 +8850,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
             return;
         }
     }
-    xa_check_active_span_borrow_owner_mutation(ctx, node, sym, "reassigning the owner");
+    xa_check_active_loan_owner_mutation(ctx, node, sym, "reassigning the owner");
 
     // Bidirectional inference: propagate target type to value expression
     XrType *saved_expected = ctx->expected_type;
@@ -8810,7 +8877,8 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
     xa_update_ownership_from_value(ctx, sym, assign->value, value_type, node, true);
     xa_update_borrowed_alias_root(ctx, sym, assign->value, value_type);
-    xa_register_active_span_borrow(ctx, sym, assign->value, value_type);
+    xa_register_active_loan(ctx, sym, assign->value, value_type);
+    xa_register_pending_capture_loans(ctx, sym, assign->value);
     xa_record_pointer_provenance(ctx, sym, assign->value, value_type);
 
     xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);
@@ -8953,7 +9021,7 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     if (for_stmt->increment) {
         xa_visit_infer_stmt(ctx, for_stmt->increment);
     }
-    xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
+    xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
@@ -9243,6 +9311,6 @@ void xa_visit_block_stmt(XaInferContext *ctx, AstNode *node) {
 
     xa_visit_inline_statement_sequence_with_cursor(ctx, node);
 
-    xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
+    xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);
 }
