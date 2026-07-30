@@ -101,9 +101,10 @@ XR_FUNC bool xr_parser_match_name(Parser *parser, const char *name);
 XR_FUNC void xr_parser_error(Parser *parser, const char *message);
 XR_FUNC void xr_parser_error_at_current(Parser *parser, const char *message);
 XR_FUNC void xr_parser_error_at_previous(Parser *parser, const char *message);
-// Emit a [Exxx] error + note pair for legacy/removed syntax. Sets panic_mode.
-XR_FUNC void xr_parser_emit_removed_syntax(Parser *parser, Token *token, int code,
-                                           const char *title, const char *note);
+// Emit a [Exxx] error anchored at `token`, optionally followed by a note line
+// carrying the suggested fix. `note` may be NULL. Sets panic_mode.
+XR_FUNC void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const char *title,
+                                        const char *note);
 XR_FUNC void xr_parser_synchronize(Parser *parser);
 typedef bool (*XrParserRecoveryBoundaryFn)(Parser *parser);
 XR_FUNC void xr_parser_skip_invalid_construct(Parser *parser, int start_line,
@@ -164,6 +165,10 @@ XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **para
 
 XR_FUNC AstNode *xr_parse_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_expr_statement(Parser *parser);
+// Report E0208 when `expr` cannot do anything as a statement. `anchor` is the
+// statement's first token so the caret lands where the line started.
+XR_FUNC void xr_parser_reject_effectless_expr_stmt(Parser *parser, const AstNode *expr,
+                                                   Token *anchor);
 XR_FUNC AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step);
 XR_FUNC AstNode *xr_parse_print_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_block(Parser *parser);

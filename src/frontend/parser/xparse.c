@@ -31,6 +31,10 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
                                     const char *source_file, struct XrArena *arena,
                                     bool collect_trivia);
 
+// Shared program-parsing body behind xr_parse_with_source / xr_parse_repl_unit.
+static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
+                                 const char *source_file, bool expr_value_observed);
+
 // Declarations now in xparse_internal.h; definitions in xparse_expr.c and xparse_decl.c
 
 /* ========== Parse Rules Table ========== */
@@ -198,12 +202,158 @@ const ParseRule *xr_get_rule(XrTokenType type) {
     return &rules[type];
 }
 
+/* ========== Statement Boundaries (L-04) ==========
+ *
+ * Xray has no mandatory `;`: a line break ends a statement. The parser must
+ * therefore decide, at every line break inside an expression, whether the next
+ * line continues that expression or starts a new statement.
+ *
+ * The rule (same shape as Go's automatic semicolon insertion, decided here in
+ * the parser rather than in the lexer):
+ *
+ *   A line break terminates the expression iff
+ *     (1) the last consumed token can END an expression, AND
+ *     (2) the token starting the new line can BEGIN one, AND
+ *     (3) the parser is not inside `(` / `[` — where no statement can begin.
+ *
+ * (1) and (2) are only ever both true for tokens carrying both a prefix and an
+ * infix role: `!` (logical not / force unwrap), `-` (negate / subtract), `/`
+ * (regex literal / divide), `++`, `--`, `(` and `[`. Without this rule
+ *
+ *     var x = a
+ *     !b
+ *
+ * silently parses as `var x = a!` followed by `b`, and the formatter then
+ * writes that misreading back into the source file.
+ *
+ * Continuation lines starting with a token that has no prefix role — `.`, `?`,
+ * `:`, `&&`, `||`, `+`, `*`, `as`, `is`, … — are unambiguous and keep working.
+ * To continue a line with `-` or `/`, put the operator at the end of the
+ * previous line or wrap the whole expression in parentheses.
+ *
+ * xr_token_can_end_expr() is the (1) half; keep it in sync with the prefix
+ * column of the rules table above — tests/unit/frontend/test_parser_asi.c fails
+ * the build if a new dual-role token escapes this rule.
+ */
+
+bool xr_token_can_end_expr(XrTokenType type) {
+    switch (type) {
+        // Primary expressions
+        case TK_NAME:
+        case TK_LITERAL_INT:
+        case TK_LITERAL_FLOAT:
+        case TK_LITERAL_BIGINT:
+        case TK_LITERAL_STRING:
+        case TK_LITERAL_BYTE_STRING:
+        case TK_LITERAL_C_STRING:
+        case TK_LITERAL_RUNE:
+        case TK_LITERAL_REGEX:
+        case TK_TEMPLATE_STRING:
+        case TK_RAW_STRING:
+        case TK_RAW_TEMPLATE_STRING:
+        case TK_TRUE:
+        case TK_FALSE:
+        case TK_NULL:
+        case TK_THIS:
+        case TK_SUPER:
+        case TK_UNDERSCORE:
+        // Closers of a completed grouping / call / index / literal
+        case TK_RPAREN:
+        case TK_RBRACKET:
+        case TK_RBRACE:
+        // Postfix operators, already absorbed into the expression
+        case TK_NOT:
+        case TK_INC:
+        case TK_DEC:
+        case TK_QUESTION:
+            return true;
+        default:
+            // Scalar type keywords terminate `expr as int` / `expr is f64`.
+            return type >= TK_STRING && type <= TK_USIZE;
+    }
+}
+
+// (1) + (2) + (3): does the line break before `current` end the expression?
+static bool line_break_ends_expr(const Parser *parser) {
+    if (parser->current.line <= parser->previous.line)
+        return false;
+    if (!xr_token_can_end_expr(parser->previous.type))
+        return false;
+    if (xr_get_rule(parser->current.type)->prefix == NULL)
+        return false;
+    return !xr_parser_in_group(parser);
+}
+
 /* ========== Token Operations ========== */
+
+// Update the open-bracket bitstack for a token that has just been consumed.
+// See Parser::bracket_bits. `(` `[` `?[` `#[` open a *group* (bit 1: no
+// statement can begin inside, so line breaks must not terminate anything);
+// `{` `#{` open a brace scope (bit 0: statements do begin inside, so line
+// breaks terminate normally).
+static void track_bracket(Parser *parser, XrTokenType type) {
+    switch (type) {
+        case TK_LPAREN:
+        case TK_LBRACKET:
+        case TK_QUESTION_LBRACKET:
+        case TK_SET_START:
+            if (parser->bracket_depth < XR_PARSER_MAX_BRACKET_BITS)
+                parser->bracket_bits |= (uint64_t) 1 << parser->bracket_depth;
+            parser->bracket_depth++;
+            break;
+        case TK_LBRACE:
+        case TK_EMPTY_MAP_START:
+            if (parser->bracket_depth < XR_PARSER_MAX_BRACKET_BITS)
+                parser->bracket_bits &= ~((uint64_t) 1 << parser->bracket_depth);
+            parser->bracket_depth++;
+            break;
+        case TK_RPAREN:
+        case TK_RBRACKET:
+        case TK_RBRACE:
+            if (parser->bracket_depth > 0)
+                parser->bracket_depth--;
+            break;
+        default:
+            break;
+    }
+}
+
+// True when the innermost still-open bracket is `(` or `[`, i.e. the parser is
+// inside a grouped expression where a statement cannot start.
+bool xr_parser_in_group(const Parser *parser) {
+    XR_DCHECK(parser != NULL, "parser_in_group: NULL parser");
+    if (parser->bracket_depth <= 0 || parser->bracket_depth > XR_PARSER_MAX_BRACKET_BITS)
+        return false;
+    return (parser->bracket_bits >> (parser->bracket_depth - 1)) & 1u;
+}
+
+XrParserStreamState xr_parser_stream_save(const Parser *parser) {
+    XR_DCHECK(parser != NULL, "parser_stream_save: NULL parser");
+    XrParserStreamState saved = {
+        .scanner = parser->scanner,
+        .current = parser->current,
+        .previous = parser->previous,
+        .bracket_bits = parser->bracket_bits,
+        .bracket_depth = parser->bracket_depth,
+    };
+    return saved;
+}
+
+void xr_parser_stream_restore(Parser *parser, const XrParserStreamState *saved) {
+    XR_DCHECK(parser != NULL, "parser_stream_restore: NULL parser");
+    XR_DCHECK(saved != NULL, "parser_stream_restore: NULL state");
+    parser->scanner = saved->scanner;
+    parser->current = saved->current;
+    parser->previous = saved->previous;
+    parser->bracket_bits = saved->bracket_bits;
+    parser->bracket_depth = saved->bracket_depth;
+}
 
 // Advance to next token
 void xr_parser_advance(Parser *parser) {
     XR_DCHECK(parser != NULL, "parser_advance: NULL parser");
     parser->previous = parser->current;
+    track_bracket(parser, parser->previous.type);
 
     // Skip error tokens until valid token found
     while (1) {
@@ -369,11 +519,11 @@ void xr_parser_error(Parser *parser, const char *message) {
 //
 // `title` is the short error headline (e.g. "`void` keyword was removed").
 // `note`  is the help/explanation that follows the underline.
-void xr_parser_emit_removed_syntax(Parser *parser, Token *token, int code, const char *title,
-                                   const char *note) {
-    XR_DCHECK(parser != NULL, "emit_removed_syntax: NULL parser");
-    XR_DCHECK(token != NULL, "emit_removed_syntax: NULL token");
-    XR_DCHECK(title != NULL, "emit_removed_syntax: NULL title");
+void xr_parser_error_coded_note(Parser *parser, Token *token, int code, const char *title,
+                                const char *note) {
+    XR_DCHECK(parser != NULL, "error_coded_note: NULL parser");
+    XR_DCHECK(token != NULL, "error_coded_note: NULL token");
+    XR_DCHECK(title != NULL, "error_coded_note: NULL title");
 
     if (parser->panic_mode)
         return;
@@ -660,6 +810,13 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
 
     // Process infix expressions by precedence
     for (;;) {
+        // L-04 statement boundary: a line break ends the expression when the
+        // new line could just as well start a statement. Checked before the
+        // generic-call probe below because `<` has no prefix role and is
+        // therefore never a statement start.
+        if (line_break_ends_expr(parser))
+            break;
+
         if (parser->current.type == TK_LT && !parser->current.has_leading_space &&
             precedence <= PREC_CALL) {
             Parser before_generic = *parser;
@@ -682,19 +839,6 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
         const ParseRule *rule = xr_get_rule(parser->current.type);
 
         if (rule->infix == NULL) {
-            break;
-        }
-        // `(` and `[` at statement boundaries: a fresh line opening
-        // with one of these is the start of a new statement (a tuple
-        // literal LHS, a destructure assignment, or an array literal),
-        // not a call/index continuation of the previous expression.
-        // xray has no `;` terminator, so without this the sequence
-        //     var p = (b, a)
-        //     (a, b) = p
-        // parses as `var p = (b, a)(a, b) = p` and the LHS of `=`
-        // ends up an AST_CALL_EXPR. Same rule as Go.
-        if ((parser->current.type == TK_LPAREN || parser->current.type == TK_LBRACKET) &&
-            parser->current.line > parser->previous.line) {
             break;
         }
         xr_parser_advance(parser);
@@ -736,6 +880,10 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     if (inc_dec)
         return inc_dec;
 
+    // First token of the statement: the E0208 caret belongs on the `!` / `-`
+    // that opened the line, not on wherever the expression happened to end.
+    Token stmt_start = parser->current;
+
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
 
@@ -774,6 +922,11 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     if (first_expr && first_expr->type == AST_DESTRUCTURE_ASSIGN) {
         return first_expr;
     }
+
+    // L-04's loud half: an expression that cannot do anything is never a
+    // statement the author meant to write — most often it is a continuation
+    // line that the statement-boundary rule correctly refused to glue on.
+    xr_parser_reject_effectless_expr_stmt(parser, first_expr, &stmt_start);
 
     return xr_ast_expr_stmt(parser->compiler_session, first_expr, parser->previous.line);
 }
@@ -1078,6 +1231,9 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->parsing_extern_fn = false;
     parser->scope_depth = 0;
     parser->recursion_depth = 0;
+    parser->bracket_bits = 0;
+    parser->bracket_depth = 0;
+    parser->expr_value_observed = false;
 }
 
 // Allocate and install a new arena on a toolchain compiler session.
@@ -1110,21 +1266,38 @@ AstNode *xr_parse(XrCompilerSession *session, const char *source) {
     return xr_parse_with_source(session, source, NULL);
 }
 
+// Parse one REPL input unit: identical to xr_parse except that expression
+// statements are value-observing, so E0208 stays silent. See the field comment
+// on Parser::expr_value_observed.
+AstNode *xr_parse_repl_unit(XrCompilerSession *session, const char *source) {
+    XR_DCHECK(source != NULL, "xr_parse_repl_unit: NULL source");
+    return xr_parse_program(session, source, "<repl>", /*expr_value_observed=*/true);
+}
+
 // Parse source code with filename, return AST.
 // Creates and owns a dedicated arena; ownership is transferred to the returned
 // program node. xr_program_destroy on the returned node releases all memory.
 AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
                               const char *source_file) {
-    XR_DCHECK(session != NULL, "xr_parse_with_source: NULL compiler session");
+    return xr_parse_program(session, source, source_file, /*expr_value_observed=*/false);
+}
+
+// Shared body of xr_parse_with_source / xr_parse_repl_unit. `expr_value_observed`
+// selects whether a bare expression statement is dead code (scripts, modules) or
+// the unit's reported result (REPL).
+static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
+                                 const char *source_file, bool expr_value_observed) {
+    XR_DCHECK(session != NULL, "xr_parse_program: NULL compiler session");
     XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
-              "xr_parse_with_source: compiler session has no VM host");
-    XR_DCHECK(source != NULL, "xr_parse_with_source: NULL source");
+              "xr_parse_program: compiler session has no VM host");
+    XR_DCHECK(source != NULL, "xr_parse_program: NULL source");
 
     XrCompilerSessionScope parse_scope;
     XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
     Parser parser;
     xr_parser_init(&parser, session, source, source_file, arena);
+    parser.expr_value_observed = expr_value_observed;
 
 // Default max errors for normal compilation
 #define XR_PARSE_MAX_ERRORS 20
@@ -1422,9 +1595,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
     }
 
     // Save parser state for rollback
-    Scanner saved_scanner = parser->scanner;
-    Token saved_current = parser->current;
-    Token saved_previous = parser->previous;
+    XrParserStreamState saved_stream = xr_parser_stream_save(parser);
     int saved_had_error = parser->had_error;
     int saved_panic_mode = parser->panic_mode;
     int saved_error_count = parser->error_count;
@@ -1479,9 +1650,7 @@ static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, in
 
 rollback:
     // Restore parser state
-    parser->scanner = saved_scanner;
-    parser->current = saved_current;
-    parser->previous = saved_previous;
+    xr_parser_stream_restore(parser, &saved_stream);
     parser->had_error = saved_had_error;
     parser->panic_mode = saved_panic_mode;
     return 0;
@@ -1673,9 +1842,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         parser->current.line == line) {
         // Lookahead: check if this is { name: ... } pattern (struct literal)
         // vs block statement (which would have statements, not name:value pairs)
-        Scanner saved_scanner = parser->scanner;
-        Token saved_current = parser->current;
-        Token saved_previous = parser->previous;
+        XrParserStreamState saved_stream = xr_parser_stream_save(parser);
         int saved_had_error = parser->had_error;
         int saved_panic_mode = parser->panic_mode;
 
@@ -1694,9 +1861,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         }
 
         // Restore parser state
-        parser->scanner = saved_scanner;
-        parser->current = saved_current;
-        parser->previous = saved_previous;
+        xr_parser_stream_restore(parser, &saved_stream);
         parser->had_error = saved_had_error;
         parser->panic_mode = saved_panic_mode;
 
