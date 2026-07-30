@@ -51,7 +51,29 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - **collector 边界**：cycle collector 跳过 const/sync shared domain、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
-详见 `src/runtime/mem/`。
+#### 16.3.1 引用计数的两个带
+
+引用计数只有一个字段，用**符号**区分两个带：
+
+| 带 | 编码 | 使用者 | 原子性 |
+|--|--|--|--|
+| coroutine-local | 正数 | 普通局部对象图 | 非原子（relaxed 快路径） |
+| shared | 负数（`N` 个引用存为 `-N`） | const 发布值、同步句柄、模块/运行时对象 | 原子 |
+
+热路径的符号测试把每个对象自动路由到正确的路径，因此两个带共存不需要额外分支。不可变的常驻对象存 sticky 值，永不参与计数。
+
+**对象落在哪个带是编译期决定的**，由该分配点的存储计划确定（§2.13.2 的能力轴 + 分配域），不是运行时转换：一个存活对象不会在跨边界时被静默改带。这条是承重的——运行时改带需要与并发的非原子读改写同步，而那正是非原子带成立的前提所排除的。
+
+因此跨执行边界只有两种合法形态：
+
+1. **共享**：值的分配计划本身就是 const-shared 或 sync-shared，从创建起就在原子带。`const` 发布值、`Channel` / `Atomic` / `Semaphore` 等受审计句柄属于此类。
+2. **转移**：`move` 把唯一根交出去，任一时刻只有一个所有者，因此非原子计数依然正确。
+
+**第 2 条的正确性直接依赖 §2.13 的唯一性证据。** 如果一个仍有别名或存活借用的根被转移出去，两个执行上下文会同时对同一个非原子计数做读改写——那不是数据竞争而是内存损坏（重复释放或提前释放）。这就是 §2.13 把闭包捕获与堆存储都算作证据的原因：所有权判定是引用计数正确性的前提，不只是一条编程纪律。
+
+真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，且没有任何放宽：线程体只能触及分配计划为共享的值，或通过 `Channel` 转移进来的唯一根。
+
+详见 `src/runtime/mem/`、`src/shared/xr_obj_header.h`。
 
 ### 16.4 协程调度
 
@@ -126,7 +148,11 @@ xray **当前不提供用户可见的确定性析构（destructor / finalizer / 
 - 回收可能发生在"最后一个引用消失时"、"某次 GC 时"、或"进程退出时"中的任意一种，VM 与 AOT 的回收时机**不保证一致**。
 - 程序**不得依赖**：(a) 对象在某个确定时刻被回收；(b) 任何析构 / finalizer 是否运行、运行顺序或运行所在线程。
 
-唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行（含 panic 展开路径），与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+
+**`defer` 在每一条退出边上都执行**，包括：正常返回、`throw` 展开、panic 展开，以及**协程被取消**。取消不是一次外部击杀：被取消的协程若仍欠着 defer 链，会被交回调度器、在自己的 worker 上恢复一次、展开完成后才被标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
+
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点**（`E0388`，见 §2.13.4）。defer 体运行在一个正在离开的帧上，没有可供挂起后恢复的位置；允许它挂起就意味着允许清理执行到一半被丢弃，那样 `defer` 就不再是确定性机制。清理期间取消被屏蔽，因此清理本身不会被取消打断。
 
 > 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
 <!-- /xr-spec:cn -->
@@ -179,7 +205,29 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 - **Collector boundary**: the cycle collector skips the const/synchronized shared domain, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
 - **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
-See `src/runtime/mem/` for details.
+#### 16.3.1 The two reference-count bands
+
+There is one reference-count field, and its **sign** selects between two bands:
+
+| Band | Encoding | Used by | Atomicity |
+|--|--|--|--|
+| coroutine-local | positive | ordinary local object graphs | non-atomic (relaxed fast path) |
+| shared | negative (`N` references stored as `-N`) | published const values, synchronization handles, module and runtime objects | atomic |
+
+A sign test on the hot path routes each object to the right path automatically, so the two bands coexist without an extra branch. Immortal objects store a sticky value and never participate in counting.
+
+**Which band an object lands in is decided at compile time**, by the storage plan of its allocation site (the capability axis of §2.13.2 plus the allocation domain); it is not a runtime conversion, and a live object is never silently re-banded when it crosses a boundary. That is load-bearing: re-banding at runtime would have to synchronize with concurrent non-atomic read-modify-writes, which is exactly what the non-atomic band assumes cannot happen.
+
+Only two shapes therefore cross an execution boundary:
+
+1. **Sharing**: the value's allocation plan is const-shared or sync-shared, so it is in the atomic band from creation. Published `const` values and audited handles such as `Channel`, `Atomic`, and `Semaphore` are of this kind.
+2. **Transfer**: `move` hands over a unique root. Exactly one owner exists at any moment, so a non-atomic count stays correct.
+
+**The correctness of the second shape rests directly on the uniqueness evidence in §2.13.** If a root that still has an alias or a live loan were transferred out, two execution contexts would read-modify-write one non-atomic counter — which is not a data race but memory corruption (a double free or a premature free). That is why §2.13 counts closure captures and heap stores as evidence: the ownership decision is a precondition for reference-count correctness, not merely a programming discipline.
+
+Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: a thread body may reach only values whose allocation plan is shared, or a unique root transferred in through a `Channel`.
+
+See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 
 ### 16.4 Coroutine Scheduling
 
@@ -254,7 +302,11 @@ xray **currently exposes no user-visible deterministic destructor (destructor / 
 - Reclamation may occur at "the moment the last reference disappears", "some GC point", or "process exit"; VM and AOT reclamation timing is **not guaranteed to agree**.
 - Programs **must not depend on**: (a) an object being reclaimed at any particular moment; (b) whether any destructor / finalizer runs, in what order, or on which thread.
 
-The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order (including the panic-unwind path), independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+
+**`defer` runs on every exit edge**: a normal return, `throw` unwinding, panic unwinding, and **coroutine cancellation**. Cancellation is not an external kill: a cancelled coroutine that still owes a defer chain is handed back to the scheduler, resumed once on its own worker, and marked cancelled only after it has unwound. `task.cancel()` correspondingly does not let an `await` observe the cancellation before that cleanup has run.
+
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point** (`E0388`, see §2.13.4). A defer body runs on a frame that is already leaving and has no place to park and resume; allowing it to suspend would allow cleanup to be dropped halfway, and `defer` would stop being deterministic. Cancellation is masked while a defer body runs, so the cleanup itself cannot be interrupted by a cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 <!-- /xr-spec:en -->

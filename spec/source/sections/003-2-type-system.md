@@ -725,7 +725,130 @@ Xray 默认只保留最小类型身份层：
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
 运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
-### 2.13 完整可运行示例
+### 2.13 所有权、别名与借用
+
+> 真值源：`src/frontend/analyzer/xa_ownership.h`（证据轴与判定结构）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（`move` 判定）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（别名与借用跟踪）、`src/ir/xi_source_move_verify.c`（Xi 层独立复核）。
+
+Xray 不要求写生命周期，也不提供借用检查器语法。但**所有权是有定义的**：`move`、`copy`、`ref`、`Slice<T>`、跨协程传递都读同一套判定，本节把它写出来。
+
+#### 2.13.1 所有权根
+
+**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map` / `Set` / `Json` / `Record` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+
+只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0387`：`move is not meaningful for value type`）。
+
+#### 2.13.2 四条独立证据轴
+
+每个绑定在每个程序点上带四条**互相独立**的证据，合法的所有权操作要求四条同时成立：
+
+| 轴 | 回答的问题 | 取值 |
+|--|--|--|
+| **绑定状态** | 这个名字现在能用吗 | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
+| **根别名** | 还有别的引用指向同一个根吗 | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
+| **能力** | 允许做什么 | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
+| **借用** | 有存活的借出吗 | 一组 loan：Slice 视图 / 裸指针借用 / 闭包捕获 |
+
+分成四条是有意的：绑定状态是控制流事实，别名是对象图事实，能力是权限，借用是有起止的 place 事实。它们不能互相推导，也不能互相替代。
+
+**默认 fail-closed**：任何一轴无法给出肯定证据时，答案是拒绝，不是放行。这也是为什么一个来源不明的调用结果不能被 `move`——编译器没有它的别名证据。
+
+#### 2.13.3 别名如何产生与终止
+
+| 动作 | 对根别名的影响 | 能否恢复 |
+|--|--|--|
+| `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
+| 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
+| `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
+| `move a` | `a` 变为 `MOVED`；根随之转移 | — |
+
+**存活期按最后一次使用判定**（非词法生命周期），与 §2.4.2 的借用规则一致。因此下面第一段合法、第二段不合法：
+
+```xray
+fn ok() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    print(len(alias))          // alias 的最后一次使用
+    consume(move buf)          // OK：别名已结束
+}
+
+fn rejected() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    consume(move buf)          // E0387：strong alias 'alias' remains live
+    print(len(alias))
+}
+```
+
+`ESCAPED` 是终态，这一点是刻意的：把引用写进堆图之后，谁还持有它已经不是这个函数能回答的问题。需要转移时用 `copy(a)`。
+
+#### 2.13.4 借用如何产生与终止
+
+三种借用形式共用同一份 loan 记录、同一套非词法存活期判定、同一组错误码（`E0382` / `E0383` / `E0384`）：
+
+| 形式 | 借出者 | 存活期 |
+|--|--|--|
+| `Slice<T>` 视图 | 视图绑定 | 到视图绑定的最后一次使用 |
+| `Ptr<T>` / `MutPtr<T>` | 指针绑定 | 到指针绑定的最后一次使用 |
+| **闭包捕获** | 闭包绑定 | 到闭包绑定的最后一次使用 |
+
+普通同步闭包**按引用捕获**外层绑定，因此捕获是一次借用，不是拷贝：
+
+```xray
+fn rejected() {
+    var buf = [1, 2, 3]
+    const peek = fn() -> int { return len(buf) }
+    go consume(move buf)       // E0382：closure capture 'peek' is active
+    print(peek())
+}
+```
+
+只作为**调用实参**出现的闭包字面量不产生存活借用——它随调用结束，不可能活过调用：
+
+```xray
+fn ok() {
+    var buf: Array<int> = []
+    items.forEach(fn(x: int) { buf.push(x) })   // 调用边界内的捕获
+    consume(move buf)                            // OK
+}
+```
+
+存活的借用禁止对 owner 做失效操作，`move` 是其中一种（`E0382`）。
+
+#### 2.13.5 `move` 的完整条件
+
+`move x` 要求 `x` 是**可重绑定的局部 `var` 根**，且：
+
+1. 绑定状态是 `LIVE`（不是已 moved、可能已 moved 或未知）；
+2. 根别名是 `UNIQUE`；
+3. 能力是 `MUTABLE`（`const` 与同步句柄不可 move）；
+4. 没有存活的 loan；
+5. 存储计划完整（编译器已为这个根解出分配域）；
+6. 不在会重复执行的循环里消费循环外声明的绑定。
+
+`move` 只接受**标识符**：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。字段与元素没有独立的所有权根——它们的根是容器本身，转移其中一格会让容器处于部分转移状态，这个状态没有表示。需要取出一格时，先 `copy`，或让容器本身成为 move 源。
+
+move 成功后源绑定在编译期标记为已 moved，再次引用是编译错误。**被拒绝的 move 不污染源状态**：诊断之后 `x` 仍然可用。
+
+拒绝原因在诊断里具名，便于定位是哪一轴失败：
+
+| 原因 | 含义 |
+|--|--|
+| `OWN-E-LIVE-ALIAS` | 存在存活的局部强别名 |
+| `OWN-E-ESCAPED-ROOT` | 根已写入堆图 |
+| `OWN-E-UNKNOWN-CALL` | 唯一性证据不完整（来源不明的调用结果） |
+| `OWN-E-STORAGE-PLAN` | 存储/所有权计划不完整 |
+| `OWN-E-LIVE-LOAN` | 存在存活借用（Slice 视图 / 裸指针 / 闭包捕获） |
+
+#### 2.13.6 值拷贝与 managed 字段
+
+值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `Json` / class 实例**不能**作为 struct 字段（`E0352`）。
+
+因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
+
+需要在聚合里放可变图时用 class——class 是引用类型，赋值创建的是别名，按 §2.13.3 的规则处理。
+
+### 2.14 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -1509,7 +1632,130 @@ Xray keeps only the minimal type identity layer by default:
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
 Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
-### 2.13 Worked Examples
+### 2.13 Ownership, Aliasing, and Loans
+
+> Truth source: `src/frontend/analyzer/xa_ownership.h` (evidence axes and decision structures), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (`move` decision), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (alias and loan tracking), `src/ir/xi_source_move_verify.c` (independent Xi-level re-check).
+
+Xray has no lifetime syntax and no borrow-checker annotations. Ownership is nonetheless **defined**: `move`, `copy`, `ref`, `Slice<T>`, and every cross-coroutine transfer read one decision procedure, and this section states it.
+
+#### 2.13.1 Ownership roots
+
+An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map`, `Set`, `Json`, `Record`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+
+Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0387`: `move is not meaningful for value type`).
+
+#### 2.13.2 Four independent evidence axes
+
+At every program point a binding carries four **mutually independent** pieces of evidence. A legal ownership operation requires all four at once:
+
+| Axis | Question it answers | Values |
+|--|--|--|
+| **Binding state** | Is this name usable now | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
+| **Root aliasing** | Does another reference reach the same root | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
+| **Capability** | What is permitted | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
+| **Loans** | Is anything borrowed out | a set of loans: Slice views / raw pointer borrows / closure captures |
+
+The split is deliberate: binding state is a CFG fact, aliasing is an object-graph fact, capability is a permission, and a loan is a bounded place fact. None of the four can be derived from or substituted for another.
+
+**Fail-closed by default**: when an axis cannot produce positive evidence, the answer is rejection, not permission. That is why the result of a call with unknown provenance cannot be moved — the compiler has no aliasing evidence for it.
+
+#### 2.13.3 How aliases are created and end
+
+| Action | Effect on root aliasing | Recoverable |
+|--|--|--|
+| `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
+| Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
+| `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
+| `move a` | `a` becomes `MOVED`; the root moves with it | — |
+
+Liveness is decided by **last use**, not by lexical scope, matching the borrow rules in §2.4.2. So the first function below is legal and the second is not:
+
+```xray
+fn ok() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    print(len(alias))          // alias's last use
+    consume(move buf)          // OK: the alias has ended
+}
+
+fn rejected() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    consume(move buf)          // E0387: strong alias 'alias' remains live
+    print(len(alias))
+}
+```
+
+`ESCAPED` being terminal is deliberate: once a reference is written into a heap graph, who still holds it is no longer a question this function can answer. Use `copy(a)` when a transfer is needed anyway.
+
+#### 2.13.4 How loans are created and end
+
+Three loan forms share one loan record, one non-lexical liveness rule, and one set of error codes (`E0382` / `E0383` / `E0384`):
+
+| Form | Borrower | Live until |
+|--|--|--|
+| `Slice<T>` view | the view binding | that binding's last use |
+| `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
+| **Closure capture** | the closure binding | that binding's last use |
+
+An ordinary synchronous closure captures an outer binding **by reference**, so a capture is a loan and not a copy:
+
+```xray
+fn rejected() {
+    var buf = [1, 2, 3]
+    const peek = fn() -> int { return len(buf) }
+    go consume(move buf)       // E0382: closure capture 'peek' is active
+    print(peek())
+}
+```
+
+A closure literal that appears only as a **call argument** creates no live loan: it ends with the call and cannot outlive it.
+
+```xray
+fn ok() {
+    var buf: Array<int> = []
+    items.forEach(fn(x: int) { buf.push(x) })   // capture bounded by the call
+    consume(move buf)                            // OK
+}
+```
+
+A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
+
+#### 2.13.5 The full conditions for `move`
+
+`move x` requires `x` to be a **rebindable local `var` root**, and:
+
+1. binding state is `LIVE` (not moved, not maybe-moved, not unknown);
+2. root aliasing is `UNIQUE`;
+3. capability is `MUTABLE` (`const` values and synchronization handles cannot be moved);
+4. no loan is live;
+5. the storage plan is complete (the compiler has resolved an allocation domain for the root);
+6. the consumed binding is not declared outside a loop that would run the `move` again.
+
+`move` accepts an **identifier** only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. A field or an element has no ownership root of its own — its root is the container — and transferring one slot would leave the container partially moved, a state with no representation. To take one slot out, `copy` it, or make the container itself the move source.
+
+After a successful move the source binding is statically marked moved, and any later reference is a compile error. **A rejected move does not poison the source**: after the diagnostic, `x` is still usable.
+
+Rejection reasons are named in the diagnostic so the failing axis is identifiable:
+
+| Reason | Meaning |
+|--|--|
+| `OWN-E-LIVE-ALIAS` | a local strong alias is still live |
+| `OWN-E-ESCAPED-ROOT` | the root was written into a heap graph |
+| `OWN-E-UNKNOWN-CALL` | uniqueness evidence is incomplete (call result with unknown provenance) |
+| `OWN-E-STORAGE-PLAN` | the storage / ownership plan is incomplete |
+| `OWN-E-LIVE-LOAN` | a loan is live (Slice view / raw pointer / closure capture) |
+
+#### 2.13.6 Value copies and managed fields
+
+A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `Json`, and class instances **cannot** be struct fields (`E0352`).
+
+A struct value copy therefore never carries a mutable managed field, and there is no shallow-versus-deep choice to make. The one managed field type is `string`, and `string` is immutable: sharing it produces no observable difference and does not affect the uniqueness decision.
+
+Use a class when an aggregate needs a mutable graph. A class is a reference type, so assignment creates an alias and §2.13.3 governs it.
+
+### 2.14 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 

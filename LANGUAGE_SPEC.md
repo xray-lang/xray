@@ -1314,7 +1314,130 @@ Xray keeps only the minimal type identity layer by default:
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
 Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
-### 2.13 Worked Examples
+### 2.13 Ownership, Aliasing, and Loans
+
+> Truth source: `src/frontend/analyzer/xa_ownership.h` (evidence axes and decision structures), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (`move` decision), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (alias and loan tracking), `src/ir/xi_source_move_verify.c` (independent Xi-level re-check).
+
+Xray has no lifetime syntax and no borrow-checker annotations. Ownership is nonetheless **defined**: `move`, `copy`, `ref`, `Slice<T>`, and every cross-coroutine transfer read one decision procedure, and this section states it.
+
+#### 2.13.1 Ownership roots
+
+An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map`, `Set`, `Json`, `Record`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+
+Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0387`: `move is not meaningful for value type`).
+
+#### 2.13.2 Four independent evidence axes
+
+At every program point a binding carries four **mutually independent** pieces of evidence. A legal ownership operation requires all four at once:
+
+| Axis | Question it answers | Values |
+|--|--|--|
+| **Binding state** | Is this name usable now | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
+| **Root aliasing** | Does another reference reach the same root | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
+| **Capability** | What is permitted | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
+| **Loans** | Is anything borrowed out | a set of loans: Slice views / raw pointer borrows / closure captures |
+
+The split is deliberate: binding state is a CFG fact, aliasing is an object-graph fact, capability is a permission, and a loan is a bounded place fact. None of the four can be derived from or substituted for another.
+
+**Fail-closed by default**: when an axis cannot produce positive evidence, the answer is rejection, not permission. That is why the result of a call with unknown provenance cannot be moved — the compiler has no aliasing evidence for it.
+
+#### 2.13.3 How aliases are created and end
+
+| Action | Effect on root aliasing | Recoverable |
+|--|--|--|
+| `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
+| Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
+| `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
+| `move a` | `a` becomes `MOVED`; the root moves with it | — |
+
+Liveness is decided by **last use**, not by lexical scope, matching the borrow rules in §2.4.2. So the first function below is legal and the second is not:
+
+```xray
+fn ok() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    print(len(alias))          // alias's last use
+    consume(move buf)          // OK: the alias has ended
+}
+
+fn rejected() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    consume(move buf)          // E0387: strong alias 'alias' remains live
+    print(len(alias))
+}
+```
+
+`ESCAPED` being terminal is deliberate: once a reference is written into a heap graph, who still holds it is no longer a question this function can answer. Use `copy(a)` when a transfer is needed anyway.
+
+#### 2.13.4 How loans are created and end
+
+Three loan forms share one loan record, one non-lexical liveness rule, and one set of error codes (`E0382` / `E0383` / `E0384`):
+
+| Form | Borrower | Live until |
+|--|--|--|
+| `Slice<T>` view | the view binding | that binding's last use |
+| `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
+| **Closure capture** | the closure binding | that binding's last use |
+
+An ordinary synchronous closure captures an outer binding **by reference**, so a capture is a loan and not a copy:
+
+```xray
+fn rejected() {
+    var buf = [1, 2, 3]
+    const peek = fn() -> int { return len(buf) }
+    go consume(move buf)       // E0382: closure capture 'peek' is active
+    print(peek())
+}
+```
+
+A closure literal that appears only as a **call argument** creates no live loan: it ends with the call and cannot outlive it.
+
+```xray
+fn ok() {
+    var buf: Array<int> = []
+    items.forEach(fn(x: int) { buf.push(x) })   // capture bounded by the call
+    consume(move buf)                            // OK
+}
+```
+
+A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
+
+#### 2.13.5 The full conditions for `move`
+
+`move x` requires `x` to be a **rebindable local `var` root**, and:
+
+1. binding state is `LIVE` (not moved, not maybe-moved, not unknown);
+2. root aliasing is `UNIQUE`;
+3. capability is `MUTABLE` (`const` values and synchronization handles cannot be moved);
+4. no loan is live;
+5. the storage plan is complete (the compiler has resolved an allocation domain for the root);
+6. the consumed binding is not declared outside a loop that would run the `move` again.
+
+`move` accepts an **identifier** only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. A field or an element has no ownership root of its own — its root is the container — and transferring one slot would leave the container partially moved, a state with no representation. To take one slot out, `copy` it, or make the container itself the move source.
+
+After a successful move the source binding is statically marked moved, and any later reference is a compile error. **A rejected move does not poison the source**: after the diagnostic, `x` is still usable.
+
+Rejection reasons are named in the diagnostic so the failing axis is identifiable:
+
+| Reason | Meaning |
+|--|--|
+| `OWN-E-LIVE-ALIAS` | a local strong alias is still live |
+| `OWN-E-ESCAPED-ROOT` | the root was written into a heap graph |
+| `OWN-E-UNKNOWN-CALL` | uniqueness evidence is incomplete (call result with unknown provenance) |
+| `OWN-E-STORAGE-PLAN` | the storage / ownership plan is incomplete |
+| `OWN-E-LIVE-LOAN` | a loan is live (Slice view / raw pointer / closure capture) |
+
+#### 2.13.6 Value copies and managed fields
+
+A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `Json`, and class instances **cannot** be struct fields (`E0352`).
+
+A struct value copy therefore never carries a mutable managed field, and there is no shallow-versus-deep choice to make. The one managed field type is `string`, and `string` is immutable: sharing it produces no observable difference and does not affect the uniqueness decision.
+
+Use a class when an aggregate needs a mutable graph. A class is a reference type, so assignment creates an alias and §2.13.3 governs it.
+
+### 2.14 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -4836,7 +4959,11 @@ print(len(outcomes))                 // 3 (one outcome per child)
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments. It requires a rebindable local `var` root proven unique with no live alias/loan. After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments.
+
+**The decision procedure is §2.13**: `move` requires a rebindable local `var` root that satisfies all four evidence axes at once — binding live, root unique, capability mutable, no live loan. Syntactically it accepts an identifier only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. After `move`, the variable is statically marked **moved**, and any later reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+
+A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.13, not on a separate concurrency-only rule.
 
 ```xray
 var buf = Array<byte>(1024 * 1024)
@@ -4954,6 +5081,16 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 **Residual data-race risk** (detected at runtime, not compile time):
 - Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
+
+#### 10.11.1 Outside the model: `unsafe` and C callbacks
+
+The guarantees above cover ownership and capability decisions for Xray values. Three places sit **outside the model**, where the obligation moves to the author. `unsafe` relaxes none of the existing rules and supplies no substitute guarantee:
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** operate on raw memory: no ownership root, no reference count, no aliasing decision. The compiler assumes nothing about those addresses and produces none of the §2.13 evidence for them. Data-race freedom of any shared structure built from them is the author's proof obligation.
+- **`Ptr<T>` / `MutPtr<T>`** are borrow-tracked (§2.4.2), but the tracking reaches only as far as the owner's scope. Address validity, alignment, and aliasing correctness at the dereference belong to the author of the `unsafe` block.
+- **A `CFn` C callback may run on any OS thread**, including threads the runtime does not manage. A callback body may reach only: the scalars and raw pointers passed in, values whose allocation plan is shared (§16.3.1), and a unique root transferred in through a `Channel`. It must **not** reach the calling coroutine's coroutine-local object graph — those objects' reference counts are in the non-atomic band, and touching them from another thread is memory corruption. A callback body must also not assume a current coroutine, a current worker, or an available scheduler.
+
+These three are the model's **boundary**, not holes in it: each has to be written explicitly in source (an `unsafe` block, a `mem` import, a `CFn` declaration), so which code runs outside compile-time protection is always auditable from the source.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
@@ -5811,7 +5948,29 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 - **Collector boundary**: the cycle collector skips the const/synchronized shared domain, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
 - **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
-See `src/runtime/mem/` for details.
+#### 16.3.1 The two reference-count bands
+
+There is one reference-count field, and its **sign** selects between two bands:
+
+| Band | Encoding | Used by | Atomicity |
+|--|--|--|--|
+| coroutine-local | positive | ordinary local object graphs | non-atomic (relaxed fast path) |
+| shared | negative (`N` references stored as `-N`) | published const values, synchronization handles, module and runtime objects | atomic |
+
+A sign test on the hot path routes each object to the right path automatically, so the two bands coexist without an extra branch. Immortal objects store a sticky value and never participate in counting.
+
+**Which band an object lands in is decided at compile time**, by the storage plan of its allocation site (the capability axis of §2.13.2 plus the allocation domain); it is not a runtime conversion, and a live object is never silently re-banded when it crosses a boundary. That is load-bearing: re-banding at runtime would have to synchronize with concurrent non-atomic read-modify-writes, which is exactly what the non-atomic band assumes cannot happen.
+
+Only two shapes therefore cross an execution boundary:
+
+1. **Sharing**: the value's allocation plan is const-shared or sync-shared, so it is in the atomic band from creation. Published `const` values and audited handles such as `Channel`, `Atomic`, and `Semaphore` are of this kind.
+2. **Transfer**: `move` hands over a unique root. Exactly one owner exists at any moment, so a non-atomic count stays correct.
+
+**The correctness of the second shape rests directly on the uniqueness evidence in §2.13.** If a root that still has an alias or a live loan were transferred out, two execution contexts would read-modify-write one non-atomic counter — which is not a data race but memory corruption (a double free or a premature free). That is why §2.13 counts closure captures and heap stores as evidence: the ownership decision is a precondition for reference-count correctness, not merely a programming discipline.
+
+Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: a thread body may reach only values whose allocation plan is shared, or a unique root transferred in through a `Channel`.
+
+See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 
 ### 16.4 Coroutine Scheduling
 
@@ -5886,7 +6045,11 @@ xray **currently exposes no user-visible deterministic destructor (destructor / 
 - Reclamation may occur at "the moment the last reference disappears", "some GC point", or "process exit"; VM and AOT reclamation timing is **not guaranteed to agree**.
 - Programs **must not depend on**: (a) an object being reclaimed at any particular moment; (b) whether any destructor / finalizer runs, in what order, or on which thread.
 
-The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order (including the panic-unwind path), independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+
+**`defer` runs on every exit edge**: a normal return, `throw` unwinding, panic unwinding, and **coroutine cancellation**. Cancellation is not an external kill: a cancelled coroutine that still owes a defer chain is handed back to the scheduler, resumed once on its own worker, and marked cancelled only after it has unwound. `task.cancel()` correspondingly does not let an `await` observe the cancellation before that cleanup has run.
+
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point** (`E0388`, see §2.13.4). A defer body runs on a frame that is already leaving and has no place to park and resume; allowing it to suspend would allow cleanup to be dropped halfway, and `defer` would stop being deterministic. Cancellation is masked while a defer body runs, so the cleanup itself cannot be interrupted by a cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 
@@ -6019,6 +6182,8 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
+| `E0387` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the ownership root fails the uniqueness evidence `move` requires: a live local alias (`OWN-E-LIVE-ALIAS`), a root written into a heap graph (`OWN-E-ESCAPED-ROOT`), unknown provenance (`OWN-E-UNKNOWN-CALL`), or an incomplete storage plan (`OWN-E-STORAGE-PLAN`); see §2.13 |
+| `E0388` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a `defer` body reaches a scheduler suspension point, or the evidence is incomplete; a defer body runs on a frame that is already leaving and cannot park and resume, so suspending would drop the rest of the cleanup; see §2.13.4 and §16.8 |
 
 ### 18.3 Runtime
 

@@ -332,7 +332,11 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。它要求可重新绑定的局部 `var` 根经 verifier 证明为唯一且没有存活 alias/loan。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误；非法 move 不会污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
+`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。
+
+**判定规则见 §2.13**：`move` 要求可重绑定的局部 `var` 根同时满足四条证据轴——绑定存活、根唯一、能力可变、无存活借用。语法上只接受标识符：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。move 后原变量在编译期标记为**已 moved**，再次引用是编译错误；被拒绝的 move 不污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
+
+跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.13 的唯一性证据，而不是另一套并发专用规则。
 
 ```xray @id=coro-move-transfer
 var buf = Array<byte>(1024 * 1024)
@@ -450,6 +454,16 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
 - Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
+
+#### 10.11.1 模型之外：`unsafe` 与 C 回调
+
+上表的保证覆盖 Xray 值的所有权与能力判定。有三处**位于模型之外**，此时义务转移给使用者，`unsafe` 不放宽任何一条已有规则、也不提供任何替代保证：
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** 操作的是裸内存，没有所有权根、没有引用计数、也没有别名判定。编译器对这些地址不做任何假设，也不为它们提供 §2.13 的任何证据。用它们构造的共享结构，其数据竞争自由由使用者负责证明。
+- **`Ptr<T>` / `MutPtr<T>`** 有借用跟踪（§2.4.2），但跟踪只到 owner 的作用域为止；解引用的地址有效性、对齐与别名正确性由 `unsafe` 块的作者承担。
+- **`CFn` C 回调可能在任意 OS 线程上发生**，包括运行时并不管理的线程。回调体只能触及：传入的标量与裸指针、分配计划为共享的值（§16.3.1）、以及通过 `Channel` 转移进来的唯一根。回调体**不得**触及调用方协程的 coroutine-local 对象图——那些对象的引用计数在非原子带，跨线程接触即内存损坏。回调体也不得假定存在当前协程、当前 worker 或可用的调度器。
+
+这三处是模型的**边界**而不是漏洞：它们在源码上都必须显式写出（`unsafe` 块、`mem` 模块导入、`CFn` 声明），因此"哪些代码不受编译期保护"始终可以从源码审计出来。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -789,7 +803,11 @@ print(len(outcomes))                 // 3 (one outcome per child)
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments. It requires a rebindable local `var` root proven unique with no live alias/loan. After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments.
+
+**The decision procedure is §2.13**: `move` requires a rebindable local `var` root that satisfies all four evidence axes at once — binding live, root unique, capability mutable, no live loan. Syntactically it accepts an identifier only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. After `move`, the variable is statically marked **moved**, and any later reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+
+A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.13, not on a separate concurrency-only rule.
 
 ```xray @id=coro-move-transfer
 var buf = Array<byte>(1024 * 1024)
@@ -907,6 +925,16 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 **Residual data-race risk** (detected at runtime, not compile time):
 - Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
+
+#### 10.11.1 Outside the model: `unsafe` and C callbacks
+
+The guarantees above cover ownership and capability decisions for Xray values. Three places sit **outside the model**, where the obligation moves to the author. `unsafe` relaxes none of the existing rules and supplies no substitute guarantee:
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** operate on raw memory: no ownership root, no reference count, no aliasing decision. The compiler assumes nothing about those addresses and produces none of the §2.13 evidence for them. Data-race freedom of any shared structure built from them is the author's proof obligation.
+- **`Ptr<T>` / `MutPtr<T>`** are borrow-tracked (§2.4.2), but the tracking reaches only as far as the owner's scope. Address validity, alignment, and aliasing correctness at the dereference belong to the author of the `unsafe` block.
+- **A `CFn` C callback may run on any OS thread**, including threads the runtime does not manage. A callback body may reach only: the scalars and raw pointers passed in, values whose allocation plan is shared (§16.3.1), and a unique root transferred in through a `Channel`. It must **not** reach the calling coroutine's coroutine-local object graph — those objects' reference counts are in the non-atomic band, and touching them from another thread is memory corruption. A callback body must also not assume a current coroutine, a current worker, or an available scheduler.
+
+These three are the model's **boundary**, not holes in it: each has to be written explicitly in source (an `unsafe` block, a `mem` import, a `CFn` declaration), so which code runs outside compile-time protection is always auditable from the source.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 

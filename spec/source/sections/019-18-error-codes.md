@@ -92,6 +92,8 @@ order: 019
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
+| `E0387` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | 所有权根不满足 `move` 所需的唯一性证据：存活局部别名（`OWN-E-LIVE-ALIAS`）、已写入堆图（`OWN-E-ESCAPED-ROOT`）、来源不明（`OWN-E-UNKNOWN-CALL`）、存储计划不完整（`OWN-E-STORAGE-PLAN`）——见 §2.13 |
+| `E0388` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | `defer` 体内抵达调度器挂起点，或证据不完整；defer 体运行在正在离开的帧上，无法挂起后恢复，挂起会丢弃其余清理——见 §2.13.4、§16.8 |
 
 ### 18.3 运行时
 
@@ -263,6 +265,8 @@ order: 019
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
+| `E0387` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the ownership root fails the uniqueness evidence `move` requires: a live local alias (`OWN-E-LIVE-ALIAS`), a root written into a heap graph (`OWN-E-ESCAPED-ROOT`), unknown provenance (`OWN-E-UNKNOWN-CALL`), or an incomplete storage plan (`OWN-E-STORAGE-PLAN`); see §2.13 |
+| `E0388` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a `defer` body reaches a scheduler suspension point, or the evidence is incomplete; a defer body runs on a frame that is already leaving and cannot park and resume, so suspending would drop the rest of the cleanup; see §2.13.4 and §16.8 |
 
 ### 18.3 Runtime
 
