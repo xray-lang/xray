@@ -311,6 +311,7 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable (compiler-order)
@@ -437,6 +438,7 @@
   :arity 1
   :escape-alloc heap
   :own-use borrow
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -691,6 +693,7 @@
   :arity 2
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires (concrete-enum-metadata)
   :observable ()
@@ -811,6 +814,7 @@
   :arity 2
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-write)
   :requires (byte-slice bounds)
   :observable (slice-fill)
@@ -821,6 +825,7 @@
   :arity 2
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-read memory-write)
   :requires (byte-slice bounds overlap-safe)
   :observable (slice-copy)
@@ -830,6 +835,7 @@
   :class memory-read
   :arity 2
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires (byte-slice bounds)
   :observable (slice-compare)
@@ -839,6 +845,7 @@
   :class memory-read
   :arity 2
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires (byte-slice bounds)
   :observable (slice-common-prefix)
@@ -849,6 +856,7 @@
   :arity 4
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-read memory-write)
   :requires (byte-slice bounds overlap-repeat)
   :observable (slice-repeat)
@@ -859,6 +867,7 @@
   :arity 3
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires (slice bounds)
   :observable (slice-window)
@@ -869,6 +878,7 @@
   :arity 3
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires (unsafe-assumption pointer-layout owner-lifetime)
   :observable (slice-from-pointer)
@@ -879,6 +889,7 @@
   :arity 1
   :result-ownership owned
   :own-use consume
+  :tbaa-group top
   :effects (side-effect may-throw memory-read)
   :requires (unsafe-assumption exact-layout complete-native-output dominating-success)
   :observable (buffer-materialize)
@@ -899,6 +910,7 @@
   :arity 2
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-write)
   :requires (slice pod bounds)
   :observable (slice-fill)
@@ -909,6 +921,7 @@
   :arity 2
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-read memory-write)
   :requires (slice pod same-element bounds overlap-safe)
   :observable (slice-copy)
@@ -918,6 +931,7 @@
   :class memory-read
   :arity 2
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires (slice pod same-element bounds)
   :observable (slice-compare)
@@ -985,6 +999,7 @@
   :arity 1
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires (array-like)
   :observable ()
@@ -1038,6 +1053,7 @@
   :arity 1
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires (call-bound-place)
   :observable ()
@@ -1049,15 +1065,18 @@
   :result-kind void
   :result-ownership none
   :own-use stored-value
+  :tbaa-group top
   :effects (side-effect memory-write)
   :requires (call-bound-place)
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
 ; FFI raw-pointer load/store. The address is an address-width int; aux_int holds
-; the XrFFIType width of the pointee. No bounds check (unsafe-only). Modeled on
-; the bytes primitives: implicit TBAA-NONE keeps them out of value numbering and
-; alias-based reordering, which is the conservative truth for memory C may mutate.
+; the XrFFIType width of the pointee. No bounds check (unsafe-only). These carry
+; TBAA-TOP: a raw pointer may address any object in the program, so a ptr.store
+; must clobber every group. TBAA-NONE would be the opposite of conservative --
+; xi_tbaa_may_alias treats NONE as "not a memory op" and returns no-alias, which
+; would let LICM hoist an aliasing array load out of a loop containing this store.
 (define-xi-op xi.ptr.load
   :class memory-read
   :arity 2
@@ -1065,6 +1084,7 @@
   ; particular, loading a value-ABI aggregate must not acquire its ARC fields.
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -1076,6 +1096,7 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -1087,6 +1108,7 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires (raw-pointer non-overlap)
   :observable (raw-memory-copy)
@@ -1096,6 +1118,7 @@
   :class allocation
   :arity 1
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1130,6 +1153,7 @@
   :class allocation
   :arity 0
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1141,6 +1165,7 @@
   :class allocation
   :arity 0
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1151,6 +1176,7 @@
   :arity 0
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1214,6 +1240,7 @@
   :class allocation
   :arity 1
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1224,6 +1251,7 @@
   :arity variadic
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1266,6 +1294,7 @@
   :arity variadic
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1277,6 +1306,7 @@
   :escape-use heap
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (memory-write allocates)
   :requires ()
   :observable ()
@@ -1359,11 +1389,20 @@
 
 ; Canonical Atomic<T> operations. xa_intrinsic_id distinguishes individual
 ; RMW semantics (add/sub/fetch/swap/CAS/toggle) without a method-name payload.
+;
+; The :sync column declares the strongest happens-before edge the op can carry
+; (spec §16.9.2, contracts/memory-model.md). The user picks the actual order at
+; run time via the `Ordering` argument, so the static declaration is the
+; fail-closed upper bound: an acquire load must keep later memory operations
+; from moving above it even when the argument turns out to be Relaxed, because
+; the argument is not always a compile-time constant.
 (define-xi-op xi.atomic.load
   :class memory-read
   :arity variadic
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
+  :sync acquire
   :requires (atomic-order)
   :observable (atomic-load)
   :targets (vm-bytecode aot-c aot-verify))
@@ -1374,7 +1413,9 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-write)
+  :sync release
   :requires (atomic-order)
   :observable (atomic-store)
   :targets (vm-bytecode aot-c aot-verify))
@@ -1383,7 +1424,9 @@
   :class memory-write
   :arity variadic
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
+  :sync acq-rel
   :requires (atomic-order)
   :observable (atomic-rmw)
   :targets (vm-bytecode aot-c aot-verify))
@@ -1392,7 +1435,9 @@
   :class call
   :arity 1
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-read allocates)
+  :sync acquire
   :requires ()
   :observable (atomic-load string-format)
   :targets (vm-bytecode aot-c aot-verify))
@@ -1413,6 +1458,7 @@
   :escape-use heap
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1498,6 +1544,7 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -1509,7 +1556,9 @@
   :result-ownership none
   :own-use borrow
   :escape-use global
+  :tbaa-group top
   :effects (side-effect memory-write)
+  :sync release
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1520,7 +1569,9 @@
   :result-ownership none
   :own-use borrow
   :escape-use global
+  :tbaa-group top
   :effects (side-effect memory-write)
+  :sync release
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1546,6 +1597,7 @@
   :arity variadic
   :own-use borrow
   :effects (side-effect may-suspend may-throw)
+  :sync acquire
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1561,7 +1613,9 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :sync acq-rel
   :requires ()
   :observable (batch-parallel)
   :targets (vm-bytecode aot-c aot-verify)
@@ -1573,7 +1627,9 @@
   :result-kind value
   :result-ownership owned
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :sync acq-rel
   :requires ()
   :observable (batch-parallel native-map)
   :targets (vm-bytecode aot-c aot-verify)
@@ -1583,7 +1639,9 @@
   :class parallel
   :arity variadic
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :sync acq-rel
   :requires ()
   :observable (batch-parallel native-reduce)
   :targets (vm-bytecode aot-c aot-verify)
@@ -1593,6 +1651,7 @@
   :class parallel
   :arity variadic
   :own-use borrow
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable (task-group-state)
@@ -1605,7 +1664,9 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-read memory-write)
+  :sync release
   :requires ()
   :observable (task-group-state)
   :targets (aot-verify)
@@ -1615,7 +1676,9 @@
   :class parallel
   :arity variadic
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :sync acquire
   :requires ()
   :observable (task-group-state native-reduce consuming-join)
   :targets (aot-verify)
@@ -1627,7 +1690,9 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-suspend may-throw memory-read memory-write)
+  :sync acquire
   :requires ()
   :observable (task-group-state consuming-join)
   :targets (aot-verify)
@@ -1645,6 +1710,7 @@
   ;; release and leak it (channels are now plain atomic shared-RC objects).
   :own-use stored-value
   :effects (side-effect may-suspend memory-write)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1657,6 +1723,7 @@
   ;; it neither owns nor releases the channel handle.
   :own-use borrow
   :effects (side-effect may-suspend memory-read)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1682,6 +1749,7 @@
   ;; User-facing Channel.trySend remains XI_CALL_METHOD/OP_INVOKE and returns SendResult.
   :own-use stored-value
   :effects (side-effect memory-write)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1693,6 +1761,7 @@
   ;; arg0 = channel (borrowed): see xi.chan.recv.
   :own-use borrow
   :effects (side-effect memory-read)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1704,6 +1773,7 @@
   ;; arg0 = channel (borrowed): a pure read of channel state.
   :own-use borrow
   :effects (side-effect memory-read)
+  :sync acquire
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1735,6 +1805,7 @@
   ;; select merge for the `after` case. See design/885.
   :own-use borrow
   :effects (side-effect memory-write)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1747,6 +1818,7 @@
   ;; consumed. Consuming them would leak the channel handles (atomic shared-RC).
   :own-use borrow
   :effects (side-effect may-suspend memory-read)
+  :sync acq-rel
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -1829,6 +1901,7 @@
   :class iterator
   :arity 1
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -1839,6 +1912,7 @@
   :class iterator
   :arity 1
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -1849,6 +1923,7 @@
   :class iterator
   :arity 1
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -1870,6 +1945,7 @@
   :arity 0
   :result-ownership none
   :own-use consume
+  :tbaa-group top
   :effects (side-effect memory-read)
   :requires ()
   :observable ()
@@ -1881,6 +1957,7 @@
   :result-kind void
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -1890,6 +1967,7 @@
   :class coroutine
   :arity variadic
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1900,6 +1978,7 @@
   :arity variadic
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1910,6 +1989,7 @@
   :arity variadic
   :escape-alloc heap
   :own-use consume
+  :tbaa-group top
   :effects (memory-read memory-write)
   :requires ()
   :observable ()
@@ -1950,6 +2030,7 @@
   ; analysis keeps the source alive through every derived view use.
   :result-ownership borrowed
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read memory-write)
   :requires ()
   :observable ()
@@ -2028,6 +2109,7 @@
   :class allocation
   :arity variadic
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -2047,6 +2129,7 @@
   :arity 0
   :own-use consume
   :effects (side-effect may-suspend)
+  :sync acquire
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify))
@@ -2140,6 +2223,7 @@
   :class memory-read
   :arity 1
   :own-use borrow
+  :tbaa-group top
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -2161,6 +2245,7 @@
   :arity 0
   :result-ownership borrowed
   :own-use consume
+  :tbaa-group top
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -2171,6 +2256,7 @@
   :arity 2
   :escape-alloc heap
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -2234,6 +2320,7 @@
   :class allocation
   :arity variadic
   :own-use consume
+  :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -2244,6 +2331,7 @@
   :arity variadic
   :result-kind dynamic
   :own-use consume
+  :tbaa-group top
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -2253,6 +2341,7 @@
   :class vector
   :arity variadic
   :own-use borrow
+  :tbaa-group top
   :effects (may-throw memory-read)
   :requires ()
   :observable ()
@@ -2263,6 +2352,7 @@
   :arity variadic
   :result-ownership none
   :own-use borrow
+  :tbaa-group top
   :effects (side-effect may-throw memory-write)
   :requires ()
   :observable ()

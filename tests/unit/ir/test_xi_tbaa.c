@@ -6,6 +6,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi_memssa.h"
@@ -1049,8 +1050,14 @@ TEST(call_is_top_but_not_direct_memory_op) {
     assert(xi_is_memory_clobber(XI_CALL_METHOD_DIRECT));
     assert(xi_is_memory_clobber(XI_TAIL_CALL));
     assert(xi_is_memory_clobber(XI_CALL_BUILTIN));
-    assert(!xi_is_memory_clobber(XI_PRINT));
+    /* print writes through an unclassified boundary (it formats arbitrary
+     * user values), so it clobbers like a call.  MemSSA always treated it as
+     * a memory def; before the memory-scope rule TBAA disagreed. */
+    assert(xi_is_memory_clobber(XI_PRINT));
+    /* A copy within one array names a tracked group, so it is a store rather
+     * than a clobber: it kills ARRAY and nothing else. */
     assert(!xi_is_memory_clobber(XI_BYTE_ARRAY_COPY_WITHIN));
+    assert(xi_is_memory_store(XI_BYTE_ARRAY_COPY_WITHIN));
 }
 
 /* ========== Annotate Pass Coverage Tests ========== */
@@ -1209,7 +1216,10 @@ TEST(annotate_call_sets_top) {
     xi_func_free(f);
 }
 
-TEST(annotate_import_ref_stays_none) {
+/* An import reference reads another module's binding — storage the lattice
+ * has no group for, and which that module's own code may write. It is TOP,
+ * not NONE: NONE would answer "provably no alias" against every store. */
+TEST(annotate_import_ref_is_top) {
     XiFunc *f = make_func("ann_import_ref");
     XiBlock *blk = f->entry;
 
@@ -1218,7 +1228,9 @@ TEST(annotate_import_ref_stays_none) {
     xi_block_set_return(blk, load);
     xi_tbaa_annotate(f);
 
-    assert(load->mem_group == XI_MEM_NONE);
+    assert(load->mem_group == XI_MEM_TOP);
+    /* Read-only: it names unknown memory but kills nothing. */
+    assert(!xi_is_memory_clobber(XI_IMPORT_REF));
     xi_func_free(f);
 }
 
@@ -1707,10 +1719,10 @@ TEST(verify_rejects_unannotated_load) {
     assert(load->mem_group == XI_MEM_SHARED);
     load->mem_group = XI_MEM_NONE;
 
+    /* A memory op left at XI_MEM_NONE reads as "provably no alias" to every
+     * query, so the verifier must reject it rather than let it through. */
     char errbuf[256];
-    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
-    /* Verifier may or may not reject — depends on impl; just exercise the path. */
-    (void) ok;
+    assert(!xi_verify(f, errbuf, sizeof(errbuf)));
 
     xi_func_free(f);
 }
@@ -1834,10 +1846,103 @@ TEST(verify_ok_after_annotate_diamond_cfg) {
     xi_func_free(f);
 }
 
+/* ========== Op-table invariants ==========
+ *
+ * These check the ops.def columns directly rather than a hand-built IR, so a
+ * new op that forgets its memory scope or its synchronisation edge fails here
+ * instead of silently disappearing from alias analysis.
+ */
+
+/* Every op that touches memory must classify which memory. XI_MEM_NONE means
+ * "no memory at all" and answers no-alias to every query, so an op that reads
+ * or writes while carrying it is invisible to the optimiser's safety checks. */
+TEST(every_memory_op_declares_a_group) {
+    for (uint16_t op = 0; op < XI_OP_COUNT; op++) {
+        uint32_t effects = xi_generated_op_effects(op);
+        bool touches = (effects & (XI_EFFECT_MEMORY_READ | XI_EFFECT_MEMORY_WRITE)) != 0;
+        bool grouped = xi_tbaa_group_for_op(op) != XI_MEM_NONE;
+        if (touches != grouped) {
+            printf("  op %s: touches_memory=%d has_group=%d\n", xi_generated_op_name(op),
+                   (int) touches, (int) grouped);
+        }
+        assert(touches == grouped);
+    }
+}
+
+/* FRESH is storage the allocating op just produced: nothing else can name it,
+ * so it aliases nothing — including TOP. */
+TEST(fresh_group_aliases_nothing) {
+    XiFunc *f = make_func("fresh_alias");
+    XiBlock *blk = f->entry;
+    XiValue *a = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *b = xi_const_int(f, blk, 2, &stub_int);
+
+    a->mem_group = XI_MEM_FRESH;
+    const uint8_t others[] = {XI_MEM_TOP,    XI_MEM_FIELD, XI_MEM_ARRAY, XI_MEM_STRUCT,
+                              XI_MEM_SHARED, XI_MEM_JSON,  XI_MEM_CHAN,  XI_MEM_FRESH};
+    for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
+        b->mem_group = others[i];
+        assert(!xi_tbaa_may_alias(a, b));
+        assert(!xi_tbaa_may_alias(b, a));
+    }
+
+    xi_func_free(f);
+}
+
+/* A raw-pointer or atomic write reaches memory the lattice cannot name, so it
+ * must clobber every group. */
+TEST(unclassified_writes_are_clobbers) {
+    assert(xi_is_memory_clobber(XI_PTR_STORE));
+    assert(xi_is_memory_clobber(XI_PTR_COPY_NONOVERLAP));
+    assert(xi_is_memory_clobber(XI_ATOMIC_STORE));
+    assert(xi_is_memory_clobber(XI_ATOMIC_RMW));
+    assert(xi_is_memory_clobber(XI_VEC_STORE));
+    assert(xi_is_memory_clobber(XI_CALL));
+    /* An allocation writes only its own storage — not a clobber. */
+    assert(!xi_is_memory_clobber(XI_ARRAY_NEW));
+}
+
+/* The ops carrying a language-level happens-before edge (spec §16.9.2) are
+ * exactly the ones the optimiser must not move ordinary memory across. */
+TEST(sync_edges_are_ordering_barriers) {
+    const uint16_t edges[] = {
+        XI_ATOMIC_LOAD, XI_ATOMIC_STORE,  XI_ATOMIC_RMW,    XI_CHAN_SEND,
+        XI_CHAN_RECV,   XI_CHAN_TRY_SEND, XI_CHAN_TRY_RECV, XI_AWAIT,
+        XI_GO,          XI_THREAD_SPAWN,  XI_SCOPE_EXIT,    XI_SELECT_BLOCK,
+    };
+    for (size_t i = 0; i < sizeof(edges) / sizeof(edges[0]); i++) {
+        assert(xi_generated_op_sync_order(edges[i]) != XI_GEN_SYNC_NONE);
+        assert(xi_op_is_ordering_barrier(edges[i]));
+        assert(xi_op_ends_memory_version(edges[i]));
+    }
+
+    /* Coro.yield and compilerFence establish no happens-before edge (§16.9.3),
+     * even though both still constrain code motion for other reasons. */
+    assert(xi_generated_op_sync_order(XI_CODEGEN_COMPILER_FENCE) == XI_GEN_SYNC_NONE);
+    assert(xi_generated_op_sync_order(XI_ADD) == XI_GEN_SYNC_NONE);
+    assert(!xi_op_is_ordering_barrier(XI_ADD));
+}
+
+/* Suspension is a barrier without a :sync edge: another task may run and
+ * mutate reachable state before the op resumes. */
+TEST(suspension_is_an_ordering_barrier) {
+    assert(xi_generated_op_sync_order(XI_YIELD) == XI_GEN_SYNC_NONE);
+    assert((xi_generated_op_effects(XI_YIELD) & XI_EFFECT_MAY_SUSPEND) != 0);
+    assert(xi_op_is_ordering_barrier(XI_YIELD));
+    assert(xi_op_ends_memory_version(XI_YIELD));
+}
+
 /* ========== Main ========== */
 
 int main(void) {
     printf("=== Xi TBAA + MemSSA Tests ===\n\n");
+
+    /* Op-table invariants (5) */
+    run_every_memory_op_declares_a_group();
+    run_fresh_group_aliases_nothing();
+    run_unclassified_writes_are_clobbers();
+    run_sync_edges_are_ordering_barriers();
+    run_suspension_is_an_ordering_barrier();
 
     /* Classification (3) */
     run_is_memory_load();
@@ -1940,7 +2045,7 @@ int main(void) {
     run_annotate_upval_sets_upval();
     run_annotate_builtin_sets_const();
     run_annotate_call_sets_top();
-    run_annotate_import_ref_stays_none();
+    run_annotate_import_ref_is_top();
 
     /* MemSSA advanced (15) */
     run_memssa_two_stores_same_slot();

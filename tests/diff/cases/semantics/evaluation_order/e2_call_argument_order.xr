@@ -1,0 +1,36 @@
+// anchor: eval-order-call
+// §3.0 E2: callee (or receiver) before arguments, arguments left to right,
+// defaults after every explicit argument.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn three(a: int, b: int, c: int) -> int { return a + b + c }
+fn add(a: int, b: int) -> int { return a + b }
+fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+fn withDefault(a: int, b: int = 99) -> int { return a + b }
+
+class Holder {
+    base: int = 10
+    bump(n: int) -> int {
+        return this.base + n
+    }
+}
+
+fn mkHolder(tag: string) -> Holder { print(tag); return Holder() }
+
+fn main() {
+    print("-- plain args --")
+    print(three(t("a1", 1), t("a2", 2), t("a3", 3)))
+
+    print("-- callee before args --")
+    print(pick("callee")(t("a1", 1), t("a2", 2)))
+
+    print("-- receiver before args --")
+    print(mkHolder("receiver").bump(t("arg", 5)))
+
+    print("-- nested call args --")
+    print(three(t("a1", 1), add(t("n1", 2), t("n2", 3)), t("a3", 4)))
+
+    print("-- default arg --")
+    print(withDefault(t("explicit", 1)))
+}
+
+main()

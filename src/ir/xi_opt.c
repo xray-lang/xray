@@ -238,7 +238,7 @@ XR_FUNC bool xi_rewrite_value_to_const_literal(XiValue *v, const XiConstLiteral 
     v->aux_int = 0;
     v->aux_kind = XI_AUX_KIND_NONE;
     v->flags = xi_op_default_effects(XI_CONST);
-    v->mem_group = XI_MEM_NONE;
+    v->mem_group = (uint8_t) xi_tbaa_group_for_op(v->op);
     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
     switch (lit->kind) {
         case XI_CONST_LITERAL_NULL:
@@ -510,7 +510,7 @@ static void rewrite_to_const_int(XiValue *v, int64_t value) {
     v->aux_kind = XI_AUX_KIND_NONE;
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
-    v->mem_group = XI_MEM_NONE;
+    v->mem_group = (uint8_t) xi_tbaa_group_for_op(v->op);
     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
@@ -564,7 +564,7 @@ static void rewrite_to_const_float(XiValue *v, double value) {
     v->aux_kind = XI_AUX_KIND_NONE;
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
-    v->mem_group = XI_MEM_NONE;
+    v->mem_group = (uint8_t) xi_tbaa_group_for_op(v->op);
     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
@@ -578,7 +578,7 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->aux_int = XI_COPY_KIND_IDENTITY;
     v->aux = NULL;
     v->aux_kind = XI_AUX_KIND_NONE;
-    v->mem_group = XI_MEM_NONE;
+    v->mem_group = (uint8_t) xi_tbaa_group_for_op(v->op);
     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
@@ -3728,7 +3728,7 @@ XR_FUNC XiPassChange xi_opt_compact_enum_payload_type_lookup(XiFunc *f) {
             value->aux = NULL;
             value->aux_kind = XI_AUX_KIND_NONE;
             value->flags = xi_op_default_effects(XI_ENUM_META_GET);
-            value->mem_group = XI_MEM_NONE;
+            value->mem_group = (uint8_t) xi_tbaa_group_for_op(value->op);
             changed.values_changed = true;
         }
     }

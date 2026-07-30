@@ -89,32 +89,22 @@ static XiMemPhi *make_mem_phi(XiMemSSA *mssa, XiBlock *blk, uint16_t npreds) {
 
 /* Returns true if the value defines a new observable memory state.
  *
- * Suspending is a full memory barrier even when the instruction does not
- * perform a write itself: another task may run before execution resumes and
- * mutate any reachable state.  Loads on opposite sides of that scheduling
- * boundary must therefore consume different memory versions. */
+ * Everything but the control-transfer case is derived from the op table:
+ * xi_op_ends_memory_version() covers tracked stores, unknown-memory clobbers
+ * (calls, spawns, raw-pointer and SIMD stores), and ordering barriers.  A
+ * barrier counts even when the instruction performs no write itself: for a
+ * suspension another task may run before execution resumes and mutate any
+ * reachable state, and for a :sync edge the memory model forbids moving
+ * ordinary accesses across it.  Loads on opposite sides of either boundary
+ * must consume different memory versions. */
 static bool is_mem_def(const XiValue *v) {
     if (!v)
         return false;
-    if (xi_is_memory_store(v->op))
+    if (xi_op_ends_memory_version(v->op))
         return true;
-    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
-        return true;
-    /* Calls may write arbitrary memory. */
-    switch (v->op) {
-        case XI_CALL:
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
-        case XI_GO:
-        case XI_THREAD_SPAWN:
-        case XI_PRINT:
-        case XI_THROW:
-            return true;
-        default:
-            return false;
-    }
+    /* Control transfer, not a memory write: a throw leaves the block through
+     * the error channel, so a later load must not inherit this version. */
+    return v->op == XI_THROW;
 }
 
 /* Count predecessor blocks for a given block. */

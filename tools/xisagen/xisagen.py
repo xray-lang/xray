@@ -305,11 +305,23 @@ VALID_XI_ALGEBRAIC_TRAITS = {
     'commutative',
 }
 
+# TBAA groups partition the memory an op may touch.
+#
+#   'none'  -- the op touches no memory at all.  An op declaring a
+#              memory-read/memory-write effect may NOT use it (see the
+#              memory-scope rule in parse_xi_ops_def): conflating "no memory"
+#              with "memory I cannot classify" makes such an op invisible to
+#              xi_tbaa_may_alias, which is unsound rather than conservative.
+#   'fresh' -- the op writes only into storage it allocates itself, which no
+#              other value can reach yet.  Aliases nothing, by construction.
+#   'top'   -- the op touches memory outside the lattice.  Aliases everything.
+#   others  -- a concrete disjoint region.
 VALID_XI_TBAA_GROUPS = {
     'array',
     'chan',
     'const',
     'field',
+    'fresh',
     'global',
     'json',
     'none',
@@ -319,6 +331,27 @@ VALID_XI_TBAA_GROUPS = {
     'top',
     'tuple',
     'upval',
+}
+
+# Language-level synchronisation edge established by an op (spec §16.9.2).
+# This is the *memory model* dimension, distinct from TBAA: it says which
+# happens-before edge the op creates, which in turn tells the optimiser which
+# direction ordinary memory operations must not move across it.
+#
+#   'none'     -- establishes no happens-before edge.
+#   'acquire'  -- later memory operations must not move above this op.
+#   'release'  -- earlier memory operations must not move below this op.
+#   'acq-rel'  -- both.
+#   'seq-cst'  -- both, and participates in a single total order.
+#
+# Ops whose ordering is chosen at runtime by an `Ordering` argument declare the
+# strongest edge they can carry; this is the fail-closed upper bound.
+VALID_XI_SYNC_ORDERS = {
+    'none',
+    'acquire',
+    'release',
+    'acq-rel',
+    'seq-cst',
 }
 
 VALID_XI_RESULT_NATIVE_TYPES = {
@@ -414,6 +447,7 @@ class XiOpDef:
     vn_kind: str
     algebraic: list
     tbaa_group: str
+    sync_order: str
     backend_rewrite: str
     backend_rewrite_name: Optional[str]
     escape_use: str
@@ -613,6 +647,37 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if tbaa_group not in VALID_XI_TBAA_GROUPS:
             die(f"{path}: Xi op '{name}' uses unknown TBAA group "
                 f"'{tbaa_group}'")
+        # Memory-scope rule (fail-closed): an op that reads or writes memory
+        # must say which memory.  'none' means "touches no memory"; using it
+        # for unclassified memory makes the op invisible to alias analysis,
+        # so stores through it stop killing loads and the op silently stops
+        # being a barrier.  Declare a concrete group, 'fresh' (writes only
+        # into storage this op allocates), or 'top' (unknown memory).
+        touches_memory = bool({'memory-read', 'memory-write'} & set(effects))
+        if touches_memory and tbaa_group == 'none':
+            die(f"{path}: Xi op '{name}' declares a memory effect but no "
+                f":tbaa-group; use a concrete group, 'fresh' (writes only "
+                f"into its own fresh allocation) or 'top' (unclassified "
+                f"memory). 'none' means 'touches no memory' and would make "
+                f"this op invisible to alias analysis")
+        if not touches_memory and tbaa_group != 'none':
+            die(f"{path}: Xi op '{name}' declares :tbaa-group "
+                f"'{tbaa_group}' without any memory effect; a TBAA group "
+                f"only classifies memory an op actually touches")
+        if tbaa_group == 'fresh' and 'memory-read' in effects:
+            die(f"{path}: Xi op '{name}' cannot use :tbaa-group fresh with a "
+                f"memory-read effect; 'fresh' claims the op only writes "
+                f"storage nothing else can reach, so it has nothing to read")
+        sync_order = _xi_get_kw_str(form, ':sync', 'none')
+        if sync_order not in VALID_XI_SYNC_ORDERS:
+            die(f"{path}: Xi op '{name}' uses unknown sync order "
+                f"'{sync_order}'")
+        if sync_order != 'none' and not (touches_memory or
+                                         {'side-effect', 'may-suspend'} & set(effects)):
+            die(f"{path}: Xi op '{name}' declares :sync '{sync_order}' but "
+                f"has no memory, side-effect or suspension effect; a "
+                f"synchronisation edge needs an observable operation to "
+                f"attach to")
         escape_use = _xi_get_kw_str(form, ':escape-use', 'none')
         if escape_use not in VALID_XI_ESCAPE_USES:
             die(f"{path}: Xi op '{name}' uses unknown escape-use "
@@ -658,6 +723,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            vn_kind=vn_kind,
                            algebraic=algebraic,
                            tbaa_group=tbaa_group,
+                           sync_order=sync_order,
                            backend_rewrite=backend_rewrite,
                            backend_rewrite_name=backend_rewrite_name,
                            escape_use=escape_use,
@@ -806,8 +872,20 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_TBAA_JSON = 10,')
     lines.append('    XI_GEN_TBAA_TUPLE = 11,')
     lines.append('    XI_GEN_TBAA_CHAN = 12,')
+    lines.append('    XI_GEN_TBAA_FRESH = 13,')
     lines.append('    XI_GEN_TBAA__COUNT')
     lines.append('} XiGeneratedTbaaGroup;')
+    lines.append('')
+    lines.append('/* ========== Synchronisation Orders (spec §16.9.2) ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_SYNC_NONE = 0,')
+    lines.append('    XI_GEN_SYNC_ACQUIRE = 1,')
+    lines.append('    XI_GEN_SYNC_RELEASE = 2,')
+    lines.append('    XI_GEN_SYNC_ACQ_REL = 3,')
+    lines.append('    XI_GEN_SYNC_SEQ_CST = 4,')
+    lines.append('    XI_GEN_SYNC__COUNT')
+    lines.append('} XiGeneratedSyncOrder;')
     lines.append('')
     lines.append('/* ========== Backend Rewrite Kinds ========== */')
     lines.append('')
@@ -881,6 +959,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t speculation;')
     lines.append('    uint8_t value_numbering;')
     lines.append('    uint8_t tbaa_group;')
+    lines.append('    uint8_t sync_order;')
     lines.append('    uint8_t backend_rewrite;')
     lines.append('    uint8_t escape_use;')
     lines.append('    uint8_t escape_alloc;')
@@ -909,6 +988,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
         vn_kind = f'XI_GEN_VN_{_xi_c_ident(op.vn_kind)}'
         tbaa_group = f'XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)}'
+        sync_order = f'XI_GEN_SYNC_{_xi_c_ident(op.sync_order)}'
         backend_rewrite = f'XI_GEN_BACKEND_REWRITE_{_xi_c_ident(op.backend_rewrite)}'
         escape_use = f'XI_GEN_ESCAPE_USE_{_xi_c_ident(op.escape_use)}'
         escape_alloc = f'XI_GEN_ESCAPE_ALLOC_{_xi_c_ident(op.escape_alloc)}'
@@ -924,7 +1004,8 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {result_ownership}, '
-            f'{lowering_policy}, {speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
+            f'{lowering_policy}, {speculation}, {vn_kind}, {tbaa_group}, {sync_order}, '
+            f'{backend_rewrite}, {escape_use}, '
             f'{escape_alloc}, {own_use}, {ic_site}, {negated_op}, {flags}, {algebraic_traits}, {effects}, '
             f'{targets}, {backend_rewrite_name}, {native_type}){suffix}')
     lines.append('')
@@ -1025,6 +1106,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_TBAA_NONE;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_sync_order(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_SYNC_{_xi_c_ident(op.sync_order)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_SYNC_NONE;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {')
@@ -3339,6 +3429,7 @@ def _test_xi_ops_parser():
       :arity 1
       :own-use consume
       :effects (side-effect memory-read memory-write)
+      :tbaa-group top
       :requires ()
       :observable ()
       :targets (vm-bytecode aot-verify)
@@ -3373,12 +3464,23 @@ def _test_xi_ops_parser():
       :escape-alloc heap
       :own-use consume
       :effects (side-effect memory-write allocates)
+      :tbaa-group fresh
       :requires ()
       :observable ()
       :targets (vm-bytecode aot-c aot-verify))
+    (define-xi-op xi.atomic.load
+      :class memory-read
+      :arity variadic
+      :own-use borrow
+      :effects (memory-read)
+      :tbaa-group top
+      :sync acquire
+      :requires (atomic-order)
+      :observable (atomic-load)
+      :targets (vm-bytecode aot-c aot-verify))
     '''
     ops = parse_xi_ops_def(text)
-    assert len(ops) == 8
+    assert len(ops) == 9
     assert ops[0].name == 'xi.add'
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
@@ -3406,6 +3508,10 @@ def _test_xi_ops_parser():
     assert ops[5].negated_op == 'xi.ne'
     assert ops[6].negated_op == 'xi.eq'
     assert ops[7].escape_alloc == 'heap'
+    assert ops[7].tbaa_group == 'fresh'
+    assert ops[7].sync_order == 'none'
+    assert ops[8].tbaa_group == 'top'
+    assert ops[8].sync_order == 'acquire'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -3431,6 +3537,10 @@ def _test_xi_ops_parser():
     assert 'case XI_MEM_LOAD: return XI_GEN_VN_NONE;' in header
     assert 'xi_generated_op_tbaa_group' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_TBAA_ARRAY;' in header
+    assert 'case XI_ARRAY_NEW: return XI_GEN_TBAA_FRESH;' in header
+    assert 'xi_generated_op_sync_order' in header
+    assert 'case XI_ATOMIC_LOAD: return XI_GEN_SYNC_ACQUIRE;' in header
+    assert 'case XI_ADD: return XI_GEN_SYNC_NONE;' in header
     assert 'xi_generated_op_backend_rewrite' in header
     assert 'case XI_ITER_NEW: return XI_GEN_BACKEND_REWRITE_BUILTIN;' in header
     assert 'xi_generated_op_backend_rewrite_name' in header
@@ -3487,6 +3597,80 @@ def _test_xi_ops_parser():
     assert pass_ops[0].own_use == 'pass'
     pass_header = generate_xi_ops_header(pass_ops)
     assert 'case XI_MOVE: return XI_GEN_OWN_USE_PASS;' in pass_header
+
+    # Memory-scope rule (fail-closed): an op that touches memory must classify
+    # it. `none` means "no memory at all"; using it for unclassified memory
+    # makes the op invisible to xi_tbaa_may_alias, so its stores stop killing
+    # loads. That is unsound, not conservative — reject it at generation time.
+    def _rejects(text: str, why: str) -> None:
+        raised = False
+        try:
+            parse_xi_ops_def(text)
+        except SystemExit:
+            raised = True
+        assert raised, why
+
+    _rejects('''
+    (define-xi-op xi.unclassified.store
+      :class memory-write
+      :arity 2
+      :result-kind void
+      :result-ownership none
+      :own-use borrow
+      :effects (side-effect memory-write)
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', "memory effect without :tbaa-group must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.pure.but.grouped
+      :class pure
+      :arity 1
+      :own-use borrow
+      :effects ()
+      :tbaa-group array
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', ":tbaa-group without a memory effect must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.fresh.that.reads
+      :class allocation
+      :arity 1
+      :own-use consume
+      :effects (side-effect memory-read memory-write allocates)
+      :tbaa-group fresh
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', "'fresh' plus memory-read must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.sync.without.effect
+      :class pure
+      :arity 1
+      :own-use borrow
+      :effects ()
+      :sync acquire
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', ":sync on an effect-free op must fail closed")
+
+    _rejects('''
+    (define-xi-op xi.bad.sync.name
+      :class memory-read
+      :arity 1
+      :own-use borrow
+      :effects (memory-read)
+      :tbaa-group top
+      :sync consume
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    ''', "unknown :sync order must fail closed")
     print(" PASS", file=sys.stderr)
 
 def _test_xi_lowering_parser():

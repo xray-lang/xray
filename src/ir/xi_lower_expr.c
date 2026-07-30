@@ -9914,13 +9914,36 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_EXPR_STMT:
             return xi_lower_expr(l, node->as.expr_stmt);
 
+        /* Canonicalizer value block: `{ var __t = recv; <expr using __t> }`.
+         * The canonicalizer emits this when a place expression must be
+         * evaluated exactly once (spec §3.0 E5/E6) and the receiver is not a
+         * simple expression.  All statements but the last are lowered as
+         * statements; the last one produces the block's value.
+         *
+         * Only canonicalizer-generated blocks are values.  A user block in
+         * expression position is still a compiler bug and falls through. */
+        case AST_BLOCK:
+            if (node->as.block.is_canon_value_block) {
+                int count = node->as.block.count;
+                XR_DCHECK(count > 0, "canon value block must have a value statement");
+                for (int i = 0; i + 1 < count; i++) {
+                    xi_lower_stmt(l, node->as.block.statements[i]);
+                    if (!l->cur_block)
+                        return NULL;
+                }
+                return xi_lower_expr(l, node->as.block.statements[count - 1]);
+            }
+            break;
+
         default:
-            /* Every analyzer-accepted AST node must be lowerable.
-             * Reaching here indicates a compiler bug, not a user error. */
-            XR_DCHECK_FMT(false, "unsupported expr AST kind %d in lowering", (int) node->type);
-            l->had_error = true;
-            return xi_const_null(l->func, l->cur_block, l->type_null);
+            break;
     }
+
+    /* Every analyzer-accepted AST node must be lowerable.
+     * Reaching here indicates a compiler bug, not a user error. */
+    XR_DCHECK_FMT(false, "unsupported expr AST kind %d in lowering", (int) node->type);
+    l->had_error = true;
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 /* Class declaration lowering (method compilation + XI_CLASS_CREATE).

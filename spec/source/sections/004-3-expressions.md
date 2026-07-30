@@ -10,6 +10,58 @@ order: 004
 
 > 真值源：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
 
+### 3.0 求值顺序
+
+> 真值源：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
+
+xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）或未定义（undefined）的求值顺序，VM 与 AOT 后端必须产生完全相同的副作用序列。
+
+这不是保守取舍而是必要条件：差分测试以"同一程序在两条后端上逐字节相同"为正确性判据，一旦承认某处顺序未指定，该处的后端分歧就不再算缺陷，判据本身随之失效。该一致性由 `tests/diff/cases/semantics/evaluation_order/` 门禁强制。
+
+**E1（总则）**：表达式按**从左到右、深度优先**求值。子表达式在其父表达式使用其值之前完成求值，包含全部副作用。
+
+**E2（函数调用）**：`callee(a1, …, an)` 依次求值被调表达式 `callee`（成员调用时为 receiver）→ `a1` → … → `an`，随后进入调用。借用在全部实参求值完成之后、进入被调函数之前建立。缺省参数在调用点按声明顺序求值，且排在全部显式实参之后。
+
+**E3（二元运算符）**：左操作数完全求值（含副作用）先于右操作数开始求值。唯一例外是短路运算符（E4）。
+
+**E4（短路点）**：`&&`、`||`、`??`、`?:`、`?.`、`?[` 是语言中**全部**的短路点。除此之外没有任何操作数会被条件性跳过求值。
+
+**E5（赋值）**：`place = rhs` 依次求值 place 的位置子表达式（receiver 或数组表达式 → 索引表达式）→ `rhs` → 执行存储。位置子表达式先于右值，与 C# / Java 一致，与 Rust 相反。
+
+**E6（复合赋值）**：`place op= rhs` 等价于 `place = place op rhs`，**但 place 的每个子表达式只求值一次**。求值顺序为：place 子表达式 → 读取 place → `rhs` → 计算 → 写回 place。`x++` / `x--` 等价于 `x += 1` / `x -= 1`，遵循同一规则。复合赋值的目标限于变量与成员访问（见 §3.4）。
+
+**E7（字面量）**：Array / Set / tuple 元素按源码顺序求值；Map 与对象字面量按源码顺序逐项求值，每项内 key 先于 value；展开 `...` 在其出现位置按序求值。
+
+**E8（字符串插值）**：插值片段按源码从左到右求值。
+
+**E9（match）**：scrutinee 先于任何 arm 求值，且只求值一次。arm 按源码顺序尝试；`if` 守卫只在其所属模式已匹配时求值。
+
+**E10（切片与范围）**：`a[lo:hi]` 依次求值 a → lo → hi；`lo..hi` 与 `lo..=hi` 依次求值 lo → hi。
+
+**E11（语句）**：语句按源码顺序求值。`defer` 在注册处求值其捕获，执行时机见 §4.9。
+
+```xray @id=eval-order-rules
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn add(a: int, b: int) -> int { return a + b }
+fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+
+class Counter {
+    hits: int = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2：被调表达式先于实参
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5：place 子表达式先于右值
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6：复杂 receiver 只求值一次
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
 ### 3.1 优先级与结合性
 
 完整优先级表（自**高至低**；同级运算符按结合性分组）：
@@ -174,15 +226,18 @@ var v = nullable_expr ?? default_value
 ### 3.4 赋值与复合赋值
 
 ```ebnf
-AssignExpr ::= LValue AssignOp Expression
-LValue ::= Identifier | MemberAccess | IndexAccess
-AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
-           | '&=' | '|=' | '^=' | '<<=' | '>>='
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
 
 **语义**：
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
-- `x op= y` 等价于 `x = x op y`，但 `x` 只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次）。
+- `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
+- **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
 - 不能赋值给 `const`（编译错误 `E0303`）。
 
 **特殊**：
@@ -624,6 +679,58 @@ yield expr                  // 生成器产出一个值并挂起
 
 > Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
+### 3.0 Evaluation Order
+
+> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+
+xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
+
+This is a requirement rather than a conservative preference. Differential testing uses "the same program is byte-identical on both backends" as its correctness criterion; the moment an order is declared unspecified, a backend divergence at that point stops being a defect and the criterion itself stops working. The `tests/diff/cases/semantics/evaluation_order/` gate enforces the agreement.
+
+**E1 (general rule)**: expressions are evaluated **left to right, depth first**. A subexpression is fully evaluated, side effects included, before its parent expression uses its value.
+
+**E2 (calls)**: `callee(a1, …, an)` evaluates the callee expression (the receiver for a method call) → `a1` → … → `an`, and then enters the call. Borrows are established after every argument has been evaluated and before the callee is entered. Default arguments are evaluated at the call site in declaration order, after all explicit arguments.
+
+**E3 (binary operators)**: the left operand is fully evaluated, side effects included, before evaluation of the right operand begins. The short-circuit operators (E4) are the only exception.
+
+**E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
+
+**E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
+
+**E7 (literals)**: Array, Set and tuple elements are evaluated in source order; Map and object literals are evaluated entry by entry in source order, key before value within an entry; a spread `...` is evaluated in sequence at the position where it appears.
+
+**E8 (string interpolation)**: interpolated fragments are evaluated left to right in source order.
+
+**E9 (match)**: the scrutinee is evaluated before any arm, exactly once. Arms are tried in source order; an `if` guard is evaluated only once its pattern has matched.
+
+**E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
+
+**E11 (statements)**: statements are evaluated in source order. A `defer` evaluates its captures where it is registered; for when the body runs see §4.9.
+
+```xray @id=eval-order-rules
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn add(a: int, b: int) -> int { return a + b }
+fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+
+class Counter {
+    hits: int = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2: the callee is evaluated before the arguments
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5: place subexpressions are evaluated before the right-hand side
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6: a complex receiver is evaluated exactly once
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
 ### 3.1 Precedence and Associativity
 
 Full precedence table (highest → lowest; operators at the same level share associativity):
@@ -788,15 +895,18 @@ var v = nullable_expr ?? default_value
 ### 3.4 Assignment and Compound Assignment
 
 ```ebnf
-AssignExpr ::= LValue AssignOp Expression
-LValue ::= Identifier | MemberAccess | IndexAccess
-AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
-           | '&=' | '|=' | '^=' | '<<=' | '>>='
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
 
 **Semantics**:
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
-- `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
+- `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
+- **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
 
 **Special cases**:

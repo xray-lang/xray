@@ -1,0 +1,12 @@
+-- two fragments --
+frag1
+frag2
+x-y
+-- inline fragments --
+inline1
+inline2
+p/q
+-- expression fragments --
+num1
+num2
+sum=3

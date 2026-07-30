@@ -854,8 +854,8 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
         }
         bool safe = (v->aux_int & 1) != 0;
         if (safe != (kind == XR_CONVERSION_DYNAMIC_NULLABLE)) {
-            verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence",
-                 f->name, v->id, blk->id);
+            verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence", f->name,
+                 v->id, blk->id);
             return false;
         }
         return true;
@@ -872,8 +872,7 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
         }
         if (XR_TYPE_IS_FLOAT(v->args[0]->type) && XR_TYPE_IS_INT(v->type) &&
             (v->flags & XI_FLAG_MAY_THROW) == 0) {
-            verr(ctx,
-                 "func '%s': v%u float-to-int XI_CONVERT in b%u lacks numeric-overflow effect",
+            verr(ctx, "func '%s': v%u float-to-int XI_CONVERT in b%u lacks numeric-overflow effect",
                  f->name, v->id, blk->id);
             return false;
         }
@@ -881,8 +880,8 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
     }
 
     if (kind == XR_CONVERSION_DYNAMIC_CHECKED || kind == XR_CONVERSION_DYNAMIC_NULLABLE) {
-        verr(ctx, "func '%s': v%u %s in b%u carries dynamic evidence outside XI_AS", f->name,
-             v->id, xi_op_name(v->op), blk->id);
+        verr(ctx, "func '%s': v%u %s in b%u carries dynamic evidence outside XI_AS", f->name, v->id,
+             xi_op_name(v->op), blk->id);
         return false;
     }
     if (xr_conversion_kind_is_numeric(kind) && v->nargs > 0 && v->args[0] && v->args[0]->type &&
@@ -2160,16 +2159,16 @@ static void verify_tbaa_annotations(VerifyCtx *ctx, const XiFunc *f) {
             XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            bool is_mem = xi_is_memory_op(v->op);
-            if (is_mem && v->mem_group == XI_MEM_NONE) {
-                verr(ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
-                     xi_op_name(v->op));
-            } else if (!is_mem && !xi_is_memory_clobber(v->op) && v->op != XI_CALL &&
-                       v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT &&
-                       v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
-                /* Memory-clobber ops and calls legitimately carry a TOP mem_group. */
-                verr(ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)", v->id,
-                     xi_op_name(v->op), v->mem_group);
+            /* mem_group must be exactly the group ops.def declares for the op,
+             * or its FIELD -> FIELD_ID refinement.  Checking against the table
+             * rather than an op whitelist means a new op cannot drift: any
+             * rewrite that forgets to reassign the group fails here. */
+            if (!xi_tbaa_group_matches_op(v)) {
+                verr(ctx,
+                     "v%u (%s): mem_group=%u does not match declared TBAA group %u "
+                     "after annotation",
+                     v->id, xi_op_name(v->op), v->mem_group,
+                     (unsigned) xi_tbaa_group_for_op(v->op));
             }
         }
     }

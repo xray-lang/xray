@@ -1374,6 +1374,58 @@ main()
 
 > Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
+### 3.0 Evaluation Order
+
+> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+
+xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
+
+This is a requirement rather than a conservative preference. Differential testing uses "the same program is byte-identical on both backends" as its correctness criterion; the moment an order is declared unspecified, a backend divergence at that point stops being a defect and the criterion itself stops working. The `tests/diff/cases/semantics/evaluation_order/` gate enforces the agreement.
+
+**E1 (general rule)**: expressions are evaluated **left to right, depth first**. A subexpression is fully evaluated, side effects included, before its parent expression uses its value.
+
+**E2 (calls)**: `callee(a1, …, an)` evaluates the callee expression (the receiver for a method call) → `a1` → … → `an`, and then enters the call. Borrows are established after every argument has been evaluated and before the callee is entered. Default arguments are evaluated at the call site in declaration order, after all explicit arguments.
+
+**E3 (binary operators)**: the left operand is fully evaluated, side effects included, before evaluation of the right operand begins. The short-circuit operators (E4) are the only exception.
+
+**E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
+
+**E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
+
+**E7 (literals)**: Array, Set and tuple elements are evaluated in source order; Map and object literals are evaluated entry by entry in source order, key before value within an entry; a spread `...` is evaluated in sequence at the position where it appears.
+
+**E8 (string interpolation)**: interpolated fragments are evaluated left to right in source order.
+
+**E9 (match)**: the scrutinee is evaluated before any arm, exactly once. Arms are tried in source order; an `if` guard is evaluated only once its pattern has matched.
+
+**E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
+
+**E11 (statements)**: statements are evaluated in source order. A `defer` evaluates its captures where it is registered; for when the body runs see §4.9.
+
+```xray
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn add(a: int, b: int) -> int { return a + b }
+fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+
+class Counter {
+    hits: int = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2: the callee is evaluated before the arguments
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5: place subexpressions are evaluated before the right-hand side
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6: a complex receiver is evaluated exactly once
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
 ### 3.1 Precedence and Associativity
 
 Full precedence table (highest → lowest; operators at the same level share associativity):
@@ -1538,15 +1590,18 @@ var v = nullable_expr ?? default_value
 ### 3.4 Assignment and Compound Assignment
 
 ```ebnf
-AssignExpr ::= LValue AssignOp Expression
-LValue ::= Identifier | MemberAccess | IndexAccess
-AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
-           | '&=' | '|=' | '^=' | '<<=' | '>>='
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
 
 **Semantics**:
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
-- `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
+- `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
+- **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
 
 **Special cases**:

@@ -1,0 +1,9 @@
+Cases in this directory freeze spec §3.0 (Evaluation Order).
+
+Each program prints a marker as every subexpression is evaluated, so the
+stdout IS the evaluation trace. The .expected sidecars pin the exact trace,
+and the VM/AOT differential run asserts both backends produce it.
+
+They exist because §3.0 declares that xray has no unspecified evaluation
+order: without that guarantee a backend divergence in these programs would
+not be a defect, and the differential suite would lose its criterion.

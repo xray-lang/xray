@@ -1,0 +1,49 @@
+// anchor: eval-order-assignment
+// §3.0 E5: place subexpressions before the right-hand side.
+// §3.0 E6: every place subexpression of a compound assignment is evaluated
+// exactly once, including a complex receiver.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+
+class Counter {
+    hits: int = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+fn mkArr(tag: string) -> Array<int> { print(tag); return [0, 0, 0] }
+
+fn main() {
+    print("-- index assign: index then value --")
+    var arr = [0, 0, 0]
+    arr[t("index", 0)] = t("value", 5)
+    print(arr[0])
+
+    print("-- complex array expression --")
+    mkArr("arrexpr")[t("index", 1)] = t("value", 7)
+
+    print("-- member assign --")
+    var c = Counter()
+    c.hits = t("value", 3)
+    print(c.hits)
+
+    print("-- compound, simple receiver --")
+    c.hits += t("delta", 4)
+    print(c.hits)
+
+    print("-- compound, complex receiver evaluated once --")
+    mk("receiver").hits += t("delta", 1)
+
+    print("-- increment is compound assignment --")
+    var i = 0
+    i++
+    i--
+    print(i)
+
+    print("-- chained assignment is right associative --")
+    var x = 0
+    var y = 0
+    x = y = t("chain", 9)
+    print(x)
+    print(y)
+}
+
+main()

@@ -1,0 +1,23 @@
+-- plain args --
+a1
+a2
+a3
+6
+-- callee before args --
+callee
+a1
+a2
+3
+-- receiver before args --
+receiver
+arg
+15
+-- nested call args --
+a1
+n1
+n2
+a3
+10
+-- default arg --
+explicit
+100

@@ -56,8 +56,16 @@ static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk, uint32_t
 
 /* ========== Alias-Aware Hoisting ========== */
 
-/* Check if a load is safe to hoist: its mem_group must not alias
- * any store or call inside the loop body. */
+/* Check if a load is safe to hoist out of the loop.
+ *
+ * Two independent obstacles, both of which must be cleared:
+ *
+ *   1. Aliasing — a store or clobber in the body may write the same memory.
+ *   2. Ordering — an ordering barrier in the body (a :sync edge or a
+ *      suspension point) forbids moving the load above it regardless of TBAA
+ *      groups.  Hoisting a load across an acquire is exactly the reordering
+ *      the memory model rules out: the loop would read once, before the edge
+ *      that publishes the value it is waiting for. */
 static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
     if (!load || load->mem_group == XI_MEM_NONE)
         return false;
@@ -71,6 +79,9 @@ static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
+            /* An ordering barrier blocks the hoist for every group. */
+            if (xi_op_is_ordering_barrier(v->op))
+                return false;
             /* Check direct stores and top-level clobbers inside loop. */
             if (xi_is_memory_store(v->op) || xi_is_memory_clobber(v->op)) {
                 if (xi_tbaa_may_alias(load, v))
