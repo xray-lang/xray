@@ -65,9 +65,19 @@ typedef struct XrtExcFrame {
 #ifdef XRT_IMPL
 XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top = NULL;
 XR_THREAD_LOCAL XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
+/* Nesting depth of defer bodies currently running on this thread, and the
+ * xrt_exc_top value captured when the innermost one started. Together they
+ * answer "would a panic raised right now escape a defer body?": only when we
+ * are inside one AND no handler has been pushed since it started. A panic the
+ * body catches itself stays ordinary — that is the escape hatch spec 8.3.1
+ * rule D2 prescribes. Both are maintained by xrt_defer_invoke_one. */
+XR_THREAD_LOCAL int xrt_defer_depth = 0;
+XR_THREAD_LOCAL XrtExcFrame *xrt_defer_exc_barrier = NULL;
 #else
 extern XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top;
 extern XR_THREAD_LOCAL XrValue xrt_pending_error;
+extern XR_THREAD_LOCAL int xrt_defer_depth;
+extern XR_THREAD_LOCAL XrtExcFrame *xrt_defer_exc_barrier;
 #endif
 
 static inline int xrt_has_pending_error(void) {
@@ -249,6 +259,15 @@ static inline const char *xrt_type_name(int64_t tid) {
 #ifdef XRT_IMPL
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     exc = xrt_exception_normalize(exc);
+    /* Spec 8.3.1 rule D3: a panic that would escape a defer body is a cleanup
+     * failure, not a recoverable condition — unwinding past a half-run cleanup
+     * would leave the resource state unknown, so not even an enclosing
+     * `catch panic` may intercept it. A handler pushed inside the body moves
+     * xrt_exc_top past the barrier and keeps the panic ordinary. */
+    if (xrt_defer_depth > 0 && xrt_exc_top == xrt_defer_exc_barrier)
+        xr_error_core_defer_throw_abort(
+            XR_ERR_DEFER_THROW, xrt_exception_message_cstr(exc),
+            xrt_has_pending_error() ? xrt_exception_message_cstr(xrt_pending_error) : NULL);
     if (xrt_exc_top) {
         /* Caught panic: run the defers of every frame skipped on the way to the
          * handler (down to its recorded mark), then jump. An uncaught panic

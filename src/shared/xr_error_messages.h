@@ -138,4 +138,12 @@
 #define XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG "Array<byte>.repeatFrom range/grow failed"
 #define XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG "Range.toArray range too large"
 
+/* Spec 8.3.1 rule D3 — an error escaped a `defer` body. Shared verbatim by the
+ * VM and AOT so both backends emit identical text, as the rule requires. */
+#define XR_ERROR_CORE_DEFER_THROW_MSG "error escaped a defer body"
+#define XR_ERROR_CORE_DEFER_THROW_IN_FLIGHT_MSG "in-flight error at the time of cleanup"
+#define XR_ERROR_CORE_DEFER_THROW_HINT_MSG                                                         \
+    "a defer body must not let errors escape (spec 8.3.1); this is not catchable"
+#define XR_ERROR_CORE_NO_MESSAGE_MSG "<no message>"
+
 #endif  // XR_ERROR_MESSAGES_H

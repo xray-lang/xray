@@ -102,9 +102,17 @@ static inline int xrt_defer_mark(XrtDeferScope *s) {
     return s ? s->count : 0;
 }
 
-/* Invoke one pending defer closure with Go-style error semantics: an error
- * thrown inside the defer replaces any in-flight value-return error; otherwise
- * the in-flight error is preserved across the call.
+/* Invoke one pending defer closure. Spec 8.3.1: a `defer` is a cleanup edge,
+ * not an error-propagation edge, so no error may escape the body. Rule D1
+ * rejects a throwing defer at compile time (E0380); what reaches here is only
+ * what static analysis cannot see through — an `extern` call or a `CFn`
+ * callback. Rule D3 makes that case fail fast: report both the escaping error
+ * and the in-flight one, then terminate. The in-flight error is neither
+ * replaced (the Go model, invisible in a language whose signatures and call
+ * sites carry no throws marker) nor suppressed (which silently loses it).
+ *
+ * The in-flight error is parked across the call so the callee starts from a
+ * clean slot and any pending error afterwards is unambiguously the defer's own.
  *
  * The closure itself is not released here: AOT heap objects currently leak to
  * process exit (see known_bugs "AOT 集合现状 leak", task 108), and a defer
@@ -118,15 +126,22 @@ static inline void xrt_defer_invoke_one(XrValue closure) {
         xrt_pending_error = XR_NULL_VAL;
 
     xrt_closure_t *c = (xrt_closure_t *) closure.ptr;
-    if (c)
+    if (c) {
+        XrtExcFrame *outer_barrier = xrt_defer_exc_barrier;
+        xrt_defer_exc_barrier = xrt_exc_top;
+        xrt_defer_depth++;
         ((XrValue (*)(xrt_closure_t *)) c->callable->sync_entry)(c);
-
-    if (had_error) {
-        if (xrt_has_pending_error())
-            xrt_release(saved_error); /* defer threw: its error wins */
-        else
-            xrt_pending_error = saved_error; /* restore the in-flight error */
+        xrt_defer_depth--;
+        xrt_defer_exc_barrier = outer_barrier;
     }
+
+    if (xrt_has_pending_error())
+        xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW,
+                                        xrt_exception_message_cstr(xrt_pending_error),
+                                        had_error ? xrt_exception_message_cstr(saved_error) : NULL);
+
+    if (had_error)
+        xrt_pending_error = saved_error;
 }
 
 /* Run a scope's pending defers LIFO down to `mark`. Does NOT unlink from the

@@ -1,0 +1,27 @@
+// anchor: defer-value-error-absorbed-inside-body
+// Spec 8.3.1 rule D2: the sanctioned way to defer a fallible cleanup is to
+// absorb the error inside the defer body. This compiles (rule D1 sees an empty
+// escaping set) and both backends must run the defer and continue normally,
+// including when an error is already in flight from the body.
+enum CleanupErr { Failed(s: string) }
+enum BodyErr { Boom }
+
+fn closeIt() {
+    throw CleanupErr.Failed("close")
+}
+
+fn f() {
+    defer {
+        try { closeIt() } catch (e) { print("cleanup-error-absorbed") }
+    }
+    throw BodyErr.Boom
+}
+
+try {
+    f()
+} catch (e) {
+    match (e) {
+        BodyErr.Boom -> { print("body-error-survives-cleanup") }
+    }
+}
+print("done")

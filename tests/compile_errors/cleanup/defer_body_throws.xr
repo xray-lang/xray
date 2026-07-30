@@ -1,0 +1,9 @@
+// Spec 8.3.1 rule D1: a defer body must not let errors escape.
+enum CleanupErr { Failed }
+
+fn f() {
+    defer { throw CleanupErr.Failed }
+    print("body")
+}
+
+f()

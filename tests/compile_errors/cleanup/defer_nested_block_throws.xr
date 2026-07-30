@@ -1,0 +1,12 @@
+// Spec 8.3.1 rule D1: block-scoped defers are checked like function-body ones.
+enum CleanupErr { Failed }
+
+fn f() {
+    {
+        defer { throw CleanupErr.Failed }
+        print("inner")
+    }
+    print("after")
+}
+
+f()

@@ -16,6 +16,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "../../runtime/value/xtype.h"
+
 typedef enum {
     XA_BUILTIN_RECEIVER_EXACT_INTEGER,
     XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER,
@@ -195,13 +197,16 @@ typedef enum {
     XA_BUILTIN_RECEIVER_METHOD_COUNT,
 } XaBuiltinReceiverMethodId;
 
+/* Widest fixed parameter list any entry in the .def table declares. */
+#define XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS 3
+
 typedef struct XaBuiltinReceiverMethodSpec {
     XaBuiltinReceiverMethodId method_id;
     const char *id;
     const char *source_name;
     XaBuiltinReceiverKind receiver;
     XaBuiltinMethodTypeKind result;
-    XaBuiltinMethodTypeKind params[3];
+    XaBuiltinMethodTypeKind params[XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS];
     int param_count;
     int min_params;
     bool is_variadic;
@@ -292,6 +297,78 @@ xa_builtin_receiver_method_memory_effect(const XaBuiltinReceiverMethodSpec *spec
             break;
     }
     return result;
+}
+
+/* Element types a Slice<T> may span POD-wise. */
+static inline bool xa_builtin_type_is_pod_span_elem(XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Does `receiver` satisfy a spec's declared receiver kind? Single definition
+ * shared by the call/expr visitors and the error-set analyzer: a divergent copy
+ * would let one pass believe a call is an intrinsic while another does not. */
+static inline bool xa_builtin_receiver_matches_type(XrType *receiver, XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver);
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver && XR_TYPE_IS_ARRAY(receiver);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
+                   xa_builtin_type_is_pod_span_elem(receiver->container.element_type);
+    }
+    return false;
+}
+
+/* Does this parameter slot take a callback? Higher-order intrinsics propagate
+ * whatever their callback throws, so unlike the rest of the table they are not
+ * unconditionally no-throw. */
+static inline bool xa_builtin_method_type_is_callback(XaBuiltinMethodTypeKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_TO_BOOL_FN:
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_BOOL_FN:
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN:
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
+        case XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
+        case XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Whether an intrinsic can put an error on the value-return channel.
+ *
+ * Every method in this table is an Array / Slice / exact-integer primitive
+ * implemented in C. Those raise panics (xrt_throw_error → the panic channel,
+ * E04xx) and never write pending_error, so on the value-return error channel
+ * they are no-throw. The exception is the higher-order ones, which re-raise
+ * whatever their callback throws — proving those needs the callback's effect,
+ * which this table does not carry, so they stay unproven (fail-closed). */
+static inline bool xa_builtin_receiver_method_is_nothrow(const XaBuiltinReceiverMethodSpec *spec) {
+    if (!spec)
+        return false;
+    for (int i = 0; i < XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS; i++) {
+        if (xa_builtin_method_type_is_callback(spec->params[i]))
+            return false;
+    }
+    return true;
 }
 
 static inline XaBuiltinMethodProfileAvailability

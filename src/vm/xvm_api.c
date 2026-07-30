@@ -21,6 +21,7 @@
 #include "../runtime/mem/xheap.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/xisolate_api.h"
+#include "../shared/xr_error_core.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 
@@ -453,6 +454,74 @@ void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
 }
 
 /*
+** User-visible message of an error value, with exactly the semantics of the
+** AOT's xrt_exception_message_cstr: a raw string yields itself, an exception
+** object yields its `message` field, anything else (a thrown enum error value,
+** say) yields NULL. Kept deliberately narrow so both backends print identical
+** text for spec 8.3.1 rule D3, which requires them to agree verbatim.
+*/
+static const char *defer_error_message_cstr(XrVMRuntime *isolate, XrValue error) {
+    if (XR_IS_NULL(error))
+        return NULL;
+    if (XR_IS_STRING(error)) {
+        XrString *s = (XrString *) XR_TO_PTR(error);
+        return s ? s->data : NULL;
+    }
+    if (!xr_value_is_panic_info(isolate, error))
+        return NULL;
+    const char *message = xr_panic_info_get_message(isolate, error);
+    return (message && message[0]) ? message : NULL;
+}
+
+/*
+** Spec 8.3.1 rule D3: an error escaped a defer body. Cleanup failed, so the
+** resource state is unknown and there is no safe point to resume from. Routed
+** through the shared reporter so the VM and AOT emit identical diagnostics and
+** exit status.
+*/
+XR_ERROR_CORE_NORETURN static void defer_throw_abort(XrVMRuntime *isolate, XrValue escaped,
+                                                     XrValue in_flight) {
+    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, defer_error_message_cstr(isolate, escaped),
+                                    defer_error_message_cstr(isolate, in_flight));
+}
+
+/*
+** Invoke one deferred closure. Spec 8.3.1: a `defer` is a cleanup edge, not an
+** error-propagation edge, so no error may escape the body. Rule D1 rejects a
+** throwing defer at compile time (E0380); what reaches here is only what static
+** analysis cannot see through (an FFI boundary). Rule D3 makes that fail fast:
+** report both the escaping error and the in-flight one, then terminate. The
+** in-flight error is neither replaced (the Go model, invisible in a language
+** whose signatures and call sites carry no throws marker) nor suppressed.
+**
+** The in-flight error is parked across the call so the callee starts from a
+** clean slot and any pending error afterwards is unambiguously the defer's own.
+** defer_depth / defer_handler_barrier let xr_vm_throw_exception tell a panic
+** escaping this body from one the body catches itself; they mirror
+** xrt_defer_depth / xrt_defer_exc_barrier in the AOT runtime.
+*/
+static void run_one_defer(XrVMRuntime *isolate, XrVMContext *ctx, XrClosure *closure, XrValue *args,
+                          int nargs) {
+    XrValue saved_error = ctx->pending_error;
+    bool had_error = !XR_IS_NULL(saved_error);
+    if (had_error)
+        ctx->pending_error = xr_null();
+
+    int outer_barrier = ctx->defer_handler_barrier;
+    ctx->defer_handler_barrier = ctx->handler_count;
+    ctx->defer_depth++;
+    xr_vm_call_closure(isolate, closure, args, nargs);
+    ctx->defer_depth--;
+    ctx->defer_handler_barrier = outer_barrier;
+
+    if (!XR_IS_NULL(ctx->pending_error))
+        defer_throw_abort(isolate, ctx->pending_error, had_error ? saved_error : xr_null());
+
+    if (had_error)
+        ctx->pending_error = saved_error;
+}
+
+/*
 ** Run VM defer entries in LIFO order down to an exact stack mark.
 **
 ** Marks are value indexes in ctx->defer_stack.  The bytecode lowering emits
@@ -513,7 +582,7 @@ XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, in
             }
             if (xr_value_is_closure(closure_val)) {
                 XrClosure *closure = xr_value_to_closure(closure_val);
-                xr_vm_call_closure(isolate, closure, defer_args, nargs);
+                run_one_defer(isolate, ctx, closure, defer_args, nargs);
             }
         }
 
@@ -539,6 +608,14 @@ static void run_defers_for_frame(XrVMRuntime *isolate, XrVMContext *ctx, int fra
 void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
+
+    /* Spec 8.3.1 rule D3: a panic that would escape a defer body is a cleanup
+     * failure, not a recoverable condition — unwinding past a half-run cleanup
+     * would leave the resource state unknown, so not even an enclosing
+     * `catch panic` may intercept it. A handler pushed inside the body raises
+     * handler_count past the barrier and keeps the panic ordinary. */
+    if (ctx && ctx->defer_depth > 0 && ctx->handler_count <= ctx->defer_handler_barrier)
+        defer_throw_abort(isolate, exception, ctx->pending_error);
 
     /* Iterative exception propagation.
      *

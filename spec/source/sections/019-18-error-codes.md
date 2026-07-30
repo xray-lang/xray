@@ -84,6 +84,7 @@ order: 019
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+| `E0380` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | `defer` 目标会抛出错误（见 §8.3.1） |
 
 ### 18.3 运行时
 
@@ -118,6 +119,7 @@ order: 019
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
+| `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
@@ -244,6 +246,7 @@ order: 019
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | the `defer` target throws (see §8.3.1) |
 
 ### 18.3 Runtime
 
@@ -278,6 +281,7 @@ order: 019
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |

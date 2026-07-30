@@ -84,6 +84,7 @@
 #define XR_ERR_ANALYZE_VISIBILITY 377
 #define XR_ERR_ANALYZE_CONST_FIELD 378
 #define XR_ERR_ANALYZE_POSSIBLY_NULL 379
+#define XR_ERR_ANALYZE_DEFER_MAY_THROW 380
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400
@@ -109,10 +110,13 @@
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #define XR_ERR_KEY_NOT_FOUND 431
 
-/* ---- Runtime system errors (E04xx, 440-442) ---- */
+/* ---- Runtime system errors (E04xx, 440-443) ---- */
 #define XR_ERR_STACK_OVERFLOW 440
 #define XR_ERR_OUT_OF_MEMORY 441
 #define XR_ERR_MATCH_FAILURE 442
+/* Error escaped a defer body past the E0380 static rule (FFI boundary).
+ * Uncatchable: terminates the process. See spec §8.3.1 rule D3. */
+#define XR_ERR_DEFER_THROW 443
 
 /* ---- Runtime argument errors (E04xx, 450-451) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450

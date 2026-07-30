@@ -2081,7 +2081,7 @@ fn process() {
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- An error thrown inside a `defer` body **replaces** any in-flight error (Go-style semantics).
+- **No error may escape a `defer` body**: `E0380` is reported when the deferred callable's inferred error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
 
 ### 4.10 Built-in Print Functions
 
@@ -3607,7 +3607,8 @@ Design principles:
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
 - **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
-- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
+- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
+- **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0380`), see §8.3.1.
 
 ### 8.1 Value-return error channel
 
@@ -3867,7 +3868,39 @@ fn fetch(url: string) -> string {
 - Multiple `defer`s in the same block run in **LIFO** order
 - `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
 - A `defer` in a loop body runs as each iteration exits
-- `defer` blocks should not throw errors (behaviour is undefined)
+- No error may escape a `defer` body (see §8.3.1)
+
+#### 8.3.1 `defer` and errors
+
+`defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
+
+**Rule D1 (static, normative)**: if the inferred error set of the callable a `defer` defers is **non-empty**, the compiler reports `E0380`.
+
+Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
+
+```xray
+fn close(c: Conn) { throw IoErr.Closed }
+
+fn bad(c: Conn) {
+    defer close(c)                           // ❌ E0380: the deferred target throws
+}
+
+fn good(c: Conn) {
+    defer {                                  // ✅ handle it inside the defer body
+        try { close(c) } catch (e) { log.warn("close failed") }
+    }
+}
+```
+
+**Rule D2 (how to satisfy it)**: absorb the error inside the `defer` body with `try` / `catch`, or call a cleanup API that does not throw. This is the only legal form — it forces the author to answer "what happens when cleanup fails?".
+
+**Rule D3 (runtime backstop, normative)**: if an error still escapes a `defer` body — an indirect call D1 could not decide statically, or a panic raised inside the body — the runtime **terminates the process** with `E0443` and exit status `70`:
+
+- The termination is **not catchable** — neither `catch` nor `catch panic` intercepts it. An error or panic the `defer` body catches **itself** has not escaped; that is the ordinary form rule D2 prescribes.
+- The in-flight error is neither replaced nor suppressed; the diagnostic reports the escaping error, and the in-flight one alongside it when there is one (an enum error value carries no message, and shows as `<no message>`).
+- The VM and AOT backends must agree verbatim on this behaviour, including exit code and diagnostic text.
+
+**Why not Go's "replace" semantics**: in Go, rewriting the error from a defer requires an explicit assignment to a named return value — visible and local. xray puts `throws` in neither the signature nor the call site (§8.0), so an implicit error replacement would be entirely invisible in the source, and multiple simultaneously-throwing `defer`s would additionally need a replacement-chain rule. Fail-fast is the only option that is defined, hides nothing, and adds no further rules.
 
 ### 8.4 Optional and error handling
 
@@ -5765,6 +5798,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | the `defer` target throws (see §8.3.1) |
 
 ### 18.3 Runtime
 
@@ -5799,6 +5833,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |

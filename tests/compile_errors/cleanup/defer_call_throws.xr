@@ -1,0 +1,14 @@
+// Spec 8.3.1 rule D1: the call form is desugared to the same deferred callable,
+// so a throwing callee is rejected the same way.
+enum CleanupErr { Failed }
+
+fn closeIt() {
+    throw CleanupErr.Failed
+}
+
+fn f() {
+    defer closeIt()
+    print("body")
+}
+
+f()

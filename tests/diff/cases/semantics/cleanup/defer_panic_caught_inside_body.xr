@@ -1,0 +1,24 @@
+// anchor: defer-panic-caught-inside-body
+// Spec 8.3.1 rule D2: a panic the defer body catches ITSELF has not escaped, so
+// it stays an ordinary panic and the program continues. This is the escape
+// hatch that keeps D3 from swallowing legitimate cleanup code, and it is the
+// boundary case for the runtime's defer barrier: a handler pushed inside the
+// body must be visible to the throw path.
+fn f() {
+    defer {
+        try {
+            var z = 0
+            print(10 / z)
+        } catch panic (p) {
+            print("panic-absorbed-inside-defer")
+        }
+    }
+    print("body-ran")
+}
+
+try {
+    f()
+} catch panic (p) {
+    print("outer-handler-must-not-run")
+}
+print("done")

@@ -1,9 +1,10 @@
 # Effect and assertion semantics contract
 
-Status: re-frozen after Task 242 gave numeric conversions typed evidence and
-Task 245 separated semantic effects from native code-shape controls. The
-ordinary effect product, product membership, and fail-closed semantics remain
-unchanged.
+Status: re-frozen after the defer cleanup edge gained a typed error rule
+(clauses 12–13) and receiver-specialized builtin intrinsics gained explicit
+error contracts. Task 242 gave numeric conversions typed evidence and Task 245
+separated semantic effects from native code-shape controls. The ordinary effect
+product, product membership, and fail-closed semantics remain unchanged.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -68,13 +69,32 @@ unchanged.
     `XaMemoryEffectSummary`. A verification contract may reject an unhonored
     request but cannot turn it into a semantic fact or optimization license.
 
+12. A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1).
+    The deferred callable's escaping error set must be empty at runtime. A
+    demonstrably non-empty escaping set is rejected statically as `E0380`; this
+    one judgement is deliberately not fail-closed, because the language has no
+    user-writable no-throw annotation with which an author could discharge an
+    unproven obligation. The unproven remainder is covered at runtime: an error
+    or panic that escapes a defer body terminates the process with `E0443` and
+    exit status 70, uncatchable, replacing and suppressing nothing. An error the
+    defer body catches itself has not escaped. VM and AOT must agree verbatim on
+    that behaviour, including exit status and diagnostic text.
+13. Receiver-specialized builtin intrinsics (`xbuiltin_receiver_method.def`) are
+    Array / Slice / exact-integer primitives implemented in C. They raise panics
+    and never write the value-return error channel, so they carry an explicit
+    `NOTHROW` error contract. The higher-order ones re-raise whatever their
+    callback throws; the table carries no callback effect, so they remain
+    unproven and leave the caller's error-set completeness unknown.
+14. Changing the defer error rule, the intrinsic error contract derivation, or
+    the runtime backstop's observable behaviour is a contract change.
+
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_effect_db.h 24f9175683e2d780e9a45f8f54e9349577845333d888e44a99815e953b6321e5
 anchor-sha256: src/frontend/analyzer/xa_effect_db.c 4c26c5da9762ceb45390900880c8590fb2ca712ccae3174f4b3673541b204111
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 65212eecec23ddb73ded9b54e869f9c51feb99126e9cc3bb9053f98be7d27ba8
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c f6130beefd5cee32af7cea485f834c0056b3bd94e9465320540d85d0642fa83c
 anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602dd1e0d01751be3e88acbcc197edcc49ad99557f57d93f
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c 988cc1cd18761cccc28fc771a0f86f09b71ac6aba685b57a0d1457563d860c07
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367

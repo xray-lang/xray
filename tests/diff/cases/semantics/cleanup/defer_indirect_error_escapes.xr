@@ -1,0 +1,20 @@
+// anchor: defer-indirect-error-escapes-terminates
+// Spec 8.3.1: rule D1 flags only a demonstrably non-empty escaping error set,
+// so an indirect call through a callback parameter compiles. Rule D3 is what
+// covers it at runtime: the error escapes the defer body, so the process
+// terminates with E0443 / exit 70 rather than the error being silently
+// dropped (which is what both backends used to do) or replacing an in-flight
+// error (which is what the AOT backend used to do).
+enum CleanupErr { Failed }
+
+fn thrower() {
+    throw CleanupErr.Failed
+}
+
+fn runWithCleanup(cleanup: () -> ()) {
+    defer cleanup()
+    print("body-ran")
+}
+
+runWithCleanup(thrower)
+print("unreachable-after-terminate")

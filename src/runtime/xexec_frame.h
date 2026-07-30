@@ -189,6 +189,15 @@ typedef struct XrVMContext {
     int defer_count;
     int defer_capacity;
     int *defer_frame_marks;
+
+    // Nesting depth of defer bodies currently running, and the handler_count
+    // captured when the innermost one started. Together they answer "would a
+    // throw raised right now escape a defer body?": only when we are inside one
+    // AND no handler has been pushed since it started. Spec 8.3.1 rule D3 makes
+    // that case uncatchable; a throw the body catches itself stays ordinary.
+    // Mirrors xrt_defer_depth / xrt_defer_exc_barrier on the AOT side.
+    int defer_depth;
+    int defer_handler_barrier;
 } XrVMContext;
 
 /*
