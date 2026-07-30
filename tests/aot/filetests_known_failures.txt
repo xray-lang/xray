@@ -63,24 +63,14 @@ tests/aot/filetests/container/typed_container_plan.xr
 #        so it no longer appears at the call site; the assertion now pins the
 #        macro call with exactly two inline payloads.
 
-# ---------------------------------------------------------------------------
-# Group F -- untriaged.  Each needs its actual emission compared against its
-# expectation before it is either fixed or reclassified into a group above.
-# Do not bulk-update these: an expectation that pins a raw-pointer or
-# unboxed-receiver shape may be recording a real regression.
-# ---------------------------------------------------------------------------
-tests/aot/filetests/abi/rawptr_ref_abi.xr
-tests/aot/filetests/boundary/direct_call_closure_u8.xr
-tests/aot/filetests/boundary/tagged_boundary.xr
-tests/aot/filetests/container/byte_slice_index_get_native_rep.xr
-tests/aot/filetests/cgen/direct_method_func_attr_callee_effect.xr
-tests/aot/filetests/cgen/fixed_array_struct_field.xr
-tests/aot/filetests/cgen/generic_map_set_storage_force_clone_plan.xr
-tests/aot/filetests/cgen/rawptr_value_struct_method_receiver.xr
-tests/aot/filetests/cgen/ref_aggregate_scalar_field_direct.xr
-tests/aot/filetests/cgen/ref_casted_native_size_field_materializes.xr
-tests/aot/filetests/cgen/scalar_ref_out_call_plan.xr
-tests/aot/filetests/cgen/stack_native_class_descriptor_elision.xr
+# Group F is empty: all 12 entries were expectation drift, confirmed per case
+# against the property each one guards.  Three causes, none of them a loss:
+#   - generated pointer casts are now the exact pointer type instead of `void *`
+#     (the address-of and the pointee are unchanged);
+#   - locals are hoisted to top-of-function declarations, so assignment lines
+#     carry no type prefix;
+#   - containers, strings and receivers are passed unboxed with an explicit
+#     cast, so call sites read `(void *)(vN)` where they used to read `vN`.
 
 # ---------------------------------------------------------------------------
 # Adjacent finding, recorded here because it was located while triaging this
