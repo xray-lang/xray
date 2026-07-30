@@ -4998,6 +4998,24 @@ static bool cg_class_native_ref_stack_return_takes_value(XiCgenCtx *ctx, const X
     return v->op == XI_CALL && cg_class_native_ref_stack_return_consumes_ctor(ctx, f, v);
 }
 
+/* cg_class_native_ctor_can_inline states the *shape's* necessary conditions and
+ * is deliberately silent about RC ref fields, because who may construct them is
+ * the caller's precondition: the value emitter refuses a ref-field layout (it
+ * has no drop site) and only the ref-stack return path supplies one.  A caller
+ * asking "will this ctor be inlined here", rather than "could this shape ever
+ * be", must therefore compose the two -- otherwise a ref-field instance that
+ * never reaches a return has its C local suppressed while the generic heap path
+ * still assigns to it, and the generated C names an undeclared identifier. */
+static bool cg_class_native_ctor_is_inlined_here(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
+    if (!cg_class_native_ctor_can_inline(ctx, f, v))
+        return false;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL);
+    if (cd && cd->instance_layout && cg_class_native_layout_has_ref_fields(cd->instance_layout))
+        return cg_class_native_ref_stack_return_takes_value(ctx, f, v);
+    return true;
+}
+
 static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                     const XiBlock *blk, const char *prefix) {
     CgClassNativeRefStackReturn info;
@@ -5430,7 +5448,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v) ||
@@ -8824,7 +8842,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v))
@@ -9679,6 +9697,11 @@ static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, con
         return false;
 
     int shared_slot = -1;
+    /* Deliberately the shape question, not the owner-specific one: this predicate
+     * is evaluated once where the adapter is defined and again where it is
+     * referenced, in different owners.  Composing it with the ref-stack return
+     * path -- which only the using owner can satisfy -- made the two disagree and
+     * emitted calls to an adapter nobody defined. */
     if (cg_value_plan_storage_rep(ctx, call) == XR_REP_PTR ||
         cg_class_native_ctor_can_inline(ctx, owner, call) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, owner, call, &shared_slot))
@@ -10961,7 +10984,12 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
      * those as forced roots emitted an imported module's unreachable suspendable
      * methods, whose coroutine machinery then named a runtime the entry never
      * links.  Freestanding images have no dynamic Xray module/class ABI at all:
-     * their public surface is the explicit C/link/entry manifest handled above. */
+     * their public surface is the explicit C/link/entry manifest handled above.
+     *
+     * This closes the world only as tightly as the edge set below is complete.
+     * Getter field reads are an edge because of this; monomorphized generic
+     * class members are not yet, which is why parallel_plan_map_cleanup_after_panic
+     * and parallel_plan_nested_dispatch_cleanup still fail to link. */
     if (cg_func_is_class_member(ctx, f)) {
         if (ctx->freestanding_profile)
             return false;
@@ -11164,6 +11192,16 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         changed |=
             cg_func_reach_mark_edge(ctx, cg_class_native_resolve_method_call(ctx, owner, v, NULL));
     }
+
+    /* A getter reads as a field, so `dt.day` is a LOAD_FIELD rather than a
+     * method call, yet it lowers to a call on the class member -- and to its
+     * boxed adapter when the receiver is not a native pointer.  Without this
+     * edge a closed-world executable pruned the accessor body while the
+     * consuming module still called the adapter, and the link failed on a
+     * symbol cgen itself had emitted the reference for. */
+    if (v->op == XI_LOAD_FIELD)
+        changed |= cg_func_reach_mark_edge(
+            ctx, cg_class_native_resolve_getter_field_method(ctx, owner, v, NULL, NULL));
 
     const XiFunc *ref_target = cg_value_static_func_target(ctx, owner, v);
     if (ref_target && cg_static_func_ref_use_requires_body(ctx, owner, v, ref_target, 0))
