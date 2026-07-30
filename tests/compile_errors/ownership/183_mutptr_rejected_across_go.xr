@@ -1,0 +1,19 @@
+// A raw pointer into an owner has call-bound lifetime, so it cannot cross a
+// coroutine boundary as an argument -- otherwise two coroutines would hold
+// write access to one buffer without any of the ownership evidence §2.13
+// requires.
+fn writer(p: ref MutPtr<int>, n: int) {
+    unsafe {
+        for (var i = 0; i < n; i++) { p[i] = p[i] + 1 }
+    }
+}
+
+fn main() {
+    var arr = [1, 2, 3]
+    unsafe {
+        go writer(arr.mutPtr(), 3)
+    }
+    print(arr[0])
+}
+
+main()
