@@ -878,3 +878,120 @@ XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count) {
     *out_count = count;
     return list;
 }
+
+XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
+    XR_DCHECK(parser != NULL, "xr_parse_generic_params: NULL parser");
+    XR_DCHECK(out_count != NULL, "xr_parse_generic_params: NULL out_count");
+
+    *out_count = 0;
+    if (!xr_parser_match(parser, TK_LT))
+        return NULL;
+
+    XrGenericParam **params = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    /* Installed before the first parameter so a constraint can name an earlier
+     * one. The caller restores its own scope; leaving this one installed is
+     * what lets the signature and body see the parameters. */
+    XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+    parser->type_scope = generic_scope;
+
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+        Token param_token = parser->previous;
+
+        char *param_name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
+        memcpy(param_name, param_token.start, param_token.length);
+        param_name[param_token.length] = '\0';
+
+        /* `<T, T>` would make every mention of T ambiguous and silently bind to
+         * whichever the scope kept. */
+        for (int i = 0; i < count; i++) {
+            if (params[i] && params[i]->name && strcmp(params[i]->name, param_name) == 0) {
+                char msg[160];
+                snprintf(msg, sizeof(msg), "duplicate type parameter name '%s'", param_name);
+                xr_parser_error(parser, msg);
+                break;
+            }
+        }
+
+        /* Visible to every later parameter's default, and to the signature. */
+        xr_type_scope_define(generic_scope, param_name,
+                             xr_tref_type_param(parser->compiler_session, param_name));
+
+        XrTypeRef **constraints = NULL;
+        int constraint_count = 0;
+        if (xr_parser_match(parser, TK_COLON))
+            constraints = xr_parse_constraint_list(parser, &constraint_count);
+
+        XrGenericParam *gp =
+            (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+        gp->name = param_name;
+        gp->constraints = constraints;
+        gp->constraint_count = constraint_count;
+        XR_PARSE_PUSH(parser, params, count, capacity, gp);
+
+    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+
+    xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
+
+    *out_count = count;
+    return params;
+}
+
+void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_count) {
+    XR_DCHECK(parser != NULL, "xr_parse_where_clause: NULL parser");
+
+    if (!xr_parser_match(parser, TK_WHERE))
+        return;
+
+    if (param_count <= 0) {
+        xr_parser_error(parser, "'where' requires type parameters to constrain");
+        /* Still parse the clause so the rest of the declaration stays in sync. */
+    }
+
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+        Token subject = parser->previous;
+
+        XrGenericParam *target = NULL;
+        for (int i = 0; i < param_count; i++) {
+            if (params[i] && params[i]->name &&
+                strncmp(params[i]->name, subject.start, (size_t) subject.length) == 0 &&
+                params[i]->name[subject.length] == '\0') {
+                target = params[i];
+                break;
+            }
+        }
+        if (!target && param_count > 0) {
+            char msg[192];
+            snprintf(msg, sizeof(msg), "'where' names '%.*s', which is not a type parameter here",
+                     subject.length, subject.start);
+            xr_parser_error(parser, msg);
+        }
+
+        xr_parser_consume(parser, TK_COLON, "expected ':' after type parameter in 'where'");
+        int added_count = 0;
+        XrTypeRef **added = xr_parse_constraint_list(parser, &added_count);
+        if (!target || added_count <= 0)
+            continue;
+
+        /* `where` is spelling, not a second mechanism: the clause appends to the
+         * same constraint list `<T: A>` fills, so one enforcement path (E0358)
+         * covers both and they compose on the same parameter. */
+        int merged_count = target->constraint_count + added_count;
+        XrTypeRef **merged = (XrTypeRef **) ast_alloc_array(
+            parser->compiler_session, sizeof(XrTypeRef *), (size_t) merged_count);
+        if (!merged)
+            continue;
+        for (int i = 0; i < target->constraint_count; i++)
+            merged[i] = target->constraints[i];
+        for (int i = 0; i < added_count; i++)
+            merged[target->constraint_count + i] = added[i];
+        target->constraints = merged;
+        target->constraint_count = merged_count;
+
+    } while (xr_parser_match(parser, TK_COMMA));
+}

@@ -1,0 +1,1061 @@
+// A chain of 132 generic classes, each specialising the next, exceeds the
+// XR_MONO_MAX_DEPTH nesting budget. Depth is the only guard that can catch a
+// diverging expansion, because every round mints a genuinely new type tuple.
+
+class C0<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C1<T>(this.v)
+        return n.get()
+    }
+}
+class C1<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C2<T>(this.v)
+        return n.get()
+    }
+}
+class C2<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C3<T>(this.v)
+        return n.get()
+    }
+}
+class C3<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C4<T>(this.v)
+        return n.get()
+    }
+}
+class C4<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C5<T>(this.v)
+        return n.get()
+    }
+}
+class C5<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C6<T>(this.v)
+        return n.get()
+    }
+}
+class C6<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C7<T>(this.v)
+        return n.get()
+    }
+}
+class C7<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C8<T>(this.v)
+        return n.get()
+    }
+}
+class C8<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C9<T>(this.v)
+        return n.get()
+    }
+}
+class C9<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C10<T>(this.v)
+        return n.get()
+    }
+}
+class C10<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C11<T>(this.v)
+        return n.get()
+    }
+}
+class C11<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C12<T>(this.v)
+        return n.get()
+    }
+}
+class C12<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C13<T>(this.v)
+        return n.get()
+    }
+}
+class C13<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C14<T>(this.v)
+        return n.get()
+    }
+}
+class C14<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C15<T>(this.v)
+        return n.get()
+    }
+}
+class C15<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C16<T>(this.v)
+        return n.get()
+    }
+}
+class C16<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C17<T>(this.v)
+        return n.get()
+    }
+}
+class C17<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C18<T>(this.v)
+        return n.get()
+    }
+}
+class C18<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C19<T>(this.v)
+        return n.get()
+    }
+}
+class C19<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C20<T>(this.v)
+        return n.get()
+    }
+}
+class C20<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C21<T>(this.v)
+        return n.get()
+    }
+}
+class C21<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C22<T>(this.v)
+        return n.get()
+    }
+}
+class C22<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C23<T>(this.v)
+        return n.get()
+    }
+}
+class C23<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C24<T>(this.v)
+        return n.get()
+    }
+}
+class C24<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C25<T>(this.v)
+        return n.get()
+    }
+}
+class C25<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C26<T>(this.v)
+        return n.get()
+    }
+}
+class C26<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C27<T>(this.v)
+        return n.get()
+    }
+}
+class C27<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C28<T>(this.v)
+        return n.get()
+    }
+}
+class C28<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C29<T>(this.v)
+        return n.get()
+    }
+}
+class C29<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C30<T>(this.v)
+        return n.get()
+    }
+}
+class C30<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C31<T>(this.v)
+        return n.get()
+    }
+}
+class C31<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C32<T>(this.v)
+        return n.get()
+    }
+}
+class C32<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C33<T>(this.v)
+        return n.get()
+    }
+}
+class C33<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C34<T>(this.v)
+        return n.get()
+    }
+}
+class C34<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C35<T>(this.v)
+        return n.get()
+    }
+}
+class C35<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C36<T>(this.v)
+        return n.get()
+    }
+}
+class C36<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C37<T>(this.v)
+        return n.get()
+    }
+}
+class C37<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C38<T>(this.v)
+        return n.get()
+    }
+}
+class C38<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C39<T>(this.v)
+        return n.get()
+    }
+}
+class C39<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C40<T>(this.v)
+        return n.get()
+    }
+}
+class C40<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C41<T>(this.v)
+        return n.get()
+    }
+}
+class C41<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C42<T>(this.v)
+        return n.get()
+    }
+}
+class C42<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C43<T>(this.v)
+        return n.get()
+    }
+}
+class C43<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C44<T>(this.v)
+        return n.get()
+    }
+}
+class C44<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C45<T>(this.v)
+        return n.get()
+    }
+}
+class C45<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C46<T>(this.v)
+        return n.get()
+    }
+}
+class C46<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C47<T>(this.v)
+        return n.get()
+    }
+}
+class C47<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C48<T>(this.v)
+        return n.get()
+    }
+}
+class C48<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C49<T>(this.v)
+        return n.get()
+    }
+}
+class C49<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C50<T>(this.v)
+        return n.get()
+    }
+}
+class C50<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C51<T>(this.v)
+        return n.get()
+    }
+}
+class C51<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C52<T>(this.v)
+        return n.get()
+    }
+}
+class C52<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C53<T>(this.v)
+        return n.get()
+    }
+}
+class C53<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C54<T>(this.v)
+        return n.get()
+    }
+}
+class C54<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C55<T>(this.v)
+        return n.get()
+    }
+}
+class C55<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C56<T>(this.v)
+        return n.get()
+    }
+}
+class C56<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C57<T>(this.v)
+        return n.get()
+    }
+}
+class C57<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C58<T>(this.v)
+        return n.get()
+    }
+}
+class C58<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C59<T>(this.v)
+        return n.get()
+    }
+}
+class C59<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C60<T>(this.v)
+        return n.get()
+    }
+}
+class C60<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C61<T>(this.v)
+        return n.get()
+    }
+}
+class C61<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C62<T>(this.v)
+        return n.get()
+    }
+}
+class C62<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C63<T>(this.v)
+        return n.get()
+    }
+}
+class C63<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C64<T>(this.v)
+        return n.get()
+    }
+}
+class C64<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C65<T>(this.v)
+        return n.get()
+    }
+}
+class C65<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C66<T>(this.v)
+        return n.get()
+    }
+}
+class C66<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C67<T>(this.v)
+        return n.get()
+    }
+}
+class C67<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C68<T>(this.v)
+        return n.get()
+    }
+}
+class C68<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C69<T>(this.v)
+        return n.get()
+    }
+}
+class C69<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C70<T>(this.v)
+        return n.get()
+    }
+}
+class C70<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C71<T>(this.v)
+        return n.get()
+    }
+}
+class C71<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C72<T>(this.v)
+        return n.get()
+    }
+}
+class C72<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C73<T>(this.v)
+        return n.get()
+    }
+}
+class C73<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C74<T>(this.v)
+        return n.get()
+    }
+}
+class C74<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C75<T>(this.v)
+        return n.get()
+    }
+}
+class C75<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C76<T>(this.v)
+        return n.get()
+    }
+}
+class C76<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C77<T>(this.v)
+        return n.get()
+    }
+}
+class C77<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C78<T>(this.v)
+        return n.get()
+    }
+}
+class C78<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C79<T>(this.v)
+        return n.get()
+    }
+}
+class C79<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C80<T>(this.v)
+        return n.get()
+    }
+}
+class C80<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C81<T>(this.v)
+        return n.get()
+    }
+}
+class C81<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C82<T>(this.v)
+        return n.get()
+    }
+}
+class C82<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C83<T>(this.v)
+        return n.get()
+    }
+}
+class C83<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C84<T>(this.v)
+        return n.get()
+    }
+}
+class C84<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C85<T>(this.v)
+        return n.get()
+    }
+}
+class C85<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C86<T>(this.v)
+        return n.get()
+    }
+}
+class C86<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C87<T>(this.v)
+        return n.get()
+    }
+}
+class C87<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C88<T>(this.v)
+        return n.get()
+    }
+}
+class C88<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C89<T>(this.v)
+        return n.get()
+    }
+}
+class C89<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C90<T>(this.v)
+        return n.get()
+    }
+}
+class C90<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C91<T>(this.v)
+        return n.get()
+    }
+}
+class C91<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C92<T>(this.v)
+        return n.get()
+    }
+}
+class C92<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C93<T>(this.v)
+        return n.get()
+    }
+}
+class C93<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C94<T>(this.v)
+        return n.get()
+    }
+}
+class C94<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C95<T>(this.v)
+        return n.get()
+    }
+}
+class C95<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C96<T>(this.v)
+        return n.get()
+    }
+}
+class C96<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C97<T>(this.v)
+        return n.get()
+    }
+}
+class C97<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C98<T>(this.v)
+        return n.get()
+    }
+}
+class C98<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C99<T>(this.v)
+        return n.get()
+    }
+}
+class C99<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C100<T>(this.v)
+        return n.get()
+    }
+}
+class C100<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C101<T>(this.v)
+        return n.get()
+    }
+}
+class C101<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C102<T>(this.v)
+        return n.get()
+    }
+}
+class C102<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C103<T>(this.v)
+        return n.get()
+    }
+}
+class C103<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C104<T>(this.v)
+        return n.get()
+    }
+}
+class C104<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C105<T>(this.v)
+        return n.get()
+    }
+}
+class C105<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C106<T>(this.v)
+        return n.get()
+    }
+}
+class C106<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C107<T>(this.v)
+        return n.get()
+    }
+}
+class C107<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C108<T>(this.v)
+        return n.get()
+    }
+}
+class C108<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C109<T>(this.v)
+        return n.get()
+    }
+}
+class C109<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C110<T>(this.v)
+        return n.get()
+    }
+}
+class C110<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C111<T>(this.v)
+        return n.get()
+    }
+}
+class C111<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C112<T>(this.v)
+        return n.get()
+    }
+}
+class C112<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C113<T>(this.v)
+        return n.get()
+    }
+}
+class C113<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C114<T>(this.v)
+        return n.get()
+    }
+}
+class C114<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C115<T>(this.v)
+        return n.get()
+    }
+}
+class C115<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C116<T>(this.v)
+        return n.get()
+    }
+}
+class C116<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C117<T>(this.v)
+        return n.get()
+    }
+}
+class C117<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C118<T>(this.v)
+        return n.get()
+    }
+}
+class C118<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C119<T>(this.v)
+        return n.get()
+    }
+}
+class C119<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C120<T>(this.v)
+        return n.get()
+    }
+}
+class C120<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C121<T>(this.v)
+        return n.get()
+    }
+}
+class C121<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C122<T>(this.v)
+        return n.get()
+    }
+}
+class C122<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C123<T>(this.v)
+        return n.get()
+    }
+}
+class C123<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C124<T>(this.v)
+        return n.get()
+    }
+}
+class C124<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C125<T>(this.v)
+        return n.get()
+    }
+}
+class C125<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C126<T>(this.v)
+        return n.get()
+    }
+}
+class C126<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C127<T>(this.v)
+        return n.get()
+    }
+}
+class C127<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C128<T>(this.v)
+        return n.get()
+    }
+}
+class C128<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C129<T>(this.v)
+        return n.get()
+    }
+}
+class C129<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C130<T>(this.v)
+        return n.get()
+    }
+}
+class C130<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        var n = C131<T>(this.v)
+        return n.get()
+    }
+}
+class C131<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T {
+        return this.v
+    }
+}
+var c = C0<int>(5)
+print(c.get())

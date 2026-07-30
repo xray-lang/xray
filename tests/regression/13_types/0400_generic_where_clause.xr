@@ -1,0 +1,67 @@
+// `where` is spelling, not a second mechanism: it appends to the same
+// constraint list `<T: C>` fills, so both forms compose on one parameter and
+// are enforced by one path. Covers every declaration form that takes type
+// parameters.
+
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// Inline and `where` constraints on the same parameter must intersect, not
+// replace one another.
+fn bothForms<T: Comparable>(a: T, b: T) -> T where T: Stringable {
+    if (a > b) { return a }
+    return b
+}
+
+class Registry<K, V> where K: Hashable {
+    m: Map<K, V>
+    constructor() { this.m = Map<K, V>() }
+    put(k: K, v: V) { this.m.set(k, v) }
+    count() -> int { return len(this.m) }
+}
+
+struct Holder<T> where T: Comparable {
+    v: T
+}
+
+interface Seq<T> where T: Comparable {
+    first() -> T
+}
+
+enum Wrap<T> where T: Comparable {
+    One(T)
+}
+
+@test
+fn test_where_on_function() {
+    assert_eq(maxOf<int>(3, 9), 9)
+    assert_eq(maxOf<string>("a", "b"), "b")
+}
+
+@test
+fn test_inline_and_where_intersect() {
+    assert_eq(bothForms<int>(4, 2), 4)
+}
+
+@test
+fn test_where_on_class() {
+    var r = Registry<string, int>()
+    r.put("a", 1)
+    r.put("b", 2)
+    assert_eq(r.count(), 2)
+}
+
+@test
+fn test_where_on_struct() {
+    var h = Holder<int>{ v: 5 }
+    assert_eq(h.v, 5)
+}
+
+@test
+fn test_where_multiple_params() {
+    var r = Registry<int, string>()
+    r.put(1, "x")
+    assert_eq(r.count(), 1)
+}

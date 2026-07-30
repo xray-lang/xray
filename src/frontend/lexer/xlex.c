@@ -1325,6 +1325,7 @@ static const char *token_names[] = {
     [TK_EXTENDS] = "extends",
     [TK_INTERFACE] = "interface",
     [TK_IMPLEMENTS] = "implements",
+    [TK_WHERE] = "where",
     [TK_FN] = "fn",
     [TK_NEW] = "new",
     [TK_THIS] = "this",

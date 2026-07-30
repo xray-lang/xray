@@ -250,6 +250,37 @@ XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *na
  */
 XR_FUNC XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count);
 
+/* Parse a generic parameter list `<T, U: A & B, V = int>` when the next token
+ * is '<'; a no-op returning NULL with *out_count == 0 otherwise.
+ *
+ * Every declaration form that accepts type parameters -- function, class,
+ * struct, interface, enum, method, function expression -- shares this one
+ * parser. They previously each carried their own copy of the same loop, so a
+ * change to the grammar had to be made seven times or silently diverge.
+ *
+ * On success `parser->type_scope` is left pointing at a fresh scope holding the
+ * parameters, so the caller can parse the signature and body against them; the
+ * caller is responsible for saving and restoring its own scope. Parameters are
+ * defined into that scope one at a time as they are parsed, which is what lets
+ * a default name an earlier parameter (`<T, U = T>`).
+ *
+ * Type aliases do not use this helper: their parameters are names only
+ * (LANGUAGE_SPEC 9.1 AliasTypeParams), and the alias entry must be registered
+ * in the enclosing scope before its right-hand side is parsed, so the scope
+ * this installs would capture the alias name itself. */
+XR_FUNC XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count);
+
+/* Parse an optional `where T: A & B, U: C` clause and merge each constraint
+ * into the named parameter's existing constraint list; a no-op when the next
+ * token is not `where`.
+ *
+ * `where` is spelling, not a second mechanism. It produces exactly what
+ * `<T: A & B>` produces, so constraint enforcement stays on one path (E0358)
+ * and the two forms compose on the same parameter. Call it after the
+ * signature, while the generic scope from xr_parse_generic_params is still
+ * installed, so constraint types can name the parameters. */
+XR_FUNC void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_count);
+
 /* ========== Destructuring ========== */
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);

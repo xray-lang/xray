@@ -301,7 +301,7 @@ TEST(mono_collector_basic) {
 
     XrTypeRef int_t = {.kind = XR_TREF_INT};
     XrTypeRef *args[] = {&int_t};
-    const char *name = xa_mono_collector_add(&c, "identity", args, 1, false);
+    const char *name = xa_mono_collector_add(&c, "identity", args, 1, false, NULL);
     ASSERT(name != NULL);
     ASSERT_STR_EQ(name, "identity$i64");
     ASSERT_EQ(c.count, 1);
@@ -315,24 +315,24 @@ TEST(mono_collector_dedup) {
 
     XrTypeRef int_t = {.kind = XR_TREF_INT};
     XrTypeRef *args1[] = {&int_t};
-    xa_mono_collector_add(&c, "identity", args1, 1, false);
+    xa_mono_collector_add(&c, "identity", args1, 1, false, NULL);
 
     // bool has different slot type from int (BOOL=11 vs I64=7) ?separate instance
     XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
     XrTypeRef *args2[] = {&bool_t};
-    xa_mono_collector_add(&c, "identity", args2, 1, false);
+    xa_mono_collector_add(&c, "identity", args2, 1, false, NULL);
     ASSERT_EQ(c.count, 2);
 
     // Same int type again ?should deduplicate
     XrTypeRef int_t2 = {.kind = XR_TREF_INT};
     XrTypeRef *args2b[] = {&int_t2};
-    xa_mono_collector_add(&c, "identity", args2b, 1, false);
+    xa_mono_collector_add(&c, "identity", args2b, 1, false, NULL);
     ASSERT_EQ(c.count, 2);
 
     // float has different rep ?separate instance
     XrTypeRef float_t = {.kind = XR_TREF_FLOAT};
     XrTypeRef *args3[] = {&float_t};
-    xa_mono_collector_add(&c, "identity", args3, 1, false);
+    xa_mono_collector_add(&c, "identity", args3, 1, false, NULL);
     ASSERT_EQ(c.count, 3);
 
     xa_mono_collector_free(&c);
