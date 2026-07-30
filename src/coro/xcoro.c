@@ -1180,9 +1180,13 @@ void xr_coro_cancel(XrCoroutine *coro) {
      * cancelled. Coroutines that owe no cleanup keep the immediate path. */
     if (coro->backend && coro->backend->has_cancellation_cleanup &&
         coro->backend->has_cancellation_cleanup(coro)) {
-        xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
         XrRuntime *cleanup_runtime = coro_cancel_runtime(coro, xr_current_worker());
         if (cleanup_runtime) {
+            /* xr_scheduler_ready owns the BLOCKED -> READY claim: clearing the
+             * flag first would make it decline the wake and strand a coroutine
+             * that was parked. A coroutine that is already running or ready
+             * declines the claim too, and reaches its next safepoint on its
+             * own. */
             xr_scheduler_ready(cleanup_runtime, coro, false);
             return;
         }

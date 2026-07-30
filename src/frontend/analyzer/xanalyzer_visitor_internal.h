@@ -260,6 +260,8 @@ XR_FUNC void xa_record_pending_capture(XaInferContext *ctx, XaSymbol *captured);
 XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *borrower_sym,
                                                AstNode *site);
 XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx);
+/* The closure outlives the call after all: its captured roots escape with it. */
+XR_FUNC void xa_escape_pending_captures(XaInferContext *ctx);
 XR_FUNC void xa_clear_active_loans_for_borrower(XaInferContext *ctx, XaSymbol *borrower_sym);
 XR_FUNC void xa_clear_active_loans_in_scope(XaInferContext *ctx, XaScope *scope);
 XR_FUNC void xa_check_active_loan_owner_mutation(XaInferContext *ctx, AstNode *loc_node,

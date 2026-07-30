@@ -803,7 +803,7 @@ fn rejected() {
 }
 ```
 
-只作为**调用实参**出现的闭包字面量不产生存活借用——它随调用结束，不可能活过调用：
+只作为**调用实参**出现的闭包字面量通常不产生存活借用——它随调用结束，不可能活过调用：
 
 ```xray
 fn ok() {
@@ -812,6 +812,8 @@ fn ok() {
     consume(move buf)                            // OK
 }
 ```
+
+例外是被调方**保留或逃逸**该形参时——此时闭包活过调用，它按引用捕获的根随之逃逸（`OWN-E-ESCAPED-ROOT`）。判据是被调方的形参效应摘要，不是语法形状。
 
 存活的借用禁止对 owner 做失效操作，`move` 是其中一种（`E0382`）。
 
@@ -1710,7 +1712,7 @@ fn rejected() {
 }
 ```
 
-A closure literal that appears only as a **call argument** creates no live loan: it ends with the call and cannot outlive it.
+A closure literal that appears only as a **call argument** usually creates no live loan: it ends with the call and cannot outlive it.
 
 ```xray
 fn ok() {
@@ -1719,6 +1721,8 @@ fn ok() {
     consume(move buf)                            // OK
 }
 ```
+
+The exception is a callee that **retains or escapes** that parameter: the closure then outlives the call, and every root it captured by reference escapes with it (`OWN-E-ESCAPED-ROOT`). The decision reads the callee's parameter effect summary, not the syntactic shape.
 
 A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
 

@@ -1392,7 +1392,7 @@ fn rejected() {
 }
 ```
 
-A closure literal that appears only as a **call argument** creates no live loan: it ends with the call and cannot outlive it.
+A closure literal that appears only as a **call argument** usually creates no live loan: it ends with the call and cannot outlive it.
 
 ```xray
 fn ok() {
@@ -1401,6 +1401,8 @@ fn ok() {
     consume(move buf)                            // OK
 }
 ```
+
+The exception is a callee that **retains or escapes** that parameter: the closure then outlives the call, and every root it captured by reference escapes with it (`OWN-E-ESCAPED-ROOT`). The decision reads the callee's parameter effect summary, not the syntactic shape.
 
 A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
 

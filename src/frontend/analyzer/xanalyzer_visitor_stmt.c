@@ -6995,6 +6995,18 @@ XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx) {
         ctx->pending_capture_count = 0;
 }
 
+XR_FUNC void xa_escape_pending_captures(XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return;
+    for (int i = 0; i < ctx->pending_capture_count; i++) {
+        XaSymbol *captured = ctx->pending_captures[i];
+        XaSymbolLinks *links = captured ? xa_analyzer_get_links(ctx->analyzer, captured) : NULL;
+        if (links && links->root_id != 0)
+            xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_ESCAPED);
+    }
+    ctx->pending_capture_count = 0;
+}
+
 XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                       XaSymbol *owner_sym, const char *owner_path,
                                                       const char *operation) {

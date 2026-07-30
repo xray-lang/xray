@@ -5038,6 +5038,12 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
     const XaParamEffectSummary *effect = xa_symbol_param_effect(callee_links, slot);
     if (!ctx || !call_node || !xa_param_effect_retains_or_escapes(effect))
         return;
+    /* A closure literal is normally call-bounded, so its captures loan nothing
+     * past the statement. A callee that retains or escapes the parameter
+     * breaks that: the closure -- and every root it captured by reference --
+     * outlives the call, and function-local analysis cannot follow it. */
+    if (arg_node && arg_node->type == AST_FUNCTION_EXPR)
+        xa_escape_pending_captures(ctx);
     if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
         char context[192];
         snprintf(context, sizeof(context),
