@@ -2571,8 +2571,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked"
-                                       : "xrt_c90_fixed_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked" : "xrt_c90_fixed_u8_set");
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
         fprintf(out, ", INT64_C(%u), ", (unsigned) info.count);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -3500,6 +3499,14 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_RETAIN:
         case XI_RELEASE:
             return arg_index == 0;
+        case XI_ERR_CHECK:
+            /* Cleanup operands are owners released only on the cold
+             * error-propagation edge, and that release is emitted as a
+             * synthetic XI_RELEASE through the same representation-aware drop
+             * path as an ordinary one (see xicgen_emit_err_check_arc_cleanups).
+             * A cleanup use therefore neither aliases nor escapes the array and
+             * is exactly as safe as the XI_RELEASE case above. */
+            return arg_index >= XI_ERR_CHECK_CLEANUP_ARG_BASE;
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
@@ -3514,8 +3521,13 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
 static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
                                              const XiValue *value) {
     const XiValue *target = cg_unwrap_identity_value(value);
-    if (!ctx || ctx->pre_decl_all || !f || !target || target != value ||
-        cg_value_has_cell(ctx, target) || !cg_array_is_native_local_alloc(target))
+    /* Deliberately independent of ctx->pre_decl_all: the pre-declaration pass
+     * emits the C type for this value and the emission pass emits its
+     * initializer, so the two must reach the same representation or the
+     * declaration and the constructor disagree.  The analysis below reads only
+     * the function body, which is identical in both passes. */
+    if (!ctx || !f || !target || target != value || cg_value_has_cell(ctx, target) ||
+        !cg_array_is_native_local_alloc(target))
         return false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -4373,8 +4385,8 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_conversion_suffix(out, conv_suffix);
             return true;
         }
-        fprintf(out, "(int64_t)%s(", unchecked ? "xrt_c90_span_u8_get_unchecked"
-                                                : "xrt_c90_span_u8_get");
+        fprintf(out, "(int64_t)%s(",
+                unchecked ? "xrt_c90_span_u8_get_unchecked" : "xrt_c90_span_u8_get");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -4446,8 +4458,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked"
-                                       : "xrt_c90_span_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked" : "xrt_c90_span_u8_set");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
