@@ -926,6 +926,20 @@ XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count) {
         if (xr_parser_match(parser, TK_COLON))
             constraints = xr_parse_constraint_list(parser, &constraint_count);
 
+        /* Default type arguments are not implemented (LANGUAGE_SPEC 9.2). Name
+         * the feature rather than letting the list parser report a missing '>',
+         * which points at the '=' and reads like a syntax slip. */
+        if (xr_parser_check(parser, TK_ASSIGN)) {
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "default type parameters are not supported; '%s' must be given explicitly "
+                     "at each use site",
+                     param_name);
+            xr_parser_error_at_current(parser, msg);
+            xr_parser_advance(parser); /* consume '=' */
+            (void) xr_parse_type_annotation(parser);
+        }
+
         XrGenericParam *gp =
             (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
         gp->name = param_name;
