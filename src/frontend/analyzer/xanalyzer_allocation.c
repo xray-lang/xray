@@ -10,6 +10,7 @@
 
 #include "xanalyzer_allocation.h"
 #include "xa_alloc_effect.h"
+#include "xa_native_effect.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
 #include "xanalyzer_ast_visitor.h"
@@ -523,10 +524,8 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
     AstNode *callee = alloc_identity_expr(call->callee);
     if (!callee)
         return;
-    const XaResolvedCall *resolved =
-        xa_analyzer_get_resolved_call(scan->pass->analyzer, node);
-    const XaIntrinsicDesc *intrinsic =
-        resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
+    const XaResolvedCall *resolved = xa_analyzer_get_resolved_call(scan->pass->analyzer, node);
+    const XaIntrinsicDesc *intrinsic = resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
     if (intrinsic && intrinsic->family == XA_INTRINSIC_FAMILY_CODEGEN &&
         intrinsic->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC)
         return;
@@ -834,10 +833,41 @@ static void alloc_scan_node_post(AstNode *node, void *userdata) {
         scan->nested_function_depth--;
 }
 
-static void alloc_scan_function(XaAllocPass *pass, XaAllocFunctionRow *row) {
-    AstNode *body = alloc_function_body(row ? row->node : NULL);
-    if (!pass || !row || !body)
+/* A bodyless extern "C" declaration has nothing to walk, so an empty scan must
+ * never be read as an allocation proof.  The audited manifest contract is the
+ * only admissible evidence; without one the row is UNKNOWN so every caller
+ * fails closed (LANGUAGE_SPEC 5.2.11). */
+static void alloc_seed_bodyless_extern(XaAllocPass *pass, XaAllocFunctionRow *row) {
+    XaNativeEffectAxioms axioms = xa_native_effect_axioms(pass->analyzer, row->symbol);
+    const char *name = row->symbol && row->symbol->name ? row->symbol->name : "?";
+    if (!axioms.has_contract) {
+        row->direct.state = XA_ALLOC_UNKNOWN;
+        row->direct.reason_bits = XA_ALLOC_REASON_NATIVE_CONTRACT_MISSING;
+        row->direct.cause_kind = "native contract missing";
+    } else if (axioms.allocates) {
+        row->direct.state = XA_ALLOC_MAY;
+        row->direct.reason_bits = XA_ALLOC_REASON_NATIVE_CONTRACT;
+        row->direct.cause_kind = "native contract";
+    } else {
+        /* allocation = "none": the contract is the proof. */
         return;
+    }
+    row->direct.first_site_node_id = row->node->node_id;
+    row->direct.line = (uint32_t) row->node->line;
+    row->direct.column = (uint32_t) row->node->column;
+    row->direct.cause_detail = name;
+    row->direct.callee_name = name;
+}
+
+static void alloc_scan_function(XaAllocPass *pass, XaAllocFunctionRow *row) {
+    if (!pass || !row || !row->node)
+        return;
+    AstNode *body = alloc_function_body(row->node);
+    if (!body) {
+        if (xa_native_effect_is_bodyless_extern(row->symbol))
+            alloc_seed_bodyless_extern(pass, row);
+        return;
+    }
     XaAllocScan scan = {.pass = pass, .row = row};
     xa_ast_walk(body, alloc_scan_node_pre, alloc_scan_node_post, &scan);
 }

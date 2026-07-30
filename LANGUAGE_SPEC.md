@@ -2481,6 +2481,10 @@ allow = []
 
 Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
 
+**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
+
+**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+
 #### Worked Examples
 
 Closure capture and higher-order functions:

@@ -31,4 +31,20 @@ if "$XRAY" verify --contract negative-schema.toml >"$WORK/schema.out" 2>"$WORK/s
 fi
 grep -q "unknown contract key 'legacy_allow'" "$WORK/schema.err"
 
+# A bodyless extern "C" with no audited native contract is not evidence of
+# anything.  LANGUAGE_SPEC 5.2.11 requires native unknowns to fail closed.
+if "$XRAY" verify --contract negative-native-unknown.toml >"$WORK/native.out" 2>"$WORK/native.err"; then
+    echo "uncontracted extern \"C\" call unexpectedly proved a semantic contract" >&2
+    exit 1
+fi
+grep -q "contract 'callsUncontractedNative' failed" "$WORK/native.err"
+grep -q 'proof incomplete' "$WORK/native.err"
+
+# A requirement with no inference source must be rejected, not granted.
+if "$XRAY" verify --contract negative-uninferred.toml >"$WORK/uninferred.out" 2>"$WORK/uninferred.err"; then
+    echo "requirement without an inference source unexpectedly passed" >&2
+    exit 1
+fi
+grep -q 'has no inference source' "$WORK/uninferred.err"
+
 echo "PASS: versioned verify contract succeeds and fails closed"

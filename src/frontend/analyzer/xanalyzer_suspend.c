@@ -16,6 +16,7 @@
 
 #include "xanalyzer_suspend.h"
 #include "../parser/xtype_ref.h"
+#include "xa_native_effect.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
 #include "xanalyzer_ast_visitor.h"
@@ -58,6 +59,11 @@ typedef struct XaSuspendRow {
     XaSuspendCause direct_cause;
     XaSuspendState result;
     XaSuspendCause result_cause;
+    /* Why an INCOMPLETE conclusion is incomplete.  Defaults to a dynamic target;
+     * a bodyless extern without an audited contract reports the native-contract
+     * reason instead so the witness names the real gap. */
+    XaUnknownReason direct_incomplete_reason;
+    XaUnknownReason result_incomplete_reason;
     XaSuspendEdge *edges;
     int edge_count;
     int edge_capacity;
@@ -205,6 +211,8 @@ static bool sus_append_row(XaSuspendPass *pass, AstNode *node, XaSymbol *symbol)
         row->uses_synthetic_symbol = true;
     }
     row->direct = XA_SUSPEND_NONE;
+    row->direct_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row->result_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
     return true;
 }
 
@@ -478,31 +486,55 @@ static void sus_scan_node_post(AstNode *node, void *userdata) {
         scan->nested_function_depth--;
 }
 
+/* A bodyless extern "C" declaration has nothing to walk, so an empty scan must
+ * never be read as a no-suspend proof.  The audited manifest contract is the
+ * only admissible evidence (LANGUAGE_SPEC 5.2.11). */
+static void sus_seed_bodyless_extern(XaSuspendPass *pass, XaSuspendRow *row) {
+    XaNativeEffectAxioms axioms = xa_native_effect_axioms(pass->analyzer, row->symbol);
+    const char *name = row->symbol && row->symbol->name ? row->symbol->name : "?";
+    if (!axioms.has_contract) {
+        row->direct_incomplete_reason = XA_UNKNOWN_NATIVE_CONTRACT_MISSING;
+        sus_mark_direct(row, XA_SUSPEND_INCOMPLETE, row->node, "native contract missing", name);
+    } else if (axioms.suspends) {
+        sus_mark_direct(row, XA_SUSPEND_MAY, row->node, "native contract", name);
+    }
+    /* suspend = "never": the contract is the proof. */
+}
+
 static void sus_scan_function(XaSuspendPass *pass, XaSuspendRow *row) {
-    AstNode *body = sus_function_body(row ? row->node : NULL);
-    if (!pass || !row || !body)
+    if (!pass || !row || !row->node)
         return;
+    AstNode *body = sus_function_body(row->node);
+    if (!body) {
+        if (xa_native_effect_is_bodyless_extern(row->symbol))
+            sus_seed_bodyless_extern(pass, row);
+        return;
+    }
     XaSuspendScan scan = {.pass = pass, .row = row};
     xa_ast_walk(body, sus_scan_node_pre, sus_scan_node_post, &scan);
 }
 
 /* Combine the direct conclusion with the transitive edges once. */
 static void sus_combine_row(XaSuspendPass *pass, XaSuspendRow *row, XaSuspendState *out_state,
-                            XaSuspendCause *out_cause) {
+                            XaSuspendCause *out_cause, XaUnknownReason *out_incomplete_reason) {
     XaSuspendState state = row->direct;
     XaSuspendCause cause = row->direct_cause;
+    XaUnknownReason incomplete_reason = row->direct_incomplete_reason;
     for (int i = 0; i < row->edge_count; i++) {
         XaSuspendEdge *edge = &row->edges[i];
         XaSuspendRow *callee_row = sus_row_for_symbol(pass, edge->callee);
         XaSuspendState edge_state = callee_row ? callee_row->result : XA_SUSPEND_NONE;
         if (edge_state > state) {
             state = edge_state;
+            if (edge_state == XA_SUSPEND_INCOMPLETE && callee_row)
+                incomplete_reason = callee_row->result_incomplete_reason;
             sus_set_cause(&cause, edge->site, edge->is_callback ? "callback" : "call",
                           edge->callee && edge->callee->name ? edge->callee->name : "?");
         }
     }
     *out_state = state;
     *out_cause = cause;
+    *out_incomplete_reason = incomplete_reason;
 }
 
 static void sus_publish_summaries(XaSuspendPass *pass) {
@@ -513,10 +545,13 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
         for (int i = 0; i < pass->row_count; i++) {
             XaSuspendState state;
             XaSuspendCause cause;
-            sus_combine_row(pass, &pass->rows[i], &state, &cause);
-            if (state != pass->rows[i].result) {
+            XaUnknownReason incomplete_reason;
+            sus_combine_row(pass, &pass->rows[i], &state, &cause, &incomplete_reason);
+            if (state != pass->rows[i].result ||
+                incomplete_reason != pass->rows[i].result_incomplete_reason) {
                 pass->rows[i].result = state;
                 pass->rows[i].result_cause = cause;
+                pass->rows[i].result_incomplete_reason = incomplete_reason;
                 changed = true;
             } else if (state != XA_SUSPEND_NONE) {
                 pass->rows[i].result_cause = cause;
@@ -539,7 +574,7 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
             xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_SUSPEND);
         else if (row->result == XA_SUSPEND_INCOMPLETE)
             xa_effect_summary_mark_semantic_incomplete(&summary, XA_SEM_EFFECT_SUSPEND,
-                                                       XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+                                                       row->result_incomplete_reason);
         XaEffectId effect_id =
             ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
         xa_effect_summary_clear(&summary);

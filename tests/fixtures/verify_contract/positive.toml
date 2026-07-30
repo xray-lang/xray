@@ -1,9 +1,12 @@
 version = 1
 
+# Only requirements backed by a real inference pass belong in a positive
+# contract.  no_block / no_thread_block / no_panic / no_abort have no inference
+# source yet, so they fail closed; see negative-uninferred.toml.
 [[function]]
 symbol = "pure"
 scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend", "no_block", "no_panic", "no_abort"]
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "privateWide"

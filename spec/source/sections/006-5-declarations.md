@@ -363,6 +363,10 @@ allow = []
 
 运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
 
+**native unknown 的含义**：无函数体的 `extern "C"` 声明没有可推导的 Xray 语义，唯一可采信的证据是 `xray.toml` 中该 symbol 的 `[native.symbol.contract]`。契约声明 `allocation` / `suspend` 等字段时，这些字段作为公理进入被调用方的 effect 结论；没有完整契约时，相应语义位标记为 unknown，任何覆盖它的合同 fail closed。**空的函数体不是证明。**
+
+**推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
+
 #### 完整可运行示例
 
 闭包捕获与高阶函数：
@@ -1435,6 +1439,10 @@ allow = []
 ```
 
 Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
+
+**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
+
+**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
 
 #### Worked Examples
 

@@ -70,9 +70,9 @@ static bool verify_contract_schema(XrTomlValue *contract) {
                                                 "profile", "requires", "shape"};
     static const char *const shape_keys[] = {"forbid", "allow"};
     static const char *const codegen_keys[] = {"control", "edge"};
-    static const char *const control_keys[] = {"subject", "kind", "minimum_stage", "target",
-                                               "provider", "profile"};
-    static const char *const edge_keys[] = {"caller", "callee", "expect", "minimum_stage",
+    static const char *const control_keys[] = {"subject", "kind",     "minimum_stage",
+                                               "target",  "provider", "profile"};
+    static const char *const edge_keys[] = {"caller", "callee",   "expect", "minimum_stage",
                                             "target", "provider", "profile"};
     if (!verify_table_schema(contract, "contract", root_keys,
                              sizeof(root_keys) / sizeof(root_keys[0])))
@@ -82,8 +82,7 @@ static bool verify_contract_schema(XrTomlValue *contract) {
     XrTomlValue *controls = codegen ? xtoml_get_array(codegen, "control") : NULL;
     XrTomlValue *edges = codegen ? xtoml_get_array(codegen, "edge") : NULL;
     if ((!functions || xtoml_array_len(functions) == 0) &&
-        (!controls || xtoml_array_len(controls) == 0) &&
-        (!edges || xtoml_array_len(edges) == 0)) {
+        (!controls || xtoml_array_len(controls) == 0) && (!edges || xtoml_array_len(edges) == 0)) {
         xr_cli_error("verify",
                      "contract requires [[function]], [[codegen.control]], or [[codegen.edge]]");
         return false;
@@ -321,6 +320,13 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     return true;
 }
 
+/* Semantic effect bits that an analysis pass in this compiler build actually
+ * infers.  A requirement naming a bit outside this mask has no evidence source
+ * at all, so granting it would report an unproven guarantee as proven.  Such a
+ * requirement fails closed until its inference lands, and this mask is what
+ * grows when it does. */
+#define VERIFY_INFERRED_SEMANTIC_EFFECTS (XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SUSPEND)
+
 static bool verify_requirement_effect(const char *requirement, XaAnalyzer *analyzer,
                                       XaSymbol *symbol, char *reason, size_t reason_size) {
     const XaEffectSummary *effect = xa_effect_db_get(analyzer->effect_db, symbol->links.effect_id);
@@ -353,6 +359,15 @@ static bool verify_requirement_effect(const char *requirement, XaAnalyzer *analy
         return true;
     } else {
         snprintf(reason, reason_size, "unknown requirement '%s'", requirement);
+        return false;
+    }
+    XaSemanticEffectSet uninferred =
+        forbidden & ~(XaSemanticEffectSet) VERIFY_INFERRED_SEMANTIC_EFFECTS;
+    if (uninferred != 0) {
+        snprintf(reason, reason_size,
+                 "requirement '%s' has no inference source in this compiler build "
+                 "(semantic effect bits 0x%x are never computed); it cannot be proven",
+                 requirement, uninferred);
         return false;
     }
     if ((effect->semantic_effects & forbidden) != 0) {
@@ -550,8 +565,7 @@ static const char *verify_codegen_ledger_kind(const char *contract_kind) {
         return "noinline";
     if (strcmp(contract_kind, "value_opaque") == 0 || strcmp(contract_kind, "opaque") == 0)
         return "opaque";
-    if (strcmp(contract_kind, "compiler_fence") == 0 ||
-        strcmp(contract_kind, "compilerFence") == 0)
+    if (strcmp(contract_kind, "compiler_fence") == 0 || strcmp(contract_kind, "compilerFence") == 0)
         return "compilerFence";
     return NULL;
 }
@@ -743,9 +757,8 @@ static bool verify_codegen_ident_char(char ch) {
     return isalnum((unsigned char) ch) || ch == '_';
 }
 
-static bool verify_codegen_generated_symbol(const char *generated_c, const char *subject,
-                                            char *out, size_t out_size, char *reason,
-                                            size_t reason_size) {
+static bool verify_codegen_generated_symbol(const char *generated_c, const char *subject, char *out,
+                                            size_t out_size, char *reason, size_t reason_size) {
     const char *component = verify_final_component(subject);
     size_t component_len = component ? strlen(component) : 0;
     const char *scan = generated_c;
@@ -761,9 +774,9 @@ static bool verify_codegen_generated_symbol(const char *generated_c, const char 
             start--;
         while (verify_codegen_ident_char(*end))
             end++;
-        bool component_boundary = (scan == start || scan[-1] == '_') &&
-                                  (scan[component_len] == '_' ||
-                                   !verify_codegen_ident_char(scan[component_len]));
+        bool component_boundary =
+            (scan == start || scan[-1] == '_') &&
+            (scan[component_len] == '_' || !verify_codegen_ident_char(scan[component_len]));
         const char *after = end;
         while (*after == ' ' || *after == '\t')
             after++;
@@ -825,8 +838,8 @@ static bool verify_codegen_asm_function(const char *assembly, const char *symbol
         while (trim < end && (*trim == ' ' || *trim == '\t'))
             trim++;
         const char *name = trim[0] == '_' ? trim + 1 : trim;
-        bool label = (size_t) (end - name) > symbol_len &&
-                     memcmp(name, symbol, symbol_len) == 0 && name[symbol_len] == ':';
+        bool label = (size_t) (end - name) > symbol_len && memcmp(name, symbol, symbol_len) == 0 &&
+                     name[symbol_len] == ':';
         bool proc = verify_codegen_line_contains_token(trim, (size_t) (end - trim), symbol) &&
                     verify_codegen_line_contains_token(trim, (size_t) (end - trim), "PROC");
         if (label || proc) {
@@ -902,7 +915,7 @@ static bool verify_codegen_realized_control(const char *generated_c,
         strcmp(kind, "inline") != 0 && strcmp(kind, "noinline") != 0
             ? false
             : verify_codegen_generated_symbol(generated_c, subject, symbol, sizeof(symbol), reason,
-                                               sizeof(reason));
+                                              sizeof(reason));
     if (strcmp(kind, "noinline") == 0 && !has_generated_symbol) {
         xr_cli_error("verify", "realized control '%s:%s' failed: %s", subject, kind, reason);
         return false;
@@ -910,8 +923,8 @@ static bool verify_codegen_realized_control(const char *generated_c,
     if (strcmp(kind, "inline") == 0 || strcmp(kind, "noinline") == 0) {
         bool has_body = has_generated_symbol &&
                         verify_codegen_asm_function(artifact->text, symbol, &body_start, &body_end);
-        inbound = has_generated_symbol ? verify_codegen_asm_inbound_edges(artifact->text, symbol)
-                                       : 0;
+        inbound =
+            has_generated_symbol ? verify_codegen_asm_inbound_edges(artifact->text, symbol) : 0;
         shape_ok = strcmp(kind, "noinline") == 0 ? (has_body && inbound > 0) : inbound == 0;
         if (!shape_ok) {
             xr_cli_error("verify",
@@ -920,8 +933,8 @@ static bool verify_codegen_realized_control(const char *generated_c,
             return false;
         }
     }
-    printf("verified codegen.control '%s:%s' stage=realized provider=%s target=%s%s%u\n",
-           subject, kind, xtc_provider_name(artifact->probe.selection.provider),
+    printf("verified codegen.control '%s:%s' stage=realized provider=%s target=%s%s%u\n", subject,
+           kind, xtc_provider_name(artifact->probe.selection.provider),
            artifact->probe.selection.target.name,
            strcmp(kind, "inline") == 0 || strcmp(kind, "noinline") == 0
                ? " inbound-direct="
@@ -944,9 +957,8 @@ static bool verify_codegen_realized_edge(const char *generated_c,
         xr_cli_error("verify", "realized edge '%s->%s' failed: %s", caller, callee, reason);
         return false;
     }
-    bool has_callee = verify_codegen_generated_symbol(generated_c, callee, callee_symbol,
-                                                       sizeof(callee_symbol), reason,
-                                                       sizeof(reason));
+    bool has_callee = verify_codegen_generated_symbol(
+        generated_c, callee, callee_symbol, sizeof(callee_symbol), reason, sizeof(reason));
     if (preserved && !has_callee) {
         xr_cli_error("verify", "realized edge '%s->%s' failed: %s", caller, callee, reason);
         return false;
@@ -956,13 +968,11 @@ static bool verify_codegen_realized_edge(const char *generated_c,
                      caller, callee, caller_symbol);
         return false;
     }
-    unsigned matches = has_callee
-                           ? verify_codegen_asm_direct_edges(body_start, body_end, callee_symbol)
-                           : 0;
+    unsigned matches =
+        has_callee ? verify_codegen_asm_direct_edges(body_start, body_end, callee_symbol) : 0;
     if ((preserved && matches == 0) || (!preserved && matches != 0)) {
-        xr_cli_error("verify",
-                     "realized edge '%s->%s:%s' failed: caller=%s callee=%s direct=%u", caller,
-                     callee, expect, caller_symbol, callee_symbol, matches);
+        xr_cli_error("verify", "realized edge '%s->%s:%s' failed: caller=%s callee=%s direct=%u",
+                     caller, callee, expect, caller_symbol, callee_symbol, matches);
         return false;
     }
     printf("verified codegen.edge '%s->%s:%s' stage=realized provider=%s target=%s direct=%u\n",
@@ -1001,16 +1011,15 @@ static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildRe
     (void) generated_size;
     if (!generated_c)
         snprintf(err, sizeof(err), "cannot create the canonical generated-C realization unit");
-    bool realized_ok = generated_c &&
-                       xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
+    bool realized_ok =
+        generated_c && xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
     if (!realized_ok && options.request.selector == XR_TOOLCHAIN_SELECTOR_AUTO) {
         char primary_err[1024];
         snprintf(primary_err, sizeof(primary_err), "%s", err);
         xtc_shape_oracle_free(&artifact);
         options.request.selector = XR_TOOLCHAIN_SELECTOR_ZIG;
         options.refresh = false;
-        realized_ok =
-            xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
+        realized_ok = xtc_shape_oracle_realize(&options, generated_c, &artifact, err, sizeof(err));
         if (!realized_ok) {
             char fallback_err[1024];
             snprintf(fallback_err, sizeof(fallback_err), "%s", err);
@@ -1060,7 +1069,8 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
         }
     }
     if (wants_freestanding && wants_hosted) {
-        xr_cli_error("verify", "codegen contracts cannot mix hosted/native and freestanding profiles");
+        xr_cli_error("verify",
+                     "codegen contracts cannot mix hosted/native and freestanding profiles");
         (*failures)++;
         return false;
     }
@@ -1071,8 +1081,8 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
     }
     options.target = &target;
     options.native_package_plan = state->project->native_plan;
-    options.profile = wants_freestanding ? XAOT_BUILD_PROFILE_FREESTANDING
-                                         : XAOT_BUILD_PROFILE_HOSTED;
+    options.profile =
+        wants_freestanding ? XAOT_BUILD_PROFILE_FREESTANDING : XAOT_BUILD_PROFILE_HOSTED;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     options.emit_local_evidence_dump = true;
     options.quiet = true;
@@ -1082,8 +1092,7 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
         (*failures)++;
     } else {
         for (int i = 0; controls && i < xtoml_array_len(controls); i++)
-            if (!verify_codegen_control(result.local_evidence_dump,
-                                        xtoml_array_get(controls, i)))
+            if (!verify_codegen_control(result.local_evidence_dump, xtoml_array_get(controls, i)))
                 (*failures)++;
         for (int i = 0; edges && i < xtoml_array_len(edges); i++)
             if (!verify_codegen_edge(result.local_evidence_dump, xtoml_array_get(edges, i)))
