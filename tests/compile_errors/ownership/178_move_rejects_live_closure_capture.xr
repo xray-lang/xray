@@ -1,0 +1,16 @@
+// A synchronous closure captures an outer binding by reference, so the capture
+// is a live loan on that root. Moving the root while the closure can still be
+// called would give two execution contexts one mutable graph.
+fn consume(x: move Array<int>) -> int {
+    x.push(99)
+    return len(x)
+}
+
+fn main() {
+    var buf = [1, 2, 3]
+    const poke = fn() -> int { buf.push(7); return len(buf) }
+    go consume(move buf)
+    print(poke())
+}
+
+main()

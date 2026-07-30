@@ -1,0 +1,22 @@
+// The rule is an effect rule, so it also catches a defer body that calls a
+// function which suspends.
+fn drain(ch: Channel<int>) -> int {
+    match (ch.recv()) {
+        Recv.Value(v) -> { return v }
+        _ -> { return -1 }
+    }
+}
+
+fn body(ch: Channel<int>) -> int {
+    defer { print(drain(ch)) }
+    return 1
+}
+
+const ch = Channel<int>(1)
+ch.send(7)
+var t = go body(ch)
+match (t.awaitResult()) {
+    TaskResult.Ok(v) -> print(v)
+    _ -> print("other")
+}
+ch.close()

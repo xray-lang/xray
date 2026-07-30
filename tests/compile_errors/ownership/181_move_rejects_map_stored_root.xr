@@ -1,0 +1,19 @@
+// A map value store escapes the root for the same reason.
+class Node {
+    v: int
+    init(v: int) { this.v = v }
+}
+
+fn consume(n: move Node) -> int {
+    return n.v
+}
+
+fn main() {
+    var a = Node(3)
+    var m = Map<string, Node>()
+    m["k"] = a
+    go consume(move a)
+    print(m["k"]!.v)
+}
+
+main()

@@ -1,0 +1,17 @@
+// A defer body runs on a frame that is already leaving and has no place to
+// park and resume. Reaching the scheduler from there drops the rest of the
+// cleanup, so `defer` would stop being a deterministic mechanism.
+fn body() -> int {
+    defer {
+        print("enter")
+        Coro.yield()
+        print("never reached")
+    }
+    return 1
+}
+
+var t = go body()
+match (t.awaitResult()) {
+    TaskResult.Ok(v) -> print(v)
+    _ -> print("other")
+}

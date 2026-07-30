@@ -1,0 +1,25 @@
+// `defer` runs on every exit edge, cancellation included. A cancelled
+// coroutine that still owes a defer chain is resumed once on its own worker
+// to unwind, and only then reported cancelled.
+const started = Channel<int>(1)
+
+fn body() -> int {
+    defer { print("defer: cleanup ran") }
+    started.send(1)
+    for (var i = 0; i < 100000000; i++) {
+        if (i % 1000 == 0) { Coro.yield() }
+    }
+    return 1
+}
+
+var t = go body()
+match (started.recv()) {
+    Recv.Value(v) -> {}
+    _ -> {}
+}
+t.cancel()
+match (t.awaitResult()) {
+    TaskResult.Cancelled -> print("cancelled")
+    _ -> print("other")
+}
+started.close()
