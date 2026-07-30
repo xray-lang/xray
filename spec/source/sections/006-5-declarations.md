@@ -567,9 +567,32 @@ class Counter {
 
 **不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
-#### 5.3.6 自定义迭代器
+#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
 
-实现 `iterator()` 返回带 `hasNext() -> bool` 和 `next() -> T?` 的对象即可启用 `for-in`。详见 §14.15。
+`Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
+
+```xray @id=decl-iterator-protocol
+interface Iterator<T> {
+    hasNext() -> bool       // 是否还有下一个元素；不消费元素
+    next() -> T             // 取下一个元素并前进
+    nth(index: int) -> T    // 从当前位置起前进 index 个元素并返回
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+规则：
+
+- 任何实现 `iterator()` 的类型都可用于 `for-in`；内建集合与 `string`（按 `rune`）已实现。
+- `for-in` 只保证按 `hasNext()` / `next()` 拉取，**不保证**调用次数与调用时机之外的任何行为。
+- `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
+- `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
+- 迭代期间修改底层集合的行为由该集合定义；内建集合会使迭代器失效（§14）。
+- `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
+
+生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
 #### 5.3.7 完整可运行示例
 
@@ -651,6 +674,24 @@ var pt = Point{x: 1.0, y: 2.0}
 var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
+```
+
+**聚合字面量的字段规则**（与 sealed Record 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
 ```
 
 **与 `class` 的差异**：
@@ -1056,7 +1097,7 @@ type Pair<T> = { first: T, second: T }                // 泛型别名
 - `type T = Json` 等于 `Json`（不密封）。
 - 别名可前向引用，但**禁止循环别名**。
 
-详见 [§2.4.6](#246-json) 与 [§2.8](#28-类型别名)。
+详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
 
 ### 5.8 `import` / `export`
 
@@ -1644,9 +1685,32 @@ class Counter {
 
 **Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
-#### 5.3.6 Custom iterators
+#### 5.3.6 `Iterator<T>` and `Iterable<T>`
 
-Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
+`Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
+
+```xray @id=decl-iterator-protocol
+interface Iterator<T> {
+    hasNext() -> bool       // is another element available; does not consume one
+    next() -> T             // take the next element and advance
+    nth(index: int) -> T    // advance index elements from the current position and return it
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+Rules:
+
+- Any type implementing `iterator()` can be used with `for-in`; the built-in collections and `string` (by `rune`) already do.
+- `for-in` guarantees only that it pulls through `hasNext()` / `next()`; nothing beyond the number and ordering of those calls is guaranteed.
+- `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
+- `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
+- Mutating the underlying collection during iteration is defined by that collection; the built-in collections invalidate their iterators (§14).
+- `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
+
+A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
 #### 5.3.7 Worked Examples
 
@@ -1728,6 +1792,24 @@ var pt = Point{x: 1.0, y: 2.0}
 var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
+```
+
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
 ```
 
 **Differences from `class`**:
@@ -2133,7 +2215,7 @@ type Pair<T> = { first: T, second: T }                // generic alias
 - `type T = Json` equals `Json` (not sealed).
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
-See [§2.4.6](#246-json) and [§2.8](#28-type-aliases).
+See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
 
 ### 5.8 `import` / `export`
 
