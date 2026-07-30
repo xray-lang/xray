@@ -34,7 +34,7 @@ tests/regression/11_coroutine/1131_linked_go_expr.xr
 tests/regression/11_coroutine/1132_task_monitor.xr
 tests/regression/11_coroutine/1133_linked_scope_cancel.xr
 tests/regression/11_coroutine/1134_linked_go_propagation.xr
-tests/regression/11_coroutine/1135_supervisor_errors.xr
+tests/regression/11_coroutine/1135_scope_child_errors.xr
 tests/regression/11_coroutine/1136_task_link.xr
 tests/regression/11_coroutine/1137_await_any_success.xr
 tests/regression/11_coroutine/1138_get_result.xr

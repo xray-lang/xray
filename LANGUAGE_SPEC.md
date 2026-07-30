@@ -152,7 +152,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
-**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `supervisor`, `after`).
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `after`).
 
 The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
@@ -245,7 +245,6 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
-| `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 
@@ -4526,9 +4525,8 @@ select {
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
-ScopeStmt           ::= 'scope' Block
-LinkedScopeStmt     ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
-SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // wait for all children; statement form
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
 ```
 
 ```xray
@@ -4548,15 +4546,14 @@ scope {
 }
 ```
 
-**Three scope variants**:
+**Two scope variants**:
 
 | Form | Behaviour when a child coroutine throws | Return value |
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | Waits for every child coroutine to finish; siblings do not affect each other | none (statement form) |
 
-`supervisor scope` waits for all child coroutines started by `go` inside the block, but it does not return an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; using `supervisor scope` as an expression is rejected by the compiler.
+Neither form returns an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; to aggregate by result, use `await all` / `await any` / `await anySuccess`.
 
 ```xray
 // linked scope: failure propagation
@@ -4569,11 +4566,11 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: keep task handles and inspect each outcome after the block
+// scope: keep task handles and inspect each outcome after the block
 var first: Task<int>?
 var second: Task<int>?
 var third: Task<int>?
-supervisor scope {
+scope {
     first = go failing("error1")
     second = go failing("error2")
     third = go ok()
@@ -4584,7 +4581,8 @@ print(len(outcomes))                 // 3 (one outcome per child)
 
 **General semantics**:
 - `scope` is not a function call and does not require an import; it is a keyword block statement.
-- All three forms await every coroutine started by `go` inside the block before exiting.
+- Both forms await every coroutine started by `go` inside the block before exiting.
+- Both forms are statements only; neither may appear in an expression position.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 
@@ -6074,7 +6072,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
+ScopeStmt ::= 'linked'? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
@@ -6172,7 +6170,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `supervisor`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|

@@ -133,11 +133,13 @@ static inline void scope_lock_release(XrScopeContext *scope) {
     atomic_store_explicit(&scope->child_lock, false, memory_order_release);
 }
 
-/* Record this child's terminal state and update scope->first_error for linked
- * scopes. Returns true when the child failed, so linked scope can cancel
- * siblings. Caller must hold scope->child_lock. */
+/* Record this child's terminal state and update scope->first_error. Only a
+ * linked scope observes child failure; a plain `scope` is a wait barrier and
+ * leaves siblings alone, so it needs no bookkeeping here. Returns true when
+ * the child failed, so linked scope can cancel siblings. Caller must hold
+ * scope->child_lock. */
 static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScopeContext *scope) {
-    if (scope->mode == XR_SCOPE_WAIT)
+    if (scope->mode != XR_SCOPE_LINKED)
         return false;
 
     const XrScopeTransferOps *ops = xr_runtime_core_scope_transfer_ops(coro->core);
@@ -150,7 +152,7 @@ static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScop
     if (XR_IS_NULL(err))
         return false;
 
-    if (scope->mode == XR_SCOPE_LINKED && XR_IS_NULL(scope->first_error)) {
+    if (XR_IS_NULL(scope->first_error)) {
         if (XR_IS_PTR(err)) {
             XrObjHeader *obj = XR_VALUE_GCPTR(err);
             int32_t rc = obj ? atomic_load_explicit(&obj->refcount, memory_order_relaxed) : 0;
@@ -221,10 +223,11 @@ static void wake_waiter_finish_scope_completion(XrCoroutine *coro, XrScopeContex
 
 static void wake_waiter_handle_scope_completion(XrCoroutine *coro, XrScopeContext *scope) {
     scope_lock_acquire(scope);
+    /* Only a linked scope can report a failed child, so the flag alone gates
+     * the sibling cancellation. */
     bool child_failed = wake_waiter_record_child_completion_locked(coro, scope);
     wake_waiter_unlink_from_scope_locked(coro, scope);
-    if (child_failed && scope->mode == XR_SCOPE_LINKED &&
-        !atomic_exchange(&scope->cancel_requested, true)) {
+    if (child_failed && !atomic_exchange(&scope->cancel_requested, true)) {
         wake_waiter_cancel_linked_siblings_locked(scope);
     }
     scope_lock_release(scope);

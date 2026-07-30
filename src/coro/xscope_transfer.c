@@ -42,17 +42,15 @@ static XrValue scope_observe_for_owner(XrCoroutine *coro, XrScopeContext *scope,
 
 static bool scope_transfer_record_child_completion_locked(XrCoroutine *coro,
                                                           XrScopeContext *scope) {
-    if (!coro || !scope || scope->mode == XR_SCOPE_WAIT)
+    if (!coro || !scope || scope->mode != XR_SCOPE_LINKED)
         return false;
 
     XrValue err = scope_child_error(coro);
     bool child_failed = !XR_IS_NULL(err);
 
-    if (scope->mode == XR_SCOPE_LINKED) {
-        if (child_failed && XR_IS_NULL(scope->first_error)) {
-            scope->first_error = scope_observe_for_owner(coro, scope, err);
-            scope->first_error_is_value = coro->error_is_value;
-        }
+    if (child_failed && XR_IS_NULL(scope->first_error)) {
+        scope->first_error = scope_observe_for_owner(coro, scope, err);
+        scope->first_error_is_value = coro->error_is_value;
     }
 
     return child_failed;

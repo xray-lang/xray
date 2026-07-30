@@ -276,7 +276,7 @@ typedef struct DeferStmtNode {
 
 typedef struct ScopeBlockNode {
     AstNode *body;
-    uint8_t scope_mode;  // XR_SCOPE_WAIT / XR_SCOPE_LINKED / XR_SCOPE_SUPERVISOR
+    uint8_t scope_mode;  // XR_SCOPE_WAIT / XR_SCOPE_LINKED
 } ScopeBlockNode;
 
 // move expression: move var (explicit ownership transfer)

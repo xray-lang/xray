@@ -375,8 +375,7 @@ XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoro
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
-XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode,
-                                      XrValue *out_value);
+XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode);
 XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds);
 // Release a select-owned `after` timer channel emitted at the select merge.
 // Mirrors the VM OP_CHAN_TIMER_DISPOSE handler.

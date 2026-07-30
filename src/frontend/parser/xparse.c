@@ -1497,15 +1497,6 @@ AstNode *xr_parse_variable(Parser *parser) {
         xr_parser_advance(parser);  // consume "go"
         return xr_parse_go_expr_with_link(parser, XR_LINK_LINKED);
     }
-    if (prev.length == 10 && memcmp(prev.start, "supervisor", 10) == 0 &&
-        xr_parser_check(parser, TK_SCOPE)) {
-        xr_parser_error_at_previous(
-            parser, "`supervisor scope` is a statement, not an expression; keep typed task handles "
-                    "and observe them with awaitResult()");
-        xr_parser_advance(parser);  // consume "scope" for recovery
-        (void) xr_parse_scope_block_with_mode(parser, XR_SCOPE_SUPERVISOR);
-        return NULL;
-    }
 
     // Contextual keyword intercept: "cancelled()" expression
     if (prev.length == 9 && memcmp(prev.start, "cancelled", 9) == 0 &&

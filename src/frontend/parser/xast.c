@@ -2365,7 +2365,7 @@ AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *expr, int line) 
 }
 
 // Create scope block node
-// scope { ... } or linked scope { ... } or supervisor scope { ... }
+// scope { ... } or linked scope { ... }
 AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t scope_mode,
                             int line) {
     AstNode *node = alloc_node(session, AST_SCOPE_BLOCK, line);

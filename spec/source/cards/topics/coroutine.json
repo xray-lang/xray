@@ -41,7 +41,7 @@
       "heading": "scope — structured concurrency",
       "fences": [
         "coro-scope",
-        "coro-linked-supervisor-scope"
+        "coro-linked-scope"
       ]
     },
     {

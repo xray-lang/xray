@@ -1792,8 +1792,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_parse_function_declaration(parser);
     }
 
-    // Context keywords: linked/supervisor before go/scope
-    // These are identifiers that act as modifiers only when followed by go or scope.
+    // Context keyword: "linked" before go/scope.
+    // An identifier that acts as a modifier only when followed by go or scope.
     // Note: "monitored" prefix was removed — use task.monitor() API instead.
     if (xr_parser_check(parser, TK_NAME)) {
         Token name_token = parser->current;
@@ -1811,17 +1811,6 @@ AstNode *xr_parse_declaration(Parser *parser) {
                 xr_parser_advance(parser);  // consume "linked"
                 xr_parser_advance(parser);  // consume "scope"
                 return xr_parse_scope_block_with_mode(parser, XR_SCOPE_LINKED);
-            }
-        }
-
-        // "supervisor" scope ...
-        if (name_token.length == 10 && memcmp(name_token.start, "supervisor", 10) == 0) {
-            Scanner saved = parser->scanner;
-            Token peek = xr_scanner_scan(&saved);
-            if (peek.type == TK_SCOPE) {
-                xr_parser_advance(parser);  // consume "supervisor"
-                xr_parser_advance(parser);  // consume "scope"
-                return xr_parse_scope_block_with_mode(parser, XR_SCOPE_SUPERVISOR);
             }
         }
     }

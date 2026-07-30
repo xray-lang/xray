@@ -363,8 +363,8 @@
     _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
     _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
     _(ARRAY_COPY_NEW, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = Array<T>(R[B]) copy/convert")              \
-    _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
-    _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
+    _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked)")                       \
+    _(SCOPE_EXIT, FMT_A, KOP_A_LIT, "exit scope, A=mode(0=wait,1=linked)")                         \
     _(SLEEP, FMT_A, KOP_A_USE, "time.sleep(R[A]) ms")                                              \
     _(TIME_AFTER, FMT_AB, KOP_AB_UNARY, "R[A] = time.after(R[B]) ms")                              \
     _(SELECT_BLOCK, FMT_ABC, KOP_ABC_BIN_LIT,                                                      \

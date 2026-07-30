@@ -999,8 +999,9 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
     xi_lower_stmt(l, sb->body);
 
-    struct XrType *res_type = l->type_unit;
-    XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, res_type, 0);
+    /* A scope block is always a statement — XI_SCOPE_EXIT is unit-typed and
+     * its register is never read. */
+    XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, l->type_unit, 0);
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;
         exit_v->flags |= XI_FLAG_SIDE_EFFECT;
@@ -3210,8 +3211,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                             : node->line;
         stmt_set_missing_line(init_val, init_line);
         lower_mark_decl_captured_by_child(l, var_id, name, init_val);
-        init_val = xi_lower_apply_numeric_conversion_witness(
-            l, node->as.var_decl.initializer, init_val, type);
+        init_val = xi_lower_apply_numeric_conversion_witness(l, node->as.var_decl.initializer,
+                                                             init_val, type);
         if (!init_val)
             return;
         init_val = xi_lower_checktype_for_type(l, node, init_val, type);
@@ -3416,8 +3417,8 @@ static void lower_return(XiLower *l, AstNode *node) {
                                                   XR_OBJ_STORAGE_SHARED);
         }
         stmt_set_missing_line(val, node->line);
-        val = xi_lower_apply_numeric_conversion_witness(
-            l, ret->values[0], val, l->func ? l->func->return_type : NULL);
+        val = xi_lower_apply_numeric_conversion_witness(l, ret->values[0], val,
+                                                        l->func ? l->func->return_type : NULL);
         if (!val)
             return;
         /* Tail-call detection: mark calls in return position so the emitter

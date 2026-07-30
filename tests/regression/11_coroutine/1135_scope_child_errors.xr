@@ -1,5 +1,5 @@
-// Supervisor scope is statement-only: child failures do not cancel siblings,
-// and callers observe explicit task handles instead of an outcome array.
+// A plain `scope` is a wait barrier: child failures do not cancel siblings,
+// and callers observe outcomes through explicit task handles.
 
 import time
 
@@ -32,9 +32,9 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
     return sum
 }
 
-fn test_statement_waits_for_success_and_failure() {
+fn test_scope_waits_for_success_and_failure() {
     const ch = Channel<int>(3)
-    supervisor scope {
+    scope {
         go ok_report(ch, 1)
         go fail_report(ch, 10)
         go ok_report(ch, 100)
@@ -45,7 +45,7 @@ fn test_statement_waits_for_success_and_failure() {
 
 fn test_explicit_task_handle_observes_failure() {
     const ch = Channel<int>(1)
-    supervisor scope {
+    scope {
         var task = go fail_report(ch, 5)
         var result = task.awaitResult()
         match (result) {
@@ -58,7 +58,7 @@ fn test_explicit_task_handle_observes_failure() {
 }
 
 fn test_cancelled_child_is_local_to_scope() {
-    supervisor scope {
+    scope {
         var task = go slow()
         task.cancel()
         var result = task.awaitResult()
@@ -70,8 +70,8 @@ fn test_cancelled_child_is_local_to_scope() {
 }
 
 @test
-fn test_supervisor_statement_errors() {
-    test_statement_waits_for_success_and_failure()
+fn test_scope_child_errors() {
+    test_scope_waits_for_success_and_failure()
     test_explicit_task_handle_observes_failure()
     test_cancelled_child_is_local_to_scope()
 }

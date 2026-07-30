@@ -47,7 +47,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
-**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`supervisor`、`after` 可作为普通标识符）。
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`after` 可作为普通标识符）。
 
 字符 `_` 是**专用通配符 token**，不是普通标识符：
 
@@ -140,7 +140,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `linked` | `linked go` / `linked scope` 修饰符 |
-| `supervisor` | `supervisor scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 
@@ -489,7 +488,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
-**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `supervisor`, `after`).
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `after`).
 
 The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
@@ -582,7 +581,6 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
-| `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 

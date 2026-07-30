@@ -10,12 +10,12 @@ fn linked_value() -> int {
 
 enum ScopeAotErr { Msg(string) }
 
-fn supervisor_ok(ch: Channel<int>) -> int {
+fn sibling_ok(ch: Channel<int>) -> int {
     ch.send(1)
     return 5
 }
 
-fn supervisor_fail(ch: Channel<int>) -> int {
+fn sibling_fail(ch: Channel<int>) -> int {
     ch.send(10)
     throw ScopeAotErr.Msg("aot_fail")
     return 0
@@ -57,10 +57,12 @@ linked scope {
     print(value + 1)
 }
 
-const supervisor_ch = Channel<int>(2)
-supervisor scope {
-    go supervisor_ok(supervisor_ch)
-    go supervisor_fail(supervisor_ch)
+// A plain `scope` waits for both children; the failing one leaves its sibling
+// alone and its error does not escape the block.
+const isolated_ch = Channel<int>(2)
+scope {
+    go sibling_ok(isolated_ch)
+    go sibling_fail(isolated_ch)
 }
-print(recv_sum(supervisor_ch, 2))
-supervisor_ch.close()
+print(recv_sum(isolated_ch, 2))
+isolated_ch.close()

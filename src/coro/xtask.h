@@ -25,7 +25,7 @@
  *   "who awaits whom" — one node per `go` expression. The scope chain
  *   (XrScopeContext, xcoroutine.h) tracks "which coroutines run inside
  *   the same `scope { ... }` block" — one node per scope statement,
- *   carrying the structured-concurrency policy (linked / supervisor).
+ *   carrying the structured-concurrency policy (plain wait / linked).
  *   They overlap in shape but capture different parent/child concepts;
  *   merging them would lose the policy dimension scope provides and
  *   would force every standalone `go` to materialize a fake scope.
@@ -100,21 +100,18 @@ typedef enum {
 /* ========== Scope Mode (scope prefix modifier) ========== */
 
 typedef enum {
-    XR_SCOPE_WAIT = 0,        // scope { } — wait barrier (default)
-    XR_SCOPE_LINKED = 1,      // linked scope { } — child fail cancels all + throws
-    XR_SCOPE_SUPERVISOR = 2,  // supervisor scope { } — collect errors, no cancel
+    XR_SCOPE_WAIT = 0,    // scope { } — wait barrier, siblings independent (default)
+    XR_SCOPE_LINKED = 1,  // linked scope { } — child fail cancels all + throws
 } XrScopeMode;
 
 /* ========== Task Flags ========== */
 
-#define XR_TASK_FLG_SUPERVISOR (1 << 0)         // child error doesn't propagate up
-#define XR_TASK_FLG_SCOPE_TASK (1 << 1)         // implicit task created by scope block
-#define XR_TASK_FLG_HAS_PARENT (1 << 2)         // attached to a parent task
-#define XR_TASK_FLG_RUNTIME_OWNED (1 << 3)      // handle lives outside executor heap
-#define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 4)     // compiler-proven single await consumer
-#define XR_TASK_FLG_DEFERRED_REGISTRY (1 << 5)  // registry link delayed until batch submit
+#define XR_TASK_FLG_HAS_PARENT (1 << 0)         // attached to a parent task
+#define XR_TASK_FLG_RUNTIME_OWNED (1 << 1)      // handle lives outside executor heap
+#define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 2)     // compiler-proven single await consumer
+#define XR_TASK_FLG_DEFERRED_REGISTRY (1 << 3)  // registry link delayed until batch submit
 #define XR_TASK_FLG_RESULT_COPY_SHARED                                                             \
-    (1 << 6)  // compiler-planned shared copy for pointer-backed Copy result
+    (1 << 4)  // compiler-planned shared copy for pointer-backed Copy result
 
 /* ========== Completion Listener ========== */
 
@@ -287,7 +284,7 @@ XR_FUNC void xr_task_child_completed(struct XrTask *parent, struct XrTask *child
 // Cancel a task and all its children recursively
 XR_FUNC void xr_task_cancel_tree(struct XrTask *task);
 
-// Fail with upward propagation (skips supervisor parents)
+// Fail with upward propagation: cancel the parent and every linked peer
 XR_FUNC void xr_task_fail_with_propagation(struct XrTask *task, XrValue error);
 
 // Fire all completion listeners

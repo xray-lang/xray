@@ -23,7 +23,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
 }
 
 const ch = Channel<int>(2)
-supervisor scope {
+scope {
     go ok(ch)
     go fail(ch)
 }
