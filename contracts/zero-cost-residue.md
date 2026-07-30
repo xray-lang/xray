@@ -67,4 +67,4 @@ that cite the affected category.
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
 anchor-sha256: src/aot/xi_cgen.c aa280bd25e296511c32c1ff9f32e03d06cebf87d25e793d2291c84851e5daea1
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
-anchor-sha256: src/app/cli/xcmd_verify.c ba8e85fbba500afe3968839f2734386b1e125cf2a78ceea49b7ec28e1e1129fc
+anchor-sha256: src/app/cli/xcmd_verify.c a50c22c43cbbb4b6f9da9efbaca567600a7ded385b468b2ef8d9b71c8fa52564
