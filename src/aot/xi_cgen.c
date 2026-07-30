@@ -5430,7 +5430,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_value_stmt_is_inlined(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v) ||
@@ -8824,7 +8824,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_value_stmt_is_inlined(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v))

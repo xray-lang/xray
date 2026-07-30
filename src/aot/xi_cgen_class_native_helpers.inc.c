@@ -4279,6 +4279,26 @@ static bool cg_class_native_ctor_can_inline(XiCgenCtx *ctx, const XiFunc *f, con
     return true;
 }
 
+/* Whether the constructor value really disappears into an inlined `_ci` local.
+ * cg_class_native_ctor_can_inline() is deliberately silent about RC ref fields
+ * because the ref-stack return path needs them, but the plain value emitter
+ * below refuses them for lack of a drop site. Callers that drop the value's
+ * declaration must use this stricter form: skipping the declaration while the
+ * emitter falls back to a normal assignment produces C that names an
+ * undeclared identifier. */
+static bool cg_class_native_ctor_value_stmt_is_inlined(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *v) {
+    if (!cg_class_native_ctor_can_inline(ctx, f, v))
+        return false;
+    const XiFunc *target = NULL;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, &target, NULL);
+    if (!cd)
+        return false;
+    if (!target)
+        return cd->instance_layout && !cg_class_native_layout_has_ref_fields(cd->instance_layout);
+    return !cg_class_native_layout_has_ref_fields(cd->instance_layout);
+}
+
 static bool emit_class_native_default_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
                                                       const XiClassData *cd,
                                                       const char *class_prefix, const XiValue *v) {
