@@ -1150,7 +1150,7 @@ Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Refle
 
 **Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
 
-Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/narrowing/`.
+Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/16_narrowing/`.
 
 #### 2.13.1 Narrowable Subjects
 

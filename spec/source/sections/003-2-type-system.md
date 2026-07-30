@@ -599,7 +599,7 @@ Xray 默认只保留最小类型身份层：
 
 **收窄（narrowing）**指在特定控制流位置上把一个绑定的**静态类型**收紧为其声明类型的子类型。收窄结果参与成员查找、重载解析、`match` 穷尽性判定与**代码生成**，因此收窄是**语义**而非诊断优化：对同一程序，VM 与 AOT 两条后端必须得到相同的收窄结果。
 
-本节规则编号 `N-1` … `N-13` 是规范性条文，每条在 `tests/compile_errors/narrowing/` 或 `tests/regression/narrowing/` 下有对应的一致性用例。
+本节规则编号 `N-1` … `N-13` 是规范性条文，每条在 `tests/compile_errors/narrowing/` 或 `tests/regression/16_narrowing/` 下有对应的一致性用例。
 
 #### 2.13.1 可收窄主体
 
@@ -1371,7 +1371,7 @@ Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Refle
 
 **Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
 
-Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/narrowing/`.
+Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/16_narrowing/`.
 
 #### 2.13.1 Narrowable Subjects
 
