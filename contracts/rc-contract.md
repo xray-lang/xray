@@ -9,7 +9,9 @@ For every RC-managed value, including registered identity aliases:
 - C2: reference-count changes are path-balanced for local death, return
   transfer, and move-out; double release is invalid.
 - C3: a borrowed view's owner remains live through every view use, including
-  uses flowing through PHI edges.
+  uses flowing through PHI edges. BOX, UNBOX, and CONVERT representation
+  adapters preserve borrow provenance; an implicit error edge must never
+  release such an adapter as a callee-owned cleanup.
 - C4: release placement is dominated by the owner definition; a non-dominating
   join cannot assign one predecessor's owner to all paths.
 - C5: ownership metadata is explicit and consistent, and SSA users reference
@@ -22,4 +24,4 @@ be enabled explicitly; it does not replace the mandatory post-ARC run.
 
 ## Digest anchors
 
-anchor-sha256: src/ir/xi_arc_verify.c 1b8fe1fcaa61176c38ac877a33fbf40bbed00ddb3aad4012f2cdb79282f5b98d
+anchor-sha256: src/ir/xi_arc_verify.c 195ac8c3aa683fd5e04bf3297ef245aafed86d5e1e2e757d199a88b6650260be

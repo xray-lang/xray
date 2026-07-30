@@ -205,6 +205,14 @@ static bool report_resource_failure(ArcVerify *av, const char *detail) {
                             detail ? detail : "ARC verifier allocation failed");
 }
 
+static void init_report(XiArcVerifyReport *report) {
+    memset(report, 0, sizeof(*report));
+    report->ok = true;
+    report->value_id = UINT32_MAX;
+    report->release_blk = UINT32_MAX;
+    report->use_blk = UINT32_MAX;
+}
+
 static bool verifier_allocation_allowed(ArcVerify *av) {
     if (av->allocation_budget < 0)
         return true;
@@ -430,6 +438,55 @@ static bool check_release_dominance(ArcVerify *av) {
     return true;
 }
 
+/* Late representation adapters preserve the ownership provenance of their
+ * source.  Re-derive that fact here from the canonical result-ownership table
+ * instead of sharing xi_arc.c's classifier: a BOX/UNBOX/CONVERT over a
+ * PLACE_LOAD remains borrowed and must never appear in an ERR_CHECK cleanup
+ * list as if the callee owned it. */
+static bool value_is_borrow_representation_alias(const XiValue *value, uint8_t depth) {
+    if (!value || depth > 16)
+        return false;
+    if (xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED)
+        return true;
+    switch (value->op) {
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_CONVERT:
+            return value->nargs == 1 &&
+                   value_is_borrow_representation_alias(value->args[0], (uint8_t) (depth + 1));
+        default:
+            return false;
+    }
+}
+
+static bool check_error_cleanup_ownership(ArcVerify *av) {
+    XiFunc *f = av->f;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || blk->rpo == 0)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *check = blk->values[i];
+            if (!check || check->op != XI_ERR_CHECK)
+                continue;
+            for (uint16_t a = XI_ERR_CHECK_CLEANUP_ARG_BASE; a < check->nargs; a++) {
+                XiValue *cleanup = check->args[a];
+                if (!value_is_borrow_representation_alias(cleanup, 0))
+                    continue;
+                char detail[176];
+                snprintf(detail, sizeof(detail),
+                         "ERR_CHECK cleanup claims borrowed representation alias v%u as a "
+                         "callee-owned reference",
+                         cleanup ? cleanup->id : UINT32_MAX);
+                return report_violation(av, XI_ARC_C3_BORROW_ESCAPE,
+                                        cleanup ? cleanup->id : UINT32_MAX, blk->id, blk->id,
+                                        detail);
+            }
+        }
+    }
+    return true;
+}
+
 /* ========== Net-delta dataflow (C1 / C2 / C3) ========== */
 
 /* Apply block `blk`'s transfer to `work` (net delta per tracked reference).
@@ -596,11 +653,7 @@ XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
                                         const XiArcVerifyOptions *options) {
     XiArcVerifyReport local;
     XiArcVerifyReport *rep = report ? report : &local;
-    memset(rep, 0, sizeof(*rep));
-    rep->ok = true;
-    rep->value_id = UINT32_MAX;
-    rep->release_blk = UINT32_MAX;
-    rep->use_blk = UINT32_MAX;
+    init_report(rep);
 
     XR_DCHECK(f != NULL, "xi_arc_verify: NULL func");
     if (!f || f->next_value_id == 0)
@@ -642,6 +695,8 @@ XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
         ok = check_rc_op_metadata(&av); /* C5 (RC-op metadata consistency) */
     if (ok)
         ok = check_release_dominance(&av); /* C4 (dominance boundary) */
+    if (ok)
+        ok = check_error_cleanup_ownership(&av); /* C3 (cold-edge borrowed cleanup) */
 
     if (ok) {
         build_tracked(&av);
@@ -680,11 +735,24 @@ XR_FUNC bool xi_arc_verify_tree(XiFunc *f, XiArcVerifyReport *report) {
     return true;
 }
 
-XR_FUNC void xi_arc_verify_or_ice(XiFunc *f, const char *stage_label) {
-    XiArcVerifyReport rep;
-    if (xi_arc_verify_tree(f, &rep))
-        return;
+static bool verify_error_cleanup_tree(XiFunc *f, XiArcVerifyReport *report) {
+    if (!f)
+        return true;
+    xi_ensure_rpo(f);
+    ArcVerify av;
+    memset(&av, 0, sizeof(av));
+    av.f = f;
+    av.rep = report;
+    if (!check_error_cleanup_ownership(&av))
+        return false;
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i] && !verify_error_cleanup_tree(f->children[i], report))
+            return false;
+    }
+    return true;
+}
 
+static void abort_with_report(const XiArcVerifyReport *rep, const char *stage_label) {
     fprintf(stderr,
             "\n========================================================\n"
             "[ICE] xi_arc_verify: RC contract violated after %s\n"
@@ -692,20 +760,35 @@ XR_FUNC void xi_arc_verify_or_ice(XiFunc *f, const char *stage_label) {
             "  function : %s\n"
             "  value    : v%u\n"
             "  detail   : %s\n",
-            stage_label ? stage_label : "(unknown stage)", xi_arc_contract_name(rep.contract),
-            rep.func_name ? rep.func_name : "<anon>", rep.value_id, rep.message);
-    if (rep.release_blk != UINT32_MAX)
-        fprintf(stderr, "  release  : b%u\n", rep.release_blk);
-    if (rep.use_blk != UINT32_MAX)
-        fprintf(stderr, "  use      : b%u\n", rep.use_blk);
-    if (rep.path[0])
-        fprintf(stderr, "  shortest counterexample path: %s\n", rep.path);
+            stage_label ? stage_label : "(unknown stage)", xi_arc_contract_name(rep->contract),
+            rep->func_name ? rep->func_name : "<anon>", rep->value_id, rep->message);
+    if (rep->release_blk != UINT32_MAX)
+        fprintf(stderr, "  release  : b%u\n", rep->release_blk);
+    if (rep->use_blk != UINT32_MAX)
+        fprintf(stderr, "  use      : b%u\n", rep->use_blk);
+    if (rep->path[0])
+        fprintf(stderr, "  shortest counterexample path: %s\n", rep->path);
     fprintf(stderr, "========================================================\n");
-    if (rep.func) {
-        fprintf(stderr, "=== Xi IR dump: %s ===\n", rep.func_name ? rep.func_name : "<anon>");
-        xi_func_dump((const XiFunc *) rep.func, stderr);
+    if (rep->func) {
+        fprintf(stderr, "=== Xi IR dump: %s ===\n", rep->func_name ? rep->func_name : "<anon>");
+        xi_func_dump((const XiFunc *) rep->func, stderr);
         fprintf(stderr, "======================================================\n");
     }
     fflush(stderr);
     abort();
+}
+
+XR_FUNC void xi_arc_verify_error_cleanups_or_ice(XiFunc *f, const char *stage_label) {
+    XiArcVerifyReport rep;
+    init_report(&rep);
+    if (verify_error_cleanup_tree(f, &rep))
+        return;
+    abort_with_report(&rep, stage_label);
+}
+
+XR_FUNC void xi_arc_verify_or_ice(XiFunc *f, const char *stage_label) {
+    XiArcVerifyReport rep;
+    if (xi_arc_verify_tree(f, &rep))
+        return;
+    abort_with_report(&rep, stage_label);
 }

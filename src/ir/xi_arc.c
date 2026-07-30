@@ -448,6 +448,29 @@ static bool op_produces_borrow(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
+/* Representation selection runs after ordinary ARC insertion and may wrap a
+ * borrowed RC value in BOX/UNBOX/CONVERT adapters.  Those adapters change only
+ * the backend representation; they do not acquire ownership.  Late error-edge
+ * cleanup discovery must therefore follow the adapter back to its source or a
+ * ref-loaded Array<T> is mistaken for a fresh owner and released by the
+ * callee.  SOURCE_MOVE/OWNER_FORWARD are deliberately excluded: they perform
+ * an ownership transfer rather than preserve a borrow. */
+static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
+    if (!value || depth > 16)
+        return false;
+    if (op_produces_borrow(value->op))
+        return true;
+    switch (value->op) {
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_CONVERT:
+            return value->nargs == 1 &&
+                   arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
+        default:
+            return false;
+    }
+}
+
 /* Is this op a call whose result ownership we cannot determine without a
  * per-callee return-ownership summary? */
 static bool op_is_call(uint16_t op) {
@@ -1685,15 +1708,14 @@ static void arc_precompute_sigs(XiFunc *f) {
 }
 
 static XiArcOwnMode arc_target_own_mode(const XiFunc *f, const XiValue *target,
-                                        const XiBorrowSig *own_sig,
-                                        const XiValue *borrowed_recv) {
+                                        const XiBorrowSig *own_sig, const XiValue *borrowed_recv) {
     if (target == borrowed_recv)
         return OWN_BORROWED;
     if (f->operator_borrowed && target->op == XI_PARAM)
         return OWN_BORROWED;
     if (target->op == XI_PARAM && param_is_borrowed(f, target, own_sig))
         return OWN_BORROWED;
-    if (op_produces_borrow(target->op))
+    if (arc_value_is_borrow_alias(target, 0))
         return OWN_BORROWED;
     if (op_is_call(target->op) && !call_returns_fresh(f, target))
         return OWN_CALL_RESULT;
@@ -1774,8 +1796,7 @@ static void arc_insert_rec(XiFunc *f) {
 
     bool cfg_changed = false;
     for (uint32_t i = 0; i < targets.count; i++) {
-        XiArcOwnMode mode =
-            arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
+        XiArcOwnMode mode = arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
         cfg_changed |= process_value_ex(f, targets.items[i], mode);
     }
     xr_free(targets.items);
@@ -1842,8 +1863,8 @@ static bool arc_value_is_defined_before_block_index(const XiValue *target, const
 }
 
 static bool arc_value_live_after_block_index(const ArcLive *live, uint32_t index) {
-    return live && (live->live_out || live->use_at_end ||
-                    (live->has_use && live->last_use > index));
+    return live &&
+           (live->live_out || live->use_at_end || (live->has_use && live->last_use > index));
 }
 
 /* Attach error-edge owner operands for one function after ordinary
@@ -1862,8 +1883,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
     xi_ensure_dominators(f);
 
     for (uint16_t p = 0; p < f->nparams; p++) {
-        if (f->params[p] && tracks_rc(f->params[p]) &&
-            !xi_value_vec_push(&targets, f->params[p]))
+        if (f->params[p] && tracks_rc(f->params[p]) && !xi_value_vec_push(&targets, f->params[p]))
             goto oom;
     }
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -1879,11 +1899,9 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
              * error edge and must not gain cleanup operands (which would also
              * make otherwise-dead owners look live on the hot path). */
             if (v->op == XI_ERR_CHECK && (!v->type || v->type->kind != XR_KIND_BOOL) &&
-                v->nargs == 0 && arc_err_check_source(v) != NULL &&
-                !xi_value_vec_push(&checks, v))
+                v->nargs == 0 && arc_err_check_source(v) != NULL && !xi_value_vec_push(&checks, v))
                 goto oom;
-            if (v->op == XI_PARAM ||
-                stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
+            if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
             if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
                 goto oom;
@@ -1948,8 +1966,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
         XR_CHECK(nargs <= UINT16_MAX, "xi_arc: too many unit ERR_CHECK cleanup owners");
         XiValue **args = NULL;
         if (nargs != 0) {
-            args = (XiValue **) xi_func_arena_alloc(
-                f, (uint32_t) ((size_t) nargs * sizeof(*args)));
+            args = (XiValue **) xi_func_arena_alloc(f, (uint32_t) ((size_t) nargs * sizeof(*args)));
             XR_CHECK(args != NULL, "xi_arc: out of memory publishing ERR_CHECK cleanups");
             for (uint32_t i = 0; i < cleanups[ci].count; i++)
                 args[i] = cleanups[ci].items[i];
