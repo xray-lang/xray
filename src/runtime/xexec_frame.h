@@ -189,6 +189,12 @@ typedef struct XrVMContext {
     int defer_count;
     int defer_capacity;
     int *defer_frame_marks;
+
+    // Nonzero while a defer body runs. Cleanup is what makes cancellation
+    // safe, so cancellation is not delivered inside it: a suspension point in
+    // a defer body must not abandon the rest of the cleanup. The request stays
+    // pending and is observed again once the defer chain completes.
+    int defer_body_depth;
 } XrVMContext;
 
 /*

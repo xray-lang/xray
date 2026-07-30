@@ -51,7 +51,8 @@ vmcase(OP_JMP) {
             VM_GC_SAFEPOINT();
 
             if (xr_coro_consume_reds(coro, 1) <= 0) {
-                if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+                if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED) &&
+                    vm_ctx->defer_body_depth == 0) {
                     return XR_VM_CANCELLED;
                 }
                 xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);

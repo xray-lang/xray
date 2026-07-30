@@ -250,6 +250,9 @@ XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto)
 XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark);
+/* Run the defer entries a cancelled coroutine still owns. Cancellation stops
+ * a coroutine between statements, so nothing else walks its frames. */
+XR_FUNC void xr_vm_run_cancellation_defers(XrVMRuntime *isolate, XrVMContext *ctx);
 
 /*
  * Single-call throw helper: records the full call chain into
