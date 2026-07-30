@@ -55,6 +55,12 @@ typedef struct LiteralNode {
      * older call sites. */
     uint64_t int_bits;
     bool int_overflows_i64;
+    /* String literals only: true when this node is a literal chunk of a
+     * template string rather than a value in its own right. `"a${"b"}"` holds
+     * two string literals — the chunk `a` and the interpolated `"b"` — and
+     * nothing else tells them apart, so the formatter would print the second
+     * one unquoted and silently turn the template into `"ab"`. */
+    bool is_template_chunk;
     union {
         int64_t int_val;
         double float_val;

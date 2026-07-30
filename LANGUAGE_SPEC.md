@@ -4475,16 +4475,15 @@ render(Square())     // OK
 
 #### Structural objects
 
-Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
+Only `object literal` and `type T = {...}` use structural matching:
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })          // OK: exact field set
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0352: sealed type rejects extra field 'z'
-describe({ x: 1.0 })                  // compile error E0352: missing field 'y'
+describe({ x: 1.0, y: 2.0 })   // OK: literal matches structurally
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error: sealed type rejects extra fields
 ```
 
 ### 9.6 Variance

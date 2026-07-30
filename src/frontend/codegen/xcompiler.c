@@ -27,6 +27,49 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Print and mark every unreported analyzer diagnostic; return the error count.
+ * Called after each analysis stage that can produce user-visible errors --
+ * including monomorphization, whose budget diagnostics arrive after the first
+ * analysis pass and would otherwise be marked reported without being shown. */
+static int drain_analyzer_diagnostics(XrCompilerContext *ctx) {
+    if (!ctx->analyzer)
+        return 0;
+    int diag_count = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(ctx->analyzer, &diag_count);
+    if (diag_count == 0)
+        return 0;
+
+    int error_count = 0;
+    int warning_count = 0;
+    for (XaDiagnostic *d = diagnostics; d; d = d->next) {
+        if (d->code == 0 || d->reported)
+            continue;
+        /* REPL mode: suppress analyzer diagnostics — analyzer cannot see
+         * cross-compilation-unit shared variables seeded from prior inputs
+         * and would produce false-positive undefined/unused warnings. */
+        if (ctx->repl_mode) {
+            d->reported = true;
+            continue;
+        }
+        const char *file = d->location.file ? d->location.file : ctx->source_file;
+        int col = d->location.column > 0 ? d->location.column : 1;
+        if (d->severity == XR_DIAG_SEV_ERROR) {
+            error_count++;
+            xr_diag_print(XR_DIAG_ERROR, d->code, d->message, file, d->location.line, col, 0, NULL,
+                          NULL);
+            d->reported = true;
+        } else if (d->severity == XR_DIAG_SEV_WARNING) {
+            warning_count++;
+            xr_diag_print(XR_DIAG_WARNING, d->code, d->message, file, d->location.line, col, 0,
+                          NULL, NULL);
+            d->reported = true;
+        }
+    }
+    if (error_count > 0)
+        xr_diag_print_summary(ctx->source_file, error_count, warning_count, 0);
+    return error_count;
+}
+
 /* Compile AST to bytecode via Xi IR pipeline.
  * Returns XrProto on success, NULL on failure.
  *
@@ -54,41 +97,8 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Type inference pass */
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, ctx->source_file, ast);
-
-        int diag_count = 0;
-        XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(ctx->analyzer, &diag_count);
-        if (diag_count > 0) {
-            int error_count = 0;
-            int warning_count = 0;
-            for (XaDiagnostic *d = diagnostics; d; d = d->next) {
-                if (d->code == 0)
-                    continue;
-                /* REPL mode: suppress analyzer diagnostics — analyzer cannot see
-                 * cross-compilation-unit shared variables seeded from prior inputs
-                 * and would produce false-positive undefined/unused warnings. */
-                if (ctx->repl_mode) {
-                    d->reported = true;
-                    continue;
-                }
-                const char *file = d->location.file ? d->location.file : ctx->source_file;
-                int col = d->location.column > 0 ? d->location.column : 1;
-                if (d->severity == XR_DIAG_SEV_ERROR) {
-                    error_count++;
-                    xr_diag_print(XR_DIAG_ERROR, d->code, d->message, file, d->location.line, col,
-                                  0, NULL, NULL);
-                    d->reported = true;
-                } else if (d->severity == XR_DIAG_SEV_WARNING) {
-                    warning_count++;
-                    xr_diag_print(XR_DIAG_WARNING, d->code, d->message, file, d->location.line, col,
-                                  0, NULL, NULL);
-                    d->reported = true;
-                }
-            }
-            if (error_count > 0) {
-                xr_diag_print_summary(ctx->source_file, error_count, warning_count, 0);
-                return NULL;
-            }
-        }
+        if (drain_analyzer_diagnostics(ctx) > 0)
+            return NULL;
     }
 
     /* Interactive frontends may elaborate syntax that depends on inferred
@@ -98,7 +108,14 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         ctx->post_analyze_hook(ctx, ast, ctx->post_analyze_user_data);
 
     /* Monomorphization: clone generic functions/structs for each concrete type */
-    xa_mono_pass_with_analyzer(ast, ctx->X, ctx->analyzer);
+    bool mono_ok = xa_mono_pass(ast, NULL, 0, ctx->X, ctx->analyzer);
+
+    /* Drain before the blanket mark-as-reported below, which would otherwise
+     * swallow an E0387/E0388 without ever printing it. */
+    if (!mono_ok) {
+        drain_analyzer_diagnostics(ctx);
+        return NULL;
+    }
 
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {

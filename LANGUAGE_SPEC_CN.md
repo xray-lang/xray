@@ -4473,16 +4473,15 @@ render(Square())     // OK
 
 #### 结构化对象
 
-仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
+仅`object literal` 与 `type T = {...}` 是结构化匹配：
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0352：sealed 类型多了字段 'z'
-describe({ x: 1.0 })                  // 编译错误 E0352：缺少字段 'y'
+describe({ x: 1.0, y: 2.0 })   // OK：字面量结构匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字段
 ```
 
 ### 9.6 方差（Variance）

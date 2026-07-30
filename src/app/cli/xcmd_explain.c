@@ -147,7 +147,7 @@ static bool explain_record_prefix_matches(const char *topic, const char *line, s
 }
 
 static bool explain_codegen_record_matches_subject(const char *subject, const char *line,
-                                                    size_t line_len) {
+                                                   size_t line_len) {
     static const char *fields[] = {"function=", "caller=", "callee="};
     char candidate[256];
     if (!explain_record_prefix_matches("codegen", line, line_len))
@@ -194,12 +194,12 @@ static uint32_t explain_print_records(const char *topic, const char *subject, co
         const char *end = strchr(line, '\n');
         size_t line_len = end ? (size_t) (end - line) : strlen(line);
         char function[256];
-        bool matches = strcmp(topic, "codegen") == 0
-                           ? explain_codegen_record_matches_subject(subject, line, line_len)
-                           : explain_record_prefix_matches(topic, line, line_len) &&
-                                 explain_line_field(line, line_len, field, function,
-                                                    sizeof(function)) &&
-                                 explain_symbol_name_matches(subject, function);
+        bool matches =
+            strcmp(topic, "codegen") == 0
+                ? explain_codegen_record_matches_subject(subject, line, line_len)
+                : explain_record_prefix_matches(topic, line, line_len) &&
+                      explain_line_field(line, line_len, field, function, sizeof(function)) &&
+                      explain_symbol_name_matches(subject, function);
         if (matches && strcmp(topic, "codegen") == 0 &&
             explain_codegen_record_seen_before(dump, line, line_len))
             matches = false;
@@ -257,22 +257,15 @@ static bool explain_codegen_json_key(const char *key, size_t key_len, const char
         const char *json;
         bool number;
     } fields[] = {
-        {"function", "function", false},
-        {"caller", "caller", false},
-        {"callee", "callee", false},
-        {"kind", "kind", false},
-        {"value", "value", false},
-        {"call", "call", false},
-        {"source-line", "sourceLine", true},
-        {"stage", "stage", false},
-        {"backend", "backend", false},
-        {"provider-capability", "providerCapability", false},
-        {"lowering", "lowering", false},
-        {"reason", "reason", false},
+        {"function", "function", false},     {"caller", "caller", false},
+        {"callee", "callee", false},         {"kind", "kind", false},
+        {"value", "value", false},           {"call", "call", false},
+        {"source-line", "sourceLine", true}, {"stage", "stage", false},
+        {"backend", "backend", false},       {"provider-capability", "providerCapability", false},
+        {"lowering", "lowering", false},     {"reason", "reason", false},
     };
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
-        if (strlen(fields[i].ledger) == key_len &&
-            strncmp(key, fields[i].ledger, key_len) == 0) {
+        if (strlen(fields[i].ledger) == key_len && strncmp(key, fields[i].ledger, key_len) == 0) {
             *json_key = fields[i].json;
             *is_number = fields[i].number;
             return true;
@@ -298,8 +291,7 @@ static void explain_print_codegen_json_record(const char *line, size_t line_len)
         const char *token_end = cursor;
         while (token_end < end && *token_end != ' ')
             token_end++;
-        const char *equal =
-            (const char *) memchr(cursor, '=', (size_t) (token_end - cursor));
+        const char *equal = (const char *) memchr(cursor, '=', (size_t) (token_end - cursor));
         if (equal) {
             const char *json_key = NULL;
             bool is_number = false;
@@ -522,8 +514,7 @@ static int explain_effect(const char *subject) {
             mono_roots[ti] = graph->specs[graph->topo_order[ti]].ast;
         for (int ti = 0; ti < graph->topo_count; ti++) {
             XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
-            xa_mono_pass_with_external_structs_and_analyzer(spec->ast, mono_roots,
-                                                            graph->topo_count, isolate, analyzer);
+            xa_mono_pass(spec->ast, mono_roots, graph->topo_count, isolate, analyzer);
         }
         for (int ti = 0; ti < graph->topo_count; ti++) {
             XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
@@ -587,8 +578,8 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv) {
         }
         return explain_effect(input);
     }
-    if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 ||
-        strcmp(topic, "alias") == 0 || strcmp(topic, "codegen") == 0) {
+    if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 || strcmp(topic, "alias") == 0 ||
+        strcmp(topic, "codegen") == 0) {
         if (inv->positional_count < 2) {
             xr_cli_error("explain", "%s requires a function symbol", topic);
             return XR_CLI_EXIT_USAGE;
