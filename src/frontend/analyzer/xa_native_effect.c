@@ -55,9 +55,11 @@ XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbo
         axioms.allocates = true;
         axioms.effects |= XA_SEM_EFFECT_ALLOC;
     }
+    /* A native symbol cannot be a generator, so its declared suspension is
+     * always the scheduler-visible kind. */
     if (native_text_equals(contract->suspend, "may")) {
         axioms.suspends = true;
-        axioms.effects |= XA_SEM_EFFECT_SUSPEND;
+        axioms.effects |= XA_SEM_EFFECT_SCHED_SUSPEND;
     }
     if (native_text_equals(contract->blocking, "may"))
         axioms.effects |= XA_SEM_EFFECT_MAY_BLOCK;

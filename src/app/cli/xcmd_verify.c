@@ -325,7 +325,8 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
  * at all, so granting it would report an unproven guarantee as proven.  Such a
  * requirement fails closed until its inference lands, and this mask is what
  * grows when it does. */
-#define VERIFY_INFERRED_SEMANTIC_EFFECTS (XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SUSPEND)
+#define VERIFY_INFERRED_SEMANTIC_EFFECTS                                                           \
+    (XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SCHED_SUSPEND | XA_SEM_EFFECT_GEN_SUSPEND)
 
 static bool verify_requirement_effect(const char *requirement, XaAnalyzer *analyzer,
                                       XaSymbol *symbol, char *reason, size_t reason_size) {
@@ -337,8 +338,14 @@ static bool verify_requirement_effect(const char *requirement, XaAnalyzer *analy
     XaSemanticEffectSet forbidden = XA_SEM_EFFECT_NONE;
     if (strcmp(requirement, "no_semantic_alloc") == 0)
         forbidden = XA_SEM_EFFECT_ALLOC;
+    /* `no_suspend` is the strong form: control never leaves this frame at all.
+     * `no_reschedule` is the weaker and more often useful one: the frame may be
+     * a generator, but control never reaches the scheduler, so the body is not a
+     * cancellation point and cannot migrate to another OS thread. */
     else if (strcmp(requirement, "no_suspend") == 0)
-        forbidden = XA_SEM_EFFECT_SUSPEND;
+        forbidden = XA_SEM_EFFECT_ANY_SUSPEND;
+    else if (strcmp(requirement, "no_reschedule") == 0)
+        forbidden = XA_SEM_EFFECT_SCHED_SUSPEND;
     else if (strcmp(requirement, "no_block") == 0)
         forbidden = XA_SEM_EFFECT_MAY_BLOCK | XA_SEM_EFFECT_THREAD_BLOCK;
     else if (strcmp(requirement, "no_thread_block") == 0)

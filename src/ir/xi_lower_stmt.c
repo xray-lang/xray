@@ -488,8 +488,11 @@ static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
 static bool stmt_function_may_suspend(XiLower *l) {
     if (!l || !l->func)
         return true;
-    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) & XA_SEM_EFFECT_SUSPEND) !=
-        0)
+    /* Storage placement asks whether control can leave this body and come back,
+     * so both suspension kinds count: a generator frame outlives `yield expr`
+     * exactly as a coroutine frame outlives `await`. */
+    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) &
+         XA_SEM_EFFECT_ANY_SUSPEND) != 0)
         return true;
     if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
         return false;
@@ -3210,8 +3213,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                             : node->line;
         stmt_set_missing_line(init_val, init_line);
         lower_mark_decl_captured_by_child(l, var_id, name, init_val);
-        init_val = xi_lower_apply_numeric_conversion_witness(
-            l, node->as.var_decl.initializer, init_val, type);
+        init_val = xi_lower_apply_numeric_conversion_witness(l, node->as.var_decl.initializer,
+                                                             init_val, type);
         if (!init_val)
             return;
         init_val = xi_lower_checktype_for_type(l, node, init_val, type);
@@ -3416,8 +3419,8 @@ static void lower_return(XiLower *l, AstNode *node) {
                                                   XR_OBJ_STORAGE_SHARED);
         }
         stmt_set_missing_line(val, node->line);
-        val = xi_lower_apply_numeric_conversion_witness(
-            l, ret->values[0], val, l->func ? l->func->return_type : NULL);
+        val = xi_lower_apply_numeric_conversion_witness(l, ret->values[0], val,
+                                                        l->func ? l->func->return_type : NULL);
         if (!val)
             return;
         /* Tail-call detection: mark calls in return position so the emitter

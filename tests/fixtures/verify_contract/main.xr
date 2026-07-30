@@ -20,5 +20,23 @@ export fn callsUncontractedNative(value: i32) -> i32 {
     return unsafe { uncontracted_native(value) }
 }
 
+// `yield expr` hands the frame to the iterator driving it; the scheduler is
+// never involved, so this proves `no_reschedule` but not `no_suspend`.
+export fn counter(n: int) -> Iterator<int> {
+    for (var i = 0; i < n; i++) {
+        yield i
+    }
+}
+
+// Driving a generator resumes the generator's frame and returns normally, so
+// neither suspension dimension reaches this caller.
+export fn driveCounter(n: int) -> int {
+    var sum = 0
+    for (x in counter(n)) {
+        sum = sum + x
+    }
+    return sum
+}
+
 print(pure(41))
 print(callPrivateWide(41 as u64))

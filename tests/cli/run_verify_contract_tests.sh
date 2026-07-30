@@ -47,4 +47,13 @@ if "$XRAY" verify --contract negative-uninferred.toml >"$WORK/uninferred.out" 2>
 fi
 grep -q 'has no inference source' "$WORK/uninferred.err"
 
+# The two suspension dimensions must stay distinguishable: the same generator
+# that proves `no_reschedule` in positive.toml must still fail `no_suspend`.
+if "$XRAY" verify --contract negative-generator-suspend.toml >"$WORK/generator.out" 2>"$WORK/generator.err"; then
+    echo "generator body unexpectedly proved no_suspend" >&2
+    exit 1
+fi
+grep -q "contract 'counter' failed" "$WORK/generator.err"
+grep -q 'forbidden semantic effect' "$WORK/generator.err"
+
 echo "PASS: versioned verify contract succeeds and fails closed"
