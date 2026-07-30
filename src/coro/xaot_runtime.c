@@ -16,6 +16,7 @@
 
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
+#include "../runtime/core/xr_exec_context.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/mem/xalloc_unified.h"
@@ -124,6 +125,24 @@ static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap
         return;
     }
     xr_aot_frame_free(frame);
+}
+
+/* A cancelled coroutine stops between statements, so no return edge drains its
+ * defer scope. Run it here, on the owner worker, before the task completes --
+ * the frame stays intact and its release path re-runs the (now empty) scope
+ * idempotently. */
+static bool aot_has_cancellation_cleanup(const XrCoroutine *coro) {
+    const XrAotCoroState *state = aot_state_from_coro((XrCoroutine *) coro);
+    return state && state->frame && state->desc && state->desc->run_pending_defers;
+}
+
+static void aot_run_cancellation_cleanup(XrCoroutine *coro) {
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    if (!state || !state->frame || !state->desc || !state->desc->run_pending_defers)
+        return;
+    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
+    state->desc->run_pending_defers(state->frame);
+    xr_exec_context_restore(previous);
 }
 
 static void aot_release_state(XrCoroutine *coro) {
@@ -436,6 +455,8 @@ static const XrCoroBackendVTable aot_runtime_backend_vtable = {
     .kind = XR_CORO_BACKEND_AOT,
     .resume = aot_runtime_backend_resume,
     .gen_drive = aot_backend_gen_drive,
+    .has_cancellation_cleanup = aot_has_cancellation_cleanup,
+    .run_cancellation_cleanup = aot_run_cancellation_cleanup,
     .trace_roots = aot_backend_trace_roots,
     .prepare_recycle = aot_prepare_recycle,
     .reset_reusable = aot_reset_reusable,

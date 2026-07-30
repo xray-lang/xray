@@ -176,6 +176,11 @@ typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 /* Optional hook; when present, it releases owned fields and frees the frame. */
 typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroHeap *heap);
+/* Run the frame's pending `defer` entries without freeing the frame. Emitted
+ * only for a coroutine that registers a defer, so a NULL field means the
+ * coroutine owes no cleanup. Cancellation calls it before the task completes,
+ * so an awaiter never observes the cancellation ahead of the cleanup. */
+typedef void (*XrAotFrameRunDefersFn)(void *frame);
 typedef void (*XrAotRootVisitFn)(XrValue value, void *ctx);
 typedef void (*XrParallelRangeI64Fn)(struct xrt_closure *closure, int64_t begin, int64_t end,
                                      int64_t worker_id);
@@ -209,6 +214,7 @@ typedef struct XrAotCoroDesc {
     XrAotResumeFn resume;
     XrAotFrameTraceFn trace_roots;
     XrAotFrameReleaseFn release_frame;
+    XrAotFrameRunDefersFn run_pending_defers;
 } XrAotCoroDesc;
 
 typedef struct XrAotSpawnResult {

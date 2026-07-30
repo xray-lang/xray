@@ -1778,6 +1778,23 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
     fprintf(out, "}\n\n");
 
+    if (cg_func_has_defer_stmt(f)) {
+        /* Cancellation stops the coroutine between statements, so no return
+         * edge drains the defer scope. This entry runs it in place, before the
+         * task completes, without touching the frame's other resources. */
+        fprintf(out, "%svoid ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
+        fprintf(out, "(void *frame) {\n");
+        fprintf(out, "    ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *f = (");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *)frame;\n");
+        fprintf(out, "    if (!f)\n        return;\n");
+        fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
+        fprintf(out, "}\n\n");
+    }
+
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroHeap *heap) {\n");
@@ -1818,6 +1835,11 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "    .release_frame = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
+    if (cg_func_has_defer_stmt(f)) {
+        fprintf(out, "    .run_pending_defers = ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
+        fprintf(out, ",\n");
+    }
     fprintf(out, "};\n\n");
 }
 
@@ -5336,6 +5358,23 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_direct_call_frame_trace(ctx, out, f, prefix);
     fprintf(out, "}\n\n");
 
+    if (cg_func_has_defer_stmt(f)) {
+        /* Cancellation stops the coroutine between statements, so no return
+         * edge drains the defer scope. This entry runs it in place, before the
+         * task completes, without touching the frame's other resources. */
+        fprintf(out, "%svoid ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
+        fprintf(out, "(void *frame) {\n");
+        fprintf(out, "    ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *f = (");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *)frame;\n");
+        fprintf(out, "    if (!f)\n        return;\n");
+        fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
+        fprintf(out, "}\n\n");
+    }
+
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroHeap *heap) {\n");
@@ -5376,6 +5415,11 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    .release_frame = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
+    if (cg_func_has_defer_stmt(f)) {
+        fprintf(out, "    .run_pending_defers = ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
+        fprintf(out, ",\n");
+    }
     fprintf(out, "};\n\n");
 }
 
