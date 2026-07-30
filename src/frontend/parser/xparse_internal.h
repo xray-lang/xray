@@ -40,6 +40,7 @@ typedef enum {
     PREC_EQUALITY,          // == !=
     PREC_COMPARISON,        // < > <= >=
     PREC_SHIFT,             // << >>
+    PREC_RANGE,             // .. ..= (non-associative; binds looser than + -)
     PREC_TERM,              // + -
     PREC_FACTOR,            // * / %
     PREC_UNARY,             // ! - ~

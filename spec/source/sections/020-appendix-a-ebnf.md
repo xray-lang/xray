@@ -92,10 +92,12 @@ BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
-ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+ShiftExpr   ::= RangeExpr (('<<' | '>>') RangeExpr)*
+RangeExpr   ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// parser 中 range 与乘除同一 precedence；安全转换写为 `x as T?`，T? 是可空类型。
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range 两端都是加减级表达式，故 `0..n+1` 即 `0..(n+1)`；`?` 表示非结合——`a..b..c` 是错误。
+// 安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -165,7 +167,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression ('..' | '..=') Expression
+RangePattern    ::= PostfixExpr ('..' | '..=') PostfixExpr   // 端点不是完整表达式：运算需加括号
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
@@ -419,10 +421,12 @@ BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
-ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+ShiftExpr   ::= RangeExpr (('<<' | '>>') RangeExpr)*
+RangeExpr   ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// Both range endpoints are additive expressions, so `0..n+1` is `0..(n+1)`; the `?` marks it
+// non-associative — `a..b..c` is an error. A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -492,7 +496,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression ('..' | '..=') Expression
+RangePattern    ::= PostfixExpr ('..' | '..=') PostfixExpr   // endpoints are not full expressions: parenthesize arithmetic
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?

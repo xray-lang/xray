@@ -1309,12 +1309,23 @@ AstNode *xr_parse_optional_index(Parser *parser, AstNode *object) {
 }
 
 // Parse range expression: start..end / start..=end
+//
+// Both endpoints are additive expressions (§3.9), so `0..n+1` is `0..(n+1)` —
+// the loop bound people actually write. The operator is non-associative:
+// `a..b..c` has no meaning, so it is rejected rather than silently grouped.
 AstNode *xr_parse_range(Parser *parser, AstNode *start) {
     XR_DCHECK(parser != NULL, "parse_range: NULL parser");
     int line = parser->previous.line;
     bool inclusive_end = parser->previous.type == TK_RANGE_INCLUSIVE;
 
-    AstNode *end = xr_parse_precedence(parser, PREC_FACTOR + 1);
+    AstNode *end = xr_parse_precedence(parser, PREC_RANGE + 1);
+
+    if (xr_parser_check(parser, TK_RANGE) || xr_parser_check(parser, TK_RANGE_INCLUSIVE)) {
+        xr_parser_error_at_current(parser,
+                                   "range operators do not chain; write one `..` / `..=` per "
+                                   "range, and parenthesize if you meant a nested expression");
+        return NULL;
+    }
 
     return xr_ast_range(parser->compiler_session, start, end, inclusive_end, line);
 }
