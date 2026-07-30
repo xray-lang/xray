@@ -6967,7 +6967,7 @@ XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx
                      b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
                      operation ? operation : "mutating the owner");
         }
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_CONFLICT,
                                    msg, &loc);
         return;
     }
@@ -6992,7 +6992,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
              "cannot %s; Slice is a borrowed view, keep it local or copy the owner data into an "
              "Array",
              escape_context ? escape_context : "var Slice view escape");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE, msg,
                                &loc);
 }
 
@@ -7030,7 +7030,7 @@ XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *lo
         "cannot create Slice view from temporary owner in %s; bind the owner to a local before "
         "borrowing it",
         operation ? operation : "borrow expression");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE, msg,
                                &loc);
 }
 
@@ -7283,7 +7283,7 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
     snprintf(msg, sizeof(msg),
              "cannot return borrowed '%s' parameter '%s'; return an owned value or copy(%s)", "ref",
              root->name ? root->name : "?", root->name ? root->name : "?");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE, msg,
                                &loc);
 }
 
@@ -7306,7 +7306,7 @@ static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_nod
     XrLocation loc = {
         .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
     xa_analyzer_add_diagnostic(
-        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE,
         "cannot return Slice view; return the owner container or copy the view into an Array",
         &loc);
 }

@@ -1,1 +1,1 @@
-无法修改只读字段 'Entity.id'（const 修饰）
+cannot assign to read-only field 'Entity.id' (declared const)
