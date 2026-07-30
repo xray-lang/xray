@@ -1,0 +1,1 @@
+generator 'gen' cannot register a deferred action; a generator abandoned before it is exhausted is never resumed, so the `defer` would not run

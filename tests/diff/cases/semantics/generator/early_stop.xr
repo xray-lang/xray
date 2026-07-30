@@ -1,0 +1,49 @@
+// anchor: generator-early-stop
+// A generator abandoned before exhaustion is never resumed: the rest of its body
+// does not run (LANGUAGE_SPEC 3.16.3). VM and AOT must agree on exactly how much
+// of the body executed, which is what makes the laziness observable.
+
+fn trace(n: int) -> Iterator<int> {
+    print("enter")
+    for (var i = 0; i < n; i++) {
+        print("produce " + string(i))
+        yield i
+    }
+    print("body-end")
+}
+
+print("-- drained")
+for (x in trace(3)) {
+    print("take " + string(x))
+}
+
+print("-- break on first")
+for (x in trace(3)) {
+    print("take " + string(x))
+    break
+}
+
+print("-- break in the middle")
+for (x in trace(5)) {
+    print("take " + string(x))
+    if (x == 2) {
+        break
+    }
+}
+
+// A generator that is created and never driven must not execute any of its body.
+print("-- never driven")
+var idle = trace(3)
+print("created")
+
+// Re-driving the same source function starts a fresh, independent frame.
+print("-- restart")
+var first = 0
+for (x in trace(2)) {
+    first = first + x
+}
+var second = 0
+for (x in trace(2)) {
+    second = second + x
+}
+print("sums " + string(first) + " " + string(second))

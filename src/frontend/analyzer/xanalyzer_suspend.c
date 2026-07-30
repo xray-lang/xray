@@ -7,11 +7,26 @@
  *
  * xanalyzer_suspend.c - Suspend effect inference
  *
- * The suspend-point set mirrors the task-212 body suspend effect
- * (XG_BODY_MAY_SUSPEND in src/analysis/xglobal_summary.c): await / yield /
- * select / scope-join, the blocking concurrency-handle methods, and time.sleep.
- * A dynamic call target or open virtual dispatch is treated as unproven. Strong
- * requirements are checked later by the versioned external contract verifier.
+ * Two independent dimensions, because `Coro.yield()` and `yield expr` stop a
+ * body in ways that differ in every property a caller can act on:
+ *
+ *   Scheduler suspension (XA_SEM_EFFECT_SCHED_SUSPEND) -- await / select /
+ *   scope-join / Coro.yield() / the blocking concurrency-handle methods /
+ *   time.sleep / an audited native contract.  Control reaches the scheduler, so
+ *   the coroutine may resume on another OS thread and observes cancellation.
+ *   This is caller-visible and composes transitively across call edges; a
+ *   dynamic call target or open virtual dispatch leaves it unproven.
+ *
+ *   Generator suspension (XA_SEM_EFFECT_GEN_SUSPEND) -- the body lexically
+ *   contains `yield expr`.  Its frame must survive a symmetric transfer to the
+ *   iterator driving it, but the scheduler is never involved.  It is a purely
+ *   local, always-decidable fact: it never propagates across a call edge and is
+ *   never incomplete, because driving a generator resumes the generator's frame
+ *   and returns normally, leaving the caller's own frame untouched.
+ *
+ * Strong requirements are checked later by the versioned external contract
+ * verifier: `no_reschedule` forbids the first dimension, `no_suspend` forbids
+ * both.
  */
 
 #include "xanalyzer_suspend.h"
@@ -29,7 +44,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Suspend lattice; a stronger conclusion dominates a weaker one. */
+/* Scheduler-suspend lattice; a stronger conclusion dominates a weaker one. */
 typedef enum XaSuspendState {
     XA_SUSPEND_NONE = 0,       /* proven not to suspend */
     XA_SUSPEND_INCOMPLETE = 1, /* fail-closed: evidence incomplete (dynamic target) */
@@ -64,6 +79,11 @@ typedef struct XaSuspendRow {
      * reason instead so the witness names the real gap. */
     XaUnknownReason direct_incomplete_reason;
     XaUnknownReason result_incomplete_reason;
+    /* Generator suspension is lexical and local: it needs no lattice, no edge
+     * propagation, and has no incomplete state. */
+    bool has_generator_yield;
+    /* First `defer` lexically in this body, for the generator-defer rule. */
+    AstNode *defer_site;
     XaSuspendEdge *edges;
     int edge_count;
     int edge_capacity;
@@ -303,6 +323,16 @@ static bool sus_is_suspending_handle_method(const XrType *receiver, const char *
     return false;
 }
 
+/* `Coro.yield()` is a scheduler suspension point, but the receiver is a
+ * VM-intrinsic module rather than a resolved function symbol, so the ordinary
+ * call-target path below sees nothing and would conclude "non-suspending". */
+static bool sus_call_is_coro_yield(XaSuspendPass *pass, const MemberAccessNode *member) {
+    if (!member || !member->name || strcmp(member->name, "yield") != 0)
+        return false;
+    return xa_symbol_is_builtin_module(pass->analyzer,
+                                       sus_variable_symbol(pass->analyzer, member->object), "Coro");
+}
+
 static bool sus_symbol_is_time_sleep(XaSymbol *symbol, const char *member_name) {
     if (!symbol || !member_name || strcmp(member_name, "sleep") != 0)
         return false;
@@ -379,13 +409,13 @@ static int sus_hof_callback_index(const XrType *receiver, const char *method) {
     return -1;
 }
 
-static bool sus_call_is_mem_with_slice_mut(const CallExprNode *call) {
+static bool sus_call_is_mem_with_slice_mut(XaSuspendPass *pass, const CallExprNode *call) {
     if (!call || call->arg_count != 4 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     const MemberAccessNode *member = &call->callee->as.member_access;
-    return member->name && strcmp(member->name, "withSliceMut") == 0 && member->object &&
-           member->object->type == AST_VARIABLE && member->object->as.variable.name &&
-           strcmp(member->object->as.variable.name, "mem") == 0;
+    return member->name && strcmp(member->name, "withSliceMut") == 0 &&
+           xa_symbol_is_module(pass->analyzer, sus_variable_symbol(pass->analyzer, member->object),
+                               "mem");
 }
 
 static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
@@ -412,7 +442,9 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
             (XaSelectionTable *) scan->pass->analyzer->selection_table, callee);
         XaSymbol *target = selection ? selection->target_symbol : NULL;
 
-        if (sus_is_suspending_handle_method(receiver, member->name)) {
+        if (sus_call_is_coro_yield(scan->pass, member)) {
+            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "call", "Coro.yield()");
+        } else if (sus_is_suspending_handle_method(receiver, member->name)) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "handle method", member->name);
         } else if (target && sus_symbol_is_time_sleep(target, member->name)) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "call", "time.sleep");
@@ -437,7 +469,7 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
         int callback_index = sus_hof_callback_index(receiver, member->name);
         if (callback_index >= 0 && callback_index < call->arg_count)
             sus_scan_callback(scan, call->arguments[callback_index], node);
-        if (sus_call_is_mem_with_slice_mut(call))
+        if (sus_call_is_mem_with_slice_mut(scan->pass, call))
             sus_scan_callback(scan, call->arguments[3], node);
         return;
     }
@@ -457,16 +489,25 @@ static void sus_scan_node_pre(AstNode *node, void *userdata) {
         return;
     switch (node->type) {
         case AST_AWAIT_EXPR:
-            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "await", "await");
+            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "await", NULL);
             break;
         case AST_YIELD_STMT:
-            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "yield", "yield");
+            /* Generator value production: the driver resumes this frame, the
+             * scheduler is not involved.  Deliberately does not mark the
+             * scheduler dimension. */
+            scan->row->has_generator_yield = true;
+            break;
+        case AST_DEFER_STMT:
+            /* Recorded unconditionally; only a body that also yields is
+             * rejected, and the walk may reach the defer before the yield. */
+            if (!scan->row->defer_site)
+                scan->row->defer_site = node;
             break;
         case AST_SELECT_STMT:
-            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "select", "select");
+            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "select", NULL);
             break;
         case AST_SCOPE_BLOCK:
-            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "scope", "scope join");
+            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "scope join", NULL);
             break;
         case AST_CALL_EXPR:
             sus_scan_call(scan, node);
@@ -537,6 +578,81 @@ static void sus_combine_row(XaSuspendPass *pass, XaSuspendRow *row, XaSuspendSta
     *out_incomplete_reason = incomplete_reason;
 }
 
+/* A generator frame is resumed by whoever drives it, never by the scheduler.
+ * The lowering has no way to reconcile the two: a body that reaches a scheduler
+ * suspension point between yields does not park and resume, it silently drops
+ * the rest of its value stream (`await`/`scope` swallow every remaining yield;
+ * `Coro.yield()` injects a spurious null element).  Both backends agree on the
+ * wrong answer, so a differential test cannot catch it either.  Reject it in the
+ * front end instead, and fail closed on unproven evidence exactly as the
+ * `sys.Thread.spawn` and parallel-callback boundaries do. */
+/* Render one cause as a single feature name: "`await`", "call to `time.sleep`",
+ * "handle method `recv`", "dynamic call". */
+static void sus_format_cause(const XaSuspendCause *cause, char *buf, size_t size) {
+    const char *kind = cause->kind ? cause->kind : "suspension point";
+    if (!cause->detail) {
+        snprintf(buf, size, "`%s`", kind);
+        return;
+    }
+    bool indirect = strcmp(kind, "call") == 0 || strcmp(kind, "callback") == 0 ||
+                    strcmp(kind, "dynamic call") == 0 || strcmp(kind, "dynamic callback") == 0;
+    snprintf(buf, size, "%s %s`%s`", kind, indirect ? "to " : "", cause->detail);
+}
+
+/* `defer` is the language's only deterministic cleanup mechanism (LANGUAGE_SPEC
+ * 16.8), and a generator abandoned before exhaustion is never resumed, so its
+ * deferred actions never run -- `for (x in gen()) { break }` silently skips
+ * them, in both backends.  A cleanup that may never run is worse than no
+ * cleanup, so the combination is rejected rather than documented.  The rule
+ * covers the whole body deliberately: whether `defer` binds to the nearest
+ * block or to the function is exactly the question the spec answers two ways,
+ * and only the whole-body rule is correct under both readings. */
+static void sus_reject_generator_defer(XaSuspendPass *pass, const XaSuspendRow *row) {
+    if (!row->has_generator_yield || !row->defer_site)
+        return;
+    char message[320];
+    snprintf(message, sizeof(message),
+             "generator '%s' cannot register a deferred action; a generator abandoned before it is "
+             "exhausted is never resumed, so the `defer` would not run\n"
+             "hint: own the resource in the caller and pass it in, or drain the generator into a "
+             "collection inside a function that owns the cleanup",
+             sus_function_name(row->node, row->symbol));
+    XrLocation location = {.file = row->symbol ? row->symbol->links.file_path : NULL,
+                           .line = (uint32_t) row->defer_site->line,
+                           .column = (uint32_t) row->defer_site->column};
+    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERATOR_DEFER,
+                               message, &location);
+}
+
+static void sus_reject_suspending_generator(XaSuspendPass *pass, const XaSuspendRow *row) {
+    if (!row->has_generator_yield || row->result == XA_SUSPEND_NONE)
+        return;
+    const XaSuspendCause *cause = &row->result_cause;
+    char feature[160];
+    sus_format_cause(cause, feature, sizeof(feature));
+    char message[320];
+    if (row->result == XA_SUSPEND_MAY)
+        snprintf(message, sizeof(message),
+                 "generator '%s' cannot reach the scheduler; %s is not allowed in a body that uses "
+                 "`yield expr`\n"
+                 "hint: a generator is resumed by whoever drives it, not by the scheduler; do the "
+                 "suspending work outside the generator and yield its result",
+                 sus_function_name(row->node, row->symbol), feature);
+    else
+        snprintf(message, sizeof(message),
+                 "generator '%s' cannot be proven not to reach the scheduler; %s leaves the "
+                 "evidence incomplete\n"
+                 "hint: a generator cannot call through an unresolved function value, because the "
+                 "target may suspend; call a named function instead",
+                 sus_function_name(row->node, row->symbol), feature);
+    AstNode *site = cause->site ? cause->site : row->node;
+    XrLocation location = {.file = row->symbol ? row->symbol->links.file_path : NULL,
+                           .line = (uint32_t) site->line,
+                           .column = (uint32_t) site->column};
+    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERATOR_SUSPEND,
+                               message, &location);
+}
+
 static void sus_publish_summaries(XaSuspendPass *pass) {
     if (!pass)
         return;
@@ -571,10 +687,16 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
         bool ok =
             !current || xa_effect_summary_add_summary(pass->analyzer->effect_db, &summary, current);
         if (row->result == XA_SUSPEND_MAY)
-            xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_SUSPEND);
+            xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_SCHED_SUSPEND);
         else if (row->result == XA_SUSPEND_INCOMPLETE)
-            xa_effect_summary_mark_semantic_incomplete(&summary, XA_SEM_EFFECT_SUSPEND,
+            xa_effect_summary_mark_semantic_incomplete(&summary, XA_SEM_EFFECT_SCHED_SUSPEND,
                                                        row->result_incomplete_reason);
+        /* Lexical and local: published straight from the scan, never combined
+         * over call edges and never incomplete. */
+        if (row->has_generator_yield)
+            xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_GEN_SUSPEND);
+        sus_reject_suspending_generator(pass, row);
+        sus_reject_generator_defer(pass, row);
         XaEffectId effect_id =
             ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
         xa_effect_summary_clear(&summary);
@@ -633,7 +755,7 @@ static XaSuspendState sus_argument_state(XaSuspendPass *pass, AstNode *expr,
 
 static void sus_check_call_constraints(XaSuspendPass *pass, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
-    if (sus_call_is_mem_with_slice_mut(call)) {
+    if (sus_call_is_mem_with_slice_mut(pass, call)) {
         const char *arg_name = "callback";
         XaSuspendState state = sus_argument_state(pass, call->arguments[3], &arg_name);
         if (state != XA_SUSPEND_NONE) {
