@@ -87,6 +87,34 @@ fn test_n10_reassignment_in_body_rejoins() {
 }
 
 @test
+fn test_n10_narrowing_before_loop_survives_read_only_body() {
+    var conn: string? = "abc"
+    var total = 0
+    if (conn != null) {
+        // The body never writes `conn`, so the back edge carries the narrowed
+        // type and the pre-loop narrowing holds inside the loop.
+        for (var i = 0; i < 3; i = i + 1) {
+            total = total + len(conn)
+        }
+    }
+    assert_eq(total, 9)
+}
+
+@test
+fn test_n10_narrowing_before_while_survives_read_only_body() {
+    var conn: string? = "ab"
+    var seen = 0
+    if (conn != null) {
+        var i = 0
+        while (i < 2) {
+            seen = seen + len(conn)
+            i = i + 1
+        }
+    }
+    assert_eq(seen, 4)
+}
+
+@test
 fn test_n10_condition_false_fact_after_loop() {
     var cur: string? = "abc"
     while (cur != null) {

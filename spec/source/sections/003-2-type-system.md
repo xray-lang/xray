@@ -669,7 +669,7 @@ fn nameLen(s: string?) -> int {
 
 **N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `never` 并被并集吸收。
 
-**N-10（循环）** 循环头的类型是入口边与所有回边的并集；当回边的类型依赖循环头自身时（循环依赖），该回边按绑定的**声明类型**取值——这是并集的保守上界。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算：
+**N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
 
 ```xray @id=narrowing-loop
 fn drain(first: string?) {
@@ -1441,7 +1441,7 @@ fn nameLen(s: string?) -> int {
 
 **N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
 
-**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge; when a back edge's type depends on the header itself (a cyclic dependency) that edge contributes the binding's **declared type**, which is the conservative upper bound of the union. An assignment to the binding inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type:
+**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 
 ```xray @id=narrowing-loop
 fn drain(first: string?) {

@@ -1220,7 +1220,7 @@ fn nameLen(s: string?) -> int {
 
 **N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
 
-**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge; when a back edge's type depends on the header itself (a cyclic dependency) that edge contributes the binding's **declared type**, which is the conservative upper bound of the union. An assignment to the binding inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type:
+**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 
 ```xray
 fn drain(first: string?) {
