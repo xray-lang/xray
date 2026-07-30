@@ -208,6 +208,9 @@ Statement ::= ExprStmt
            |  Block
            // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
 
+// LineBreak 不是一个 token：它是"行结尾在此结束语句"这一判定的结果。
+// 判定规则（上一 token 可结束表达式 + 新行首 token 可开始表达式 + 不在
+// '(' / '[' 之内）是规范性的，完整定义见 §1.2.1。
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
@@ -535,6 +538,10 @@ Statement ::= ExprStmt
            |  Block
            // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
 
+// LineBreak is not a token: it is the outcome of deciding that a line ending
+// terminates the statement here. That decision (previous token can end an
+// expression + the new line's first token can begin one + not inside '(' / '[')
+// is normative; see §1.2.1 for the full definition.
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
