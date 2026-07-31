@@ -1520,10 +1520,9 @@ static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *nod
         double value = node->as.literal.raw_value.float_val;
         if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Floating literal is out of range for contextual type 'f32'",
-                                       &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "Floating literal is out of range for contextual type 'f32'", &loc);
         }
         return target;
     }
@@ -5206,6 +5205,32 @@ static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_n
     return true;
 }
 
+/* Whether a type is the prelude `Range`, as opposed to a user class that
+ * happens to reuse the name. Prelude names are ordinary identifiers, so
+ * `class Range { ... }` is legal; user class instances always carry a
+ * class_ref, while the prelude registry builds its named instances with a
+ * NULL one. A user Range still has to supply iterator() to be iterable, so
+ * it must not inherit the builtin's int-sequence domain. The matching
+ * distinction in is_index_iterable_collection() (src/ir/xi_lower_stmt.c)
+ * keeps lowering in step with what is accepted here. */
+static bool xa_type_is_prelude_range(const XrType *type) {
+    return xr_type_is_named_class(type, "Range") && type->instance.class_ref == NULL;
+}
+
+/* A range is a flat sequence of ints, so it has no second yield to bind. The
+ * check lives here because both range for-in forms — the inline `a..b`
+ * literal and a stored `Range` value — must reject key-value iteration
+ * identically; without it the value form reaches lowering and fails at
+ * runtime with "method 'entriesIterator' not found". */
+static void xa_for_in_reject_range_keyvalue(XaInferContext *ctx, AstNode *node,
+                                            const ForInStmtNode *fi) {
+    if (!fi->is_keyvalue)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               "Range iteration yields values only; use `for (i in range)`", &loc);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -5992,6 +6017,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     item_type = enum_type ? enum_type : xr_type_new_unknown(NULL);
                 }
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
+                xa_for_in_reject_range_keyvalue(ctx, node, fi);
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
                 if (xr_type_is_enum_metadata_named(coll_type, XR_ENUM_VARIANTS_TYPE_NAME)) {
@@ -6054,6 +6080,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
+                } else if (xa_type_is_prelude_range(coll_type)) {
+                    /* A `Range` held in a variable, parameter, or field is the
+                     * same iteration domain as the inline `a..b` form above —
+                     * the literal is just the fast path that never materializes
+                     * the object. Both yield int. */
+                    xa_for_in_reject_range_keyvalue(ctx, node, fi);
+                    item_type = xr_type_new_int(NULL);
                 } else if (XR_TYPE_IS_STRING(coll_type)) {
                     item_type = xr_type_new_rune(NULL);
                     if (fi->is_keyvalue) {
@@ -6099,7 +6132,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "type '%s' is not iterable; expected an Array, Map, Set, string, "
-                                 "Json, range or a class with an 'iterator()' method",
+                                 "Json, Range or a class with an 'iterator()' method",
                                  xr_type_to_string(coll_type));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);

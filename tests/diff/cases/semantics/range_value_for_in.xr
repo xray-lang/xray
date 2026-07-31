@@ -1,0 +1,103 @@
+// anchor: semantics-range-value-for-in
+// VM/AOT differential coverage for iterating a `Range` held in a value
+// position (variable, parameter, field) rather than written inline as `a..b`.
+
+fn range_total(r: Range) -> int {
+    var sum = 0
+    for (i in r) {
+        sum = sum + i
+    }
+    return sum
+}
+
+class Window {
+    span: Range
+
+    constructor(span: Range) {
+        this.span = span
+    }
+}
+
+var r = 2..9
+print(r)
+print(len(r))
+
+var stored = 0
+for (i in r) {
+    stored = stored + i
+}
+print(stored)
+
+var inline_total = 0
+for (i in 2..9) {
+    inline_total = inline_total + i
+}
+print(stored == inline_total)
+
+var inc = 1..=3
+var inc_items: Array<int> = []
+for (i in inc) {
+    inc_items.push(i)
+}
+print(inc_items)
+
+var empty = 5..5
+var empty_count = 0
+for (i in empty) {
+    empty_count = empty_count + 1
+}
+print(empty_count)
+
+print(range_total(0..5))
+print(range_total(1..=4))
+print(range_total(Window(2..5).span))
+
+var ranges = [0..3, 10..12]
+var nested = 0
+for (rr in ranges) {
+    for (i in rr) {
+        nested = nested + i
+    }
+}
+print(nested)
+
+var seen: Array<int> = []
+for (i in 0..10) {
+    if (i == 2) {
+        continue
+    }
+    if (i == 5) {
+        break
+    }
+    seen.push(i)
+}
+print(seen)
+
+var loop_r = 0..10
+var seen_value: Array<int> = []
+for (i in loop_r) {
+    if (i == 2) {
+        continue
+    }
+    if (i == 5) {
+        break
+    }
+    seen_value.push(i)
+}
+print(seen_value)
+
+var max = 9223372036854775807
+var boundary = 0
+for (i in max..=max) {
+    boundary = boundary + 1
+    continue
+}
+print(boundary)
+
+var boundary_value = max..=max
+var boundary_stored = 0
+for (i in boundary_value) {
+    boundary_stored = boundary_stored + 1
+    continue
+}
+print(boundary_stored)
