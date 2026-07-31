@@ -1,0 +1,7 @@
+// The same field-set rule applies to a class literal.
+class Counter {
+    n: int
+}
+
+var c = Counter{n: 1, bogus: 2}
+print(c.n)

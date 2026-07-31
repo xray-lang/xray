@@ -4,4 +4,5 @@ fn fillUsers(users: ref Array<Json>, replacement: Json) -> int {
 }
 
 var users: Array<Json> = [{ name: "ada", age: 1 }, { name: "bob", age: 2 }, { name: "cy", age: 3 }]
-print(fillUsers(ref users, { name: "zoe", age: 9 }))
+var replacement: Json = { name: "zoe", age: 9 }
+print(fillUsers(ref users, replacement))

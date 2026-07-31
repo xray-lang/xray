@@ -1,0 +1,7 @@
+// Runtime type identity does not record nullability, union membership or
+// function signatures, so a test against them has no answer to give.
+fn main() {
+    var v: Json = 1
+    print(v is int?)
+}
+main()

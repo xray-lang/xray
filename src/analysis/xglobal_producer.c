@@ -5665,6 +5665,49 @@ static const char *body_json_static_method_name(const AstNode *callee) {
     return strcmp(member->object->as.variable.name, "Json") == 0 ? member->name : NULL;
 }
 
+/* `expr as T` and `expr is T` against a sealed Record are decode sites: both
+ * lower to the validated structural check that compares the value's field set
+ * against T's. They therefore need the same json-codec evidence row the
+ * explicit decode call gets, or the AOT backend rejects the site for a missing
+ * mandatory plan. */
+static void body_add_json_codec_shape_test(XgBodyCollect *bc, const AstNode *node,
+                                           const XrTypeRef *target, const AstNode *operand) {
+    XgJsonCodecSummary row;
+    if (!bc || !bc->evidence || !node || !target)
+        return;
+
+    /* Only a target that carries a record bridge shape reaches the structural
+     * check; every other cast keeps its own lowering and must not claim a codec
+     * site. Emitting a row unconditionally also collides on source identity,
+     * because nested casts share a start position. */
+    uint32_t target_type_key = hash_tref32(target);
+    const XgJsonShapeSummary *target_shape =
+        body_find_json_shape_for_type_key(bc, target_type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+    if (!target_shape)
+        return;
+
+    memset(&row, 0, sizeof(row));
+    row.codec_id = (XgJsonCodecId) (bc->evidence->njson_codecs + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = producer_source_node_id(bc->module_id, node);
+    row.source_span_id = (uint32_t) node->line;
+    row.codec_kind = XG_JSON_CODEC_DECODE;
+    row.target_type_key = target_type_key;
+    row.flags |= XG_JSON_CODEC_HAS_TARGET_TYPE;
+    if (operand)
+        row.input_type_key = body_expr_type_key(bc, operand);
+
+    row.output_shape_id = target_shape->json_shape_id;
+    row.record_shape_id = target_shape->record_shape_id;
+    row.field_count = target_shape->field_count;
+    row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
+    if (row.record_shape_id != XG_NO_ID)
+        row.flags |= XG_JSON_CODEC_HAS_RECORD_SHAPE;
+
+    (void) xg_global_evidence_add_json_codec(bc->evidence, &row);
+}
+
 static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
     const CallExprNode *call;
     const char *method;
@@ -9663,10 +9706,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.ternary.false_expr);
             break;
         case AST_AS_EXPR:
+            body_add_json_codec_shape_test(bc, node, node->as.as_expr.type, node->as.as_expr.expr);
             walk_body_for_calls(bc, node->as.as_expr.expr);
             break;
         case AST_IS_EXPR:
             bc->capability_bits |= XG_CAP_INSTANCEOF;
+            body_add_json_codec_shape_test(bc, node, node->as.is_expr.type, node->as.is_expr.expr);
             walk_body_for_calls(bc, node->as.is_expr.expr);
             break;
         case AST_COMPTIME_EXPR:

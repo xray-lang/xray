@@ -1627,6 +1627,19 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                         if (!xr_type_assignable(target_field_type, source_field_type)) {
                             return false;
                         }
+                        /* Object shapes are reference values with mutable
+                         * fields, so a field accepted only in the widening
+                         * direction is unsound: the wider view can store a
+                         * value the narrower view still promises to hold at its
+                         * own type.  Fields are therefore invariant, matching
+                         * Array, Map, Slice and fixed-length arrays.  A literal
+                         * `null` stays acceptable for a nullable field because
+                         * it denotes the absent value rather than a narrower
+                         * field type that could later be read back. */
+                        if (!XR_TYPE_IS_NULL(source_field_type) &&
+                            !xr_type_assignable(source_field_type, target_field_type)) {
+                            return false;
+                        }
                     }
                     found = true;
                     break;

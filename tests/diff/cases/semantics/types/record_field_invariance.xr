@@ -1,0 +1,21 @@
+// A literal written for a declared shape adopts that shape, so a nullable field
+// still accepts a non-null value and an omitted nullable field stays optional.
+// Both backends must agree on the values read back.
+type PageOpts = { limit: int?, cursor: string? }
+type User = { name: string, age: int? }
+
+fn describe(o: PageOpts) -> string {
+    var lim = o.limit ?? -1
+    var cur = o.cursor ?? "<none>"
+    return lim.toString() + "/" + cur
+}
+
+print(describe({ limit: 5, cursor: null }))
+print(describe({ limit: null, cursor: "abc" }))
+var empty: PageOpts = { }
+print(describe(empty))
+
+var u: User = { name: "Alice" }
+print(u.name + "/" + (u.age ?? -1).toString())
+var v: User = { name: "Bob", age: 3 }
+print(v.name + "/" + (v.age ?? -1).toString())

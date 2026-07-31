@@ -1081,10 +1081,13 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
 
         XrType *param_type = variant->payload_types ? variant->payload_types[i] : NULL;
         XrType *saved_expected = ctx->expected_type;
+        XrType *saved_from_signature = ctx->expected_from_signature;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type))
             ctx->expected_type = param_type;
+        ctx->expected_from_signature = ctx->expected_type;
         XrType *arg_type = xa_visit_infer_expr(ctx, arg);
         ctx->expected_type = saved_expected;
+        ctx->expected_from_signature = saved_from_signature;
         if (xa_type_contains_span_view(arg_type)) {
             char context[160];
             snprintf(context, sizeof(context), "store Slice view in enum payload '%s.%s'",
@@ -6667,9 +6670,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         }
 
-        XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
-        param_type = xa_contextualize_generic_call_param(ctx, fn_links, callee_type, call,
-                                                         effective_arg_types, slot, param_type);
+        XrType *declared_param_type = xr_type_function_param_type(callee_type, param_slot);
+        /* The hazard this guards against is a *user declaration elsewhere in the
+         * program* silently retyping a caller's literal.  Two parameter kinds
+         * cannot do that: a type parameter carries whatever the receiver or the
+         * call site already stated, and a built-in member's signature is fixed
+         * by the language, so `arrayOfJson.push({...})` states its domain
+         * through the receiver's own annotation. */
+        bool param_type_is_generic =
+            (declared_param_type && declared_param_type->kind == XR_KIND_TYPE_PARAM) ||
+            (method_name && callee_obj_type && xa_builtin_is_method(callee_obj_type, method_name));
+        XrType *param_type = xa_contextualize_generic_call_param(
+            ctx, fn_links, callee_type, call, effective_arg_types, slot, declared_param_type);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
@@ -6679,6 +6691,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         } else if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
         }
+        XrType *saved_from_signature = ctx->expected_from_signature;
+        if (!param_type_is_generic)
+            ctx->expected_from_signature = ctx->expected_type;
         if (xa_call_is_copy_builtin(call) && slot == 0)
             ctx->allow_view_expr_for_copy = true;
         const char *parallel_callback_label =
@@ -6689,6 +6704,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                             access, param_mode);
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
+        ctx->expected_from_signature = saved_from_signature;
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
             math_first_arg_seen = true;
             math_int_shape = arg_type && XR_TYPE_IS_INT(arg_type);

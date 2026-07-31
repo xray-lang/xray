@@ -4804,8 +4804,23 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                                                "string interpolation allocates formatted text");
             /* Visit all interpolation parts to resolve variable symbol_ids. */
             for (int ti = 0; ti < node->as.template_str.part_count; ti++) {
-                if (node->as.template_str.parts[ti])
-                    xa_visit_infer_expr(ctx, node->as.template_str.parts[ti]);
+                AstNode *part = node->as.template_str.parts[ti];
+                if (!part)
+                    continue;
+                XrType *part_type = xa_visit_infer_expr(ctx, part);
+                /* Json intrinsically includes null, so an absent field formats
+                 * as "null" and a typo reads as a plausible result.  Every
+                 * other possibly-null value must be unwrapped before it is
+                 * formatted; Json is the one hole in that discipline. */
+                if (part_type && XR_TYPE_IS_JSON(part_type)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = part->line, .column = part->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_WARNING, XR_ERR_ANALYZE_POSSIBLY_NULL,
+                        "interpolating a Json value formats an absent field as \"null\"; commit to "
+                        "a type with `as T` or supply a default with `?? ...`",
+                        &loc);
+                }
             }
             result = xr_type_new_string(NULL);
             break;
@@ -4920,6 +4935,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_IS_EXPR:
             if (node->as.is_expr.expr)
                 xa_visit_infer_expr(ctx, node->as.is_expr.expr);
+            xa_check_runtime_testable_type(ctx, node, node->as.is_expr.type, "is");
             result = xr_type_new_bool(NULL);
             break;
         case AST_RANGE:
