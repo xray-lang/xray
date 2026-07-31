@@ -21,8 +21,10 @@
 #define XDIAG_FMT_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "../base/xchecks.h"
+#include "../os/os_fd.h"
 
 /*
  * ROLE PIN:
@@ -50,6 +52,29 @@
 #define XR_CLR_YELLOW "\033[1;33m"
 #define XR_CLR_BLUE "\033[1;34m"
 #define XR_CLR_CYAN "\033[1;36m"
+
+/*
+ * Whether diagnostics should be colourised. Diagnostics are written to stderr,
+ * so the decision gates on stderr — not stdout, which the CLI colour helper
+ * uses. Two signals, in order:
+ *
+ *   1. NO_COLOR (https://no-color.org): any non-empty value forces colour off.
+ *      This is the cross-platform, tool-agnostic opt-out — it works the same on
+ *      a Windows Git-Bash shell as on a Unix pipe, and it is what CI and test
+ *      harnesses set.
+ *   2. Otherwise, auto-detect: colour only when stderr is a real terminal.
+ *      Every redirected or piped run (tests, `$(...)`, `2>&1 | ...`, files)
+ *      therefore gets clean, un-escaped text with no per-caller stripping.
+ *
+ * Computed once per diagnostic call and cached in a local; the isatty syscall
+ * is not on any hot path.
+ */
+static inline bool xr_diag_use_color(void) {
+    const char *no_color = getenv("NO_COLOR");
+    if (no_color && no_color[0] != '\0')
+        return false;
+    return xr_isatty(xr_stderr_fd());
+}
 
 typedef enum {
     XR_DIAG_ERROR,
@@ -141,6 +166,12 @@ static inline void xr_diag_print(XrDiagLevel level, int code, const char *messag
     if (token_len <= 0)
         token_len = 1;
 
+    // Resolve colour once; every code below is empty when colour is off, so a
+    // piped/redirected diagnostic is plain text with no escape sequences.
+    bool use_color = xr_diag_use_color();
+    const char *c_reset = use_color ? XR_CLR_RESET : "";
+    const char *c_blue = use_color ? XR_CLR_BLUE : "";
+
     // Level label
     const char *level_color;
     const char *level_name;
@@ -163,19 +194,20 @@ static inline void xr_diag_print(XrDiagLevel level, int code, const char *messag
             code_prefix = "N";
             break;
     }
+    if (!use_color)
+        level_color = "";
 
     // Line 1: level + code + message
     if (code > 0) {
-        fprintf(stderr, "%s%s[%s%04d]%s: %s\n", level_color, level_name, code_prefix, code,
-                XR_CLR_RESET, message);
+        fprintf(stderr, "%s%s[%s%04d]%s: %s\n", level_color, level_name, code_prefix, code, c_reset,
+                message);
     } else {
-        fprintf(stderr, "%s%s%s: %s\n", level_color, level_name, XR_CLR_RESET, message);
+        fprintf(stderr, "%s%s%s: %s\n", level_color, level_name, c_reset, message);
     }
 
     // Line 2: file location
     int gutter = xr_diag_num_digits(line);
-    fprintf(stderr, " %*s%s-->%s %s:%d:%d\n", gutter, "", XR_CLR_BLUE, XR_CLR_RESET, file, line,
-            column);
+    fprintf(stderr, " %*s%s-->%s %s:%d:%d\n", gutter, "", c_blue, c_reset, file, line, column);
 
     // Source context (skip if no source available)
     if (source && token_start && token_start >= source) {
@@ -184,11 +216,11 @@ static inline void xr_diag_print(XrDiagLevel level, int code, const char *messag
         int line_len = (int) (line_end - line_start);
 
         // Blank gutter line
-        fprintf(stderr, " %*s %s|%s\n", gutter, "", XR_CLR_BLUE, XR_CLR_RESET);
+        fprintf(stderr, " %*s %s|%s\n", gutter, "", c_blue, c_reset);
 
         // Source line
-        fprintf(stderr, " %s%*d%s %s|%s %.*s\n", XR_CLR_BLUE, gutter, line, XR_CLR_RESET,
-                XR_CLR_BLUE, XR_CLR_RESET, line_len, line_start);
+        fprintf(stderr, " %s%*d%s %s|%s %.*s\n", c_blue, gutter, line, c_reset, c_blue, c_reset,
+                line_len, line_start);
 
         // Caret/underline line
         int col_offset = (int) (token_start - line_start);
@@ -205,7 +237,7 @@ static inline void xr_diag_print(XrDiagLevel level, int code, const char *messag
         if (underline_len < 1)
             underline_len = 1;
 
-        fprintf(stderr, " %*s %s|%s ", gutter, "", XR_CLR_BLUE, XR_CLR_RESET);
+        fprintf(stderr, " %*s %s|%s ", gutter, "", c_blue, c_reset);
         // Spaces to reach the column
         for (int i = 0; i < col_offset; i++) {
             // Preserve tab alignment
@@ -216,7 +248,7 @@ static inline void xr_diag_print(XrDiagLevel level, int code, const char *messag
         for (int i = 0; i < underline_len; i++) {
             fputc('^', stderr);
         }
-        fprintf(stderr, "%s\n", XR_CLR_RESET);
+        fprintf(stderr, "%s\n", c_reset);
     }
 
     fprintf(stderr, "\n");
@@ -235,22 +267,27 @@ static inline void xr_diag_print_summary(const char *file, int error_count, int 
     if (!file)
         file = "<script>";
 
+    bool use_color = xr_diag_use_color();
+    const char *c_reset = use_color ? XR_CLR_RESET : "";
+    const char *c_red = use_color ? XR_CLR_RED : "";
+    const char *c_yellow = use_color ? XR_CLR_YELLOW : "";
+
     if (max_errors_reached && error_count > 0) {
         fprintf(stderr,
-                "%serror%s: could not compile `%s`: too many errors emitted, stopping now\n",
-                XR_CLR_RED, XR_CLR_RESET, file);
+                "%serror%s: could not compile `%s`: too many errors emitted, stopping now\n", c_red,
+                c_reset, file);
     }
 
     if (error_count > 0) {
-        fprintf(stderr, "%serror%s: aborting due to %d previous error%s", XR_CLR_RED, XR_CLR_RESET,
+        fprintf(stderr, "%serror%s: aborting due to %d previous error%s", c_red, c_reset,
                 error_count, error_count > 1 ? "s" : "");
         if (warning_count > 0) {
             fprintf(stderr, "; %d warning%s emitted", warning_count, warning_count > 1 ? "s" : "");
         }
         fprintf(stderr, "\n");
     } else if (warning_count > 0) {
-        fprintf(stderr, "%swarning%s: %d warning%s emitted\n", XR_CLR_YELLOW, XR_CLR_RESET,
-                warning_count, warning_count > 1 ? "s" : "");
+        fprintf(stderr, "%swarning%s: %d warning%s emitted\n", c_yellow, c_reset, warning_count,
+                warning_count > 1 ? "s" : "");
     }
 }
 
