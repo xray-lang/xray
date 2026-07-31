@@ -1,0 +1,3 @@
+{"case":"opaque-is-identity","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
+{"case":"compiler-fence-is-semantically-empty","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
+{"case":"controls-are-allocation-free","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}

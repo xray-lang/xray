@@ -14,10 +14,10 @@
 # Leaks are intentionally OFF here (detect_leaks=0); process-exit leaks are the
 # job of the separate lsan_strict lane (task 218 P4). ASan/UBSan stay fully on.
 #
-# The ASan build reuses the `asan-jit-debug` CMake preset (binaryDir build-asan)
-# when a Ninja generator is available, and otherwise falls back to a direct
-# configure with the same ENABLE_ASAN / ENABLE_UBSAN cache variables using the
-# default Make generator, so the lane runs in environments without Ninja.
+# The lane configures XR_ASAN_BUILD_DIR itself rather than going through the
+# asan-jit-debug preset, whose binaryDir is fixed and cannot take the caller's
+# directory. An already-configured directory is reused as it stands, so the
+# generator it was created with never has to match anything.
 #
 # Environment overrides:
 #   XR_ASAN_JOBS          parallel build/test jobs (default: 8)
@@ -71,25 +71,48 @@ echo "== [asan_focused] build dir=${ASAN_BUILD} jobs=${JOBS}"
 # ---------------------------------------------------------------------------
 # 1. Configure + build the ASan/UBSan compiler and tests.
 # ---------------------------------------------------------------------------
+ASAN_CACHE="${ROOT}/${ASAN_BUILD}/CMakeCache.txt"
+
 if [[ "${XR_ASAN_SKIP_BUILD:-0}" != "1" ]]; then
-    if command -v ninja >/dev/null 2>&1 && [[ -f CMakePresets.json ]]; then
-        echo "== [asan_focused] configuring via CMake preset asan-jit-debug (Ninja)"
-        cmake --preset asan-jit-debug
+    # An already-configured directory is used as it stands, whatever generator
+    # it was created with. Re-imposing one is what broke this lane: the Ninja
+    # path configured the preset's hardcoded build-asan while every later step
+    # used ${ASAN_BUILD}, so the knob configured one directory and built
+    # another, and a directory created with a different generator failed
+    # outright with no way to recover from the environment.
+    if [[ -f "${ASAN_CACHE}" ]]; then
+        echo "== [asan_focused] reusing existing configuration in ${ASAN_BUILD}"
     else
-        echo "== [asan_focused] Ninja unavailable; configuring build-asan directly (Make)"
-        cmake -S . -B "${ASAN_BUILD}" -G "Unix Makefiles" \
+        if command -v ninja >/dev/null 2>&1; then
+            GENERATOR="Ninja"
+        else
+            GENERATOR="Unix Makefiles"
+        fi
+        echo "== [asan_focused] configuring ${ASAN_BUILD} (${GENERATOR})"
+        # Same cache variables as the asan-jit-debug preset in CMakePresets.json,
+        # which stays the hand-run entry point. Keep the two in step; a preset
+        # cannot take a caller-supplied binaryDir, so this lane cannot use it.
+        cmake -S "${ROOT}" -B "${ROOT}/${ASAN_BUILD}" -G "${GENERATOR}" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DENABLE_ASAN=ON -DENABLE_UBSAN=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     fi
     echo "== [asan_focused] building compiler + tests (ASan/UBSan)"
-    cmake --build "${ASAN_BUILD}" -j"${JOBS}"
+    cmake --build "${ROOT}/${ASAN_BUILD}" -j"${JOBS}"
 fi
 
 XRAY_BIN="${ROOT}/${ASAN_BUILD}/xray"
 if [[ ! -x "${XRAY_BIN}" ]]; then
     echo "!! [asan_focused] ASan xray binary not found at ${XRAY_BIN}" >&2
+    exit 1
+fi
+
+# Checked even when the build is skipped: the caller points XR_ASAN_BUILD_DIR at
+# a directory it configured itself, and a lane that silently runs a non-ASan
+# binary reports a clean result it never earned.
+if [[ -f "${ASAN_CACHE}" ]] && ! grep -q '^ENABLE_ASAN:BOOL=ON' "${ASAN_CACHE}"; then
+    echo "!! [asan_focused] ${ASAN_BUILD} is configured without ENABLE_ASAN=ON" >&2
     exit 1
 fi
 

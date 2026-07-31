@@ -1,0 +1,7 @@
+// The inline `a..b` form takes the same rule as a stored Range value.
+fn main() {
+    for (i, v in 1..5) {
+        print(i)
+    }
+}
+main()

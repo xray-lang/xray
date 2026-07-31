@@ -480,7 +480,11 @@ export class Box {
 XR_EOF
     require_build "class-add-method" "$dir/log2" \
         build_log "$cache" "$app" "$dir/capp2" "$dir/log2" || return 1
-    expect_state "$dir/log2" shape compiling "class-add-method"
+    # An executable is closed-world, so a method no reachable code calls is not
+    # emitted and shape's object is byte-identical: a hit, not a recompile.  The
+    # cache stays sound because the key covers what consumers actually need --
+    # making the app call perimeter() does recompile shape and links.
+    expect_state "$dir/log2" shape hit "class-add-method"
     expect_state "$dir/log2" capp hit "class-add-method"
     expect_output "$dir/capp2" "16" "class-add-method"
 }

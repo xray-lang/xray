@@ -22,6 +22,11 @@
 // interpolation expressions. The formatter passes its own fmt_expression.
 typedef void (*XrFmtExprEmitter)(XrFmtContext *ctx, AstNode *expr);
 
+// Emit a float literal so that it re-parses AS A FLOAT. `%g` alone is not
+// safe: it renders 0.0 as "0" and 1e21 as "1e+21", the first of which the
+// lexer reads back as an integer literal.
+XR_FUNC void xfmt_emit_float_literal(XrFmtContext *ctx, double value);
+
 XR_FUNC void xfmt_emit_escaped_inline_string(XrFmtContext *ctx, const char *value, int length);
 XR_FUNC void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node);

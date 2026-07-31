@@ -1357,9 +1357,13 @@ static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     return NULL;
 }
 
-static XaSymbol *xa_thread_spawn_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
+XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
         return NULL;
+    /* The id recorded when the reference was resolved is the only scope-
+     * independent answer.  Effect scans walk a body long after its scope was
+     * popped, so a name lookup from the current scope would silently skip the
+     * shadowing declaration and resolve to an outer symbol of the same name. */
     uint32_t symbol_id = node->as.variable.symbol_id;
     if (symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
@@ -1410,16 +1414,6 @@ static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNo
     return member_sym;
 }
 
-static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    const char *module_name = ma->object->as.variable.name;
-    return module_name && strcmp(module_name, "Coro") == 0;
-}
 static bool xa_thread_spawn_path_is_sync_module(const char *path) {
     return path && (strstr(path, "stdlib/sync/sync.xr") || strstr(path, "stdlib\\sync\\sync.xr") ||
                     strstr(path, "<embedded stdlib>/sync/sync.xr"));
@@ -1687,7 +1681,7 @@ xa_thread_spawn_function_value_expr_status(XaInferContext *ctx, AstNode *expr,
     }
 
     if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, expr);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, expr);
         return xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
     }
 
@@ -1716,7 +1710,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
         *out_feature = NULL;
     if (!ctx || !call)
         return false;
-    if (xa_thread_spawn_call_is_coro_yield(call)) {
+    if (xa_call_is_builtin_module_member(ctx, call, "Coro", "yield")) {
         if (out_feature)
             *out_feature = "Coro.yield()";
         return true;
@@ -1731,7 +1725,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
     }
 
     if (callee && callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, callee);
         if (sym && sym->kind == XA_SYM_FUNCTION) {
             if (xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
                 if (out_feature)
@@ -2481,20 +2475,25 @@ static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *obje
     return links ? links->module_name : NULL;
 }
 
-static bool xa_runtime_module_call_matches(XaInferContext *ctx, CallExprNode *call,
-                                           const char *module_name, const char *member_name) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
+                                      const char *module_name, const char *member_name) {
+    if (!ctx || !ctx->analyzer || !call || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS || !module_name || !member_name)
         return false;
-    MemberAccessNode *member = &call->callee->as.member_access;
-    return member->name && strcmp(member->name, member_name) == 0 &&
-           xa_call_object_is_module(ctx, member->object, module_name);
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || strcmp(member->name, member_name) != 0 || !member->object ||
+        member->object->type != AST_VARIABLE || !member->object->as.variable.name)
+        return false;
+    /* Resolved symbol, not spelling: a shadowing declaration resolves to itself. */
+    return xa_symbol_is_builtin_module(
+        ctx->analyzer, xa_resolve_variable_symbol(ctx, member->object), module_name);
 }
 
 static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *node,
                                                CallExprNode *call, bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "Coro", "Local"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "Coro", "Local"))
         return NULL;
     if (handled)
         *handled = true;
@@ -2529,7 +2528,7 @@ static XrType *xa_visit_coro_pool_submit(XaInferContext *ctx, AstNode *node, Cal
                                          bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "CoroPool", "submit"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "CoroPool", "submit"))
         return NULL;
     if (handled)
         *handled = true;
@@ -5511,7 +5510,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
         ctx->expected_type = saved_expected;
         ctx->allow_view_expr_for_copy = saved_view_context;
-        if (!xa_len_type_supported(operand_type)) {
+        /* len() dereferences its argument, so a still-nullable one is the same
+         * error as `x.f` on a nullable receiver. Checked before the Lengthable
+         * test, which sees through the nullable flag and would otherwise accept
+         * `Array<int>?` and defer the failure to a runtime panic. `?.` has no
+         * spelling in argument position, so it is not offered as a remedy. */
+        if (!xa_check_nullable_use(ctx, node, operand_type, "len()", false) &&
+            !xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             snprintf(msg, sizeof(msg),
@@ -6659,9 +6664,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         owner && owner->enum_type.enum_name ? owner->enum_type.enum_name : "Enum",
                         param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
                 } else {
-                    snprintf(msg, sizeof(msg),
-                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                             slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                    char reason[192];
+                    if (xr_type_record_mismatch_reason(param_type, arg_type, reason,
+                                                       sizeof(reason))) {
+                        snprintf(
+                            msg, sizeof(msg),
+                            "Argument %d: type '%s' is not assignable to parameter type '%s'; %s",
+                            slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type),
+                            reason);
+                    } else {
+                        snprintf(msg, sizeof(msg),
+                                 "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                                 slot + 1, xr_type_to_string(arg_type),
+                                 xr_type_to_string(param_type));
+                    }
                 }
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);

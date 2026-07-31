@@ -1,0 +1,60 @@
+# Backend-differential ratchet baseline
+#
+# Every line is a VM/AOT divergence that fails today and is tracked, not
+# forgotten. The net still gates all 471 other cases.
+#
+# Rules
+#   - The list may only shrink. run_backend_diff_fast.py fails the run when a
+#     case outside this list fails AND when a listed case starts passing, so a
+#     fix must delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green. A VM/AOT divergence
+#     means one of the two backends is wrong about the language.
+#
+# Established 2026-07-31, when the differential net was moved out of the CI
+# exclusion list. It had been excluded wholesale because a minority of cases
+# were red — which left the other 471 ungated as well. The net compares the same
+# .xr through both backends byte for byte and is the only thing that can catch
+# "VM and AOT disagree"; running none of it was strictly worse than running it
+# with a written list of exceptions.
+#
+# One case path per line. Comments and blank lines ignored.
+
+# --- Group 1: xr_aot_scope_exit arity ---------------------------------------
+# Cleared 2026-07-31. The emitter had been updated to call
+# xr_aot_scope_exit(ctx, mode) while the helper still declared a third
+# out_value parameter, so the AOT build failed outright. A scope block is a
+# statement and produces no value, and the value the scope settles on already
+# rides in XrAotResult.value — the out-parameter was a second output channel
+# for the same value that no caller ever read, so the declaration followed the
+# emitter rather than the other way round. The seventh case filed here,
+# sys_process_direct.xr, was never a scope_exit failure at all; it is a missing
+# stdlib member and has moved to Group 2.
+
+# --- Group 2: computed properties ---------------------------------------------
+# Cleared 2026-07-31. Filed as "stdlib members missing from the emitted C", but
+# the members were not missing anywhere in particular: `x: int { fn() {...} }`
+# declares a computed property, and the accessor it defines was never reachable.
+# The parser stored accessors as methods named "get:x" / "set:x" and the runtime
+# gave them their own method kinds, but nothing resolved `obj.x` to one, so both
+# backends rejected the read -- these cases failed under the VM too, which the
+# old note had wrong. The analyzer now resolves the access, lowering emits the
+# call, and the accessor kinds are gone: an accessor is a closure method whose
+# name marks it. See spec 5.3.7.
+
+# --- Group 3: union overlay literals -----------------------------------------
+# Cleared 2026-07-31. The aggregate-literal completeness check counted a union's
+# fields the way it counts a struct's, so a literal was rejected for not setting
+# every member — writes that would have landed on the same storage, where only
+# the last could survive. A union literal now sets exactly one member: naming
+# none leaves which member is live undefined, naming several says the value is
+# two things at once. XrClassInfo.is_overlay_union carries the distinction,
+# which nothing recorded before: a struct and a union were both just value types
+# with the same member shape.
+
+# --- Group 4: AOT crash ------------------------------------------------------
+# Cleared 2026-07-31. nested_generator.xr died on signal 5 (heap-use-after-free
+# in libmalloc) because iterator() on an iterator returned the receiver without
+# retaining it: `for (v in gen)` inside a generator put the generator and its
+# iterator into two frame slots that both get released. See
+# xrt_method_return_self in src/aot/xrt_method.h.

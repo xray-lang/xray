@@ -448,6 +448,11 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "static ");
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
+        } else if (m->is_operator && m->op_type == OPTYPE_LEN) {
+            /* `operator len` is stored as `__operator_len` to keep the named
+             * operator out of the ordinary member namespace; op_type carries
+             * the spelling the source used. */
+            xfmt_write_str(ctx, "operator len");
         } else if (m->is_operator) {
             xfmt_write_str(ctx, "operator");
             xfmt_write_str(ctx, m->name);

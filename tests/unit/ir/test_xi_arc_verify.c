@@ -63,6 +63,7 @@ static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType t_span = {.kind = XR_KIND_SLICE, .id = 4, .frozen = true};
+static XrType t_unit = {.kind = XR_KIND_UNIT, .id = 5, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -173,6 +174,30 @@ static void test_incident5_rc_op_metadata(void) {
     retain(f, b0, n);
     xi_block_set_return(b0, n);
     ASSERT_CONTRACT(f, XI_ARC_C5_METADATA, "incident5: retain on non-RC value");
+    xi_func_free(f);
+}
+
+/* A late BOX inserted by representation selection does not acquire ownership
+ * of a ref-loaded aggregate. Publishing it as a unit ERR_CHECK cleanup makes
+ * the callee release its caller's Array and is a C3 violation. */
+static void test_cold_error_cleanup_rejects_boxed_borrow(void) {
+    XiFunc *f = make_func("cold_error_boxed_borrow", &t_int);
+    XiBlock *b0 = f->entry;
+    XiValue *place = rc_new(f, b0);
+    XiValue *borrowed = xi_value_new(f, b0, XI_PLACE_LOAD, &t_array, 1);
+    borrowed->args[0] = place;
+    XiValue *boxed = xi_value_new(f, b0, XI_BOX, &t_array, 1);
+    boxed->args[0] = borrowed;
+    XiValue *fallible = xi_value_new(f, b0, XI_CALL_BUILTIN, &t_int, 0);
+    fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *check = xi_value_new(f, b0, XI_ERR_CHECK, &t_unit, 1);
+    check->args[0] = boxed;
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *ret = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, ret);
+
+    ASSERT_CONTRACT(f, XI_ARC_C3_BORROW_ESCAPE,
+                    "C3: ERR_CHECK must not release boxed ref-load borrow");
     xi_func_free(f);
 }
 
@@ -558,6 +583,7 @@ int main(void) {
     test_incident3_nondominating_release();
     test_incident4_stale_use();
     test_incident5_rc_op_metadata();
+    test_cold_error_cleanup_rejects_boxed_borrow();
     test_double_release();
     test_receiver_alias_returned_after_receiver_release();
     test_receiver_alias_read_after_receiver_release();

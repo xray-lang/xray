@@ -91,17 +91,16 @@ static const char xtc_probe_preserve_call_c[] =
     "#endif\n"
     "static XTC_PRESERVE_CALL int plus_one(int value) { return value + 1; }\n"
     "int main(void) { return plus_one(0) != 1; }\n";
-static const char xtc_probe_value_opaque_c[] =
-    "#include <stdint.h>\n"
-    "static int64_t opaque(int64_t value) {\n"
-    "#if defined(__GNUC__) || defined(__clang__)\n"
-    "  __asm__ __volatile__(\"\" : \"+r\"(value));\n"
-    "#else\n"
-    "#error provider_has_no_register_opacity_construct\n"
-    "#endif\n"
-    "  return value;\n"
-    "}\n"
-    "int main(void) { return opaque(7) != 7; }\n";
+static const char xtc_probe_value_opaque_c[] = "#include <stdint.h>\n"
+                                               "static int64_t opaque(int64_t value) {\n"
+                                               "#if defined(__GNUC__) || defined(__clang__)\n"
+                                               "  __asm__ __volatile__(\"\" : \"+r\"(value));\n"
+                                               "#else\n"
+                                               "#error provider_has_no_register_opacity_construct\n"
+                                               "#endif\n"
+                                               "  return value;\n"
+                                               "}\n"
+                                               "int main(void) { return opaque(7) != 7; }\n";
 static const char xtc_probe_compiler_fence_c[] =
     "#if defined(_MSC_VER)\n"
     "#include <intrin.h>\n"
@@ -116,6 +115,37 @@ static const char xtc_probe_compiler_fence_c[] =
 
 #define XTC_PROBE_COMPILE_TIMEOUT_MS 30000u
 #define XTC_PROBE_CROSS_ZIG_TIMEOUT_MS 60000u
+#define XTC_PROBE_DUMPMACHINE_TIMEOUT_MS 5000u
+#define XTC_PROBE_RUN_TIMEOUT_MS 10000u
+
+/* Probe budgets are wall-clock, so they are really "is this machine idle?"
+ * tests. On a saturated build host — CI, or a laptop running several builds —
+ * spawning and running the freshly linked native probe can exceed the bound for
+ * reasons that have nothing to do with the toolchain: scheduler queueing, and
+ * on macOS the first-run Gatekeeper scan of an unsigned binary. The whole AOT
+ * surface then reports UNAVAILABLE and every AOT test fails for an unrelated
+ * reason.
+ *
+ * XRAY_TOOLCHAIN_PROBE_SCALE multiplies every probe budget so a loaded host can
+ * be given proportionally more room without changing what is being probed.
+ * Values below 1 are ignored; the product is capped to keep a genuinely broken
+ * toolchain from hanging the build. */
+static uint32_t xtc_probe_timeout(uint32_t base_ms) {
+    const char *scale_env = getenv("XRAY_TOOLCHAIN_PROBE_SCALE");
+    if (!scale_env || !*scale_env)
+        return base_ms;
+
+    char *end = NULL;
+    unsigned long scale = strtoul(scale_env, &end, 10);
+    if (end == scale_env || scale < 1)
+        return base_ms;
+
+    const unsigned long kMaxTimeoutMs = 600000ul; /* 10 minutes, hard ceiling */
+    unsigned long scaled = (unsigned long) base_ms * scale;
+    if (scaled > kMaxTimeoutMs)
+        scaled = kMaxTimeoutMs;
+    return (uint32_t) scaled;
+}
 
 static void xtc_probe_error(char *err, size_t err_size, const char *format, const char *arg) {
     if (!err || err_size == 0)
@@ -256,10 +286,10 @@ static bool xtc_probe_command_init(const XrToolchainSelection *selection, XtcPro
     // The first Zig invocation for a cold cross target may populate compiler
     // and sysroot caches before it can link the probe. Keep the usual native
     // bound tight, but give that bounded cold-start path one extra interval.
-    uint32_t timeout_ms =
-        selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG && !selection->target.is_native
-            ? XTC_PROBE_CROSS_ZIG_TIMEOUT_MS
-            : XTC_PROBE_COMPILE_TIMEOUT_MS;
+    uint32_t timeout_ms = xtc_probe_timeout(selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+                                                    !selection->target.is_native
+                                                ? XTC_PROBE_CROSS_ZIG_TIMEOUT_MS
+                                                : XTC_PROBE_COMPILE_TIMEOUT_MS);
     xtc_process_spec_init(&command->spec, selection->program, timeout_ms);
     command->index = 0;
     XrToolchainArgSink sink = xtc_probe_command_sink(command);
@@ -372,7 +402,7 @@ static bool xtc_probe_add_build_sanitizer_link_flags(const XrToolchainSelection 
 #if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
     if (!xtc_probe_command_add(command, "-fsanitize=address", detail, detail_size))
         return false;
-#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                         \
+#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                            \
     defined(XRT_BUILD_ASAN_WINDOWS_THUNK)
     if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
         (!xtc_probe_command_add(command, "-Wl,--whole-archive", detail, detail_size) ||
@@ -444,7 +474,8 @@ static bool xtc_probe_link_minimal(const XrToolchainSelection *selection, const 
     compile.language_standard = "c11";
     if (!xtc_command_emit_compile(selection, &compile, &sink, detail, detail_size) ||
         !xtc_probe_command_add(&command, source, detail, detail_size) ||
-        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size) ||
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail,
+                                      detail_size) ||
         !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
     bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
@@ -463,7 +494,8 @@ static bool xtc_probe_link_object(const XrToolchainSelection *selection, const c
     XrNativeLinkSpec link = {0};
     link.lto = lto;
     if (!xtc_probe_command_add(&command, object, detail, detail_size) ||
-        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail, detail_size) ||
+        !xtc_command_emit_link_output(selection->provider, executable, &sink, detail,
+                                      detail_size) ||
         !xtc_command_emit_link(selection, &selection->target, &link, &sink, detail, detail_size))
         return false;
     bool ok = xtc_probe_run_process(&command.spec, &process, detail, detail_size);
@@ -474,7 +506,7 @@ static bool xtc_probe_link_object(const XrToolchainSelection *selection, const c
 static bool xtc_probe_run_executable(const char *executable, char *detail, size_t detail_size) {
     XrProcessSpec spec;
     XrProcessResult process;
-    xtc_process_spec_init(&spec, executable, 10000);
+    xtc_process_spec_init(&spec, executable, xtc_probe_timeout(XTC_PROBE_RUN_TIMEOUT_MS));
     spec.argv[1] = NULL;
     bool ok = xtc_probe_run_process(&spec, &process, detail, detail_size);
     xtc_process_result_free(&process);
@@ -493,7 +525,7 @@ static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char
         return false;
     spec = command.spec;
     index = command.index;
-    spec.timeout_ms = 5000;
+    spec.timeout_ms = xtc_probe_timeout(XTC_PROBE_DUMPMACHINE_TIMEOUT_MS);
     spec.argv[index++] = "-dumpmachine";
     spec.argv[index] = NULL;
     if (!xtc_probe_run_process(&spec, &process, detail, detail_size)) {
@@ -556,8 +588,8 @@ static void xtc_probe_fingerprint(const XrToolchainProbeOptions *options,
         result->selection.version, result->selection.target.name, result->runtime.sdk_digest,
         result->selection.runtime_artifact, result->selection.system_sdk,
         xtc_profile_name(options->profile), options->no_run ? 1 : 0,
-        options->required_codegen_capabilities,
-        getenv("PATH") ? getenv("PATH") : "", getenv("SDKROOT") ? getenv("SDKROOT") : "");
+        options->required_codegen_capabilities, getenv("PATH") ? getenv("PATH") : "",
+        getenv("SDKROOT") ? getenv("SDKROOT") : "");
     if (written < 0 || (size_t) written >= sizeof(identity))
         identity[0] = '\0';
     xtc_probe_sha256_string(identity, result->selection.probe_fingerprint);
@@ -666,9 +698,9 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     char runtime_executable[1300] = {0};
     char codegen_source[1300] = {0};
     char codegen_object[1300] = {0};
-    const char *cleanup_files[] = {minimal_source, minimal_object, sdk_source, sdk_object,
-                                   lto_object, runtime_source, runtime_object, runtime_executable,
-                                   codegen_source, codegen_object};
+    const char *cleanup_files[] = {
+        minimal_source, minimal_object, sdk_source,         sdk_object,     lto_object,
+        runtime_source, runtime_object, runtime_executable, codegen_source, codegen_object};
 
     memset(result, 0, sizeof(*result));
     snprintf(result->cache, sizeof(result->cache), "%s", "miss");
@@ -731,10 +763,10 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     XrToolchainTarget sdk_target = result->selection.target;
     bool exact_runtime_target = options->request.target.is_native;
 #ifdef XR_OS_WINDOWS
-    exact_runtime_target = exact_runtime_target ||
-                           (result->selection.provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
-                            result->selection.target.os == XR_TOOLCHAIN_TARGET_OS_WINDOWS &&
-                            result->selection.target.abi == XR_TOOLCHAIN_TARGET_ABI_GNU);
+    exact_runtime_target =
+        exact_runtime_target || (result->selection.provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
+                                 result->selection.target.os == XR_TOOLCHAIN_TARGET_OS_WINDOWS &&
+                                 result->selection.target.abi == XR_TOOLCHAIN_TARGET_ABI_GNU);
 #endif
     const char *host_sdk_target = "native";
 #ifdef XR_OS_WINDOWS
@@ -833,15 +865,15 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
     result->sdk_compile = XR_TOOLCHAIN_CAPABILITY_OK;
     result->selection.readiness = XR_TOOLCHAIN_SDK_COMPILE_OK;
 
-#define XTC_PROBE_CODEGEN_CAP(field, source_text)                                                   \
+#define XTC_PROBE_CODEGEN_CAP(field, source_text)                                                  \
     do {                                                                                           \
-        if (!xtc_probe_write_file(codegen_source, (source_text))) {                               \
-            result->field = XR_TOOLCHAIN_CAPABILITY_FAILED;                                       \
+        if (!xtc_probe_write_file(codegen_source, (source_text))) {                                \
+            result->field = XR_TOOLCHAIN_CAPABILITY_FAILED;                                        \
         } else if (xtc_probe_compile(&result->selection, codegen_source, codegen_object, NULL,     \
-                                     false, false, detail, sizeof(detail))) {                       \
-            result->field = XR_TOOLCHAIN_CAPABILITY_OK;                                           \
+                                     false, false, detail, sizeof(detail))) {                      \
+            result->field = XR_TOOLCHAIN_CAPABILITY_OK;                                            \
         } else {                                                                                   \
-            result->field = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;                                  \
+            result->field = XR_TOOLCHAIN_CAPABILITY_UNSUPPORTED;                                   \
         }                                                                                          \
         (void) xr_fs_remove(codegen_object);                                                       \
     } while (0)
@@ -865,8 +897,7 @@ static bool xtc_probe_candidate(const XrToolchainProbeOptions *options,
         snprintf(detail, sizeof(detail),
                  "provider lacks required native code-shape capabilities 0x%x "
                  "(forceInline=%s preserveCall=%s valueOpaque=%s compilerFence=%s)",
-                 missing_codegen,
-                 xtc_capability_state_name(result->force_inline),
+                 missing_codegen, xtc_capability_state_name(result->force_inline),
                  xtc_capability_state_name(result->preserve_call),
                  xtc_capability_state_name(result->value_opaque),
                  xtc_capability_state_name(result->compiler_fence));
@@ -977,9 +1008,8 @@ XR_FUNC bool xtc_probe(const XrToolchainProbeOptions *options, XrToolchainProbeR
             out->selection.program = out->selection.program_storage;
             if (i > 0 && have_best) {
                 const char *rejected_detail =
-                    best.diagnostic_count > 0
-                        ? best.diagnostics[best.diagnostic_count - 1].message
-                        : xtc_reason_code_name(best.selection.reason);
+                    best.diagnostic_count > 0 ? best.diagnostics[best.diagnostic_count - 1].message
+                                              : xtc_reason_code_name(best.selection.reason);
                 char fallback_detail[512];
                 snprintf(fallback_detail, sizeof(fallback_detail),
                          "provider '%s' did not satisfy the generated-C contract (%.*s); "
@@ -987,12 +1017,11 @@ XR_FUNC bool xtc_probe(const XrToolchainProbeOptions *options, XrToolchainProbeR
                          xtc_provider_name(best.selection.provider), 260,
                          rejected_detail ? rejected_detail : "unknown reason",
                          xtc_provider_name(out->selection.provider));
-                xtc_probe_add_diagnostic(
-                    out,
-                    best.selection.reason == XR_TOOLCHAIN_REASON_NONE
-                        ? XR_TOOLCHAIN_REASON_COMPILE_PROBE_FAILED
-                        : best.selection.reason,
-                    "fallback", fallback_detail);
+                xtc_probe_add_diagnostic(out,
+                                         best.selection.reason == XR_TOOLCHAIN_REASON_NONE
+                                             ? XR_TOOLCHAIN_REASON_COMPILE_PROBE_FAILED
+                                             : best.selection.reason,
+                                         "fallback", fallback_detail);
             }
             return true;
         }

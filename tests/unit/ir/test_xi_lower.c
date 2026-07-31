@@ -2625,7 +2625,7 @@ TEST(struct_field_store_narrows_scalar_rep) {
     XiFunc *f = lower_source("struct Sample {\n"
                              "    octet: byte\n"
                              "}\n"
-                             "fn run() -> int {\n"
+                             "fn run() -> byte {\n"
                              "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
                              /* byte -> int is an explicit conversion since

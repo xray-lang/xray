@@ -468,14 +468,10 @@ static bool xr_parse_current_is_param_mode_prefix(Parser *parser, const char **o
         return false;
     }
 
-    Scanner saved_scan = parser->scanner;
-    Token saved_cur = parser->current;
-    Token saved_prev = parser->previous;
+    XrParserStreamState saved = xr_parser_stream_save(parser);
     xr_parser_advance(parser);
     bool is_prefix = xr_parser_check(parser, TK_NAME);
-    parser->scanner = saved_scan;
-    parser->current = saved_cur;
-    parser->previous = saved_prev;
+    xr_parser_stream_restore(parser, &saved);
     if (!is_prefix)
         return false;
     if (out_mode)
@@ -821,7 +817,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             return xr_tref_char(parser->compiler_session);
         }
         if (strcmp(temp_name, "void") == 0) {
-            xr_parser_emit_removed_syntax(
+            xr_parser_error_coded_note(
                 parser, &name_token, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
                 "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
             return xr_tref_unit(parser->compiler_session);

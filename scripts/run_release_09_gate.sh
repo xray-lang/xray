@@ -16,7 +16,10 @@ DO_BUILD=1
 BOUNDARY_REPORT=1
 EXTRA_EXCLUDE_RE="${XRAY_RELEASE09_EXTRA_EXCLUDE_RE:-}"
 
-KNOWN_AOT_BOUNDARY_RE='^(aot_filetests|aot_link_command_manifest)$'
+# aot_filetests left this list on 2026-07-30: it is ratchet-gated against
+# tests/aot/filetests_known_failures.txt, so it blocks new failures while its
+# 40 tracked ones are worked down.
+KNOWN_AOT_BOUNDARY_RE='^(aot_link_command_manifest)$'
 
 usage() {
     cat <<EOF

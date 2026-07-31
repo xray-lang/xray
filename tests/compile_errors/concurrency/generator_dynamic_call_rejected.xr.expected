@@ -1,0 +1,1 @@
+generator 'gen' cannot be proven not to reach the scheduler; dynamic call to `f` leaves the evidence incomplete

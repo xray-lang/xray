@@ -1,0 +1,162 @@
+// 0373_range_value_for_in.xr
+// Test: a `Range` held in a variable / parameter / field iterates exactly
+// like the inline `a..b` form. The inline literal is only a fast path that
+// skips materializing the object; it is not what makes a range iterable.
+
+// ===== 变量中的 Range =====
+
+@test
+fn test_stored_half_open_range() {
+    var r = 1..5
+    var sum = 0
+    for (i in r) {
+        sum = sum + i
+    }
+    assert_eq(sum, 10)  // 1+2+3+4
+}
+
+@test
+fn test_stored_inclusive_range() {
+    var r = 1..=5
+    var sum = 0
+    for (i in r) {
+        sum = sum + i
+    }
+    assert_eq(sum, 15)  // 1+2+3+4+5
+}
+
+@test
+fn test_stored_matches_inline() {
+    var inline_sum = 0
+    for (i in 2..9) {
+        inline_sum = inline_sum + i
+    }
+
+    var r = 2..9
+    var stored_sum = 0
+    for (i in r) {
+        stored_sum = stored_sum + i
+    }
+
+    assert_eq(stored_sum, inline_sum)
+}
+
+@test
+fn test_stored_empty_range() {
+    var r = 5..5
+    var count = 0
+    for (i in r) {
+        count = count + 1
+    }
+    assert_eq(count, 0)
+}
+
+@test
+fn test_iteration_count_matches_len() {
+    var r = 3..9
+    var count = 0
+    for (i in r) {
+        count = count + 1
+    }
+    assert_eq(count, len(r))
+}
+
+@test
+fn test_stored_range_yields_int() {
+    var r = 1..4
+    var items: Array<int> = []
+    for (i in r) {
+        items.push(i)
+    }
+    assert_eq(items, [1, 2, 3])
+}
+
+// ===== 参数 / 字段 / 表达式中的 Range =====
+
+fn range_total(r: Range) -> int {
+    var sum = 0
+    for (i in r) {
+        sum = sum + i
+    }
+    return sum
+}
+
+@test
+fn test_range_parameter() {
+    assert_eq(range_total(0..5), 10)
+    assert_eq(range_total(1..=4), 10)
+}
+
+class Window {
+    span: Range
+
+    constructor(span: Range) {
+        this.span = span
+    }
+}
+
+@test
+fn test_range_field() {
+    var w = Window(2..5)
+    assert_eq(range_total(w.span), 9)  // 2+3+4
+
+    var sum = 0
+    for (i in w.span) {
+        sum = sum + i
+    }
+    assert_eq(sum, 9)
+}
+
+@test
+fn test_range_array_element() {
+    var ranges = [0..3, 10..12]
+    var sum = 0
+    for (r in ranges) {
+        for (i in r) {
+            sum = sum + i
+        }
+    }
+    assert_eq(sum, 24)  // (0+1+2) + (10+11)
+}
+
+// ===== 控制流 =====
+
+@test
+fn test_stored_range_break_continue() {
+    var r = 0..10
+    var seen: Array<int> = []
+    for (i in r) {
+        if (i == 2) {
+            continue
+        }
+        if (i == 5) {
+            break
+        }
+        seen.push(i)
+    }
+    assert_eq(seen, [0, 1, 3, 4])
+}
+
+@test
+fn test_stored_range_nested() {
+    var r = 0..3
+    var count = 0
+    for (i in r) {
+        for (j in r) {
+            count = count + 1
+        }
+    }
+    assert_eq(count, 9)
+}
+
+@test
+fn test_stored_range_rebind_does_not_affect_running_loop() {
+    // The loop domain is fixed at entry, exactly like array iteration.
+    var r = 0..3
+    var count = 0
+    for (i in r) {
+        r = 0..100
+        count = count + 1
+    }
+    assert_eq(count, 3)
+}

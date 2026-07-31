@@ -137,5 +137,10 @@
     "Array<byte>.repeatFrom receiver must be Array<byte>"
 #define XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG "Array<byte>.repeatFrom range/grow failed"
 #define XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG "Range.toArray range too large"
+#define XR_ERROR_CORE_ITERATOR_EXHAUSTED_NEXT_MSG                                                  \
+    "Iterator.next() on an exhausted iterator: every next() must follow a hasNext() that "         \
+    "returned true"
+#define XR_ERROR_CORE_ITERATOR_EXHAUSTED_NTH_MSG                                                   \
+    "Iterator.nth(index) ran past the end: the iterator was exhausted before reaching index"
 
 #endif  // XR_ERROR_MESSAGES_H

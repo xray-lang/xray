@@ -50,28 +50,21 @@ int xrt_gen_iter_has_next(xrt_iterator_t *it) {
 }
 
 XrValue xrt_gen_iter_next(xrt_iterator_t *it) {
-    if (!it || !it->gen || it->cursor == 2)
-        return XR_NULL_VAL;
-    if (it->cursor != 1) {
-        XrValue out = XR_NULL_VAL;
-        bool error_is_value = false;
-        XrAotGenDriveKind kind = xr_aot_gen_drive(it->gen, &out, &error_is_value);
-        if (kind != XR_AOT_GEN_DRIVE_YIELD) {
-            xrt_gen_iter_finish(it);
-            if (kind == XR_AOT_GEN_DRIVE_ERROR && !XR_IS_NULL(out)) {
-                if (error_is_value)
-                    xrt_pending_error = out;
-                else
-                    xrt_throw_exc(out);
-            }
-            return XR_NULL_VAL;
-        }
-        it->coll = out;
+    /* The same test hasNext() performs: it drives the producer one step when
+     * nothing is buffered, so an in-contract next() behaves exactly as the
+     * unguarded pull did, and surfaces a producer failure as that failure. */
+    if (it && xrt_gen_iter_has_next(it)) {
+        XrValue yielded = it->coll;
+        it->coll = XR_NULL_VAL;
+        it->cursor = 0;
+        return yielded;
     }
-    XrValue yielded = it->coll;
-    it->coll = XR_NULL_VAL;
-    it->cursor = 0;
-    return yielded;
+    /* A producer that ended cleanly leaves nothing to hand back, and next() is
+     * typed T: pulling past the end is a protocol violation (LANGUAGE_SPEC
+     * 5.3.6), not a zero value. A producer that failed already reported it. */
+    if (!xrt_has_pending_error())
+        xrt_throw_error(XR_ERR_ITERATOR_EXHAUSTED, XR_ERROR_CORE_ITERATOR_EXHAUSTED_NEXT_MSG);
+    return XR_NULL_VAL;
 }
 
 void xrt_gen_iter_destroy(xrt_iterator_t *it) {
