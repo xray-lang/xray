@@ -1248,7 +1248,7 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> // var u: User = full            // 编译错误 E0352：多了字段 'age'
+> // var u: User = full            // 编译错误 E0352：extra field 'age'
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
@@ -4519,8 +4519,8 @@ type Point = { x: float, y: float }
 fn describe(p: Point) { ... }
 
 describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0352：sealed 类型多了字段 'z'
-describe({ x: 1.0 })                  // 编译错误 E0352：缺少字段 'y'
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
+describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 ```
 
 ### 9.6 方差（Variance）

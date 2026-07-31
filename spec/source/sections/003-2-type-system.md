@@ -664,7 +664,7 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> // var u: User = full            // 编译错误 E0352：多了字段 'age'
+> // var u: User = full            // 编译错误 E0352：extra field 'age'
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省

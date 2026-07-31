@@ -4521,8 +4521,8 @@ type Point = { x: float, y: float }
 fn describe(p: Point) { ... }
 
 describe({ x: 1.0, y: 2.0 })          // OK: exact field set
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0352: sealed type rejects extra field 'z'
-describe({ x: 1.0 })                  // compile error E0352: missing field 'y'
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
+describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 ```
 
 ### 9.6 Variance
