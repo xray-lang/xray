@@ -5,9 +5,10 @@
 // keyed on the full type argument (Array<int> and Array<string> are distinct
 // instances), and AOT specializes the body instead of running it erased.
 //
-// widthOf keeps the erased origin honest: a tuple type argument has no type-ref
-// spelling, so that call site still targets the generic origin while its Array
-// sibling is specialized. AOT must emit both.
+// rounds keeps the erased origin honest: a function type argument is not
+// synthesized (its tref form cannot carry throw effect or parameter modes), so
+// that call site still targets the generic origin while its int sibling is
+// specialized. AOT must emit both.
 
 fn tagOf<T>(x: T) -> int {
     return len(string(x))
@@ -41,6 +42,23 @@ fn widthOf<T>(x: T, n: int) -> int {
     return acc
 }
 
+// Same shape, but never inspects x, so it can take a type argument no tref can
+// spell. Kept out of the inliner for the same reason as widthOf.
+fn rounds<T>(x: T, n: int) -> int {
+    var acc = 0
+    for (i in 0..n) {
+        acc = acc + i
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+fn helper(n: int) -> int {
+    return n + 1
+}
+
 fn main() {
     var ints = [1, 2, 3]
     var words = ["ab", "cd"]
@@ -66,12 +84,20 @@ fn main() {
     print(firstOr(ints, 0))
     print(firstOr(words, "z"))
 
-    // Mixed specialization: the Array and Map call sites clone, the tuple call
-    // site stays on the erased origin.
+    // Tuples are synthesized too, and each arity/element combination is its own
+    // instance rather than collapsing into one.
     var pair = (1, 2)
+    var mixed = (1, "z", true)
     print(widthOf(ints, 3))
     print(widthOf(pair, 3))
+    print(widthOf(mixed, 2))
     print(widthOf(scores, 2))
+
+    // Mixed specialization: the int call site clones while the function-typed
+    // one stays on the erased origin, so AOT has to emit both bodies.
+    var fnv = helper
+    print(rounds(fnv, 3))
+    print(rounds(7, 3))
 }
 
 main()
