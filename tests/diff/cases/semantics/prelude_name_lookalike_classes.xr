@@ -63,10 +63,20 @@ var r = Range(4, 9)
 print(r.count())
 print(r.lo + r.hi)
 
-// Deliberately no `a..b` literal here. Using the builtin Range in a module
-// that also declares `class Range` makes the AOT backend plan native-struct
-// storage for the builtin value and emit C that does not compile
-// ("initializing 'void *' ... incompatible type 'XrValue'"). That is a
-// separate, pre-existing representation-planning bug, not a dispatch one;
-// builtin-Range coverage alongside a shadowing class lives in
-// tests/regression/12_type_checking/1236_prelude_name_shadowing.xr.
+// The builtin Range is still reached through the `a..b` literal, which no
+// declaration shadows: its own count/len/index keep the builtin semantics even
+// though `class Range` is declared right above. This combination also pins the
+// representation plan — a builtin named instance has no declaration identity,
+// so it must not adopt the same-named user class's native pointer storage. When
+// it did, CGen emitted a `void *` local initialized from a tagged XrValue and
+// the generated C failed to compile.
+var built_in = 2..6
+print(built_in.count())
+print(len(built_in))
+print(built_in[1])
+
+var sum = 0
+for (i in 2..6) {
+    sum = sum + i
+}
+print(sum)

@@ -5171,7 +5171,7 @@ static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType
     if (!rt)
         return false;
     if ((rt->kind == XR_KIND_INTERFACE || rt->kind == XR_KIND_INSTANCE) &&
-        rt->instance.class_name && strcmp(rt->instance.class_name, "Iterator") == 0) {
+        xr_type_is_builtin_named_type(rt, "Iterator")) {
         if (out_elem) {
             *out_elem = (rt->instance.type_arg_count >= 1 && rt->instance.type_args &&
                          rt->instance.type_args[0])

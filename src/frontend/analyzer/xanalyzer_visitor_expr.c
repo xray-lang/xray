@@ -2159,7 +2159,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     // Handle built-in properties
     if ((obj_type->kind == XR_KIND_INTERFACE || obj_type->kind == XR_KIND_INSTANCE) &&
-        obj_type->instance.class_name && strcmp(obj_type->instance.class_name, "Iterator") == 0) {
+        xr_type_is_builtin_named_type(obj_type, "Iterator")) {
         XrType *elem = (obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args &&
                         obj_type->instance.type_args[0])
                            ? obj_type->instance.type_args[0]
@@ -4948,8 +4948,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_RECORD:
             return true;
         case XR_KIND_INSTANCE:
-            return type->instance.class_name &&
-                   strcmp(type->instance.class_name, "StringBuilder") == 0;
+            return xr_type_is_builtin_named_class(type, "StringBuilder");
         case XR_KIND_UNION:
             for (uint8_t i = 0; i < type->union_type.member_count; i++) {
                 if (xa_boundary_transfer_type_needs_explicit(type->union_type.members[i]))

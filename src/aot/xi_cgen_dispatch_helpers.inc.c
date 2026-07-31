@@ -4404,8 +4404,7 @@ typedef enum {
 static const XrType *xicgen_atomic_inner_type_from_receiver(const XiValue *recv) {
     const XiValue *origin = cg_unwrap_identity_value(recv);
     const XrType *type = origin ? origin->type : (recv ? recv->type : NULL);
-    if (!type || type->kind != XR_KIND_INSTANCE || !type->instance.class_name ||
-        strcmp(type->instance.class_name, "Atomic") != 0 || type->instance.type_arg_count == 0)
+    if (!xr_type_is_builtin_named_class(type, "Atomic") || type->instance.type_arg_count == 0)
         return NULL;
     return type->instance.type_args ? type->instance.type_args[0] : NULL;
 }
@@ -8565,9 +8564,7 @@ static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const X
 }
 
 static bool xicgen_is_stringbuilder_receiver(const XiValue *v) {
-    const XrType *type = v ? v->type : NULL;
-    return type && type->kind == XR_KIND_INSTANCE && type->instance.class_name &&
-           strcmp(type->instance.class_name, "StringBuilder") == 0;
+    return xr_type_is_builtin_named_class(v ? v->type : NULL, "StringBuilder");
 }
 
 static const XaotCapacityPlan *xicgen_stringbuilder_capacity_plan(XiCgenCtx *ctx,
@@ -8743,10 +8740,7 @@ static void xicgen_emit_stringbuilder_literal_append_reserve(XiCgenCtx *ctx, FIL
 static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                              const char *method, uint16_t nargs) {
     const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
-    bool recv_is_stringbuilder = recv_type && recv_type->kind == XR_KIND_INSTANCE &&
-                                 recv_type->instance.class_name &&
-                                 strcmp(recv_type->instance.class_name, "StringBuilder") == 0;
-    if (!recv_is_stringbuilder || !method)
+    if (!xr_type_is_builtin_named_class(recv_type, "StringBuilder") || !method)
         return false;
     const XaotCapacityPlan *plan = xicgen_stringbuilder_capacity_plan(ctx, v);
 

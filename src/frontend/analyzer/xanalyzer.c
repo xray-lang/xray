@@ -1589,10 +1589,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
      * so allocate them from the program's arena and keep their lifetime tied
      * to xr_program_destroy(). */
     XrCompilerSessionScope ast_scope;
-    bool has_ast_scope =
-        ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(analyzer->compiler_session, ast->as.program.arena, file,
-                                       &ast_scope);
+    bool has_ast_scope = ast->type == AST_PROGRAM && ast->as.program.arena &&
+                         xr_compiler_session_push_arena(analyzer->compiler_session,
+                                                        ast->as.program.arena, file, &ast_scope);
 
     // Set current type pool and symbol ID counter (eliminates global state)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
@@ -2383,7 +2382,7 @@ bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_el
     // iterator() (which returns self) + hasNext()/next(). The element type is the
     // interface's single type argument.
     if ((type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_INSTANCE) &&
-        type->instance.class_name && strcmp(type->instance.class_name, "Iterator") == 0) {
+        xr_type_is_builtin_named_type(type, "Iterator")) {
         if (out_element_type) {
             *out_element_type = (type->instance.type_arg_count >= 1 && type->instance.type_args &&
                                  type->instance.type_args[0])

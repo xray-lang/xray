@@ -370,6 +370,23 @@ static inline bool xr_type_is_builtin_named_class(const XrType *t, const char *n
     return xr_type_is_named_class(t, name) && t->instance.class_ref == NULL;
 }
 
+/* Same question for a builtin that surfaces as either a native instance or as
+ * the builtin interface of that name — Iterator is the one such type today.
+ *
+ * The instance form is decided by identity. The interface form still has to be
+ * matched by spelling: xr_type_new_interface builds builtin and user-declared
+ * interfaces alike with no back-pointer to the declaration, so an
+ * `interface Iterator<T>` written in user code is indistinguishable here. That
+ * is the same class of bug one level up, and closing it means giving interface
+ * types a declaration identity — a separate change from this one. */
+static inline bool xr_type_is_builtin_named_type(const XrType *t, const char *name) {
+    if (!t)
+        return false;
+    if (t->kind == XR_KIND_INTERFACE)
+        return t->instance.class_name && strcmp(t->instance.class_name, name) == 0;
+    return xr_type_is_builtin_named_class(t, name);
+}
+
 /* Whether a type denotes a runtime-managed object whose lifetime belongs to
  * the runtime/scheduler, NOT the compiler's per-coroutine RC. The compiler
  * (xi_arc / xi_own) must not insert dup/drop for such values: they are held by

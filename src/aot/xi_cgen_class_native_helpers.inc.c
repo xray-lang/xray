@@ -1354,8 +1354,7 @@ static bool emit_class_native_receiver_ref_field_ptr_expr(XiCgenCtx *ctx, FILE *
  * avoids a stack copy around `callee(ref this.field)` while preserving the
  * same call-bound, nonescaping place contract. */
 static bool emit_class_native_receiver_scalar_field_addr_expr(XiCgenCtx *ctx, FILE *out,
-                                                              const XiFunc *f,
-                                                              const XiValue *value,
+                                                              const XiFunc *f, const XiValue *value,
                                                               const char *result_c_type) {
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
     const XiValue *load = cg_unwrap_identity_value(value);
@@ -3464,16 +3463,14 @@ static void emit_class_native_param_decl(XiCgenCtx *ctx, FILE *out, const char *
 }
 
 static const XiClassData *cg_class_native_value_type_data(XiCgenCtx *ctx, const XiValue *v) {
-    const char *class_name = v && v->type ? xr_type_get_class_name(v->type) : NULL;
-    const XiClassData *cd = cg_class_native_data_by_name(ctx, class_name);
+    const XiClassData *cd = cg_class_native_data_for_type(ctx, v ? v->type : NULL);
     if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
         return NULL;
     return cd;
 }
 
 static const XiClassData *cg_class_data_for_type_name(XiCgenCtx *ctx, const XrType *type) {
-    const char *class_name = type ? xr_type_get_class_name((XrType *) (uintptr_t) type) : NULL;
-    return cg_class_native_data_by_name(ctx, class_name);
+    return cg_class_native_data_for_type(ctx, type);
 }
 
 static bool cg_class_native_value_has_ptr_storage(XiCgenCtx *ctx, const XiValue *v) {
@@ -4652,12 +4649,21 @@ static const XiClassData *cg_class_native_instance_data(XiCgenCtx *ctx, const Xi
     return cg_class_native_ctor_call_data(ctx, f, origin, NULL, NULL);
 }
 
+/* Class name to resolve a receiver's method against the module's classes.
+ *
+ * Only a receiver with declaration identity may be named here. A builtin named
+ * instance carries none, and letting its spelling through binds `(2..6).count()`
+ * statically to a user-declared `class Range`'s count(): CGen then calls that
+ * method's boxed adapter, whose instance guard aborts at runtime with
+ * "expected native class instance". Builtin receivers fall through to the
+ * builtin dispatch below, matching what the VM does. */
 static const char *cg_class_native_receiver_class_name(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiValue *recv) {
-    if (recv && recv->type &&
-        (recv->type->kind == XR_KIND_CLASS || recv->type->kind == XR_KIND_INSTANCE) &&
-        recv->type->instance.class_name)
-        return recv->type->instance.class_name;
+    const XrType *type = recv ? recv->type : NULL;
+    if (type && type->instance.class_name &&
+        (type->kind == XR_KIND_CLASS ||
+         (type->kind == XR_KIND_INSTANCE && type->instance.class_ref)))
+        return type->instance.class_name;
     const XiClassData *data = cg_class_native_instance_data(ctx, f, recv);
     return data ? data->class_name : NULL;
 }
