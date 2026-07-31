@@ -1,0 +1,24 @@
+// anchor: eval-order-binary
+// §3.0 E1/E3: left operand fully evaluated (side effects included) before the
+// right operand begins; nesting is depth-first.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+
+fn main() {
+    print("-- flat --")
+    var a = t("L", 1) + t("R", 2)
+    print(a)
+
+    print("-- nested --")
+    var b = t("outer-l", 1) + (t("inner-l", 2) * t("inner-r", 3))
+    print(b)
+
+    print("-- both sides nested --")
+    var c = (t("ll", 1) - t("lr", 2)) * (t("rl", 3) - t("rr", 4))
+    print(c)
+
+    print("-- comparison chain --")
+    var d = t("cmp-l", 1) < t("cmp-r", 2)
+    print(d)
+}
+
+main()

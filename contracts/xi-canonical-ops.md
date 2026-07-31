@@ -1,11 +1,12 @@
 # Xi canonical operation contract
 
-Status: re-frozen after implicit error propagation gained late cold-edge ARC
-operands, and raw-pointer loads plus ordinary slices were made explicit
-borrowed views instead of accidental owners.
+Status: re-frozen after every memory-effecting operation gained a mandatory
+memory scope (`:tbaa-group`) and every synchronising operation gained its
+language-level happens-before edge (`:sync`).
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
-   effects, result ownership, and operand ownership are generated from it.
+   effects, result ownership, operand ownership, memory scope, and
+   synchronisation edge are generated from it.
 2. Every operation declares `:own-use` explicitly. Missing ownership metadata
    is a generator error; no consumer may supply a default guess.
 3. `borrow`, `consume`, `pass`, `stored-value`, and `method-args` retain the
@@ -26,12 +27,24 @@ borrowed views instead of accidental owners.
    assumptions. Once the analyzer accepts that boundary, the operation is
    non-throwing in VM and AOT; a backend must not recreate a pending-error or
    bounds check that contradicts the caller-proven contract.
-9. A named SIMD shuffle pattern such as adjacent-lane exchange is preserved as
+9. An operation that declares a `memory-read` or `memory-write` effect must
+   declare which memory it touches via `:tbaa-group`. `none` means "touches no
+   memory" and is rejected for such an operation: alias queries answer no-alias
+   for it, so a store carrying `none` would stop killing loads. Unclassified
+   memory is `top`; storage the operation itself allocates and nothing else can
+   yet reach is `fresh`.
+10. An operation that establishes a language-level happens-before edge
+   (spec §16.9.2) declares it via `:sync`. Where the edge's strength is chosen
+   at run time by an `Ordering` argument, the declaration is the strongest edge
+   the operation can carry. Alias disjointness never licenses moving an
+   ordinary memory operation across such an operation; that is decided by
+   `xi_op_is_ordering_barrier()`, not by `xi_tbaa_may_alias()`.
+11. A named SIMD shuffle pattern such as adjacent-lane exchange is preserved as
    a semantic Xi shape bit. Backends must not depend on packing every lane
    index into `aux_int`; explicit arbitrary shuffle lists fail closed when the
    canonical representation cannot carry their width.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 3c9676f5351ac63aeac0160f9e26a4c4a3bec9ac720426d06e8abe1fa294f30b
+anchor-sha256: xisa/xi/ops.def 2c8bfd83682639ac82828e0d0782107d7750aa3cf5535ebc7927519cf3e01cd3
 anchor-sha256: xisa/xi/lowering.def e57b4b7cf84e3dadf3e03f39c68279c87b298820cf1cfa5e4b687826d2bc98b0

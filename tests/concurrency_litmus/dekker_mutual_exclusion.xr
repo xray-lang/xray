@@ -1,0 +1,42 @@
+// Dekker-style mutual exclusion built only from SeqCst atomics.
+//
+// §16.9.2 edge 8 gives the total order the algorithm needs; §16.9.2 edge 12
+// keeps it sound when the scheduler migrates a coroutine between workers
+// mid-critical-section.
+//
+// Forbidden outcome: both agents inside the critical section at once,
+// observed as a non-zero `inside` count on entry.
+
+const ITERATIONS = 4000
+
+fn contender(mine: Atomic<bool>, theirs: Atomic<bool>, inside: Atomic<int>,
+             collisions: Atomic<int>) {
+    mine.store(true, Ordering.SeqCst)
+    while (theirs.load(Ordering.SeqCst)) {
+        mine.store(false, Ordering.SeqCst)
+        Coro.yield()
+        mine.store(true, Ordering.SeqCst)
+    }
+    // Critical section.
+    if (inside.fetchAdd(1, Ordering.SeqCst) != 0) {
+        collisions.add(1, Ordering.SeqCst)
+    }
+    inside.sub(1, Ordering.SeqCst)
+    mine.store(false, Ordering.SeqCst)
+}
+
+fn main() {
+    const collisions = Atomic(0)
+    for (i in 0..ITERATIONS) {
+        const wantA = Atomic(false)
+        const wantB = Atomic(false)
+        const inside = Atomic(0)
+        var a = go contender(wantA, wantB, inside, collisions)
+        var b = go contender(wantB, wantA, inside, collisions)
+        await a
+        await b
+    }
+    print("dekker_mutual_exclusion forbidden=${collisions.load(Ordering.SeqCst)}")
+}
+
+main()

@@ -1,0 +1,41 @@
+// The channel capacity edge.
+//
+// §16.9.2 edge 2: on a channel of capacity N, completion of the k-th receive
+// happens-before completion of the (k + N)-th send. This is what makes
+// Channel(N) usable as a semaphore, and nothing else in this suite covers it.
+//
+// A capacity-1 channel is used as a mutex: send acquires, receive releases.
+// Without edge 2 the second send could complete before the first receive and
+// two agents would hold the token at once.
+//
+// Forbidden outcome: a non-zero `inside` count on entry to the critical
+// section.
+
+const ITERATIONS = 3000
+
+fn worker(lock: Channel<int>, inside: Atomic<int>, collisions: Atomic<int>) {
+    lock.send(1)
+    if (inside.fetchAdd(1, Ordering.SeqCst) != 0) {
+        collisions.add(1, Ordering.SeqCst)
+    }
+    inside.sub(1, Ordering.SeqCst)
+    var released = lock.recvOr(0)
+}
+
+fn main() {
+    const collisions = Atomic(0)
+    for (i in 0..ITERATIONS) {
+        const lock = Channel<int>(1)
+        const inside = Atomic(0)
+        var a = go worker(lock, inside, collisions)
+        var b = go worker(lock, inside, collisions)
+        var c = go worker(lock, inside, collisions)
+        await a
+        await b
+        await c
+        lock.close()
+    }
+    print("channel_capacity_edge forbidden=${collisions.load(Ordering.SeqCst)}")
+}
+
+main()

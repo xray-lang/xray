@@ -1,0 +1,37 @@
+// anchor: eval-order-short-circuit
+// §3.0 E4: &&, ||, ??, ?:, ?. and ?[ are the only short-circuit points.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn tb(tag: string, v: bool) -> bool { print(tag); return v }
+fn ts(tag: string, v: string?) -> string? { print(tag); return v }
+
+fn main() {
+    print("-- && skips right --")
+    var a = tb("and-l", false) && tb("and-r", true)
+    print(a)
+
+    print("-- && evaluates right --")
+    var b = tb("and-l", true) && tb("and-r", false)
+    print(b)
+
+    print("-- || skips right --")
+    var c = tb("or-l", true) || tb("or-r", false)
+    print(c)
+
+    print("-- ?? skips right --")
+    var d = ts("nc-l", "set") ?? ts("nc-r", "fallback")
+    print(d)
+
+    print("-- ?? evaluates right --")
+    var e = ts("nc-l", null) ?? ts("nc-r", "fallback")
+    print(e)
+
+    print("-- ternary picks one branch --")
+    var f = tb("cond", true) ? t("then", 1) : t("else", 2)
+    print(f)
+
+    print("-- bitwise ops do NOT short circuit --")
+    var g = t("bit-l", 0) & t("bit-r", 1)
+    print(g)
+}
+
+main()

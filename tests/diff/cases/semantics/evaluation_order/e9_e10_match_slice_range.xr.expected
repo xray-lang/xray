@@ -1,0 +1,16 @@
+-- match scrutinee once --
+scrutinee
+two
+-- guard runs only for a matching pattern --
+scrutinee
+guard-1
+guard-2
+one-fallback
+-- range endpoints --
+lo
+hi
+3
+-- slice bounds --
+slice-lo
+slice-hi
+2

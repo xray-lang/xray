@@ -1,0 +1,33 @@
+-- array --
+e1
+e2
+e3
+3
+-- set --
+s1
+s2
+2
+-- map: key before value --
+k1
+v1
+k2
+v2
+2
+-- object literal --
+o1
+o2
+1
+-- tuple --
+t1
+t2
+1
+-- spread in place --
+head
+p1
+p2
+6
+-- nested literal --
+n1
+n2
+n3
+2

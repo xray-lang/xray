@@ -329,11 +329,14 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
         canon_set_node_type(ctx, store, target_type);
 
-        /* Wrap in block: { decl; store } */
+        /* Wrap in a value block: { decl; store }.  The store is the last
+         * statement, so the block yields the compound assignment's value and
+         * stays usable in expression position (spec §3.0 E6). */
         AstNode *blk = xr_ast_block(ctx->session, line);
         XR_DCHECK(blk != NULL, "canon_compound_member: block alloc");
         xr_ast_block_add(ctx->session, blk, decl);
         xr_ast_block_add(ctx->session, blk, store);
+        blk->as.block.is_canon_value_block = true;
 
         /* Mutate the original node in-place → AST_BLOCK */
         uint32_t saved_id = node->node_id;
@@ -438,6 +441,7 @@ static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
         xr_ast_index_set(ctx->session, new_arr, new_idx, node->as.index_set.value, line);
     XR_DCHECK(store != NULL, "canon_index_set: index_set alloc");
     xr_ast_block_add(ctx->session, blk, store);
+    blk->as.block.is_canon_value_block = true;
 
     /* Mutate in-place → AST_BLOCK */
     uint32_t saved_id = node->node_id;
@@ -587,9 +591,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_inc_dec(ctx, node);
         /* Node type has changed to AST_ASSIGNMENT; fall through. */
     }
-    /* AST_INDEX_SET canonicalization is applied in canon_block() (statement
-     * context only) — expanding to AST_BLOCK in expression position would
-     * break the lowerer. */
+    /* AST_INDEX_SET extraction runs in statement context only (canon_block).
+     * Hoisting a receiver into a temp is only needed to keep an effectful
+     * subexpression single-evaluated; doing it for every `obj.field[i] = v`
+     * would copy the field out instead of indexing it in place. */
     if ((node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) &&
         !canon_should_keep_eager_bool_logic(ctx, node)) {
         canon_short_circuit(ctx, node);

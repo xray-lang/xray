@@ -333,6 +333,11 @@ TEST(inlines_unannotated_callee_under_tbaa_invariant) {
     XiValue *call = add_known_call(caller, callee);
     ASSERT(call != NULL);
     xi_block_set_return(caller->entry, call);
+    /* Publishing XI_EVD_ALIAS means "every value carries its declared TBAA
+     * group", which is what the verifier checks. Run the annotation pass that
+     * establishes it rather than asserting it of hand-built values. */
+    xi_tbaa_annotate(callee);
+    xi_tbaa_annotate(caller);
     xi_evidence_publish(caller, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
                         XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
 

@@ -314,9 +314,11 @@ static bool has_aliasing_store_between(const XiFunc *f, const XiValue *leader,
         if (!past_leader)
             continue;
 
-        /* A suspension lets another task mutate arbitrary reachable state,
-         * so it invalidates every load regardless of its TBAA group. */
-        if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+        /* An ordering barrier invalidates every load regardless of its TBAA
+         * group: a suspension lets another task mutate arbitrary reachable
+         * state, and a :sync edge means the memory model forbids reusing a
+         * value loaded on the other side of it (spec §16.9). */
+        if (xi_op_is_ordering_barrier(v->op))
             return true;
 
         /* Check if this instruction is a store that may alias current. */

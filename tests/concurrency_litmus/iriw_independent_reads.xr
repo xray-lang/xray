@@ -1,0 +1,44 @@
+// Independent reads of independent writes.
+//
+// §16.9.2 edge 8: two SeqCst writes to different locations are ordered by one
+// total order, so two readers cannot disagree about which came first.
+//
+// Forbidden outcome: reader A observes x before y while reader B observes y
+// before x.
+
+const ITERATIONS = 6000
+
+fn writer(target: Atomic<int>) {
+    target.store(1, Ordering.SeqCst)
+}
+
+fn reader(first: Atomic<int>, second: Atomic<int>) -> int {
+    var f = first.load(Ordering.SeqCst)
+    var s = second.load(Ordering.SeqCst)
+    // Encodes the observed pair as f*2 + s so the caller can compare them.
+    return f * 2 + s
+}
+
+fn main() {
+    var forbidden = 0
+    for (i in 0..ITERATIONS) {
+        const x = Atomic(0)
+        const y = Atomic(0)
+        var r1 = go reader(x, y)
+        var r2 = go reader(y, x)
+        var w1 = go writer(x)
+        var w2 = go writer(y)
+        await w1
+        await w2
+        var o1 = await r1
+        var o2 = await r2
+        // o == 2 means "saw my first location set, my second still clear".
+        // Both readers claiming that is the contradictory pair.
+        if (o1 == 2 && o2 == 2) {
+            forbidden = forbidden + 1
+        }
+    }
+    print("iriw_independent_reads forbidden=${forbidden}")
+}
+
+main()

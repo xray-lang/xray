@@ -1455,6 +1455,58 @@ main()
 
 > Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
+### 3.0 Evaluation Order
+
+> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+
+xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
+
+This is a requirement rather than a conservative preference. Differential testing uses "the same program is byte-identical on both backends" as its correctness criterion; the moment an order is declared unspecified, a backend divergence at that point stops being a defect and the criterion itself stops working. The `tests/diff/cases/semantics/evaluation_order/` gate enforces the agreement.
+
+**E1 (general rule)**: expressions are evaluated **left to right, depth first**. A subexpression is fully evaluated, side effects included, before its parent expression uses its value.
+
+**E2 (calls)**: `callee(a1, …, an)` evaluates the callee expression (the receiver for a method call) → `a1` → … → `an`, and then enters the call. Borrows are established after every argument has been evaluated and before the callee is entered. Default arguments are evaluated at the call site in declaration order, after all explicit arguments.
+
+**E3 (binary operators)**: the left operand is fully evaluated, side effects included, before evaluation of the right operand begins. The short-circuit operators (E4) are the only exception.
+
+**E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
+
+**E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
+
+**E7 (literals)**: Array, Set and tuple elements are evaluated in source order; Map and object literals are evaluated entry by entry in source order, key before value within an entry; a spread `...` is evaluated in sequence at the position where it appears.
+
+**E8 (string interpolation)**: interpolated fragments are evaluated left to right in source order.
+
+**E9 (match)**: the scrutinee is evaluated before any arm, exactly once. Arms are tried in source order; an `if` guard is evaluated only once its pattern has matched.
+
+**E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
+
+**E11 (statements)**: statements are evaluated in source order. A `defer` evaluates its captures where it is registered; for when the body runs see §4.9.
+
+```xray
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn add(a: int, b: int) -> int { return a + b }
+fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+
+class Counter {
+    hits: int = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2: the callee is evaluated before the arguments
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5: place subexpressions are evaluated before the right-hand side
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6: a complex receiver is evaluated exactly once
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
 ### 3.1 Precedence and Associativity
 
 Full precedence table (highest → lowest; operators at the same level share associativity):
@@ -1619,15 +1671,18 @@ var v = nullable_expr ?? default_value
 ### 3.4 Assignment and Compound Assignment
 
 ```ebnf
-AssignExpr ::= LValue AssignOp Expression
-LValue ::= Identifier | MemberAccess | IndexAccess
-AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
-           | '&=' | '|=' | '^=' | '<<=' | '>>='
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
 
 **Semantics**:
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
-- `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
+- `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
+- **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
 
 **Special cases**:
@@ -4788,7 +4843,7 @@ Structured field/method metadata is not provided automatically by the default ru
 
 > Source of truth: `src/coro/xcoro*.c`, `src/coro/xtask*.c`, `src/coro/xchannel.c`, `src/coro/xscope*.c`, `src/frontend/analyzer/xanalyzer_escape.c`, and `docs/rules/design-principles.md`.
 
-xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. Design goal: writing `go { ... }` is as simple as writing an ordinary function call, while the **compiler guarantees no data race**.
+xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. Design goal: writing `go { ... }` is as simple as writing an ordinary function call, while the **compiler guarantees no data race** within the language's safe subset. The precise form of that guarantee, its boundary, and the synchronisation edges each construct in this section establishes are defined in §16.9.
 
 ### 10.1 Coroutine model
 
@@ -5187,6 +5242,8 @@ enum Ordering {
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
+> `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
+
 ```xray
 const counter = Atomic(0)
 counter.store(42, Ordering.Release)
@@ -5213,7 +5270,9 @@ The two share a word root but are not the same suspension: `Coro.yield()` yields
 
 ### 10.11 Concurrency safety model
 
-xray uses the type system to **eliminate most data races at compile time**:
+xray eliminates data races at compile time through the type system. The precise statement is the theorem in §16.9.5: **a program containing no `unsafe` block and using none of the escape hatches listed in §16.9.5 has no data race, and its behaviour is equivalent to some sequentially consistent interleaving (SC-DRF)**. Inside the safe subset you may therefore reason in terms of interleaved statements without needing the happens-before detail; the rules below are how that theorem is enforced. The escape-hatch list and the language-level synchronisation edges are defined in §16.9.
+
+The compiler enforces:
 
 | Rule | Enforced |
 |--|--|
@@ -5225,8 +5284,9 @@ xray uses the type system to **eliminate most data races at compile time**:
 | Channels for cross-coroutine values | ✅ |
 | `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
 
-**Residual data-race risk** (detected at runtime, not compile time):
+**What compile-time enforcement does not cover**:
 - Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
+- The escape hatches of §16.9.5 (`unsafe`, `Array.mutPtr()`, raw `mem.*` memory, `sys.Thread` bodies, `CFn` callback bodies) sit outside the theorem's guarantee; a data race through them has implementation-defined consequences.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
@@ -6078,7 +6138,7 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
-### 16.3 Memory Model
+### 16.3 Object Lifetime and Reclamation
 
 - Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
 - **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
@@ -6163,6 +6223,93 @@ xray **currently exposes no user-visible deterministic destructor (destructor / 
 The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order (including the panic-unwind path), independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
+
+### 16.9 Concurrency Memory Model
+
+> Source of truth: `src/coro/xchannel.c`, `src/coro/xtask.c`, `src/coro/xtask_await.c`, the `:sync` column of `xisa/xi/ops.def`, `contracts/memory-model.md`.
+
+This section defines when accesses by two execution agents to the same memory location are **ordered**. The `Ordering` enum in §10.9 describes one atomic operation; it is not enough to derive program behaviour. This section is.
+
+#### 16.9.1 Basic definitions
+
+**Execution agent**: coroutines and OS threads are both execution agents. A coroutine may be moved between worker threads by the work-stealing scheduler during its lifetime and remains the same agent (see edge 12).
+
+**Sequenced-before**: the total order of evaluation within one agent, given by §3.0 Evaluation Order. Because §3.0 leaves no order unspecified, this relation is total rather than partial.
+
+**Synchronizes-with**: given by the edge table in §16.9.2. **That table is exhaustive**: no runtime behaviour outside it establishes synchronizes-with.
+
+**Happens-before**: the transitive closure of (sequenced-before ∪ synchronizes-with).
+
+**Conflicting accesses**: accesses by two agents to the same memory location, at least one of which is a write.
+
+**Data race**: a pair of conflicting accesses with **no** happens-before between them in either direction, where the two are **not both** atomic operations on the same atomic object.
+
+Reference-count updates are themselves memory accesses: concurrent retain/release on a non-atomic RC is a data race whose consequence is memory corruption, not merely a wrong number. The promotion rules are in §16.9.4.
+
+#### 16.9.2 Synchronisation edges (exhaustive)
+
+| # | Edge | Relation established |
+|--:|---|---|
+| 1 | Channel send → recv | Everything sequenced **before** the k-th successful `send(v)` happens-before everything sequenced **after** the `recv` / `recvOr` / `tryRecv` / `for-in` iteration that receives v. Buffered and unbuffered channels follow the same rule |
+| 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
+| 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
+| 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
+| 5 | Task completion → await | The task body's last action happens-before everything after any `await t` / `awaitResult()` / `awaitTimeout()` return, or after observing `t.done == true`, a terminal `t.poll()` result, or a terminal `t.status` |
+| 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `await all` / `any` / `anySuccess` establish the same edge under their respective completion conditions |
+| 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
+| 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |
+| 9 | Coroutine-domain locks | `sync.Mutex` / `sync.RwLock`: an unlock synchronizes-with a later successful lock |
+| 10 | OS-thread-domain primitives | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`: as above; a `sys.OsOnce` initialisation happens-before every call that observes it as complete |
+| 11 | `sys.Thread` | Everything before `spawn` happens-before the thread body; the thread body happens-before everything after `join` returns |
+| 12 | Coroutine migration | A coroutine suspended on worker A and resumed on worker B: everything before the suspension happens-before everything after the resumption. The runtime guarantees this edge; user code never names it, but **without it no ordering argument holds under work-stealing at all** |
+| 13 | `select` | The selected arm establishes the edge of its channel operation (edges 1 / 2 / 3) |
+
+#### 16.9.3 Non-edges (exhaustively denied)
+
+The following establish **no** happens-before and must not be used to synchronise:
+
+- `Coro.yield()`: a scheduling yield point, not a synchronisation point.
+- `codegen.compilerFence()`: it only prevents memory-effecting operations from moving across that compiler scheduling point. It is not a CPU fence, establishes no happens-before, and cannot repair a data race (see §12).
+- Atomic operations with `Ordering.Relaxed`: they keep that location's accesses from tearing; they order nothing with respect to other locations.
+- Object reclamation, an RC reaching zero, or a cycle-collector run: reclamation timing is not observable semantics (§16.8), so it cannot carry an ordering relation.
+- The sysmon heartbeat and the `XRAY_SYSMON_CANCEL_MS` cancellation flag.
+- Time: neither `time.sleep` nor any timeout expiry establishes ordering.
+
+#### 16.9.4 Reference-count promotion rules
+
+Ordinary local objects use **coroutine-local, non-atomic RC** (§16.3). Once an object can be reached by two agents, its reference count **must** already have been promoted to atomic RC; otherwise concurrent retain/release is a data race whose consequence is heap corruption.
+
+The promotion points are exhaustive, and each applies to the reachable graph **deeply** (the object and every managed member reachable from it):
+
+| Promotion point | Notes |
+|---|---|
+| The value of a Channel `send` | Including a `move` send; the value stays atomically counted after the receiver takes exclusive ownership |
+| `go` / `scope` arguments and capture-plan members | Determined statically by the capture plan |
+| Task / scope result values | Delivered through edge 5 / edge 6 |
+| The reachable graph of a `const` publish / seal | Promoted once; the graph is deeply read-only afterwards |
+| Everything reachable across a `sys.Thread` boundary or from a `CFn` callback | See §16.9.5: that channel is currently outside the safe subset |
+
+`string` promotion is described separately in §16.1 (short strings are coroutine-local, promoted to shared atomic RC on demand when they cross a boundary). That is this same rule instantiated for `XrString`, not an exception to it.
+
+#### 16.9.5 The data-race-freedom guarantee and its boundary
+
+**Theorem (DRF for the safe subset)**: a program containing no `unsafe` block and using none of the escape hatches below has no data race, and its behaviour is equivalent to some sequentially consistent interleaving. That is SC-DRF: inside the safe subset you may reason in terms of interleaved statements and never need the happens-before detail in this section.
+
+**Escape hatches (exhaustive)**: the following capabilities can introduce a data race. Their consequences are **implementation-defined and may include memory corruption**; the proof obligation is the user's:
+
+- Any raw memory access inside an `unsafe` block
+- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without passing through capture-plan checking)
+- `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
+- The body of a `sys.Thread`
+- The body of a `CFn` C callback (which may be invoked on any thread)
+
+> This is the **precise form** of the claim that xray eliminates data races at compile time: a theorem with a stated boundary, not an unconditional assertion. Shrinking the escape-hatch list is a goal of the language's evolution, and each shrink must come with the mechanism that brings that capability inside the guarantee.
+
+#### 16.9.6 Obligations on the compiler
+
+A synchronisation edge is not only a runtime promise; it also constrains optimisation. The `:sync` column of `xisa/xi/ops.def` declares the edge each Xi operation establishes (`none` / `acquire` / `release` / `acq-rel` / `seq-cst`). Where the edge's strength is chosen at run time by an `Ordering` argument, the declaration is the **strongest** edge that operation can carry — a fail-closed upper bound.
+
+From this follows one hard rule for every pass: **alias disjointness is not a licence to reorder**. Two memory operations must not be moved across an operation that carries a `:sync` edge or that may suspend, even when TBAA proves them disjoint. `xi_op_is_ordering_barrier()` is the single answer to that question, and `contracts/memory-model.md` freezes it.
 
 ---
 

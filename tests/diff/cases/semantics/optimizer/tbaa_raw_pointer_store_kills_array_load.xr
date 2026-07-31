@@ -1,0 +1,26 @@
+// anchor: tbaa-raw-store-kills-array-load
+// A raw-pointer store aliases the array it addresses. TBAA must classify
+// xi.ptr.store as a top-level clobber so LICM cannot hoist the arr[0] load out
+// of the loop; a TBAA group of `none` would answer "provably no alias" and the
+// loop would read the pre-loop value four times.
+// Requires Xi -O2 (LICM is XI_OPT_FULL); the backend_diff_optimized lane.
+import mem
+
+fn run() {
+    var arr = Array<u8>(8)
+    arr[0] = 1
+    var sum = 0
+    var i = 0
+    var p = unsafe { arr.mutPtr() }
+    unsafe {
+        while (i < 4) {
+            mem.store<u8>(p, 0, (i + 100) as u8)
+            sum = sum + (arr[0] as int)
+            i = i + 1
+        }
+    }
+    print(sum)
+    print(arr[0] as int)
+}
+
+run()

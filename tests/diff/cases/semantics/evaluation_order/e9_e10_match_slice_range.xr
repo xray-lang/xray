@@ -1,0 +1,36 @@
+// anchor: eval-order-match-slice-range
+// §3.0 E9: the scrutinee is evaluated once, before any arm; guards only after
+// their pattern matches.
+// §3.0 E10: a[lo:hi] evaluates a -> lo -> hi; lo..hi evaluates lo -> hi.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn tb(tag: string, v: bool) -> bool { print(tag); return v }
+
+fn main() {
+    print("-- match scrutinee once --")
+    match (t("scrutinee", 2)) {
+        1 -> print("one")
+        2 -> print("two")
+        _ -> print("other")
+    }
+
+    print("-- guard runs only for a matching pattern --")
+    match (t("scrutinee", 1)) {
+        1 if (tb("guard-1", false)) -> print("one-guarded")
+        1 if (tb("guard-2", true)) -> print("one-fallback")
+        _ -> print("other")
+    }
+
+    print("-- range endpoints --")
+    var total = 0
+    for (i in t("lo", 0)..t("hi", 3)) {
+        total = total + i
+    }
+    print(total)
+
+    print("-- slice bounds --")
+    var arr = [1, 2, 3, 4]
+    var view: Slice<int> = arr[t("slice-lo", 1):t("slice-hi", 3)]
+    print(len(view))
+}
+
+main()

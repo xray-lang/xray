@@ -2911,6 +2911,46 @@ if(BUILD_TESTS)
         )
     endforeach()
 
+    # Reordering regressions are invisible at the default -O0 differential
+    # level: LICM, GVN-PRE and the rest of the Xi middle end only run from
+    # XI_OPT_FULL (-O2). These cases exist to catch code motion, so they get
+    # their own lane at the level where code motion happens.
+    add_test(
+        NAME backend_diff_optimized
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/optimizer_cases.txt
+                XRAY_DIFF_EXTRA_CASES_FILE=
+                XRAY_AOT_TEST_OPT=2
+                XRAY_DIFF_MAX_AUTO_JOBS=4
+                ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(backend_diff_optimized PROPERTIES
+        LABELS "diff;cross;backend;optimizer;memory-model"
+        PROCESSORS 2
+        TIMEOUT 600
+    )
+
+    # Memory-model litmus tests (spec §16.9). Same reasoning as above: the VM
+    # does not reorder, so the AOT -O2 lane is the one under test and the VM
+    # lane is the control.
+    add_test(
+        NAME concurrency_litmus
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_LITMUS_OPT=2
+                ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency_litmus/run_litmus.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(concurrency_litmus PROPERTIES
+        LABELS "concurrency;memory-model;litmus"
+        PROCESSORS 4
+        TIMEOUT 1800
+    )
+
     add_test(
         NAME backend_diff_deterministic
         COMMAND ${CMAKE_COMMAND} -E env

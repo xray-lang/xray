@@ -1,0 +1,19 @@
+// anchor: eval-order-interpolation
+// §3.0 E8: interpolated fragments are evaluated left to right.
+fn ts(tag: string, v: string) -> string { print(tag); return v }
+fn t(tag: string, v: int) -> int { print(tag); return v }
+
+fn main() {
+    print("-- two fragments --")
+    var a = ts("frag1", "x")
+    var b = ts("frag2", "y")
+    print("${a}-${b}")
+
+    print("-- inline fragments --")
+    print("${ts("inline1", "p")}/${ts("inline2", "q")}")
+
+    print("-- expression fragments --")
+    print("sum=${t("num1", 1) + t("num2", 2)}")
+}
+
+main()

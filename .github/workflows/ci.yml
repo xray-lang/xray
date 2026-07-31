@@ -15,6 +15,15 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Everything named here is skipped on PR CI. Adding a name is a decision to
+  # stop testing something, so it needs a reason recorded next to it.
+  #
+  # The cross-backend differential lanes (backend_diff, backend_diff_optimized,
+  # backend_diff_deterministic, task190_*_backend_diff) are deliberately NOT in
+  # these lists. They are the project's only check that one .xr program means
+  # the same thing under the VM and under AOT, which for a two-backend language
+  # is the correctness net; excluding them left it running only in a nightly
+  # lane marked continue-on-error, i.e. not running at all.
   XRAY_CI_RELEASE09_EXTRA_EXCLUDE_RE: '^(test_vm_exception|sys_thread_vm|stdlib_embedded_layout|parallel_plan_vm_scaling_gate|http_static_route_full_parse|test_stdlib_boundary_manifest|stdlib_migration_contracts|stdlib_self_hosting_consistency|binary_stdlib_surface_inventory|binary_public_native_readiness|query_surface_residue|string_surface_residue|byte_array_aot_c90_hotpath|aot_freestanding_allowlist|aot_freestanding_provider_abi|aot_manifest_sweep|aot_isolate_symbol_gate|install_public_surface)$'
   # aot_filetests was removed from this list on 2026-07-30: it is the only driver
   # for the 104 `xray verify` contract cases and it now gates every passing case
@@ -303,7 +312,10 @@ jobs:
     - name: Run unit tests with ${{ matrix.sanitizer.name }}
       run: |
         cd build
-        ctest --output-on-failure --timeout 120 \
+        # No blanket --timeout: each test carries the TIMEOUT its shape needs
+        # in CMakeLists.txt, and a flat 120s here silently overrode them. The
+        # cross-backend differential lanes are minutes-long by construction.
+        ctest --output-on-failure \
               --exclude-regex "$XRAY_CI_CORE_CTEST_EXCLUDE_RE"
       env:
         # Leak detection disabled: unit tests don't fully tear down

@@ -4,6 +4,7 @@
  */
 
 #include "../../../src/ir/xi_opt_licm.h"
+#include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi.h"
@@ -613,6 +614,121 @@ TEST(no_hoist_load_with_store_dep) {
     xi_func_free(f);
 }
 
+/* ========== Ordering barriers and unclassified memory ==========
+ *
+ * These cover the two ways a load can be unsafe to hoist for reasons TBAA
+ * group disjointness does not express.  Each builds the same loop shape as
+ * hoist_disjoint_load (which DOES hoist) and only changes the blocking op, so
+ * a regression shows up as the load moving to the preheader.
+ */
+
+/* Builds preheader/header/body/exit, puts a STRUCT-group load in the body
+ * alongside `blocker`, runs LICM, and reports whether the load was hoisted.
+ * `blocker` is created in the body by the caller's callback. */
+typedef void (*BlockerFn)(XiFunc *f, XiBlock *body, XiValue *operand);
+
+/* Defined with the alias-lattice tests below. */
+static bool check_hoist(uint8_t read_group, uint8_t write_group);
+
+static bool load_hoists_past(BlockerFn make_blocker) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+
+    entry->kind = XI_BLOCK_PLAIN;
+    wire(entry, header, 0);
+
+    header->kind = XI_BLOCK_IF;
+    wire(header, body, 0);
+    wire(header, exit_blk, 1);
+
+    body->kind = XI_BLOCK_PLAIN;
+    wire(body, header, 0);
+
+    exit_blk->kind = XI_BLOCK_RETURN;
+
+    XiValue *obj = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+
+    XiValue *cond = xi_value_new(f, header, XI_CONST, &stub_int, 0);
+    cond->aux_int = 1;
+    header->control = cond;
+
+    XiValue *load = xi_value_new(f, body, XI_AGG_GET, &stub_int, 1);
+    load->args[0] = obj;
+    load->mem_group = XI_MEM_STRUCT;
+    load->flags = XI_FLAG_READS_MEM;
+
+    make_blocker(f, body, obj);
+
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    xi_opt_licm(f);
+
+    bool hoisted = false;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        if (entry->values[i] == load)
+            hoisted = true;
+    }
+    xi_func_free(f);
+    return hoisted;
+}
+
+static void blocker_ptr_store(XiFunc *f, XiBlock *body, XiValue *operand) {
+    XiValue *store = xi_value_new(f, body, XI_PTR_STORE, &stub_unit, 3);
+    store->args[0] = operand;
+    store->args[1] = operand;
+    store->args[2] = operand;
+    xi_tbaa_annotate_value(store);
+    store->flags = xi_generated_op_default_flags(XI_PTR_STORE);
+}
+
+static void blocker_atomic_load(XiFunc *f, XiBlock *body, XiValue *operand) {
+    XiValue *ld = xi_value_new(f, body, XI_ATOMIC_LOAD, &stub_int, 1);
+    ld->args[0] = operand;
+    xi_tbaa_annotate_value(ld);
+    ld->flags = xi_generated_op_default_flags(XI_ATOMIC_LOAD);
+}
+
+static void blocker_chan_recv(XiFunc *f, XiBlock *body, XiValue *operand) {
+    XiValue *recv = xi_value_new(f, body, XI_CHAN_RECV, &stub_int, 1);
+    recv->args[0] = operand;
+    xi_tbaa_annotate_value(recv);
+    recv->flags = xi_generated_op_default_flags(XI_CHAN_RECV);
+}
+
+/* A raw-pointer store may address any object, so it clobbers every group.
+ * With xi.ptr.store carrying TBAA `none` this hoisted, and the loop read the
+ * pre-loop value on every iteration. */
+TEST(no_hoist_load_across_raw_pointer_store) {
+    ASSERT(xi_is_memory_clobber(XI_PTR_STORE));
+    ASSERT(!load_hoists_past(blocker_ptr_store));
+}
+
+/* An atomic load is an acquire edge: later memory operations must not move
+ * above it. It writes nothing, so no aliasing rule can express this — only
+ * the :sync column does. */
+TEST(no_hoist_load_across_sync_barrier) {
+    ASSERT(!xi_is_memory_clobber(XI_ATOMIC_LOAD));
+    ASSERT(xi_op_is_ordering_barrier(XI_ATOMIC_LOAD));
+    ASSERT(!load_hoists_past(blocker_atomic_load));
+}
+
+/* A channel receive suspends: another task may run before it resumes and
+ * mutate any reachable state. Its TBAA group (CHAN) is disjoint from the
+ * load's (STRUCT), so disjointness alone would license the hoist. */
+TEST(no_hoist_load_across_suspension) {
+    /* Same group pair with an ordinary store does hoist — the difference is
+     * the barrier, not the alias lattice. */
+    ASSERT(check_hoist(XI_MEM_STRUCT, XI_MEM_CHAN));
+    ASSERT(xi_op_is_ordering_barrier(XI_CHAN_RECV));
+    ASSERT(!load_hoists_past(blocker_chan_recv));
+}
+
 /* ========== Test: no loop — no change ========== */
 
 TEST(no_loop_no_change) {
@@ -823,6 +939,9 @@ int main(void) {
     run_no_hoist_aliasing_load();
     run_no_hoist_inner_operand();
     run_no_hoist_load_with_store_dep();
+    run_no_hoist_load_across_raw_pointer_store();
+    run_no_hoist_load_across_sync_barrier();
+    run_no_hoist_load_across_suspension();
     run_no_loop_no_change();
     run_no_hoist_call();
 

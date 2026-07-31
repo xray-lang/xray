@@ -9880,6 +9880,24 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
     if (!l->cur_block)
         return NULL; /* dead code after return/break */
 
+    /* Canonicalizer value block: `{ var __t = recv; <expr using __t> }`.  The
+     * canonicalizer emits this when a place expression must be evaluated
+     * exactly once (spec §3.0 E6) and the receiver is not simple.  Every
+     * statement but the last is lowered as a statement; the last one produces
+     * the block's value.  Only canonicalizer-generated blocks are values, so a
+     * user block reaching expression position still falls to the switch and is
+     * reported as the compiler bug it is. */
+    if (node->type == AST_BLOCK && node->as.block.is_canon_value_block) {
+        int count = node->as.block.count;
+        XR_DCHECK(count > 0, "canon value block must have a value statement");
+        for (int i = 0; i + 1 < count; i++) {
+            xi_lower_stmt(l, node->as.block.statements[i]);
+            if (!l->cur_block)
+                return NULL;
+        }
+        return xi_lower_expr(l, node->as.block.statements[count - 1]);
+    }
+
     switch (node->type) {
         /* Literals */
         case AST_LITERAL_INT:

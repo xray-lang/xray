@@ -1,0 +1,42 @@
+// Message passing through a release/acquire atomic flag.
+//
+// §16.9.2 edge 8: store(v, Release) synchronizes-with the load(Acquire) that
+// reads v. The producer's Relaxed write to `data` is sequenced before its
+// Release store to `flag`, so a consumer that acquires `flag` must see it.
+//
+// Forbidden outcome: flag observed true while data still reads 0.
+//
+// This is also the shape that catches an optimiser that treats alias
+// disjointness as a licence to reorder (§16.9.6): hoisting the `data` load
+// above the acquire loop would produce exactly this forbidden result.
+
+const ITERATIONS = 4000
+
+fn producer(data: Atomic<int>, flag: Atomic<bool>) {
+    data.store(42, Ordering.Relaxed)
+    flag.store(true, Ordering.Release)
+}
+
+fn consumer(data: Atomic<int>, flag: Atomic<bool>) -> int {
+    while (!flag.load(Ordering.Acquire)) {
+        Coro.yield()
+    }
+    return data.load(Ordering.Relaxed)
+}
+
+fn main() {
+    var forbidden = 0
+    for (i in 0..ITERATIONS) {
+        const data = Atomic(0)
+        const flag = Atomic(false)
+        var c = go consumer(data, flag)
+        var p = go producer(data, flag)
+        await p
+        if (await c != 42) {
+            forbidden = forbidden + 1
+        }
+    }
+    print("mp_atomic_flag forbidden=${forbidden}")
+}
+
+main()

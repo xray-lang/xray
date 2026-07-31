@@ -1,0 +1,33 @@
+// Store buffering.
+//
+// §16.9.2 edge 8: SeqCst operations participate in one single total order.
+// Each agent stores 1 to its own flag, then reads the other's. Under that
+// total order at least one agent must observe the other's store.
+//
+// Forbidden outcome: both agents read 0. That is the classic store-buffering
+// relaxation, allowed by hardware and by weaker orderings but not by SeqCst.
+
+const ITERATIONS = 6000
+
+fn side(mine: Atomic<int>, theirs: Atomic<int>) -> int {
+    mine.store(1, Ordering.SeqCst)
+    return theirs.load(Ordering.SeqCst)
+}
+
+fn main() {
+    var forbidden = 0
+    for (i in 0..ITERATIONS) {
+        const x = Atomic(0)
+        const y = Atomic(0)
+        var a = go side(x, y)
+        var b = go side(y, x)
+        var ra = await a
+        var rb = await b
+        if (ra == 0 && rb == 0) {
+            forbidden = forbidden + 1
+        }
+    }
+    print("sb_store_buffering forbidden=${forbidden}")
+}
+
+main()

@@ -1,0 +1,37 @@
+// anchor: eval-order-literals
+// §3.0 E7: literal elements in source order; key before value in each
+// Map/object entry; a spread is evaluated in place.
+fn t(tag: string, v: int) -> int { print(tag); return v }
+fn ts(tag: string, v: string) -> string { print(tag); return v }
+fn three(a: int, b: int, c: int) -> int { return a + b + c }
+
+fn main() {
+    print("-- array --")
+    var arr = [t("e1", 1), t("e2", 2), t("e3", 3)]
+    print(len(arr))
+
+    print("-- set --")
+    var s = #[t("s1", 1), t("s2", 2)]
+    print(len(s))
+
+    print("-- map: key before value --")
+    var m = #{ts("k1", "a"): t("v1", 1), ts("k2", "b"): t("v2", 2)}
+    print(len(m))
+
+    print("-- object literal --")
+    var o = {first: t("o1", 1), second: t("o2", 2)}
+    print(o.first)
+
+    print("-- tuple --")
+    var tup = (t("t1", 1), t("t2", 2))
+    print(tup.0)
+
+    print("-- spread in place --")
+    print(three(t("head", 1), ...(t("p1", 2), t("p2", 3))))
+
+    print("-- nested literal --")
+    var nested = [t("n1", 1), [t("n2", 2), t("n3", 3)][0]]
+    print(len(nested))
+}
+
+main()

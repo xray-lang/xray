@@ -161,6 +161,13 @@ typedef struct BlockNode {
     /* Set on the wrapper block `defer f(a, b)` desugars into: it isolates the
      * argument temporaries without becoming a defer scope of its own. */
     bool is_synthetic_defer_capture;
+    /* Canonicalizer value block: `{ var __t = recv; <expr using __t> }`,
+     * produced when a place expression must be evaluated exactly once
+     * (spec §3.0 E5/E6).  It is an expression, not a user scope: its last
+     * statement produces the block's value and it declares no defer scope.
+     * A user-written block never carries this, so an unflagged AST_BLOCK in
+     * expression position stays a compiler bug. */
+    bool is_canon_value_block;
 } BlockNode;
 
 #endif  // XAST_NODES_COMMON_H

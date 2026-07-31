@@ -1,0 +1,19 @@
+-- flat --
+L
+R
+3
+-- nested --
+outer-l
+inner-l
+inner-r
+7
+-- both sides nested --
+ll
+lr
+rl
+rr
+1
+-- comparison chain --
+cmp-l
+cmp-r
+true

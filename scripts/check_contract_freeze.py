@@ -96,6 +96,21 @@ CONTRACT_SPECS = (
             "stdlib/simd/simd.xr",
         ),
     ),
+    ContractSpec(
+        "memory-model.md",
+        (
+            "xisa/xi/ops.def",
+            "src/ir/xi_tbaa.c",
+            "src/ir/xi_tbaa.h",
+            "src/ir/xi_opt_licm.c",
+            "src/ir/xi_opt_gvn_pre.c",
+            "src/ir/xi_memssa.c",
+            "src/coro/xchannel.c",
+            "src/coro/xtask.c",
+            "src/coro/xtask_await.c",
+            "src/frontend/canonical/xcanon.c",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

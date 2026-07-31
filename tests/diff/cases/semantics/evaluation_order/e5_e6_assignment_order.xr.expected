@@ -1,0 +1,23 @@
+-- index assign: index then value --
+index
+value
+5
+-- complex array expression --
+arrexpr
+index
+value
+-- member assign --
+value
+3
+-- compound, simple receiver --
+delta
+7
+-- compound, complex receiver evaluated once --
+receiver
+delta
+-- increment is compound assignment --
+0
+-- chained assignment is right associative --
+chain
+9
+9

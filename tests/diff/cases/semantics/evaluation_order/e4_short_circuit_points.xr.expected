@@ -1,0 +1,25 @@
+-- && skips right --
+and-l
+false
+-- && evaluates right --
+and-l
+and-r
+false
+-- || skips right --
+or-l
+true
+-- ?? skips right --
+nc-l
+set
+-- ?? evaluates right --
+nc-l
+nc-r
+fallback
+-- ternary picks one branch --
+cond
+then
+1
+-- bitwise ops do NOT short circuit --
+bit-l
+bit-r
+0
