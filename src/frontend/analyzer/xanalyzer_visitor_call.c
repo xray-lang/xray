@@ -5481,6 +5481,89 @@ static XrType *xa_contextualize_generic_call_param(XaInferContext *ctx, XaSymbol
     return result ? result : param_type;
 }
 
+// Does one declared constraint on a type parameter already imply `required`?
+// Reuses the runtime checker with the *constraint* as the candidate type, so
+// identical interfaces, interface inheritance, class upper bounds and the
+// universally-satisfied interfaces (Stringable / Equatable) all resolve there.
+static bool xa_constraint_implies(XrType *have, XrType *required) {
+    if (!required)
+        return true;
+    if (!have)
+        return false;
+    return xr_type_satisfies_constraint(have, required);
+}
+
+// Look for `name` in one declaration's type-parameter list. Sets `*out_found`
+// when the declaration owns that parameter, so callers can stop the scope walk
+// at the innermost binder instead of letting an outer `T` shadow back in.
+static bool xa_type_param_link_implies(XaSymbolLinks *links, const char *name, XrType *required,
+                                       bool *out_found) {
+    if (out_found)
+        *out_found = false;
+    if (!links || !name)
+        return false;
+    int count = xa_symbol_links_get_type_param_count(links);
+    for (int i = 0; i < count; i++) {
+        const char *param_name = xa_symbol_links_get_type_param_name(links, i);
+        if (!param_name || strcmp(param_name, name) != 0)
+            continue;
+        if (out_found)
+            *out_found = true;
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
+        for (int j = 0; j < constraint_count; j++) {
+            if (xa_constraint_implies(constraints ? constraints[j] : NULL, required))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+// Constraint entailment for a type parameter forwarded as a type argument.
+//
+// A type parameter's constraints live on the enclosing declaration's
+// XaSymbolLinks, not on the XrType, so xr_type_satisfies_constraint() only ever
+// sees a bare XR_KIND_TYPE_PARAM and has nothing to match. Resolve it here:
+// walk out to the function or class that introduced `name` and accept when one
+// of its own constraints implies `required`.
+static bool xa_type_param_entails_constraint(XaInferContext *ctx, const char *name,
+                                             XrType *required) {
+    if (!ctx || !ctx->analyzer || !name)
+        return false;
+    for (XaScope *scope = ctx->analyzer->current_scope; scope; scope = scope->parent) {
+        bool found = false;
+        if (scope->function_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->function_symbol);
+            if (xa_type_param_link_implies(links, name, required, &found))
+                return true;
+            if (found)
+                return false;
+        }
+        if (scope->class_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->class_symbol);
+            if (xa_type_param_link_implies(links, name, required, &found))
+                return true;
+            if (found)
+                return false;
+        }
+    }
+    return false;
+}
+
+// Constraint check for a generic call's type argument.  Same contract as
+// xr_type_satisfies_constraint(), plus the analyzer-only entailment path that
+// lets a constrained type parameter be forwarded into another generic.
+static bool xa_type_arg_satisfies_constraint(XaInferContext *ctx, XrType *type_arg,
+                                             XrType *constraint) {
+    if (xr_type_satisfies_constraint(type_arg, constraint))
+        return true;
+    if (type_arg && type_arg->kind == XR_KIND_TYPE_PARAM)
+        return xa_type_param_entails_constraint(ctx, type_arg->type_param.name, constraint);
+    return false;
+}
+
 // Name the callee for a diagnostic. Deliberately reports only the written
 // name, never "function" or "method": one call site here may be a plain
 // function, a static method, an instance method, or a module member, and the
@@ -5537,7 +5620,7 @@ static void xa_check_explicit_type_args(XaInferContext *ctx, AstNode *node, Call
 
         for (int j = 0; j < constraint_count; j++) {
             XrType *constraint = constraints[j];
-            if (constraint && !xr_type_satisfies_constraint(type_arg, constraint)) {
+            if (constraint && !xa_type_arg_satisfies_constraint(ctx, type_arg, constraint)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 const char *param_name = xa_symbol_links_get_type_param_name(links, i);
@@ -5591,7 +5674,7 @@ static void xa_check_inferred_type_arg_constraints(XaInferContext *ctx, AstNode 
             continue;
         for (int j = 0; j < constraint_count; j++) {
             XrType *constraint = constraints[j];
-            if (constraint && !xr_type_satisfies_constraint(inferred, constraint)) {
+            if (constraint && !xa_type_arg_satisfies_constraint(ctx, inferred, constraint)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];

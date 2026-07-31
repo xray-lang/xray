@@ -1,0 +1,19 @@
+// Same rule as 143, but forwarding into a *method's* own generic constraint.
+// A method's `<U: C>` reaches the same shared call-site check as a plain fn,
+// so a type parameter that does not carry C must still be rejected there.
+//
+// Positive coverage: tests/regression/12_type_checking/1251_generic_constraint_forwarding.xr
+
+class Forwarder {
+    constructor() {}
+
+    pick<U: Hashable>(y: U) -> U {
+        return y
+    }
+}
+
+fn outerC<T: Comparable>(x: T) -> T {
+    return Forwarder().pick(x)
+}
+
+print(outerC(3))
