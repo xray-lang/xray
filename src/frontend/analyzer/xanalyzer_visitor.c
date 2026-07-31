@@ -2766,6 +2766,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
 
     XrClassInfo *info = xa_class_info_new(cls->name);
     info->explicit_final = cls->explicit_final;
+    info->is_overlay_union = is_union_decl;
     info->location =
         (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
     if (cls->super_name)

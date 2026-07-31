@@ -4114,6 +4114,27 @@ static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node
         }
     }
 
+    /* A union's fields overlay one another, so "set every field" is not a
+     * completeness rule but a contradiction: the writes would land on the same
+     * storage and only the last would survive. Exactly one member is live, so
+     * the literal names exactly one -- naming none leaves which member is live
+     * undefined, and naming several says the value is two things at once. */
+    if (class_info->is_overlay_union) {
+        int named = 0;
+        for (int i = 0; i < sl->field_count; i++)
+            if (sl->field_names[i])
+                named++;
+        if (named != 1) {
+            char msg[224];
+            snprintf(msg, sizeof(msg),
+                     "literal for union '%s' sets %d members; a union literal must set exactly "
+                     "one, because its members share one storage location",
+                     label, named);
+            xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_MISSING_FIELD, msg);
+        }
+        return;
+    }
+
     for (XrClassInfo *info = class_info; info; info = info->base) {
         for (int i = 0; i < info->field_count; i++) {
             XaSymbol *field = info->fields[i];

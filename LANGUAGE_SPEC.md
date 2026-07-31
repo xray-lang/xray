@@ -3001,6 +3001,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
 ```xray
 struct Config {

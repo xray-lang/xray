@@ -681,6 +681,7 @@ b.x = 99.0
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+- **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
 ```xray
 struct Config {
@@ -1799,6 +1800,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
 ```xray
 struct Config {

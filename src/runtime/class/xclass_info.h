@@ -86,6 +86,11 @@ struct XrClassInfo {
     uint32_t capability_flags;  // compiler-owned XaTypeCapability proof bits
     // Struct layout (VALUE_TYPE only, computed by analyzer)
     struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
+    // Declared with `union`, so the fields overlay one another instead of
+    // sitting side by side. A struct and a union are both value types with the
+    // same member shape, so nothing else here distinguishes them -- and the
+    // rules that count fields differ: exactly one union member is live.
+    bool is_overlay_union;
 
     // Implemented interfaces (populated from 'implements' clause).
     // Each entry is a fully resolved XrType*: built-in interfaces become

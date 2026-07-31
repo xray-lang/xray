@@ -49,12 +49,14 @@ tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
 tests/diff/cases/semantics/stdlib/sys_process_direct.xr
 
 # --- Group 3: union overlay literals -----------------------------------------
-# "literal for type 'U32Bytes' is missing field 'b'" — a union literal is
-# rejected for not initialising every member, but a union's whole purpose is
-# that exactly one member is live. Both backends fail here (vm=1, aot=200), so
-# this is a front-end rule that contradicts the feature, not a backend gap.
-tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
-tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
+# Cleared 2026-07-31. The aggregate-literal completeness check counted a union's
+# fields the way it counts a struct's, so a literal was rejected for not setting
+# every member — writes that would have landed on the same storage, where only
+# the last could survive. A union literal now sets exactly one member: naming
+# none leaves which member is live undefined, naming several says the value is
+# two things at once. XrClassInfo.is_overlay_union carries the distinction,
+# which nothing recorded before: a struct and a union were both just value types
+# with the same member shape.
 
 # --- Group 4: AOT crash ------------------------------------------------------
 # Cleared 2026-07-31. nested_generator.xr died on signal 5 (heap-use-after-free
