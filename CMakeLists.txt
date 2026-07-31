@@ -2241,9 +2241,15 @@ if(BUILD_TESTS)
             COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
+        # COST drives ctest's launch order (highest first). On a fresh checkout
+        # with no CTestCostData.txt yet, this is the only signal ctest has, so
+        # pin the known-heavy lanes to their measured wall times to keep them
+        # from being scheduled last and running alone at the tail. asan_focused
+        # is RUN_SERIAL and the single longest lane — it must start first.
         set_tests_properties(asan_focused PROPERTIES
             LABELS "sanitizer;asan;ubsan;task-218"
             RUN_SERIAL TRUE
+            COST 700
             TIMEOUT 2400
         )
 
@@ -2472,10 +2478,12 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # See the asan_focused COST note. Measured ~119s.
     set_tests_properties(aot_incremental_cache PROPERTIES
         LABELS "aot;cache;smoke"
         PROCESSORS ${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
         SKIP_RETURN_CODE 77
+        COST 120
         TIMEOUT 120
     )
 
@@ -2919,9 +2927,12 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # See the asan_focused COST note: pin heavy lanes so a cold run schedules
+    # them first. Measured ~228s.
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
         PROCESSORS ${XRAY_CTEST_DIFF_PROCESSORS}
+        COST 230
         TIMEOUT 900
     )
 
@@ -3041,9 +3052,11 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # See the asan_focused COST note. Measured ~196s.
     set_tests_properties(aot_standalone_suite PROPERTIES
         LABELS "aot;standalone;tombstone;task-220"
         PROCESSORS 4
+        COST 200
         TIMEOUT 600
     )
 
