@@ -3020,6 +3020,37 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 249 — RC reclamation gates. probe0 asserts that a local class
+    # instance is reclaimed by plain RC (it was not: every `var x = Class(...)`
+    # leaked); probe4 asserts runtime.liveBytes() is live bytes rather than
+    # cumulative allocation. Both are resident gates, not diagnostics: without
+    # them a regression here is invisible until someone measures RSS by hand.
+    #
+    # The remaining probes in tests/probes/rc/ are diagnostic assets driven by
+    # run_probes.sh and are deliberately NOT registered — probe1 stays red
+    # until task 247 phase A fixes the Map-field marking gap it measures.
+    add_test(
+        NAME rc_probe_gate_baseline
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe0_gate_rc_baseline.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_gate_baseline PROPERTIES
+        LABELS "regression;rc;vm;task-249"
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME rc_probe_heap_accounting
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe4_heap_accounting_fidelity.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_heap_accounting PROPERTIES
+        LABELS "regression;rc;vm;task-249"
+        TIMEOUT 120
+    )
+
     # ========================================================================
     # Task 220 — Verification asset governance gates (appended registrations)
     # Design: xray-docs/tasks/220-semantic-contract-freeze-and-verification-
