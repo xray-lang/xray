@@ -23,7 +23,6 @@
 0380_optional_chain.xr
 0661_json_object_field_boundary.xr
 0731_string_byte_rune_surface.xr
-0802_cycle_collection_destroy.xr
 0830_getter_setter.xr
 0835_this_in_closure.xr
 0851_interface_generic_property.xr
