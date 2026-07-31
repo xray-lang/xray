@@ -266,9 +266,8 @@ select {
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
-ScopeStmt           ::= 'scope' Block
-LinkedScopeStmt     ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
-SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // 等待所有子协程；语句形式
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
 ```
 
 ```xray @id=coro-scope
@@ -288,17 +287,16 @@ scope {
 }
 ```
 
-**三种 scope 变体**：
+**两种 scope 变体**：
 
 | 形式 | 子协程抛异常时的行为 | 返回值 |
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | 等待所有子协程完成；子协程之间互不影响 | 无（语句形式） |
 
-`supervisor scope` 会等待块内所有 `go` 子协程完成，但不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；把 `supervisor scope` 当表达式使用会被编译器拒绝。
+两种形式都不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；需要按结果聚合时用 `await all` / `await any` / `await anySuccess`。
 
-```xray @id=coro-linked-supervisor-scope
+```xray @id=coro-linked-scope
 // linked scope：失败传播
 try {
     linked scope {
@@ -309,11 +307,11 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：保留 task handle，块退出后逐个观察 outcome
+// scope：保留 task handle，块退出后逐个观察 outcome
 var first: Task<int>?
 var second: Task<int>?
 var third: Task<int>?
-supervisor scope {
+scope {
     first = go failing("error1")
     second = go failing("error2")
     third = go ok()
@@ -324,7 +322,8 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 
 **通用语义**：
 - `scope` 不是函数调用，也不需要 import；是关键字块语句。
-- 三种形式都在块退出前等待所有 `go` 启动的子协程完成。
+- 两种形式都在块退出前等待所有 `go` 启动的子协程完成。
+- 两种形式都只能作为语句出现，不能用在表达式位置。
 
 ### 10.8 `move` — 跨协程所有权转移
 
@@ -723,9 +722,8 @@ select {
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
-ScopeStmt           ::= 'scope' Block
-LinkedScopeStmt     ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
-SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // wait for all children; statement form
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
 ```
 
 ```xray @id=coro-scope
@@ -745,17 +743,16 @@ scope {
 }
 ```
 
-**Three scope variants**:
+**Two scope variants**:
 
 | Form | Behaviour when a child coroutine throws | Return value |
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | Waits for every child coroutine to finish; siblings do not affect each other | none (statement form) |
 
-`supervisor scope` waits for all child coroutines started by `go` inside the block, but it does not return an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; using `supervisor scope` as an expression is rejected by the compiler.
+Neither form returns an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; to aggregate by result, use `await all` / `await any` / `await anySuccess`.
 
-```xray @id=coro-linked-supervisor-scope
+```xray @id=coro-linked-scope
 // linked scope: failure propagation
 try {
     linked scope {
@@ -766,11 +763,11 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: keep task handles and inspect each outcome after the block
+// scope: keep task handles and inspect each outcome after the block
 var first: Task<int>?
 var second: Task<int>?
 var third: Task<int>?
-supervisor scope {
+scope {
     first = go failing("error1")
     second = go failing("error2")
     third = go ok()
@@ -781,7 +778,8 @@ print(len(outcomes))                 // 3 (one outcome per child)
 
 **General semantics**:
 - `scope` is not a function call and does not require an import; it is a keyword block statement.
-- All three forms await every coroutine started by `go` inside the block before exiting.
+- Both forms await every coroutine started by `go` inside the block before exiting.
+- Both forms are statements only; neither may appear in an expression position.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 

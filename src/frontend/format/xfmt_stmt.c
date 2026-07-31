@@ -488,8 +488,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             ScopeBlockNode *sb = &node->as.scope_block;
             if (sb->scope_mode == XR_SCOPE_LINKED)
                 xfmt_write_str(ctx, "linked ");
-            else if (sb->scope_mode == XR_SCOPE_SUPERVISOR)
-                xfmt_write_str(ctx, "supervisor ");
             xfmt_write_str(ctx, "scope ");
             xfmt_emit_block(ctx, sb->body);
             xfmt_write_newline(ctx);

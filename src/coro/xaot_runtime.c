@@ -809,7 +809,7 @@ bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime) {
     atomic_init(&scope->cancel_requested, false);
     atomic_init(&scope->child_lock, false);
     /* Root descriptor waits for top-level children without changing ordinary
-     * `go` error isolation. Explicit linked/supervisor scopes carry policy. */
+     * `go` error isolation. Only an explicit `linked scope` carries policy. */
     scope->mode = XR_SCOPE_WAIT;
     scope->first_error = XR_NULL_VAL;
     root = xr_coro_create_aot(runtime, &AOT_ROOT_DESCRIPTOR, scope, "root-descriptor");

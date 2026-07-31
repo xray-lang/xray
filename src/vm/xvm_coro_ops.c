@@ -714,8 +714,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
             atomic_fetch_add_explicit(&_scope->count, 1, memory_order_relaxed);
 
             // In linked scope, auto-link children for error propagation.
-            // Supervisor scope children stay XR_LINK_NONE — errors are collected
-            // by the scope itself, no per-child propagation needed.
+            // Plain `scope` children stay XR_LINK_NONE — it is a wait barrier
+            // only, so a failing child must not touch its siblings.
             if (link_mode == XR_LINK_NONE && _scope->mode == XR_SCOPE_LINKED) {
                 task_link_mode = XR_LINK_LINKED;
             }

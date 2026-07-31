@@ -239,7 +239,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
+ScopeStmt ::= 'linked'? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
@@ -571,7 +571,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
+ScopeStmt ::= 'linked'? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive

@@ -57,27 +57,13 @@ fn test_linked_scope_success() {
     }
     assert(!caught, "linked scope with all success should not throw")
 }
-fn test_supervisor_scope_no_throw() {
-    var caught = false
-    try {
-        supervisor scope {
-            go ok_worker()
-            go failing_worker()
-        }
-    } catch (e) {
-        caught = true
-    }
-    assert(!caught, "supervisor scope should not throw child error")
-}
 
 @test
 fn test_linked_scope() {
     // Test 1: linked scope with a failing child should throw
     // Test 2: normal scope with a failing child should NOT throw
     // Test 3: linked scope with all success should NOT throw
-    // Test 4: supervisor scope with a failing child should NOT throw
     test_linked_scope_error()
     test_normal_scope_no_error()
     test_linked_scope_success()
-    test_supervisor_scope_no_throw()
 }

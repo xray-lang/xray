@@ -1,7 +1,8 @@
 // Cross-worker stress for structured-concurrency scope paths.
 //
-// Supervisor scope is now statement-only. The test observes completion through
-// an explicit channel so no public heterogeneous result array is required.
+// A plain `scope` is a wait barrier: a failing child must not disturb its
+// siblings, and no child may be lost. The test observes completion through an
+// explicit channel.
 
 enum RaceErr { Msg(string) }
 
@@ -55,10 +56,10 @@ fn drain_counts(ch: Channel<int>, expected: int) -> Array<int> {
 }
 
 @test
-fn test_supervisor_statement_no_lost_children() {
+fn test_scope_loses_no_children() {
     for (var iter = 0; iter < ITERATIONS; iter++) {
         const ch = Channel<int>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
-        supervisor scope {
+        scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing_report(ch, i)
             }
@@ -74,10 +75,10 @@ fn test_supervisor_statement_no_lost_children() {
 }
 
 @test
-fn test_supervisor_statement_all_success() {
+fn test_scope_all_success() {
     for (var iter = 0; iter < 5; iter++) {
         const ch = Channel<int>(FAILING_PER_SCOPE)
-        supervisor scope {
+        scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_ok_report(ch, i)
             }

@@ -1002,8 +1002,9 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
     xi_lower_stmt(l, sb->body);
 
-    struct XrType *res_type = l->type_unit;
-    XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, res_type, 0);
+    /* A scope block is always a statement — XI_SCOPE_EXIT is unit-typed and
+     * its register is never read. */
+    XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, l->type_unit, 0);
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;
         exit_v->flags |= XI_FLAG_SIDE_EFFECT;

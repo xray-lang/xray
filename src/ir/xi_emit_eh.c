@@ -1501,7 +1501,8 @@ XR_FUNC void xi_emit_scope_enter(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Scope exit */
 XR_FUNC void xi_emit_scope_exit(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_inst(ctx, CREATE_ABC(OP_SCOPE_EXIT, (uint8_t) v->aux_int, dst, 0));
+    (void) dst;
+    emit_inst(ctx, CREATE_ABC(OP_SCOPE_EXIT, (uint8_t) v->aux_int, 0, 0));
 }
 
 /* ========== Assert ========== */

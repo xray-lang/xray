@@ -1,5 +1,0 @@
-fn main() {
-    var outcomes = supervisor scope {
-    }
-    print(outcomes)
-}

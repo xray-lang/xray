@@ -153,7 +153,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
-**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`supervisor`、`after` 可作为普通标识符）。
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`after` 可作为普通标识符）。
 
 字符 `_` 是**专用通配符 token**，不是普通标识符：
 
@@ -246,7 +246,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `linked` | `linked go` / `linked scope` 修饰符 |
-| `supervisor` | `supervisor scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 
@@ -4639,9 +4638,8 @@ select {
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
-ScopeStmt           ::= 'scope' Block
-LinkedScopeStmt     ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
-SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // 等待所有子协程；语句形式
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
 ```
 
 ```xray
@@ -4661,15 +4659,14 @@ scope {
 }
 ```
 
-**三种 scope 变体**：
+**两种 scope 变体**：
 
 | 形式 | 子协程抛异常时的行为 | 返回值 |
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | 等待所有子协程完成；子协程之间互不影响 | 无（语句形式） |
 
-`supervisor scope` 会等待块内所有 `go` 子协程完成，但不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；把 `supervisor scope` 当表达式使用会被编译器拒绝。
+两种形式都不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；需要按结果聚合时用 `await all` / `await any` / `await anySuccess`。
 
 ```xray
 // linked scope：失败传播
@@ -4682,11 +4679,11 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：保留 task handle，块退出后逐个观察 outcome
+// scope：保留 task handle，块退出后逐个观察 outcome
 var first: Task<int>?
 var second: Task<int>?
 var third: Task<int>?
-supervisor scope {
+scope {
     first = go failing("error1")
     second = go failing("error2")
     third = go ok()
@@ -4697,7 +4694,8 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 
 **通用语义**：
 - `scope` 不是函数调用，也不需要 import；是关键字块语句。
-- 三种形式都在块退出前等待所有 `go` 启动的子协程完成。
+- 两种形式都在块退出前等待所有 `go` 启动的子协程完成。
+- 两种形式都只能作为语句出现，不能用在表达式位置。
 
 ### 10.8 `move` — 跨协程所有权转移
 
@@ -6187,7 +6185,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
+ScopeStmt ::= 'linked'? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
@@ -6285,7 +6283,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`supervisor`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|

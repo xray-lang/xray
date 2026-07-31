@@ -565,8 +565,8 @@ typedef enum {
     XI_CLASS_CREATE, /* create class from descriptor: aux=XiClassData* */
 
     /* Structured concurrency scope */
-    XI_SCOPE_ENTER, /* enter scope: aux_int=scope_mode (0=WAIT,1=LINKED,2=SUPERVISOR) */
-    XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode, dst=result (supervisor) */
+    XI_SCOPE_ENTER, /* enter scope: aux_int=scope_mode (0=WAIT,1=LINKED) */
+    XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode; unit-typed, no result */
 
     /* Exception handling (panic channel only) */
     XI_TRY,     /* begin try: marks start of panic-protected region */

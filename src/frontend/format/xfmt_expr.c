@@ -1313,18 +1313,6 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, node->as.move_expr.expr);
             break;
 
-        // Scope block used as expression
-        case AST_SCOPE_BLOCK: {
-            ScopeBlockNode *sb = &node->as.scope_block;
-            if (sb->scope_mode == XR_SCOPE_LINKED)
-                xfmt_write_str(ctx, "linked ");
-            else if (sb->scope_mode == XR_SCOPE_SUPERVISOR)
-                xfmt_write_str(ctx, "supervisor ");
-            xfmt_write_str(ctx, "scope ");
-            xfmt_emit_block(ctx, sb->body);
-            break;
-        }
-
         default:
             xfmt_write_indent(ctx);
             xfmt_write_fmt(ctx, "/* unsupported expr: %d */", node->type);

@@ -1094,8 +1094,7 @@ struct XrBlockedBucket {
  *     - lives across the whole task lifecycle
  *
  *   XrScopeContext
- *     - one node per `scope { ... }`, `linked scope { ... }`, or
- *       `supervisor scope { ... }` block
+ *     - one node per `scope { ... }` or `linked scope { ... }` block
  *     - first_child links describe which coroutines run inside this block
  *     - malloc-allocated, freed at OP_SCOPE_EXIT
  *     - carries the per-block policy that does not exist on XrTask

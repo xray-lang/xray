@@ -569,7 +569,6 @@ AstNode *xr_parse_select_statement(Parser *parser) {
  * Parse scope block
  * scope { ... }
  * linked scope { ... }
- * supervisor scope { ... }
  */
 static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
     XR_DCHECK(parser != NULL, "parse_scope_body: NULL parser");

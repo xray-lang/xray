@@ -156,8 +156,7 @@ vmcase(OP_SCOPE_ENTER) {
 }
 
 vmcase(OP_SCOPE_EXIT) {
-    /* Exit structured concurrency scope.
-     * A = scope_mode, B = unused result register */
+    /* Exit structured concurrency scope. A = scope_mode. */
     int scope_mode = GETARG_A(i);
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
 

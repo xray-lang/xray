@@ -149,7 +149,7 @@ fn fail() {
     throw GoErr.Failed("scoped")
 }
 
-supervisor scope {
+scope {
     go fail()
 }
 print("after")

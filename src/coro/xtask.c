@@ -735,9 +735,9 @@ void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
         xr_task_finalize(task, XR_TASK_FAILED);
     }
 
-    // Propagate to parent (unless parent is supervisor)
+    // Propagate to parent
     XrTask *p = task->parent;
-    if (p && !(p->flags & XR_TASK_FLG_SUPERVISOR)) {
+    if (p) {
         xr_task_cancel_tree(p);
     }
 
@@ -947,7 +947,7 @@ void xr_task_wake_waiter_runtime(XrRuntime *runtime, XrTask *task) {
         }
         case -2: {
             /* Scope child completion: decrement count, wake parent when all done.
-             * Scope error handling (linked/supervisor) is done in xr_coro_wake_waiter
+             * Linked-scope error handling is done in xr_coro_wake_waiter
              * BEFORE delegating here — parent_scope is already cleared at this point. */
             if (!wait_state)
                 break;
