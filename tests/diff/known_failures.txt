@@ -31,22 +31,16 @@
 # sys_process_direct.xr, was never a scope_exit failure at all; it is a missing
 # stdlib member and has moved to Group 2.
 
-# --- Group 2: native struct members missing from the language surface --------
-# The program reads members the type does not declare: DateTime.year/month/
-# timestamp, CookieJar.count, Process.id.
-#
-# datetime_* and http_cookie_* fail only under AOT — the emitted C omits fields
-# the VM resolves through its own object model, which is exactly the class of
-# divergence this net exists to surface.
-#
-# sys_process_direct.xr is different and must not be read as the same bug: both
-# backends reject it identically with "type 'Process' has no member 'id'", so
-# the member is absent from the analyzer's surface, not just from the emitted
-# C. It is filed here because the missing member is the shared root cause.
-tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
-tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
-tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
-tests/diff/cases/semantics/stdlib/sys_process_direct.xr
+# --- Group 2: computed properties ---------------------------------------------
+# Cleared 2026-07-31. Filed as "stdlib members missing from the emitted C", but
+# the members were not missing anywhere in particular: `x: int { fn() {...} }`
+# declares a computed property, and the accessor it defines was never reachable.
+# The parser stored accessors as methods named "get:x" / "set:x" and the runtime
+# gave them their own method kinds, but nothing resolved `obj.x` to one, so both
+# backends rejected the read -- these cases failed under the VM too, which the
+# old note had wrong. The analyzer now resolves the access, lowering emits the
+# call, and the accessor kinds are gone: an accessor is a closure method whose
+# name marks it. See spec 5.3.7.
 
 # --- Group 3: union overlay literals -----------------------------------------
 # Cleared 2026-07-31. The aggregate-literal completeness check counted a union's

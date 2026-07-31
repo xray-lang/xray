@@ -2914,7 +2914,44 @@ Rules:
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
-#### 5.3.7 Worked Examples
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: int { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 

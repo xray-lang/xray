@@ -25,6 +25,7 @@
 #include "../../base/xhashmap.h"
 #include "../../../stdlib/prelude/prelude.h"
 #include "../../runtime/value/xtype_names.h"
+#include "../../shared/xr_accessor_name.h"
 #include <limits.h>
 #include <stdint.h>
 
@@ -2336,6 +2337,31 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         struct XrClassInfo *member_owner = NULL;
         XaSymbol *member =
             xa_class_info_lookup_instance_member_owner(class_info, ma->name, &member_owner);
+        /* No slot by that name: the class may still expose it as a computed
+         * property, which the parser stored as a method named "get:<prop>".
+         * The read is the getter's return type, and lowering turns it into the
+         * call. A property with only a setter is not readable, so a bare
+         * "set:<prop>" is deliberately not consulted here. */
+        if (!member && ma->name) {
+            char getter_name[XR_ACCESSOR_NAME_MAX];
+            if (xr_accessor_name(getter_name, sizeof(getter_name), XR_ACCESSOR_GET_PREFIX,
+                                 ma->name)) {
+                XaSymbol *getter = xa_class_info_lookup_instance_member_owner(
+                    class_info, getter_name, &member_owner);
+                if (getter && getter->kind == XA_SYM_METHOD) {
+                    xa_check_member_visibility(ctx, node, getter, member_owner);
+                    XaSymbolLinks *glinks = xa_analyzer_get_links(ctx->analyzer, getter);
+                    XrType *prop_type = glinks && glinks->type && XR_TYPE_IS_FUNCTION(glinks->type)
+                                            ? glinks->type->function.return_type
+                                            : NULL;
+                    if (!prop_type)
+                        prop_type = xr_type_new_unknown(NULL);
+                    record_selection(ctx, node, XA_SEL_PROPERTY, obj_type, getter, -1, prop_type,
+                                     false);
+                    return prop_type;
+                }
+            }
+        }
         if (member) {
             xa_check_member_visibility(ctx, node, member, member_owner);
             XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);

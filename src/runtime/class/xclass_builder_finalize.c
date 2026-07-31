@@ -239,6 +239,32 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     }
 }
 
+// Allocate cls->field_default_values and seed the inherited slots.
+// xr_instance_init_inplace copies one flat table per class and never walks the
+// super chain, so a parent's `p: int = 5` reaches a subclass instance only if
+// it is copied down here.
+static bool finalize_alloc_default_values(const XrClassBuilder *b, XrClass *cls,
+                                          int parent_instance_field_count,
+                                          int total_instance_field_count) {
+    if (total_instance_field_count <= 0)
+        return true;
+    cls->field_default_values =
+        (XrValue *) xr_malloc((size_t) total_instance_field_count * sizeof(XrValue));
+    if (cls->field_default_values == NULL)
+        return false;
+    for (int i = 0; i < total_instance_field_count; i++)
+        cls->field_default_values[i] = xr_null();
+
+    if (b->super == NULL || b->super->field_default_values == NULL)
+        return true;
+    int inherited = (int) xr_class_instance_field_count(b->super);
+    if (inherited > parent_instance_field_count)
+        inherited = parent_instance_field_count;
+    for (int i = 0; i < inherited; i++)
+        cls->field_default_values[i] = b->super->field_default_values[i];
+    return true;
+}
+
 // Populate cls->fields (instance + static descriptors), cls->instance_size,
 // and cls->field_default_values. Returns false on any alloc failure:
 // missing default values would silently null-initialize declared
@@ -252,6 +278,12 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_in
         cls->field_count = parent_instance_field_count;
         cls->own_field_count = 0;
         cls->instance_size = (b->super != NULL) ? b->super->instance_size : sizeof(XrObjHeader);
+        // A subclass declaring no fields of its own still has to apply the
+        // parent's declared defaults; without a table of its own it would
+        // null-initialize every inherited slot.
+        if (b->super != NULL && b->super->field_default_values != NULL)
+            return finalize_alloc_default_values(b, cls, parent_instance_field_count,
+                                                 total_instance_field_count);
         return true;
     }
 
@@ -291,13 +323,9 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_in
     cls->instance_size = offset;
 
     if (total_instance_field_count > 0) {
-        cls->field_default_values =
-            (XrValue *) xr_malloc(total_instance_field_count * sizeof(XrValue));
-        if (cls->field_default_values == NULL)
+        if (!finalize_alloc_default_values(b, cls, parent_instance_field_count,
+                                           total_instance_field_count))
             return false;
-        for (int i = 0; i < total_instance_field_count; i++) {
-            cls->field_default_values[i] = xr_null();
-        }
         for (int i = 0; i < own_instance_fields; i++) {
             int global_idx = parent_instance_field_count + i;
             cls->field_default_values[global_idx] = b->fields[i].default_value;
@@ -354,8 +382,6 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
             method->as.yieldable_primitive = item->impl.yieldable_primitive;
             break;
         case XMETHOD_CLOSURE:
-        case XMETHOD_GETTER:
-        case XMETHOD_SETTER:
         case XMETHOD_OPERATOR:
             method->as.closure = item->impl.closure;
             break;

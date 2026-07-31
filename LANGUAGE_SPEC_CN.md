@@ -2916,7 +2916,44 @@ interface Iterable<T> {
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
-#### 5.3.7 完整可运行示例
+#### 5.3.7 计算属性
+
+字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // 只读：只有 getter
+    area: int { fn() { return this._w * this._h } }
+
+    // 可读可写：getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+规则：
+
+- 访问器块只能含 `fn` 定义。**无参**的是 getter，**一个参数**的是 setter；各自最多一个，参数多于一个是编译错误。
+- getter 的返回类型默认为属性声明的类型，setter 的参数类型同理，二者都可省略。
+- 属性类型即读取表达式的类型。只有 getter 的属性是**只读**的，写它按未声明成员报 `E0380`。
+- `obj.p` 与 `obj.p = v` 是普通调用，**不是**槽读写：访问器可以计算、可以带副作用，其开销就是一次方法调用。
+- 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
+- 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
+
+#### 5.3.8 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 

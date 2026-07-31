@@ -594,7 +594,44 @@ interface Iterable<T> {
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
-#### 5.3.7 完整可运行示例
+#### 5.3.7 计算属性
+
+字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // 只读：只有 getter
+    area: int { fn() { return this._w * this._h } }
+
+    // 可读可写：getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+规则：
+
+- 访问器块只能含 `fn` 定义。**无参**的是 getter，**一个参数**的是 setter；各自最多一个，参数多于一个是编译错误。
+- getter 的返回类型默认为属性声明的类型，setter 的参数类型同理，二者都可省略。
+- 属性类型即读取表达式的类型。只有 getter 的属性是**只读**的，写它按未声明成员报 `E0380`。
+- `obj.p` 与 `obj.p = v` 是普通调用，**不是**槽读写：访问器可以计算、可以带副作用，其开销就是一次方法调用。
+- 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
+- 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
+
+#### 5.3.8 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -1713,7 +1750,44 @@ Rules:
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
-#### 5.3.7 Worked Examples
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: int { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 

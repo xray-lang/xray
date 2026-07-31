@@ -32,6 +32,8 @@
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../shared/xr_accessor_name.h"
+#include "xa_selection.h"
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -2036,6 +2038,28 @@ static int object_shape_field_index_local(XrType *type, const char *name) {
             return i;
     }
     return -1;
+}
+
+/* Record that this write goes through a computed property's setter, so lowering
+ * emits the call instead of a slot store. Mirrors the read side's
+ * XA_SEL_PROPERTY selection in xanalyzer_visitor_expr.c. */
+static void xa_record_property_write(XaInferContext *ctx, AstNode *node, XrType *receiver,
+                                     XaSymbol *setter, XrType *value_type) {
+    if (!ctx || !ctx->analyzer || !node || !setter)
+        return;
+    XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
+    if (!st)
+        return;
+    XaSelection sel = {
+        .kind = XA_SEL_PROPERTY,
+        .receiver_type = receiver,
+        .target_symbol = setter,
+        .field_index = -1,
+        .result_type = value_type,
+        .is_indirect = false,
+        .is_optional = false,
+    };
+    xa_selection_table_set(st, node, &sel);
 }
 
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
@@ -5369,6 +5393,53 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrClassInfo *field_owner = NULL;
                     XaSymbol *field =
                         xa_class_info_lookup_member_owner(class_info, ms->member, &field_owner);
+                    /* No slot by that name: the write may target a computed
+                     * property, whose setter the parser stored as "set:<prop>".
+                     * Resolving it here is what makes the write work in both
+                     * backends -- the VM alone could find the accessor by name
+                     * at runtime, so an AOT build silently dropped the store.
+                     * A property with only a getter has no setter to find and
+                     * is reported as read-only rather than deferred to a
+                     * runtime "field not declared" panic. */
+                    if (!field) {
+                        char setter_name[XR_ACCESSOR_NAME_MAX];
+                        char getter_name[XR_ACCESSOR_NAME_MAX];
+                        if (xr_accessor_name(setter_name, sizeof(setter_name),
+                                             XR_ACCESSOR_SET_PREFIX, ms->member) &&
+                            xr_accessor_name(getter_name, sizeof(getter_name),
+                                             XR_ACCESSOR_GET_PREFIX, ms->member)) {
+                            XrClassInfo *acc_owner = NULL;
+                            XaSymbol *setter = xa_class_info_lookup_member_owner(
+                                class_info, setter_name, &acc_owner);
+                            if (setter && setter->kind == XA_SYM_METHOD) {
+                                xa_check_member_visibility(ctx, node, setter, acc_owner);
+                                XaSymbolLinks *sl = xa_analyzer_get_links(ctx->analyzer, setter);
+                                /* The setter's parameter type drives the value
+                                 * the same way a field's declared type does, so
+                                 * `t.celsius = 100` adapts the literal to float
+                                 * exactly as a float field would. */
+                                if (sl && sl->type && XR_TYPE_IS_FUNCTION(sl->type) &&
+                                    sl->type->function.param_count == 1 &&
+                                    sl->type->function.params) {
+                                    member_type = sl->type->function.params[0].type;
+                                    if (member_type && !XR_TYPE_IS_UNKNOWN(member_type))
+                                        ctx->expected_type = member_type;
+                                }
+                                xa_record_property_write(ctx, node, obj_type, setter, member_type);
+                            } else if (xa_class_info_lookup_member(class_info, getter_name)) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = node->line,
+                                                  .column = node->column};
+                                char msg[224];
+                                snprintf(msg, sizeof(msg),
+                                         "cannot assign to '%s': it is a read-only computed "
+                                         "property, declared with a getter and no setter",
+                                         ms->member);
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
+                            }
+                        }
+                    }
                     if (field) {
                         // Enforce private/protected visibility on the write target.
                         xa_check_member_visibility(ctx, node, field, field_owner);

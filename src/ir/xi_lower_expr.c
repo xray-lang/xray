@@ -2245,6 +2245,23 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     if (!obj)
         return NULL;
 
+    /* Computed property: the analyzer resolved this read to a "get:<prop>"
+     * accessor, so it is a call, not a slot read. Emitted before the layout
+     * and slot paths below, none of which have a field to offset to. */
+    if (sel && sel->kind == XA_SEL_PROPERTY && sel->target_symbol && sel->target_symbol->name) {
+        const char *getter = sel->target_symbol->name;
+        XiValue *v =
+            xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                         sel->result_type ? sel->result_type : xi_lower_node_type(l, node), 1);
+        if (!v)
+            return NULL;
+        v->args[0] = obj;
+        v->aux = (void *) arena_strdup(l->func, getter);
+        v->aux_int = (int64_t) xi_lower_method_symbol(l, getter) << 1;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
     XiValue *module_constant = lower_module_member_constant(l, obj, ma->name);
     if (module_constant)
         return module_constant;
@@ -2402,6 +2419,31 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         return NULL;
 
     struct XrType *result_type = val->type;
+
+    /* Computed property: the analyzer resolved this write to a "set:<prop>"
+     * accessor, so it is a call, not a store. Emitted before the layout and
+     * slot paths, none of which have a field to store into -- the VM used to
+     * find the accessor by name at run time and AOT dropped the write. */
+    {
+        const XaSelection *psel =
+            l && l->analyzer && l->analyzer->selection_table
+                ? xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table, node)
+                : NULL;
+        if (psel && psel->kind == XA_SEL_PROPERTY && psel->target_symbol &&
+            psel->target_symbol->name) {
+            const char *setter = psel->target_symbol->name;
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = obj;
+            v->args[1] = val;
+            v->aux = (void *) arena_strdup(l->func, setter);
+            v->aux_int = (int64_t) xi_lower_method_symbol(l, setter) << 1;
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
 
     /* Struct with compile-time layout → XI_AGG_SET */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
@@ -9447,6 +9489,12 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
             access_val->args[0] = obj;
             access_val->aux = (void *) arena_strdup(l->func, oc->name);
             access_val->aux_int = xi_lower_method_symbol(l, oc->name);
+            /* Same class-field binding the non-optional `obj.name` path does.
+             * The receiver is a `T?`, but nullability is a flag on XrType, not
+             * a kind, so the instance payload needed to resolve the field is
+             * still present; the null case never reaches here (null_blk). AOT
+             * rejects a XI_LOAD_FIELD on a class with no field id bound. */
+            xi_lower_bind_class_field_id(l, access_val, obj->type, oc->name);
         }
     } else if (oc->index) {
         /* Index access: obj[idx] */
