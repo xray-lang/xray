@@ -2094,12 +2094,6 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  var run = makeCapturedUnknownFunctionValue(cb)\n"
         "  run()\n"
         "}\n"
-        "fn viaCapturedFunctionValueCurrentRebound() {\n"
-        "  var f = failDynamic\n"
-        "  var run = fn() { f() }\n"
-        "  f = noThrowDynamic\n"
-        "  run()\n"
-        "}\n"
         "fn viaHigherOrderCallback() {\n"
         "  invokeCallback(failDynamic)\n"
         "}\n"
@@ -2164,8 +2158,6 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaCapturedFunctionValueDirect");
     const XaEffectSummary *captured_function_value_unknown =
         analyzer_function_effect_summary(a, "viaCapturedFunctionValueUnknown");
-    const XaEffectSummary *captured_function_value_current_rebound =
-        analyzer_function_effect_summary(a, "viaCapturedFunctionValueCurrentRebound");
     const XaEffectSummary *higher_order_callback =
         analyzer_function_effect_summary(a, "viaHigherOrderCallback");
     const XaEffectSummary *higher_order_function_expr =
@@ -2200,7 +2192,6 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(captured_function_value != NULL);
     ASSERT(captured_function_value_direct != NULL);
     ASSERT(captured_function_value_unknown != NULL);
-    ASSERT(captured_function_value_current_rebound != NULL);
     ASSERT(higher_order_callback != NULL);
     ASSERT(higher_order_function_expr != NULL);
     ASSERT(higher_order_union != NULL);
@@ -2284,13 +2275,6 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT((captured_function_value_unknown->error_unknown_reasons &
             XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, captured_function_value_unknown, "DynamicErr"));
-    ASSERT(captured_function_value_current_rebound->error_set_completeness == XA_EFFECT_COMPLETE);
-    ASSERT((captured_function_value_current_rebound->error_unknown_reasons &
-            XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(
-        !effect_summary_has_enum_named(a, captured_function_value_current_rebound, "DynamicErr"));
-    ASSERT(!effect_summary_has_enum_named(a, captured_function_value_current_rebound,
-                                          "OtherDynamicErr"));
     ASSERT(higher_order_callback->error_set_completeness == XA_EFFECT_COMPLETE);
     ASSERT((higher_order_callback->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, higher_order_callback, "DynamicErr"));

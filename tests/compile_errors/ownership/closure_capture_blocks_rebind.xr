@@ -1,0 +1,14 @@
+// A closure naming an outer local holds a loan on it for as long as the closure
+// value lives. Rebinding the owner underneath would silently change what the
+// closure calls, so the assignment is rejected while the capture is active.
+enum DynamicErr { Boom }
+
+fn failDynamic() { throw DynamicErr.Boom }
+fn noThrowDynamic() {}
+
+fn main() {
+    var f = failDynamic
+    var run = fn() { f() }
+    f = noThrowDynamic
+    run()
+}
