@@ -4609,6 +4609,44 @@ static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
     return false;
 }
 
+/* `is` and `as` compare against runtime type identity. Xray keeps that identity
+ * minimal (§2.11): scalars, containers, Json, tuple arity, nominal class /
+ * struct / enum, and sealed Record field sets. Nullability, union membership
+ * and function signatures are erased, so a test against them has no runtime
+ * answer. They are rejected here because the lowering would otherwise emit a
+ * type test with no target operand — malformed Xi IR, surfacing as an internal
+ * verifier failure instead of a diagnostic. */
+void xa_check_runtime_testable_type(XaInferContext *ctx, AstNode *node, XrTypeRef *tref,
+                                    const char *op_name) {
+    if (!ctx || !node || !tref)
+        return;
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, tref);
+    if (!target || XR_TYPE_IS_ERROR(target) || XR_TYPE_IS_UNKNOWN(target))
+        return;
+
+    const char *reason = NULL;
+    const char *hint = NULL;
+    if (target->is_nullable || tref->kind == XR_TREF_OPTIONAL) {
+        reason = "nullability is not part of runtime type identity";
+        hint = "test `x != null` first, then test the non-null type";
+    } else if (XR_TYPE_IS_UNION(target) || tref->kind == XR_TREF_UNION) {
+        reason = "a union is not a runtime type";
+        hint = "test each member type separately";
+    } else if (XR_TYPE_IS_FUNCTION(target) || tref->kind == XR_TREF_FUNCTION) {
+        reason = "function types carry no runtime identity";
+        hint = "no runtime check exists for a function signature";
+    }
+    if (!reason)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "'%s %s' is not a valid type test: %s; %s", op_name,
+             xr_type_to_string(target), reason, hint);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* as type cast: expr as T — returns T (non-safe), or T? (safe). */
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)

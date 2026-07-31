@@ -190,7 +190,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
-**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `supervisor`, `after`).
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `after`).
 
 The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
@@ -262,7 +262,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
-> **Note**: the following names are **not** lexer keywords; `stdlib/prelude/prelude_types.def` introduces them automatically:
+> **Note**: the following names are **not** lexer keywords; `stdlib/prelude/builtin_symbols.def` introduces them automatically:
 > `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
 > `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 
@@ -283,7 +283,6 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
-| `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 
@@ -591,7 +590,7 @@ The full precedence table is in [§3.1](#31-precedence-and-associativity).
 
 ## 2. Type System
 
-> Source of truth: `src/runtime/value/xtype.h` (`XrType` definition), `src/runtime/value/xtype.c`, `src/frontend/parser/xparse_type.c` (syntax), `src/frontend/analyzer/xtype_ref_resolve.c` (resolution), `stdlib/prelude/prelude_types.def` (built-in type table).
+> Source of truth: `src/runtime/value/xtype.h` (`XrType` definition), `src/runtime/value/xtype.c`, `src/frontend/parser/xparse_type.c` (syntax), `src/frontend/analyzer/xtype_ref_resolve.c` (resolution), `stdlib/prelude/builtin_symbols.def` (built-in type table).
 
 ### 2.1 Overview
 
@@ -626,6 +625,88 @@ Xray is statically typed; every expression has a determined type at compile time
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
+
+<!-- xr-builtin-registry:begin -->
+
+#### 2.2.1 Built-in symbol registry
+
+Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of names available without an import. The compiler, the LSP and this table read the same source of truth; any capitalized name outside it comes from an import or a user declaration.
+
+**Built-in types**
+
+| Symbol | Construction |
+|--|--|
+| `Array<T>` | prelude |
+| `Atomic<T>` | prelude |
+| `BigInt` | prelude |
+| `CFn<T>` | resolver built-in |
+| `Channel<T>` | prelude |
+| `CoroLocal<T>` | resolver built-in |
+| `EnumPayloadField<T>` | resolver built-in |
+| `EnumPayloads<T>` | resolver built-in |
+| `EnumVariant<T>` | resolver built-in |
+| `EnumVariants<T>` | resolver built-in |
+| `Json` | prelude |
+| `Map<K, V>` | prelude |
+| `MutPtr<T>` | resolver built-in |
+| `NetConn` | prelude |
+| `NetListener` | prelude |
+| `OsBarrier` | prelude |
+| `OsCondvar` | prelude |
+| `OsMutex` | prelude |
+| `OsOnce` | prelude |
+| `OsRwLock` | prelude |
+| `PanicInfo` | prelude |
+| `Path` | prelude |
+| `Ptr<T>` | resolver built-in |
+| `Range` | prelude |
+| `Regex` | prelude |
+| `Set<T>` | prelude |
+| `Slice<T>` | resolver built-in |
+| `StringBuilder` | prelude |
+| `Task<T>` | resolver built-in |
+| `Thread<T>` | prelude |
+| `WeakMap<K, V>` | resolver built-in |
+| `WeakSet<T>` | resolver built-in |
+
+**Built-in enums**
+
+| Symbol | Variants |
+|--|--|
+| `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
+| `Endian` | `Native` \| `LE` \| `BE` |
+| `Utf8Error` | `InvalidUtf8` |
+| `StringSliceError` | `InvalidByteRange` |
+| `CompressionError` | `InvalidData` |
+| `CryptoError` | `InvalidLength` |
+| `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
+| `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
+| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
+| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+
+**Built-in constraint interfaces**
+
+| Symbol |
+|--|
+| `Callable<T>` |
+| `Closeable` |
+| `Comparable` |
+| `Equatable` |
+| `Hashable` |
+| `Indexable<K, V>` |
+| `Iterable<T>` |
+| `Iterator<T>` |
+| `Lengthable` |
+| `Stringable` |
+
+**Deliberately absent names**
+
+| Symbol | Diagnostic hint |
+|--|--|
+| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. operator==(other: Token) -> bool |
+| `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
+
+<!-- xr-builtin-registry:end -->
 
 ### 2.3 Primitive Types
 
@@ -959,7 +1040,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> int` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.4 `Set<T>`
 
@@ -1386,15 +1467,15 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -1650,7 +1731,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray
@@ -1660,9 +1741,12 @@ var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
 - Type: `Range` (int ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
@@ -2283,7 +2367,7 @@ fn process() {
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- An error thrown inside a `defer` body **replaces** any in-flight error (Go-style semantics).
+- **No error may escape a `defer` body**: `E0387` is reported when the deferred callable's inferred error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
 
 ### 4.10 Built-in Print Functions
 
@@ -2914,7 +2998,44 @@ Rules:
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
-#### 5.3.7 Worked Examples
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: int { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -3001,6 +3122,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
 ```xray
 struct Config {
@@ -3213,14 +3335,26 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
+// A recursive enum payload must be indirected through a class node
+class ExprNode {
+    expr: Expr
+    constructor(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
 enum Expr {
     Number(int),
-    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
+    Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-A directly recursive enum payload would have infinite size and must be rejected at compile time. Recursive data structures need explicit indirection such as `Box<Expr>`, class nodes, or reference-container slots.
+A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
+
+- **Class node**: classes are reference types, so the field costs one pointer and `Binary(left: ExprNode, ...)` has a finite layout.
+- **Container slot**: `Array<Expr>`, `Map<K, Expr>`, and other containers keep elements in their own storage, so the payload holds only the container handle.
+
+`T?` is not indirection — nullable does not change the by-value layout of the payload, so `Binary(left: Expr?, ...)` is rejected by `E0352` as well.
 
 #### 5.6.3 Construction and destructuring
 
@@ -3850,7 +3984,8 @@ Design principles:
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
 - **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
-- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
+- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
+- **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0387`), see §8.3.1.
 
 ### 8.1 Value-return error channel
 
@@ -4088,6 +4223,38 @@ fn main() {
 main()
 ```
 
+#### 8.2.4 Top-level diagnostic for an uncaught panic
+
+A panic that reaches the top level uncaught by any `catch panic` prints one line
+to stderr and exits with code 1:
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+For example, division by zero prints `[Uncaught Panic] E0420: division by zero`,
+and an out-of-bounds write prints
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`.
+
+**Backend contract**: the VM and AOT (`xray build --native`) produce
+**byte-identical** observable results for the same fault — exit code, stdout, and
+this stderr line (both the code and the message come from the same shared
+formatters). The contract covers exactly that surface.
+
+**Presentation details, outside the contract**:
+
+- The **stack trace** is an opt-in diagnostic, off by default. With
+  `XRAY_BACKTRACE=1` the VM appends a `Stack trace:` frame list after the report
+  line; the AOT native path carries no unwind state and appends nothing. Keeping
+  the trace off by default is exactly what lets the two backends' default output
+  agree.
+- **Colour** follows whether stderr is a TTY: the `[Uncaught Panic]` tag is bold
+  red on an interactive terminal and plain text when piped or redirected.
+
+> Compare the value-return channel (§8.1.1): an uncaught top-level error prints
+> `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
+> the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
@@ -4110,7 +4277,39 @@ fn fetch(url: string) -> string {
 - Multiple `defer`s in the same block run in **LIFO** order
 - `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
 - A `defer` in a loop body runs as each iteration exits
-- `defer` blocks should not throw errors (behaviour is undefined)
+- No error may escape a `defer` body (see §8.3.1)
+
+#### 8.3.1 `defer` and errors
+
+`defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
+
+**Rule D1 (static, normative)**: if the inferred error set of the callable a `defer` defers is **non-empty**, the compiler reports `E0387`.
+
+Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
+
+```xray
+fn close(c: Conn) { throw IoErr.Closed }
+
+fn bad(c: Conn) {
+    defer close(c)                           // ❌ E0387: the deferred target throws
+}
+
+fn good(c: Conn) {
+    defer {                                  // ✅ handle it inside the defer body
+        try { close(c) } catch (e) { log.warn("close failed") }
+    }
+}
+```
+
+**Rule D2 (how to satisfy it)**: absorb the error inside the `defer` body with `try` / `catch`, or call a cleanup API that does not throw. This is the only legal form — it forces the author to answer "what happens when cleanup fails?".
+
+**Rule D3 (runtime backstop, normative)**: if an error still escapes a `defer` body — an indirect call D1 could not decide statically, or a panic raised inside the body — the runtime **terminates the process** with `E0443` and exit status `70`:
+
+- The termination is **not catchable** — neither `catch` nor `catch panic` intercepts it. An error or panic the `defer` body catches **itself** has not escaped; that is the ordinary form rule D2 prescribes.
+- The in-flight error is neither replaced nor suppressed; the diagnostic reports the escaping error, and the in-flight one alongside it when there is one (an enum error value carries no message, and shows as `<no message>`).
+- The VM and AOT backends must agree verbatim on this behaviour, including exit code and diagnostic text.
+
+**Why not Go's "replace" semantics**: in Go, rewriting the error from a defer requires an explicit assignment to a named return value — visible and local. xray puts `throws` in neither the signature nor the call site (§8.0), so an implicit error replacement would be entirely invisible in the source, and multiple simultaneously-throwing `defer`s would additionally need a replacement-chain rule. Fail-fast is the only option that is defined, hides nothing, and adds no further rules.
 
 ### 8.4 Optional and error handling
 
@@ -4392,11 +4591,29 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | Interface | Meaning |
 |---|---|
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> int` (signature below) |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()` satisfy this constraint. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
+| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map, Set, string, Json, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> int`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+
+```xray
+class Token implements Hashable {
+    value: int
+
+    constructor(value: int) { this.value = value }
+
+    // the parameter is spelled Token, not Self
+    operator==(other: Token) -> bool { return this.value == other.value }
+
+    hash() -> int { return this.value }
+}
+
+var counts: Map<Token, int> = #{}
+counts.set(Token(7), 99)
+```
+
+Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
 #### `where` clauses
 
@@ -4521,15 +4738,16 @@ render(Square())     // OK
 
 #### Structural objects
 
-Only `object literal` and `type T = {...}` use structural matching:
+Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK: literal matches structurally
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error: sealed type rejects extra fields
+describe({ x: 1.0, y: 2.0 })          // OK: exact field set
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
+describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 ```
 
 ### 9.6 Variance
@@ -4826,9 +5044,8 @@ select {
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
-ScopeStmt           ::= 'scope' Block
-LinkedScopeStmt     ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
-SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // wait for all children; statement form
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
 ```
 
 ```xray
@@ -4848,15 +5065,14 @@ scope {
 }
 ```
 
-**Three scope variants**:
+**Two scope variants**:
 
 | Form | Behaviour when a child coroutine throws | Return value |
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | Waits for every child coroutine to finish; siblings do not affect each other | none (statement form) |
 
-`supervisor scope` waits for all child coroutines started by `go` inside the block, but it does not return an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; using `supervisor scope` as an expression is rejected by the compiler.
+Neither form returns an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; to aggregate by result, use `await all` / `await any` / `await anySuccess`.
 
 ```xray
 // linked scope: failure propagation
@@ -4869,11 +5085,11 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: keep task handles and inspect each outcome after the block
+// scope: keep task handles and inspect each outcome after the block
 var first: Task<int>?
 var second: Task<int>?
 var third: Task<int>?
-supervisor scope {
+scope {
     first = go failing("error1")
     second = go failing("error2")
     third = go ok()
@@ -4884,7 +5100,8 @@ print(len(outcomes))                 // 3 (one outcome per child)
 
 **General semantics**:
 - `scope` is not a function call and does not require an import; it is a keyword block statement.
-- All three forms await every coroutine started by `go` inside the block before exiting.
+- Both forms await every coroutine started by `go` inside the block before exiting.
+- Both forms are statements only; neither may appear in an expression position.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 
@@ -5604,6 +5821,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
 | `toArray()` | Produces an independent `Array<int>` in iteration order |
 | `toString()` | Returns an `a..b` or `a..=b` string |
+| `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
 | `len(range)` | Returns the number of elements in the range |
 
 ```xray
@@ -6075,8 +6293,9 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
-| `E0387` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
-| `E0388` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | the `defer` target throws (see §8.3.1) |
+| `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
+| `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
 
 ### 18.3 Runtime
 
@@ -6112,6 +6331,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
@@ -6245,11 +6465,12 @@ BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -6393,7 +6614,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
+ScopeStmt ::= 'linked'? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
@@ -6491,7 +6712,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `supervisor`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
