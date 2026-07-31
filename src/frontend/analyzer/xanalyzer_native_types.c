@@ -171,6 +171,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
     const char *p = source;
     bool next_member_lowered_only = false;
     bool next_member_mutates_receiver = false;
+    bool next_member_returns_receiver = false;
 
     /* Find "class <Name>" line */
     while (*p) {
@@ -188,6 +189,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
                 next_member_lowered_only = true;
             if (strstr(line, "@receiver_write"))
                 next_member_mutates_receiver = true;
+            if (strstr(line, "@returns_receiver"))
+                next_member_returns_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -229,6 +232,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
                 next_member_lowered_only = true;
             if (strstr(line, "@receiver_write"))
                 next_member_mutates_receiver = true;
+            if (strstr(line, "@returns_receiver"))
+                next_member_returns_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -301,10 +306,13 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
         members[count].mutates_receiver = next_member_mutates_receiver;
+        members[count].return_ownership =
+            next_member_returns_receiver ? XA_BUILTIN_RETURN_RECEIVER : XA_BUILTIN_RETURN_UNKNOWN;
         members[count].is_yieldable = false;
         native_member_apply_contract(*out_class_name, &members[count]);
         next_member_lowered_only = false;
         next_member_mutates_receiver = false;
+        next_member_returns_receiver = false;
         count++;
 
         p = next_line(p);

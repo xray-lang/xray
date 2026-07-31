@@ -1,4 +1,4 @@
-// 1236_generic_method_constraint.xr
+// 1239_generic_method_constraint.xr
 // A class method's OWN generic constraints — `total<T: Iterable<int>>(...)`
 // declared on a method rather than on a top-level fn.
 //

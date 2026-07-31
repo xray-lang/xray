@@ -101,9 +101,10 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         xr_parser_advance(parser);  // Consume '{'
         AstNode *body = xr_parse_block(parser);
 
-        // Create anonymous function expression to wrap block
-        AstNode *fn_expr = xr_ast_function_decl(parser->compiler_session, "", NULL, 0, body, line);
-        fn_expr->type = AST_FUNCTION_EXPR;  // Mark as expression not declaration
+        // Create anonymous function expression to wrap block. `go { ... }` and
+        // `go fn() { ... }` are the same coroutine, so they must build the same
+        // node — including the NULL name every other anonymous closure carries.
+        AstNode *fn_expr = xr_ast_function_expr(parser->compiler_session, NULL, 0, body, line);
         return xr_ast_go_expr(parser->compiler_session, fn_expr, name, link_mode, line);
     }
 
@@ -329,7 +330,7 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
     AstNode **temp_refs = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) n);
     char name[24];
     for (int k = 0; k < n; k++) {
-        snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
+        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "%d", k);
         temp_refs[k] = xr_ast_variable(X, name, line);
     }
     AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, call->arg_accesses, n,
@@ -339,7 +340,7 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
     AstNode *outer = xr_ast_block(X, line);
     outer->as.block.is_synthetic_defer_capture = true;
     for (int k = 0; k < n; k++) {
-        snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
+        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "%d", k);
         xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));
     }
     xr_ast_block_add(X, outer, defer_wrap_in_closure(parser, new_call, line));
@@ -643,7 +644,10 @@ AstNode *xr_parse_unsafe_expr(Parser *parser) {
     /* xr_parse_block assumes the '{' was already consumed and consumes the
      * matching '}'. The body is an AST_BLOCK; the analyzer/lowerer treat its
      * trailing expression statement as the unsafe expression's value. */
+    bool saved_observed = parser->expr_value_observed;
+    parser->expr_value_observed = true;
     AstNode *body = xr_parse_block(parser);
+    parser->expr_value_observed = saved_observed;
     if (!body) {
         xr_parser_error(parser, "expected statements inside 'unsafe { }'");
         return NULL;

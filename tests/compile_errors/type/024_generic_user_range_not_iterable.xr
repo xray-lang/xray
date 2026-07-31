@@ -1,0 +1,22 @@
+// The prelude `Range` satisfies Iterable / Lengthable, but prelude names are
+// ordinary identifiers: a user class may reuse `Range`, and it earns those
+// interfaces the same way every other class does — by declaring them and
+// supplying iterator() / len support — never by matching the name.
+
+class Range {
+    n: int
+
+    constructor(n: int) {
+        this.n = n
+    }
+}
+
+fn total<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+print(total(Range(3)))

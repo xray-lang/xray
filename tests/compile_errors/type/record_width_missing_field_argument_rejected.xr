@@ -1,0 +1,8 @@
+// Record width rule at an argument position: missing required field is rejected.
+type Point = { x: int, y: int }
+
+fn describe(p: Point) { print(p.x) }
+
+fn main() { describe({ x: 1 }) }
+
+main()

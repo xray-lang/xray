@@ -441,7 +441,6 @@ typedef struct XaParamEscapeSummary {
     XrClassInfo *receiver_info;
     XrViewReturnSourceKind view_return_source;
     int view_return_param;
-    XaViewRangeTransform view_return_range;
     bool view_return_seen;
 } XaParamEscapeSummary;
 
@@ -871,20 +870,14 @@ static void xa_summary_mark_return(XaParamEscapeSummary *summary, AstNode *expr)
                                              strcmp(root->as.variable.name, "this") == 0)))
             source = XR_VIEW_RETURN_RECEIVER;
     }
-    XaViewRangeTransform range =
-        expr->type == AST_SLICE_EXPR ? XA_VIEW_RANGE_SUBRANGE : XA_VIEW_RANGE_IDENTITY;
     if (!summary->view_return_seen) {
         summary->view_return_seen = true;
         summary->view_return_source = source;
         summary->view_return_param = source_param;
-        summary->view_return_range = range;
     } else if (summary->view_return_source != source ||
                (source == XR_VIEW_RETURN_PARAM && summary->view_return_param != source_param)) {
         summary->view_return_source = XR_VIEW_RETURN_MULTI;
         summary->view_return_param = -1;
-        summary->view_return_range = XA_VIEW_RANGE_UNKNOWN;
-    } else if (summary->view_return_range != range) {
-        summary->view_return_range = XA_VIEW_RANGE_AFFINE;
     }
     xa_summary_mark_expr(summary, expr);
 }
@@ -1287,7 +1280,7 @@ static void xa_report_return_type_contains_span_view(XaInferContext *ctx, AstNod
                  "return an owner container or an owned Array value",
                  kind ? kind : "function", name ? name : "?");
     }
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE, msg,
                                &loc);
 }
 
@@ -1493,21 +1486,13 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
                                     .ctx = ctx,
                                     .receiver_info = receiver_info,
                                     .view_return_source = XR_VIEW_RETURN_UNKNOWN,
-                                    .view_return_param = -1,
-                                    .view_return_range = XA_VIEW_RANGE_UNKNOWN};
+                                    .view_return_param = -1};
     xa_summary_walk(&summary, body);
 
     if (xa_type_contains_span_view(return_type)) {
         links->return_view.origin =
             summary.view_return_seen ? summary.view_return_source : XR_VIEW_RETURN_UNKNOWN;
         links->return_view.param_index = (int16_t) summary.view_return_param;
-        links->return_view.range_transform = summary.view_return_range;
-        links->return_view.required_capability = XA_CAPABILITY_READONLY;
-        links->return_view.element_type_id =
-            return_type && XR_TYPE_IS_SLICE(return_type) && return_type->container.element_type
-                ? return_type->container.element_type->semantic_type_id
-                : 0;
-        links->return_view.required_alignment = 0;
         links->return_view.complete = links->return_view.origin == XR_VIEW_RETURN_PARAM ||
                                       links->return_view.origin == XR_VIEW_RETURN_RECEIVER ||
                                       links->return_view.origin == XR_VIEW_RETURN_STATIC;
@@ -3453,6 +3438,7 @@ skip_interfaces:
             field_sym->is_private = fd->is_private;
             field_sym->is_protected = fd->is_protected;
             field_sym->is_const = fd->is_const;
+            field_sym->has_declared_default = (fd->initializer != NULL);
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
@@ -3486,7 +3472,7 @@ skip_interfaces:
                          "cannot live in long-lived storage",
                          decl_label ? decl_label : "class", fd->name ? fd->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                           XR_ERR_ANALYZE_BORROW_ESCAPE, msg, &loc);
             }
             xa_class_info_add_field(info, field_sym);
         }
@@ -3572,6 +3558,18 @@ skip_interfaces:
 
     // Compute fixed-layout aggregate layout (VALUE_TYPE only, skip generic struct templates)
     int struct_type_param_count = is_struct_decl ? node->as.struct_decl.type_param_count : 0;
+    /* Tell the native plan this program declares the type, before deciding
+     * whether it gets a fixed layout.  A [[native.layout]] assertion naming a
+     * type that no compiled module declares is vacuous for this build; one
+     * naming a type that IS declared but has no fixed layout is a real error.
+     * Without this signal the two are indistinguishable. */
+    if (is_aggregate_decl && cls->name) {
+        XrNativePackagePlan *layout_subject_plan =
+            (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
+                ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+        if (layout_subject_plan)
+            xr_native_package_note_layout_subject(layout_subject_plan, cls->name);
+    }
     if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
         XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));

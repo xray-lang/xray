@@ -6,6 +6,8 @@ contains=name=pick$i64
 regex=array-storage [0-9]+ func=pick\$i64 .*elem=XR_ELEM_I64/i64/int64_t
 c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_I64)
 c_contains=((int64_t*)_a->data)[_idx]
-c_regex=int64_t v[0-9]+ = generic_array_storage_force_clone_plan_[0-9a-f]+_pick_i64_[0-9]+\(NULL, v[0-9]+, v[0-9]+\);
+# The specialized body now receives the array unboxed, so the argument reads
+# `(void *)(vN)` and the result declaration is hoisted out of the assignment.
+c_regex=v[0-9]+ = generic_array_storage_force_clone_plan_[0-9a-f]+_pick_i64_[0-9]+\(NULL, \(void \*\)\(v[0-9]+\), v[0-9]+\);
 c_not_contains=xrt_index_get(
 c_not_regex=XR_TO_INT\(generic_array_storage_force_clone_plan_[0-9a-f]+_pick_

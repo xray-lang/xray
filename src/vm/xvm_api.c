@@ -23,6 +23,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+#include "../shared/xr_panic_report.h"
 
 static XrArray *vm_api_root_array_new(XrVMRuntime *isolate) {
     return xr_array_with_capacity_in(&isolate->core_rt->root_alloc, 4, XR_ELEM_ANY);
@@ -591,10 +592,27 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
         is_child_coro = !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
     }
     if (!is_child_coro && !(isolate && isolate->suppress_exception_print)) {
-        fprintf(stderr, "\n[Uncaught Exception]\n");
-        xr_panic_info_print(isolate, exception);
-        fprintf(stderr, "\n");
+        xr_panic_report_emit(stderr, (int) xr_panic_info_get_code(isolate, exception),
+                             xr_panic_info_get_message(isolate, exception), XR_COLOR_SUPPORTED());
+        /* The captured trace is the VM's free by-product; the AOT native path
+         * has none, so it stays out of the shared report and behind an opt-in
+         * switch that keeps default output identical across backends. */
+        if (xr_panic_backtrace_enabled(getenv("XRAY_BACKTRACE")))
+            xr_panic_info_print_trace(isolate, exception, stderr);
     }
+}
+
+/* Uncaught value-return error diagnostic (spec §8.1.1). Every top-level
+ * finalization path funnels through here so the wording cannot drift between
+ * them: the coroutine backend's run_finalize (scheduler-backed roots and
+ * dropped fire-and-forget `go`) and xr_execute's elided-root fast path, which
+ * never materializes a main coroutine at all. */
+void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine) {
+    if (!isolate || isolate->suppress_exception_print || XR_IS_NULL(error))
+        return;
+    XrString *msg = xr_value_to_string(isolate, error);
+    fprintf(stderr, "\n[Uncaught Error%s] %s\n", in_go_coroutine ? " in go coroutine" : "",
+            msg ? (const char *) msg->data : "<error>");
 }
 
 bool xr_vm_is_catch_reachable(XrVMRuntime *isolate) {

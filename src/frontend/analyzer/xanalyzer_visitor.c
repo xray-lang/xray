@@ -32,6 +32,8 @@
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../shared/xr_accessor_name.h"
+#include "xa_selection.h"
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -409,8 +411,12 @@ XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name) {
 XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
     if (!module_name)
         return false;
+    /* `codegen` is admissible because its whole surface is compiler barriers
+     * (opaque / compilerFence) that lower to inline expressions over <stdint.h>
+     * with no runtime, libc, or allocation dependency. */
     return strcmp(module_name, "prelude") == 0 || strcmp(module_name, "math") == 0 ||
-           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0;
+           strcmp(module_name, "mem") == 0 || strcmp(module_name, "simd") == 0 ||
+           strcmp(module_name, "codegen") == 0;
 }
 
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
@@ -588,19 +594,6 @@ static AstNode *xa_parallel_symbol_function_body(XaInferContext *ctx, XaSymbol *
     return NULL;
 }
 
-static XaSymbol *xa_parallel_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
-        return NULL;
-    uint32_t symbol_id = node->as.variable.symbol_id;
-    if (symbol_id != 0) {
-        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
-        if (sym)
-            return sym;
-    }
-    const char *name = node->as.variable.name;
-    return name ? xa_lookup_visible_symbol(ctx, name) : NULL;
-}
-
 static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !sym || !sym->is_imported)
         return sym;
@@ -625,7 +618,7 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
         !ma->object->as.variable.name)
         return NULL;
 
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
 
@@ -638,20 +631,6 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
         return NULL;
     XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     return xa_parallel_import_target_symbol(ctx, member);
-}
-
-static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    const char *module_name = ma->object->as.variable.name;
-    if (!module_name || strcmp(module_name, "Coro") != 0)
-        return false;
-    XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, ma->object) : NULL;
-    return sym && sym->kind == XA_SYM_MODULE && sym->is_builtin;
 }
 
 static XrType *xa_parallel_node_type(XaInferContext *ctx, AstNode *node) {
@@ -767,7 +746,7 @@ static const char *xa_parallel_module_member_yieldable_feature(XaInferContext *c
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
         return NULL;
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
@@ -786,7 +765,7 @@ static const char *xa_parallel_module_member_unknown_effect_feature(XaInferConte
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE)
         return NULL;
-    XaSymbol *mod_sym = xa_parallel_symbol_from_variable_node(ctx, ma->object);
+    XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
     if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
@@ -845,7 +824,7 @@ static const char *xa_parallel_stdlib_suspend_call_feature(XaParallelCallbackEff
     if (feature)
         return feature;
     if (call->callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, call->callee);
         return xa_parallel_imported_yieldable_feature(ctx, sym, scan->feature_buf,
                                                       sizeof(scan->feature_buf));
     }
@@ -866,7 +845,7 @@ static const char *xa_parallel_unknown_effect_call_feature(XaParallelCallbackEff
     if (feature)
         return feature;
     if (call->callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, call->callee);
         return xa_parallel_imported_unknown_effect_feature(ctx, sym, scan->feature_buf,
                                                            sizeof(scan->feature_buf));
     }
@@ -912,7 +891,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         return NULL;
 
     XaInferContext *ctx = scan ? scan->ctx : NULL;
-    if (xa_parallel_call_is_coro_yield(ctx, call)) {
+    if (xa_call_is_builtin_module_member(ctx, call, "Coro", "yield")) {
         if (is_suspend)
             *is_suspend = true;
         return "Coro.yield()";
@@ -942,7 +921,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
     if (call->callee->type == AST_VARIABLE &&
         xa_parallel_assert_call_name(call->callee->as.variable.name)) {
         const char *name = call->callee->as.variable.name;
-        XaSymbol *sym = ctx ? xa_parallel_symbol_from_variable_node(ctx, call->callee) : NULL;
+        XaSymbol *sym = ctx ? xa_resolve_variable_symbol(ctx, call->callee) : NULL;
         if (sym && sym->kind == XA_SYM_FUNCTION && sym->is_builtin)
             return name ? name : "assert";
     }
@@ -960,7 +939,7 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
     XaSymbol *callee_sym = NULL;
     const char *callee_name = NULL;
     if (call->callee->type == AST_VARIABLE) {
-        callee_sym = xa_parallel_symbol_from_variable_node(ctx, call->callee);
+        callee_sym = xa_resolve_variable_symbol(ctx, call->callee);
         callee_name = call->callee->as.variable.name;
     } else if (call->callee->type == AST_MEMBER_ACCESS) {
         callee_sym = xa_parallel_module_member_symbol(ctx, call->callee);
@@ -1102,7 +1081,7 @@ xa_parallel_function_value_expr_status(XaInferContext *ctx, AstNode *expr, XaSym
     }
 
     if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_parallel_symbol_from_variable_node(ctx, expr);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, expr);
         return xa_parallel_function_value_symbol_status(ctx, sym, call_stack, call_depth,
                                                         out_suspend);
     }
@@ -2069,6 +2048,28 @@ static int object_shape_field_index_local(XrType *type, const char *name) {
     return -1;
 }
 
+/* Record that this write goes through a computed property's setter, so lowering
+ * emits the call instead of a slot store. Mirrors the read side's
+ * XA_SEL_PROPERTY selection in xanalyzer_visitor_expr.c. */
+static void xa_record_property_write(XaInferContext *ctx, AstNode *node, XrType *receiver,
+                                     XaSymbol *setter, XrType *value_type) {
+    if (!ctx || !ctx->analyzer || !node || !setter)
+        return;
+    XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
+    if (!st)
+        return;
+    XaSelection sel = {
+        .kind = XA_SEL_PROPERTY,
+        .receiver_type = receiver,
+        .target_symbol = setter,
+        .field_index = -1,
+        .result_type = value_type,
+        .is_indirect = false,
+        .is_optional = false,
+    };
+    xa_selection_table_set(st, node, &sel);
+}
+
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links) {
     if (out_links)
@@ -2130,6 +2131,26 @@ static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *typ
                                         type->instance.type_args, type->instance.type_arg_count);
     xr_free(param_names);
     return result ? result : field_type;
+}
+
+/* Declared type of `obj.field` for a compound assignment target, with the
+ * receiver's type arguments substituted in.  NULL when the field is unknown, so
+ * the caller falls back to inferring the right-hand side without context. */
+static XrType *compound_assign_member_target_type(XaInferContext *ctx, XrType *obj_type,
+                                                  const char *field_name) {
+    if (!ctx || !obj_type || !field_name)
+        return NULL;
+    XaSymbolLinks *class_links = NULL;
+    XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
+    if (!class_info)
+        return NULL;
+    XaSymbol *field = xa_class_info_lookup_member(class_info, field_name);
+    if (!field)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, field);
+    if (!links || !links->type || XR_TYPE_IS_UNKNOWN(links->type))
+        return NULL;
+    return member_set_substitute_field_type(ctx, obj_type, class_links, links->type);
 }
 
 /*
@@ -2777,6 +2798,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
 
     XrClassInfo *info = xa_class_info_new(cls->name);
     info->explicit_final = cls->explicit_final;
+    info->is_overlay_union = is_union_decl;
     info->location =
         (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
     if (cls->super_name)
@@ -2972,7 +2994,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                  import->module_name ? import->module_name : "?");
         xa_freestanding_report_unavailable(
             ctx, node, feature,
-            "only prelude, math, mem, and simd are in the freestanding allowlist");
+            "only prelude, math, mem, simd, and codegen are in the freestanding allowlist");
     }
 
     // For whole module import: import math or import math as m
@@ -5190,6 +5212,41 @@ static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType
     return xa_analyzer_is_iterator(analyzer, rt, out_elem);
 }
 
+/* Element type a single constraint promises when the constrained value is
+ * iterated. The built-in `Iterable<E>` interface names E directly; every other
+ * constraint (a class upper bound with `iterator()`, an `Iterator<E>` bound)
+ * answers through the analyzer's structural check. */
+/* Iteration element promised by a type parameter's constraints.
+ *
+ * A generic body is analyzed before monomorphization, so `for (x in xs)` over
+ * `xs: T` can only be justified by what T was constrained to — the concrete
+ * collection type is not known until the clone for each instantiation is
+ * analyzed. Constraints are recorded on the enclosing generic declaration's
+ * symbol links rather than on the XR_KIND_TYPE_PARAM value, so this resolves
+ * them through xa_lookup_type_param_constraints, the same scope walk the
+ * Hashable check uses.
+ *
+ * Methods, interface methods, functions and classes are all equivalent here:
+ * a method's own `<T: ...>` list reaches its symbol links like any other. */
+static bool xa_type_param_iteration_element(XaInferContext *ctx, XrType *type_param,
+                                            XrType **out_elem) {
+    if (!ctx || !ctx->analyzer || !type_param || type_param->kind != XR_KIND_TYPE_PARAM)
+        return false;
+    if (xa_analyzer_is_iterable(ctx->analyzer, type_param->type_param.constraint, out_elem))
+        return true;
+
+    const char *name = type_param->type_param.name;
+    if (!name)
+        return false;
+    int count = 0;
+    XrType **constraints = xa_lookup_type_param_constraints(ctx, NULL, name, &count, NULL);
+    for (int i = 0; i < count; i++) {
+        if (xa_analyzer_is_iterable(ctx->analyzer, constraints ? constraints[i] : NULL, out_elem))
+            return true;
+    }
+    return false;
+}
+
 static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_node, AstNode *value,
                                            XrType *value_type) {
     if (!ctx || !yield_node || !value || !xa_type_needs_borrow_escape_guard(value_type) ||
@@ -5211,6 +5268,32 @@ static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_n
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
     return true;
+}
+
+/* Whether a type is the prelude `Range`, as opposed to a user class that
+ * happens to reuse the name. Prelude names are ordinary identifiers, so
+ * `class Range { ... }` is legal; user class instances always carry a
+ * class_ref, while the prelude registry builds its named instances with a
+ * NULL one. A user Range still has to supply iterator() to be iterable, so
+ * it must not inherit the builtin's int-sequence domain. The matching
+ * distinction in is_index_iterable_collection() (src/ir/xi_lower_stmt.c)
+ * keeps lowering in step with what is accepted here. */
+static bool xa_type_is_prelude_range(const XrType *type) {
+    return xr_type_is_named_class(type, "Range") && type->instance.class_ref == NULL;
+}
+
+/* A range is a flat sequence of ints, so it has no second yield to bind. The
+ * check lives here because both range for-in forms — the inline `a..b`
+ * literal and a stored `Range` value — must reject key-value iteration
+ * identically; without it the value form reaches lowering and fails at
+ * runtime with "method 'entriesIterator' not found". */
+static void xa_for_in_reject_range_keyvalue(XaInferContext *ctx, AstNode *node,
+                                            const ForInStmtNode *fi) {
+    if (!fi->is_keyvalue)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               "Range iteration yields values only; use `for (i in range)`", &loc);
 }
 
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
@@ -5237,6 +5320,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XaSymbol *id_sym = xa_scope_lookup(ctx->analyzer->current_scope, id->name);
             if (id_sym)
                 id->symbol_id = id_sym->id;
+            /* Canonicalization rewrites x++ into x = x + 1 and needs the target
+             * type to type the synthesized operand.  Publish it here: the
+             * analyzer owns types, and a literal invented after inference can
+             * never acquire a conversion witness of its own. */
+            if (id_sym && id_sym->links.type)
+                xa_analyzer_set_node_type(ctx->analyzer, node, id_sym->links.type);
             xa_parallel_capture_check(ctx, node, id_sym, true);
             if (id_sym && (id_sym->is_const || !id_sym->is_rebindable)) {
                 XrLocation loc = {
@@ -5249,13 +5338,31 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_COMPOUND_ASSIGNMENT: {
-            // Infer value expression so its type is recorded in the side table
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
-            XrType *ca_value_type = ca->value ? xa_visit_infer_expr(ctx, ca->value) : NULL;
-            // Visit object expression for member compound assign (obj.field += ...)
+            /* Resolve the assignment target *before* the right-hand side, so the
+             * RHS is inferred with the target as its expected type.  `x += 1`
+             * must type its literal exactly as `x = x + 1` does: canonicalization
+             * rewrites it into that form later and cannot re-run inference, so an
+             * operand typed without context here stays wrong all the way down. */
             XrType *ca_obj_type = NULL;
             if (ca->object)
                 ca_obj_type = xa_visit_infer_expr(ctx, ca->object);
+            XaSymbol *ca_sym =
+                ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
+            if (ca_sym)
+                ca->symbol_id = ca_sym->id;
+            XrType *ca_target_type = NULL;
+            if (!ca->object && ca_sym)
+                ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
+            if (ca->object && ca_obj_type && ca->name)
+                ca_target_type = compound_assign_member_target_type(ctx, ca_obj_type, ca->name);
+
+            XrType *ca_saved_expected = ctx->expected_type;
+            if (ca_target_type && !XR_TYPE_IS_UNKNOWN(ca_target_type))
+                ctx->expected_type = ca_target_type;
+            XrType *ca_value_type = ca->value ? xa_visit_infer_expr(ctx, ca->value) : NULL;
+            ctx->expected_type = ca_saved_expected;
+
             // Tuples are immutable: reject compound assignment on tuple fields
             if (ca_obj_type && XR_TYPE_IS_TUPLE(ca_obj_type)) {
                 XrLocation loc = {
@@ -5269,27 +5376,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 break;
             }
             // Check const/in-param immutability
-            XaSymbol *ca_sym =
-                ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
-            if (ca_sym)
-                ca->symbol_id = ca_sym->id;
             xa_parallel_capture_check(ctx, node, ca_sym, true);
-            XrType *ca_target_type = NULL;
-            if (!ca->object && ca_sym)
-                ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
-            if (ca->object && ca_obj_type && ca->name) {
-                XaSymbolLinks *class_links = NULL;
-                XrClassInfo *class_info = member_set_class_info(ctx, ca_obj_type, &class_links);
-                if (class_info) {
-                    XaSymbol *field = xa_class_info_lookup_member(class_info, ca->name);
-                    if (field) {
-                        XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
-                        if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type))
-                            ca_target_type = member_set_substitute_field_type(
-                                ctx, ca_obj_type, class_links, fl->type);
-                    }
-                }
-            }
             if (ca_target_type)
                 xa_analyzer_set_node_type(ctx->analyzer, node, ca_target_type);
             if (ca->op == TK_MOD_ASSIGN && ca_target_type && ca_value_type &&
@@ -5375,6 +5462,53 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrClassInfo *field_owner = NULL;
                     XaSymbol *field =
                         xa_class_info_lookup_member_owner(class_info, ms->member, &field_owner);
+                    /* No slot by that name: the write may target a computed
+                     * property, whose setter the parser stored as "set:<prop>".
+                     * Resolving it here is what makes the write work in both
+                     * backends -- the VM alone could find the accessor by name
+                     * at runtime, so an AOT build silently dropped the store.
+                     * A property with only a getter has no setter to find and
+                     * is reported as read-only rather than deferred to a
+                     * runtime "field not declared" panic. */
+                    if (!field) {
+                        char setter_name[XR_ACCESSOR_NAME_MAX];
+                        char getter_name[XR_ACCESSOR_NAME_MAX];
+                        if (xr_accessor_name(setter_name, sizeof(setter_name),
+                                             XR_ACCESSOR_SET_PREFIX, ms->member) &&
+                            xr_accessor_name(getter_name, sizeof(getter_name),
+                                             XR_ACCESSOR_GET_PREFIX, ms->member)) {
+                            XrClassInfo *acc_owner = NULL;
+                            XaSymbol *setter = xa_class_info_lookup_member_owner(
+                                class_info, setter_name, &acc_owner);
+                            if (setter && setter->kind == XA_SYM_METHOD) {
+                                xa_check_member_visibility(ctx, node, setter, acc_owner);
+                                XaSymbolLinks *sl = xa_analyzer_get_links(ctx->analyzer, setter);
+                                /* The setter's parameter type drives the value
+                                 * the same way a field's declared type does, so
+                                 * `t.celsius = 100` adapts the literal to float
+                                 * exactly as a float field would. */
+                                if (sl && sl->type && XR_TYPE_IS_FUNCTION(sl->type) &&
+                                    sl->type->function.param_count == 1 &&
+                                    sl->type->function.params) {
+                                    member_type = sl->type->function.params[0].type;
+                                    if (member_type && !XR_TYPE_IS_UNKNOWN(member_type))
+                                        ctx->expected_type = member_type;
+                                }
+                                xa_record_property_write(ctx, node, obj_type, setter, member_type);
+                            } else if (xa_class_info_lookup_member(class_info, getter_name)) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = node->line,
+                                                  .column = node->column};
+                                char msg[224];
+                                snprintf(msg, sizeof(msg),
+                                         "cannot assign to '%s': it is a read-only computed "
+                                         "property, declared with a getter and no setter",
+                                         ms->member);
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
+                            }
+                        }
+                    }
                     if (field) {
                         // Enforce private/protected visibility on the write target.
                         xa_check_member_visibility(ctx, node, field, field_owner);
@@ -5457,14 +5591,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                         : false;
                     if (readonly) {
                         char msg[256];
-                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                        snprintf(msg, sizeof(msg),
+                                 "cannot assign to read-only field '%s.%s' (declared const)",
                                  object_shape_type_label_local(obj_type), ms->member);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (obj_type->object.is_sealed) {
                     char msg[256];
-                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                    snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(obj_type), ms->member);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -5967,6 +6102,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *item_type = xr_type_new_unknown(NULL);
             XrType *value_type = xr_type_new_unknown(NULL);
 
+            /* for-in consumes the collection whole, so a still-nullable one is
+             * the same error as `x.f` or `x[i]` on a nullable receiver — the
+             * loop would ask a null value for its length. Checked before the
+             * type dispatch below, which only sees through to `Array<int>` and
+             * would otherwise accept `Array<int>?` and defer the failure to a
+             * runtime "value does not implement Lengthable". `?.` has no for-in
+             * spelling, so it is not offered as a remedy. */
+            xa_check_nullable_use(ctx, node, coll_type, "iteration", false);
+
             if (is_enum_iter) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -5999,6 +6143,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     item_type = enum_type ? enum_type : xr_type_new_unknown(NULL);
                 }
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
+                xa_for_in_reject_range_keyvalue(ctx, node, fi);
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
                 if (xr_type_is_enum_metadata_named(coll_type, XR_ENUM_VARIANTS_TYPE_NAME)) {
@@ -6061,6 +6206,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
+                } else if (xa_type_is_prelude_range(coll_type)) {
+                    /* A `Range` held in a variable, parameter, or field is the
+                     * same iteration domain as the inline `a..b` form above —
+                     * the literal is just the fast path that never materializes
+                     * the object. Both yield int. */
+                    xa_for_in_reject_range_keyvalue(ctx, node, fi);
+                    item_type = xr_type_new_int(NULL);
                 } else if (XR_TYPE_IS_STRING(coll_type)) {
                     item_type = xr_type_new_rune(NULL);
                     if (fi->is_keyvalue) {
@@ -6090,36 +6242,33 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 } else if (coll_type->kind == XR_KIND_TYPE_PARAM) {
-                    /* A generic parameter is iterable exactly when one of its
-                     * declared bounds is: `<T: Iterable<int>>` makes `for (i in
-                     * xs)` legal and gives i the bound's element type. Nothing
-                     * else is known about T inside the generic body, so an
-                     * unbounded T must be rejected rather than deferred to a
-                     * runtime "method 'iterator' not found". */
-                    const char *tp_name = coll_type->type_param.name;
-                    int constraint_count = 0;
-                    XrType **constraints = xa_lookup_type_param_constraints(
-                        ctx, NULL, tp_name, &constraint_count, NULL);
+                    /* Generic body, analyzed before monomorphization: the
+                     * collection's real type is unknown here, so iterability
+                     * comes from the type parameter's constraints. The clone
+                     * produced for each concrete instantiation is re-analyzed
+                     * against the substituted collection type. */
                     XrType *elem = NULL;
-                    bool iterable = false;
-                    for (int ci = 0; ci < constraint_count; ci++) {
-                        if (constraints && constraints[ci] &&
-                            xa_analyzer_is_iterable(ctx->analyzer, constraints[ci], &elem) &&
-                            elem) {
-                            iterable = true;
-                            break;
+                    const char *param_name =
+                        coll_type->type_param.name ? coll_type->type_param.name : "T";
+                    if (xa_type_param_iteration_element(ctx, coll_type, &elem)) {
+                        if (fi->is_keyvalue) {
+                            /* Key/value shape depends on the instantiation
+                             * (Map yields K,V; Array yields index,element),
+                             * so leave both to the monomorphized clone. */
+                            item_type = xr_type_new_unknown(NULL);
+                            value_type = xr_type_new_unknown(NULL);
+                        } else if (elem) {
+                            item_type = elem;
                         }
-                    }
-                    if (iterable) {
-                        item_type = elem;
                     } else {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
-                        char msg[256];
+                        char msg[288];
                         snprintf(msg, sizeof(msg),
-                                 "type parameter '%s' is not iterable; add an iterable bound such "
-                                 "as '<%s: Iterable<int>>' to iterate it",
-                                 tp_name ? tp_name : "?", tp_name ? tp_name : "T");
+                                 "type parameter '%s' is not iterable; constrain it with "
+                                 "'Iterable<T>' (e.g. '<%s: Iterable<int>>') or with a type "
+                                 "that has an 'iterator()' method",
+                                 param_name, param_name);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
@@ -6140,7 +6289,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "type '%s' is not iterable; expected an Array, Map, Set, string, "
-                                 "Json, range or a class with an 'iterator()' method",
+                                 "Json, Range or a class with an 'iterator()' method",
                                  xr_type_to_string(coll_type));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -6489,14 +6638,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                         : false;
                     if (readonly) {
                         char msg[256];
-                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                        snprintf(msg, sizeof(msg),
+                                 "cannot assign to read-only field '%s.%s' (declared const)",
                                  object_shape_type_label_local(array_type), key);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (array_type->object.is_sealed) {
                     char msg[256];
-                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                    snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(array_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);

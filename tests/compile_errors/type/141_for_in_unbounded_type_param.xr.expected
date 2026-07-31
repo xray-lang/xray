@@ -1,2 +1,2 @@
 E0352
-type parameter 'T' is not iterable; add an iterable bound such as '<T: Iterable<int>>' to iterate it
+type parameter 'T' is not iterable; constrain it with 'Iterable<T>'

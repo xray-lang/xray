@@ -1,0 +1,83 @@
+// anchor: class-field-default-initializers
+//
+// A field declaration initializer applies to every instance, whether or not
+// the class declares a constructor. The VM applies these from
+// XrClassDescriptor::instance_fields[].default_value inside
+// xr_instance_init_inplace; AOT object construction has no descriptor to read
+// and must replay the same stores after zeroing the instance and before any
+// constructor body runs. The AOT native backend used to drop them entirely, so
+// `Scalars().i` read back 0 in a native build and 10 under the VM.
+
+class Scalars {
+    i: int = 10
+    f: float = 1.5
+    b: bool = true
+    s: string = "hi"
+}
+
+// A nullable field keeps the class off the native struct layout, so this also
+// covers the boxed instance shape.
+class Boxed {
+    n: string? = null
+    tag: string = "boxed"
+    count: int = 3
+}
+
+// Defaults are applied before the constructor body: `kept` survives, `taken`
+// is overwritten.
+class WithCtor {
+    kept: int = 10
+    taken: int = 20
+
+    constructor() {
+        this.taken = 99
+    }
+}
+
+class Parent {
+    p: int = 5
+    label: string = "parent"
+}
+
+class Child extends Parent {
+    c: int = 6
+}
+
+// A subclass that declares no fields of its own still inherits the defaults.
+class Bare extends Parent {
+}
+
+fn main() {
+    // Field read straight off a temporary, and through a local: the two
+    // shapes reach different AOT instance-construction emitters.
+    print(Scalars().i)
+    print(Scalars().f)
+    print(Scalars().b)
+    print(Scalars().s)
+
+    var v = Scalars()
+    print(v.i)
+    print(v.f)
+    print(v.b)
+    print(v.s)
+
+    var boxed = Boxed()
+    print(boxed.n == null)
+    print(boxed.tag)
+    print(boxed.count)
+
+    var wc = WithCtor()
+    print(wc.kept)
+    print(wc.taken)
+
+    var ch = Child()
+    print(ch.p)
+    print(ch.label)
+    print(ch.c)
+
+    var bare = Bare()
+    print(bare.p)
+    print(bare.label)
+}
+
+main()

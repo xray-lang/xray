@@ -109,37 +109,16 @@ typedef struct XaParamEffectSummary {
     XaUnknownReasonSet incomplete_reason;
 } XaParamEffectSummary;
 
-/* Compiler-owned Slice proof.  The template is the serializable function
- * contract; an instantiated evidence record binds it to the caller's root.
- * Neither form is constructible from source code. */
-typedef enum XaViewRangeTransform {
-    XA_VIEW_RANGE_IDENTITY = 0,
-    XA_VIEW_RANGE_SUBRANGE,
-    XA_VIEW_RANGE_AFFINE,
-    XA_VIEW_RANGE_UNKNOWN,
-} XaViewRangeTransform;
-
-typedef struct XaViewEvidenceTemplate {
+/* Compiler-owned Slice<T> return contract: which owner a function's returned
+ * view borrows from.  `complete` means the origin is a uniquely inferable
+ * parameter / receiver / static root, which is the precondition for the
+ * caller to keep accounting for the borrow (§2.4.2).  Not constructible from
+ * source code. */
+typedef struct XaViewReturnContract {
     XrViewReturnSourceKind origin;
     int16_t param_index;
-    XaViewRangeTransform range_transform;
-    XaCapabilityRequirement required_capability;
-    uint32_t element_type_id;
-    uint32_t required_alignment;
     bool complete;
-} XaViewEvidenceTemplate;
-
-typedef struct XaViewEvidence {
-    XaViewEvidenceTemplate contract;
-    XaRootId root;
-    uint64_t byte_offset;
-    uint64_t byte_length;
-    uint32_t alias_class;
-    uint32_t relocation_epoch;
-    bool range_known;
-    bool stable_address;
-    bool invalidation_summary_complete;
-} XaViewEvidence;
+} XaViewReturnContract;
 
 // Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)
 typedef struct XaSymbol XaSymbol;
@@ -226,7 +205,7 @@ struct XaSymbolLinks {
     bool return_storage_mixed;
     bool return_storage_scanned;
     bool return_storage_scan_in_progress;
-    XaViewEvidenceTemplate return_view;
+    XaViewReturnContract return_view;
     XaParamEffectSummary *return_fn_param_effects;
     int return_fn_param_effect_count;
     bool return_fn_effect_mixed;
@@ -322,24 +301,25 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;             // const declaration / immutable field
-    bool is_rebindable;        // binding name may be assigned again
-    bool is_readonly_binding;  // binding exposes deep-readonly semantics
-    bool is_exported;          // export modifier
-    bool is_static;            // static member
-    bool is_private;           // private member (class-only visibility)
-    bool is_protected;         // protected member (class + subclass visibility)
-    bool is_override;          // analyzer-inferred exact-signature method override
-    bool is_imported;          // selective import binding; kind remains the exported semantic kind
-    bool is_builtin;           // built-in type member (Array.push, etc.)
-    bool mutates_receiver;     // method body writes through `this`
-    XrParamMode passing_mode;  // read / ref / move parameter contract
+    bool is_const;              // const declaration / immutable field
+    bool is_rebindable;         // binding name may be assigned again
+    bool is_readonly_binding;   // binding exposes deep-readonly semantics
+    bool is_exported;           // export modifier
+    bool is_static;             // static member
+    bool is_private;            // private member (class-only visibility)
+    bool is_protected;          // protected member (class + subclass visibility)
+    bool is_override;           // analyzer-inferred exact-signature method override
+    bool is_imported;           // selective import binding; kind remains the exported semantic kind
+    bool is_builtin;            // built-in type member (Array.push, etc.)
+    bool mutates_receiver;      // method body writes through `this`
+    bool has_declared_default;  // field declaration carries an initializer expression
+    XrParamMode passing_mode;   // read / ref / move parameter contract
     uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing
 
     // Parent references
-    XaScope *scope;               // Owning scope
-    XaSymbol *scope_owned_next;   // Intrusive link for scope-owned lifetime
-    XaSymbol *parent;             // Parent symbol (for methods/fields)
+    XaScope *scope;              // Owning scope
+    XaSymbol *scope_owned_next;  // Intrusive link for scope-owned lifetime
+    XaSymbol *parent;            // Parent symbol (for methods/fields)
 
     // For type aliases: declaration-backed TypeRef plus optional resolved cache.
     struct AstNode *type_alias_node;

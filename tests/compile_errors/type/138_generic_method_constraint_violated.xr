@@ -12,7 +12,7 @@
 // the case to bite.
 //
 // The positive half lives in
-// tests/regression/12_type_checking/1236_generic_method_constraint.xr.
+// tests/regression/12_type_checking/1239_generic_method_constraint.xr.
 
 interface Greeter {
     greet() -> string

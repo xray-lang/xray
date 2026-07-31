@@ -77,8 +77,10 @@ fn test_tostring() {
     assert(cs.indexOf("Channel") == 0)
 
     // === 10. Function toString ===
+    // A function value renders without its source name (commit 781de7ef8):
+    // the name is debug detail, not part of the value.
     var fs = string(myFunc)
-    assert(fs.indexOf("fn") == 0)
+    assert_eq(fs, "<fn>")
 
     // === 11. Class and Instance toString ===
     assert(string(Dog).indexOf("class") == 0)

@@ -47,11 +47,30 @@ typedef struct XaErrorSet {
 
 /* Source-semantic effects are a product, not a mutually exclusive state.
  * Backend residue such as a release-AOT heap allocation is intentionally not
- * represented here; it belongs to the target/profile shape plan. */
+ * represented here; it belongs to the target/profile shape plan.
+ *
+ * Suspension is two independent dimensions, not one.  `yield expr` and
+ * `Coro.yield()` both stop a body mid-flight, but they stop it in ways that
+ * differ in every property a caller can act on, so a single bit cannot answer
+ * either question:
+ *
+ *   SCHED_SUSPEND -- control reaches the scheduler.  The coroutine parks, may
+ *     resume on a different OS thread, and observes cancellation here.  Sources:
+ *     `await`, `select`, scope join, `Coro.yield()`, the blocking
+ *     concurrency-handle methods, `time.sleep`, and an audited native contract
+ *     that declares it.  Caller-visible: it composes transitively across calls.
+ *
+ *   GEN_SUSPEND -- the body contains `yield expr`, so its frame must survive a
+ *     symmetric transfer back to the iterator driving it.  The scheduler is
+ *     never involved, no thread migration is possible, and it is not a
+ *     cancellation point.  It does NOT compose across calls: driving a generator
+ *     resumes the generator's frame and returns normally, so a caller's own
+ *     frame is untouched.  A generator that also reaches the scheduler
+ *     publishes SCHED_SUSPEND independently, and that bit does propagate. */
 typedef enum XaSemanticEffect {
     XA_SEM_EFFECT_NONE = 0,
     XA_SEM_EFFECT_ALLOC = 1u << 0,
-    XA_SEM_EFFECT_SUSPEND = 1u << 1,
+    XA_SEM_EFFECT_SCHED_SUSPEND = 1u << 1,
     XA_SEM_EFFECT_MAY_BLOCK = 1u << 2,
     XA_SEM_EFFECT_THREAD_BLOCK = 1u << 3,
     XA_SEM_EFFECT_PANIC = 1u << 4,
@@ -59,7 +78,14 @@ typedef enum XaSemanticEffect {
     XA_SEM_EFFECT_IO = 1u << 6,
     XA_SEM_EFFECT_FOREIGN = 1u << 7,
     XA_SEM_EFFECT_SYNC = 1u << 8,
+    XA_SEM_EFFECT_GEN_SUSPEND = 1u << 9,
 } XaSemanticEffect;
+
+/* Either kind of suspension means the frame is not a plain function activation.
+ * Backends asking "can control leave this body and come back?" want this union;
+ * user-facing contracts ask the two questions separately. */
+#define XA_SEM_EFFECT_ANY_SUSPEND                                                                  \
+    ((XaSemanticEffectSet) (XA_SEM_EFFECT_SCHED_SUSPEND | XA_SEM_EFFECT_GEN_SUSPEND))
 
 typedef uint32_t XaSemanticEffectSet;
 

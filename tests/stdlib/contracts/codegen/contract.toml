@@ -1,0 +1,35 @@
+schema = 1
+module = "codegen"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "executable"
+legacy_cases_manifest = "tests/stdlib/contracts/codegen/legacy_expected.jsonl"
+legacy_public_surface = [
+  "opaque",
+  "compilerFence",
+]
+intentional_semantic_changes = [
+  "codegen is a permanent semantic-neutral control surface, not a migration: the module source is the VM/reference semantics and the analyzer binds each declaration to a compiler-owned intrinsic identity",
+  "this contract is a behavior baseline lock stating that the controls are observable to the backend and invisible to program semantics",
+]
+known_legacy_bugs = [
+  "none recorded; the surface has no observable behavior of its own to get wrong",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/codegen/diff_cases.txt"
+benchmark_suite = "stdlib/codegen"
+
+[[legacy_behavior]]
+id = "opaque-is-identity"
+classification = "required"
+new_behavior = "opaque(v) yields exactly v over its accepted domain -- non-null integer scalars and Ptr<T>/MutPtr<T>, including u64 zero and maximum -- and constrains code shape only; aggregate, managed, floating-point, boolean, rune and nullable operands are rejected at analysis"
+
+[[legacy_behavior]]
+id = "compiler-fence-is-semantically-empty"
+classification = "required"
+new_behavior = "compilerFence() observes and changes nothing at the language level; it orders compiler scheduling, never inter-thread state"
+
+[[legacy_behavior]]
+id = "controls-are-allocation-free"
+classification = "required"
+new_behavior = "neither control allocates, throws, suspends or blocks, so both remain usable on a freestanding target with no runtime"

@@ -1,0 +1,34 @@
+// anchor: function-value-to-string
+// A function value renders without its source name on both backends. The name
+// is debug metadata: AOT's callable descriptor carries none, and sourcing one
+// from the type-name profile would make a program's output depend on how it was
+// built. One name-free spelling keeps VM and AOT in step on every profile.
+
+fn helper(n: int) -> int {
+    return n + 1
+}
+
+fn apply(f: (int) -> int, n: int) -> int {
+    return f(n)
+}
+
+fn main() {
+    var named = helper
+    var lambda = (a: int) -> a * 2
+
+    print(named)
+    print(string(named))
+    print(lambda)
+    print(string(lambda))
+
+    print(len(string(named)))
+    print(len(string(lambda)))
+    print("f=" + string(named))
+
+    // The rendering is independent of whether the value is still callable.
+    print(apply(named, 4))
+    print(apply(lambda, 4))
+    print(string(named) == string(lambda))
+}
+
+main()

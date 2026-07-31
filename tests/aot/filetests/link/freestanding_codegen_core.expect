@@ -1,0 +1,16 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_caps": []
+contains="runtime_objects": []
+contains="stdlib_objects": []
+c_contains=#include "xrt_core_freestanding.h"
+# codegen is a barrier surface over <stdint.h>: an opaque value and a compiler
+# fence, with no runtime, libc or allocation dependency.
+c_contains=xrt_codegen_opaque_u64(
+c_contains=xrt_codegen_opaque_i64(
+c_contains=xrt_codegen_compiler_fence()
+c_not_contains=#include "xrt.h"
+c_not_contains=xrt_arc_alloc
+c_not_contains=xrt_shared[
+not_contains=xray_rt_coro
+not_contains=xray_core
