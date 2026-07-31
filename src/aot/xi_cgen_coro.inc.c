@@ -1922,6 +1922,22 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
+        /* Edge temporaries for the phi copies.  emit_phi_copies declares them
+         * inline at the assignment unless pre_decl_all is set, in which case it
+         * expects a function-scope declaration -- and the resume prologue never
+         * emitted one, so the assignment referenced an undeclared temporary.
+         * Keyed on the same cg_phi_copy_should_emit predicate as the assignment
+         * and as the ordinary prologue in xi_cgen.c.  A phi that lives in the
+         * frame still lands in a stack temporary on the edge before publication. */
+        for (uint16_t pred_idx = 0; ctx->pre_decl_all && pred_idx < blk->npreds; pred_idx++) {
+            for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
+                    continue;
+                fprintf(out, "    %s ", cg_coro_decl_ctype(ctx, f, &phi->value));
+                emit_phi_tmp_ref(out, blk, phi, pred_idx);
+                fprintf(out, ";\n");
+            }
+        }
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (!cg_phi_has_storage(phi))
                 continue;
@@ -3194,18 +3210,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_SCOPE_EXIT) {
         emit_value_generated_line_reset(ctx, out, v);
         int sid = ++(*state_id);
-        fprintf(out, "    XrValue _scope_exit_value_%u = XR_NULL_VAL;\n", v->id);
+        /* A scope block is a statement — scope exit yields no value.  When the
+         * frame still reserves a slot for the unit result, park a null in it;
+         * nothing ever reads it. */
+        bool has_storage = cg_coro_value_has_storage(f, v);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
-        fprintf(out, "    XrAotResult _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ", v->id,
+        fprintf(out, "    XrAotResult _scope_exit_%u = xr_aot_scope_exit(ctx, %u);\n", v->id,
                 (unsigned) v->aux_int);
-        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
-            fprintf(out, "&");
-            emit_vref(out, v);
-        } else {
-            fprintf(out, "&_scope_exit_value_%u", v->id);
-        }
-        fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
@@ -3216,15 +3228,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
-        fprintf(out, "    _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ", v->id,
+        fprintf(out, "    _scope_exit_%u = xr_aot_scope_exit(ctx, %u);\n", v->id,
                 (unsigned) v->aux_int);
-        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
-            fprintf(out, "&");
-            emit_vref(out, v);
-        } else {
-            fprintf(out, "&_scope_exit_value_%u", v->id);
-        }
-        fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
@@ -3232,19 +3237,15 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_coro_scope_exit_error_check(out, v->id);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+        if (has_storage && cg_rep(v) == XR_REP_TAGGED) {
             fprintf(out, "    ");
             emit_vref(out, v);
-            fprintf(out, " = xr_aot_bridge_value_to_xrt(");
-            emit_vref(out, v);
-            fprintf(out, ");\n");
-        } else if (cg_coro_value_has_storage(f, v)) {
+            fprintf(out, " = xr_aot_bridge_value_to_xrt(XR_NULL_VAL);\n");
+        } else if (has_storage) {
             fprintf(out,
-                    "    _scope_exit_value_%u = "
-                    "xr_aot_bridge_value_to_xrt(_scope_exit_value_%u);\n",
-                    v->id, v->id);
-        }
-        if (cg_coro_value_has_storage(f, v) && cg_rep(v) != XR_REP_TAGGED) {
+                    "    XrValue _scope_exit_value_%u = "
+                    "xr_aot_bridge_value_to_xrt(XR_NULL_VAL);\n",
+                    v->id);
             char tmp[48];
             snprintf(tmp, sizeof(tmp), "_scope_exit_value_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);

@@ -1,0 +1,59 @@
+// anchor: generator-iterator-exhausted
+// §5.3.6: the pull protocol is two-step. hasNext() is the exhaustion test and
+// next() is typed T, not T?, so pulling a generator past its last yield is a
+// contract violation (E0432) in both backends -- not the int zero value the
+// unguarded pull used to hand back.
+
+fn one() -> Iterator<int> {
+    yield 5
+}
+
+fn empty() -> Iterator<int> {
+    for (var i = 0; i < 0; i++) {
+        yield i
+    }
+}
+
+// In contract: drive to exhaustion through hasNext() / next().
+var g = one()
+while (g.hasNext()) {
+    print("yielded " + string(g.next()))
+}
+print("has " + string(g.hasNext()))
+
+try {
+    print("unreachable " + string(g.next()))
+} catch panic (p) {
+    print("next " + string(p.code) + " " + p.message)
+}
+
+// Exhaustion is a state, not a one-off: the iterator stays exhausted and keeps
+// reporting, rather than resuming or reverting to a zero value.
+try {
+    print("unreachable " + string(g.next()))
+} catch panic (p) {
+    print("next-again " + string(p.code))
+}
+print("has-after " + string(g.hasNext()))
+
+// A generator that never reaches a yield is exhausted from its first pull.
+var e = empty()
+print("empty-has " + string(e.hasNext()))
+try {
+    print("unreachable " + string(e.next()))
+} catch panic (p) {
+    print("empty-next " + string(p.code))
+}
+
+// next() without a preceding hasNext() is still fine while elements remain:
+// the guard performs the same drive the unguarded pull did.
+print("direct " + string(one().next()))
+
+// nth(index) consumes index + 1 elements and reports the same violation when
+// the producer runs dry first.
+print("nth-in-range " + string(one().nth(0)))
+try {
+    print("unreachable " + string(one().nth(3)))
+} catch panic (p) {
+    print("nth " + string(p.code) + " " + p.message)
+}

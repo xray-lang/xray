@@ -1,0 +1,11 @@
+# `no_suspend` is the strong form: control never leaves the frame at all.  A
+# generator's frame is resumed by whoever drives it, so `yield expr` must keep
+# failing this requirement even though the same body proves `no_reschedule` in
+# positive.toml.  Collapsing the two dimensions back into one bit would make
+# exactly one of these two contracts wrong.
+version = 1
+
+[[function]]
+symbol = "counter"
+scope = "semantic"
+requires = ["no_suspend"]

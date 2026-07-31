@@ -252,7 +252,7 @@ static bool xa_symbol_is_local_thread_handle(XaSymbol *sym, XaScope *current_sco
     if (xa_symbol_has_shared_storage(sym) || sym->is_exported || sym->is_imported)
         return false;
     XaSymbolLinks *links = &sym->links;
-    return links->type && xr_type_is_named_class(links->type, "Thread");
+    return links->type && xr_type_is_builtin_named_class(links->type, "Thread");
 }
 
 static XrType *xa_lifecycle_lint_param_type(XaInferContext *ctx, XrParamNode *param) {
@@ -5602,16 +5602,23 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
         return;
 
     char msg[256];
+    char reason[192];
+    const char *tail = "";
+    char tail_buf[200];
+    if (xr_type_record_mismatch_reason(target_type, value_type, reason, sizeof(reason))) {
+        snprintf(tail_buf, sizeof(tail_buf), "; %s", reason);
+        tail = tail_buf;
+    }
     if (target_name && target_kind) {
-        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to %s '%s' (type '%s')",
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to %s '%s' (type '%s')%s",
                  xr_type_to_string(value_type), target_kind, target_name,
-                 xr_type_to_string(target_type));
+                 xr_type_to_string(target_type), tail);
     } else if (target_name) {
-        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')",
-                 xr_type_to_string(value_type), target_name, xr_type_to_string(target_type));
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')%s",
+                 xr_type_to_string(value_type), target_name, xr_type_to_string(target_type), tail);
     } else {
-        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
-                 xr_type_to_string(value_type), xr_type_to_string(target_type));
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'%s",
+                 xr_type_to_string(value_type), xr_type_to_string(target_type), tail);
     }
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
@@ -5898,7 +5905,7 @@ static bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *ex
          receiver_type->kind == XR_KIND_FIXED_ARRAY)) {
         preserves = true;
     } else if (strcmp(member->name, "borrowPtr") == 0 && receiver_type &&
-               xr_type_is_named_class(receiver_type, "Buffer")) {
+               xr_type_is_builtin_named_class(receiver_type, "Buffer")) {
         preserves = true;
     } else if (strcmp(member->name, "offset") == 0 && receiver_type &&
                XR_TYPE_IS_POINTER(receiver_type)) {
@@ -5957,7 +5964,7 @@ XR_FUNC bool xa_type_can_own_span_view(XrType *type) {
         return false;
     if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_STRING(type))
         return true;
-    return xr_type_is_named_class(type, "Buffer");
+    return xr_type_is_builtin_named_class(type, "Buffer");
 }
 
 XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
@@ -6967,7 +6974,7 @@ XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx
                      b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
                      operation ? operation : "mutating the owner");
         }
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_CONFLICT,
                                    msg, &loc);
         return;
     }
@@ -6992,7 +6999,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
              "cannot %s; Slice is a borrowed view, keep it local or copy the owner data into an "
              "Array",
              escape_context ? escape_context : "var Slice view escape");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE, msg,
                                &loc);
 }
 
@@ -7030,7 +7037,7 @@ XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *lo
         "cannot create Slice view from temporary owner in %s; bind the owner to a local before "
         "borrowing it",
         operation ? operation : "borrow expression");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE, msg,
                                &loc);
 }
 
@@ -7283,7 +7290,7 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
     snprintf(msg, sizeof(msg),
              "cannot return borrowed '%s' parameter '%s'; return an owned value or copy(%s)", "ref",
              root->name ? root->name : "?", root->name ? root->name : "?");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE, msg,
                                &loc);
 }
 
@@ -7306,7 +7313,7 @@ static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_nod
     XrLocation loc = {
         .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
     xa_analyzer_add_diagnostic(
-        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_ESCAPE,
         "cannot return Slice view; return the owner container or copy the view into an Array",
         &loc);
 }
@@ -7742,7 +7749,8 @@ static bool xa_return_storage_prepass_is_channel_receive(XaReturnStoragePrepass 
         return false;
     AstNode *receiver = callee->as.member_access.object;
     XrType *type = receiver ? xa_analyzer_get_node_type(scan->ctx->analyzer, receiver) : NULL;
-    return type && (type->kind == XR_KIND_CHANNEL || xr_type_is_named_class(type, "Channel"));
+    return type &&
+           (type->kind == XR_KIND_CHANNEL || xr_type_is_builtin_named_class(type, "Channel"));
 }
 
 static void xa_return_storage_prepass_bind_pattern(XaReturnStoragePrepass *scan, AstNode *pattern,
@@ -8574,8 +8582,17 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                 if (XR_TYPE_IS_FUNCTION(links->declared_type) ||
                     !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
-                    snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
-                             xr_type_to_string(init_type), xr_type_to_string(links->declared_type));
+                    char reason[192];
+                    if (xr_type_record_mismatch_reason(links->declared_type, init_type, reason,
+                                                       sizeof(reason))) {
+                        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'; %s",
+                                 xr_type_to_string(init_type),
+                                 xr_type_to_string(links->declared_type), reason);
+                    } else {
+                        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
+                                 xr_type_to_string(init_type),
+                                 xr_type_to_string(links->declared_type));
+                    }
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
@@ -9220,9 +9237,17 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
-                snprintf(msg, sizeof(msg), "Return type mismatch: expected '%s', got '%s'",
-                         xr_type_to_string(ctx->expected_return_type),
-                         xr_type_to_string(return_type));
+                char reason[192];
+                if (xr_type_record_mismatch_reason(ctx->expected_return_type, return_type, reason,
+                                                   sizeof(reason))) {
+                    snprintf(msg, sizeof(msg), "Return type mismatch: expected '%s', got '%s'; %s",
+                             xr_type_to_string(ctx->expected_return_type),
+                             xr_type_to_string(return_type), reason);
+                } else {
+                    snprintf(msg, sizeof(msg), "Return type mismatch: expected '%s', got '%s'",
+                             xr_type_to_string(ctx->expected_return_type),
+                             xr_type_to_string(return_type));
+                }
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             }

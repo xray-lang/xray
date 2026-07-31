@@ -10,7 +10,10 @@
     "dict",
     "dictionary",
     "json",
-    "bytes"
+    "bytes",
+    "slice",
+    "view",
+    "borrow"
   ],
   "sections": [
     {
@@ -32,6 +35,13 @@
       "fences": [
         "types-set",
         "expr-set-lit"
+      ]
+    },
+    {
+      "heading": "Slice (borrowed view)",
+      "fences": [
+        "types-slice",
+        "expr-slice"
       ]
     },
     {

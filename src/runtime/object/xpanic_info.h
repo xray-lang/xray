@@ -78,7 +78,11 @@ XR_FUNC void xr_panic_info_add_frame(XrVMRuntime *X, XrValue exception, const ch
 
 /* ========== Output ========== */
 
-XR_FUNC void xr_panic_info_print(XrVMRuntime *X, XrValue exception);
+// Print a panic's captured stack trace (the "Stack trace:" block) to `stream`,
+// or nothing when it has no frames. The fault code + message line is emitted by
+// xr_panic_report_emit (shared/xr_panic_report.h) so both backends match; this
+// is the VM-only opt-in tail shown under XRAY_BACKTRACE.
+XR_FUNC void xr_panic_info_print_trace(XrVMRuntime *X, XrValue exception, FILE *stream);
 
 /* ========== Class Registration ========== */
 

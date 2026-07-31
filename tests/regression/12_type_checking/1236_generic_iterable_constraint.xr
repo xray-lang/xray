@@ -1,0 +1,279 @@
+// 1236_generic_iterable_constraint.xr
+// 作者：xingleixu@gmail.com
+// 测试：Iterable<T> / Lengthable 作为泛型约束（§9.2）
+//
+// REGRESSION: the Iterable<T> constraint was unusable, in two independent
+//             places.
+//
+//   1) `for (x in xs)` where xs's type is a constrained type parameter always
+//      failed with E0352 "type 'T' is not iterable", for every type argument
+//      including Array. A generic body is analyzed before monomorphization,
+//      so the collection's only known type is the parameter itself; the
+//      for-in analyzer never resolved that parameter to the iteration domain
+//      its constraint promises.
+//
+//   2) `Range` did not satisfy the constraint at all (E0358). The check in
+//      xr_type_satisfies_constraint tested a bare XrTypeKind, and Range is an
+//      XR_KIND_INSTANCE of the prelude class, so it never matched — the same
+//      shape also kept it out of Lengthable even though len(range) works.
+//      Json was missing from both for the same reason.
+//
+// PASS_AT:    constraint checking accepts every for-in / len() domain the
+//             spec lists (Array, Map, Set, string, Json, Range, and classes
+//             with iterator()), and the for-in analyzer types a type
+//             parameter's item from its constraint.
+//
+// A user class may reuse the prelude name; `class Range { ... }` earns these
+// interfaces only by declaring them, never by name. Covered in
+// tests/compile_errors/type/024_generic_user_range_not_iterable.xr.
+//
+// The constraint admits every for-in domain that runs through the iterator
+// protocol, including the Iterator<T> a generator returns. Channel<T> is the
+// one for-in form left out: it lowers to a dedicated receive loop and carries
+// no iterator(), so admitting it would compile and then panic. Covered in
+// tests/compile_errors/type/025_channel_not_iterable_constraint.xr.
+//
+// Generic functions here are declared at file scope: only file-scope generics
+// are monomorphized, so a nested one keeps its type parameter into lowering
+// and iterates through the runtime iterator() protocol instead
+// (test_nested_generic_uses_runtime_protocol).
+
+fn total<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+fn count<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + 1
+    }
+    return n
+}
+
+fn keyLengths<T: Iterable<string>>(xs: T) -> int {
+    var n = 0
+    for (k in xs) {
+        n = n + len(k)
+    }
+    return n
+}
+
+fn sizeOf<T: Lengthable>(x: T) -> int {
+    return len(x)
+}
+
+// ===== Iterable<int>: built-in containers =====
+@test
+fn test_iterate_array_through_type_param() {
+    assert_eq(total([1, 2, 3]), 6)
+}
+
+@test
+fn test_iterate_set_through_type_param() {
+    var s: Set<int> = #[1, 2, 3]
+    assert_eq(total(s), 6)
+}
+
+// ===== Iterable<int>: prelude Range =====
+@test
+fn test_iterate_range_literal_through_type_param() {
+    assert_eq(total(1..5), 10)  // 1+2+3+4, end exclusive
+}
+
+@test
+fn test_iterate_range_value_through_type_param() {
+    var r = 2..6
+    assert_eq(count(r), 4)
+    assert_eq(total(r), 14)  // 2+3+4+5
+}
+
+// ===== Iterable<string>: string-keyed domains =====
+@test
+fn test_iterate_map_keys_through_type_param() {
+    var m: Map<string, int> = #{"aa": 1, "bbb": 2}
+    assert_eq(keyLengths(m), 5)
+}
+
+@test
+fn test_iterate_json_fields_through_type_param() {
+    var j: Json = { "a": 1, "bb": 2, "ccc": 3 }
+    assert_eq(keyLengths(j), 6)
+}
+
+// ===== Key-value iteration =====
+fn sumValues<T: Iterable<string>>(xs: T) -> int {
+    var n = 0
+    for (k, v in xs) {
+        n = n + v
+    }
+    return n
+}
+
+@test
+fn test_keyvalue_iteration_through_type_param() {
+    var m: Map<string, int> = #{"x": 4, "y": 5}
+    assert_eq(sumValues(m), 9)
+}
+
+// ===== Element type is enforced, not erased =====
+fn firstPlusOne<T: Iterable<int>>(xs: T) -> int {
+    for (i in xs) {
+        return i + 1  // i is int, not unknown
+    }
+    return 0
+}
+
+@test
+fn test_constraint_element_type_flows_into_body() {
+    assert_eq(firstPlusOne([41, 0]), 42)
+}
+
+// ===== Lengthable =====
+@test
+fn test_lengthable_builtin_domains() {
+    var m: Map<string, int> = #{"x": 1, "y": 2}
+    var s: Set<int> = #[1, 2, 3]
+    var j: Json = { "a": 1 }
+    assert_eq(sizeOf([1, 2, 3]), 3)
+    assert_eq(sizeOf("hey"), 3)
+    assert_eq(sizeOf(m), 2)
+    assert_eq(sizeOf(s), 3)
+    assert_eq(sizeOf(j), 1)
+}
+
+@test
+fn test_lengthable_range() {
+    assert_eq(sizeOf(1..4), 3)
+    var r = 0..10
+    assert_eq(sizeOf(r), 10)
+}
+
+// ===== Intersection constraint =====
+fn sumPlusSize<T: Iterable<int> & Lengthable>(xs: T) -> int {
+    var n = len(xs)
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+@test
+fn test_iterable_and_lengthable_intersection() {
+    assert_eq(sumPlusSize([1, 2, 3]), 9)  // 3 + 6
+    assert_eq(sumPlusSize(1..4), 9)       // 3 + (1+2+3)
+}
+
+// ===== Explicit type arguments =====
+@test
+fn test_explicit_type_argument() {
+    assert_eq(total<Array<int>>([2, 3]), 5)
+}
+
+// ===== Iterator<T>: what a generator returns is its own iterable =====
+fn upTo(limit: int) -> Iterator<int> {
+    var i = 1
+    while (i <= limit) {
+        yield i
+        i = i + 1
+    }
+}
+
+@test
+fn test_generator_iterator_through_type_param() {
+    assert_eq(total(upTo(4)), 10)  // 1+2+3+4
+    assert_eq(count(upTo(3)), 3)
+}
+
+// ===== Nested generic: no monomorphization, runtime iterator() protocol =====
+@test
+fn test_nested_generic_uses_runtime_protocol() {
+    fn nestedTotal<T: Iterable<int>>(xs: T) -> int {
+        var n = 0
+        for (i in xs) {
+            n = n + i
+        }
+        return n
+    }
+    var s: Set<int> = #[4, 5]
+    assert_eq(nestedTotal([1, 2, 3]), 6)
+    assert_eq(nestedTotal(s), 9)
+}
+
+// ===== Generic class carrying the constraint =====
+class Bag<T: Iterable<int>> {
+    items: T
+
+    constructor(items: T) {
+        this.items = items
+    }
+
+    total() -> int {
+        var n = 0
+        for (i in this.items) {
+            n = n + i
+        }
+        return n
+    }
+}
+
+@test
+fn test_generic_class_constraint() {
+    var fromArray = Bag([1, 2, 3])
+    assert_eq(fromArray.total(), 6)
+    var fromRange = Bag(1..5)
+    assert_eq(fromRange.total(), 10)
+}
+
+// ===== Class upper bound with a custom iterator() =====
+class StepIter {
+    current: int
+    end: int
+
+    constructor(start: int, end: int) {
+        this.current = start
+        this.end = end
+    }
+
+    hasNext() -> bool {
+        return this.current < this.end
+    }
+
+    next() -> int {
+        var v = this.current
+        this.current = this.current + 1
+        return v
+    }
+}
+
+class Steps {
+    start: int
+    end: int
+
+    constructor(start: int, end: int) {
+        this.start = start
+        this.end = end
+    }
+
+    iterator() -> StepIter {
+        return StepIter(this.start, this.end)
+    }
+}
+
+fn totalSteps<T: Steps>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+@test
+fn test_class_bound_with_custom_iterator() {
+    assert_eq(totalSteps(Steps(1, 5)), 10)
+}
+
+print("All generic Iterable/Lengthable constraint tests passed!")

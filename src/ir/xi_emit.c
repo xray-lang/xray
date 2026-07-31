@@ -528,7 +528,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                 break;
             }
             /* BigInt: aux holds decimal digit string, create XrBigInt object */
-            if (xr_type_is_named_class(ty, "BigInt") && v->aux) {
+            if (xr_type_is_builtin_named_class(ty, "BigInt") && v->aux) {
                 const char *digits = (const char *) v->aux;
                 XrBigInt *bi = xr_bigint_from_string_on_fixed_heap(
                     xr_isolate_get_fixed_heap(ctx->isolate), digits);

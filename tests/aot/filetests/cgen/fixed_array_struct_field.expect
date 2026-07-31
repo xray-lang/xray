@@ -7,5 +7,9 @@ regex=  value v[0-9]+ op=INDEX_SET kind=void rep=void c_type=void
 c_contains=uint8_t data[4]
 c_contains=memmove(&
 c_regex=static int64_t fixed_array_struct_field_[0-9a-f]+_run_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
-c_regex=uint8_t v[0-9]+ = .*->data\[v[0-9]+\];
+# Locals are hoisted to top-of-function declarations, so an assignment line
+# carries no type prefix.
+# The u8 element rep is asserted at the Xi level above, and the boxed form is
+# excluded by the c_not_regex below; here only the direct ->data index matters.
+c_regex=v[0-9]+ = [^;]*->data\[v[0-9]+\];
 c_not_regex=XrValue v[0-9]+ = .*->data\[

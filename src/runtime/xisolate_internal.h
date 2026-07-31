@@ -111,7 +111,7 @@ struct XrVMRuntime {
     // the same isolate-level slot, so the accesses must be tear-free.
     _Atomic uint8_t current_storage_mode;  // 0=normal, 1=shared, 2=owned
 
-    // Test mode: suppress [Uncaught Exception] stderr output
+    // Test mode: suppress the uncaught-error / uncaught-panic stderr report
     bool suppress_exception_print;
 
     /* ========== Embedded execution policy (opt-in) ==========

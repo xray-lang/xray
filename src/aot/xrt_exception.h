@@ -31,16 +31,23 @@
 #ifndef XRT_EXCEPTION_H
 #define XRT_EXCEPTION_H
 
+#include "xrt_arith.h" /* xrt_value_to_string, for the uncaught-error diagnostic */
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/value/xtype_names.h" /* XrTypeId + xr_typeid_name (shared with VM) */
 #include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_error_core.h"
+#include "../shared/xr_panic_report.h" /* shared uncaught-panic wording with the VM */
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <io.h> /* _isatty/_fileno for the panic report's TTY colour gate */
+#else
+#include <unistd.h> /* isatty for the panic report's TTY colour gate */
+#endif
 
 /* =========================================================================
  * Exception frame (stack-allocated in each try block)
@@ -78,6 +85,27 @@ static inline int xrt_has_pending_error(void) {
  * xrt_defer.h (included after this header); forward-declared here because
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
 static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
+
+/* Uncaught value-return error diagnostic (spec §8.1.1): print the error value to
+ * stderr. `in_go_coroutine` selects the wording for a dropped fire-and-forget
+ * `go` whose body threw with nothing left to observe it. Kept byte-identical to
+ * the VM's report in run_finalize (src/vm/xvm_coro_backend.c) — the two backends
+ * must not drift.
+ *
+ * Header-only because rendering an AOT value needs the generated program's own
+ * formatter; the scheduler runtime reaches it through
+ * XrAotValueOps::report_uncaught_error. */
+static inline XRT_COLD void xrt_report_uncaught_error(XrValue err, bool in_go_coroutine) {
+    const char *where = in_go_coroutine ? " in go coroutine" : "";
+    XrValue s;
+    if (XR_IS_NULL(err))
+        return;
+    s = xrt_value_to_string(err);
+    if (XR_IS_STR(s))
+        fprintf(stderr, "\n[Uncaught Error%s] %.*s\n", where, (int) xr_str_len(s), xr_str_data(s));
+    else
+        fprintf(stderr, "\n[Uncaught Error%s] <error>\n", where);
+}
 
 static inline XrValue xrt_exception_message_value(const char *message, size_t len) {
     if (!message)
@@ -130,6 +158,34 @@ static inline XrValue xrt_exception_get_message_value(XrValue exc) {
 static inline const char *xrt_exception_message_cstr(XrValue exc) {
     XrValue msg = xrt_exception_get_message_value(exc);
     return XR_IS_STR(msg) ? xr_str_data(msg) : NULL;
+}
+
+/* Fault code carried by a normalized exception object; 0 when absent. A bare
+ * string exception still encodes it as an "E0420: " prefix, so parse that too
+ * for the pre-normalize path. */
+static inline int xrt_exception_get_code(XrValue exc) {
+    if (exc.tag == XR_TAG_PTR && exc.ptr && exc.heap_type == 0) {
+        XrValue code = xrt_json_get_name(exc, "code");
+        if (XR_IS_INT(code))
+            return (int) XR_TO_INT(code);
+    }
+    if (XR_IS_STR(exc)) {
+        XrErrorCoreMessageView view =
+            xr_error_core_parse_prefixed(xr_str_data(exc), (size_t) xr_str_len(exc));
+        if (view.has_code)
+            return view.code;
+    }
+    return 0;
+}
+
+/* stderr TTY gate for the panic report's colour, matching the VM's
+ * XR_COLOR_SUPPORTED (isatty on stderr) so piped output stays plain on both. */
+static inline bool xrt_stderr_is_tty(void) {
+#if defined(_WIN32)
+    return _isatty(_fileno(stderr)) != 0;
+#else
+    return isatty(STDERR_FILENO) != 0;
+#endif
 }
 
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
@@ -257,15 +313,13 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }
-    /* Uncaught exception: report and exit with status 1, matching the VM's
-     * uncaught-exception behavior (a clean exit(1), not a SIGABRT/134 core
-     * dump) so both backends agree on the observable exit code. */
+    /* Uncaught panic: emit the shared report and exit(1) — matching the VM's
+     * wording (shared/xr_panic_report.h) and its clean exit code (not a
+     * SIGABRT/134 core dump). No stack trace: the native path carries no unwind
+     * state, and the VM gates its own trace behind XRAY_BACKTRACE precisely so
+     * the default output stays identical across backends. */
     const char *message = xrt_exception_message_cstr(exc);
-    if (message) {
-        fprintf(stderr, "Uncaught exception: %s\n", message);
-    } else {
-        fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
-    }
+    xr_panic_report_emit(stderr, xrt_exception_get_code(exc), message, xrt_stderr_is_tty());
     exit(1);
 }
 

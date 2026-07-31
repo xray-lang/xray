@@ -109,7 +109,7 @@ static const char *msvc_optimization(XrOptimizationLevel level) {
 }
 
 static bool emit_gnu_simd(XrNativeSimdMode simd, XrToolchainArgSink *sink, char *err,
-                           size_t err_size) {
+                          size_t err_size) {
     switch (simd) {
         case XR_NATIVE_SIMD_DEFAULT:
         case XR_NATIVE_SIMD_NEON:
@@ -132,7 +132,7 @@ static bool emit_gnu_simd(XrNativeSimdMode simd, XrToolchainArgSink *sink, char 
 }
 
 static bool emit_msvc_simd(XrNativeSimdMode simd, XrToolchainArgSink *sink, char *err,
-                            size_t err_size) {
+                           size_t err_size) {
     switch (simd) {
         case XR_NATIVE_SIMD_DEFAULT:
         case XR_NATIVE_SIMD_SSE2:
@@ -437,7 +437,6 @@ XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, con
             const char *library;
         } mappings[] = {{"ws2_32", "ws2_32.lib"},
                         {"bcrypt", "bcrypt.lib"},
-                        {"synchronization", "synchronization.lib"},
                         {"api-ms-win-core-synch-l1-2-0", "synchronization.lib"}};
         size_t len = name ? strlen(name) : 0;
         if (len >= 4 && strcmp(name + len - 4, ".lib") == 0)
@@ -448,9 +447,9 @@ XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, con
         return command_error(err, err_size,
                              "MSVC system-library logical name has no explicit .lib mapping");
     }
-    if (provider == XR_TOOLCHAIN_PROVIDER_ZIG && name &&
-        strcmp(name, "api-ms-win-core-synch-l1-2-0") == 0)
-        return joined(sink, "-l", "synchronization", err, err_size);
+    /* Zig ships the Windows API-set import libraries under their canonical
+     * names; the legacy `synchronization` alias does not exist there, so the
+     * canonical name passes through unchanged. */
     return joined(sink, "-l", name, err, err_size);
 }
 

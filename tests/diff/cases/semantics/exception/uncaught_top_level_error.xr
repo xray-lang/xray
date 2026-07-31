@@ -1,0 +1,15 @@
+// anchor: uncaught-top-level-error
+// An uncaught value-return error reaching the top level must report
+// "[Uncaught Error] <enum value>" on stderr and exit 1 (spec §8.1.1).
+// This program spawns nothing, so its entry plan elides the root: the VM runs
+// it on the native stack with no main coroutine, and AOT calls the module init
+// directly. Both once returned the exit code silently.
+enum TopErr { Failed(reason: string) }
+
+fn run() {
+    throw TopErr.Failed("top-level")
+}
+
+print("before")
+run()
+print("unreachable")

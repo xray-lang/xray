@@ -22,15 +22,15 @@ order: 004
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
 | 12 | `<<` `>>` | 左 | 移位 |
-| 11 | `<` `<=` `>` `>=` | 左 | 关系比较 |
-| 10 | `==` `!=` | 左 | 相等比较 |
-| 9 | `&` | 左 | 位与 |
-| 8 | `^` | 左 | 位异或 |
-| 7 | `\|` | 左 | 位或（亦用于 union 类型） |
-| 6 | `&&` | 左 | 逻辑与（短路） |
-| 5 | `\|\|` | 左 | 逻辑或（短路） |
-| 4 | `??` | 左 | 空值合并 |
-| 3 | `..` `..=` | 左 | 范围 |
+| 11 | `..` `..=` | 无 | 范围：端点是算术表达式，故 `0..n+1` = `0..(n+1)`；非结合，`a..b..c` 是语法错误 |
+| 10 | `<` `<=` `>` `>=` | 左 | 关系比较 |
+| 9 | `==` `!=` | 左 | 相等比较 |
+| 8 | `&` | 左 | 位与 |
+| 7 | `^` | 左 | 位异或 |
+| 6 | `\|` | 左 | 位或（亦用于 union 类型） |
+| 5 | `&&` | 左 | 逻辑与（短路） |
+| 4 | `\|\|` | 左 | 逻辑或（短路） |
+| 3 | `??` | 左 | 空值合并 |
 | 2 | `? :` | 右 | 三元 |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
@@ -286,19 +286,22 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 #### 范围 `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray @id=expr-range
-0..10                  // 0..10，左闭右开（包含 0，不包含 10）
-0..=10                 // 0..=10，闭区间（包含 0 和 10）
+var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）
+var closed = 0..=10    // 闭区间（包含 0 和 10）
 var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
 
 - 类型 `Range`（仅 int 范围）。
+- **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
+- **非结合**：范围不能链式书写，`a..b..c` 是语法错误；确需嵌套时给端点加括号。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
 - `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
@@ -378,13 +381,13 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 默认推断为 sealed structural `Record`（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 - 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Array<byte> `Array<byte>(...)`
 
-详见 §2.4.5 与 §14.5。
+详见 §2.4.6 与 §14.5。
 
 #### Channel `Channel<T>(buf?)`
 
@@ -456,14 +459,15 @@ Slice ::= Primary '[' Expr? ':' Expr? ']'
 arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
-arr[:]                  // 全切片（浅拷贝）
+arr[:]                  // 全长视图（不是拷贝）
 var view: Slice<int> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 切片是目标类型为 `Slice<T>` 的 scoped borrowed view，不修改 owner。
+- 切片求值为目标类型为 `Slice<T>` 的**借用视图**，不复制元素。包括 `arr[:]` 在内的所有形式都是视图：通过视图写入直接改写 owner 的存储，owner 的元素写入也对视图立即可见。需要独立数据时写 `copy(arr[1:4])`。
+- 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
 
@@ -570,7 +574,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 详见 §1.6.5。简要：
 
 ```xray @id=expr-string-interpolation
-"Hello, ${name}! Age: ${user.age + 1}"
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
@@ -583,9 +587,37 @@ var p = Point{x: 1, y: 2}      // struct literal
 yield expr                  // 生成器产出一个值并挂起
 ```
 
-`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
 协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
+
+#### 3.16.1 两种挂起是不同的语义
+
+`yield expr` 与 `Coro.yield()` 共用词根，但**不是同一种挂起**，二者在调用方能观察到的每一个性质上都不同：
+
+| | `yield expr` | `Coro.yield()` |
+|---|---|---|
+| 转移目标 | 对称转移回驱动该生成器的迭代器 | 非对称让出给调度器 |
+| 是否可能换 OS 线程 | 否 | 是（work-stealing） |
+| 是否是取消检查点 | **否** | 是（§10.5） |
+| 是否向调用方传播 | **否**——驱动生成器不会挂起驱动方自己的帧 | 是，沿调用边传递 |
+| 效应契约 | `no_suspend` 拒绝，`no_reschedule` 接受 | 两者都拒绝 |
+
+因此 `xray verify` 把挂起拆成两个独立维度：`no_reschedule` 断言"不进调度器、不是取消点、不迁移线程"，`no_suspend` 是更强的"控制流从不离开本帧"。纯生成器满足前者而不满足后者；**只是驱动生成器的函数两者都满足**。
+
+#### 3.16.2 生成器体内不得抵达调度器
+
+生成器帧由驱动它的一方恢复，而非由调度器恢复。因此生成器函数体内**不得出现任何调度器挂起点**，包括：`await`、`select`、`scope` 块、`Coro.yield()`、Channel 的阻塞方法、`time.sleep()`，以及对任何可能挂起的函数的调用。违反时报 `E0385`。
+
+该规则是**效应规则而非语法规则**：它按 §8 的效应产品逐层传播，因此调用一个内部 `await` 的函数同样被拒绝。证据不完整时**失败关闭**——生成器体内通过未解析的函数值（如函数类型参数）发起调用会被拒绝，因为该目标可能挂起。这与 `sys.Thread.spawn` 体和 parallel 回调的边界规则一致。
+
+> 该限制是有意的作用域决定，不是实现缺口：本版本的生成器是拉取式迭代器，不是异步流。
+
+#### 3.16.3 提前放弃的生成器不再执行任何代码
+
+`for-in` 通过 `break` / `return` / 抛错提前离开，或迭代器被丢弃时，生成器帧**不会被恢复**，其函数体的剩余部分永不执行。回收时机不属于可观察语义契约（§16.8）。
+
+因此**生成器体内不得使用 `defer`**（`E0386`）：`defer` 是本语言唯一的确定性清理机制，而在此处它可能永远不执行，一个可能不运行的清理比没有清理更危险。需要清理时，由调用方持有资源并作为参数传入。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -607,15 +639,15 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -871,19 +903,22 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray @id=expr-range
-0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
-0..=10                 // 0..=10, closed interval (includes both 0 and 10)
+var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)
+var closed = 0..=10    // closed interval (includes both 0 and 10)
 var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
 - Type: `Range` (int ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
@@ -963,13 +998,13 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
+- Defaults to sealed structural `Record` (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 - Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Array<byte> `Array<byte>(...)`
 
-See §2.4.5 and §14.5.
+See §2.4.6 and §14.5.
 
 #### Channel `Channel<T>(buf?)`
 
@@ -1041,14 +1076,15 @@ Slice ::= Primary '[' Expr? ':' Expr? ']'
 arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
-arr[:]                  // full slice (shallow copy)
+arr[:]                  // full-length view (not a copy)
 var view: Slice<int> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice expression is a scoped borrowed `Slice<T>` selected by its target type and does not modify the owner.
+- A slice expression evaluates to a **borrowed view** of type `Slice<T>`, selected by its target type; no elements are copied. Every form, including `arr[:]`, is a view: writing through the view writes straight into the owner's storage, and element writes on the owner are immediately visible through the view. Use `copy(arr[1:4])` when you need independent data.
+- A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas
 
@@ -1155,7 +1191,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 See §1.6.5. In brief:
 
 ```xray @id=expr-string-interpolation
-"Hello, ${name}! Age: ${user.age + 1}"
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
@@ -1168,7 +1204,35 @@ See §1.6.5. In brief:
 yield expr                  // produce one generator value and suspend
 ```
 
-`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
 Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
+
+#### 3.16.1 The two suspensions are different semantics
+
+`yield expr` and `Coro.yield()` share a word root but are **not the same kind of suspension**. They differ in every property a caller can observe:
+
+| | `yield expr` | `Coro.yield()` |
+|---|---|---|
+| Transfer target | symmetric transfer back to the iterator driving the generator | asymmetric yield to the scheduler |
+| Can migrate OS threads | no | yes (work stealing) |
+| Is a cancellation checkpoint | **no** | yes (§10.5) |
+| Propagates to the caller | **no** — driving a generator does not suspend the driver's own frame | yes, along call edges |
+| Effect contract | rejected by `no_suspend`, accepted by `no_reschedule` | rejected by both |
+
+`xray verify` therefore treats suspension as two independent dimensions: `no_reschedule` asserts "never reaches the scheduler, is not a cancellation point, cannot migrate threads", and `no_suspend` is the stronger "control never leaves this frame". A pure generator satisfies the first but not the second; **a function that merely drives a generator satisfies both**.
+
+#### 3.16.2 A generator body must not reach the scheduler
+
+A generator frame is resumed by whoever drives it, never by the scheduler. A generator function body therefore **must not contain any scheduler suspension point**: `await`, `select`, a `scope` block, `Coro.yield()`, the blocking channel methods, `time.sleep()`, or a call to any function that may suspend. Violations report `E0385`.
+
+The rule is an **effect rule, not a syntactic one**: it composes through the §8 effect product, so calling a function that awaits internally is rejected the same way. Incomplete evidence **fails closed** — a generator that calls through an unresolved function value (such as a function-typed parameter) is rejected, because that target may suspend. This matches the boundary rules for `sys.Thread.spawn` bodies and parallel callbacks.
+
+> The restriction is a deliberate scope decision, not an implementation gap: generators in this version are pull-driven iterators, not async streams.
+
+#### 3.16.3 An abandoned generator runs no further code
+
+When `for-in` leaves early through `break` / `return` / a thrown error, or the iterator is discarded, the generator frame is **not resumed** and the rest of its body never executes. Reclamation timing is not part of the observable semantic contract (§16.8).
+
+A generator body therefore **must not use `defer`** (`E0386`). `defer` is the language's only deterministic cleanup mechanism, and here it might never run; a cleanup that may not run is more dangerous than no cleanup. When cleanup is required, the caller owns the resource and passes it in.
 <!-- /xr-spec:en -->

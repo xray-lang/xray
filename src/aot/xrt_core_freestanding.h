@@ -54,6 +54,11 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_sync_core.h"
+/* Code-shape controls are pure compiler barriers over <stdint.h>: no runtime,
+ * no libc, no allocation.  A freestanding target is exactly where an opaque
+ * value and a compiler fence are needed most, so they belong in this core
+ * rather than only in the hosted xrt.h. */
+#include "xrt_codegen.h"
 #include "xrt_method_symbols.h"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -113,8 +118,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_ATTR_NAKED __attribute__((naked))
 #if defined(__x86_64__) || defined(__i386__)
 #if defined(__clang__)
-#define XRT_TARGET_AVX2                                                                            \
-    __attribute__((target("avx2"), __min_vector_width__(256), flatten))
+#define XRT_TARGET_AVX2 __attribute__((target("avx2"), __min_vector_width__(256), flatten))
 #else
 #define XRT_TARGET_AVX2 __attribute__((target("avx2"), flatten))
 #endif
@@ -125,8 +129,7 @@ typedef uint64_t xr_v2u64 __attribute__((vector_size(16)));
 #define XRT_TARGET_AVX512                                                                          \
     __attribute__((target("avx512f,evex512"), __min_vector_width__(512), flatten))
 #elif defined(__clang__)
-#define XRT_TARGET_AVX512                                                                          \
-    __attribute__((target("avx512f"), __min_vector_width__(512), flatten))
+#define XRT_TARGET_AVX512 __attribute__((target("avx512f"), __min_vector_width__(512), flatten))
 #else
 #define XRT_TARGET_AVX512 __attribute__((target("avx512f"), flatten))
 #endif
@@ -508,15 +511,15 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
 /* C compound-literal arrays and C++ temporary arrays have different address
  * rules.  Keep the payload alive for the complete make call in either mode. */
 #if defined(__cplusplus)
-#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)        \
     ([&]() {                                                                                       \
-        const XrValue _xrt_enum_payloads[(payload_count)] = {__VA_ARGS__};                          \
+        const XrValue _xrt_enum_payloads[(payload_count)] = {__VA_ARGS__};                         \
         return xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name),           \
-                                       (member_name), _xrt_enum_payloads);                          \
+                                       (member_name), _xrt_enum_payloads);                         \
     }())
 #else
-#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)          \
-    xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name), (member_name),        \
+#define XRT_ENUM_AGGREGATE_MAKE(layout_id, tag, payload_count, enum_name, member_name, ...)        \
+    xrt_enum_aggregate_make((layout_id), (tag), (payload_count), (enum_name), (member_name),       \
                             (const XrValue[(payload_count)]) {__VA_ARGS__})
 #endif
 
@@ -1986,6 +1989,23 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (recv.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_1(recv, sym, arg0);
+    return XR_NULL_VAL;
+}
+
+/* Statement-position dispatch, the freestanding counterpart of the hosted
+ * xrt_method_discard_N (see xrt_method.h).  Generated C emits these wherever a
+ * builtin method call's result has no consumer, so the freestanding profile has
+ * to answer the same names.  Nothing is released: the whole dispatch surface
+ * here is Buffer, whose arms answer with a length, a raw borrowed pointer, or a
+ * resize status — never an owned reference.  An arm that starts returning one
+ * needs the hosted gate (xrt_method_result_is_owned) mirrored here. */
+static inline XrValue xrt_method_discard_0(XrValue recv, int sym) {
+    (void) xrt_method_0(recv, sym);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_method_discard_1(XrValue recv, int sym, XrValue arg0) {
+    (void) xrt_method_1(recv, sym, arg0);
     return XR_NULL_VAL;
 }
 

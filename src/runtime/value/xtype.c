@@ -1434,10 +1434,10 @@ XrConversionKind xr_type_numeric_conversion_kind(const XrType *target, const XrT
                                            : XR_CONVERSION_EXPLICIT_TRUNCATE;
     }
 
-    bool target_sized = target->scalar_rep == XR_NATIVE_ISIZE ||
-                        target->scalar_rep == XR_NATIVE_USIZE;
-    bool source_sized = source->scalar_rep == XR_NATIVE_ISIZE ||
-                        source->scalar_rep == XR_NATIVE_USIZE;
+    bool target_sized =
+        target->scalar_rep == XR_NATIVE_ISIZE || target->scalar_rep == XR_NATIVE_USIZE;
+    bool source_sized =
+        source->scalar_rep == XR_NATIVE_ISIZE || source->scalar_rep == XR_NATIVE_USIZE;
     if (target_sized || source_sized)
         return XR_CONVERSION_EXPLICIT_TARGET_WIDTH;
     if (xr_scalar_rep_is_unsigned(target->scalar_rep) !=
@@ -1755,8 +1755,11 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_assignable(te, se) && xr_type_assignable(se, te);
     }
 
-    // Task type compatibility: both are INSTANCE with class_name="Task"
-    if (xr_type_is_named_class(target, "Task") && xr_type_is_named_class(source, "Task")) {
+    // Task type compatibility: both are the builtin INSTANCE named "Task".
+    // A user class of that name is nominal like any other and must not get
+    // the builtin's type-argument variance.
+    if (xr_type_is_builtin_named_class(target, "Task") &&
+        xr_type_is_builtin_named_class(source, "Task")) {
         XrType *tr = (target->instance.type_arg_count > 0) ? target->instance.type_args[0] : NULL;
         XrType *sr = (source->instance.type_arg_count > 0) ? source->instance.type_args[0] : NULL;
         if (!tr || !sr)
@@ -1887,6 +1890,104 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             }
         }
         return false;
+    }
+
+    return false;
+}
+
+/* Index of `name` in an object shape's field list, or -1. */
+static int object_shape_field_index_by_name(XrType *shape, const char *name) {
+    if (!shape || !name || !shape->object.field_names)
+        return -1;
+    for (int i = 0; i < shape->object.field_count; i++) {
+        const char *fn = shape->object.field_names[i];
+        if (fn && strcmp(fn, name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n) {
+    if (!target || !source || !buf || n == 0)
+        return false;
+
+    /* Peel invariant containers so a width mismatch inside Array/Slice/Map
+     * still localizes. Only recurse when the element/value pair is itself the
+     * structural cause, so Array<int> vs Array<string> yields no bogus reason. */
+    if ((XR_TYPE_IS_ARRAY(target) && XR_TYPE_IS_ARRAY(source)) ||
+        (XR_TYPE_IS_SLICE(target) && XR_TYPE_IS_SLICE(source))) {
+        char sub[192];
+        if (xr_type_record_mismatch_reason(target->container.element_type,
+                                           source->container.element_type, sub, sizeof(sub))) {
+            snprintf(buf, n, "element: %s", sub);
+            return true;
+        }
+        return false;
+    }
+    if (XR_TYPE_IS_MAP(target) && XR_TYPE_IS_MAP(source)) {
+        char sub[192];
+        if (xr_type_record_mismatch_reason(target->map.value_type, source->map.value_type, sub,
+                                           sizeof(sub))) {
+            snprintf(buf, n, "value: %s", sub);
+            return true;
+        }
+        return false;
+    }
+
+    /* Only object shapes of the same kind carry a field-set reason; Record and
+     * Json are distinct domains and never bridge (mirrors xr_type_assignable). */
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(target) || !XR_TYPE_HAS_OBJECT_SHAPE(source) ||
+        target->kind != source->kind)
+        return false;
+
+    /* 1. Extra field the sealed target does not declare. */
+    if (target->object.is_sealed && source->object.field_names) {
+        for (int j = 0; j < source->object.field_count; j++) {
+            const char *sf = source->object.field_names[j];
+            if (sf && object_shape_field_index_by_name(target, sf) < 0) {
+                snprintf(buf, n, "extra field '%s'", sf);
+                return true;
+            }
+        }
+    }
+
+    /* 2. Required (non-nullable) target field the source omits. */
+    if (target->object.field_names) {
+        for (int i = 0; i < target->object.field_count; i++) {
+            const char *tf = target->object.field_names[i];
+            if (!tf)
+                continue;
+            XrType *tft = target->object.field_types ? target->object.field_types[i] : NULL;
+            bool is_optional = tft && tft->is_nullable;
+            if (!is_optional && object_shape_field_index_by_name(source, tf) < 0) {
+                snprintf(buf, n, "missing field '%s'", tf);
+                return true;
+            }
+        }
+    }
+
+    /* 3. First shared field whose type is incompatible; recurse one level so a
+     *    nested shape reports its own field, otherwise name the type pair. */
+    if (target->object.field_names && target->object.field_types && source->object.field_types) {
+        for (int i = 0; i < target->object.field_count; i++) {
+            const char *tf = target->object.field_names[i];
+            if (!tf)
+                continue;
+            int j = object_shape_field_index_by_name(source, tf);
+            if (j < 0)
+                continue;
+            XrType *tft = target->object.field_types[i];
+            XrType *sft = source->object.field_types[j];
+            if (tft && sft && !xr_type_assignable(tft, sft)) {
+                char sub[192];
+                if (xr_type_record_mismatch_reason(tft, sft, sub, sizeof(sub)))
+                    snprintf(buf, n, "field '%s': %s", tf, sub);
+                else
+                    snprintf(buf, n, "field '%s' has type '%s', expected '%s'", tf,
+                             xr_type_to_string(sft), xr_type_to_string(tft));
+                return true;
+            }
+        }
     }
 
     return false;

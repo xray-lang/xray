@@ -154,12 +154,28 @@ static const char *cg_class_native_prefix_for_data(const XiCgenCtx *ctx, const X
     return fallback;
 }
 
+/* Native class data for a *type* rather than a bare name.
+ *
+ * A builtin named instance carries no declaration identity, so it must never
+ * resolve to a module's native class however that class is spelled. Without
+ * this guard, `class Range { ... }` in the module makes an ordinary `2..6`
+ * value adopt the class's native pointer layout, and CGen emits a `void *`
+ * slot holding a tagged XrValue — C that does not compile.
+ *
+ * Resolution stays name-based for the user-class case on purpose: a
+ * monomorphized generic is found through display_name / generic_origin_name,
+ * which no single XrClassInfo pointer identifies. */
+static const XiClassData *cg_class_native_data_for_type(const XiCgenCtx *ctx, const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+        return NULL;
+    if (type->kind == XR_KIND_INSTANCE && !type->instance.class_ref)
+        return NULL;
+    return cg_class_native_data_by_name(ctx, xr_type_get_class_name((XrType *) (uintptr_t) type));
+}
+
 static const XiClassData *cg_class_native_data_for_abi_type(const XiCgenCtx *ctx,
                                                             const XrType *type) {
-    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
-        !type->instance.class_name)
-        return NULL;
-    const XiClassData *cd = cg_class_native_data_by_name(ctx, type->instance.class_name);
+    const XiClassData *cd = cg_class_native_data_for_type(ctx, type);
     if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
         return NULL;
     return cd;

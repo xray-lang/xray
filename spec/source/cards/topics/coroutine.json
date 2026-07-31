@@ -51,11 +51,12 @@
       ]
     },
     {
-      "heading": "yield — cooperative safepoint",
+      "heading": "Coro.yield() vs yield expr — two different suspensions",
       "fences": [
         "coro-yield-loop",
         "expr-yield"
-      ]
+      ],
+      "markdown": "They share a word root and are never interchangeable. `Coro.yield()` is a **scheduler** suspension: the coroutine parks, may resume on another OS thread, is a cancellation point, and the effect propagates to callers along call edges. `yield expr` is a **generator** suspension: a symmetric transfer back to the iterator driving the generator, with no scheduler involvement, no thread migration, no cancellation point, and no propagation to the caller. In `xray verify` terms, a generator passes `no_reschedule` but not `no_suspend`, while a function that merely drives a generator passes both.\n\nTwo rules the compiler enforces on generator bodies:\n\n- **A generator body must not reach the scheduler** (`E0385`): no `await`, `select`, `scope`, `Coro.yield()`, blocking channel method, `time.sleep()`, or call to a function that may suspend. This is an effect rule, so it also catches an indirect call to a function that awaits internally, and it fails closed on a call through a function-typed parameter. Generators are pull-driven iterators, not async streams.\n- **A generator body must not use `defer`** (`E0386`): a generator abandoned before it is exhausted (a `break` out of `for-in`) is never resumed, so the deferred action would silently not run. Let the caller own the resource and pass it in."
     },
     {
       "heading": "defer — LIFO cleanup",
