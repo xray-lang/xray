@@ -1,10 +1,10 @@
 // `for (msg in ch)` is legal, but a channel does not satisfy Iterable<T>:
 // that form lowers to a dedicated receive loop (XI_CHAN_RECV) rather than the
-// iterator protocol, and a channel carries no iterator() method. A generic
-// body instantiated with a container type argument stays type-erased and
-// drives iteration through iterator(), so admitting Channel here would
-// compile and then panic at run time. Receive from the channel directly, or
-// collect into an Array first.
+// iterator protocol, and a channel carries no iterator() method. A nested
+// generic body keeps its type parameter into lowering and drives iteration
+// through iterator(), so admitting Channel here would compile and then panic
+// at run time. Receive from the channel directly, or collect into an Array
+// first.
 
 fn total<T: Iterable<int>>(xs: T) -> int {
     var n = 0

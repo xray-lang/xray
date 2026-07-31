@@ -3586,10 +3586,10 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         return 0;
     }
     /* Arrays reach an iterator only through the dynamic protocol — `for (x in
-     * arr)` on a statically known array lowers to len()/index instead. An
-     * erased generic body (`fn f<T: Iterable<E>>(xs: T)` instantiated with a
-     * container, which does not monomorphize) is that path, and so is an
-     * explicit arr.iterator(). Mirrors XR_ITERATOR_ARRAY in the VM
+     * arr)` on a statically known array lowers to len()/index instead. A
+     * nested generic body is that path (only file-scope generics are
+     * monomorphized, so its type parameter survives into lowering), and so is
+     * an explicit arr.iterator(). Mirrors XR_ITERATOR_ARRAY in the VM
      * (src/runtime/object/xiterator.c). */
     if (XR_IS_ARRAY(it->coll)) {
         xrt_array_t *a = (xrt_array_t *) it->coll.ptr;

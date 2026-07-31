@@ -346,7 +346,8 @@ static XrType *iterable_element_of(XrType *type) {
  *
  * `Channel<E>` is deliberately absent even though `for (msg in ch)` works:
  * that form lowers to a channel-specific receive loop (XI_CHAN_RECV), and a
- * channel carries no iterator() for the erased generic path to call, so
+ * channel carries no iterator() for a nested generic body — which keeps its
+ * type parameter into lowering and drives iteration dynamically — to call, so
  * admitting it here would compile and then panic at run time. */
 static bool builtin_iterable_type(XrType *type) {
     if (!type)
