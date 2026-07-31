@@ -7265,6 +7265,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var n = 10\n"
             "for (i in 0..n) { print(i) }\n"
             "for (i in 0..=n) { print(i) }\n"
+            "for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)\n"
             "```\n"
             "```xray\n"
             "var v = nullable_expr ?? default_value\n"

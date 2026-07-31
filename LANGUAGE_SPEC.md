@@ -1386,15 +1386,15 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -1650,7 +1650,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray
@@ -1660,9 +1660,12 @@ var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
 - Type: `Range` (int ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
@@ -6225,11 +6228,12 @@ BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr

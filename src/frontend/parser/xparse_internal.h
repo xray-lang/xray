@@ -39,6 +39,7 @@ typedef enum {
     PREC_BIT_AND,           // & (bitwise and)
     PREC_EQUALITY,          // == !=
     PREC_COMPARISON,        // < > <= >=
+    PREC_RANGE,             // .. ..= (endpoints are arithmetic; range is a whole value)
     PREC_SHIFT,             // << >>
     PREC_TERM,              // + -
     PREC_FACTOR,            // * / %

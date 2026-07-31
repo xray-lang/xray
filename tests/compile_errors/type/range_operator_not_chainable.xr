@@ -1,0 +1,8 @@
+// `..` is non-associative: a chained range must fail rather than silently
+// parse as (a..b)..c.
+fn main() {
+    var r = 1..2..3
+    print(len(r))
+}
+
+main()

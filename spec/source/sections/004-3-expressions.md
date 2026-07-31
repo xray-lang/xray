@@ -22,15 +22,15 @@ order: 004
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
 | 12 | `<<` `>>` | 左 | 移位 |
-| 11 | `<` `<=` `>` `>=` | 左 | 关系比较 |
-| 10 | `==` `!=` | 左 | 相等比较 |
-| 9 | `&` | 左 | 位与 |
-| 8 | `^` | 左 | 位异或 |
-| 7 | `\|` | 左 | 位或（亦用于 union 类型） |
-| 6 | `&&` | 左 | 逻辑与（短路） |
-| 5 | `\|\|` | 左 | 逻辑或（短路） |
-| 4 | `??` | 左 | 空值合并 |
-| 3 | `..` `..=` | 左 | 范围 |
+| 11 | `..` `..=` | 无 | 范围：端点是算术表达式，故 `0..n+1` = `0..(n+1)`；非结合，`a..b..c` 是语法错误 |
+| 10 | `<` `<=` `>` `>=` | 左 | 关系比较 |
+| 9 | `==` `!=` | 左 | 相等比较 |
+| 8 | `&` | 左 | 位与 |
+| 7 | `^` | 左 | 位异或 |
+| 6 | `\|` | 左 | 位或（亦用于 union 类型） |
+| 5 | `&&` | 左 | 逻辑与（短路） |
+| 4 | `\|\|` | 左 | 逻辑或（短路） |
+| 3 | `??` | 左 | 空值合并 |
 | 2 | `? :` | 右 | 三元 |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
@@ -286,7 +286,7 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 #### 范围 `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray @id=expr-range
@@ -296,9 +296,12 @@ var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
 
 - 类型 `Range`（仅 int 范围）。
+- **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
+- **非结合**：范围不能链式书写，`a..b..c` 是语法错误；确需嵌套时给端点加括号。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
 - `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
@@ -636,15 +639,15 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -900,7 +903,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray @id=expr-range
@@ -910,9 +913,12 @@ var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
 - Type: `Range` (int ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
