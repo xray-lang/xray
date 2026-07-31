@@ -80,7 +80,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Range` | prelude |
 | `Regex` | prelude |
 | `Set<T>` | prelude |
-| `Slice<T>` | 解析器内建 |
+| `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
 | `Task<T>` | 解析器内建 |
 | `Thread<T>` | prelude |
@@ -1203,7 +1203,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Range` | prelude |
 | `Regex` | prelude |
 | `Set<T>` | prelude |
-| `Slice<T>` | resolver built-in |
+| `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
 | `Task<T>` | resolver built-in |
 | `Thread<T>` | prelude |

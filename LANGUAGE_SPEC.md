@@ -662,7 +662,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Range` | prelude |
 | `Regex` | prelude |
 | `Set<T>` | prelude |
-| `Slice<T>` | resolver built-in |
+| `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
 | `Task<T>` | resolver built-in |
 | `Thread<T>` | prelude |
@@ -5027,12 +5027,12 @@ Two budgets guard two different risks, and they are not interchangeable:
 
 | Budget | Value | Guards | On breach |
 |---|:---:|---|---|
-| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<int>` building `RouteMatch<int>` building `Entry<int>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0388` |
+| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<int>` building `RouteMatch<int>` building `Map<string, int>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
 | `XR_MONO_MAX_INSTANCES` | 16384 | **Breadth**. Each instance clones a whole declaration, so this is a compile-time memory backstop rather than a language rule. It sits far above any realistic program | `E0387` |
 
 **Exceeding a budget is always a hard error, never a silent downgrade.** Leaving a call generic would reintroduce boxing underneath an `xray verify` `forbid=["box"]` contract that just "proved" it absent — exactly the kind of invisible de-optimization versioned effect contracts exist to rule out.
 
-The `E0388` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 -> ...`); without it the reported type is one the user never wrote and cannot search for.
+The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 -> ...`); without it the reported type is one the user never wrote and cannot search for.
 
 **Performance impact**:
 - Monomorphization lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations.
@@ -5098,7 +5098,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 
 ### 9.6.1 Higher-Kinded Types (HKT)
 
-**Status: explicitly not provided** — a non-goal, not a deferral. Xray has no type-constructor parameters (`F<_>`, `Functor<F>`, and the like).
+**Status: explicitly not provided** — a non-goal, not a deferral. Xray has no type-constructor parameters (the functor abstraction other languages spell `F<_>`).
 
 **Why this is permanent**: HKT is fundamentally at odds with whole-program monomorphization. Abstracting over a type constructor means the instance set is no longer finitely enumerable at compile time, leaving only dictionary passing or type erasure — and both reintroduce exactly the indirection that Xray's AOT line (unboxed representations, exact layout, `xray verify` shape contracts) exists to remove. It is also inconsistent with the lightweight-scripting-language positioning.
 
