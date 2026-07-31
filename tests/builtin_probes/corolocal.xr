@@ -1,0 +1,2 @@
+fn use(c: CoroLocal<int>) -> bool { return true }
+print(true)

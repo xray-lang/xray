@@ -1,0 +1,3 @@
+import { from } from path
+var p: Path = from("/tmp/x")
+print(p.toString())

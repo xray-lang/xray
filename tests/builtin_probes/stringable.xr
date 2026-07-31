@@ -1,0 +1,2 @@
+fn show<T: Stringable>(v: T) -> string { return v.toString() }
+print(show(42))

@@ -1,0 +1,10 @@
+class Token implements Hashable {
+    value: int
+    constructor(value: int) { this.value = value }
+    operator==(other: Token) -> bool { return this.value == other.value }
+    hash() -> int { return this.value }
+}
+fn keyed<K: Hashable>(m: Map<K, int>) -> int { return len(m) }
+var m: Map<Token, int> = #{}
+m.set(Token(1), 9)
+print(keyed(m))

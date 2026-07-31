@@ -1,0 +1,2 @@
+fn use(m: OsMutex) -> bool { return true }
+print(true)

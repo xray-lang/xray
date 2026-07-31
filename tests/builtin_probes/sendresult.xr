@@ -1,0 +1,4 @@
+var ch = Channel<int>(1)
+var r: SendResult = ch.trySend(7)
+print(r == SendResult.Sent)
+ch.close()

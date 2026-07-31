@@ -1,0 +1,2 @@
+fn use(e: CryptoError) -> bool { return e == CryptoError.InvalidLength }
+print(use(CryptoError.InvalidLength))

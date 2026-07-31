@@ -45,6 +45,12 @@ jobs:
         chmod +x ./scripts/check_frontend_arch.sh
         ./scripts/check_frontend_arch.sh
 
+    # Text-only rules (R1 generated spec registry, R2 no undefined symbol in
+    # normative prose). The R3 probe suite needs a compiler and runs as the
+    # builtin_symbol_registry ctest instead.
+    - name: Check built-in symbol registry
+      run: python3 ./scripts/check_builtin_symbol_registry.py --root .
+
   # ===========================================================================
   # Reverse-invariant seed checks.
   #   - known_failures.txt freshness: every active suppression entry must

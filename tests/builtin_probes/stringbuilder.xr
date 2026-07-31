@@ -1,0 +1,3 @@
+var sb: StringBuilder = StringBuilder()
+sb.append("hi")
+print(sb.toString())

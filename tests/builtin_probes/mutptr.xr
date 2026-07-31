@@ -1,0 +1,2 @@
+fn use(p: MutPtr<int>) -> bool { return true }
+print(true)

@@ -1,0 +1,2 @@
+fn use(f: CFn<(int) -> int>) -> bool { return true }
+print(true)

@@ -2985,6 +2985,25 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Built-in symbol registry. stdlib/prelude/builtin_symbols.def is the single
+    # source of truth for every name available without an import; this gate keeps
+    # the generated specification registry, the specification's normative prose,
+    # and the per-symbol probes in tests/builtin_probes locked to it. The probes
+    # run both `xray check` and `xray run` because a symbol can pass analysis and
+    # still fail in the post-monomorphization pass.
+    add_test(
+        NAME builtin_symbol_registry
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_builtin_symbol_registry.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(builtin_symbol_registry PROPERTIES
+        LABELS "meta;surface;prelude"
+        PROCESSORS 1
+        TIMEOUT 300
+    )
+
     # P0: semantic contract anchor digests and CONTRACT-CHANGE trailers. The
     # self-test injects both an anchor drift and a missing trailer to prove the
     # gate fails closed independently of the live repository state.

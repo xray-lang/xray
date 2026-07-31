@@ -1,0 +1,3 @@
+enum Shape { Dot, Seg(a: int, b: int) }
+var ps: EnumPayloads<Shape> = Shape.variants[1].payloads
+print(ps.length)

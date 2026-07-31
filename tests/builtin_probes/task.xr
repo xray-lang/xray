@@ -1,0 +1,3 @@
+fn work() -> int { return 42 }
+var t: Task<int> = go work()
+print(await t)

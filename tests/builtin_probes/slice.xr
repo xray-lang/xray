@@ -1,0 +1,5 @@
+fn head(a: Array<int>) -> int {
+    var s: Slice<int> = a[0:2]
+    return len(s)
+}
+print(head([1, 2, 3]))

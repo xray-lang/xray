@@ -931,14 +931,26 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
+// 递归 enum 的 payload 必须经 class 节点间接化
+class ExprNode {
+    expr: Expr
+    constructor(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
 enum Expr {
     Number(int),
-    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
+    Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-直接按值递归的 enum payload 会导致无限大小，必须编译拒绝。递归数据结构需要显式间接化，例如 `Box<Expr>`、class 节点或引用容器槽。
+直接按值递归的 enum payload 会导致无限大小，必须编译拒绝（`E0352`）。递归数据结构必须显式间接化，有两种手段：
+
+- **class 节点**：class 是引用类型，字段只占一个指针宽度，因此 `Binary(left: ExprNode, ...)` 布局有限。
+- **容器槽**：`Array<Expr>`、`Map<K, Expr>` 等容器把元素存在自己的存储里，payload 只保存容器句柄。
+
+`T?` 不构成间接化——nullable 不改变 payload 的按值布局，`Binary(left: Expr?, ...)` 同样被 `E0352` 拒绝。
 
 #### 5.6.3 构造与解构
 
@@ -2087,14 +2099,26 @@ enum NetEvent {
     Error(code: int, message: string),
 }
 
+// A recursive enum payload must be indirected through a class node
+class ExprNode {
+    expr: Expr
+    constructor(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
 enum Expr {
     Number(int),
-    Binary(op: string, left: Box<Expr>, right: Box<Expr>),
+    Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
 ```
 
-A directly recursive enum payload would have infinite size and must be rejected at compile time. Recursive data structures need explicit indirection such as `Box<Expr>`, class nodes, or reference-container slots.
+A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
+
+- **Class node**: classes are reference types, so the field costs one pointer and `Binary(left: ExprNode, ...)` has a finite layout.
+- **Container slot**: `Array<Expr>`, `Map<K, Expr>`, and other containers keep elements in their own storage, so the payload holds only the container handle.
+
+`T?` is not indirection — nullable does not change the by-value layout of the payload, so `Binary(left: Expr?, ...)` is rejected by `E0352` as well.
 
 #### 5.6.3 Construction and destructuring
 

@@ -1,0 +1,4 @@
+fn work() -> int { return 42 }
+var t = go work()
+var r: TaskResult<int> = t.awaitTimeout(1000)
+print(match (r) { TaskResult.Success(v) -> v, _ -> -1 })

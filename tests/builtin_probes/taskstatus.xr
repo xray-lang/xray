@@ -1,0 +1,5 @@
+fn work() -> int { return 1 }
+var t = go work()
+print(await t)
+var s: TaskStatus = t.status
+print(s == TaskStatus.Success)

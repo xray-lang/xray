@@ -1,0 +1,2 @@
+fn use(e: StringSliceError) -> bool { return e == StringSliceError.InvalidByteRange }
+print(use(StringSliceError.InvalidByteRange))

@@ -1,0 +1,2 @@
+var j: Json = Json.parse("{\"a\":1}")
+print(j.a)

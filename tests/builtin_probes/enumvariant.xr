@@ -1,0 +1,3 @@
+enum Color { Red, Green, Blue }
+var v: EnumVariant<Color> = Color.variants[0]
+print(v.name)

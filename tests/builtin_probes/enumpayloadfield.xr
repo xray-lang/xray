@@ -1,0 +1,3 @@
+enum Shape { Dot, Seg(a: int, b: int) }
+var f: EnumPayloadField<Shape> = Shape.variants[1].payloads[0]
+print(f.name)

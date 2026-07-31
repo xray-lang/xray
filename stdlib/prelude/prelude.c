@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   The prelude module owns a single static table built from
- *   prelude_types.def. The same const table is shared by every isolate
+ *   builtin_symbols.def. The same const table is shared by every isolate
  *   in the process; per-isolate state is only a pointer back to it
  *   (isolate->prelude_symbols). The loader is therefore idempotent and
  *   has no per-isolate teardown work — the pointer field becomes dangling
@@ -33,15 +33,15 @@
 /* ========== Static type registry (process-wide) ========== */
 
 /*
- * Build the type table from the X-macro list in prelude_types.def. The
+ * Build the type table from the prelude-type rows of builtin_symbols.def. The
  * sentinel entry guarantees the array is non-empty in standard C even
  * before any real entries land in subsequent phases; readers stop at
  * type_count, so the sentinel is never visited.
  */
 static const XrPreludeTypeEntry g_prelude_types[] = {
-#define XR_PRELUDE_TYPE(name, native_type, kind) {(name), XR_PRELUDE_KIND_##kind, (native_type)},
-#include "prelude_types.def"
-#undef XR_PRELUDE_TYPE
+#define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind)                            \
+    {(name), XR_PRELUDE_KIND_##prelude_kind, (native_type)},
+#include "builtin_symbols.def"
     /* Sentinel to keep the array non-empty under strict C rules. Not
      * counted in type_count and therefore never visited by lookups. */
     {NULL, 0, 0},
@@ -136,49 +136,84 @@ static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const cha
     return et;
 }
 
+/* Canonical prelude enums, built from builtin_symbols.def so the runtime's
+ * XrEnumType and the analyzer's XrType describe the same variants. `Ordering`
+ * ordinals must match XrAtomicOrdering — the def declares them in that order. */
+#define XR_PRELUDE_ENUM_MAX_VARIANTS 8
+/* -1 marks an enum the runtime does not bind into a VM builtin slot. */
+#define XR_GLOBAL_VAR_NONE (-1)
+
+typedef struct {
+    const char *name;
+    bool has_payload;
+} XrPreludeEnumVariantRow;
+
+typedef struct {
+    const char *name;
+    int slot;
+    int variant_count;
+} XrPreludeEnumRow;
+
+/* All variants of all prelude enums, flattened in declaration order; each
+ * enum's slice starts where the previous one ended. */
+static const XrPreludeEnumVariantRow g_prelude_enum_variants[] = {
+#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants) evariants
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
+#define XR_PRELUDE_PAYLOAD_IS_SET_NONE false
+#define XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0 true
+#define XR_PRELUDE_PAYLOAD_IS_SET_UNKNOWN true
+#include "builtin_symbols.def"
+};
+
+/* Registration exists only to bind canonical enum types into VM builtin slots,
+ * so slotless enums (the stdlib error enums, whose values never cross a module
+ * boundary) are skipped rather than built and dropped. */
+
+static const XrPreludeEnumRow g_prelude_enum_rows[] = {
+#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants)                                        \
+    {(ename), XR_GLOBAL_VAR_##evm_slot,                                                            \
+     (int) (sizeof((const XrPreludeEnumVariantRow[]) {evariants}) /                                \
+            sizeof(XrPreludeEnumVariantRow))},
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
+#include "builtin_symbols.def"
+};
+
+#undef XR_PRELUDE_PAYLOAD_IS_SET_NONE
+#undef XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0
+#undef XR_PRELUDE_PAYLOAD_IS_SET_UNKNOWN
+
 static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (!X)
         return;
 
-    /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — ordinals
-     * must match XrAtomicOrdering. */
-    static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
-                                             "SeqCst"};
-    XrEnumType *ordering_et = make_prelude_enum(X, "Ordering", ordering_members, 5, NULL, false);
-    if (ordering_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering_et));
+    int variant_base = 0;
+    for (size_t e = 0; e < sizeof(g_prelude_enum_rows) / sizeof(g_prelude_enum_rows[0]); e++) {
+        const XrPreludeEnumRow *row = &g_prelude_enum_rows[e];
+        const XrPreludeEnumVariantRow *variants = &g_prelude_enum_variants[variant_base];
+        variant_base += row->variant_count;
 
-    static const char *endian_members[] = {"Native", "LE", "BE"};
-    XrEnumType *endian_et = make_prelude_enum(X, "Endian", endian_members, 3, NULL, false);
-    if (endian_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_ENDIAN, XR_FROM_PTR(endian_et));
+        if (row->slot < 0)
+            continue;
 
-    static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
-    static const int recv_payload_counts[] = {1, 0, 0, 0};
-    XrEnumType *recv_et = make_prelude_enum(X, "Recv", recv_members, 4, recv_payload_counts, true);
-    if (recv_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_RECV, XR_FROM_PTR(recv_et));
+        XR_DCHECK(row->variant_count <= XR_PRELUDE_ENUM_MAX_VARIANTS,
+                  "prelude enum exceeds XR_PRELUDE_ENUM_MAX_VARIANTS");
+        if (row->variant_count > XR_PRELUDE_ENUM_MAX_VARIANTS)
+            continue;
 
-    static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
-    XrEnumType *send_result_et =
-        make_prelude_enum(X, "SendResult", send_result_members, 4, NULL, false);
-    if (send_result_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_SEND_RESULT, XR_FROM_PTR(send_result_et));
+        const char *members[XR_PRELUDE_ENUM_MAX_VARIANTS];
+        int payload_counts[XR_PRELUDE_ENUM_MAX_VARIANTS];
+        bool is_adt = false;
+        for (int v = 0; v < row->variant_count; v++) {
+            members[v] = variants[v].name;
+            payload_counts[v] = variants[v].has_payload ? 1 : 0;
+            is_adt = is_adt || variants[v].has_payload;
+        }
 
-    static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
-                                                "Pending"};
-    static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
-    XrEnumType *task_result_et = make_prelude_enum(X, "TaskResult", task_result_members, 5,
-                                                   task_result_payload_counts, true);
-    if (task_result_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result_et));
-
-    static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
-                                                "Cancelled"};
-    XrEnumType *task_status_et =
-        make_prelude_enum(X, "TaskStatus", task_status_members, 5, NULL, false);
-    if (task_status_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status_et));
+        XrEnumType *et = make_prelude_enum(X, row->name, members, row->variant_count,
+                                           is_adt ? payload_counts : NULL, is_adt);
+        if (et)
+            bind_builtin_value(X, row->slot, XR_FROM_PTR(et));
+    }
 
     if (X->vm.builtin_count < XR_USER_GLOBALS_START)
         X->vm.builtin_count = XR_USER_GLOBALS_START;
