@@ -257,6 +257,12 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             xrt_fmt_cstr(sb, buf);
             return;
         }
+        /* Name-free by design, matching the VM: the callable descriptor carries
+         * no source name, and taking one from the type-name profile would make
+         * a program's output depend on how it was built. */
+        case XR_TAG_CLOSURE:
+            xrt_fmt_cstr(sb, "<fn>");
+            return;
         default:
             break;
     }
@@ -449,6 +455,7 @@ static inline int xrt_value_kind_is_formattable_aggregate(XrValue v) {
         case XR_TAG_MAP:
         case XR_TAG_SET:
         case XR_TAG_TUPLE:
+        case XR_TAG_CLOSURE:
             return 1;
         case XR_TAG_PTR:
             return v.ptr && (xrt_is_json_object_value(v) || v.heap_type == XR_TINSTANCE);
