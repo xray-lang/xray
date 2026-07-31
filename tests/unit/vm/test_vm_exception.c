@@ -157,20 +157,19 @@ TEST(catch_clears_pending_error_state) {
     xray_vm_delete(iso);
 }
 
-/* ========== Caught enum error can be rethrown ========== */
+/* ========== Rethrow reaches the top level and is consumed ========== */
 
 /*
- * Value-return errors do not use the panic trace channel. Verify that
- * catch + rethrow preserves the enum error and leaves it pending at top
- * level.
+ * Value-return errors do not use the panic trace channel. A caught enum error
+ * that is re-thrown propagates to the top level, where the uncaught-error
+ * report consumes it: dostring returns non-zero and the error channel is left
+ * clean — matching the scheduler-backed roots (run_finalize) and the sibling
+ * catch_clears_pending_error_state, so the isolate stays re-entrant.
  */
-TEST(caught_error_rethrow_preserves_pending_error) {
+TEST(caught_error_rethrow_reaches_top_level) {
     XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
-    /* In the new model, throw + catch + re-throw all go through
-     * the value-return error channel.  Verify the error value
-     * survives catch and re-throw. */
     const char *src = "enum VmErr { Deep(string) }\n"
                       "fn deep() { throw VmErr.Deep(\"deep\") }\n"
                       "fn level2() { deep() }\n"
@@ -178,11 +177,12 @@ TEST(caught_error_rethrow_preserves_pending_error) {
                       "try { level1() } catch (e) { throw e }\n";
 
     int rc = xray_vm_dostring(iso, src);
+    /* Rethrow propagated uncaught to the top level. */
     ASSERT(rc != 0);
 
-    /* Error propagated to top level via pending_error */
+    /* The top-level report consumed the error; no dangling channel state. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
-    ASSERT(!XR_IS_NULL(ctx->pending_error));
+    ASSERT(XR_IS_NULL(ctx->pending_error));
 
     xray_vm_delete(iso);
 }
@@ -199,5 +199,5 @@ RUN_TEST_SUITE("Catch state cleanup");
 RUN_TEST(catch_clears_pending_error_state);
 
 RUN_TEST_SUITE("Error rethrow surface");
-RUN_TEST(caught_error_rethrow_preserves_pending_error);
+RUN_TEST(caught_error_rethrow_reaches_top_level);
 TEST_MAIN_END()
