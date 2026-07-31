@@ -2805,6 +2805,22 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Spec 8.1.1 uncaught value-return error diagnostic. A content gate: the
+    # dropped-`go` shape exits 0 on both backends, so the VM/AOT differential
+    # agrees even when one of them prints nothing.
+    add_test(
+        NAME uncaught_error_diagnostics
+        COMMAND ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_uncaught_error_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR UNCAUGHT_ERROR_TESTS_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(uncaught_error_diagnostics PROPERTIES
+        LABELS "cli;vm;aot;regression"
+        TIMEOUT ${UNCAUGHT_ERROR_TESTS_TIMEOUT}
+    )
+
     # Borrow/ownership instrumentation: keep a machine-parseable Xi
     # retain/release budget available for RC-overhead regression work.
     add_test(

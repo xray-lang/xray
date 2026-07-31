@@ -31,6 +31,7 @@
 #ifndef XRT_EXCEPTION_H
 #define XRT_EXCEPTION_H
 
+#include "xrt_arith.h" /* xrt_value_to_string, for the uncaught-error diagnostic */
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
@@ -78,6 +79,27 @@ static inline int xrt_has_pending_error(void) {
  * xrt_defer.h (included after this header); forward-declared here because
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
 static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
+
+/* Uncaught value-return error diagnostic (spec §8.1.1): print the error value to
+ * stderr. `in_go_coroutine` selects the wording for a dropped fire-and-forget
+ * `go` whose body threw with nothing left to observe it. Kept byte-identical to
+ * the VM's report in run_finalize (src/vm/xvm_coro_backend.c) — the two backends
+ * must not drift.
+ *
+ * Header-only because rendering an AOT value needs the generated program's own
+ * formatter; the scheduler runtime reaches it through
+ * XrAotValueOps::report_uncaught_error. */
+static inline XRT_COLD void xrt_report_uncaught_error(XrValue err, bool in_go_coroutine) {
+    const char *where = in_go_coroutine ? " in go coroutine" : "";
+    XrValue s;
+    if (XR_IS_NULL(err))
+        return;
+    s = xrt_value_to_string(err);
+    if (XR_IS_STR(s))
+        fprintf(stderr, "\n[Uncaught Error%s] %.*s\n", where, (int) xr_str_len(s), xr_str_data(s));
+    else
+        fprintf(stderr, "\n[Uncaught Error%s] <error>\n", where);
+}
 
 static inline XrValue xrt_exception_message_value(const char *message, size_t len) {
     if (!message)

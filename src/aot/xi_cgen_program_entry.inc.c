@@ -583,6 +583,12 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "}\n"
         "static void xrt_runtime_value_retain(XrValue value) { xrt_retain(value); }\n"
         "static void xrt_runtime_value_release(XrValue value) { xrt_release(value); }\n"
+        /* The scheduler runtime finalizes a coroutine whose error nothing is
+         * left to observe; the rendering has to happen here, in the generated
+         * program, because the runtime cannot format an AOT value layout. */
+        "static void xrt_runtime_report_uncaught_error(XrValue error, bool in_go_coroutine) {\n"
+        "    xrt_report_uncaught_error(error, in_go_coroutine);\n"
+        "}\n"
         "static const XrAotValueOps xrt_runtime_value_ops = {\n"
         "    .string_new = xrt_runtime_string_new,\n"
         "    .string_data = xrt_runtime_string_data,\n"
@@ -598,6 +604,7 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
         "    .retain = xrt_runtime_value_retain,\n"
         "    .release = xrt_runtime_value_release,\n"
+        "    .report_uncaught_error = xrt_runtime_report_uncaught_error,\n"
         "};\n\n");
 }
 
