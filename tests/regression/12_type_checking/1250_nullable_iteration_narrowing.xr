@@ -1,0 +1,109 @@
+// 1250_nullable_iteration_narrowing.xr
+// 测试：可空集合的 for-in / len() 必须先收窄或断言非空
+//
+// for-in 与 len() 都会整体消费该值，因此和 `x.f` / `x[i]` 适用同一条
+// strict-null 规则 (E0379)。收窄 (`if x != null`) 与非空断言 (`!`) 都会
+// 剥掉可空标记，之后使用方式与普通集合完全一致。
+
+// ===== null 检查收窄 =====
+
+@test
+fn test_narrowed_array_iterates() {
+    var a: Array<int>? = [1, 2, 3]
+    var sum = 0
+    if (a != null) {
+        for (i in a) {
+            sum = sum + i
+        }
+    }
+    assert_eq(sum, 6)
+}
+
+@test
+fn test_narrowed_array_len() {
+    var a: Array<int>? = [1, 2, 3]
+    var n = 0
+    if (a != null) {
+        n = len(a)
+    }
+    assert_eq(n, 3)
+}
+
+@test
+fn test_narrowed_null_skips_body() {
+    var a: Array<int>? = null
+    var count = 0
+    if (a != null) {
+        for (i in a) {
+            count = count + 1
+        }
+    }
+    assert_eq(count, 0)
+}
+
+// ===== 非空断言 =====
+
+@test
+fn test_asserted_array_iterates() {
+    var a: Array<int>? = [4, 5, 6]
+    var sum = 0
+    for (i in a!) {
+        sum = sum + i
+    }
+    assert_eq(sum, 15)
+}
+
+@test
+fn test_asserted_array_len() {
+    var a: Array<int>? = [4, 5, 6]
+    assert_eq(len(a!), 3)
+}
+
+// ===== 可空 Range =====
+
+@test
+fn test_narrowed_range_iterates() {
+    var r: Range? = 1..5
+    var sum = 0
+    if (r != null) {
+        for (i in r) {
+            sum = sum + i
+        }
+    }
+    assert_eq(sum, 10)
+}
+
+@test
+fn test_asserted_range_iterates() {
+    var r: Range? = 1..=4
+    var sum = 0
+    for (i in r!) {
+        sum = sum + i
+    }
+    assert_eq(sum, 10)
+}
+
+@test
+fn test_narrowed_range_len() {
+    var r: Range? = 3..9
+    var n = 0
+    if (r != null) {
+        n = len(r)
+    }
+    assert_eq(n, 6)
+}
+
+// ===== 非可空值不受影响 =====
+
+@test
+fn test_plain_collections_unaffected() {
+    var a = [1, 2, 3]
+    var sum = 0
+    for (i in a) {
+        sum = sum + i
+    }
+    assert_eq(sum, 6)
+    assert_eq(len(a), 3)
+    assert_eq(len("abc"), 3)
+    assert_eq(len(1..5), 4)
+}

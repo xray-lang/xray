@@ -5985,6 +5985,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *item_type = xr_type_new_unknown(NULL);
             XrType *value_type = xr_type_new_unknown(NULL);
 
+            /* for-in consumes the collection whole, so a still-nullable one is
+             * the same error as `x.f` or `x[i]` on a nullable receiver — the
+             * loop would ask a null value for its length. Checked before the
+             * type dispatch below, which only sees through to `Array<int>` and
+             * would otherwise accept `Array<int>?` and defer the failure to a
+             * runtime "value does not implement Lengthable". `?.` has no for-in
+             * spelling, so it is not offered as a remedy. */
+            xa_check_nullable_use(ctx, node, coll_type, "iteration", false);
+
             if (is_enum_iter) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};

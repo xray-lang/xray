@@ -5511,7 +5511,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
         ctx->expected_type = saved_expected;
         ctx->allow_view_expr_for_copy = saved_view_context;
-        if (!xa_len_type_supported(operand_type)) {
+        /* len() dereferences its argument, so a still-nullable one is the same
+         * error as `x.f` on a nullable receiver. Checked before the Lengthable
+         * test, which sees through the nullable flag and would otherwise accept
+         * `Array<int>?` and defer the failure to a runtime panic. `?.` has no
+         * spelling in argument position, so it is not offered as a remedy. */
+        if (!xa_check_nullable_use(ctx, node, operand_type, "len()", false) &&
+            !xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             snprintf(msg, sizeof(msg),
