@@ -37,16 +37,12 @@ fn sizeOf<T: Lengthable>(x: T) -> int {
     return len(x)
 }
 
-/* Straight-line yields on purpose. A generator that carries a loop variable
- * across its yields emits phi temporaries that AOT cgen fails to declare once
- * the Iterator is passed as a value instead of being iterated in place — a
- * pre-existing defect reachable without generics
- * (`fn f(xs: Iterator<int>)` + `f(upTo(4))` fails the same way on main). */
 fn upTo(limit: int) -> Iterator<int> {
-    yield 1
-    yield 2
-    yield 3
-    yield limit
+    var i = 1
+    while (i <= limit) {
+        yield i
+        i = i + 1
+    }
 }
 
 var s: Set<int> = #[1, 2, 3]
