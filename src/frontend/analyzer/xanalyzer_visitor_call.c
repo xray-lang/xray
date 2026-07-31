@@ -5402,15 +5402,42 @@ static XrType *xa_contextualize_generic_call_param(XaInferContext *ctx, XaSymbol
     return result ? result : param_type;
 }
 
-// Verify each explicit type argument against the declaration's `<T: A & B>`
-// intersection constraint list. Shared by plain-function / static-method calls
-// and by instance `obj.method<T>()` calls, which resolve their links later.
-static void xa_check_explicit_type_arg_constraints(XaInferContext *ctx, AstNode *node,
-                                                   CallExprNode *call, XaSymbolLinks *links) {
+// Name the callee for a diagnostic. Deliberately reports only the written
+// name, never "function" or "method": one call site here may be a plain
+// function, a static method, an instance method, or a module member, and the
+// callee syntax alone cannot tell them apart.
+static const char *xa_callee_display_name(CallExprNode *call) {
+    const char *name = NULL;
+    if (call && call->callee) {
+        if (call->callee->type == AST_VARIABLE)
+            name = call->callee->as.variable.name;
+        else if (call->callee->type == AST_MEMBER_ACCESS)
+            name = call->callee->as.member_access.name;
+    }
+    return name ? name : "<anonymous>";
+}
+
+// Verify explicit type arguments — both their count and each one against the
+// declaration's `<T: A & B>` intersection constraint list. Shared by
+// plain-function / static-method calls and by instance `obj.method<T>()`
+// calls, which resolve their links later. Arity and constraints stay in one
+// helper so a caller can never pick up half the checking.
+static void xa_check_explicit_type_args(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                        XaSymbolLinks *links) {
     if (!ctx || !node || !call || !links || call->type_arg_count <= 0 || !call->type_args)
         return;
 
     int expected_count = xa_symbol_links_get_type_param_count(links);
+
+    if (call->type_arg_count != expected_count) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Generic call to '%s' expects %d type argument(s), but got %d",
+                 xa_callee_display_name(call), expected_count, call->type_arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+    }
+
     for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
         // Use analyzer-aware resolver so user class type-args carry their
         // superclass chain — required for `<T: BaseClass>` upper bounds.
@@ -5673,30 +5700,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_string(ctx->analyzer->isolate);
     }
 
-    // Check generic type argument count and constraints. Instance-method links
-    // are not resolved yet at this point; those calls are checked further down,
-    // once the receiver has been inferred.
-    bool type_arg_constraints_checked = false;
+    // Check generic type arguments. Instance-method links are not resolved yet
+    // at this point; those calls are checked further down, once the receiver
+    // has been inferred.
+    bool type_args_checked = false;
     if (call->type_arg_count > 0 && fn_links) {
-        int expected_count = xa_symbol_links_get_type_param_count(fn_links);
-
-        // Check count matches
-        if (call->type_arg_count != expected_count) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            char msg[256];
-            const char *fn_name = call->callee && call->callee->type == AST_VARIABLE
-                                      ? call->callee->as.variable.name
-                                      : "function";
-            snprintf(msg, sizeof(msg),
-                     "Generic function '%s' expects %d type argument(s), but got %d", fn_name,
-                     expected_count, call->type_arg_count);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
-        }
-
-        // Check constraints — every constraint in the intersection list must hold.
-        xa_check_explicit_type_arg_constraints(ctx, node, call, fn_links);
-        type_arg_constraints_checked = true;
+        xa_check_explicit_type_args(ctx, node, call, fn_links);
+        type_args_checked = true;
     } else if (fn_links && xa_symbol_links_get_type_param_count(fn_links) > 0 && call->callee &&
                call->callee->type == AST_VARIABLE) {
         // Implicit generic instantiation: type args inferred from arguments.
@@ -5707,7 +5717,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
             xa_check_inferred_type_arg_constraints(ctx, node, call,
                                                    xa_analyzer_get_links(ctx->analyzer, fn_sym));
-            type_arg_constraints_checked = true;
+            type_args_checked = true;
         }
     }
 
@@ -5811,15 +5821,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         // An instance method's links only become available here, after the
-        // receiver has been inferred — run the constraint check the block above
-        // could not reach, for both `obj.method<T>()` and the inferred
+        // receiver has been inferred — run the type-argument checks the block
+        // above could not reach, for both `obj.method<T>()` and the inferred
         // `obj.method(arg)` form.
-        if (!type_arg_constraints_checked && fn_links) {
+        if (!type_args_checked && fn_links) {
             if (call->type_arg_count > 0)
-                xa_check_explicit_type_arg_constraints(ctx, node, call, fn_links);
+                xa_check_explicit_type_args(ctx, node, call, fn_links);
             else
                 xa_check_inferred_type_arg_constraints(ctx, node, call, fn_links);
-            type_arg_constraints_checked = true;
+            type_args_checked = true;
         }
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
