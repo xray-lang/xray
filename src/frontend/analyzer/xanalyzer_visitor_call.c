@@ -5728,11 +5728,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
         ctx->allow_view_expr_for_copy = saved_view_context;
         /* len() dereferences its argument, so a still-nullable one is the same
-         * error as `x.f` on a nullable receiver. Checked before the Lengthable
-         * test, which sees through the nullable flag and would otherwise accept
-         * `Array<int>?` and defer the failure to a runtime panic. `?.` has no
-         * spelling in argument position, so it is not offered as a remedy. */
-        if (!xa_check_nullable_use(ctx, node, operand_type, "len()", false) &&
+         * error as `x.f` on a nullable receiver (spec §2.13 N-12). Checked
+         * before the Lengthable test, which sees through the nullable flag and
+         * would otherwise accept `Array<int>?` and defer the failure to a
+         * runtime panic. */
+        if (!xa_check_nullable_access(ctx, node, call->arguments[0], operand_type, "len()") &&
             !xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];

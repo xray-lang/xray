@@ -1990,7 +1990,8 @@ static inline XrValue xrt_map_new_vt(int64_t cap, uint8_t value_type) {
 
 static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, int32_t *indices,
                                                   XrMapEntry *entries, uint32_t indices_size,
-                                                  uint32_t entries_cap, uint8_t value_type) {
+                                                  uint32_t entries_cap, uint8_t key_type,
+                                                  uint8_t value_type) {
     xrt_map_init_header(m);
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < indices_size; i++)
@@ -2002,6 +2003,7 @@ static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, i
     m->indices_size = indices_size;
     m->entries_cap = entries_cap;
     m->flags = XR_MAP_FLAG_NODES_ON_STACK;
+    m->key_type = key_type;
     m->value_type = value_type;
     return xr_mkptr(m, XR_TAG_MAP);
 }
