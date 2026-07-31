@@ -1,0 +1,22 @@
+// Builtin interface names are ordinary identifiers too, so a program may
+// declare `interface Lengthable`. Implementing the user's interface must not
+// make a class Lengthable in the builtin sense: it satisfies only the contract
+// its own declaration states, and len() on it stays a compile error.
+
+interface Lengthable {
+    describe() -> string
+}
+
+class Box implements Lengthable {
+    v: int
+    constructor(v: int) { this.v = v }
+    describe() -> string { return "box" }
+}
+
+fn main() {
+    var b = Box(3)
+    print(b.describe())
+    print(len(b))
+}
+
+main()

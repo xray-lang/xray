@@ -5290,9 +5290,7 @@ static bool xa_len_type_supported(XrType *type) {
              * the specialized call site; an explicit non-Lengthable
              * constraint is rejected immediately. */
             return !type->type_param.constraint ||
-                   (type->type_param.constraint->kind == XR_KIND_INTERFACE &&
-                    type->type_param.constraint->instance.class_name &&
-                    strcmp(type->type_param.constraint->instance.class_name, "Lengthable") == 0);
+                   xr_type_is_builtin_named_type(type->type_param.constraint, "Lengthable");
         case XR_KIND_UNION:
             if (type->union_type.member_count == 0)
                 return false;
@@ -5308,8 +5306,7 @@ static bool xa_len_type_supported(XrType *type) {
             if (info) {
                 for (int i = 0; i < info->interface_count; i++) {
                     XrType *iface = info->interface_types ? info->interface_types[i] : NULL;
-                    if (iface && iface->instance.class_name &&
-                        strcmp(iface->instance.class_name, "Lengthable") == 0)
+                    if (xr_type_is_builtin_named_type(iface, "Lengthable"))
                         return true;
                 }
             }

@@ -2876,6 +2876,13 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     // its declared type parameters so generic resolution can plug arguments
     // in later (the type_args slot is empty at the declaration site).
     links->type = xr_type_new_interface(ctx->analyzer->isolate, iface->name);
+    // Carry the declaration identity on the type, exactly as a class instance
+    // does. Interface names are ordinary identifiers too, so `interface
+    // Lengthable { ... }` is legal source and must not be mistaken for the
+    // builtin of that name: xr_type_is_builtin_named_type reads a NULL
+    // class_ref as "builtin", and the builtin interface registry leaves it NULL.
+    if (links->type)
+        links->type->instance.class_ref = info;
     info->base = NULL;  // interfaces never carry an inheritance chain here
     info->base_name = NULL;
 
@@ -3035,11 +3042,17 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
 
         // Built-in interfaces have no XrClassInfo* attached. Hashable is the
         // one builtin with a user-visible structural contract.
-        if (strcmp(iface_name, "Hashable") == 0) {
+        //
+        // Identity, not spelling, decides which is which: `interface Lengthable
+        // { ... }` written in user code carries its own declaration info, and is
+        // audited as an ordinary interface below against the methods it actually
+        // declares — not against the builtin's `operator len() -> int` contract.
+        const bool is_builtin_iface = iface_type->instance.class_ref == NULL;
+        if (is_builtin_iface && strcmp(iface_name, "Hashable") == 0) {
             xa_validate_hashable_contract_for_class(ctx, cls_node, cls_info);
             continue;
         }
-        if (xa_is_builtin_interface_name(iface_name)) {
+        if (is_builtin_iface && xa_is_builtin_interface_name(iface_name)) {
             if (strcmp(iface_name, "Lengthable") == 0) {
                 XaSymbol *found = xa_class_info_lookup_member(cls_info, "__operator_len");
                 XaSymbolLinks *found_links =

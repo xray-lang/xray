@@ -373,18 +373,15 @@ static inline bool xr_type_is_builtin_named_class(const XrType *t, const char *n
 /* Same question for a builtin that surfaces as either a native instance or as
  * the builtin interface of that name — Iterator is the one such type today.
  *
- * The instance form is decided by identity. The interface form still has to be
- * matched by spelling: xr_type_new_interface builds builtin and user-declared
- * interfaces alike with no back-pointer to the declaration, so an
- * `interface Iterator<T>` written in user code is indistinguishable here. That
- * is the same class of bug one level up, and closing it means giving interface
- * types a declaration identity — a separate change from this one. */
+ * Both forms are decided the same way, by declaration identity. A user
+ * `interface Lengthable { ... }` is as legal as `class Range { ... }`, and the
+ * analyzer attaches the declaration's XrClassInfo to the interface type it
+ * builds; the builtin interface registry leaves class_ref NULL. */
 static inline bool xr_type_is_builtin_named_type(const XrType *t, const char *name) {
-    if (!t)
+    if (!t || (t->kind != XR_KIND_INTERFACE && t->kind != XR_KIND_INSTANCE))
         return false;
-    if (t->kind == XR_KIND_INTERFACE)
-        return t->instance.class_name && strcmp(t->instance.class_name, name) == 0;
-    return xr_type_is_builtin_named_class(t, name);
+    return t->instance.class_name && strcmp(t->instance.class_name, name) == 0 &&
+           t->instance.class_ref == NULL;
 }
 
 /* Whether a type denotes a runtime-managed object whose lifetime belongs to

@@ -1668,8 +1668,8 @@ static void xa_register_catch_pattern_bindings(XaInferContext *ctx, XrCatchClaus
 }
 
 static bool xa_is_hashable_interface_type(XrType *type) {
-    return type && type->kind == XR_KIND_INTERFACE && type->instance.class_name &&
-           strcmp(type->instance.class_name, "Hashable") == 0;
+    return type && type->kind == XR_KIND_INTERFACE &&
+           xr_type_is_builtin_named_type(type, "Hashable");
 }
 
 static bool xa_type_param_link_has_hashable(XaSymbolLinks *links, const char *name,
