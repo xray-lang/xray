@@ -31,6 +31,7 @@
 #ifndef XRT_EXCEPTION_H
 #define XRT_EXCEPTION_H
 
+#include "xrt_arith.h" /* xrt_value_to_string, for the uncaught-error diagnostic */
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
@@ -78,6 +79,20 @@ static inline int xrt_has_pending_error(void) {
  * xrt_defer.h (included after this header); forward-declared here because
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
 static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
+
+/* Uncaught top-level value-return error (spec §8.1.1): print the enum value to
+ * stderr; the generated entry then exits 1. Mirrors the VM's
+ * xr_vm_report_uncaught_error so both backends emit the same diagnostic. */
+static inline XRT_COLD void xrt_report_uncaught_error(XrValue err) {
+    XrValue s;
+    if (XR_IS_NULL(err))
+        return;
+    s = xrt_value_to_string(err);
+    if (XR_IS_STR(s))
+        fprintf(stderr, "\n[Uncaught Error] %.*s\n", (int) xr_str_len(s), xr_str_data(s));
+    else
+        fprintf(stderr, "\n[Uncaught Error] <error>\n");
+}
 
 static inline XrValue xrt_exception_message_value(const char *message, size_t len) {
     if (!message)

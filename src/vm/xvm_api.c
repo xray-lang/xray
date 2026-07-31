@@ -597,6 +597,19 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
     }
 }
 
+/* Uncaught value-return error diagnostic (spec §8.1.1). Every top-level
+ * finalization path funnels through here so the wording cannot drift between
+ * them: the coroutine backend's run_finalize (scheduler-backed roots and
+ * dropped fire-and-forget `go`) and xr_execute's elided-root fast path, which
+ * never materializes a main coroutine at all. */
+void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine) {
+    if (!isolate || isolate->suppress_exception_print || XR_IS_NULL(error))
+        return;
+    XrString *msg = xr_value_to_string(isolate, error);
+    fprintf(stderr, "\n[Uncaught Error%s] %s\n", in_go_coroutine ? " in go coroutine" : "",
+            msg ? (const char *) msg->data : "<error>");
+}
+
 bool xr_vm_is_catch_reachable(XrVMRuntime *isolate) {
     if (!isolate)
         return false;

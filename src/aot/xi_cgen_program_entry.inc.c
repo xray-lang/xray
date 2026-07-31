@@ -211,8 +211,20 @@ static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
     return bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR;
 }
 
-static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtime) {
+/* The freestanding and C90 runtime kernels carry neither the shared value
+ * formatter nor stderr, so only the hosted profile can render a diagnostic. */
+static bool cg_can_report_uncaught_error(const XiCgenCtx *ctx) {
+    return ctx && !ctx->freestanding_profile && ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
+}
+
+/* Uncaught top-level value-return error (spec §8.1.1): report, then exit 1.
+ * `can_report` is false for the freestanding and C90 kernels, which carry
+ * neither the value formatter nor stderr; those keep the bare exit code. */
+static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtime,
+                                              bool can_report) {
     fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
+    if (can_report)
+        fprintf(out, "        xrt_report_uncaught_error(xrt_pending_error);\n");
     if (entry_needs_runtime)
         fprintf(out, "        xr_aot_runtime_delete(rt);\n");
     fprintf(out, "        xrt_bump_destroy();\n");
@@ -233,8 +245,7 @@ static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
            (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
 
-static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx,
-                                                         const XiFunc *func) {
+static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx, const XiFunc *func) {
     if (!ctx || !ctx->target || !func)
         return 0;
     if ((ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 &&
@@ -246,8 +257,7 @@ static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx,
         cg_func_requires_x86_vector_target(ctx, func, 32))
         selected = 32;
     for (uint16_t i = 0; i < func->nchildren; i++) {
-        uint8_t child_width =
-            cg_static_x86_compile_width_for_func_tree(ctx, func->children[i]);
+        uint8_t child_width = cg_static_x86_compile_width_for_func_tree(ctx, func->children[i]);
         if (child_width == 64)
             return 64;
         if (child_width == 32)
@@ -729,7 +739,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
-            cg_emit_main_pending_error_return(out, entry_needs_runtime);
+            cg_emit_main_pending_error_return(out, entry_needs_runtime,
+                                              cg_can_report_uncaught_error(ctx));
         } else {
             if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
                 fprintf(stderr,
@@ -743,7 +754,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             fprintf(out, "    ");
             emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
             fprintf(out, "(NULL);\n");
-            cg_emit_main_pending_error_return(out, entry_needs_runtime);
+            cg_emit_main_pending_error_return(out, entry_needs_runtime,
+                                              cg_can_report_uncaught_error(ctx));
         }
     }
     if (entry_has_descriptor)
@@ -885,7 +897,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    xr_aot_run_main(rt, &");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_desc");
             fprintf(body, ", _entry_frame);\n");
-            cg_emit_main_pending_error_return(body, entry_needs_runtime);
+            cg_emit_main_pending_error_return(body, entry_needs_runtime,
+                                              cg_can_report_uncaught_error(ctx));
         } else {
             if (!entry_needs_runtime) {
                 fprintf(body, "    (void) argc;\n");
@@ -894,7 +907,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    ");
             emit_fname(ctx, body, prefix, main_func);
             fprintf(body, "(NULL);\n");
-            cg_emit_main_pending_error_return(body, entry_needs_runtime);
+            cg_emit_main_pending_error_return(body, entry_needs_runtime,
+                                              cg_can_report_uncaught_error(ctx));
         }
         if (entry_has_descriptor)
             fprintf(body, "    if (!xr_aot_root_descriptor_end(rt)) { xr_aot_runtime_delete(rt); "

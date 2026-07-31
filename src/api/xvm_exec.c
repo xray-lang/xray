@@ -89,6 +89,12 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
         XrVMContext *ctx = xr_vm_current_ctx(isolate);
         xr_exec_context_restore(previous);
         if (result == XR_VM_OK && ctx && !XR_IS_NULL(ctx->pending_error)) {
+            /* An elided root runs on the native stack with no main coroutine,
+             * so run_finalize() — where the scheduler-backed roots report —
+             * is never reached. Report here, and clear the channel so a
+             * re-entrant host (REPL, embedder) starts clean. */
+            xr_vm_report_uncaught_error(isolate, ctx->pending_error, false);
+            ctx->pending_error = xr_null();
             return -1;
         }
         return (result == XR_VM_OK) ? 0 : -1;

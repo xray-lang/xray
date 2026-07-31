@@ -2764,6 +2764,22 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Spec 8.1.1 uncaught top-level error diagnostic. A content gate: when this
+    # message went missing it went missing on both backends, so the VM/AOT
+    # differential still agreed and could not catch it.
+    add_test(
+        NAME uncaught_error_diagnostics
+        COMMAND ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_uncaught_error_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR UNCAUGHT_ERROR_TESTS_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(uncaught_error_diagnostics PROPERTIES
+        LABELS "cli;vm;aot;regression"
+        TIMEOUT ${UNCAUGHT_ERROR_TESTS_TIMEOUT}
+    )
+
     # Borrow/ownership instrumentation: keep a machine-parseable Xi
     # retain/release budget available for RC-overhead regression work.
     add_test(
