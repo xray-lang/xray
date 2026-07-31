@@ -1,0 +1,22 @@
+// Pushing a reference into a container publishes its root into a heap graph.
+// Function-local analysis cannot see that slot being overwritten, so the root
+// is escaped and can no longer be moved.
+class Node {
+    v: int
+    init(v: int) { this.v = v }
+}
+
+fn consume(n: move Node) -> int {
+    n.v = 50
+    return n.v
+}
+
+fn main() {
+    var a = Node(1)
+    var holder: Array<Node> = []
+    holder.push(a)
+    go consume(move a)
+    print(holder[0].v)
+}
+
+main()

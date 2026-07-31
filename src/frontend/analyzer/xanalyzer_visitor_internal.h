@@ -257,22 +257,50 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
                                                        XrType *receiver_type);
 XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
                                                  const char *kind);
-XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_sym, AstNode *value,
-                                            XrType *value_type);
-XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym);
-XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope);
-XR_FUNC void xa_check_active_span_borrow_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
-                                                        XaSymbol *owner_sym, const char *operation);
+/* Shared analyzer utilities the ownership decision needs: AST/statement
+ * traversal, place-path comparison, and whole-binding identity. Defined in
+ * xanalyzer_visitor_stmt.c, used from xa_ownership.c. */
+XR_FUNC bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count);
+XR_FUNC bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int start_index);
+XR_FUNC bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *expr,
+                                                 bool *out_pointer_borrow);
+XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+XR_FUNC bool xa_path_is_same_or_nested(const char *path, const char *prefix);
+XR_FUNC bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr);
+XR_FUNC bool xa_symbol_used_after_current_statement(XaInferContext *ctx, const XaSymbol *symbol);
+XR_FUNC AstNode *xa_unsafe_expr_result(AstNode *expr);
+XR_FUNC XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value);
+XR_FUNC AstNode *xa_whole_binding_value(AstNode *value);
+
+/* The live loan a given borrower holds, if any. */
+XR_FUNC XaActiveLoan *xa_active_loan_for_borrower(XaInferContext *ctx, XaSymbol *borrower_sym);
+XR_FUNC void xa_register_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, AstNode *value,
+                                     XrType *value_type);
+/* Closure captures are collected while the closure body is inferred, then
+ * either bound to the closure's own binding as CAPTURE loans, or discarded
+ * when the closure is a call argument that cannot outlive the call. */
+XR_FUNC void xa_record_pending_capture(XaInferContext *ctx, XaSymbol *captured);
+XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *borrower_sym,
+                                               AstNode *site);
+XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx);
+/* The closure outlives the call after all: its captured roots escape with it. */
+XR_FUNC void xa_escape_pending_captures(XaInferContext *ctx);
+XR_FUNC void xa_clear_active_loans_for_borrower(XaInferContext *ctx, XaSymbol *borrower_sym);
+XR_FUNC void xa_clear_active_loans_in_scope(XaInferContext *ctx, XaScope *scope);
+XR_FUNC void xa_check_active_loan_owner_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                 XaSymbol *owner_sym, const char *operation);
 /* Return a live local strong alias of move_sym's root, if one is used after
  * the current statement. analysis_failed is set on evidence-allocation
  * failure so the caller can fail closed. */
 XR_FUNC XaSymbol *xa_find_live_strong_alias_after_current(XaInferContext *ctx, XaSymbol *move_sym,
                                                           bool *analysis_failed);
 XR_FUNC void xa_mark_root_alias_state(XaInferContext *ctx, XaRootId root, XaRootAliasState state);
-XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
-                                                             XaSymbol *owner_sym,
-                                                             const char *owner_path,
-                                                             const char *operation);
+/* Report every ownership axis `move` requires that this source fails. */
+XR_FUNC void xa_check_move_source_evidence(XaInferContext *ctx, XaSymbol *move_sym,
+                                           const char *move_name, XrLocation loc);
+XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
+                                                      XaSymbol *owner_sym, const char *owner_path,
+                                                      const char *operation);
 XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_expr(XaInferContext *ctx, AstNode *expr,
                                                      char *path_buf, size_t path_buf_size);
 XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_owner_expr(XaInferContext *ctx, AstNode *expr,
@@ -285,6 +313,11 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_path_for_index_write(XaInferContext *ctx,
                                                             AstNode *index, XrType *element_type,
                                                             char *path_buf, size_t path_buf_size);
 XR_FUNC void xa_visit_inline_statement_sequence_with_cursor(XaInferContext *ctx, AstNode *node);
+/* Writing a local's whole binding into a heap slot (container element, object
+ * field, enum payload) publishes its ownership root into a graph that
+ * function-local analysis can no longer follow. The root becomes ESCAPED and
+ * can no longer be moved. `move x` and `copy(x)` sources are exempt. */
+XR_FUNC void xa_note_owner_escapes_into_heap(XaInferContext *ctx, AstNode *value);
 XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, XrType *value_type,
                                         const char *escape_context);
 XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *loc_node,

@@ -1,0 +1,15 @@
+// A generic enum arrives monomorphized as an instance type naming the enum,
+// so the same check has to reach through it.
+enum Box<T> { Full(T), Empty }
+
+fn pick() -> Box<int> { return Box<int>.Empty }
+
+fn main() {
+    match (pick()) {
+        Box.Full(v) -> print("full")
+        Box.Nope -> print("nope")
+        _ -> print("other")
+    }
+}
+
+main()

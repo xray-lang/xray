@@ -3110,7 +3110,15 @@ XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value) {
     XrCoroutine *coro = xr_task_executor_peek(task);
     if (!xr_task_is_done(task) && coro) {
         uint32_t before_cancel_flags = xr_coro_flags_load(coro);
+        /* A coroutine that owes a `defer` chain unwinds on its own worker and
+         * marks its task cancelled when that finishes. Completing the task here
+         * instead would let an awaiter observe the cancellation before the
+         * cleanup it is waiting on has run. */
+        bool cleanup_pending = coro->backend && coro->backend->has_cancellation_cleanup &&
+                               coro->backend->has_cancellation_cleanup(coro);
         xr_coro_cancel(coro);
+        if (cleanup_pending)
+            return xr_null();
         xr_task_cancel(task);
         xr_coro_wake_waiter_runtime(aot_context_scheduler(ctx), coro);
         aot_task_recycle_cancelled_executor(task, coro, before_cancel_flags);

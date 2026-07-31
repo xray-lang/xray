@@ -110,6 +110,15 @@
  * has no finite monomorphization. */
 #define XR_ERR_ANALYZE_MONO_DEPTH 389
 #define XR_ERR_ANALYZE_UNION_INDISCRIMINABLE 390
+/* An ownership root failed the uniqueness evidence `move` requires: a live
+ * local alias, a root published into a heap graph, unknown provenance, or an
+ * incomplete storage plan.  The message names which axis failed. */
+#define XR_ERR_ANALYZE_MOVE_NOT_UNIQUE 391
+/* A deferred action reached, or could not be proven not to reach, the
+ * scheduler.  A defer body runs on a frame that is already leaving and has no
+ * suspension point left to park at, so reaching the scheduler drops the rest
+ * of the cleanup instead of resuming it. */
+#define XR_ERR_ANALYZE_DEFER_SUSPEND 392
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

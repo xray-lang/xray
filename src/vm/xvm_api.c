@@ -541,6 +541,7 @@ XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, in
     if (mark > ctx->defer_count)
         mark = ctx->defer_count;
 
+    ctx->defer_body_depth++;
     while (ctx->defer_count > mark) {
         int entries[XR_DEFER_ENTRIES_MAX];
         int total_entries = 0;
@@ -560,6 +561,7 @@ XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, in
 
         if (total_entries == 0 || pos != end) {
             ctx->defer_count = mark;
+            ctx->defer_body_depth--;
             return;
         }
 
@@ -589,6 +591,7 @@ XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, in
 
         ctx->defer_count = batch_starts[0];
     }
+    ctx->defer_body_depth--;
 }
 
 /*
@@ -598,6 +601,26 @@ static void run_defers_for_frame(XrVMRuntime *isolate, XrVMContext *ctx, int fra
     if (!ctx->defer_frame_marks || frame_index < 0)
         return;
     xr_vm_run_defers_to_mark(isolate, ctx, ctx->defer_frame_marks[frame_index]);
+}
+
+/*
+** Run every defer entry a cancelled coroutine still owns, innermost first.
+**
+** Cancellation stops a coroutine between statements rather than at a return,
+** so nothing else walks its frames. Without this the coroutine is marked done
+** with its defer entries untouched, and `defer` -- the language's only
+** deterministic cleanup mechanism -- silently does not run on the one path
+** where cleanup matters most.
+*/
+XR_FUNC void xr_vm_run_cancellation_defers(XrVMRuntime *isolate, XrVMContext *ctx) {
+    if (!isolate || !ctx || !ctx->defer_stack || ctx->defer_count <= 0)
+        return;
+    int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
+    for (int fi = ctx->frame_count - 1; fi >= floor; fi--)
+        run_defers_for_frame(isolate, ctx, fi);
+    /* Block-scoped entries below the outermost frame mark have no frame of
+     * their own; drain them so nothing is left pending on the shell. */
+    xr_vm_run_defers_to_mark(isolate, ctx, 0);
 }
 
 /*

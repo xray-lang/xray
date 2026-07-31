@@ -1,0 +1,26 @@
+// A unit enum variant is an immortal shared constant, so it can be published
+// as a task's error payload. Both backends must agree; the VM used to abort
+// here while AOT accepted it.
+enum E { Boom }
+
+fn body() -> int {
+    throw E.Boom
+}
+
+fn payload_body() -> int {
+    throw E2.Code(7)
+}
+
+enum E2 { Code(int) }
+
+var a = go body()
+match (a.awaitResult()) {
+    TaskResult.Failed(e) -> print("failed: unit variant")
+    _ -> print("other")
+}
+
+var b = go payload_body()
+match (b.awaitResult()) {
+    TaskResult.Failed(e) -> print("failed: payload variant")
+    _ -> print("other")
+}

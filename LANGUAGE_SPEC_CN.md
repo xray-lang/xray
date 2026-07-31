@@ -124,9 +124,47 @@ xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对�
 
 ### 1.2 行结尾与空白
 
-行结尾以 `\n` 计数；Windows `\r\n` 因 `\r` 被当作横向空白而正常工作。单独的 `\r` 也会被跳过，但**不会**增加行号或触发智能分号，因此不应当作源码换行使用。
+行结尾以 `\n` 计数；Windows `\r\n` 因 `\r` 被当作横向空白而正常工作。单独的 `\r` 也会被跳过，但**不会**增加行号或触发语句结束，因此不应当作源码换行使用。
 
-**空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义（**异常**：泛型语境下连续 `>>` 的拆分依赖空白上下文）。
+**空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义。
+
+**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<int>>` 与 `Array<Array<int> >` 完全等价，由语法位置而非空白决定。
+
+#### 1.2.1 语句边界
+
+xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达式尚未结束而遇到行结尾时，编译器按下列规则判定下一行是续行还是新语句。
+
+行结尾**结束**当前表达式，当且仅当同时满足：
+
+1. 已消耗的最后一个 token 可以**结束**一个表达式（标识符、字面量、`)`、`]`、`}`、后缀 `!`、`++`、`--`、`?`、标量类型名）；且
+2. 新行的首个 token 可以**开始**一个表达式；且
+3. 当前不在 `(` 或 `[` 之内——括号组内不可能开始新语句，因此行结尾在其中完全透明。
+
+条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`/`（正则字面量 / 除法）、`++`、`--`、`(`、`[`。因此：
+
+```xray
+var x = a
+!b            // 两条语句；不是 var x = a!
+```
+
+行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`as`、`is` 等）时不存在歧义，续行照常工作：
+
+```xray
+var ok = check(a)
+    && check(b)      // 续行
+
+var total = base +
+            extra    // 运算符置于行尾，续行
+```
+
+若需要以 `-` 或 `/` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
+
+```xray
+var d = (total
+    - used)          // 括号组内行结尾透明
+```
+
+> 表达式语句的值会被丢弃，因此**没有任何效果的表达式语句是错误**（`E0208`）。这条规则与上面的语句边界规则配套：被正确断开的续行不会变成静默的空操作，而是立刻报错并提示改写方式。REPL 例外——它会打印末尾裸表达式的值，该值属于被观察的结果。
 
 ### 1.3 注释
 
@@ -226,7 +264,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/prelude_types.def` 自动引入的类型符号：
-> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`。
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
 > `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 
 #### 1.5.7 字面量关键字
@@ -524,7 +562,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `is` | 运行时类型检查 |
 | `as` | 类型转换 |
 
-`!` 的歧义在 parser 阶段消解：紧跟表达式末尾且无空白时识别为强制解包；前缀位置识别为逻辑非。
+`!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
 
 #### 1.7.9 集合字面量起始符
 
@@ -564,7 +602,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
+5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`Record` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -576,6 +614,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
+| 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -778,11 +817,126 @@ fn first(packet: Packet) -> byte {
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
 - `Array<T>`：动态长度、可增长、堆上容器。
-- `Slice<T>`：借用连续存储的视图，不拥有数据。
+- `Slice<T>`：借用连续存储的视图，不拥有数据（见 §2.4.2）。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
-#### 2.4.2 `Map<K, V>`
+#### 2.4.2 `Slice<T>`
+
+> 真值源：`stdlib/prelude/prelude_types.def`（prelude 注册）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（借用跟踪与失效检查）、`src/frontend/analyzer/xa_memory_effect_db.h`（失效判据）、`src/frontend/analyzer/xanalyzer_visitor_decl.c`（返回视图契约）。
+
+`Slice<T>` 是**借用视图**：它描述另一个值所拥有的一段连续元素存储，自身不拥有数据、不参与引用计数、不可放入任何长生命周期存储。它是 prelude 类型（`GENERIC_1`），可以在任何类型注解里直接写出。
+
+##### 构造
+
+视图只能由以下三种来源产生，且**必须有显式目标类型**——没有目标类型时切片表达式是编译错误：
+
+| 来源 | 结果 | 说明 |
+|--|--|--|
+| `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
+| `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
+| `str.bytes()` | `Slice<byte>` | owner 是 `string` 的 UTF-8 字节存储 |
+
+```xray
+var arr: Array<int> = [10, 20, 30, 40]
+var view: Slice<int> = arr[1:3]      // OK：借用 arr
+var all: Slice<int> = arr[:]         // 全长视图，不是拷贝
+var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
+```
+
+owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
+
+```xray
+var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
+```
+
+##### 能力
+
+- `len(view)` 取长度；`view[i]` 读元素；`view[i] = v` 写元素，**直接写入 owner 的存储**。
+- `view[a:b]` 可以再切片，结果仍借用同一个 owner。
+- 视图**没有成员方法**，也没有 `.length`。
+- `const Slice<T>` 与 `const` owner 派生出的视图是只读的，写入是编译错误。
+
+```xray
+fn main() {
+    var arr: Array<int> = [10, 20, 30, 40]
+    var view: Slice<int> = arr[1:3]        // 借用视图，不是拷贝
+    view[1] = 31
+    print(arr[2])                          // 31 —— 写穿到 owner
+    arr[1] = 21
+    print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
+    var owned: Array<int> = copy(arr[1:3]) // 独立的 Array<T>
+    arr.push(50)                           // OK：此处没有存活的视图
+    print(len(owned))
+}
+
+main()
+```
+
+##### 借用规则
+
+设视图 `v` 借用 owner `o`。在 `v` 的**存活期**内：
+
+1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
+2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
+3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
+4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/Record 字段、Array / Map / Set / tuple / Json / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+
+```xray
+fn ok() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    print(len(view))                 // view 的最后一次使用
+    bytes.push(3)                    // OK：借用已结束（规则 3）
+}
+
+fn rejected() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    bytes.push(3)                    // E0382：view 仍存活
+    print(len(view))
+}
+```
+
+##### 跨函数：返回视图契约
+
+函数可以返回 `Slice<T>`，**当且仅当**返回的视图有**唯一可推断的来源**：某一个参数、receiver，或静态存储。编译器为这样的函数记录一份返回视图契约（来源 + 参数下标），调用点据此把结果继续记在原 owner 的账上，借用规则在调用者一侧照常生效。
+
+来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
+
+```xray
+fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+    return data[start:]              // OK：唯一来源是参数 data
+}
+
+fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+    if (useA) {
+        return a
+    }
+    return b                         // E0384：多来源
+}
+
+fn alsoBad() -> Slice<int> {
+    var local: Array<int> = [1, 2]
+    return local[:]                  // E0384：借自局部值
+}
+```
+
+##### 逃生口：`copy`
+
+需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
+
+```xray
+var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
+```
+
+`copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
+
+##### 与其他借用形式的关系
+
+`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 共用同一套借用跟踪与同一组错误码：`E0382`（owner 在借用存活期内失效）、`E0383`（借用逃逸）、`E0384`（借用来源不稳定或不唯一）。`unsafe` 块不放宽其中任何一条。
+
+#### 2.4.3 `Map<K, V>`
 
 哈希字典，**保持插入顺序**。详见 §14.8。
 
@@ -800,7 +954,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | `Json` / `Object`（结构化） | 见 §2.4.6 |
+| `{ key: value }`（无前缀） | sealed `Record`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.7 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -808,7 +962,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 `K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或提供 `operator==(other: Self) -> bool` 与 `hash() -> int` 的自定义类型。泛型键类型必须显式写成 `K: Hashable`。
 
-#### 2.4.3 `Set<T>`
+#### 2.4.4 `Set<T>`
 
 去重集合。详见 §14.9。
 
@@ -816,7 +970,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 var s: Set<int> = #[1, 2, 3]
 ```
 
-#### 2.4.4 `Channel<T>`
+#### 2.4.5 `Channel<T>`
 
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
@@ -824,7 +978,7 @@ var s: Set<int> = #[1, 2, 3]
 const ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Array<byte>`
+#### 2.4.6 `Array<byte>`
 
 类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
 
@@ -833,7 +987,7 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Record` / `Json` 与对象字面量
+#### 2.4.7 `Record` / `Json` 与对象字面量
 
 裸对象字面量默认推断为 sealed structural `Record`，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
 
@@ -882,11 +1036,22 @@ var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
 
-#### 2.4.7 `BigInt`
+**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+
+| | 身份 | 字段集 | 用户可定义方法 | 用途 |
+|---|---|---|---|---|
+| `Record` | 结构化 | 声明的，编译期精确检查 | **否** | options、多字段返回值、普通业务数据 |
+| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
+| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
+
+**规范性承诺**：`Record` 与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
+
+#### 2.4.8 `BigInt`
 
 任意精度整数。见 §14.8。
 
-#### 2.4.8 `Range`
+#### 2.4.9 `Range`
 
 `Range` 表示整数区间，由 `a..b` 或 `a..=b` 产生：
 
@@ -908,11 +1073,11 @@ for (i in 3..=5) {
 
 范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
-#### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
 
-#### 2.4.10 `WeakMap` / `WeakSet`
+#### 2.4.11 `WeakMap` / `WeakSet`
 
 `WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
@@ -961,7 +1126,6 @@ v = "hello"             // OK
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
 - 成员互不为彼此的子类型（否则会被规范化）。
-- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | float` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0380`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
@@ -971,21 +1135,6 @@ match v {
     is string -> print("str: ${v}"),
 }
 ```
-
-**成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
-
-- 源类型与某个成员**完全相同** → 选该成员。
-- 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
-- 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
-
-```xray
-var a: int | float = 1        // 精确匹配 int
-var b: int | float = 1.0      // 精确匹配 float
-var c: i32 | string = 7       // 唯一整数族成员：i32
-var d: f32 | string = 1.5     // 唯一浮点族成员：f32
-```
-
-`is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
 **特殊化**：
 - `int | null` 规范化为 `int?`。
@@ -1089,17 +1238,25 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
+| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 子集对象类型 | 超集对象类型 | ❌（结构化兼容是 superset → subset） |
+| 字段集不同的 Record | Record | ❌ sealed Record 要求精确字段集 |
 
-> **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
+> **sealed Record 的宽度规则**：Record 赋值要求**精确字段集**——源的字段名集合必须与目标一致。目标中类型可空的字段允许缺省，其余字段既不能少也不能多。Xray 不提供 width subtyping，`superset → subset` 与 `subset → superset` 两个方向都被拒绝。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK：full 是 User 的超集
+> // var u: User = full            // 编译错误 E0352：多了字段 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
+
+> **Record 与 Json 是两个互不连通的语义域**：`Record` 是编译期检查的封闭字段集，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
+> - `Json.encode(value)`：typed value → `Json`
+> - `json as T` / `json as T?`：`Json` → Record 或其它 typed value（结构化 narrowing）
 
 #### 2.10.2 显式 `as`
 
@@ -1152,7 +1309,132 @@ Xray 默认只保留最小类型身份层：
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
 运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
-### 2.13 完整可运行示例
+### 2.13 所有权、别名与借用
+
+> 真值源：`src/frontend/analyzer/xa_ownership.h`（证据轴与判定结构）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（`move` 判定）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（别名与借用跟踪）、`src/ir/xi_source_move_verify.c`（Xi 层独立复核）。
+
+Xray 不要求写生命周期，也不提供借用检查器语法。但**所有权是有定义的**：`move`、`copy`、`ref`、`Slice<T>`、跨协程传递都读同一套判定，本节把它写出来。
+
+#### 2.13.1 所有权根
+
+**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map` / `Set` / `Json` / `Record` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+
+只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0387`：`move is not meaningful for value type`）。
+
+#### 2.13.2 四条独立证据轴
+
+每个绑定在每个程序点上带四条**互相独立**的证据，合法的所有权操作要求四条同时成立：
+
+| 轴 | 回答的问题 | 取值 |
+|--|--|--|
+| **绑定状态** | 这个名字现在能用吗 | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
+| **根别名** | 还有别的引用指向同一个根吗 | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
+| **能力** | 允许做什么 | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
+| **借用** | 有存活的借出吗 | 一组 loan：Slice 视图 / 裸指针借用 / 闭包捕获 |
+
+分成四条是有意的：绑定状态是控制流事实，别名是对象图事实，能力是权限，借用是有起止的 place 事实。它们不能互相推导，也不能互相替代。
+
+**默认 fail-closed**：任何一轴无法给出肯定证据时，答案是拒绝，不是放行。这也是为什么一个来源不明的调用结果不能被 `move`——编译器没有它的别名证据。
+
+#### 2.13.3 别名如何产生与终止
+
+| 动作 | 对根别名的影响 | 能否恢复 |
+|--|--|--|
+| `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
+| 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
+| `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
+| `move a` | `a` 变为 `MOVED`；根随之转移 | — |
+
+**存活期按最后一次使用判定**（非词法生命周期），与 §2.4.2 的借用规则一致。因此下面第一段合法、第二段不合法：
+
+```xray
+fn ok() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    print(len(alias))          // alias 的最后一次使用
+    consume(move buf)          // OK：别名已结束
+}
+
+fn rejected() {
+    var buf = [1, 2, 3]
+    var alias = buf
+    consume(move buf)          // E0387：strong alias 'alias' remains live
+    print(len(alias))
+}
+```
+
+`ESCAPED` 是终态，这一点是刻意的：把引用写进堆图之后，谁还持有它已经不是这个函数能回答的问题。需要转移时用 `copy(a)`。
+
+#### 2.13.4 借用如何产生与终止
+
+三种借用形式共用同一份 loan 记录、同一套非词法存活期判定、同一组错误码（`E0382` / `E0383` / `E0384`）：
+
+| 形式 | 借出者 | 存活期 |
+|--|--|--|
+| `Slice<T>` 视图 | 视图绑定 | 到视图绑定的最后一次使用 |
+| `Ptr<T>` / `MutPtr<T>` | 指针绑定 | 到指针绑定的最后一次使用 |
+| **闭包捕获** | 闭包绑定 | 到闭包绑定的最后一次使用 |
+
+普通同步闭包**按引用捕获**外层绑定，因此捕获是一次借用，不是拷贝：
+
+```xray
+fn rejected() {
+    var buf = [1, 2, 3]
+    const peek = fn() -> int { return len(buf) }
+    go consume(move buf)       // E0382：closure capture 'peek' is active
+    print(peek())
+}
+```
+
+只作为**调用实参**出现的闭包字面量通常不产生存活借用——它随调用结束，不可能活过调用：
+
+```xray
+fn ok() {
+    var buf: Array<int> = []
+    items.forEach(fn(x: int) { buf.push(x) })   // 调用边界内的捕获
+    consume(move buf)                            // OK
+}
+```
+
+例外是被调方**保留或逃逸**该形参时——此时闭包活过调用，它按引用捕获的根随之逃逸（`OWN-E-ESCAPED-ROOT`）。判据是被调方的形参效应摘要，不是语法形状。
+
+存活的借用禁止对 owner 做失效操作，`move` 是其中一种（`E0382`）。
+
+#### 2.13.5 `move` 的完整条件
+
+`move x` 要求 `x` 是**可重绑定的局部 `var` 根**，且：
+
+1. 绑定状态是 `LIVE`（不是已 moved、可能已 moved 或未知）；
+2. 根别名是 `UNIQUE`；
+3. 能力是 `MUTABLE`（`const` 与同步句柄不可 move）；
+4. 没有存活的 loan；
+5. 存储计划完整（编译器已为这个根解出分配域）；
+6. 不在会重复执行的循环里消费循环外声明的绑定。
+
+`move` 只接受**标识符**：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。字段与元素没有独立的所有权根——它们的根是容器本身，转移其中一格会让容器处于部分转移状态，这个状态没有表示。需要取出一格时，先 `copy`，或让容器本身成为 move 源。
+
+move 成功后源绑定在编译期标记为已 moved，再次引用是编译错误。**被拒绝的 move 不污染源状态**：诊断之后 `x` 仍然可用。
+
+拒绝原因在诊断里具名，便于定位是哪一轴失败：
+
+| 原因 | 含义 |
+|--|--|
+| `OWN-E-LIVE-ALIAS` | 存在存活的局部强别名 |
+| `OWN-E-ESCAPED-ROOT` | 根已写入堆图 |
+| `OWN-E-UNKNOWN-CALL` | 唯一性证据不完整（来源不明的调用结果） |
+| `OWN-E-STORAGE-PLAN` | 存储/所有权计划不完整 |
+| `OWN-E-LIVE-LOAN` | 存在存活借用（Slice 视图 / 裸指针 / 闭包捕获） |
+
+#### 2.13.6 值拷贝与 managed 字段
+
+值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `Json` / class 实例**不能**作为 struct 字段（`E0352`）。
+
+因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
+
+需要在聚合里放可变图时用 class——class 是引用类型，赋值创建的是别名，按 §2.13.3 的规则处理。
+
+### 2.14 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -1426,8 +1708,8 @@ var value = callback?.(input)   // 可选函数调用
 - `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
 - `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
+- **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
-- **`?.` 只覆盖紧邻的一次访问**。结果可空，所以链上的下一次访问必须自己再写一个 `?.`：`a?.b?.c`。在可空值上写裸 `.` 是 `E0379`，与其它可空接收者一视同仁。这条规则让每个 `?.` 都精确标出一处可能为 null 的接收者，而不是让一个 `?.` 把后面若干次解引用一起隐掉。
 
 ### 3.7 强制解包 `!`
 
@@ -1459,7 +1741,6 @@ if (v is User) {
 - 结果类型 `bool`。
 - **类型守卫**：分析器在分支内窄化 `v` 的静态类型。
 - 适用于 union、可空、class 层级、`Json` 结构匹配。
-- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
 
@@ -1493,8 +1774,8 @@ RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray
-0..10                  // 0..10，左闭右开（包含 0，不包含 10）
-0..=10                 // 0..=10，闭区间（包含 0 和 10）
+var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）
+var closed = 0..=10    // 闭区间（包含 0 和 10）
 var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
@@ -1581,13 +1862,13 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 默认推断为 sealed structural `Record`（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 - 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Array<byte> `Array<byte>(...)`
 
-详见 §2.4.5 与 §14.5。
+详见 §2.4.6 与 §14.5。
 
 #### Channel `Channel<T>(buf?)`
 
@@ -1659,14 +1940,15 @@ Slice ::= Primary '[' Expr? ':' Expr? ']'
 arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
-arr[:]                  // 全切片（浅拷贝）
+arr[:]                  // 全长视图（不是拷贝）
 var view: Slice<int> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 切片是目标类型为 `Slice<T>` 的 scoped borrowed view，不修改 owner。
+- 切片求值为目标类型为 `Slice<T>` 的**借用视图**，不复制元素。包括 `arr[:]` 在内的所有形式都是视图：通过视图写入直接改写 owner 的存储，owner 的元素写入也对视图立即可见。需要独立数据时写 `copy(arr[1:4])`。
+- 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
 
@@ -1773,7 +2055,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 详见 §1.6.5。简要：
 
 ```xray
-"Hello, ${name}! Age: ${user.age + 1}"
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
@@ -1786,9 +2068,37 @@ var p = Point{x: 1, y: 2}      // struct literal
 yield expr                  // 生成器产出一个值并挂起
 ```
 
-`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
 协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
+
+#### 3.16.1 两种挂起是不同的语义
+
+`yield expr` 与 `Coro.yield()` 共用词根，但**不是同一种挂起**，二者在调用方能观察到的每一个性质上都不同：
+
+| | `yield expr` | `Coro.yield()` |
+|---|---|---|
+| 转移目标 | 对称转移回驱动该生成器的迭代器 | 非对称让出给调度器 |
+| 是否可能换 OS 线程 | 否 | 是（work-stealing） |
+| 是否是取消检查点 | **否** | 是（§10.5） |
+| 是否向调用方传播 | **否**——驱动生成器不会挂起驱动方自己的帧 | 是，沿调用边传递 |
+| 效应契约 | `no_suspend` 拒绝，`no_reschedule` 接受 | 两者都拒绝 |
+
+因此 `xray verify` 把挂起拆成两个独立维度：`no_reschedule` 断言"不进调度器、不是取消点、不迁移线程"，`no_suspend` 是更强的"控制流从不离开本帧"。纯生成器满足前者而不满足后者；**只是驱动生成器的函数两者都满足**。
+
+#### 3.16.2 生成器体内不得抵达调度器
+
+生成器帧由驱动它的一方恢复，而非由调度器恢复。因此生成器函数体内**不得出现任何调度器挂起点**，包括：`await`、`select`、`scope` 块、`Coro.yield()`、Channel 的阻塞方法、`time.sleep()`，以及对任何可能挂起的函数的调用。违反时报 `E0385`。
+
+该规则是**效应规则而非语法规则**：它按 §8 的效应产品逐层传播，因此调用一个内部 `await` 的函数同样被拒绝。证据不完整时**失败关闭**——生成器体内通过未解析的函数值（如函数类型参数）发起调用会被拒绝，因为该目标可能挂起。这与 `sys.Thread.spawn` 体和 parallel 回调的边界规则一致。
+
+> 该限制是有意的作用域决定，不是实现缺口：本版本的生成器是拉取式迭代器，不是异步流。
+
+#### 3.16.3 提前放弃的生成器不再执行任何代码
+
+`for-in` 通过 `break` / `return` / 抛错提前离开，或迭代器被丢弃时，生成器帧**不会被恢复**，其函数体的剩余部分永不执行。回收时机不属于可观察语义契约（§16.8）。
+
+因此**生成器体内不得使用 `defer`**（`E0386`）：`defer` 是本语言唯一的确定性清理机制，而在此处它可能永远不执行，一个可能不运行的清理比没有清理更危险。需要清理时，由调用方持有资源并作为参数传入。
 
 ---
 
@@ -2704,9 +3014,32 @@ class Counter {
 
 **不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
-#### 5.3.6 自定义迭代器
+#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
 
-实现 `iterator()` 返回带 `hasNext() -> bool` 和 `next() -> T?` 的对象即可启用 `for-in`。详见 §14.15。
+`Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
+
+```xray
+interface Iterator<T> {
+    hasNext() -> bool       // 是否还有下一个元素；不消费元素
+    next() -> T             // 取下一个元素并前进
+    nth(index: int) -> T    // 从当前位置起前进 index 个元素并返回
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+规则：
+
+- 任何实现 `iterator()` 的类型都可用于 `for-in`；内建集合与 `string`（按 `rune`）已实现。
+- `for-in` 只保证按 `hasNext()` / `next()` 拉取，**不保证**调用次数与调用时机之外的任何行为。
+- `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
+- `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
+- 迭代期间修改底层集合的行为由该集合定义；内建集合会使迭代器失效（§14）。
+- `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
+
+生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
 #### 5.3.7 完整可运行示例
 
@@ -2788,6 +3121,24 @@ var pt = Point{x: 1.0, y: 2.0}
 var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
+```
+
+**聚合字面量的字段规则**（与 sealed Record 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
 ```
 
 **与 `class` 的差异**：
@@ -3193,7 +3544,7 @@ type Pair<T> = { first: T, second: T }                // 泛型别名
 - `type T = Json` 等于 `Json`（不密封）。
 - 别名可前向引用，但**禁止循环别名**。
 
-详见 [§2.4.6](#246-json) 与 [§2.8](#28-类型别名)。
+详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
 
 ### 5.8 `import` / `export`
 
@@ -4170,20 +4521,6 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
-#### 键等价关系
-
-哈希容器按**键等价关系**存取，它与 `==` 运算符是两个关系：
-
-- 键等价必须**自反、对称、传递**。自反性是容器不变量：存进去的键必须能被它自己找回来，否则插入不再覆盖、查找不再命中、删除不再回收。
-- `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
-- 键等价蕴含 `hash(a) == hash(b)`。
-
-内置 `float` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
-
-按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
-
-用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
-
 **当前限制**：
 - 约束只能位于类型参数后，不支持 where 子句。
 - 不支持**高阶类型**（`F<_>` 作为参数）。
@@ -4261,15 +4598,16 @@ render(Square())     // OK
 
 #### 结构化对象
 
-仅`object literal` 与 `type T = {...}` 是结构化匹配：
+仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK：字面量结构匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字段
+describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0352：sealed 类型多了字段 'z'
+describe({ x: 1.0 })                  // 编译错误 E0352：缺少字段 'y'
 ```
 
 ### 9.6 方差（Variance）
@@ -4621,7 +4959,11 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。它要求可重新绑定的局部 `var` 根经 verifier 证明为唯一且没有存活 alias/loan。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误；非法 move 不会污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
+`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。
+
+**判定规则见 §2.13**：`move` 要求可重绑定的局部 `var` 根同时满足四条证据轴——绑定存活、根唯一、能力可变、无存活借用。语法上只接受标识符：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。move 后原变量在编译期标记为**已 moved**，再次引用是编译错误；被拒绝的 move 不污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
+
+跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.13 的唯一性证据，而不是另一套并发专用规则。
 
 ```xray
 var buf = Array<byte>(1024 * 1024)
@@ -4721,6 +5063,8 @@ for (i in 0..1000) {
 
 `Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
+两者共用词根但不是同一种挂起：`Coro.yield()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。**生成器体内不得调用 `Coro.yield()`**（`E0385`，见 §3.16.2）。
+
 ### 10.11 并发安全模型
 
 xray 通过类型系统**编译期消除大部分数据竞争**：
@@ -4737,6 +5081,16 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
 - Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
+
+#### 10.11.1 模型之外：`unsafe` 与 C 回调
+
+上表的保证覆盖 Xray 值的所有权与能力判定。有三处**位于模型之外**，此时义务转移给使用者，`unsafe` 不放宽任何一条已有规则、也不提供任何替代保证：
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** 操作的是裸内存，没有所有权根、没有引用计数、也没有别名判定。编译器对这些地址不做任何假设，也不为它们提供 §2.13 的任何证据。用它们构造的共享结构，其数据竞争自由由使用者负责证明。
+- **`Ptr<T>` / `MutPtr<T>`** 有借用跟踪（§2.4.2），但跟踪只到 owner 的作用域为止；解引用的地址有效性、对齐与别名正确性由 `unsafe` 块的作者承担。
+- **`CFn` C 回调可能在任意 OS 线程上发生**，包括运行时并不管理的线程。回调体只能触及：传入的标量与裸指针、分配计划为共享的值（§16.3.1）、以及通过 `Channel` 转移进来的唯一根。回调体**不得**触及调用方协程的 coroutine-local 对象图——那些对象的引用计数在非原子带，跨线程接触即内存损坏。回调体也不得假定存在当前协程、当前 worker 或可用的调度器。
+
+这三处是模型的**边界**而不是漏洞：它们在源码上都必须显式写出（`unsafe` 块、`mem` 模块导入、`CFn` 声明），因此"哪些代码不受编译期保护"始终可以从源码审计出来。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -5256,7 +5610,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | `toString()` | 容器字符串表示 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
-Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立数据时使用 `copy(arr[start:end])`。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -5592,7 +5946,29 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - **collector 边界**：cycle collector 跳过 const/sync shared domain、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
-详见 `src/runtime/mem/`。
+#### 16.3.1 引用计数的两个带
+
+引用计数只有一个字段，用**符号**区分两个带：
+
+| 带 | 编码 | 使用者 | 原子性 |
+|--|--|--|--|
+| coroutine-local | 正数 | 普通局部对象图 | 非原子（relaxed 快路径） |
+| shared | 负数（`N` 个引用存为 `-N`） | const 发布值、同步句柄、模块/运行时对象 | 原子 |
+
+热路径的符号测试把每个对象自动路由到正确的路径，因此两个带共存不需要额外分支。不可变的常驻对象存 sticky 值，永不参与计数。
+
+**对象落在哪个带是编译期决定的**，由该分配点的存储计划确定（§2.13.2 的能力轴 + 分配域），不是运行时转换：一个存活对象不会在跨边界时被静默改带。这条是承重的——运行时改带需要与并发的非原子读改写同步，而那正是非原子带成立的前提所排除的。
+
+因此跨执行边界只有两种合法形态：
+
+1. **共享**：值的分配计划本身就是 const-shared 或 sync-shared，从创建起就在原子带。`const` 发布值、`Channel` / `Atomic` / `Semaphore` 等受审计句柄属于此类。
+2. **转移**：`move` 把唯一根交出去，任一时刻只有一个所有者，因此非原子计数依然正确。
+
+**第 2 条的正确性直接依赖 §2.13 的唯一性证据。** 如果一个仍有别名或存活借用的根被转移出去，两个执行上下文会同时对同一个非原子计数做读改写——那不是数据竞争而是内存损坏（重复释放或提前释放）。这就是 §2.13 把闭包捕获与堆存储都算作证据的原因：所有权判定是引用计数正确性的前提，不只是一条编程纪律。
+
+真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，且没有任何放宽：线程体只能触及分配计划为共享的值，或通过 `Channel` 转移进来的唯一根。
+
+详见 `src/runtime/mem/`、`src/shared/xr_obj_header.h`。
 
 ### 16.4 协程调度
 
@@ -5667,7 +6043,11 @@ xray **当前不提供用户可见的确定性析构（destructor / finalizer / 
 - 回收可能发生在"最后一个引用消失时"、"某次 GC 时"、或"进程退出时"中的任意一种，VM 与 AOT 的回收时机**不保证一致**。
 - 程序**不得依赖**：(a) 对象在某个确定时刻被回收；(b) 任何析构 / finalizer 是否运行、运行顺序或运行所在线程。
 
-唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行（含 panic 展开路径），与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+
+**`defer` 在每一条退出边上都执行**，包括：正常返回、`throw` 展开、panic 展开，以及**协程被取消**。取消不是一次外部击杀：被取消的协程若仍欠着 defer 链，会被交回调度器、在自己的 worker 上恢复一次、展开完成后才被标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
+
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点**（`E0388`，见 §2.13.4）。defer 体运行在一个正在离开的帧上，没有可供挂起后恢复的位置；允许它挂起就意味着允许清理执行到一半被丢弃，那样 `defer` 就不再是确定性机制。清理期间取消被屏蔽，因此清理本身不会被取消打断。
 
 > 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
 
@@ -5738,6 +6118,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 花括号未闭合 |
 | `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 方括号未闭合 |
 | `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标或形式 |
+| `E0208` | `XR_ERR_SYN_EFFECTLESS_STMT` | 表达式语句没有任何效果，结果被丢弃（见 §1.2.1） |
 
 ### 18.2 编译与静态分析
 
@@ -5792,7 +6173,15 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
-| `E0380` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、闭包捕获、跨执行边界） |
+| `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
+| `E0387` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | 所有权根不满足 `move` 所需的唯一性证据：存活局部别名（`OWN-E-LIVE-ALIAS`）、已写入堆图（`OWN-E-ESCAPED-ROOT`）、来源不明（`OWN-E-UNKNOWN-CALL`）、存储计划不完整（`OWN-E-STORAGE-PLAN`）——见 §2.13 |
+| `E0388` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | `defer` 体内抵达调度器挂起点，或证据不完整；defer 体运行在正在离开的帧上，无法挂起后恢复，挂起会丢弃其余清理——见 §2.13.4、§16.8 |
 
 ### 18.3 运行时
 
@@ -5819,6 +6208,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0422` | `XR_ERR_OVERFLOW` | 算术溢出或数值转换越界（含 NaN / 无穷大转整数） |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.6 |
 
 #### 系统、调用、coroutine 与 stdlib
 
@@ -5831,6 +6221,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
+| `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | Task 的 transferable 结果已被取走，不能再次取用 |
 | `E0470` | `XR_ERR_JSON_PARSE` | JSON 解析失败 |
 | `E0471` | `XR_ERR_JSON_INVALID` | JSON 值或操作非法 |
 | `E0475` | `XR_ERR_REGEX_COMPILE` | regex 编译失败 |
@@ -5858,6 +6249,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | 代码 | C 名称 | 被拒形式 / 含义 |
 |--|--|--|
 | `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` 无效；元组返回写作 `return (a, b)` |
+| `E0802` | `XR_ERR_SYN_BINDING_CAPABILITY_REMOVED` | `owned` / `shared` 绑定语法无效；使用 `var` 或 `const`，所有权与共享由值能力和显式 copy/move 边界推断 |
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | 裸 key/value `for` 形式无效 |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` 无效；无返回值写作 `-> ()` 或省略 |
 | `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | 参数 mode 必须写在冒号与类型之间 |
@@ -6075,6 +6467,9 @@ Statement ::= ExprStmt
            |  Block
            // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
 
+// LineBreak 不是一个 token：它是"行结尾在此结束语句"这一判定的结果。
+// 判定规则（上一 token 可结束表达式 + 新行首 token 可开始表达式 + 不在
+// '(' / '[' 之内）是规范性的，完整定义见 §1.2.1。
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
@@ -6359,7 +6754,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 
 | 维度 | Rust | xray |
 |--|--|--|
-| 内存安全 | borrow checker 全面 | 推断唯一性、`move` 与 `const`/同步能力约束跨执行边界；`Slice` 等借用视图受静态生命周期限制 |
+| 内存安全 | borrow checker 全面 | 推断唯一性、`move` 与 `const`/同步能力约束跨执行边界；`Slice` 等借用视图受静态生命周期限制（见 §2.4.2） |
 | 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
 | 类型推断 | Hindley-Milner 强 | 双向推断 |
 | trait | 完整 | 类似 `interface`，少功能 |
@@ -6397,7 +6792,9 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
-| **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
+| **Array<byte>** | 字节缓冲类型（见 §2.4.6） |
+| **Slice<T>** | 借用视图：借用另一个值拥有的连续元素存储，自身不拥有数据，受借用生命周期约束（见 §2.4.2） |
+| **borrow / 借用** | 在不取得所有权的前提下访问另一个值的存储；`Slice<T>`、`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 都是借用，共用 `E0382` / `E0383` / `E0384` 三条规则 |
 | **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `u32` 别名（见 §2.3.5） |
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |

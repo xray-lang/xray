@@ -1173,6 +1173,25 @@ void xr_coro_cancel(XrCoroutine *coro) {
         }
     }
 
+    /* A coroutine that still owes a `defer` chain cannot be killed from here:
+     * its cleanup has to run in its own execution context, on its own worker.
+     * Leave the request set and hand it back to the scheduler; it observes the
+     * request at its next resume, unwinds, and the worker finalizes it as
+     * cancelled. Coroutines that owe no cleanup keep the immediate path. */
+    if (coro->backend && coro->backend->has_cancellation_cleanup &&
+        coro->backend->has_cancellation_cleanup(coro)) {
+        XrRuntime *cleanup_runtime = coro_cancel_runtime(coro, xr_current_worker());
+        if (cleanup_runtime) {
+            /* xr_scheduler_ready owns the BLOCKED -> READY claim: clearing the
+             * flag first would make it decline the wake and strand a coroutine
+             * that was parked. A coroutine that is already running or ready
+             * declines the claim too, and reaches its next safepoint on its
+             * own. */
+            xr_scheduler_ready(cleanup_runtime, coro, false);
+            return;
+        }
+    }
+
     // Set cancelled and done flags
     xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
     xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_BLOCKED |

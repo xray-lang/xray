@@ -1,0 +1,25 @@
+// Storing a reference into an object field escapes the root just as a
+// container store does.
+class Node {
+    v: int
+    init(v: int) { this.v = v }
+}
+
+class Holder {
+    n: Node?
+    init() { this.n = null }
+}
+
+fn consume(n: move Node) -> int {
+    return n.v
+}
+
+fn main() {
+    var a = Node(2)
+    var h = Holder()
+    h.n = a
+    go consume(move a)
+    print(h.n!.v)
+}
+
+main()

@@ -4986,6 +4986,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     xa_check_pointer_borrow_escape(ctx, node->as.set_literal.elements[si],
                                                    node->as.set_literal.elements[si], et,
                                                    "store raw pointer borrow in set literal");
+                    xa_note_owner_escapes_into_heap(ctx, node->as.set_literal.elements[si]);
                     if (!elem && si == 0)
                         elem = et;
                 }
@@ -5616,7 +5617,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XaSymbol *owner = xa_span_borrow_owner_path_for_member_write(
                 ctx, ms->object, ms->member, member_type, owner_path, sizeof(owner_path));
             if (owner) {
-                xa_check_active_span_borrow_owner_path_mutation(
+                xa_check_active_loan_owner_path_mutation(
                     ctx, node, owner, owner_path[0] ? owner_path : NULL, "reassigning owner field");
             }
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
@@ -5634,6 +5635,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
             xa_check_pointer_borrow_escape(ctx, node, ms->value, value_type,
                                            "store raw pointer borrow into a member");
+            xa_note_owner_escapes_into_heap(ctx, ms->value);
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
                 if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {
@@ -6395,7 +6397,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
 
-            xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
+            xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }
@@ -6575,9 +6577,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ctx, is->array, is->index, value_expected, owner_path, sizeof(owner_path));
             if (owner) {
                 owner->links.value_mutated = true;
-                xa_check_active_span_borrow_owner_path_mutation(ctx, node, owner,
-                                                                owner_path[0] ? owner_path : NULL,
-                                                                "reassigning owner element");
+                xa_check_active_loan_owner_path_mutation(ctx, node, owner,
+                                                         owner_path[0] ? owner_path : NULL,
+                                                         "reassigning owner element");
             }
             XrType *value_type = NULL;
             if (is->value) {
@@ -6591,6 +6593,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                        "store Slice view into an index target");
             xa_check_pointer_borrow_escape(ctx, node, is->value, value_type,
                                            "store raw pointer borrow into an index target");
+            xa_note_owner_escapes_into_heap(ctx, is->value);
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
                 if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {

@@ -63,6 +63,9 @@ typedef struct XaSuspendEdge {
     XaSymbol *callee;
     AstNode *site;
     bool is_callback;
+    /* The call sits inside a `defer` body, so the callee's suspend result
+     * decides whether that cleanup can run to completion. */
+    bool in_defer_body;
 } XaSuspendEdge;
 
 typedef struct XaSuspendRow {
@@ -84,6 +87,16 @@ typedef struct XaSuspendRow {
     bool has_generator_yield;
     /* First `defer` lexically in this body, for the generator-defer rule. */
     AstNode *defer_site;
+    /* Depth of `defer` bodies the scan is currently inside, and the first
+     * suspension point found in one. A defer body runs as a nested VM call on
+     * a frame that is already unwinding, so it cannot park and resume. */
+    int defer_body_depth;
+    XaSuspendCause defer_suspend_cause;
+    bool has_defer_suspend;
+    /* This row IS a defer body. `defer { ... }` parses to a function
+     * expression, so the cleanup gets its own row and its own converged
+     * suspend result -- which is exactly the answer the rule needs. */
+    bool is_defer_body;
     XaSuspendEdge *edges;
     int edge_count;
     int edge_capacity;
@@ -267,7 +280,13 @@ static void sus_set_cause(XaSuspendCause *cause, AstNode *site, const char *kind
 /* Record a direct conclusion for the scanned body.  MAY dominates INCOMPLETE. */
 static void sus_mark_direct(XaSuspendRow *row, XaSuspendState state, AstNode *site,
                             const char *kind, const char *detail) {
-    if (!row || !site || state <= row->direct)
+    if (!row || !site)
+        return;
+    if (row->defer_body_depth > 0 && !row->has_defer_suspend) {
+        sus_set_cause(&row->defer_suspend_cause, site, kind, detail);
+        row->has_defer_suspend = true;
+    }
+    if (state <= row->direct)
         return;
     row->direct = state;
     sus_set_cause(&row->direct_cause, site, kind, detail);
@@ -290,8 +309,10 @@ static bool sus_add_edge(XaSuspendRow *row, XaSymbol *callee, AstNode *site, boo
         row->edges = next;
         row->edge_capacity = next_capacity;
     }
-    row->edges[row->edge_count++] =
-        (XaSuspendEdge) {.callee = callee, .site = site, .is_callback = is_callback};
+    row->edges[row->edge_count++] = (XaSuspendEdge) {.callee = callee,
+                                                     .site = site,
+                                                     .is_callback = is_callback,
+                                                     .in_defer_body = row->defer_body_depth > 0};
     return true;
 }
 
@@ -497,12 +518,23 @@ static void sus_scan_node_pre(AstNode *node, void *userdata) {
              * scheduler dimension. */
             scan->row->has_generator_yield = true;
             break;
-        case AST_DEFER_STMT:
+        case AST_DEFER_STMT: {
             /* Recorded unconditionally; only a body that also yields is
              * rejected, and the walk may reach the defer before the yield. */
             if (!scan->row->defer_site)
                 scan->row->defer_site = node;
+            /* Block form: the body is a function expression with its own row.
+             * Inline form: it stays in this row, tracked by the depth. */
+            AstNode *deferred = node->as.defer_stmt.expr;
+            XaSuspendRow *deferred_row = deferred && deferred->type == AST_FUNCTION_EXPR
+                                             ? sus_row_for_node(scan->pass, deferred)
+                                             : NULL;
+            if (deferred_row)
+                deferred_row->is_defer_body = true;
+            else
+                scan->row->defer_body_depth++;
             break;
+        }
         case AST_SELECT_STMT:
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "select", NULL);
             break;
@@ -525,6 +557,12 @@ static void sus_scan_node_post(AstNode *node, void *userdata) {
          node->type == AST_METHOD_DECL) &&
         scan->nested_function_depth > 0)
         scan->nested_function_depth--;
+    if (node->type == AST_DEFER_STMT && scan->row && scan->row->defer_body_depth > 0) {
+        AstNode *deferred = node->as.defer_stmt.expr;
+        if (!deferred || deferred->type != AST_FUNCTION_EXPR ||
+            !sus_row_for_node(scan->pass, deferred))
+            scan->row->defer_body_depth--;
+    }
 }
 
 /* A bodyless extern "C" declaration has nothing to walk, so an empty scan must
@@ -653,6 +691,57 @@ static void sus_reject_suspending_generator(XaSuspendPass *pass, const XaSuspend
                                message, &location);
 }
 
+/* A `defer` body is cleanup, and cleanup has to finish. It runs as a nested
+ * call on a frame that is already leaving -- returning, unwinding a throw, or
+ * being cancelled -- and that frame has no suspension point left to park at.
+ * A body that reaches the scheduler therefore does not park and resume: it
+ * aborts, and the rest of the cleanup silently does not happen. Both backends
+ * agree on that wrong answer, so a differential test cannot catch it either.
+ * Rejecting it here is what makes `defer` total: every registered action runs
+ * to completion on every exit path, cancellation included. */
+static void sus_reject_suspending_defer(XaSuspendPass *pass, const XaSuspendRow *row) {
+    XaSuspendCause edge_cause;
+    const XaSuspendCause *cause = NULL;
+    if (row->is_defer_body && row->result != XA_SUSPEND_NONE) {
+        /* Block form: this row is the cleanup body, and its converged result
+         * already accounts for everything it calls. */
+        cause = &row->result_cause;
+    } else if (row->has_defer_suspend) {
+        /* Inline form: the suspension point sits directly in `defer expr`. */
+        cause = &row->defer_suspend_cause;
+    } else {
+        for (int i = 0; i < row->edge_count; i++) {
+            const XaSuspendEdge *edge = &row->edges[i];
+            if (!edge->in_defer_body)
+                continue;
+            XaSuspendRow *callee = sus_row_for_symbol(pass, edge->callee);
+            if (!callee || callee->result == XA_SUSPEND_NONE)
+                continue;
+            sus_set_cause(&edge_cause, edge->site, edge->is_callback ? "callback" : "call",
+                          edge->callee && edge->callee->name ? edge->callee->name : "?");
+            cause = &edge_cause;
+            break;
+        }
+    }
+    if (!cause)
+        return;
+    char feature[160];
+    sus_format_cause(cause, feature, sizeof(feature));
+    char message[320];
+    snprintf(message, sizeof(message),
+             "a deferred action cannot reach the scheduler; %s runs while the frame is already "
+             "leaving, so the rest of the cleanup would be dropped\n"
+             "hint: do the suspending work before the `defer`, or hand the resource to a "
+             "coroutine that owns closing it",
+             feature);
+    AstNode *site = cause->site ? cause->site : row->node;
+    XrLocation location = {.file = row->symbol ? row->symbol->links.file_path : NULL,
+                           .line = (uint32_t) site->line,
+                           .column = (uint32_t) site->column};
+    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_DEFER_SUSPEND,
+                               message, &location);
+}
+
 static void sus_publish_summaries(XaSuspendPass *pass) {
     if (!pass)
         return;
@@ -697,6 +786,7 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
             xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_GEN_SUSPEND);
         sus_reject_suspending_generator(pass, row);
         sus_reject_generator_defer(pass, row);
+        sus_reject_suspending_defer(pass, row);
         XaEffectId effect_id =
             ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
         xa_effect_summary_clear(&summary);

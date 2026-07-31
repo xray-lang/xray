@@ -137,11 +137,11 @@ static void pointer_set_owner(XaInferContext *ctx, XaPointerProvenance *out, XaS
     pointer_set_mutability(out, pointer_type);
 }
 
-static XaActiveSliceBorrow *pointer_active_borrow(XaInferContext *ctx, XaSymbol *symbol) {
+static XaActiveLoan *pointer_active_borrow(XaInferContext *ctx, XaSymbol *symbol) {
     if (!ctx || !symbol)
         return NULL;
-    for (XaActiveSliceBorrow *borrow = ctx->active_span_borrows; borrow; borrow = borrow->next) {
-        if (borrow->view_symbol == symbol && borrow->is_pointer_borrow)
+    for (XaActiveLoan *borrow = ctx->active_loans; borrow; borrow = borrow->next) {
+        if (borrow->borrower_symbol == symbol && XA_LOAN_KIND_IS_RAW(borrow->loan.kind))
             return borrow;
     }
     return NULL;
@@ -227,7 +227,7 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
             pointer_set_mutability(out, pointer_type);
             return true;
         }
-        XaActiveSliceBorrow *borrow = pointer_active_borrow(ctx, symbol);
+        XaActiveLoan *borrow = pointer_active_borrow(ctx, symbol);
         if (borrow) {
             pointer_set_owner(ctx, out, borrow->owner_symbol, pointer_type);
             return true;

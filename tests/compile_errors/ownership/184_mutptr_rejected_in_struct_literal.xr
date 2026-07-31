@@ -1,0 +1,13 @@
+// Smuggling the same pointer inside a struct does not change the answer: the
+// escape is rejected at the literal that would store it.
+struct Box {
+    p: MutPtr<int>
+}
+
+fn main() {
+    var arr = [1, 2, 3]
+    var box = unsafe { Box{p: arr.mutPtr()} }
+    print(arr[0])
+}
+
+main()

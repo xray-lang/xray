@@ -406,6 +406,11 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
              * (includes the `after` timer channel dispose, design/885). No-op for
              * the common case of a coroutine cancelled while running. */
             xr_worker_teardown_select_wait(worker, coro);
+            /* Cleanup runs before the coroutine is marked done: a cancelled
+             * coroutine still owes its `defer` chain, and nothing else will
+             * walk its frames. */
+            if (coro->backend && coro->backend->run_cancellation_cleanup)
+                coro->backend->run_cancellation_cleanup(coro);
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
             xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_READY |
                                           XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);

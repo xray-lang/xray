@@ -62,6 +62,8 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
                                          const XrCoroRunContext *run_ctx);
 static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out);
+static bool vm_backend_has_cancellation_cleanup(const XrCoroutine *coro);
+static void vm_backend_run_cancellation_cleanup(XrCoroutine *coro);
 static XrCoroRunKind vm_backend_drive_inline(XrCoroutine *coro, XrValue *out, bool allow_yield);
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
@@ -94,6 +96,8 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
     .resume = vm_backend_resume,
     .gen_drive = vm_backend_gen_drive,
+    .has_cancellation_cleanup = vm_backend_has_cancellation_cleanup,
+    .run_cancellation_cleanup = vm_backend_run_cancellation_cleanup,
     .trace_roots = NULL,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
@@ -1333,6 +1337,11 @@ static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCorouti
         ctx->current_coro = NULL;
         return result;
     }
+    if (result == XR_VM_CANCELLED) {
+        /* The interpreter stopped between statements, so no return or unwind
+         * edge will walk these frames. Run the defer chain here. */
+        xr_vm_run_cancellation_defers(isolate, coro_ctx);
+    }
     if (result == XR_VM_BLOCKED || result == XR_VM_YIELD) {
         if (result == XR_VM_YIELD) {
             xr_coro_transition_to_ready(coro);
@@ -1652,6 +1661,32 @@ static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
     return vm_backend_drive_inline(coro, out, true);
 }
 
+// ========== Cancellation Cleanup ==========
+//
+// A cancelled coroutine stops between statements: no OP_RETURN runs, no
+// exception unwinds, so nothing else drains its defer stack. Run it here, on
+// the owner worker, while the coroutine's frames and stack are still intact.
+static bool vm_backend_has_cancellation_cleanup(const XrCoroutine *coro) {
+    if (!coro || !xr_coro_flags_has(coro, XR_CORO_FLG_STARTED))
+        return false;
+    XrVmCoroState *state = vm_state_for_coro((XrCoroutine *) coro);
+    return state && state->ctx.defer_count > 0;
+}
+
+static void vm_backend_run_cancellation_cleanup(XrCoroutine *coro) {
+    if (!coro || !xr_coro_flags_has(coro, XR_CORO_FLG_STARTED))
+        return;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return;
+    XrVMRuntime *isolate = state->ctx.isolate;
+    if (!isolate)
+        return;
+    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
+    xr_vm_run_cancellation_defers(isolate, &state->ctx);
+    xr_exec_context_restore(previous);
+}
+
 XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out) {
     return vm_backend_drive_inline(coro, out, false);
 }
@@ -1791,17 +1826,23 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     if (!worker || !coro)
         return XR_VM_RUNTIME_ERROR;
 
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
-        return XR_VM_CANCELLED;
-    }
-
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE) &&
+        !xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         return XR_VM_OK;
     }
 
     XR_DCHECK(worker->p.runtime != NULL, "worker thread: runtime is NULL");
     XrVMRuntime *isolate = (XrVMRuntime *) xr_scheduler_host_backend_context(worker->p.runtime);
     XR_DCHECK(isolate != NULL, "worker thread: VM scheduler host isolate is NULL");
+
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+        /* Cancelled while suspended: the coroutine is never resumed, so this
+         * is the only place its defer chain can still run. */
+        XrVmCoroState *cancel_state = vm_state_for_coro(coro);
+        if (cancel_state)
+            xr_vm_run_cancellation_defers(isolate, &cancel_state->ctx);
+        return XR_VM_CANCELLED;
+    }
 
     XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
     if (!ctx)

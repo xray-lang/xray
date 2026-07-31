@@ -113,6 +113,18 @@ typedef struct XrCoroBackendVTable {
      * `resume`, this never enqueues onto a worker — generators are driven inline
      * by the consuming iterator's hasNext()/next(). */
     XrCoroRunKind (*gen_drive)(XrCoroutine *coro, XrValue *out);
+    /* Whether this coroutine still owes cleanup -- a pending `defer` chain.
+     * Cancelling such a coroutine cannot be a force kill from the canceller's
+     * thread: it must be resumed once on its own worker so the cleanup runs.
+     * Coroutines that owe nothing keep the cheaper immediate path. */
+    bool (*has_cancellation_cleanup)(const XrCoroutine *coro);
+    /* Run that cleanup. Cancellation stops a coroutine between statements
+     * rather than at a return or a throw, so no other edge walks its frames.
+     * Without this hook `defer` -- the language's only deterministic cleanup
+     * mechanism -- does not run on the one path where cleanup matters most.
+     * Called on the owner worker, before the coroutine is marked
+     * CANCELLED|DONE. Idempotent: draining the chain empties it. */
+    void (*run_cancellation_cleanup)(XrCoroutine *coro);
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);

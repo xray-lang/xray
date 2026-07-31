@@ -1,0 +1,16 @@
+// A field has no ownership root of its own -- its root is the container --
+// so moving one slot would leave the container partially moved.
+struct Holder {
+    n: int
+}
+
+fn consume(x: move int) -> int {
+    return x
+}
+
+fn main() {
+    var s = Holder{n: 1}
+    consume(move s.n)
+}
+
+main()

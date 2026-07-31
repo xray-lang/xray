@@ -41,9 +41,18 @@ typedef enum XaBindingUseState {
     XA_BINDING_UNKNOWN,
 } XaBindingUseState;
 
+/* Aliasing state of an ownership root.
+ *
+ * LOCAL_ALIASED is recoverable: every alias is a named local binding, so the
+ * analyzer can prove the last one died and restore UNIQUE.  ESCAPED is not:
+ * the reference was written into a heap graph (container element, object
+ * field, enum payload), and function-local analysis cannot observe when that
+ * slot is overwritten.  ALIAS_UNKNOWN is the fail-closed answer for values
+ * whose provenance the analyzer never established. */
 typedef enum XaRootAliasState {
     XA_ROOT_UNIQUE = 0,
     XA_ROOT_LOCAL_ALIASED,
+    XA_ROOT_ESCAPED,
     XA_ROOT_ALIAS_UNKNOWN,
 } XaRootAliasState;
 
@@ -59,12 +68,21 @@ typedef enum XaValueCapability {
     XA_CAP_UNKNOWN,
 } XaValueCapability;
 
+/* Loan forms, ordered from the most structured place borrow to the least.
+ *
+ * CAPTURE is the closure form: a closure value holds the whole root by
+ * reference, so the loan has no place projection and lives as long as the
+ * closure binding does.  It is a loan and not an alias because the borrower
+ * is a value with its own liveness, exactly like a Slice view. */
 typedef enum XaLoanKind {
     XA_LOAN_READ = 0,
     XA_LOAN_WRITE,
     XA_LOAN_RAW_READ,
     XA_LOAN_RAW_WRITE,
+    XA_LOAN_CAPTURE,
 } XaLoanKind;
+
+#define XA_LOAN_KIND_IS_RAW(kind) ((kind) == XA_LOAN_RAW_READ || (kind) == XA_LOAN_RAW_WRITE)
 
 typedef enum XaPlaceProjectionKind {
     XA_PLACE_ROOT = 0,

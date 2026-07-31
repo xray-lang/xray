@@ -972,12 +972,36 @@ static bool xa_symbol_is_outer_function_capture(XaInferContext *ctx, XaSymbol *s
     return !xa_scope_is_descendant(sym->scope, current_fn);
 }
 
-static void xa_check_span_view_closure_capture(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
-                                               XrType *type) {
+/* Whether a name resolved inside a closure body refers to a binding declared
+ * outside that closure. Unlike xa_symbol_is_outer_function_capture, this is an
+ * ownership question, not an upvalue question: a script-level `var` needs no
+ * upvalue cell, yet a closure naming it still holds a live reference to its
+ * ownership root. */
+static bool xa_symbol_is_closure_borrowed_root(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || ctx->closure_body_depth == 0 || !sym || !sym->scope)
+        return false;
+    if (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER)
+        return false;
+    if (sym->is_builtin || sym->is_imported || sym->is_const)
+        return false;
+    XaScope *current_fn = xa_current_function_scope(ctx);
+    return current_fn && !xa_scope_is_descendant(sym->scope, current_fn);
+}
+
+/* A closure body naming an outer local borrows that local for as long as the
+ * closure value lives. Slice views and raw pointers cannot be captured at all
+ * (their lifetime is bounded by the owner, which the closure outlives); an
+ * owned root can be, but the capture is a loan that blocks `move`. */
+static void xa_note_closure_capture(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
+                                    XrType *type) {
+    if (xa_symbol_is_closure_borrowed_root(ctx, sym))
+        xa_record_pending_capture(ctx, sym);
     if (!xa_symbol_is_outer_function_capture(ctx, sym))
         return;
-    if (xa_type_contains_span_view(type))
+    if (xa_type_contains_span_view(type)) {
         xa_check_span_value_escape(ctx, node, type, "capture Slice view in closure");
+        return;
+    }
     if (type && XR_TYPE_IS_POINTER(type))
         xa_check_pointer_borrow_escape(ctx, node, node, type,
                                        "capture raw pointer borrow in closure");
@@ -1168,14 +1192,14 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                                          ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
         if (narrowed && narrowed != declared_type && !XR_TYPE_IS_NEVER(narrowed)) {
-            xa_check_span_view_closure_capture(ctx, node, sym, narrowed);
+            xa_note_closure_capture(ctx, node, sym, narrowed);
             // Side table is the canonical type store.
             xa_analyzer_set_node_type(ctx->analyzer, node, narrowed);
             return narrowed;
         }
     }
 
-    xa_check_span_view_closure_capture(ctx, node, sym, declared_type);
+    xa_note_closure_capture(ctx, node, sym, declared_type);
 
     // Store the declared type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, declared_type);
@@ -3057,6 +3081,7 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
         xa_check_span_value_escape(ctx, child, elem, "store Slice view in tuple literal");
         xa_check_pointer_borrow_escape(ctx, child, child, elem,
                                        "store raw pointer borrow in tuple literal");
+        xa_note_owner_escapes_into_heap(ctx, child);
         if (elem && XR_TYPE_IS_ERROR(elem))
             poisoned = true;
         elem_types[slot++] = elem;
@@ -3171,6 +3196,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                                    "repeat Slice view in array literal");
         xa_check_pointer_borrow_escape(ctx, arr->repeat_value, arr->repeat_value, elem_type,
                                        "repeat raw pointer borrow in array literal");
+        xa_note_owner_escapes_into_heap(ctx, arr->repeat_value);
         XrType *count_type = xa_visit_infer_expr(ctx, arr->repeat_count);
         if ((elem_type && XR_TYPE_IS_ERROR(elem_type)) ||
             (count_type && XR_TYPE_IS_ERROR(count_type)))
@@ -3237,6 +3263,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                                        "store Slice view in fixed array literal");
             xa_check_pointer_borrow_escape(ctx, child, child, elem_type,
                                            "store raw pointer borrow in fixed array literal");
+            xa_note_owner_escapes_into_heap(ctx, child);
             if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
                 poisoned = true;
                 continue;
@@ -3285,6 +3312,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, elem_type,
                                        "store Slice view in Json array literal");
+            xa_note_owner_escapes_into_heap(ctx, child);
             if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
                 poisoned = true;
                 continue;
@@ -3386,6 +3414,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                                        "store Slice view in array literal");
             xa_check_pointer_borrow_escape(ctx, child, child, contributed,
                                            "store raw pointer borrow in array literal");
+            xa_note_owner_escapes_into_heap(ctx, child);
             if (contributed && XR_TYPE_IS_ERROR(contributed))
                 poisoned = true;
         }
@@ -3452,11 +3481,13 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     xa_check_span_value_escape(ctx, map->keys[0], key_type, "store Slice view as map literal key");
     xa_check_pointer_borrow_escape(ctx, map->keys[0], map->keys[0], key_type,
                                    "store raw pointer borrow as map literal key");
+    xa_note_owner_escapes_into_heap(ctx, map->keys[0]);
     ctx->expected_type = target_value_type;
     XrType *val_type = xa_visit_infer_expr(ctx, map->values[0]);
     xa_check_span_value_escape(ctx, map->values[0], val_type, "store Slice view in map literal");
     xa_check_pointer_borrow_escape(ctx, map->values[0], map->values[0], val_type,
                                    "store raw pointer borrow in map literal");
+    xa_note_owner_escapes_into_heap(ctx, map->values[0]);
 
     // Union with remaining elements (same pattern as array_literal)
     for (int i = 1; i < map->count; i++) {
@@ -3465,11 +3496,13 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
         xa_check_span_value_escape(ctx, map->keys[i], k, "store Slice view as map literal key");
         xa_check_pointer_borrow_escape(ctx, map->keys[i], map->keys[i], k,
                                        "store raw pointer borrow as map literal key");
+        xa_note_owner_escapes_into_heap(ctx, map->keys[i]);
         ctx->expected_type = target_value_type;
         XrType *v = xa_visit_infer_expr(ctx, map->values[i]);
         xa_check_span_value_escape(ctx, map->values[i], v, "store Slice view in map literal");
         xa_check_pointer_borrow_escape(ctx, map->values[i], map->values[i], v,
                                        "store raw pointer borrow in map literal");
+        xa_note_owner_escapes_into_heap(ctx, map->values[i]);
         if (!xr_type_equals(key_type, k)) {
             key_type = xr_type_union(ctx->analyzer->isolate, key_type, k);
         }
@@ -3590,6 +3623,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                                        "store Slice view in object literal");
             xa_check_pointer_borrow_escape(ctx, obj->values[i], obj->values[i], entry_types[i],
                                            "store raw pointer borrow in object literal");
+            xa_note_owner_escapes_into_heap(ctx, obj->values[i]);
             ctx->expected_type = saved_expected;
             cap += 1;
 
@@ -5076,7 +5110,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         // (e.g. `var f = fn() { return f() }`).
         uint32_t saved_initializing_symbol_id = ctx->initializing_symbol_id;
         ctx->initializing_symbol_id = 0;
+        ctx->closure_body_depth++;
         xa_visit_function_body_unified(ctx, fn->body);
+        ctx->closure_body_depth--;
         xa_parallel_callback_effect_check(ctx, fn->body);
         ctx->initializing_symbol_id = saved_initializing_symbol_id;
 
@@ -5298,8 +5334,8 @@ static void xa_report_boundary_local_move(XaInferContext *ctx, AstNode *boundary
              "%s move of '%s' requires a proven unique transferable root; end aliases/loans or "
              "use copy(%s)",
              boundary_label ? boundary_label : "cross-coroutine value", name, name);
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                               &loc);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
+                               msg, &loc);
 }
 
 void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
@@ -5526,15 +5562,17 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
     }
     if (links) {
         if (links->root_id == 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot await unique Task: no ownership root exists", &loc);
         } else if (links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot await unique Task: ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
         }
         if (links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                                        "cannot await unique Task: capability is unknown", &loc);
         } else if (links->value_capability != XA_CAP_MUTABLE) {
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
@@ -5546,7 +5584,7 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
         }
         if (!links->allocation_plan.complete) {
             xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
                 "cannot await unique Task: storage/ownership plan is incomplete "
                 "(OWN-E-STORAGE-PLAN)",
                 &loc);
@@ -5565,8 +5603,8 @@ static void xa_consume_unique_task_await(XaInferContext *ctx, AstNode *await_nod
                      "cannot await '%s': strong alias '%s' remains live "
                      "(OWN-E-LIVE-ALIAS)",
                      name, live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
         } else if (links->root_alias == XA_ROOT_LOCAL_ALIASED) {
             xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_UNIQUE);
         }
@@ -5893,54 +5931,8 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
-    if (move_links) {
-        if (move_links->root_id == 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move value: no ownership root exists", &loc);
-        } else if (move_links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "cannot move value: unique ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
-        }
-        if (move_links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move value: capability is unknown", &loc);
-        } else if (move_links->value_capability == XA_CAP_CONST) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move const-capability value", &loc);
-        } else if (move_links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move synchronization capability", &loc);
-        }
-        if (move_links->storage_domain == XR_STORAGE_MODULE_STATIC) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot consume a module-static binding", &loc);
-        }
-        if (!move_links->allocation_plan.complete) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "cannot move value: storage/ownership plan is incomplete (OWN-E-STORAGE-PLAN)",
-                &loc);
-        }
-        bool alias_analysis_failed = false;
-        XaSymbol *live_alias =
-            xa_find_live_strong_alias_after_current(ctx, move_sym, &alias_analysis_failed);
-        if (alias_analysis_failed) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                       "ownership alias analysis failed (AnalysisResourceFailure)",
-                                       &loc);
-        } else if (live_alias) {
-            char msg[224];
-            snprintf(msg, sizeof(msg),
-                     "cannot move '%s': strong alias '%s' remains live (OWN-E-LIVE-ALIAS)",
-                     move_name ? move_name : "?", live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
-        } else if (move_links->root_alias == XA_ROOT_LOCAL_ALIASED) {
-            xa_mark_root_alias_state(ctx, move_links->root_id, XA_ROOT_UNIQUE);
-        }
-    }
-    xa_check_active_span_borrow_owner_mutation(ctx, node, move_sym, "moving the owner");
+    xa_check_move_source_evidence(ctx, move_sym, move_name, loc);
+    xa_check_active_loan_owner_mutation(ctx, node, move_sym, "moving the owner");
 
     // Check: cannot move synchronization/concurrency handles.
     const char *handle_label = xa_concurrency_handle_label(var_type);

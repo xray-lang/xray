@@ -28,16 +28,21 @@ typedef struct XaLoopScope {
     struct XaLoopScope *prev;
 } XaLoopScope;
 
-typedef struct XaActiveSliceBorrow {
+/* One live loan against an ownership root.  `loan.kind` is the discriminator:
+ * READ is a Slice view, RAW_READ/RAW_WRITE a raw pointer borrow, CAPTURE a
+ * closure holding the root by reference.  `borrower_symbol` is the binding
+ * that holds the loan; the loan ends at that binding's last use, so liveness
+ * is non-lexical for every form.  `owner_path` is the borrowed place inside
+ * the owner, empty when the whole binding is loaned. */
+typedef struct XaActiveLoan {
     XaLoan loan;
     struct XaSymbol *owner_symbol;
     char *owner_path;
-    struct XaSymbol *view_symbol;
-    struct XaScope *view_scope;
+    struct XaSymbol *borrower_symbol;
+    struct XaScope *borrower_scope;
     int loop_depth_at_creation;
-    bool is_pointer_borrow;
-    struct XaActiveSliceBorrow *next;
-} XaActiveSliceBorrow;
+    struct XaActiveLoan *next;
+} XaActiveLoan;
 
 typedef struct XaInferVar {
     uint32_t id;
@@ -58,6 +63,10 @@ typedef struct XaInferVar {
 } XaInferVar;
 
 #define XA_BLOCK_CURSOR_MAX 64
+
+/* Capacity of the pending closure-capture list. Overflow is not a silent
+ * drop: the extra roots are marked escaped, which is the fail-closed answer. */
+#define XA_PENDING_CAPTURE_MAX 32
 
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
@@ -172,9 +181,22 @@ typedef struct XaInferContext {
     // thread domain, so ThreadLocal usage is intentional there.
     int os_thread_body_depth;
 
-    // Active local Slice/Slice<byte> views keyed by the owning mutable container.
-    // Used to reject owner grow/free mutations while borrowed views are live.
-    XaActiveSliceBorrow *active_span_borrows;
+    // Active loans against local ownership roots: Slice views, raw pointer
+    // borrows, and closure captures. Used to reject owner grow/free mutations
+    // and `move` while a loan is live.
+    XaActiveLoan *active_loans;
+
+    // Outer locals with an ownership root that the closure currently being
+    // inferred names in its body. Drained into CAPTURE loans when that closure
+    // becomes a named binding. A closure that is only a call argument cannot
+    // outlive the call, so an undrained list is discarded at statement end.
+    XaSymbol *pending_captures[XA_PENDING_CAPTURE_MAX];
+    int pending_capture_count;
+
+    // Nonzero while inferring a closure body. The body's own statements must
+    // not discard the capture list they are producing; only the statement that
+    // contains the closure literal decides whether the captures become loans.
+    int closure_body_depth;
 
     // Current statement cursor inside xa_visit_block_stmt. Used by Slice borrow
     // liveness to allow owner mutations after the borrowed view's last use in a
