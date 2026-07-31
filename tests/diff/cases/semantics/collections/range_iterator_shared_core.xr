@@ -1,0 +1,92 @@
+// anchor: range-iterator-shared-core
+// Range answers the iterator()/hasNext()/next() protocol, so for-in paths that
+// drive iteration dynamically — an explicit iterator, or a bare generic type
+// parameter — see the same element sequence the static len/index lowering
+// produces. next() here is always in contract (guarded by hasNext, or on a
+// range known to be non-empty); pulling an exhausted iterator is E0432 and is
+// covered by its own case.
+
+fn drain(r: Range) -> Array<int> {
+    var out: Array<int> = []
+    var it = r.iterator()
+    while (it.hasNext()) {
+        out.push(it.next())
+    }
+    return out
+}
+
+print(drain(2..9))
+print(drain(1..=4))
+print(drain(5..5))
+print(drain(9..2))
+print(drain(-3..2))
+print(drain(-4..=-2))
+print(drain(7..=7))
+
+// Explicit iterator elements match toArray() and the static for-in lowering.
+var r = 3..=8
+print(drain(r))
+print(r.toArray())
+var forInTotal = 0
+for (i in 3..=8) {
+    forInTotal = forInTotal + i
+}
+var iterTotal = 0
+var walk = r.iterator()
+while (walk.hasNext()) {
+    iterTotal = iterTotal + walk.next()
+}
+print(forInTotal)
+print(iterTotal)
+
+// Each iterator() call starts an independent cursor, and an iterator is its own
+// iterable (iterator() returns self), so draining c advances b.
+var a = r.iterator()
+var b = r.iterator()
+print(a.hasNext())
+print(a.next())
+print(a.next())
+print(b.next())
+var c = b.iterator()
+print(c.next())
+
+// Empty range: hasNext() is false and for-in never enters the loop.
+var empty = 0..0
+var e = empty.iterator()
+print(e.hasNext())
+var emptyCount = 0
+for (i in empty) {
+    emptyCount = emptyCount + 1
+}
+print(emptyCount)
+
+// `for (i in rangeVar)`: the static type is Range (a variable, not a literal
+// `a..b`), so this lowers through the counted len/index loop; the sum matches
+// the same range's toArray().
+fn forInSum(rng: Range) -> int {
+    var acc = 0
+    for (i in rng) {
+        acc = acc + i
+    }
+    return acc
+}
+print(forInSum(2..9))
+print(forInSum(1..=4))
+print(forInSum(9..2))
+print(forInSum(-3..2))
+
+// A generic body drives `for (i in xs)` over a bare `T: Iterable<int>` through
+// iterator(). A nested (non-monomorphized) parameter keeps T into lowering, so
+// a Range flows through iterator() dynamically — the exact path this change
+// makes answerable (it previously panicked with E0405 iterator-not-found).
+fn wrapper() -> int {
+    fn nestedTotal<T: Iterable<int>>(xs: T) -> int {
+        var n = 0
+        for (i in xs) {
+            n = n + i
+        }
+        return n
+    }
+    return nestedTotal(1..5) + nestedTotal(10..=12)
+}
+print(wrapper())

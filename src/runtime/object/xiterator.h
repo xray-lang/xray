@@ -8,7 +8,7 @@
  * xiterator.h - Iterator for for-in loops
  *
  * KEY CONCEPT:
- *   Supports Map/Set/Json/Array/String iteration with key-value pairs.
+ *   Supports Map/Set/Json/Array/String/Range iteration with key-value pairs.
  *
  * MEMORY LAYOUT (unified class model):
  *   XrInstance header + 0 fields + native body:
@@ -17,7 +17,7 @@
  *     XrIteratorType type    (4B)  ─┐
  *     mode/pad               (4B)   │ native body (40B)
  *     source union           (8B)   │ — traversed by iterator_body_traverse
- *     scan_index/total_count (8B)   │
+ *     cursor union           (8B)   │ — scan_index/total_count, or range_cursor
  *     coro pointer           (8B)   │
  *     context pointer        (8B)  ─┘
  */
@@ -46,6 +46,7 @@ typedef enum {
     XR_ITERATOR_ARRAY = 3,
     XR_ITERATOR_STRING = 4,
     XR_ITERATOR_GENERATOR = 5,
+    XR_ITERATOR_RANGE = 6,
 } XrIteratorType;
 
 /* Yield mode. PAIRS is used by `for (k, v in coll)` (entriesIterator);
@@ -82,15 +83,25 @@ typedef struct XrIterator {
     uint8_t _pad0;
     uint16_t _pad1;
     union {
-        struct XrMap *map;        // Map iterator
-        struct XrSet *set;        // Set iterator
-        struct XrInstance *json;  // Json iterator over dynamic-layout instance storage
-        struct XrArray *array;    // Array iterator
-        struct XrString *string;  // String iterator
-        struct XrCoroutine *gen;  // Generator: owned, pull-driven producer coroutine
-    } source;                     // source object (union, selected by type)
-    uint32_t scan_index;       // internal scan position; generator phase (0=idle,1=buffered,2=done)
-    uint32_t total_count;      // total field count (Json fast mode only)
+        struct XrMap *map;         // Map iterator
+        struct XrSet *set;         // Set iterator
+        struct XrInstance *json;   // Json iterator over dynamic-layout instance storage
+        struct XrArray *array;     // Array iterator
+        struct XrString *string;   // String iterator
+        struct XrCoroutine *gen;   // Generator: owned, pull-driven producer coroutine
+        struct XrInstance *range;  // Range: instance whose native body is the XrRange bounds
+    } source;                      // source object (union, selected by type)
+    /* Cursor. Every collection source is bounded by a 32-bit entry count, so
+     * they share the narrow pair. A Range is the one source whose element
+     * count can exceed 2^32, so it overlays the same eight bytes with a 64-bit
+     * index instead of wrapping where the AOT's int64 cursor would not. */
+    union {
+        struct {
+            uint32_t scan_index;   // scan position; generator phase (0=idle,1=buffered,2=done)
+            uint32_t total_count;  // total field count (Json fast mode only)
+        };
+        int64_t range_cursor;  // XR_ITERATOR_RANGE: element index into the sequence
+    };
     struct XrCoroutine *coro;  // coroutine (for creating temp arrays)
     void *context;             // extra context (Json: XrSymbolTable*)
 } XrIterator;
@@ -124,6 +135,11 @@ XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct 
 // `isolate` is needed so we can intern the per-rune single-character strings.
 XR_FUNC XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
                                                 struct XrVMRuntime *isolate);
+
+// Create iterator from Range (lazy, yields each element of the sequence).
+// `range` is the Range instance; the iterator borrows its native body bounds
+// and computes element i as start + i * step, exactly like Range.toArray().
+XR_FUNC XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrInstance *range);
 
 // Create iterator over a generator coroutine. `owner` is the consuming
 // coroutine (heap for the iterator allocation and yielded-value promotion);

@@ -17,6 +17,8 @@
 #include "xmap.h"  // Must be included before xarray.h, XrMap definition is required
 #include "xset.h"
 #include "xarray.h"
+#include "xrange.h"
+#include "../../shared/xr_range_core.h"
 #include "xtuple.h"
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
@@ -133,6 +135,37 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     return iter;
 }
 
+/* Create iterator from Range (lazy, yields the sequence elements).
+ * The bounds live in the Range instance's native body; the iterator holds a
+ * reference to that instance and derives each element from `range_cursor`, so
+ * the produced sequence matches Range.toArray() and the static
+ * `for (i in a..b)` lowering element for element. */
+XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrInstance *range) {
+    XR_DCHECK(range != NULL, "iterator_new_from_range: NULL range");
+    XrIterator *iter = iterator_alloc(coro);
+    if (!iter)
+        return NULL;
+    iter->type = XR_ITERATOR_RANGE;
+    iter->source.range = range;
+    iter->range_cursor = 0;
+    iter->coro = coro;
+    xr_rc_retain((XrObjHeader *) range);
+    iter->context = NULL;
+    iter->mode = XR_ITER_MODE_VALUES;
+    return iter;
+}
+
+/* Bounds of the range an XR_ITERATOR_RANGE iterator walks, planned through the
+ * runtime-neutral core so the VM and AOT (src/aot/xrt_coll.h) agree on both the
+ * element count and every element value. */
+static XrRangeCore range_iter_core(XrIterator *iter) {
+    XrRange *r =
+        iter->source.range ? (XrRange *) xr_instance_native_body(iter->source.range) : NULL;
+    if (!r)
+        return xr_range_core_make(0, 0, 1);
+    return xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end);
+}
+
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
 XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
                                       struct XrVMRuntime *isolate) {
@@ -238,6 +271,10 @@ bool xr_iterator_has_next(XrIterator *iter) {
         if (!iter->source.string)
             return false;
         return iter->scan_index < iter->total_count;
+    } else if (iter->type == XR_ITERATOR_RANGE) {
+        if (!iter->source.range)
+            return false;
+        return iter->range_cursor < xr_range_core_length(range_iter_core(iter));
     } else if (iter->type == XR_ITERATOR_GENERATOR) {
         XrCoroutine *gen = iter->source.gen;
         if (!gen)
@@ -398,6 +435,16 @@ XrValue xr_iterator_next(XrIterator *iter) {
         xr_tuple_set(pair, 0, xr_int((int64_t) idx));
         xr_tuple_set(pair, 1, ch);
         return xr_value_from_tuple(pair);
+    } else if (iter->type == XR_ITERATOR_RANGE) {
+        /* Range yields plain elements; there is no key/value projection to
+         * pick, so KEYS and PAIRS never reach here (`for (k, v in r)` is
+         * rejected by the analyzer). */
+        if (!iter->source.range)
+            return xr_null();
+        XrRangeCore core = range_iter_core(iter);
+        if (iter->range_cursor >= xr_range_core_length(core))
+            return xr_null();
+        return xr_int(xr_range_core_value_at(core, iter->range_cursor++));
     } else if (iter->type == XR_ITERATOR_GENERATOR) {
         XrCoroutine *gen = iter->source.gen;
         if (!gen || iter->scan_index == 2)
@@ -475,6 +522,9 @@ static void iterator_body_destroy(void *body) {
             break;
         case XR_ITERATOR_JSON:
             src = (XrObjHeader *) iter->source.json;
+            break;
+        case XR_ITERATOR_RANGE:
+            src = (XrObjHeader *) iter->source.range;
             break;
         case XR_ITERATOR_GENERATOR:
             // The producer coroutine is owned (not RC-shared); tear it down.

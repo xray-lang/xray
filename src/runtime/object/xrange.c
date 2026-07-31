@@ -10,6 +10,7 @@
 
 #include "xrange.h"
 #include "xarray.h"
+#include "xiterator.h"
 #include "xpanic_info.h"
 #include "../mem/xheap.h"
 #include "../class/xclass.h"
@@ -181,6 +182,19 @@ static XrValue m_range_get_end(XrVMRuntime *iso, XrValue self, XrValue *args, in
     return xr_int(rng->end);
 }
 
+/* `for (i in r)` over a Range whose static type is not the literal `a..b`
+ * form (a variable, a generic parameter) lowers to the iterator protocol
+ * instead of the len/index form, so Range must answer iterator() like every
+ * other iterable. The elements match Range.toArray() and the static lowering. */
+static XrValue m_range_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    if (!xr_value_is_range(iso, self))
+        return xr_null();
+    XrIterator *iter = xr_iterator_new_from_range(NULL, (XrInstance *) XR_TO_PTR(self));
+    return xr_value_from_iterator(iter);
+}
+
 static XrValue m_range_count(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -228,6 +242,7 @@ void xr_register_range_class(XrVMRuntime *X) {
     xr_class_builder_add_method(builder, "toArray", m_range_to_array, 0, 0);
     xr_class_builder_add_method(builder, "contains", m_range_contains, 1, 0);
     xr_class_builder_add_method(builder, "count", m_range_count, 0, 0);
+    xr_class_builder_add_method(builder, "iterator", m_range_iterator, 0, 0);
 
     /* Property getters: registered under `get:<name>` so OP_GETPROP
      * resolves them through the standard getter lookup path (no parens

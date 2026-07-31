@@ -5605,6 +5605,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
 | `toArray()` | 按迭代顺序生成独立的 `Array<int>` |
 | `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
+| `iterator()` | 迭代协议；惰性产出与 `toArray()` 相同的元素序列 |
 | `len(range)` | 返回范围中的元素数量 |
 
 ```xray

@@ -32,6 +32,7 @@
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_json_type.h"
+#include "../shared/xr_range_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
 #include <string.h>
@@ -3495,6 +3496,18 @@ static inline int xrt_is_json_object_value(XrValue v) {
     return v.tag == XR_TAG_PTR && v.ptr && v.heap_type == 0;
 }
 
+/* Bounds of the range an iterator over XR_TAG_RANGE walks. Planned through the
+ * runtime-neutral core so this and the VM's XR_ITERATOR_RANGE
+ * (src/runtime/object/xiterator.c) agree on the element count and on every
+ * element value. Ranges carry no ARC header, so the iterator's retain/release
+ * of `coll` is a no-op and the bounds stay readable for the traversal. */
+static inline XrRangeCore xrt_range_iter_core(const xrt_iterator_t *it) {
+    const xrt_range_t *r = (const xrt_range_t *) it->coll.ptr;
+    if (!r)
+        return xr_range_core_make(0, 0, 1);
+    return xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end);
+}
+
 static inline int64_t xrt_json_dynamic_len(const xrt_json_t *j) {
     return (j && j->dynamic_fields) ? xrt_map_len(j->dynamic_fields) : 0;
 }
@@ -3623,6 +3636,8 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
     }
     if (XR_IS_STR(it->coll))
         return it->cursor < xr_str_len(it->coll);
+    if (it->coll.tag == XR_TAG_RANGE)
+        return it->cursor < xr_range_core_length(xrt_range_iter_core(it));
     return 0;
 }
 
@@ -3696,6 +3711,13 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return xrt_tuple_make(2, kv);
         }
         return ch;
+    }
+    if (it->coll.tag == XR_TAG_RANGE) {
+        /* Range yields plain elements; there is no key/value projection to
+         * pick, so KEYS and PAIRS never reach here (`for (k, v in r)` is
+         * rejected by the analyzer). */
+        int64_t idx = it->cursor++;
+        return XR_FROM_INT(xr_range_core_value_at(xrt_range_iter_core(it), idx));
     }
     return XR_NULL_VAL;
 }

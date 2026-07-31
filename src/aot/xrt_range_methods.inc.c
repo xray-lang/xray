@@ -6,6 +6,12 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
         return XR_FROM_INT(xrt_range_length_ptr(r));
     if (sym == XRT_SYM_TOSTRING)
         return xrt_range_to_string(recv);
+    /* Mirrors the VM's Range.iterator() (src/runtime/object/xrange.c): the
+     * iterator walks the same element sequence toArray() would materialize,
+     * lazily. Reached whenever for-in lowers through the iterator protocol
+     * instead of the static len/index form. */
+    if (sym == XRT_SYM_ITERATOR)
+        return xrt_iterator_new(recv, XRT_ITER_VALUES);
     if (sym == XRT_SYM_VALUES || sym == XRT_SYM_TO_ARRAY) {
         XrRangeCore core =
             r ? xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end)

@@ -5621,6 +5621,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
 | `toArray()` | Produces an independent `Array<int>` in iteration order |
 | `toString()` | Returns an `a..b` or `a..=b` string |
+| `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
 | `len(range)` | Returns the number of elements in the range |
 
 ```xray
