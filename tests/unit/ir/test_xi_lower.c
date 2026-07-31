@@ -2628,7 +2628,10 @@ TEST(struct_field_store_narrows_scalar_rep) {
                              "fn run() -> int {\n"
                              "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
-                             "    return p.octet\n"
+                             /* byte -> int is an explicit conversion since
+                              * contextual conversion semantics were enforced;
+                              * the narrowing under test is the field store. */
+                             "    return int(p.octet)\n"
                              "}\n"
                              "print(run())\n");
     assert(f != NULL);
@@ -2896,8 +2899,7 @@ TEST(numeric_as_carries_typed_conversion_evidence) {
                 float_to_int = value;
         }
     }
-    assert(float_to_int &&
-           float_to_int->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
+    assert(float_to_int && float_to_int->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
            (float_to_int->flags & XI_FLAG_MAY_THROW) != 0 &&
            "float-to-int lowering must retain overflow behavior in Xi");
     assert(!func_tree_has_op(f, XI_AS) && "numeric casts must never lower through XI_AS");
