@@ -1,0 +1,240 @@
+// 1237_generic_constraint_forwarding.xr
+// Forwarding a constrained type parameter into another generic.
+//
+// REGRESSION: `fn outer<T: C>(x: T) { inner(x) }` where `inner<U: C>` was
+//             rejected with E0358 "Type 'T' does not satisfy constraint 'C'
+//             for type parameter 'U'", even though T carries exactly the
+//             constraint U demands.
+// FAIL_AT:    the call-site constraint check handed the type argument to
+//             xr_type_satisfies_constraint(). A type parameter's constraints
+//             live on the enclosing declaration's XaSymbolLinks, not on the
+//             XrType, so the runtime-layer check saw a bare
+//             XR_KIND_TYPE_PARAM, had nothing to match, and fell through to
+//             `return false`.
+// PASS_AT:    the analyzer now resolves the entailment before calling down:
+//             it walks out to the function or class that introduced the type
+//             parameter and accepts when one of that parameter's own
+//             constraints implies the target constraint.
+//
+// The entailment must stay conservative — forwarding to a constraint the
+// parameter does not carry is still an error. See
+// tests/compile_errors/type/139_generic_constraint_forwarding_unsatisfied.xr.
+
+// ===== Implicit type argument (inferred from the argument) =====
+fn innerC<U: Comparable>(y: U) -> U {
+    return y
+}
+
+fn outerC<T: Comparable>(x: T) -> T {
+    return innerC(x)
+}
+
+@test
+fn test_forward_inferred_int() {
+    assert_eq(outerC(3), 3)
+}
+
+@test
+fn test_forward_inferred_string() {
+    assert_eq(outerC("hi"), "hi")
+}
+
+// ===== Explicit type argument =====
+fn outerCExplicit<T: Comparable>(x: T) -> T {
+    return innerC<T>(x)
+}
+
+@test
+fn test_forward_explicit_type_arg() {
+    assert_eq(outerCExplicit(7), 7)
+    assert_eq(outerCExplicit("ok"), "ok")
+}
+
+// ===== Constraint-agnostic: Hashable and Iterable behave the same =====
+fn innerH<U: Hashable>(y: U) -> U {
+    return y
+}
+
+fn outerH<T: Hashable>(x: T) -> T {
+    return innerH(x)
+}
+
+@test
+fn test_forward_hashable() {
+    assert_eq(outerH(5), 5)
+}
+
+fn innerIt<U: Iterable<int>>(y: U) -> U {
+    return y
+}
+
+fn outerIt<T: Iterable<int>>(x: T) -> T {
+    return innerIt(x)
+}
+
+@test
+fn test_forward_iterable() {
+    var forwarded = outerIt([1, 2, 3])
+    assert_eq(len(forwarded), 3)
+    assert_eq(forwarded[0], 1)
+}
+
+// ===== Wider source constraint satisfies a narrower target =====
+// T carries Comparable & Hashable; U only demands Hashable.
+fn outerCH<T: Comparable & Hashable>(x: T) -> T {
+    return innerH(x)
+}
+
+@test
+fn test_forward_subset_of_constraints() {
+    assert_eq(outerCH(9), 9)
+    assert_eq(outerCH("z"), "z")
+}
+
+// ===== Universally-satisfied target constraint =====
+fn innerS<U: Stringable>(y: U) -> U {
+    return y
+}
+
+fn outerCtoS<T: Comparable>(x: T) -> T {
+    return innerS(x)
+}
+
+@test
+fn test_forward_to_universal_constraint() {
+    assert_eq(outerCtoS(4), 4)
+}
+
+// ===== Class upper bound: a subclass bound satisfies a superclass bound =====
+class Animal {
+    name: string
+
+    constructor(name) {
+        this.name = name
+    }
+}
+
+class Dog extends Animal {
+    constructor(name) {
+        super(name)
+    }
+}
+
+fn innerAnimal<U: Animal>(y: U) -> string {
+    return y.name
+}
+
+fn outerDog<T: Dog>(x: T) -> string {
+    return innerAnimal(x)
+}
+
+@test
+fn test_forward_class_bound_to_superclass() {
+    assert_eq(outerDog(Dog("rex")), "rex")
+}
+
+// ===== User-defined interface constraint =====
+interface Shape {
+    area() -> float
+}
+
+class Square implements Shape {
+    side: float
+
+    constructor(side) {
+        this.side = side
+    }
+
+    area() -> float {
+        return this.side * this.side
+    }
+}
+
+fn innerShape<U: Shape>(y: U) -> float {
+    return y.area()
+}
+
+fn outerShape<T: Shape>(x: T) -> float {
+    return innerShape(x)
+}
+
+@test
+fn test_forward_user_interface() {
+    var a = outerShape<Square>(Square(2.0))
+    assert(a > 3.9 && a < 4.1)
+}
+
+// ===== Type parameter introduced by the enclosing class =====
+fn identityC<U: Comparable>(y: U) -> U {
+    return y
+}
+
+class Holder<T: Comparable> {
+    value: T
+
+    constructor(value) {
+        this.value = value
+    }
+
+    forwarded() -> T {
+        return identityC(this.value)
+    }
+}
+
+@test
+fn test_forward_class_type_param() {
+    assert_eq(Holder<int>(11).forwarded(), 11)
+    assert_eq(Holder<string>("cls").forwarded(), "cls")
+}
+
+// ===== Multi-hop forwarding: T -> U -> V =====
+fn hop3<V: Comparable>(z: V) -> V {
+    return z
+}
+
+fn hop2<U: Comparable>(y: U) -> U {
+    return hop3(y)
+}
+
+fn hop1<T: Comparable>(x: T) -> T {
+    return hop2(x)
+}
+
+@test
+fn test_forward_multi_hop() {
+    assert_eq(hop1(21), 21)
+    assert_eq(hop1("hop"), "hop")
+}
+
+// ===== An unconstrained target still accepts a constrained parameter =====
+fn innerFree<U>(y: U) -> U {
+    return y
+}
+
+fn outerToFree<T: Comparable>(x: T) -> T {
+    return innerFree(x)
+}
+
+@test
+fn test_forward_to_unconstrained() {
+    assert_eq(outerToFree(6), 6)
+}
+
+// ===== Shadowing: an inner unconstrained T must not borrow the outer bound =====
+// `shadowOuter` declares T: Comparable, but `shadowInner` re-binds T with no
+// constraint. Calling shadowInner (not identityC) from shadowOuter is fine —
+// the point is that the analyzer resolves T against the innermost binder.
+fn shadowInner<T>(z: T) -> T {
+    return z
+}
+
+fn shadowOuter<T: Comparable>(x: T) -> T {
+    return shadowInner(x)
+}
+
+@test
+fn test_shadowed_type_param_resolves_to_inner_binder() {
+    assert_eq(shadowOuter(13), 13)
+}
+
+print("All generic constraint forwarding tests passed!")

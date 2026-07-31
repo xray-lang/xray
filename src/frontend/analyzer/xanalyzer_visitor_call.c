@@ -660,10 +660,10 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
     XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth = type_param_count <= 8
-                            ? stack_synth
-                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
-                                                       (size_t) type_param_count);
+    XrTypeRef **synth =
+        type_param_count <= 8
+            ? stack_synth
+            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
@@ -2446,8 +2446,7 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *type_args[1] = {
-        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
+    XrType *type_args[1] = {value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
@@ -5403,6 +5402,89 @@ static XrType *xa_contextualize_generic_call_param(XaInferContext *ctx, XaSymbol
     return result ? result : param_type;
 }
 
+// Does one declared constraint on a type parameter already imply `required`?
+// Reuses the runtime checker with the *constraint* as the candidate type, so
+// identical interfaces, interface inheritance, class upper bounds and the
+// universally-satisfied interfaces (Stringable / Equatable) all resolve there.
+static bool xa_constraint_implies(XrType *have, XrType *required) {
+    if (!required)
+        return true;
+    if (!have)
+        return false;
+    return xr_type_satisfies_constraint(have, required);
+}
+
+// Look for `name` in one declaration's type-parameter list. Sets `*out_found`
+// when the declaration owns that parameter, so callers can stop the scope walk
+// at the innermost binder instead of letting an outer `T` shadow back in.
+static bool xa_type_param_link_implies(XaSymbolLinks *links, const char *name, XrType *required,
+                                       bool *out_found) {
+    if (out_found)
+        *out_found = false;
+    if (!links || !name)
+        return false;
+    int count = xa_symbol_links_get_type_param_count(links);
+    for (int i = 0; i < count; i++) {
+        const char *param_name = xa_symbol_links_get_type_param_name(links, i);
+        if (!param_name || strcmp(param_name, name) != 0)
+            continue;
+        if (out_found)
+            *out_found = true;
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
+        for (int j = 0; j < constraint_count; j++) {
+            if (xa_constraint_implies(constraints ? constraints[j] : NULL, required))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+// Constraint entailment for a type parameter forwarded as a type argument.
+//
+// A type parameter's constraints live on the enclosing declaration's
+// XaSymbolLinks, not on the XrType, so xr_type_satisfies_constraint() only ever
+// sees a bare XR_KIND_TYPE_PARAM and has nothing to match. Resolve it here:
+// walk out to the function or class that introduced `name` and accept when one
+// of its own constraints implies `required`.
+static bool xa_type_param_entails_constraint(XaInferContext *ctx, const char *name,
+                                             XrType *required) {
+    if (!ctx || !ctx->analyzer || !name)
+        return false;
+    for (XaScope *scope = ctx->analyzer->current_scope; scope; scope = scope->parent) {
+        bool found = false;
+        if (scope->function_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->function_symbol);
+            if (xa_type_param_link_implies(links, name, required, &found))
+                return true;
+            if (found)
+                return false;
+        }
+        if (scope->class_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->class_symbol);
+            if (xa_type_param_link_implies(links, name, required, &found))
+                return true;
+            if (found)
+                return false;
+        }
+    }
+    return false;
+}
+
+// Constraint check for a generic call's type argument.  Same contract as
+// xr_type_satisfies_constraint(), plus the analyzer-only entailment path that
+// lets a constrained type parameter be forwarded into another generic.
+static bool xa_type_arg_satisfies_constraint(XaInferContext *ctx, XrType *type_arg,
+                                             XrType *constraint) {
+    if (xr_type_satisfies_constraint(type_arg, constraint))
+        return true;
+    if (type_arg && type_arg->kind == XR_KIND_TYPE_PARAM)
+        return xa_type_param_entails_constraint(ctx, type_arg->type_param.name, constraint);
+    return false;
+}
+
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -5617,7 +5699,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
             for (int j = 0; j < constraint_count; j++) {
                 XrType *constraint = constraints[j];
-                if (constraint && !xr_type_satisfies_constraint(type_arg, constraint)) {
+                if (constraint && !xa_type_arg_satisfies_constraint(ctx, type_arg, constraint)) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
@@ -5669,7 +5751,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     continue;
                 for (int j = 0; j < constraint_count; j++) {
                     XrType *constraint = constraints[j];
-                    if (constraint && !xr_type_satisfies_constraint(inferred, constraint)) {
+                    if (constraint &&
+                        !xa_type_arg_satisfies_constraint(ctx, inferred, constraint)) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
                         char msg[256];

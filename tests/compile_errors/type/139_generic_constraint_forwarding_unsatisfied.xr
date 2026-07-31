@@ -1,0 +1,16 @@
+// Forwarding a constrained type parameter into another generic is accepted
+// only when the parameter's own constraints imply the target constraint.
+// Here T carries Comparable, but innerH demands Hashable, so the forwarding
+// must stay an error.
+//
+// Positive coverage: tests/regression/12_type_checking/1237_generic_constraint_forwarding.xr
+
+fn innerH<U: Hashable>(y: U) -> U {
+    return y
+}
+
+fn outerC<T: Comparable>(x: T) -> T {
+    return innerH(x)
+}
+
+print(outerC(3))
