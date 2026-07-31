@@ -1,6 +1,10 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects top-level var declaration
-contains=module-local recursively scalar fixed-array/struct/union consteval initializers are supported as static mutable module storage
+# A mutable fixed array cannot be shared across modules. The general rule --
+# no mutable export in any profile -- fires first and is the stronger one, so
+# there is no freestanding-specific wording to add: module-local mutable fixed
+# arrays stay supported (freestanding_top_var_fixed_array_static), and the
+# cross-module form is rejected here before any storage is planned.
+contains=mutable export is not supported
 not_contains=xrt_shared
 not_contains=CRASH
