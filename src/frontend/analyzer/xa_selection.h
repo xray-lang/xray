@@ -41,8 +41,14 @@ struct AstNode;
 
 /* What kind of member/access is this selection? */
 typedef enum XaSelectionKind {
-    XA_SEL_FIELD,         /* instance field access: obj.field */
-    XA_SEL_METHOD,        /* method access: obj.method (before call) */
+    XA_SEL_FIELD,  /* instance field access: obj.field */
+    XA_SEL_METHOD, /* method access: obj.method (before call) */
+    /* Computed property: obj.prop reads through an accessor rather than a slot.
+     * The parser stores accessors as methods named "get:<prop>" / "set:<prop>"
+     * (see xr_parse_property_accessors), and target_symbol is the one this
+     * access resolves to -- the getter on a read, the setter on a write -- so
+     * lowering emits the call without repeating the name lookup. */
+    XA_SEL_PROPERTY,
     XA_SEL_INDEX,         /* subscript/index access: arr[i] / map[k] */
     XA_SEL_STATIC_MEMBER, /* static member: Class.staticField */
     XA_SEL_MODULE_EXPORT, /* module namespace access: mod.exportedName */

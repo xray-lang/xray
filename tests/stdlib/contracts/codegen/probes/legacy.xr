@@ -1,0 +1,53 @@
+// Executable oracle for the codegen control surface.  Each block asserts the
+// baseline behaviour and then emits one canonical observation.
+import codegen
+import mem
+
+// --- opaque-is-identity ---------------------------------------------------
+// The accepted domain is non-null integer scalars and Ptr<T>/MutPtr<T>; the
+// analyzer rejects aggregate, managed, floating-point, boolean, rune and
+// nullable operands outright.
+var u_zero: u64 = 0
+var u_max: u64 = 18446744073709551615
+var u_mixed: u64 = 1609587791953885689
+assert(codegen.opaque(u_zero) == u_zero)
+assert(codegen.opaque(u_max) == u_max)
+assert(codegen.opaque(u_mixed) == u_mixed)
+
+var i_min = -9223372036854775807
+assert(codegen.opaque(i_min) == i_min)
+var i_zero = 0
+assert(codegen.opaque(i_zero) == i_zero)
+
+var b: byte = 255
+assert(codegen.opaque(b) == b)
+var w: u16 = 65535
+assert(codegen.opaque(w) == w)
+var s32: i32 = -2147483647
+assert(codegen.opaque(s32) == s32)
+
+var p = mem.mutPtr<byte>(4096)
+assert(mem.addr(codegen.opaque(p)) == mem.addr(p))
+print("{\"case\":\"opaque-is-identity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+// --- compiler-fence-is-semantically-empty --------------------------------
+var before = u_mixed
+codegen.compilerFence()
+assert(u_mixed == before)
+codegen.compilerFence()
+codegen.compilerFence()
+assert(codegen.opaque(u_mixed) == before)
+print("{\"case\":\"compiler-fence-is-semantically-empty\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+// --- controls-are-allocation-free ----------------------------------------
+// Neither control introduces an effect of its own: a loop over both keeps the
+// same value and terminates with no error channel and no suspension.
+var acc: u64 = 0
+var k = 0
+while (k < 64) {
+    acc = codegen.opaque(acc) + 1
+    codegen.compilerFence()
+    k = k + 1
+}
+assert(acc == 64)
+print("{\"case\":\"controls-are-allocation-free\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

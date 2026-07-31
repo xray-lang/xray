@@ -145,6 +145,19 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
     }
 }
 
+/* Kinds whose identity lives in their children rather than in their own tag. */
+static bool mono_tag_needs_children(uint8_t kind) {
+    switch ((XrTypeRefKind) kind) {
+        case XR_TREF_CONST:
+        case XR_TREF_GENERIC:
+        case XR_TREF_OPTIONAL:
+        case XR_TREF_TUPLE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
     if (!buf || cap == 0)
         return;
@@ -160,8 +173,24 @@ static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
         snprintf(buf, cap, "const_%s", inner);
         return;
     }
-    if (t->kind == XR_TREF_GENERIC) {
-        size_t used = (size_t) snprintf(buf, cap, "%s", t->name ? t->name : "obj");
+    if (t->kind == XR_TREF_OPTIONAL) {
+        char inner[192];
+        mono_qualified_type_tag(t->children && t->nchildren > 0 ? t->children[0] : NULL, inner,
+                                sizeof(inner));
+        snprintf(buf, cap, "opt_%s", inner);
+        return;
+    }
+    /* GENERIC carries its head name; TUPLE has none, so it needs an explicit
+     * one or (int, string) and (string, int) would differ only by child order
+     * in a name that also has to stay collision-free against a class literally
+     * called "tup". The arity keeps a 2-tuple distinct from a 1-tuple whose
+     * element tag happens to concatenate the same way. */
+    if (t->kind == XR_TREF_GENERIC || t->kind == XR_TREF_TUPLE) {
+        size_t used;
+        if (t->kind == XR_TREF_TUPLE)
+            used = (size_t) snprintf(buf, cap, "tup%u", (unsigned) t->nchildren);
+        else
+            used = (size_t) snprintf(buf, cap, "%s", t->name ? t->name : "obj");
         for (uint8_t i = 0; i < t->nchildren && used < cap; i++) {
             char child[128];
             mono_qualified_type_tag(t->children ? t->children[i] : NULL, child, sizeof(child));
@@ -179,15 +208,19 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     if (!name || count <= 0 || !type_args)
         return xr_strdup(name ? name : "");
 
-    /* A bare "const" tag would collapse const Array<int> and const Map<K,V>
-     * into one instance. Qualified arguments therefore use a recursive,
-     * identifier-safe tag while legacy unqualified tags remain unchanged. */
+    /* Every type argument whose identity lives in its children needs a
+     * recursive tag. A head-only tag collapses distinct instances into one, and
+     * the second call site is then rewritten to a clone whose parameter types
+     * belong to the first: "const" would merge const Array<int> with
+     * const Map<K,V>, "Array" would merge Array<int> with Array<string>, and
+     * "unknown"/"opt" would merge every tuple and every optional. Scalars carry
+     * their whole identity in the tag itself and keep the flat form. */
     char type_bufs[XR_MONO_MAX_PER_GENERIC][256];
     const char *tags[XR_MONO_MAX_PER_GENERIC];
     if (count > XR_MONO_MAX_PER_GENERIC)
         return xr_strdup(name);
     for (int i = 0; i < count; i++) {
-        if (type_args[i] && type_args[i]->kind == XR_TREF_CONST) {
+        if (type_args[i] && mono_tag_needs_children(type_args[i]->kind)) {
             mono_qualified_type_tag(type_args[i], type_bufs[i], sizeof(type_bufs[i]));
             tags[i] = type_bufs[i];
         } else {
@@ -347,6 +380,26 @@ static char **clone_str_array(char **arr, int count) {
     char **result = (char **) xr_calloc(count, sizeof(char *));
     for (int i = 0; i < count; i++) {
         result[i] = clone_str(arr[i]);
+    }
+    return result;
+}
+
+/* Clone method-local generic params. Constraints go through sub_tref so a
+ * bound that mentions an enclosing class type param (for example
+ * `find<U: Comparable<T>>` inside `Box<T>`) lands on the substituted type. */
+static XrGenericParam **clone_generic_params(XrGenericParam **arr, int count, XrMonoTypeMap *map,
+                                             int mc) {
+    if (!arr || count <= 0)
+        return NULL;
+    XrGenericParam **result = (XrGenericParam **) xr_calloc((size_t) count, sizeof(*result));
+    for (int i = 0; i < count; i++) {
+        if (!arr[i])
+            continue;
+        XrGenericParam *gp = (XrGenericParam *) xr_calloc(1, sizeof(XrGenericParam));
+        gp->name = clone_str(arr[i]->name);
+        gp->constraints = clone_tref_array(arr[i]->constraints, arr[i]->constraint_count, map, mc);
+        gp->constraint_count = gp->constraints ? arr[i]->constraint_count : 0;
+        result[i] = gp;
     }
     return result;
 }
@@ -943,7 +996,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             // params (for example T in Box<T>) but must preserve method-local
             // params (for example U in map<U>). Clearing them makes the
             // post-mono analyzer treat U as an ordinary unresolved type name.
-            dst->type_param_names = clone_str_array(src->type_param_names, src->type_param_count);
+            dst->type_params =
+                clone_generic_params(src->type_params, src->type_param_count, map, mc);
             dst->type_param_count = src->type_param_count;
             break;
         }

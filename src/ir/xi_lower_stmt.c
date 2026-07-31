@@ -488,8 +488,11 @@ static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
 static bool stmt_function_may_suspend(XiLower *l) {
     if (!l || !l->func)
         return true;
-    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) & XA_SEM_EFFECT_SUSPEND) !=
-        0)
+    /* Storage placement asks whether control can leave this body and come back,
+     * so both suspension kinds count: a generator frame outlives `yield expr`
+     * exactly as a coroutine frame outlives `await`. */
+    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) &
+         XA_SEM_EFFECT_ANY_SUSPEND) != 0)
         return true;
     if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
         return false;
@@ -2342,12 +2345,23 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
  * canonical type directly. Map / Json instead route through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
  * yield real keys and `for (k in obj)` yield string keys, matching
- * the analyzer's item-type inference and Python / Go conventions. */
+ * the analyzer's item-type inference and Python / Go conventions.
+ *
+ * A `Range` value qualifies too: it carries no iterator() method, but both
+ * backends answer len()/[i] on it lazily (VM: OP_LEN / OP_GETINDEX fast
+ * paths; AOT: the XR_TAG_RANGE branches in xrt_len_value / xrt_index_get),
+ * so the counted loop reads elements without materializing an array.
+ *
+ * The class_ref test keeps a user-declared `class Range` out of that path:
+ * prelude names are ordinary identifiers, and the analyzer only grants the
+ * builtin int-sequence domain to the prelude type (NULL class_ref). A user
+ * Range reaches for-in through iterator() like any other class. */
 static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     struct XrType *t = xi_lower_node_type(l, coll_node);
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
-    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SLICE || t->kind == XR_KIND_SET;
+    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SLICE || t->kind == XR_KIND_SET ||
+           (xr_type_is_named_class(t, "Range") && t->instance.class_ref == NULL);
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
@@ -3210,8 +3224,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                             : node->line;
         stmt_set_missing_line(init_val, init_line);
         lower_mark_decl_captured_by_child(l, var_id, name, init_val);
-        init_val = xi_lower_apply_numeric_conversion_witness(
-            l, node->as.var_decl.initializer, init_val, type);
+        init_val = xi_lower_apply_numeric_conversion_witness(l, node->as.var_decl.initializer,
+                                                             init_val, type);
         if (!init_val)
             return;
         init_val = xi_lower_checktype_for_type(l, node, init_val, type);
@@ -3416,8 +3430,8 @@ static void lower_return(XiLower *l, AstNode *node) {
                                                   XR_OBJ_STORAGE_SHARED);
         }
         stmt_set_missing_line(val, node->line);
-        val = xi_lower_apply_numeric_conversion_witness(
-            l, ret->values[0], val, l->func ? l->func->return_type : NULL);
+        val = xi_lower_apply_numeric_conversion_witness(l, ret->values[0], val,
+                                                        l->func ? l->func->return_type : NULL);
         if (!val)
             return;
         /* Tail-call detection: mark calls in return position so the emitter

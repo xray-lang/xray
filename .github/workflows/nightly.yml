@@ -23,6 +23,52 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # ===========================================================================
+  # Full tiered suite (scripts/t.sh t3)
+  #
+  # PR CI runs a bounded subset; t3 is the only lane that runs everything,
+  # including the six toolchain-spawning tests that dominate the runtime
+  # (aot_standalone_suite, asan_focused, and the four native-ABI suites). It is
+  # blocking so that "nightly caught it" stays a real sentence — the existing
+  # linux-msan lane is continue-on-error, which is why the differential net has
+  # been able to sit red without anyone being told.
+  # ===========================================================================
+  full-suite:
+    runs-on: ubuntu-latest
+    name: Full Suite (t3)
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Cache compiler objects
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ccache
+          .cache/xray-test
+        key: nightly-ccache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          nightly-ccache-${{ runner.os }}-
+
+    - name: Install toolchain
+      run: |
+        sudo apt-get update && sudo apt-get install -y ccache ninja-build
+        ccache --max-size=5G
+        ./scripts/install_zig_toolchain.sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Run tier t3
+      run: ./scripts/t.sh t3
+
+    - name: ccache statistics
+      if: always()
+      run: ccache -s
+
   # ---------------------------------------------------------------------------
   # 1. Memory stress on Linux + macOS arm64
   # ---------------------------------------------------------------------------

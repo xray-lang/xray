@@ -279,6 +279,13 @@ bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name) {
     return member && member->is_method && member->mutates_receiver;
 }
 
+bool xa_builtin_member_returns_receiver(XrType *type, const char *member_name) {
+    if (!type || !member_name)
+        return false;
+    const XaBuiltinMember *member = xa_builtin_find_instance_member(type, member_name);
+    return member && member->is_method && member->return_ownership == XA_BUILTIN_RETURN_RECEIVER;
+}
+
 /* R2-2 stopgap: see xanalyzer_builtins.h. The runtime bindings for the
  * checked/saturating/overflows families evaluate at int64 width (VM native
  * cfuncs and AOT xrt_method dispatch both see a widened i64 value), so on a

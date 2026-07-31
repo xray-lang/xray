@@ -1,0 +1,15 @@
+import codegen
+
+fn xray_codegen_opaque_u64(value: u64) -> u64 {
+    return codegen.opaque(value)
+}
+
+fn xray_codegen_opaque_i64(value: int) -> int {
+    return codegen.opaque(value)
+}
+
+fn xray_codegen_fence_between(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return codegen.opaque(hidden)
+}

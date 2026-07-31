@@ -870,14 +870,10 @@ static bool xr_parse_call_argument_access_marker_starts(Parser *parser,
         return false;
     }
 
-    Scanner saved_scan = parser->scanner;
-    Token saved_cur = parser->current;
-    Token saved_prev = parser->previous;
+    XrParserStreamState saved = xr_parser_stream_save(parser);
     xr_parser_advance(parser);
     bool marker = xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_THIS);
-    parser->scanner = saved_scan;
-    parser->current = saved_cur;
-    parser->previous = saved_prev;
+    xr_parser_stream_restore(parser, &saved);
     if (marker && out_access)
         *out_access = access;
     return marker;
@@ -1661,7 +1657,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         char title[128];
         snprintf(title, sizeof(title), "'%s' binding syntax was removed; use var or const",
                  spelling);
-        xr_parser_emit_removed_syntax(
+        xr_parser_error_coded_note(
             parser, &removed, XR_ERR_SYN_BINDING_CAPABILITY_REMOVED, title,
             "ownership, sharing, and storage are inferred from value capability and explicit "
             "copy/move boundaries");

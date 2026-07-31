@@ -38,6 +38,7 @@
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
 #include "xi_value_query.h"
+#include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -446,6 +447,29 @@ static bool op_has_trackable_result(uint16_t op) {
  * module slot. Dropping it would free storage still owned elsewhere. */
 static bool op_produces_borrow(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+}
+
+/* Representation selection runs after ordinary ARC insertion and may wrap a
+ * borrowed RC value in BOX/UNBOX/CONVERT adapters.  Those adapters change only
+ * the backend representation; they do not acquire ownership.  Late error-edge
+ * cleanup discovery must therefore follow the adapter back to its source or a
+ * ref-loaded Array<T> is mistaken for a fresh owner and released by the
+ * callee.  SOURCE_MOVE/OWNER_FORWARD are deliberately excluded: they perform
+ * an ownership transfer rather than preserve a borrow. */
+static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
+    if (!value || depth > 16)
+        return false;
+    if (op_produces_borrow(value->op))
+        return true;
+    switch (value->op) {
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_CONVERT:
+            return value->nargs == 1 &&
+                   arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
+        default:
+            return false;
+    }
 }
 
 /* Is this op a call whose result ownership we cannot determine without a
@@ -1020,6 +1044,13 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                             break;
                         }
                     }
+                } else if (xi_call_result_aliases_receiver(u)) {
+                    /* A declared `return self` result IS the receiver, so the
+                     * receiver must outlive it. Listed first because some of
+                     * these members lower to XI_CALL_BUILTIN intrinsics
+                     * (array_reserve / array_resize), which the method-call
+                     * test below never sees. */
+                    is_member_borrow = u->args[0] == member;
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
                            xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
@@ -1692,7 +1723,20 @@ static XiArcOwnMode arc_target_own_mode(const XiFunc *f, const XiValue *target,
         return OWN_BORROWED;
     if (target->op == XI_PARAM && param_is_borrowed(f, target, own_sig))
         return OWN_BORROWED;
-    if (op_produces_borrow(target->op))
+    if (arc_value_is_borrow_alias(target, 0))
+        return OWN_BORROWED;
+    /* A declared `return self` result (xi_receiver_alias) is the receiver's own
+     * reference under a second SSA name, handed back at +0. That is a BORROW,
+     * exactly like the ops whose ops.def result-ownership column already says
+     * BORROWED for the same shape (xi.byte.array.append.from and friends).
+     *
+     * OWN_CALL_RESULT is unsound for it: that mode skips the retain at a
+     * consume which is the result's last use, so `return a.reverse()` moves out
+     * a reference the function never held while `a`'s own death-drop frees the
+     * object (contract C1, then C2 on the caller's release). OWN_BORROWED
+     * retains at EVERY consuming use and never drops, which is the convention
+     * a +0 alias actually has. */
+    if (xi_call_result_aliases_receiver(target))
         return OWN_BORROWED;
     if (op_is_call(target->op) && !call_returns_fresh(f, target))
         return OWN_CALL_RESULT;

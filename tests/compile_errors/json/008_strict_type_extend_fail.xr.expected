@@ -1,1 +1,1 @@
-类型 'Rectangle' 不允许添加字段 'color'
+type 'Rectangle' does not allow adding field 'color'

@@ -149,6 +149,12 @@ struct XrAotValueOps {
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
     void (*retain)(XrValue value);
     void (*release)(XrValue value);
+    /* Report a coroutine's uncaught value-return error (spec §8.1.1). The
+     * runtime decides *when* — it alone knows whether anything is left to
+     * observe the error — while the generated program owns the rendering,
+     * because only it can format its own value layouts. NULL in profiles that
+     * have no stderr to write to. */
+    void (*report_uncaught_error)(XrValue error, bool in_go_coroutine);
 };
 
 typedef struct XrAotContext {
@@ -375,8 +381,10 @@ XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoro
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
-XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode,
-                                      XrValue *out_value);
+// A scope block is a statement: exiting one produces no value. The result the
+// scope settles on already rides in XrAotResult.value, so there is no second
+// out-parameter channel to keep in step with it.
+XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode);
 XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds);
 // Release a select-owned `after` timer channel emitted at the select merge.
 // Mirrors the VM OP_CHAN_TIMER_DISPOSE handler.

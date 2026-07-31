@@ -1,0 +1,27 @@
+arr 10
+arr 20
+arr 30
+arr-has false
+arr-next 432 Iterator.next() on an exhausted iterator: every next() must follow a hasNext() that returned true
+arr-entry 0=10
+arr-entry 1=20
+arr-entry 2=30
+arr-entry-next 432
+arr-nth 30
+arr-nth 432 Iterator.nth(index) ran past the end: the iterator was exhausted before reaching index
+map k
+map j
+map-next 432
+map-entry k=1
+map-entry j=2
+map-entry-next 432
+set 7
+set 8
+set-next 432
+rune a
+rune b
+rune-next 432 Iterator.next() on an exhausted iterator: every next() must follow a hasNext() that returned true
+rune-nth b
+rune-nth 432
+empty-has false
+empty-next 432

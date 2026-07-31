@@ -134,7 +134,7 @@ def case_dir_key(case_file: Path) -> str:
 
 
 def cache_root() -> Path:
-    return Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / "build" / ".xray-test-cache")))
+    return Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / ".cache" / "xray-test")))
 
 
 def stable_cache_dir(suite: str, xray_bin: Path) -> Path:

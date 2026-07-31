@@ -64,8 +64,11 @@ typedef enum {
     XMETHOD_CLOSURE,
     XMETHOD_PRIMITIVE,
     XMETHOD_YIELDABLE_PRIMITIVE,
-    XMETHOD_GETTER,
-    XMETHOD_SETTER,
+    /* A computed-property accessor is an ordinary closure method; only its
+     * name marks it (see xr_accessor_name.h). It had its own two kinds once,
+     * stored and invoked exactly like XMETHOD_CLOSURE, which bought nothing
+     * and cost every dispatch site an extra kind to remember -- OP_INVOKE did
+     * not, so calling an accessor reported "method not found". */
     XMETHOD_OPERATOR,
 } XrMethodType;
 

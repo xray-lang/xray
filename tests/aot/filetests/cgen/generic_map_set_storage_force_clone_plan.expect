@@ -12,7 +12,10 @@ contains=name=has$i64
 c_contains=xrt_map_find_i64_typed(
 c_contains=xrt_map_get_i64_value_typed(
 c_contains=xrt_set_has_i64(
-c_regex=int64_t v[0-9]+ = generic_map_set_storage_force_clone_plan_[0-9a-f]+_lookup_i64_i64_[0-9]+\(NULL, v[0-9]+, v[0-9]+, v[0-9]+\);
-c_regex=uint8_t v[0-9]+ = generic_map_set_storage_force_clone_plan_[0-9a-f]+_has_i64_[0-9]+\(NULL, v[0-9]+, v[0-9]+\);
+# Locals are hoisted to top-of-function declarations, so an assignment line
+# carries no type prefix.
+# The container is passed unboxed with an explicit pointer cast.
+c_regex=v[0-9]+ = generic_map_set_storage_force_clone_plan_[0-9a-f]+_lookup_i64_i64_[0-9]+\(NULL, \(void \*\)\(v[0-9]+\), v[0-9]+, v[0-9]+\);
+c_regex=v[0-9]+ = generic_map_set_storage_force_clone_plan_[0-9a-f]+_has_i64_[0-9]+\(NULL, \(void \*\)\(v[0-9]+\), v[0-9]+\);
 c_not_contains=xrt_method_
 c_not_regex=XR_TO_INT\(generic_map_set_storage_force_clone_plan_[0-9a-f]+_lookup_

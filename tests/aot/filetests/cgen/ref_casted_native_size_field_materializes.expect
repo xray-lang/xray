@@ -1,2 +1,4 @@
-c_regex=int64_t \* v[0-9]+ = \(void \*\)\(&v[0-9]+\);
+# Generated pointer casts are now the exact pointer type instead of `void *`;
+# the address-of itself is unchanged.
+c_regex=int64_t \* v[0-9]+ = \(int64_t \*\)\(&v[0-9]+\);
 c_not_regex=int64_t \* v[0-9]+ = \(void \*\)\(&\(\*\(xrt_struct_abi_[0-9a-f]+ \*\)\(v[0-9]+\)\)\.stripes\);

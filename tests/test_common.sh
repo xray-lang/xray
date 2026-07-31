@@ -62,7 +62,7 @@ xray_test_stable_cache_dir() {
     local xray_bin="$3"
     local root key
 
-    root="${XRAY_TEST_CACHE_ROOT:-$project_dir/build/.xray-test-cache}"
+    root="${XRAY_TEST_CACHE_ROOT:-$project_dir/.cache/xray-test}"
     key="$(xray_test_toolchain_key "$xray_bin" "$project_dir")"
     printf '%s/%s/%s' "$root" "$suite" "$key"
 }
@@ -72,7 +72,7 @@ xray_test_shared_cache_dir() {
     local suite="$2"
     local root
 
-    root="${XRAY_TEST_CACHE_ROOT:-$project_dir/build/.xray-test-cache}"
+    root="${XRAY_TEST_CACHE_ROOT:-$project_dir/.cache/xray-test}"
     printf '%s/%s' "$root" "$suite"
 }
 

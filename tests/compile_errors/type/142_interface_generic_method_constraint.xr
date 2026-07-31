@@ -1,0 +1,30 @@
+// A bound declared on an INTERFACE method must be enforced at call sites, not
+// just parsed. Declaring `wrap<T: Hashable>` in the interface and repeating it
+// in the implementation has to reject a non-Hashable type argument.
+//
+// REGRESSION: InterfaceMethodNode had no type_params field, so this signature
+// did not even parse. Adding the field is only half the job — the bounds have
+// to reach the method's symbol links too, which is what this case pins.
+//
+// `wrap` never touches anything Hashable-specific, so the program is otherwise
+// well-formed: without the constraint check it compiles and runs.
+//
+// The positive half lives in
+// tests/regression/12_type_checking/1238_interface_generic_method.xr.
+
+interface Wrapper {
+    wrap<T: Hashable>(x: T) -> string
+}
+
+class Thing {
+    constructor() {}
+}
+
+class W implements Wrapper {
+    constructor() {}
+
+    wrap<T: Hashable>(x: T) -> string { return "wrapped" }
+}
+
+var w = W()
+print(w.wrap<Thing>(Thing()))

@@ -256,6 +256,13 @@ XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark);
 
 /*
+ * Uncaught value-return error diagnostic (spec §8.1.1). Shared by every
+ * top-level finalization path so the wording stays in one place; honours
+ * suppress_exception_print and ignores a null error. Defined in xvm_api.c.
+ */
+XR_FUNC void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine);
+
+/*
  * Single-call throw helper: records the full call chain into
  * exc.stackTrace then performs the unwind. New code should prefer
  * this over the add_stacktrace + throw_exception pair so the

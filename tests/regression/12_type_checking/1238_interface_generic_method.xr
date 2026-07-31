@@ -1,0 +1,101 @@
+// 1238_interface_generic_method.xr
+// An interface method may declare its own generic type parameters and bounds,
+// exactly like a class method:
+//
+//     interface Wrapper {
+//         wrap<T: Hashable>(x: T) -> string
+//     }
+//
+// REGRESSION: InterfaceMethodNode had no type_params field at all, so the
+//             parser stopped at the '<' with "expected '(' or ':' after
+//             interface member name". A generic operation could be declared on
+//             a class but never described by an interface.
+// FAIL_AT:    pre-fix -> parse error at the '<'
+// PASS_AT:    post-fix
+//             -> the signature parses, `x: T` resolves to a type parameter
+//                rather than an undefined type, and the bound is enforced at
+//                call sites.
+//
+// The negative half (a type argument violating an interface method's bound)
+// lives in tests/compile_errors/type/142_interface_generic_method_constraint.xr.
+
+interface Wrapper {
+    wrap<T: Hashable>(x: T) -> string
+    // A non-generic sibling must keep working alongside it.
+    label() -> string
+}
+
+class Tagger implements Wrapper {
+    constructor() {}
+
+    wrap<T: Hashable>(x: T) -> string { return "wrapped:" + this.label() }
+
+    label() -> string { return "tagger" }
+}
+
+// Multiple type params, mixed constrained and unconstrained.
+interface Pairer {
+    pair<K: Hashable, V>(k: K, v: V) -> string
+}
+
+class P implements Pairer {
+    constructor() {}
+
+    pair<K: Hashable, V>(k: K, v: V) -> string { return "paired" }
+}
+
+// An iterable bound declared on an interface method.
+interface Summing {
+    total<T: Iterable<int>>(xs: T) -> int
+}
+
+class Sum implements Summing {
+    constructor() {}
+
+    total<T: Iterable<int>>(xs: T) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+}
+
+@test
+fn test_interface_generic_method_explicit_type_arg() {
+    var t = Tagger()
+    assert_eq(t.wrap<int>(1), "wrapped:tagger")
+    assert_eq(t.wrap<string>("s"), "wrapped:tagger")
+}
+
+@test
+fn test_interface_generic_method_inferred_type_arg() {
+    var t = Tagger()
+    assert_eq(t.wrap(42), "wrapped:tagger")
+}
+
+@test
+fn test_interface_non_generic_sibling_still_works() {
+    var t = Tagger()
+    assert_eq(t.label(), "tagger")
+}
+
+@test
+fn test_interface_generic_method_multiple_params() {
+    var p = P()
+    assert_eq(p.pair<int, string>(1, "one"), "paired")
+    assert_eq(p.pair<string, int>("k", 2), "paired")
+}
+
+@test
+fn test_interface_iterable_bound() {
+    var s = Sum()
+    assert_eq(s.total([1, 2, 3]), 6)
+}
+
+// The declaring interface type still drives dynamic dispatch.
+@test
+fn test_dispatch_through_interface_type() {
+    var w: Wrapper = Tagger()
+    assert_eq(w.label(), "tagger")
+}
+
+print("All interface generic method tests passed!")

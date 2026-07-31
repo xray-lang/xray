@@ -32,6 +32,10 @@ typedef enum XaAllocReason {
     XA_ALLOC_REASON_RUNTIME = 1u << 3,
     XA_ALLOC_REASON_CALLEE = 1u << 4,
     XA_ALLOC_REASON_CALLBACK = 1u << 5,
+    /* An audited [native.symbol.contract] declares allocation = "may".  This is
+     * a cause of a MAY state, never an unknown reason: the contract is the
+     * evidence. */
+    XA_ALLOC_REASON_NATIVE_CONTRACT = 1u << 6,
     XA_ALLOC_REASON_UNRESOLVED_CALLEE = 1u << 16,
     XA_ALLOC_REASON_DYNAMIC_CALL = 1u << 17,
     XA_ALLOC_REASON_OPEN_DISPATCH = 1u << 18,

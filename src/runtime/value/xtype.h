@@ -912,6 +912,13 @@ XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, in
 XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
+/* Explain why `source` is not assignable to `target` when the root cause is a
+ * Record/object-shape field-set difference, possibly nested inside an invariant
+ * container. Writes a reason such as "extra field 'z'", "missing field 'y'", or
+ * "element: extra field 'z'" into `buf` and returns true. Returns false for
+ * scalar or otherwise unstructured mismatches, so callers keep their plain
+ * "not assignable" message. Only call after xr_type_assignable() has failed. */
+XR_FUNC bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n);
 // Classify a conversion between concrete numeric types.  This does not grant
 // contextual-literal or dynamic-cast semantics; the analyzer upgrades those
 // cases using the same XrConversionKind domain.

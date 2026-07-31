@@ -1,0 +1,57 @@
+// anchor: generator-in-coroutine
+// A generator body may not reach the scheduler (LANGUAGE_SPEC 3.16.2), but a
+// coroutine may freely drive one: pulling a value resumes the generator's frame
+// and returns to the same coroutine, so the driver never parks. This is the case
+// the two suspension dimensions exist to keep apart, and it must produce the same
+// values under both backends.
+
+fn counter(n: int) -> Iterator<int> {
+    for (var i = 0; i < n; i++) {
+        yield i
+    }
+}
+
+fn sumGenerator(n: int) -> int {
+    var total = 0
+    for (x in counter(n)) {
+        total = total + x
+    }
+    return total
+}
+
+fn generatorInto(sink: Atomic<int>, n: int) {
+    sink.fetchAdd(sumGenerator(n))
+}
+
+fn doubleInto(sink: Atomic<int>, v: int) {
+    sink.fetchAdd(v * 2)
+}
+
+// Driven inside a spawned coroutine.
+var t = go sumGenerator(5)
+print("await " + string(await t))
+
+// Driven inside a structured scope, alongside a sibling that does not.
+fn doubleOf(v: int) -> int {
+    return v * 2
+}
+
+const total: Atomic<int> = Atomic<int>(0)
+scope {
+    go generatorInto(total, 4)
+    go doubleInto(total, 21)
+}
+print("scope " + string(total.load()))
+
+// Driven on the main coroutine after the scope joined.
+print("main " + string(sumGenerator(3)))
+
+// A generator abandoned inside a coroutine must not leak the pull into the
+// scheduler either: the coroutine finishes normally.
+fn firstOf(n: int) -> int {
+    for (x in counter(n)) {
+        return x + 100
+    }
+    return -1
+}
+print("early " + string(await go firstOf(9)))

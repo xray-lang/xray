@@ -1,0 +1,29 @@
+// Iterating an UNBOUNDED type parameter declared by a METHOD must be rejected.
+// 023_for_in_unconstrained_type_param.xr covers the same rule for a top-level
+// function; this pins the method path, which reached the diagnostic by a
+// different route.
+//
+// REGRESSION: a method's `<T: ...>` list was parsed and discarded, so every
+// method type parameter arrived with an empty constraint list whatever the
+// source said. The for-in analyzer could not tell "declared without a bound"
+// from "bound dropped on the way here", and said so: it told the user their
+// constraints "are not tracked yet" and suggested moving the generic to a
+// top-level function or to the class. Now that a method's bounds reach its
+// symbol links, that escape hatch is gone and an unbounded T on a method gets
+// the same ordinary diagnostic a function's would.
+//
+// The positive half lives in
+// tests/regression/12_type_checking/1237_for_in_method_type_param.xr.
+
+class Summer {
+    constructor() {}
+
+    total<T>(xs: T) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+}
+
+var c = Summer()
+print(c.total([1, 2, 3]))
