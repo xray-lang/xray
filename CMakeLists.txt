@@ -2883,7 +2883,7 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
-                XRAY_TEST_CACHE_ROOT=$<TARGET_FILE_DIR:xray>/.xray-test-cache/deterministic
+                XRAY_TEST_CACHE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/.cache/xray-test/deterministic
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/deterministic_cases.txt
                 XRAY_DIFF_JOBS=${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
                 ${XRAY_TEST_BASH}

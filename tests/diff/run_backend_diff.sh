@@ -113,10 +113,28 @@ PASS=0
 FAIL=0
 SKIP=0
 
+# Ratchet baseline. Every case listed here is a known, tracked divergence; the
+# net still gates every other case. The list may only shrink: a failure outside
+# it fails the run, and a listed case that starts passing also fails the run, so
+# the fix deletes the entry instead of leaving it to mask a later regression.
+#
+# This is what let the differential net come out of the CI exclusion list. It
+# had been excluded wholesale because some cases were red, which meant the other
+# ~400 were not gated either — the most valuable correctness asset in the repo,
+# running nowhere.
+BASELINE_FILE="${XRAY_DIFF_BASELINE:-$SCRIPT_DIR/known_failures.txt}"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_backend_diff.XXXXXX")" || {
     echo "error: cannot create temp dir" >&2
     exit 1
 }
+
+# Per-case verdicts for the ratchet. run_case() executes in parallel subshells,
+# so verdicts must travel through files, never through shell variables.
+FAILED_LIST="$WORK/failed.list"
+SKIPPED_LIST="$WORK/skipped.list"
+: >"$FAILED_LIST"
+: >"$SKIPPED_LIST"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
@@ -396,6 +414,7 @@ run_case() {
     local nb=0
     for b in $enabled; do nb=$((nb + 1)); done
     if [ "$nb" -lt 2 ]; then
+        printf '%s\n' "$name" >>"$SKIPPED_LIST"
         echo "SKIP (need >=2 backends; case=${case_backends:-all} global=$BACKENDS)"
         SKIP=$((SKIP + 1))
         return 0
@@ -452,6 +471,7 @@ run_case() {
         return 0
     fi
 
+    printf '%s\n' "$name" >>"$FAILED_LIST"
     echo "FAIL ($mismatch)${anchor:+  [anchor: $anchor]}"
     for b in $enabled; do
         echo "      $b: rc=$(cat "$WORK/${base}.$b.rc")  stdout: $(head -3 "$WORK/${base}.$b.out" | tr '\n' '|')"
@@ -616,4 +636,48 @@ fi
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
-[ "$FAIL" -eq 0 ] && exit 0 || exit 1
+
+# ---------------------------------------------------------------------------
+# Ratchet.
+#
+# New-failure detection is always valid. The stale-entry check is not: a run
+# restricted to a case subset (XRAY_DIFF_CASES_FILE, or a shard) never executes
+# most baselined cases, so their absence from the failure list says nothing.
+# Checking it there would demand deletion of entries that still fail.
+# ---------------------------------------------------------------------------
+read_diff_baseline() {
+    [ -f "$BASELINE_FILE" ] || return 0
+    sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$BASELINE_FILE"
+}
+
+sort -u "$FAILED_LIST" >"$WORK/failed.sorted"
+sort -u "$SKIPPED_LIST" >"$WORK/skipped.sorted"
+read_diff_baseline | sort -u >"$WORK/baseline.sorted"
+
+ratchet_status=0
+new_failures="$(comm -23 "$WORK/failed.sorted" "$WORK/baseline.sorted")"
+if [ -n "$new_failures" ]; then
+    echo ""
+    echo "=== New differential failures (not in $(rel_path "$BASELINE_FILE")) ==="
+    printf '%s\n' "$new_failures" | sed 's/^/  /'
+    echo "A VM/AOT divergence is a correctness bug in one of the two backends."
+    echo "Fix it, or -- only with a written reason -- add it to the baseline."
+    ratchet_status=1
+fi
+
+FULL_RUN=0
+[ -z "$BASE_CASES_FILE" ] && [ "$SHARD_TOTAL" -le 1 ] && FULL_RUN=1
+if [ "$FULL_RUN" -eq 1 ]; then
+    fixed="$(comm -13 "$WORK/failed.sorted" "$WORK/baseline.sorted" |
+        comm -23 - "$WORK/skipped.sorted")"
+    if [ -n "$fixed" ]; then
+        echo ""
+        echo "=== Baselined cases now pass; delete these entries ==="
+        printf '%s\n' "$fixed" | sed 's/^/  /'
+        echo "The baseline may only shrink. Remove the lines above from $(rel_path "$BASELINE_FILE")."
+        ratchet_status=1
+    fi
+    echo "Ratchet: $(wc -l <"$WORK/failed.sorted" | tr -d ' ') failing, $(wc -l <"$WORK/baseline.sorted" | tr -d ' ') baselined."
+fi
+
+exit "$ratchet_status"

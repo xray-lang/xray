@@ -1,0 +1,57 @@
+# Backend-differential ratchet baseline
+#
+# Every line is a VM/AOT divergence that fails today and is tracked, not
+# forgotten. The net still gates all 471 other cases.
+#
+# Rules
+#   - The list may only shrink. run_backend_diff_fast.py fails the run when a
+#     case outside this list fails AND when a listed case starts passing, so a
+#     fix must delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green. A VM/AOT divergence
+#     means one of the two backends is wrong about the language.
+#
+# Established 2026-07-31, when the differential net was moved out of the CI
+# exclusion list. It had been excluded wholesale because a minority of cases
+# were red — which left the other 471 ungated as well. The net compares the same
+# .xr through both backends byte for byte and is the only thing that can catch
+# "VM and AOT disagree"; running none of it was strictly worse than running it
+# with a written list of exceptions.
+#
+# One case path per line. Comments and blank lines ignored.
+
+# --- Group 1: xr_aot_scope_exit arity ---------------------------------------
+# Generated C calls xr_aot_scope_exit(ctx, mode) but the helper declares three
+# parameters (ctx, scope_mode, out_value) — 14 call sites, so the AOT build
+# fails outright (rc=200) while the VM passes. The signature and the emitter
+# are out of step; whichever is authoritative, the other must follow.
+tests/diff/cases/semantics/coro/scope_child_failure_isolation.xr
+tests/diff/cases/semantics/coro/scope_outcomes.xr
+tests/diff/cases/semantics/generator/generator_in_coroutine.xr
+tests/diff/cases/semantics/stdlib/sys_process_direct.xr
+tests/regression/11_coroutine/1110_scope.xr
+tests/regression/11_coroutine/1120_scope_basic.xr
+tests/regression/11_coroutine/1157_select_after_scope_cancel.xr
+
+# --- Group 2: native struct members absent from generated C ------------------
+# The emitted C declares these stdlib types without the fields the program
+# reads: DateTime.year/month/timestamp, CookieJar.count, Process.id. The VM
+# resolves them through its own object model, so only AOT breaks — exactly the
+# class of divergence this net exists to surface.
+tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
+tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
+tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
+
+# --- Group 3: union overlay literals -----------------------------------------
+# "literal for type 'U32Bytes' is missing field 'b'" — a union literal is
+# rejected for not initialising every member, but a union's whole purpose is
+# that exactly one member is live. Both backends fail here (vm=1, aot=200), so
+# this is a front-end rule that contradicts the feature, not a backend gap.
+tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
+tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
+
+# --- Group 4: AOT crash ------------------------------------------------------
+# The AOT binary dies on signal 5 while the VM completes normally. A crash in
+# generated code is the most severe entry in this file; it should be the first
+# one removed.
+tests/diff/cases/semantics/generator/nested_generator.xr
