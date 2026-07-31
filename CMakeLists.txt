@@ -2780,6 +2780,23 @@ if(BUILD_TESTS)
         TIMEOUT ${UNCAUGHT_ERROR_TESTS_TIMEOUT}
     )
 
+    # Panic channel counterpart: pins the shared "[Uncaught Panic] E<code>: ..."
+    # report and its two parity policies (opt-in XRAY_BACKTRACE trace, TTY-gated
+    # colour). Same blind spot as above — the stderr-off differential net cannot
+    # catch a wording regression that hits both backends.
+    add_test(
+        NAME panic_report_diagnostics
+        COMMAND ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_panic_report_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR PANIC_REPORT_TESTS_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(panic_report_diagnostics PROPERTIES
+        LABELS "cli;vm;aot;regression"
+        TIMEOUT ${PANIC_REPORT_TESTS_TIMEOUT}
+    )
+
     # Borrow/ownership instrumentation: keep a machine-parseable Xi
     # retain/release budget available for RC-overhead regression work.
     add_test(
