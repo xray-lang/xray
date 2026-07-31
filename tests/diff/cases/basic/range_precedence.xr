@@ -1,0 +1,31 @@
+// anchor: basic-range-precedence
+// Range endpoints are additive expressions, so arithmetic needs no parentheses
+// and both backends must agree on the resulting bounds.
+var n = 3
+var a: Array<int> = [10, 20, 30, 40]
+
+print((0..n + 1).toString())
+print((0..n - 1).toString())
+print((0..n * 2).toString())
+print((1..=n + 1).toString())
+print((n - 1..n * 3).toString())
+print((0..len(a) - 1).toString())
+
+// The parenthesized spelling must stay byte-identical to the bare one.
+print((0..(n + 1)).toString())
+
+var sum = 0
+for (i in 0..n + 1) {
+    sum = sum + i
+}
+print(sum)
+
+var sum2 = 0
+for (i in 0..len(a) - 1) {
+    sum2 = sum2 + a[i]
+}
+print(sum2)
+
+// Range binds looser than `+ -`, tighter than comparison: `==` sees whole ranges.
+print(len(0..n + 1) == 4)
+print(len(0..n) == 3)

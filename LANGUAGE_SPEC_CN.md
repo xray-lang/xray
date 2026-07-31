@@ -1289,16 +1289,16 @@ main()
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
-| 12 | `<<` `>>` | 左 | 移位 |
-| 11 | `<` `<=` `>` `>=` | 左 | 关系比较 |
-| 10 | `==` `!=` | 左 | 相等比较 |
-| 9 | `&` | 左 | 位与 |
-| 8 | `^` | 左 | 位异或 |
-| 7 | `\|` | 左 | 位或（亦用于 union 类型） |
-| 6 | `&&` | 左 | 逻辑与（短路） |
-| 5 | `\|\|` | 左 | 逻辑或（短路） |
-| 4 | `??` | 左 | 空值合并 |
-| 3 | `..` `..=` | 左 | 范围 |
+| 12 | `..` `..=` | **非结合** | 范围；两端都是加减级表达式，故 `0..n+1` 即 `0..(n+1)` |
+| 11 | `<<` `>>` | 左 | 移位 |
+| 10 | `<` `<=` `>` `>=` | 左 | 关系比较 |
+| 9 | `==` `!=` | 左 | 相等比较 |
+| 8 | `&` | 左 | 位与 |
+| 7 | `^` | 左 | 位异或 |
+| 6 | `\|` | 左 | 位或（亦用于 union 类型） |
+| 5 | `&&` | 左 | 逻辑与（短路） |
+| 4 | `\|\|` | 左 | 逻辑或（短路） |
+| 3 | `??` | 左 | 空值合并 |
 | 2 | `? :` | 右 | 三元 |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
@@ -1554,7 +1554,7 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 #### 范围 `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 ```
 
 ```xray
@@ -1569,7 +1569,10 @@ for (i in 0..=n) { print(i) }
 - 类型 `Range`（仅 int 范围）。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
 - `a..=b` 是闭区间 `[a, b]`：两端都包含。
+- **优先级**：两端都是加减级表达式（§3.1 第 12 级），因此 `0..n+1` 是 `0..(n+1)`、`0..len(a)-1` 是 `0..(len(a)-1)`；而 `0..n == m` 是 `(0..n) == m`。
+- **非结合**：`a..b..c` 是编译错误，不做任何隐式分组。
 - `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
+- `match` 中的范围**模式**不共用本节的表达式产生式：模式端点是后缀级表达式（见附录 A.3 `RangePattern`），需要运算时必须加括号，例如 `1..(n+1) ->`。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
 
 #### 展开 `...`
@@ -6039,10 +6042,12 @@ BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
-ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+ShiftExpr   ::= RangeExpr (('<<' | '>>') RangeExpr)*
+RangeExpr   ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// parser 中 range 与乘除同一 precedence；安全转换写为 `x as T?`，T? 是可空类型。
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range 两端都是加减级表达式，故 `0..n+1` 即 `0..(n+1)`；`?` 表示非结合——`a..b..c` 是错误。
+// 安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -6112,7 +6117,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression ('..' | '..=') Expression
+RangePattern    ::= PostfixExpr ('..' | '..=') PostfixExpr   // 端点不是完整表达式：运算需加括号
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?

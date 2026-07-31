@@ -102,3 +102,65 @@ fn test_range_expression_end() {
     assert_eq(sum, 15)  // 0+1+2+3+4+5
 }
 
+// Range endpoints are additive expressions, so the parentheses above are
+// optional. These are the loop bounds people actually write; before range got
+// its own precedence level they parsed as `(0..n) * 2` and failed.
+
+@test
+fn test_range_end_takes_arithmetic_without_parens() {
+    var n = 3
+    var sum = 0
+    for (i in 0..n * 2) {
+        sum = sum + i
+    }
+    assert_eq(sum, 15)
+
+    var sum2 = 0
+    for (i in 0..n + 1) {
+        sum2 = sum2 + i
+    }
+    assert_eq(sum2, 6)  // 0+1+2+3
+
+    var sum3 = 0
+    for (i in 0..n - 1) {
+        sum3 = sum3 + i
+    }
+    assert_eq(sum3, 1)  // 0+1
+
+    var sum4 = 0
+    for (i in 1..=n + 1) {
+        sum4 = sum4 + i
+    }
+    assert_eq(sum4, 10)  // 1+2+3+4
+}
+
+@test
+fn test_range_start_takes_arithmetic_without_parens() {
+    var n = 2
+    var sum = 0
+    for (i in n - 1..n * 3) {
+        sum = sum + i
+    }
+    assert_eq(sum, 15)  // 1+2+3+4+5
+}
+
+@test
+fn test_range_endpoints_use_len_and_calls() {
+    var a: Array<int> = [10, 20, 30, 40]
+    var sum = 0
+    for (i in 0..len(a) - 1) {
+        sum = sum + a[i]
+    }
+    assert_eq(sum, 60)  // a[0]+a[1]+a[2]
+}
+
+// Range binds looser than `+ -` but tighter than shifts, comparisons and the
+// logical operators, so a whole range is what those operators see.
+
+@test
+fn test_range_binds_tighter_than_comparison() {
+    var n = 2
+    assert(len(0..n + 1) == 3, "range is the left operand of ==, not `n + 1 == 3`")
+    assert(len(0..n) == 2 && true, "&& sees the comparison, not the range end")
+}
+

@@ -41,6 +41,7 @@ typedef enum {
     PREC_COMPARISON,        // < > <= >=
     PREC_RANGE,             // .. ..= (endpoints are arithmetic; range is a whole value)
     PREC_SHIFT,             // << >>
+    PREC_RANGE,             // .. ..= (non-associative; binds looser than + -)
     PREC_TERM,              // + -
     PREC_FACTOR,            // * / %
     PREC_UNARY,             // ! - ~

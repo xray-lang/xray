@@ -1,0 +1,7 @@
+// `..` / `..=` are non-associative: a chained range has no meaning, so it is
+// rejected instead of being silently grouped one way or the other.
+fn main() {
+    for (i in 1..2..3) {
+        print(i)
+    }
+}

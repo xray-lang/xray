@@ -1294,16 +1294,16 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
-| 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 12 | `..` `..=` | **non-assoc** | range; both endpoints are additive expressions, so `0..n+1` means `0..(n+1)` |
+| 11 | `<<` `>>` | left | shifts |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -1559,7 +1559,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 ```
 
 ```xray
@@ -1574,7 +1574,10 @@ for (i in 0..=n) { print(i) }
 - Type: `Range` (int ranges only).
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
+- **Precedence**: both endpoints are additive expressions (§3.1 level 12), so `0..n+1` means `0..(n+1)` and `0..len(a)-1` means `0..(len(a)-1)`, while `0..n == m` means `(0..n) == m`.
+- **Non-associative**: `a..b..c` is a compile error; nothing is grouped implicitly.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
+- Range **patterns** in `match` do not share this production: pattern endpoints are postfix-level expressions (appendix A.3, `RangePattern`), so arithmetic there must be parenthesized — `1..(n+1) ->`.
 - Primary uses: `for-in` loops, range checks in pattern matching.
 
 #### Spread `...`
@@ -6043,10 +6046,12 @@ BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
-ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+ShiftExpr   ::= RangeExpr (('<<' | '>>') RangeExpr)*
+RangeExpr   ::= AdditiveExpr (('..' | '..=') AdditiveExpr)?
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// Both range endpoints are additive expressions, so `0..n+1` is `0..(n+1)`; the `?` marks it
+// non-associative — `a..b..c` is an error. A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -6116,7 +6121,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression ('..' | '..=') Expression
+RangePattern    ::= PostfixExpr ('..' | '..=') PostfixExpr   // endpoints are not full expressions: parenthesize arithmetic
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
