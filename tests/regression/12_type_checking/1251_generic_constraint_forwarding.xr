@@ -1,4 +1,4 @@
-// 1237_generic_constraint_forwarding.xr
+// 1251_generic_constraint_forwarding.xr
 // Forwarding a constrained type parameter into another generic.
 //
 // REGRESSION: `fn outer<T: C>(x: T) { inner(x) }` where `inner<U: C>` was
@@ -18,7 +18,7 @@
 //
 // The entailment must stay conservative — forwarding to a constraint the
 // parameter does not carry is still an error. See
-// tests/compile_errors/type/139_generic_constraint_forwarding_unsatisfied.xr.
+// tests/compile_errors/type/143_generic_constraint_forwarding_unsatisfied.xr.
 
 // ===== Implicit type argument (inferred from the argument) =====
 fn innerC<U: Comparable>(y: U) -> U {
@@ -64,19 +64,20 @@ fn test_forward_hashable() {
     assert_eq(outerH(5), 5)
 }
 
-fn innerIt<U: Iterable<int>>(y: U) -> U {
-    return y
+// Returns a derived value rather than the parameter itself: an Array argument
+// is an owned value, and returning a read parameter is a separate ownership
+// error that would mask what this case is meant to check.
+fn innerIt<U: Iterable<int>>(y: U) -> int {
+    return len(y)
 }
 
-fn outerIt<T: Iterable<int>>(x: T) -> T {
+fn outerIt<T: Iterable<int>>(x: T) -> int {
     return innerIt(x)
 }
 
 @test
 fn test_forward_iterable() {
-    var forwarded = outerIt([1, 2, 3])
-    assert_eq(len(forwarded), 3)
-    assert_eq(forwarded[0], 1)
+    assert_eq(outerIt([1, 2, 3]), 3)
 }
 
 // ===== Wider source constraint satisfies a narrower target =====
@@ -185,6 +186,40 @@ class Holder<T: Comparable> {
 fn test_forward_class_type_param() {
     assert_eq(Holder<int>(11).forwarded(), 11)
     assert_eq(Holder<string>("cls").forwarded(), "cls")
+}
+
+// ===== Forwarding into a method's own generic constraint =====
+// A method's `<U: C>` reaches the same shared call-site check as a plain fn,
+// so entailment has to hold there too.
+class Forwarder {
+    constructor() {}
+
+    pick<U: Comparable>(y: U) -> U {
+        return y
+    }
+
+    static pickStatic<U: Comparable>(y: U) -> U {
+        return y
+    }
+}
+
+fn outerToMethod<T: Comparable>(x: T) -> T {
+    return Forwarder().pick(x)
+}
+
+fn outerToStaticMethod<T: Comparable>(x: T) -> T {
+    return Forwarder.pickStatic(x)
+}
+
+@test
+fn test_forward_into_instance_method() {
+    assert_eq(outerToMethod(15), 15)
+    assert_eq(outerToMethod("m"), "m")
+}
+
+@test
+fn test_forward_into_static_method() {
+    assert_eq(outerToStaticMethod(16), 16)
 }
 
 // ===== Multi-hop forwarding: T -> U -> V =====

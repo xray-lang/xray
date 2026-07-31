@@ -2235,7 +2235,7 @@ static bool prepare_span_value_writable_proven(const XaotBundle *bundle, const X
         case XI_CALL_METHOD:
             return origin->aux && strcmp((const char *) origin->aux, "asMutBytes") == 0 &&
                    origin->nargs >= 1 && origin->args[0] && origin->args[0]->type &&
-                   xr_type_is_named_class(origin->args[0]->type, "Buffer") &&
+                   xr_type_is_builtin_named_class(origin->args[0]->type, "Buffer") &&
                    !xr_type_is_const(origin->args[0]->type);
         case XI_PHI: {
             bool saw_arg = false;
@@ -2278,7 +2278,7 @@ static bool prepare_span_value_readonly_proven(const XaotBundle *bundle, const X
         case XI_CALL_METHOD_DIRECT:
             return origin->aux && strcmp((const char *) origin->aux, "asBytes") == 0 &&
                    origin->nargs >= 1 && origin->args[0] && origin->args[0]->type &&
-                   xr_type_is_named_class(origin->args[0]->type, "Buffer");
+                   xr_type_is_builtin_named_class(origin->args[0]->type, "Buffer");
         case XI_PHI: {
             bool saw_arg = false;
             for (uint16_t i = 0; i < origin->nargs; i++) {

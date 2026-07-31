@@ -214,12 +214,10 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                                    value->nargs == 1;
     bool lowered_parallel_arity = desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
                                   value->nargs >= (expected == XI_PAR_FOR ? 4u : 5u);
-    bool lowered_codegen_arity =
-        desc->family == XA_INTRINSIC_FAMILY_CODEGEN && value->nargs >= desc->min_arity &&
-        value->nargs <= desc->max_arity;
+    bool lowered_codegen_arity = desc->family == XA_INTRINSIC_FAMILY_CODEGEN &&
+                                 value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
     if (!backend_static_arity && !backend_encoded_shuffle && !lowered_parallel_arity &&
-        !lowered_codegen_arity &&
-        (value->nargs < min_nargs || value->nargs > max_nargs))
+        !lowered_codegen_arity && (value->nargs < min_nargs || value->nargs > max_nargs))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
 
@@ -275,7 +273,7 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                              value->xa_intrinsic_id);
     } else if (desc->family == XA_INTRINSIC_FAMILY_ATOMIC) {
         if (!value->args || !value->args[0] || !value->args[0]->type ||
-            !xr_type_is_named_class(value->args[0]->type, "Atomic"))
+            !xr_type_is_builtin_named_class(value->args[0]->type, "Atomic"))
             return set_error(error, error_size,
                              "canonical atomic intrinsic id %u lacks Atomic<T> receiver",
                              value->xa_intrinsic_id);

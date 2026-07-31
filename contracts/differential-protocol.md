@@ -21,6 +21,6 @@ Status: re-frozen by task 237.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.sh aafc77b058ff221fd9795b92547ad1120119049f093b7bbf01724e2417a23423
-anchor-sha256: tests/diff/run_backend_diff_fast.py 21c2e36bbd3833d483f82ce3b381da0244458c108487de41cf9c2a944ef19937
+anchor-sha256: tests/diff/run_backend_diff.sh 2065d507708a4ab8d3f967b78abd49cd387327fac44f7b40131dc4c5675d5dfb
+anchor-sha256: tests/diff/run_backend_diff_fast.py 3c8e6af669827f3412a199fe7bc481a328179f0b88d103b26511eec937e8bc25
 anchor-sha256: tests/aot/TOMBSTONES.tsv 01db981e6f0742672435ae3871e0f072f6a73f6f17d1ba3d09fdfeee0983a2a7

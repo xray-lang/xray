@@ -1,11 +1,30 @@
 version = 1
 
+# Only requirements backed by a real inference pass belong in a positive
+# contract.  no_block / no_thread_block / no_panic / no_abort have no inference
+# source yet, so they fail closed; see negative-uninferred.toml.
 [[function]]
 symbol = "pure"
 scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend", "no_block", "no_panic", "no_abort"]
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "privateWide"
 scope = "semantic"
 requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+# Suspension is two dimensions.  A generator stops for its driver, not for the
+# scheduler: it is not a cancellation point and cannot migrate OS threads, so
+# `no_reschedule` holds even though `no_suspend` does not (negative-generator-
+# suspend.toml pins the other half).
+[[function]]
+symbol = "counter"
+scope = "semantic"
+requires = ["no_reschedule"]
+
+# Driving a generator leaves the driver's own frame untouched, so neither
+# dimension propagates here.
+[[function]]
+symbol = "driveCounter"
+scope = "semantic"
+requires = ["no_suspend", "no_reschedule"]

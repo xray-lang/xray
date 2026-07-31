@@ -56,6 +56,18 @@
 typedef void (*XrtDestructor)(void *obj);
 typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
+/* Compiled hash() / operator == of a class that implements Hashable by hand,
+ * in their typed body form — the same entry points and signatures the existing
+ * specialized key-access plan targets (xrt_user_hash_fn_t / xrt_user_eq_fn_t).
+ * The receiver and argument are the native instance pointer; the closure is
+ * always NULL for a plain method call. Stored on the type table so the runtime
+ * keys a Map/Set by value for any instance, whatever creation form the map came
+ * from (no static key-access plan required). NULL when the class declares
+ * neither. */
+struct xrt_closure;
+typedef int64_t (*XrtUserHashFn)(struct xrt_closure *closure, void *self);
+typedef uint8_t (*XrtUserEqFn)(struct xrt_closure *closure, void *a, void *b);
+
 typedef struct {
     uint32_t interface_id;
     XrtMethodFn *methods;
@@ -78,6 +90,8 @@ typedef struct {
     uint16_t itable_size;
     XrtDestructor destructor;  // NULL for classes without custom dtor
     uint32_t instance_size;    // byte size of instance fields
+    XrtUserHashFn hash_fn;     // compiled hash(); NULL unless user-Hashable
+    XrtUserEqFn eq_fn;         // compiled operator ==; NULL unless user-Hashable
 } XrtTypeInfo;
 
 typedef struct {
@@ -165,6 +179,8 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->itable_size = 0;
     ti->destructor = dtor;
     ti->instance_size = inst_size;
+    ti->hash_fn = NULL;
+    ti->eq_fn = NULL;
     ni->name = NULL;
     ni->display_name = NULL;
     ni->mono_type_arg_names = NULL;
@@ -182,6 +198,32 @@ static inline void xrt_type_set_itable(uint16_t type_id, const XrtInterfaceMetho
     XrtTypeInfo *ti = &xrt_type_table[type_id];
     ti->itable = itable;
     ti->itable_size = itable ? itable_size : 0;
+}
+
+/* Record a class's own hash() / operator == so the runtime keys Map/Set by
+ * value for its instances. Emitted at module init for user-Hashable classes. */
+static inline void xrt_type_set_user_hash_eq(uint16_t type_id, XrtUserHashFn hash_fn,
+                                             XrtUserEqFn eq_fn) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    xrt_type_table[type_id].hash_fn = hash_fn;
+    xrt_type_table[type_id].eq_fn = eq_fn;
+}
+
+/* The compiled hash() / operator == for an instance value, or NULL when its
+ * class declares none. NULL for non-instances. */
+static inline XrtUserHashFn xrt_instance_user_hash_fn(XrValue v) {
+    if (v.tag != XR_TAG_PTR || v.heap_type != XR_TINSTANCE || !v.ptr)
+        return NULL;
+    uint16_t tid = XRT_ARC_HDR(v.ptr)->type;
+    return (tid && tid < xrt_type_count) ? xrt_type_table[tid].hash_fn : NULL;
+}
+
+static inline XrtUserEqFn xrt_instance_user_eq_fn(XrValue v) {
+    if (v.tag != XR_TAG_PTR || v.heap_type != XR_TINSTANCE || !v.ptr)
+        return NULL;
+    uint16_t tid = XRT_ARC_HDR(v.ptr)->type;
+    return (tid && tid < xrt_type_count) ? xrt_type_table[tid].eq_fn : NULL;
 }
 
 static inline void xrt_type_set_name(uint16_t type_id, const char *name, const char *display) {

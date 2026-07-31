@@ -1,0 +1,9 @@
+# A requirement whose semantic effect bits no pass computes must fail closed
+# rather than be granted vacuously, even for a function that plainly satisfies
+# nothing of the sort.
+version = 1
+
+[[function]]
+symbol = "pure"
+scope = "semantic"
+requires = ["no_block"]

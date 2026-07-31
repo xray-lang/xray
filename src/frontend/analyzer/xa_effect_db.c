@@ -1093,7 +1093,7 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
     b.cap = 0;
     b.ok = true;
 
-    xa_json_raw(&b, "{\"schema\":\"xray.effect-summary.v3\"");
+    xa_json_raw(&b, "{\"schema\":\"xray.effect-summary.v4\"");
     if (symbol_qualified_name) {
         xa_json_raw(&b, ",\"symbol\":");
         xa_json_string(&b, symbol_qualified_name);
@@ -1109,7 +1109,7 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
         const char *name;
     } semantic_effect_names[] = {
         {XA_SEM_EFFECT_ALLOC, "semanticAlloc"},
-        {XA_SEM_EFFECT_SUSPEND, "suspend"},
+        {XA_SEM_EFFECT_SCHED_SUSPEND, "schedSuspend"},
         {XA_SEM_EFFECT_MAY_BLOCK, "mayBlock"},
         {XA_SEM_EFFECT_THREAD_BLOCK, "threadBlock"},
         {XA_SEM_EFFECT_PANIC, "panic"},
@@ -1117,6 +1117,7 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
         {XA_SEM_EFFECT_IO, "io"},
         {XA_SEM_EFFECT_FOREIGN, "foreign"},
         {XA_SEM_EFFECT_SYNC, "sync"},
+        {XA_SEM_EFFECT_GEN_SUSPEND, "generatorSuspend"},
     };
     bool first_semantic = true;
     for (size_t i = 0; i < sizeof(semantic_effect_names) / sizeof(semantic_effect_names[0]); i++) {

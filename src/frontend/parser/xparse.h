@@ -97,6 +97,28 @@ struct Parser {
     // XR_PARSER_MAX_DEPTH reports a clean error and stops recursion instead of
     // crashing with SIGSEGV.
     int recursion_depth;
+
+    // Open-bracket bitstack driven purely by xr_parser_advance(): bit i records
+    // what the i-th still-open bracket was — 1 for `(` / `[` (a *group*, where
+    // no statement can begin), 0 for `{` (a brace scope, where statements can).
+    // xr_parser_in_group() reads the top bit and is the single gate for
+    // suppressing line-break statement termination (L-04, see xparse.c).
+    //
+    // Maintained by the token stream itself so that no `(`-consuming call site
+    // has to remember to bump a counter, and so that the parser-state
+    // checkpoint/rollback used by generic-call and struct-literal lookahead
+    // restores it for free along with the rest of the struct.
+    //
+    // Nesting past XR_PARSER_MAX_BRACKET_BITS stops being tracked and reads as
+    // "not in a group", i.e. the conservative statement-terminating behaviour.
+    uint64_t bracket_bits;
+    int bracket_depth;
+
+    // True for units whose contract is "evaluate and report" — the REPL prints
+    // the value of a trailing bare expression, so an expression statement there
+    // is not a discarded result and E0208 must not fire. False for scripts and
+    // modules, where a bare expression really is dead code.
+    bool expr_value_observed;
 };
 
 // Maximum nesting depth for expressions / types / match patterns. Chosen to
@@ -104,11 +126,63 @@ struct Parser {
 // 8MB stack (each recursion level uses a few hundred bytes; 1000 levels < 1MB).
 #define XR_PARSER_MAX_DEPTH 1000
 
+// Number of open brackets tracked by Parser::bracket_bits. Beyond this the
+// tracker degrades to "statement level", which is the safe direction: line
+// breaks terminate statements rather than silently gluing lines together.
+#define XR_PARSER_MAX_BRACKET_BITS 64
+
+/* ========== Statement Boundaries (L-04) ==========
+ *
+ * Xray terminates statements at line breaks. `xr_token_can_end_expr` is the
+ * language-level predicate that decides whether a token may be the last token
+ * of an expression; together with "the next line starts with a token that has a
+ * prefix role" it defines where a line break ends a statement. The full rule
+ * and its rationale live above xr_token_can_end_expr() in xparse.c.
+ *
+ * Exposed because the rule is part of the language surface, not a parser
+ * detail: tests/unit/frontend/test_parser_asi.c cross-checks it against the
+ * Pratt rules table so a newly added dual-role token cannot silently escape it.
+ */
+XR_FUNC bool xr_token_can_end_expr(XrTokenType type);
+
+// True when the innermost still-open bracket is `(` or `[`. Inside such a group
+// no statement can begin, so line breaks never terminate anything there.
+XR_FUNC bool xr_parser_in_group(const Parser *parser);
+
+/* ========== Speculative Lookahead ==========
+ *
+ * Everything the token stream owns, as one value. Speculative lookahead must
+ * save and restore it through these two calls rather than copying individual
+ * fields: the bracket bitstack advances with the stream, and a site that
+ * restored only `scanner`/`current`/`previous` would silently leave it wrong —
+ * which is how a `(` scanned during lookahead used to leak into the L-04
+ * statement-boundary decision.
+ *
+ * Error state (had_error / panic_mode / error_count) is deliberately NOT part
+ * of this: each site decides for itself whether a speculative parse's
+ * diagnostics should survive.
+ */
+typedef struct XrParserStreamState {
+    Scanner scanner;
+    Token current;
+    Token previous;
+    uint64_t bracket_bits;
+    int bracket_depth;
+} XrParserStreamState;
+
+XR_FUNC XrParserStreamState xr_parser_stream_save(const Parser *parser);
+XR_FUNC void xr_parser_stream_restore(Parser *parser, const XrParserStreamState *saved);
+
 /* ========== Public Entry Points ========== */
 
 // Parse a complete program. Returns AST_PROGRAM node owning its arena;
 // release with xr_program_destroy(). Returns NULL on parse error.
 XR_FUNC AstNode *xr_parse(XrCompilerSession *session, const char *source);
+
+// Parse one REPL input unit. Same as xr_parse except that a bare expression
+// statement is allowed: the REPL prints the value of a trailing expression, so
+// the result is observed rather than discarded (E0208 does not apply).
+XR_FUNC AstNode *xr_parse_repl_unit(XrCompilerSession *session, const char *source);
 
 // Same as xr_parse but tags diagnostics with the given file path.
 XR_FUNC AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,

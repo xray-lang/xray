@@ -591,10 +591,31 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
  * constructors copy temporary child arrays; no analyzer-owned heap graph
  * escapes. Returns NULL for shapes we do not synthesize; the caller then skips
  * the writeback and keeps prior behavior.
+ *
+ * The rule for adding a shape is round-trip fidelity: synthesize only when
+ * resolving the result reproduces the type it came from. Containers
+ * (Array/Slice/Set/Map/Json) and tuples qualify, and so does a nullable carrier
+ * through XR_TREF_OPTIONAL. Deliberately excluded, because their tref form
+ * cannot carry everything XrType holds and the clone would be typed against a
+ * different type than the call site inferred:
+ *   - function types (throw effect, parameter modes, view-return provenance)
+ *   - unions (resolution normalizes and sorts members)
+ *   - records and field-shaped Json (per-field readonly, sealed-ness)
+ *   - const carriers (xr_type_make_const is not a syntax-level wrapper here)
+ * Those still reach the generic origin erased, which stays a correct callable
+ * body — see xaot_callable_func_has_executable_body_plan.
  */
 static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrType *t) {
     if (!session || !t)
         return NULL;
+    /* A nullable carrier is the same shape one optional level down. Handled
+     * before the kind switch so every synthesizable kind gets it uniformly. */
+    if (t->is_nullable && !t->is_const) {
+        XrType bare = *t;
+        bare.is_nullable = false;
+        XrTypeRef *inner = xa_synth_tref_from_type(session, &bare);
+        return inner ? xr_tref_optional(session, inner) : NULL;
+    }
     switch (t->kind) {
         case XR_KIND_INT:
             return t->scalar_rep == XR_NATIVE_I64 ? xr_tref_int(session)
@@ -610,6 +631,60 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
             return xr_tref_bool(session);
         case XR_KIND_RUNE:
             return xr_tref_char(session);
+        case XR_KIND_ARRAY:
+        case XR_KIND_SLICE:
+        case XR_KIND_SET: {
+            if (t->is_const)
+                return NULL;
+            XrTypeRef *elem = xa_synth_tref_from_type(session, t->container.element_type);
+            if (!elem)
+                return NULL;
+            const char *head = t->kind == XR_KIND_ARRAY   ? "Array"
+                               : t->kind == XR_KIND_SLICE ? TYPE_NAME_SLICE
+                               : t->is_weak               ? "WeakSet"
+                                                          : "Set";
+            return xr_tref_generic(session, head, &elem, 1);
+        }
+        case XR_KIND_MAP: {
+            if (t->is_const)
+                return NULL;
+            XrTypeRef *kv[2];
+            kv[0] = xa_synth_tref_from_type(session, t->map.key_type);
+            kv[1] = xa_synth_tref_from_type(session, t->map.value_type);
+            if (!kv[0] || !kv[1])
+                return NULL;
+            return xr_tref_generic(session, t->is_weak ? "WeakMap" : "Map", kv, 2);
+        }
+        case XR_KIND_TUPLE: {
+            if (t->is_const)
+                return NULL;
+            int n = t->tuple.element_count;
+            if (n < 0 || n > 255 || (n > 0 && !t->tuple.element_types))
+                return NULL;
+            XrTypeRef *stack_elems[8] = {0};
+            XrTypeRef **elems =
+                n <= 8 ? stack_elems : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) n);
+            if (!elems)
+                return NULL;
+            bool complete = true;
+            for (int i = 0; i < n; i++) {
+                elems[i] = xa_synth_tref_from_type(session, t->tuple.element_types[i]);
+                if (!elems[i]) {
+                    complete = false;
+                    break;
+                }
+            }
+            XrTypeRef *result = complete ? xr_tref_tuple(session, elems, n) : NULL;
+            if (elems != stack_elems)
+                xr_free(elems);
+            return result;
+        }
+        case XR_KIND_JSON:
+            /* Only plain `Json`: a field-shaped Json has no NAMED spelling that
+             * resolves back to the same shape. */
+            if (t->is_const || t->object.field_count != 0)
+                return NULL;
+            return xr_tref_named(session, "Json");
         case XR_KIND_TYPE_PARAM:
             return t->type_param.name ? xr_tref_type_param(session, t->type_param.name) : NULL;
         case XR_KIND_ENUM:
@@ -1282,9 +1357,13 @@ static AstNode *xa_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     return NULL;
 }
 
-static XaSymbol *xa_thread_spawn_symbol_from_variable_node(XaInferContext *ctx, AstNode *node) {
+XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || node->type != AST_VARIABLE)
         return NULL;
+    /* The id recorded when the reference was resolved is the only scope-
+     * independent answer.  Effect scans walk a body long after its scope was
+     * popped, so a name lookup from the current scope would silently skip the
+     * shadowing declaration and resolve to an outer symbol of the same name. */
     uint32_t symbol_id = node->as.variable.symbol_id;
     if (symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
@@ -1335,16 +1414,6 @@ static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNo
     return member_sym;
 }
 
-static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "yield") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    const char *module_name = ma->object->as.variable.name;
-    return module_name && strcmp(module_name, "Coro") == 0;
-}
 static bool xa_thread_spawn_path_is_sync_module(const char *path) {
     return path && (strstr(path, "stdlib/sync/sync.xr") || strstr(path, "stdlib\\sync\\sync.xr") ||
                     strstr(path, "<embedded stdlib>/sync/sync.xr"));
@@ -1612,7 +1681,7 @@ xa_thread_spawn_function_value_expr_status(XaInferContext *ctx, AstNode *expr,
     }
 
     if (expr->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, expr);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, expr);
         return xa_thread_spawn_function_value_symbol_status(ctx, sym, call_stack, call_depth);
     }
 
@@ -1641,7 +1710,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
         *out_feature = NULL;
     if (!ctx || !call)
         return false;
-    if (xa_thread_spawn_call_is_coro_yield(call)) {
+    if (xa_call_is_builtin_module_member(ctx, call, "Coro", "yield")) {
         if (out_feature)
             *out_feature = "Coro.yield()";
         return true;
@@ -1656,7 +1725,7 @@ static bool xa_thread_spawn_inline_call_may_suspend(XaInferContext *ctx, CallExp
     }
 
     if (callee && callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_thread_spawn_symbol_from_variable_node(ctx, callee);
+        XaSymbol *sym = xa_resolve_variable_symbol(ctx, callee);
         if (sym && sym->kind == XA_SYM_FUNCTION) {
             if (xa_thread_spawn_symbol_may_suspend(ctx, sym, call_stack, call_depth)) {
                 if (out_feature)
@@ -2406,20 +2475,25 @@ static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *obje
     return links ? links->module_name : NULL;
 }
 
-static bool xa_runtime_module_call_matches(XaInferContext *ctx, CallExprNode *call,
-                                           const char *module_name, const char *member_name) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
+                                      const char *module_name, const char *member_name) {
+    if (!ctx || !ctx->analyzer || !call || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS || !module_name || !member_name)
         return false;
-    MemberAccessNode *member = &call->callee->as.member_access;
-    return member->name && strcmp(member->name, member_name) == 0 &&
-           xa_call_object_is_module(ctx, member->object, module_name);
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || strcmp(member->name, member_name) != 0 || !member->object ||
+        member->object->type != AST_VARIABLE || !member->object->as.variable.name)
+        return false;
+    /* Resolved symbol, not spelling: a shadowing declaration resolves to itself. */
+    return xa_symbol_is_builtin_module(
+        ctx->analyzer, xa_resolve_variable_symbol(ctx, member->object), module_name);
 }
 
 static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *node,
                                                CallExprNode *call, bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "Coro", "Local"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "Coro", "Local"))
         return NULL;
     if (handled)
         *handled = true;
@@ -2454,7 +2528,7 @@ static XrType *xa_visit_coro_pool_submit(XaInferContext *ctx, AstNode *node, Cal
                                          bool *handled) {
     if (handled)
         *handled = false;
-    if (!xa_runtime_module_call_matches(ctx, call, "CoroPool", "submit"))
+    if (!xa_call_is_builtin_module_member(ctx, call, "CoroPool", "submit"))
         return NULL;
     if (handled)
         *handled = true;
@@ -3165,7 +3239,7 @@ static XrType *xa_mem_assume_initialized_return_type(XaInferContext *ctx, AstNod
                            ? xa_lookup_visible_symbol(ctx, source->as.variable.name)
                            : NULL;
     XrType *buffer_type = xa_visit_infer_expr(ctx, call->arguments[0]);
-    if (!buffer || !buffer_type || !xr_type_is_named_class(buffer_type, "Buffer")) {
+    if (!buffer || !buffer_type || !xr_type_is_builtin_named_class(buffer_type, "Buffer")) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "mem.assumeInitialized<T>() expects `move` of a mem.Buffer",
                                    &loc);
@@ -3862,7 +3936,7 @@ static bool xa_method_call_creates_span_borrow(XaInferContext *ctx, XrType *rece
     if (!ctx || !ctx->analyzer || !receiver_type || !method_name)
         return false;
     bool canonical_view_method =
-        (xr_type_is_named_class(receiver_type, "Buffer") &&
+        (xr_type_is_builtin_named_class(receiver_type, "Buffer") &&
          (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "asMutBytes") == 0)) ||
         (XR_TYPE_IS_SLICE(receiver_type) &&
          (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0)) ||
@@ -4240,7 +4314,7 @@ static bool xa_method_stores_argument(XrType *receiver_type, const char *method_
                (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
                 strcmp(method_name, "sendTimeout") == 0);
     }
-    if (xr_type_is_named_class(receiver_type, "WorkQueue"))
+    if (xr_type_is_builtin_named_class(receiver_type, "WorkQueue"))
         return strcmp(method_name, "push") == 0 && slot == 0;
     return false;
 }
@@ -5290,9 +5364,7 @@ static bool xa_len_type_supported(XrType *type) {
              * the specialized call site; an explicit non-Lengthable
              * constraint is rejected immediately. */
             return !type->type_param.constraint ||
-                   (type->type_param.constraint->kind == XR_KIND_INTERFACE &&
-                    type->type_param.constraint->instance.class_name &&
-                    strcmp(type->type_param.constraint->instance.class_name, "Lengthable") == 0);
+                   xr_type_is_builtin_named_type(type->type_param.constraint, "Lengthable");
         case XR_KIND_UNION:
             if (type->union_type.member_count == 0)
                 return false;
@@ -5308,11 +5380,18 @@ static bool xa_len_type_supported(XrType *type) {
             if (info) {
                 for (int i = 0; i < info->interface_count; i++) {
                     XrType *iface = info->interface_types ? info->interface_types[i] : NULL;
-                    if (iface && iface->instance.class_name &&
-                        strcmp(iface->instance.class_name, "Lengthable") == 0)
+                    if (xr_type_is_builtin_named_type(iface, "Lengthable"))
                         return true;
                 }
             }
+            /* The name list below is the builtin allowlist: those types answer
+             * len() natively without declaring Lengthable. A user class that
+             * reuses one of the names has already had its own interfaces
+             * checked above, so it must not inherit the builtin's answer —
+             * `class Range { }` is not Lengthable and len() on it is a
+             * compile error, not a runtime panic. */
+            if (info)
+                return false;
             return class_name &&
                    (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
                     strcmp(class_name, "WorkQueue") == 0 || strcmp(class_name, "Range") == 0);
@@ -5485,6 +5564,130 @@ static bool xa_type_arg_satisfies_constraint(XaInferContext *ctx, XrType *type_a
     return false;
 }
 
+// Name the callee for a diagnostic. Deliberately reports only the written
+// name, never "function" or "method": one call site here may be a plain
+// function, a static method, an instance method, or a module member, and the
+// callee syntax alone cannot tell them apart.
+static const char *xa_callee_display_name(CallExprNode *call) {
+    const char *name = NULL;
+    if (call && call->callee) {
+        if (call->callee->type == AST_VARIABLE)
+            name = call->callee->as.variable.name;
+        else if (call->callee->type == AST_MEMBER_ACCESS)
+            name = call->callee->as.member_access.name;
+    }
+    return name ? name : "<anonymous>";
+}
+
+// Verify explicit type arguments — both their count and each one against the
+// declaration's `<T: A & B>` intersection constraint list. Shared by
+// plain-function / static-method calls and by instance `obj.method<T>()`
+// calls, which resolve their links later. Arity and constraints stay in one
+// helper so a caller can never pick up half the checking.
+static void xa_check_explicit_type_args(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                        XaSymbolLinks *links) {
+    if (!ctx || !node || !call || !links || call->type_arg_count <= 0 || !call->type_args)
+        return;
+
+    int expected_count = xa_symbol_links_get_type_param_count(links);
+
+    if (call->type_arg_count != expected_count) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Generic call to '%s' expects %d type argument(s), but got %d",
+                 xa_callee_display_name(call), expected_count, call->type_arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+    }
+
+    for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
+        // Use analyzer-aware resolver so user class type-args carry their
+        // superclass chain — required for `<T: BaseClass>` upper bounds.
+        XrType *type_arg = call->type_args[i]
+                               ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
+                               : NULL;
+        if (xa_reject_error_type_success_type(ctx->analyzer, type_arg, "generic type argument",
+                                              "function", node->line, node->column)) {
+            continue;
+        }
+
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
+
+        if (!type_arg || constraint_count == 0)
+            continue;
+
+        for (int j = 0; j < constraint_count; j++) {
+            XrType *constraint = constraints[j];
+            if (constraint && !xa_type_arg_satisfies_constraint(ctx, type_arg, constraint)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                const char *param_name = xa_symbol_links_get_type_param_name(links, i);
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
+                         xr_type_to_string(type_arg), xr_type_to_string(constraint),
+                         param_name ? param_name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+            }
+        }
+    }
+}
+
+// Implicit generic instantiation: no explicit `<T>` at the call site, so infer
+// each type parameter from the first argument whose declared type is exactly
+// the bare T, then verify that parameter's constraints. Shared by plain-function
+// calls and by instance `obj.method(...)` calls, which resolve their links later.
+static void xa_check_inferred_type_arg_constraints(XaInferContext *ctx, AstNode *node,
+                                                   CallExprNode *call, XaSymbolLinks *links) {
+    if (!ctx || !node || !call || !links)
+        return;
+
+    int tp_count = xa_symbol_links_get_type_param_count(links);
+    int p_count = links->param_count;
+    for (int ti = 0; ti < tp_count; ti++) {
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, ti, &constraint_count);
+        if (constraint_count == 0)
+            continue;
+        const char *tp_name = xa_symbol_links_get_type_param_name(links, ti);
+        if (!tp_name)
+            continue;
+        // Find the first parameter whose type is exactly the bare T
+        XrType *inferred = NULL;
+        for (int pi = 0; pi < p_count && pi < call->arg_count; pi++) {
+            XrType *pt = links->param_types ? links->param_types[pi] : NULL;
+            if (!pt || pt->kind != XR_KIND_TYPE_PARAM)
+                continue;
+            if (!pt->type_param.name || strcmp(pt->type_param.name, tp_name) != 0)
+                continue;
+            AstNode *a = call->arguments[pi];
+            if (a && a->type != AST_FUNCTION_EXPR)
+                inferred = xa_visit_infer_expr(ctx, a);
+            if (inferred)
+                break;
+        }
+        if (!inferred || XR_TYPE_IS_UNKNOWN(inferred))
+            continue;
+        for (int j = 0; j < constraint_count; j++) {
+            XrType *constraint = constraints[j];
+            if (constraint && !xa_type_arg_satisfies_constraint(ctx, inferred, constraint)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
+                         xr_type_to_string(inferred), xr_type_to_string(constraint), tp_name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+            }
+        }
+    }
+}
+
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -5519,7 +5722,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
         ctx->expected_type = saved_expected;
         ctx->allow_view_expr_for_copy = saved_view_context;
-        if (!xa_len_type_supported(operand_type)) {
+        /* len() dereferences its argument, so a still-nullable one is the same
+         * error as `x.f` on a nullable receiver. Checked before the Lengthable
+         * test, which sees through the nullable flag and would otherwise accept
+         * `Array<int>?` and defer the failure to a runtime panic. `?.` has no
+         * spelling in argument position, so it is not offered as a remedy. */
+        if (!xa_check_nullable_use(ctx, node, operand_type, "len()", false) &&
+            !xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             snprintf(msg, sizeof(msg),
@@ -5659,60 +5868,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_string(ctx->analyzer->isolate);
     }
 
-    // Check generic type argument count and constraints
+    // Check generic type arguments. Instance-method links are not resolved yet
+    // at this point; those calls are checked further down, once the receiver
+    // has been inferred.
+    bool type_args_checked = false;
     if (call->type_arg_count > 0 && fn_links) {
-        int expected_count = xa_symbol_links_get_type_param_count(fn_links);
-
-        // Check count matches
-        if (call->type_arg_count != expected_count) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            char msg[256];
-            const char *fn_name = call->callee && call->callee->type == AST_VARIABLE
-                                      ? call->callee->as.variable.name
-                                      : "function";
-            snprintf(msg, sizeof(msg),
-                     "Generic function '%s' expects %d type argument(s), but got %d", fn_name,
-                     expected_count, call->type_arg_count);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
-        }
-
-        // Check constraints — every constraint in the intersection list must hold.
-        for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
-            // Use analyzer-aware resolver so user class type-args carry their
-            // superclass chain — required for `<T: BaseClass>` upper bounds.
-            XrType *type_arg = call->type_args[i]
-                                   ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
-                                   : NULL;
-            if (xa_reject_error_type_success_type(ctx->analyzer, type_arg, "generic type argument",
-                                                  "function", node ? node->line : 0,
-                                                  node ? node->column : 0)) {
-                continue;
-            }
-
-            int constraint_count = 0;
-            XrType **constraints =
-                xa_symbol_links_get_type_param_constraints(fn_links, i, &constraint_count);
-
-            if (!type_arg || constraint_count == 0)
-                continue;
-
-            for (int j = 0; j < constraint_count; j++) {
-                XrType *constraint = constraints[j];
-                if (constraint && !xa_type_arg_satisfies_constraint(ctx, type_arg, constraint)) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
-                    char msg[256];
-                    snprintf(msg, sizeof(msg),
-                             "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
-                             xr_type_to_string(type_arg), xr_type_to_string(constraint),
-                             param_name ? param_name : "?");
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
-                }
-            }
-        }
+        xa_check_explicit_type_args(ctx, node, call, fn_links);
+        type_args_checked = true;
     } else if (fn_links && xa_symbol_links_get_type_param_count(fn_links) > 0 && call->callee &&
                call->callee->type == AST_VARIABLE) {
         // Implicit generic instantiation: type args inferred from arguments.
@@ -5721,50 +5883,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // but does its own simple inference per type parameter.
         XaSymbol *fn_sym = xa_lookup_visible_symbol(ctx, call->callee->as.variable.name);
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
-            XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, fn_sym);
-            int tp_count = xa_symbol_links_get_type_param_count(fl);
-            int p_count = fl ? fl->param_count : 0;
-            for (int ti = 0; ti < tp_count; ti++) {
-                int constraint_count = 0;
-                XrType **constraints =
-                    xa_symbol_links_get_type_param_constraints(fl, ti, &constraint_count);
-                if (constraint_count == 0)
-                    continue;
-                const char *tp_name = xa_symbol_links_get_type_param_name(fl, ti);
-                if (!tp_name)
-                    continue;
-                // Find the first parameter whose type is exactly the bare T
-                XrType *inferred = NULL;
-                for (int pi = 0; pi < p_count && pi < call->arg_count; pi++) {
-                    XrType *pt = fl->param_types ? fl->param_types[pi] : NULL;
-                    if (!pt || pt->kind != XR_KIND_TYPE_PARAM)
-                        continue;
-                    if (!pt->type_param.name || strcmp(pt->type_param.name, tp_name) != 0)
-                        continue;
-                    AstNode *a = call->arguments[pi];
-                    if (a && a->type != AST_FUNCTION_EXPR)
-                        inferred = xa_visit_infer_expr(ctx, a);
-                    if (inferred)
-                        break;
-                }
-                if (!inferred || XR_TYPE_IS_UNKNOWN(inferred))
-                    continue;
-                for (int j = 0; j < constraint_count; j++) {
-                    XrType *constraint = constraints[j];
-                    if (constraint &&
-                        !xa_type_arg_satisfies_constraint(ctx, inferred, constraint)) {
-                        XrLocation loc = {
-                            .file = ctx->file_path, .line = node->line, .column = node->column};
-                        char msg[256];
-                        snprintf(
-                            msg, sizeof(msg),
-                            "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
-                            xr_type_to_string(inferred), xr_type_to_string(constraint), tp_name);
-                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
-                    }
-                }
-            }
+            xa_check_inferred_type_arg_constraints(ctx, node, call,
+                                                   xa_analyzer_get_links(ctx->analyzer, fn_sym));
+            type_args_checked = true;
         }
     }
 
@@ -5867,6 +5988,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
+        // An instance method's links only become available here, after the
+        // receiver has been inferred — run the type-argument checks the block
+        // above could not reach, for both `obj.method<T>()` and the inferred
+        // `obj.method(arg)` form.
+        if (!type_args_checked && fn_links) {
+            if (call->type_arg_count > 0)
+                xa_check_explicit_type_args(ctx, node, call, fn_links);
+            else
+                xa_check_inferred_type_arg_constraints(ctx, node, call, fn_links);
+            type_args_checked = true;
+        }
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         /* R2-2 stopgap: checked/saturating/overflows methods on fixed-width
@@ -6668,9 +6800,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         owner && owner->enum_type.enum_name ? owner->enum_type.enum_name : "Enum",
                         param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
                 } else {
-                    snprintf(msg, sizeof(msg),
-                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                             slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                    char reason[192];
+                    if (xr_type_record_mismatch_reason(param_type, arg_type, reason,
+                                                       sizeof(reason))) {
+                        snprintf(
+                            msg, sizeof(msg),
+                            "Argument %d: type '%s' is not assignable to parameter type '%s'; %s",
+                            slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type),
+                            reason);
+                    } else {
+                        snprintf(msg, sizeof(msg),
+                                 "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                                 slot + 1, xr_type_to_string(arg_type),
+                                 xr_type_to_string(param_type));
+                    }
                 }
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);

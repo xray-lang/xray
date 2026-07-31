@@ -1,0 +1,103 @@
+// anchor: collection-iterator-exhausted
+// §5.3.6 applies to every built-in Iterator<T>, not just the generator one:
+// in-contract traversal yields the elements, and a pull past the end is E0432
+// in both backends. The wrong answer used to differ by iterator kind -- 0 for
+// an array iterator, null handed back through the non-nullable `rune` result
+// of string.runes().
+
+// --- Array -------------------------------------------------------------
+var a = [10, 20, 30]
+var ai = a.iterator()
+while (ai.hasNext()) {
+    print("arr " + string(ai.next()))
+}
+print("arr-has " + string(ai.hasNext()))
+try {
+    print("unreachable " + string(ai.next()))
+} catch panic (p) {
+    print("arr-next " + string(p.code) + " " + p.message)
+}
+
+var aei = a.entriesIterator()
+while (aei.hasNext()) {
+    var entry = aei.next()
+    print("arr-entry " + string(entry.0) + "=" + string(entry.1))
+}
+try {
+    var gone = aei.next()
+    print("unreachable " + string(gone.0))
+} catch panic (p) {
+    print("arr-entry-next " + string(p.code))
+}
+
+print("arr-nth " + string(a.iterator().nth(2)))
+try {
+    print("unreachable " + string(a.iterator().nth(3)))
+} catch panic (p) {
+    print("arr-nth " + string(p.code) + " " + p.message)
+}
+
+// --- Map ---------------------------------------------------------------
+var m = #{"k": 1, "j": 2}
+var mi = m.iterator()
+while (mi.hasNext()) {
+    print("map " + mi.next())
+}
+try {
+    print("unreachable " + mi.next())
+} catch panic (p) {
+    print("map-next " + string(p.code))
+}
+
+var mei = m.entriesIterator()
+while (mei.hasNext()) {
+    var pair = mei.next()
+    print("map-entry " + pair.0 + "=" + string(pair.1))
+}
+try {
+    var stale = mei.next()
+    print("unreachable " + stale.0)
+} catch panic (p) {
+    print("map-entry-next " + string(p.code))
+}
+
+// --- Set ---------------------------------------------------------------
+var s = #[7, 8]
+var si = s.iterator()
+while (si.hasNext()) {
+    print("set " + string(si.next()))
+}
+try {
+    print("unreachable " + string(si.next()))
+} catch panic (p) {
+    print("set-next " + string(p.code))
+}
+
+// --- string runes ------------------------------------------------------
+// next() is typed `rune`, so exhaustion has no in-band representation at all.
+var ri = "ab".runes()
+while (ri.hasNext()) {
+    print("rune " + string(ri.next()))
+}
+try {
+    print("unreachable " + string(ri.next()))
+} catch panic (p) {
+    print("rune-next " + string(p.code) + " " + p.message)
+}
+
+print("rune-nth " + string("ab".runes().nth(1)))
+try {
+    print("unreachable " + string("ab".runes().nth(2)))
+} catch panic (p) {
+    print("rune-nth " + string(p.code))
+}
+
+// An empty collection is exhausted from its first pull.
+var empty: Array<int> = []
+var ei = empty.iterator()
+print("empty-has " + string(ei.hasNext()))
+try {
+    print("unreachable " + string(ei.next()))
+} catch panic (p) {
+    print("empty-next " + string(p.code))
+}

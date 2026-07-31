@@ -1,0 +1,2 @@
+E0352
+type parameter 'T' is not iterable; constrain it with 'Iterable<T>'

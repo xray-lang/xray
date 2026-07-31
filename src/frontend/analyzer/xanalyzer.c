@@ -918,6 +918,19 @@ XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
     return best;
 }
 
+bool xa_symbol_is_module(XaAnalyzer *analyzer, XaSymbol *symbol, const char *module_name) {
+    if (!analyzer || !symbol || !module_name || symbol->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
+    return links && links->module_name && strcmp(links->module_name, module_name) == 0;
+}
+
+bool xa_symbol_is_builtin_module(XaAnalyzer *analyzer, XaSymbol *symbol, const char *module_name) {
+    /* register_builtin_module() is the only producer of this shape: a global
+     * XA_SYM_MODULE symbol flagged built-in whose module name is its own name. */
+    return symbol && symbol->is_builtin && xa_symbol_is_module(analyzer, symbol, module_name);
+}
+
 // Get type of symbol (lazy computation)
 XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
     if (!analyzer || !symbol)
@@ -1589,10 +1602,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
      * so allocate them from the program's arena and keep their lifetime tied
      * to xr_program_destroy(). */
     XrCompilerSessionScope ast_scope;
-    bool has_ast_scope =
-        ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(analyzer->compiler_session, ast->as.program.arena, file,
-                                       &ast_scope);
+    bool has_ast_scope = ast->type == AST_PROGRAM && ast->as.program.arena &&
+                         xr_compiler_session_push_arena(analyzer->compiler_session,
+                                                        ast->as.program.arena, file, &ast_scope);
 
     // Set current type pool and symbol ID counter (eliminates global state)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
@@ -2378,12 +2390,16 @@ bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_el
         return true;
     }
 
-    // An Iterator<T> value (the built-in iteration protocol type — e.g. the
-    // result of a generator call) is its own iterable: for-in drives it through
-    // iterator() (which returns self) + hasNext()/next(). The element type is the
-    // interface's single type argument.
+    // The two built-in iteration-protocol interfaces yield their single type
+    // argument as the element type.
+    //   Iterable<T> — the contract a for-in collection satisfies; also what a
+    //                 `<T: Iterable<int>>` bound resolves to.
+    //   Iterator<T> — its own iterable (e.g. the result of a generator call):
+    //                 for-in drives it through iterator() (which returns self)
+    //                 plus hasNext()/next().
     if ((type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_INSTANCE) &&
-        type->instance.class_name && strcmp(type->instance.class_name, "Iterator") == 0) {
+        (xr_type_is_builtin_named_type(type, "Iterable") ||
+         xr_type_is_builtin_named_type(type, "Iterator"))) {
         if (out_element_type) {
             *out_element_type = (type->instance.type_arg_count >= 1 && type->instance.type_args &&
                                  type->instance.type_args[0])

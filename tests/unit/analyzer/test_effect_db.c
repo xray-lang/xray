@@ -555,7 +555,7 @@ TEST(json_empty_complete_summary_is_canonical) {
 
     char *json = xa_effect_summary_to_json(db, &summary, "app::boot");
     ASSERT(json != NULL);
-    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v3\"") != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v4\"") != NULL);
     ASSERT(strstr(json, "\"symbol\":\"app::boot\"") != NULL);
     ASSERT(strstr(json, "\"complete\":true") != NULL);
     ASSERT(strstr(json, "\"errors\":[]") != NULL);
@@ -677,8 +677,9 @@ TEST(semantic_product_participates_in_identity_join_and_json) {
     XaEffectSummary semantic;
     xa_effect_summary_init(&base);
     xa_effect_summary_init(&semantic);
-    xa_effect_summary_add_semantic_effects(&semantic, XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SUSPEND |
-                                                          XA_SEM_EFFECT_IO);
+    xa_effect_summary_add_semantic_effects(&semantic,
+                                           XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SCHED_SUSPEND |
+                                               XA_SEM_EFFECT_GEN_SUSPEND | XA_SEM_EFFECT_IO);
     xa_effect_summary_mark_contains_unsafe(&semantic);
     xa_effect_summary_mark_requires_unsafe(&semantic);
     xa_effect_summary_mark_semantic_incomplete(&semantic, XA_SEM_EFFECT_MAY_BLOCK,
@@ -692,16 +693,18 @@ TEST(semantic_product_participates_in_identity_join_and_json) {
 
     ASSERT(xa_effect_summary_add_summary(db, &base, &semantic));
     ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_ALLOC));
-    ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_GEN_SUSPEND));
     ASSERT(!xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_PANIC));
     ASSERT(base.contains_unsafe_op);
     ASSERT(base.requires_unsafe_at_call);
 
     char *json = xa_effect_summary_to_json(db, &base, "app::run");
     ASSERT(json != NULL);
-    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v3\"") != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v4\"") != NULL);
     ASSERT(strstr(json, "\"semanticAlloc\"") != NULL);
-    ASSERT(strstr(json, "\"suspend\"") != NULL);
+    ASSERT(strstr(json, "\"schedSuspend\"") != NULL);
+    ASSERT(strstr(json, "\"generatorSuspend\"") != NULL);
     ASSERT(strstr(json, "\"io\"") != NULL);
     ASSERT(strstr(json, "\"unknownSemanticEffects\":[\"mayBlock\"]") != NULL);
     ASSERT(strstr(json, "\"errorSetComplete\":true") != NULL);

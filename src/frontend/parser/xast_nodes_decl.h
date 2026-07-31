@@ -91,6 +91,8 @@ typedef struct ClassDeclNode {
     int mono_type_arg_count;           // Element count of mono_type_arg_names
 } ClassDeclNode;
 
+// Method signature inside an interface body. Supports generic methods with
+// their own constraints: `wrap<T: Hashable>(x: T) -> int`.
 typedef struct InterfaceMethodNode {
     char *name;
     XrParamNode **params;
@@ -98,6 +100,8 @@ typedef struct InterfaceMethodNode {
     XrTypeRef *return_type;
     XrAttribute **attributes;
     int attr_count;
+    XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
+    int type_param_count;
 } InterfaceMethodNode;
 
 // Property signature inside an interface body, e.g. `length: int` or
@@ -134,7 +138,7 @@ typedef struct FieldDeclNode {
 } FieldDeclNode;
 
 // Method declaration node
-// Supports generic methods: add<T>(item: T): void { ... }
+// Supports generic methods: add<T: Hashable>(item: T): void { ... }
 typedef struct MethodDeclNode {
     char *name;
     XrParamNode **params;
@@ -156,7 +160,7 @@ typedef struct MethodDeclNode {
     int base_arg_count;
     bool is_operator;
     OperatorType op_type;
-    char **type_param_names;  // Generic type parameters
+    XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
     int type_param_count;
 } MethodDeclNode;
 

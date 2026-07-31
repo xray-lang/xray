@@ -1,0 +1,21 @@
+// `for (msg in ch)` is legal, but a channel does not satisfy Iterable<T>:
+// that form lowers to a dedicated receive loop (XI_CHAN_RECV) rather than the
+// iterator protocol, and a channel carries no iterator() method. A nested
+// generic body keeps its type parameter into lowering and drives iteration
+// through iterator(), so admitting Channel here would compile and then panic
+// at run time. Receive from the channel directly, or collect into an Array
+// first.
+
+fn total<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+var ch = Channel<int>(4)
+ch.send(1)
+ch.send(2)
+ch.close()
+print(total(ch))

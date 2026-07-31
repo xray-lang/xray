@@ -24,7 +24,11 @@ fn callNativeSize(f: (Ptr<byte>) -> usize, bytes: Ptr<byte>) -> usize {
     return f(bytes)
 }
 
-const text = b"registry"
+// strlen requires a NUL terminator.  A `b"..."` literal is an Array<byte> of
+// exactly its content, and .ptr() carries no terminator contract, so the
+// sentinel is explicit here; without it strlen reads past the buffer and the
+// answer depends on the adjacent stack byte.
+const text = b"registry\0"
 var strlenIndirect = strlen
 print(unsafe { callNativeSize(strlenIndirect, text.ptr()) })
 var found = unsafe { memchr(text.ptr(), 103, 8) }

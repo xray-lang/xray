@@ -98,6 +98,16 @@ XR_FUNC const char *xfmt_compound_op(XrTokenType type);
 // xfmt_expr.c
 XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node);
 
+// If `node` is the synthetic block the parser desugars `defer f(a, b)` into,
+// print that `defer` statement back (indent and terminating newline included)
+// and return true. Returns false, having written nothing, for every other node.
+XR_FUNC bool xfmt_emit_defer_capture(XrFmtContext *ctx, AstNode *node);
+
+// If `node` is a `defer` whose closure body is a single zero-argument call,
+// print it as `defer f()` (indent and terminating newline included) and return
+// true. Returns false, having written nothing, for every other defer.
+XR_FUNC bool xfmt_emit_defer_closure(XrFmtContext *ctx, AstNode *node);
+
 // xfmt_stmt.c
 XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_block(XrFmtContext *ctx, AstNode *node);

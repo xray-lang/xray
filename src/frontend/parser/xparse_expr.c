@@ -447,7 +447,13 @@ AstNode *xr_parse_comptime_expr(Parser *parser) {
 
     AstNode *expr = NULL;
     if (xr_parser_match(parser, TK_LBRACE)) {
+        /* Like `unsafe { }`, a comptime block's trailing expression statement
+         * is the block's value, so it is observed rather than discarded and
+         * E0208 must stay quiet inside it. */
+        bool saved_observed = parser->expr_value_observed;
+        parser->expr_value_observed = true;
         expr = xr_parse_block(parser);
+        parser->expr_value_observed = saved_observed;
     } else {
         expr = xr_parse_precedence(parser, PREC_TERNARY);
     }
@@ -491,6 +497,8 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
                                           is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
                                           parser->previous.line);
     xr_free(buf);
+    if (node)
+        node->as.literal.is_template_chunk = true;
     return node;
 }
 
@@ -768,8 +776,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
     // below. Arrow closures cannot declare an explicit return type.
     bool is_arrow_head = false;
     {
-        Scanner saved_scan = parser->scanner;
-        Token saved_tok = parser->current;
+        XrParserStreamState saved = xr_parser_stream_save(parser);
         int depth = 1;
         while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
             if (xr_parser_check(parser, TK_LPAREN)) {
@@ -787,8 +794,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
         if (xr_parser_check(parser, TK_RPAREN))
             xr_parser_advance(parser);
         is_arrow_head = xr_parser_check(parser, TK_ARROW);
-        parser->scanner = saved_scan;
-        parser->current = saved_tok;
+        xr_parser_stream_restore(parser, &saved);
     }
 
     if (is_arrow_head && xr_parser_check(parser, TK_NAME)) {
@@ -1309,12 +1315,25 @@ AstNode *xr_parse_optional_index(Parser *parser, AstNode *object) {
 }
 
 // Parse range expression: start..end / start..=end
+//
+// `..` binds looser than every arithmetic operator, so endpoints such as
+// `0..n+1` or `1..len(a)*2` group as `0..(n+1)` / `1..(len(a)*2)`. It binds
+// tighter than comparison and logical operators, so a range is produced as a
+// whole value before it is compared or tested. Parsing the endpoint at
+// PREC_RANGE + 1 stops before a second `..`, which makes the operator
+// non-associative: `a..b..c` is a syntax error rather than a silent `(a..b)..c`.
 AstNode *xr_parse_range(Parser *parser, AstNode *start) {
     XR_DCHECK(parser != NULL, "parse_range: NULL parser");
     int line = parser->previous.line;
     bool inclusive_end = parser->previous.type == TK_RANGE_INCLUSIVE;
 
-    AstNode *end = xr_parse_precedence(parser, PREC_FACTOR + 1);
+    AstNode *end = xr_parse_precedence(parser, PREC_RANGE + 1);
+
+    if (xr_parser_check(parser, TK_RANGE) || xr_parser_check(parser, TK_RANGE_INCLUSIVE)) {
+        xr_parser_error(parser,
+                        "range operator cannot be chained; wrap an endpoint in parentheses if a "
+                        "nested range is intended");
+    }
 
     return xr_ast_range(parser->compiler_session, start, end, inclusive_end, line);
 }

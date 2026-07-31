@@ -13,6 +13,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+def _cache_root() -> Path:
+    """Shared native-build cache. Lives outside build/ so a clean reconfigure
+    does not throw away objects that cost ~30s each to recreate."""
+    return Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(ROOT / ".cache" / "xray-test")))
+
 FIXTURE = ROOT / "tests/aot/basic/string_utf8_conversion.xr"
 STRING_DECL = ROOT / "stdlib/types/string.xr"
 NATIVE_DEFS = ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c"
@@ -131,7 +137,7 @@ class StringNativeErrorAbiTest(unittest.TestCase):
         output_dir.mkdir(parents=True, exist_ok=True)
         source = output_dir / f"{native_stem}_{os.getpid()}.xr"
         native = output_dir / f"{native_stem}_{os.getpid()}"
-        cache = ROOT / "build" / ".xray-test-cache" / native_stem
+        cache = _cache_root() / native_stem
         source.write_text(source_text, encoding="utf-8")
         try:
             vm = self.run_raw([str(self.xray), str(source)])
@@ -186,7 +192,7 @@ class StringNativeErrorAbiTest(unittest.TestCase):
         output_dir = ROOT / "build" / ".xray-test-tmp"
         output_dir.mkdir(parents=True, exist_ok=True)
         native = output_dir / f"string_native_error_{os.getpid()}"
-        cache = ROOT / "build" / ".xray-test-cache" / "task-198-native-error"
+        cache = _cache_root() / "task-198-native-error"
         try:
             self.run_checked(
                 [

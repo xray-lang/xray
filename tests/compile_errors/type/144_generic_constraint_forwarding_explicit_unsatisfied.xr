@@ -1,8 +1,8 @@
-// Same rule as 139, but through the explicit type-argument path: writing
+// Same rule as 143, but through the explicit type-argument path: writing
 // innerShape<T>(...) must not smuggle T past a constraint it does not carry.
 // T is bounded by Animal; U demands the unrelated interface Shape.
 //
-// Positive coverage: tests/regression/12_type_checking/1237_generic_constraint_forwarding.xr
+// Positive coverage: tests/regression/12_type_checking/1251_generic_constraint_forwarding.xr
 
 interface Shape {
     area() -> float

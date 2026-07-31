@@ -1,0 +1,112 @@
+// 1237_for_in_method_type_param.xr
+// `for (i in xs)` where xs is typed by a METHOD's own generic parameter.
+//
+// 1236_generic_iterable_constraint.xr covers the same rule for top-level
+// functions, along with which types satisfy Iterable at all (Range, Json,
+// Lengthable, the iterator() protocol). None of that is repeated here: this
+// file only pins the declaration sites that used to be unable to carry a bound
+// — instance methods, static methods, methods of a generic class, and
+// interface methods.
+//
+// REGRESSION: a method's `<T: ...>` list was parsed and discarded, so its type
+//             parameters reached the analyzer with an empty constraint list no
+//             matter what the source said. for-in could not distinguish that
+//             from an unbounded parameter, and the diagnostic said as much:
+//             it told the user their method constraints "are not tracked yet"
+//             and to move the generic to a top-level function or to the class.
+// FAIL_AT:    pre-fix -> E0352 on every case below, with that message.
+// PASS_AT:    post-fix -> a method's bounds reach its symbol links, so for-in
+//             resolves the element type from them exactly as it does for a
+//             function, and the "not tracked yet" escape hatch is gone.
+//
+// The negative half (an unbounded T on a method) lives in
+// tests/compile_errors/type/141_for_in_unbounded_type_param.xr.
+
+interface Summing {
+    total<T: Iterable<int>>(xs: T) -> int
+}
+
+class Summer implements Summing {
+    constructor() {}
+
+    // The original bug report's exact shape.
+    total<T: Iterable<int>>(xs: T) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+
+    static totalStatic<T: Iterable<int>>(xs: T) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+
+    // The element type must follow the bound, not default to int.
+    joinAll<T: Iterable<string>>(xs: T) -> string {
+        var s = ""
+        for (w in xs) { s = s + w }
+        return s
+    }
+
+    // A bound alongside an unconstrained method parameter.
+    tagAll<T: Iterable<int>, U>(xs: T, tag: U) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+}
+
+// A method-local bound inside a generic class: monomorphizing Box<T> must
+// preserve the method's own parameter U and its bound.
+class Box<T> {
+    value: T
+    constructor(v: T) { this.value = v }
+
+    get() -> T { return this.value }
+
+    sumOf<U: Iterable<int>>(xs: U) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+}
+
+@test
+fn test_instance_method_bound() {
+    var s = Summer()
+    assert_eq(s.total([1, 2, 3]), 6)
+}
+
+@test
+fn test_static_method_bound() {
+    assert_eq(Summer.totalStatic([10, 20]), 30)
+}
+
+@test
+fn test_element_type_follows_bound() {
+    var s = Summer()
+    assert_eq(s.joinAll(["a", "b", "c"]), "abc")
+}
+
+@test
+fn test_bound_with_unconstrained_second_param() {
+    var s = Summer()
+    assert_eq(s.tagAll([1, 2], "label"), 3)
+    assert_eq(s.tagAll([3, 4], 99), 7)
+}
+
+@test
+fn test_method_bound_in_generic_class() {
+    var box: Box<int> = Box<int>(10)
+    assert_eq(box.get(), 10)
+    assert_eq(box.sumOf([5, 6]), 11)
+}
+
+@test
+fn test_dispatch_through_interface_declaring_the_bound() {
+    var s: Summing = Summer()
+    assert_eq(s.total([7, 8]), 15)
+}
+
+print("All method type-parameter for-in tests passed!")

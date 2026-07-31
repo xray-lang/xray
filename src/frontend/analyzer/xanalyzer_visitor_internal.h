@@ -45,6 +45,12 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);
 XR_FUNC bool xa_body_has_return_expr(AstNode *node);
 XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type);
+/* Strict-null gate (E0379), defined in xanalyzer_visitor_expr.c. Every position
+ * that would dereference the value at runtime must route through this, so the
+ * rule has one implementation and one wording. Pass optional_chain_applies only
+ * where `?.` is actually accepted by the grammar. */
+XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *value_type,
+                                   const char *use_desc, bool optional_chain_applies);
 
 // Cross-TU helpers between xanalyzer_visitor.c (the dispatch / hoisting
 // / infer entry points) and xanalyzer_visitor_decl.c (the bulk of
@@ -94,6 +100,21 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
                                                 const char *feature, const char *suggestion);
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name);
+
+/* Canonical resolver for a variable reference: prefers the symbol id recorded
+ * when the reference was resolved, so the answer does not depend on which scope
+ * happens to be current when the question is asked. */
+XR_FUNC XaSymbol *xa_resolve_variable_symbol(XaInferContext *ctx, AstNode *node);
+
+/* Canonical recognizer for a call to a member of a VM-intrinsic built-in module
+ * (`Coro.yield()`, `Coro.Local<T>()`, `CoroPool.submit()`, ...).  The receiver is
+ * resolved through the symbol table and must be the built-in module symbol; a
+ * user declaration that merely spells the same name resolves to that declaration
+ * and is rejected here.  Every site that needs this question must call this
+ * function -- recognizing an intrinsic by comparing the source spelling makes the
+ * same semantic decision twice with two different answers. */
+XR_FUNC bool xa_call_is_builtin_module_member(XaInferContext *ctx, const CallExprNode *call,
+                                              const char *module_name, const char *member_name);
 
 /* Task 216: a function item can carry a precise inferred effect, but storing it
  * in an unannotated variable/field creates a merge point whose type defaults to

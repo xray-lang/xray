@@ -10,10 +10,114 @@
  * KEY CONCEPT:
  *   Parses if/while/for/for-in/break/continue statements.
  *   Split from xparse.c to keep file sizes manageable.
+ *   Also owns the effectless-expression-statement rule (E0208).
  */
 
 #include "xparse_internal.h"
 #include "../../base/xchecks.h"
+#include "../../runtime/xerror_codes.h"
+
+/* ========== Effectless Expression Statements (E0208) ==========
+ *
+ * An expression used as a statement must be able to do something; its value is
+ * discarded, so a pure operator application is always a mistake. This is the
+ * loud half of the L-04 statement-boundary rule in xparse.c: the shapes rejected
+ * here are exactly the shapes a mis-continued line collapses into.
+ *
+ *     var x = a
+ *     !b            // parsed as its own statement -> E0208, not a silent no-op
+ *
+ * Deliberately a deny-list, not an allow-list. Only node types that provably
+ * cannot do anything are rejected, so a construct whose effect lives behind an
+ * abstraction (a call, a member access that may run a getter, `await`, `match`)
+ * is never falsely accused. `&&` / `||` / `??` are excluded because
+ * `ready && start()` is an idiomatic guarded-effect statement.
+ */
+static bool expr_stmt_is_effectless(const AstNode *expr) {
+    if (!expr)
+        return false;
+
+    switch (expr->type) {
+        // Values: naming one discards it.
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_RUNE:
+        case AST_LITERAL_REGEX:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_FIXED_BYTES_LITERAL:
+        case AST_TEMPLATE_STRING:
+        case AST_VARIABLE:
+        case AST_THIS_EXPR:
+        case AST_ARRAY_LITERAL:
+        case AST_OBJECT_LITERAL:
+        case AST_MAP_LITERAL:
+        case AST_SET_LITERAL:
+        case AST_TUPLE_LITERAL:
+        // Pure operators: the result is the only thing they produce.
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_IS_EXPR:
+        case AST_RANGE:
+        // `expr!` only ever panics; as a whole statement it is the misparse
+        // shape this rule exists to catch, never something worth writing.
+        case AST_FORCE_UNWRAP:
+            return true;
+        // Parentheses are transparent: judge what they wrap.
+        case AST_GROUPING:
+            return expr_stmt_is_effectless(expr->as.grouping);
+        default:
+            return false;
+    }
+}
+
+// Reject `expr` as a statement when it cannot do anything. `anchor` is the
+// statement's first token, so the caret lands on the `!` / `-` / `(` that
+// started the line.
+void xr_parser_reject_effectless_expr_stmt(Parser *parser, const AstNode *expr, Token *anchor) {
+    XR_DCHECK(parser != NULL, "reject_effectless_expr_stmt: NULL parser");
+    XR_DCHECK(anchor != NULL, "reject_effectless_expr_stmt: NULL anchor");
+
+    // In the REPL the value of a bare expression is printed, so it is observed
+    // rather than discarded.
+    if (parser->expr_value_observed)
+        return;
+    if (!expr_stmt_is_effectless(expr))
+        return;
+
+    // The continuation hint only makes sense when the statement opens with a
+    // token that could have continued the previous line — i.e. a dual-role
+    // prefix/infix token. `42` on its own line is dead code, not a mis-wrap.
+    const ParseRule *rule = xr_get_rule(anchor->type);
+    const char *note = (rule->prefix && rule->infix)
+                           ? "if this line was meant to continue the previous one, move the "
+                             "operator to the end of the previous line or wrap the whole "
+                             "expression in parentheses"
+                           : NULL;
+
+    xr_parser_error_coded_note(parser, anchor, XR_ERR_SYN_EFFECTLESS_STMT,
+                               "expression statement has no effect; its result is discarded", note);
+}
 
 /* ========== Control Flow Parsing ========== */
 

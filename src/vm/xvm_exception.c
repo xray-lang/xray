@@ -56,8 +56,8 @@
  *
  * The trace is recorded in source-language order: the function that
  * actually executed the throw is appended first, then its caller,
- * then the caller's caller, and so on. xr_panic_info_print walks the
- * array in that same order, so the user sees the throw site first
+ * then the caller's caller, and so on. xr_panic_info_print_trace walks
+ * the array in that same order, so the user sees the throw site first
  * and the outermost frame last — matching the convention of every
  * mainstream runtime (Python, Java, JavaScript).
  */

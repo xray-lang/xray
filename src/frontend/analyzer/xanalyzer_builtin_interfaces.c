@@ -467,7 +467,7 @@ static bool is_set_type(XrType *type) {
 }
 
 static bool is_bigint_type(XrType *type) {
-    return type && (xr_type_is_named_class(type, "BigInt"));
+    return type && (xr_type_is_builtin_named_class(type, "BigInt"));
 }
 
 static bool is_json_type(XrType *type) {

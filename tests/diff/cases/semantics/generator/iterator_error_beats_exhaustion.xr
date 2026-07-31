@@ -1,0 +1,52 @@
+// anchor: generator-iterator-error-beats-exhaustion
+// A generator that ends by throwing is not an exhausted iterator. The pull that
+// observes the failure must report the producer's own error, not the E0432
+// contract violation, in both backends -- otherwise enforcing §5.3.6 would
+// swallow the diagnosis a failing generator owes its consumer.
+
+enum GenErr {
+    Msg(s: string)
+}
+
+fn gen() -> Iterator<int> {
+    yield 1
+    throw GenErr.Msg("boom")
+}
+
+// next() drives the producer itself when nothing is buffered, so the second
+// pull is the one that reaches the throw.
+fn direct() {
+    var it = gen()
+    print("direct " + string(it.next()))
+    print("direct " + string(it.next()))
+    print("unreachable")
+}
+
+// The hasNext() / next() loop reaches the same throw through hasNext().
+fn looped() {
+    var it = gen()
+    while (it.hasNext()) {
+        print("looped " + string(it.next()))
+    }
+    print("unreachable")
+}
+
+try {
+    direct()
+} catch (e) {
+    match (e) {
+        GenErr.Msg(s) -> print("direct-caught " + s)
+    }
+} catch panic (p) {
+    print("direct-panic " + string(p.code))
+}
+
+try {
+    looped()
+} catch (e) {
+    match (e) {
+        GenErr.Msg(s) -> print("looped-caught " + s)
+    }
+} catch panic (p) {
+    print("looped-panic " + string(p.code))
+}

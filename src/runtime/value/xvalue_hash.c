@@ -18,6 +18,16 @@
 
 #define XR_DERIVED_HASH_MAX_DEPTH 64
 
+/* Installed by the VM (xr_value_set_instance_hooks). NULL in backends that do
+ * not run user methods, where instance keys fall back to pointer identity. */
+static XrValueInstanceHashHook g_instance_hash_hook;
+static XrValueInstanceEqHook g_instance_eq_hook;
+
+void xr_value_set_instance_hooks(XrValueInstanceHashHook hash_hook, XrValueInstanceEqHook eq_hook) {
+    g_instance_hash_hook = hash_hook;
+    g_instance_eq_hook = eq_hook;
+}
+
 uint32_t xr_hash_string(XrString *str) {
     XR_DCHECK(str != NULL, "hash_string: NULL string");
     if (str->hash == 0) {
@@ -49,6 +59,15 @@ static uint32_t xr_hash_value_depth(XrValue val, uint32_t depth) {
             if (val.heap_type == XR_TINSTANCE && val.ptr) {
                 XrInstance *instance = (XrInstance *) val.ptr;
                 XrClass *cls = instance->klass;
+                /* A hand-written hash() keys by value. It is invoked through the
+                 * hook (only the VM can run it) and takes precedence over the
+                 * pointer fallback; @derive(Hash) classes declare no such method
+                 * and stay on the structural path below. */
+                if (g_instance_hash_hook) {
+                    uint32_t user_hash = 0;
+                    if (g_instance_hash_hook(val, &user_hash))
+                        return user_hash ? user_hash : 1u;
+                }
                 if (cls && (cls->flags & XR_CLASS_DERIVE_HASH) != 0) {
                     uint64_t hash = xr_hash_core_mix_u64((uint64_t) (uintptr_t) cls);
                     if (depth >= XR_DERIVED_HASH_MAX_DEPTH) {
@@ -120,6 +139,14 @@ bool xr_value_eq(XrValue a, XrValue b) {
         if (a.heap_type == XR_TINSTANCE && b.heap_type == XR_TINSTANCE && a.ptr && b.ptr) {
             XrInstance *ia = (XrInstance *) a.ptr;
             XrInstance *ib = (XrInstance *) b.ptr;
+            /* A hand-written operator == decides equality by value; the hook
+             * runs it (VM only) and takes precedence over the address compare,
+             * mirroring the hash hook so a user Hashable key round-trips. */
+            if (g_instance_eq_hook) {
+                int handled = g_instance_eq_hook(a, b);
+                if (handled >= 0)
+                    return handled != 0;
+            }
             if (ia->klass && ia->klass == ib->klass && (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0)
                 return xr_value_deep_eq(a, b);
         }

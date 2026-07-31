@@ -1073,6 +1073,8 @@ AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, X
     node->as.interface_method.return_type = return_type;
     node->as.interface_method.attributes = NULL;
     node->as.interface_method.attr_count = 0;
+    node->as.interface_method.type_params = NULL;
+    node->as.interface_method.type_param_count = 0;
     return node;
 }
 
@@ -1130,7 +1132,7 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
         OPTYPE_ADD;  // Default value (doesn't matter since is_operator=false)
 
     // Initialize generic type parameters
-    node->as.method_decl.type_param_names = NULL;
+    node->as.method_decl.type_params = NULL;
     node->as.method_decl.type_param_count = 0;
     return node;
 }

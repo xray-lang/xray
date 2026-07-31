@@ -85,6 +85,8 @@ static bool cg_direct_ref_param_noescape(XiCgenCtx *ctx, const XiFunc *target, u
 static bool cg_static_direct_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v);
 static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v);
 
 static const char *ctype_str(XrRep rep) {
     switch (rep) {
@@ -329,7 +331,7 @@ static bool cg_ownership_op_is_noop(bool freestanding_profile, const XiValue *v)
         return false;
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
     if (freestanding_profile && arg && arg->type)
-        return !xr_type_is_named_class(arg->type, "Buffer");
+        return !xr_type_is_builtin_named_class(arg->type, "Buffer");
     return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 
@@ -4998,6 +5000,24 @@ static bool cg_class_native_ref_stack_return_takes_value(XiCgenCtx *ctx, const X
     return v->op == XI_CALL && cg_class_native_ref_stack_return_consumes_ctor(ctx, f, v);
 }
 
+/* cg_class_native_ctor_can_inline states the *shape's* necessary conditions and
+ * is deliberately silent about RC ref fields, because who may construct them is
+ * the caller's precondition: the value emitter refuses a ref-field layout (it
+ * has no drop site) and only the ref-stack return path supplies one.  A caller
+ * asking "will this ctor be inlined here", rather than "could this shape ever
+ * be", must therefore compose the two -- otherwise a ref-field instance that
+ * never reaches a return has its C local suppressed while the generic heap path
+ * still assigns to it, and the generated C names an undeclared identifier. */
+static bool cg_class_native_ctor_is_inlined_here(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
+    if (!cg_class_native_ctor_can_inline(ctx, f, v))
+        return false;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL);
+    if (cd && cd->instance_layout && cg_class_native_layout_has_ref_fields(cd->instance_layout))
+        return cg_class_native_ref_stack_return_takes_value(ctx, f, v);
+    return true;
+}
+
 static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                     const XiBlock *blk, const char *prefix) {
     CgClassNativeRefStackReturn info;
@@ -5430,7 +5450,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v) ||
@@ -8824,7 +8844,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
         xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
         cg_class_shared_native_value_is_elided(ctx, f, v))
@@ -9232,7 +9252,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 }
                 if (debug_only_fixed_wrapper)
                     fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
-                XrRep rep = cg_value_plan_storage_rep(ctx, v);
+                /* The defensive initializer must be chosen from the same rep as
+                 * the declared C type on the next line, not from the planned
+                 * rep: a native-local array is declared xrt_array_t* and needs
+                 * a null pointer, while its plan rep is tagged and would emit
+                 * XR_NULL_VAL into a pointer. */
+                XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
                 if (!needs_defensive_init) {
@@ -9674,6 +9699,11 @@ static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, con
         return false;
 
     int shared_slot = -1;
+    /* Deliberately the shape question, not the owner-specific one: this predicate
+     * is evaluated once where the adapter is defined and again where it is
+     * referenced, in different owners.  Composing it with the ref-stack return
+     * path -- which only the using owner can satisfy -- made the two disagree and
+     * emitted calls to an adapter nobody defined. */
     if (cg_value_plan_storage_rep(ctx, call) == XR_REP_PTR ||
         cg_class_native_ctor_can_inline(ctx, owner, call) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, owner, call, &shared_slot))
@@ -10949,14 +10979,23 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
         return ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
     if (f->export_plan || f->link_plan || f->entry_plan)
         return true;
-    /* Hosted shared-library class descriptors are open-world ABI tables.
-     * Freestanding images have no dynamic Xray module/class ABI: their public
-     * surface is the explicit C/link/entry manifest handled above, so language
-     * exports stay closed-world just like executable bodies. */
+    /* A hosted shared library publishes class descriptors as open-world ABI
+     * tables, so every member of one stays live.  An executable is closed-world
+     * -- the same rule the module-export case below states -- so an exported
+     * class member is retained only when something reachable uses it.  Keeping
+     * those as forced roots emitted an imported module's unreachable suspendable
+     * methods, whose coroutine machinery then named a runtime the entry never
+     * links.  Freestanding images have no dynamic Xray module/class ABI at all:
+     * their public surface is the explicit C/link/entry manifest handled above.
+     *
+     * This closes the world only as tightly as the edge set below is complete.
+     * Getter field reads are an edge because of this; monomorphized generic
+     * class members are not yet, which is why parallel_plan_map_cleanup_after_panic
+     * and parallel_plan_nested_dispatch_cleanup still fail to link. */
     if (cg_func_is_class_member(ctx, f)) {
         if (ctx->freestanding_profile)
             return false;
-        return !ctx->emit_main || cg_func_is_exported_class_member(ctx, f);
+        return !ctx->emit_main;
     }
     /* Executables are closed-world: a language-level export is retained only
      * when a reachable import/shared-slot read consumes it. Hosted shared
@@ -10999,24 +11038,68 @@ static void cg_func_reach_mark_hash_eq_roots(XiCgenCtx *ctx) {
         cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->hash_func_id, NULL));
         cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->eq_func_id, NULL));
     }
+    /* Also seed hash() / operator == for every class that declares them. The
+     * runtime type table dispatches to these by class for a user-Hashable key
+     * (xrt_type_set_user_hash_eq), an edge no static plan or direct call site
+     * exposes, so without seeding they would be pruned and the type-table setup
+     * would reference undefined symbols. */
+    for (int mi = 0; mi < ctx->all_nmodules; mi++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[mi] : NULL;
+        if (!mod || !mod->classes)
+            continue;
+        for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
+            const XiClassData *cd = mod->classes[ci];
+            const XiFunc *hash_fn = cg_class_instance_method_func(ctx, cd, "hash");
+            const XiFunc *eq_fn = cg_class_instance_method_func(ctx, cd, "==");
+            if (hash_fn && eq_fn) {
+                cg_func_reach_mark_root(ctx, hash_fn);
+                cg_func_reach_mark_root(ctx, eq_fn);
+            }
+        }
+    }
 }
 
-static void cg_func_reach_mark_dispatch_roots(XiCgenCtx *ctx) {
+/* A dispatch plan's targets are edges out of the function that dispatches, not
+ * unconditional roots.  As roots they kept every virtual target of every
+ * imported class alive even when nothing reachable dispatches to it, so an
+ * imported module's methods were emitted and named runtime symbols the entry
+ * never declares.  Runs inside the reachability fixed point and reports whether
+ * it discovered anything new.
+ *
+ * A plan with no owner body cannot be attributed to a caller, so its targets
+ * stay unconditional: under-approximating there would prune a body that a live C
+ * call still references. */
+static bool cg_func_reach_mark_dispatch_edges(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    bool changed = false;
     if (!ctx || !bundle)
-        return;
+        return false;
     for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
         const XaotMethodDispatchPlan *plan = &bundle->method_dispatch_plans[i];
         if (plan->target_count == 0 || plan->target_start == 0 ||
             plan->target_start - 1 + plan->target_count > bundle->ndispatch_target_cases)
             continue;
+        if (plan->owner_func_id != XG_NO_ID) {
+            const XiFunc *owner = xaot_bundle_find_body_func(bundle, plan->owner_func_id, NULL);
+            CgFuncReachMemo *owner_memo =
+                owner ? cg_func_reach_memo_entry(ctx, owner, false) : NULL;
+            if (!owner_memo || !owner_memo->reachable)
+                continue;
+        }
         for (uint16_t ti = 0; ti < plan->target_count; ti++) {
             const XaotDispatchTargetCase *target =
                 &bundle->dispatch_target_cases[plan->target_start - 1 + ti];
-            cg_func_reach_mark_root(ctx,
-                                    xaot_bundle_find_dispatch_target_func(bundle, target, NULL));
+            const XiFunc *target_func = xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
+            if (!target_func)
+                continue;
+            CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target_func, false);
+            if (memo && memo->reachable)
+                continue;
+            cg_func_reach_mark_root(ctx, target_func);
+            changed = true;
         }
     }
+    return changed;
 }
 
 static void cg_func_reach_mark_generic_body_roots(XiCgenCtx *ctx) {
@@ -11114,10 +11197,17 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
             if (receiver_class && receiver_class->methods && receiver_class->child_idx) {
                 const XiModule *class_mod = cg_class_native_module_for_data(ctx, receiver_class);
                 if (class_mod && class_mod->init) {
+                    /* Instance methods count too, not just static ones.  On a
+                     * monomorphized class the call resolves to the generic
+                     * template -- correctly non-executable -- while cgen emits
+                     * the specialization's symbol, so the template edge marks
+                     * nothing and the body that was actually named gets pruned.
+                     * The receiver's class data is the specialization, so its
+                     * own method table names exactly the body cgen emits. */
                     for (uint16_t mi = 0; mi < receiver_class->nmethod; mi++) {
                         const XiClassMethod *candidate = &receiver_class->methods[mi];
-                        if (!candidate->is_static || candidate->is_static_constructor ||
-                            !candidate->name || strcmp(candidate->name, method) != 0)
+                        if (candidate->is_static_constructor || !candidate->name ||
+                            strcmp(candidate->name, method) != 0)
                             continue;
                         uint16_t child_idx = receiver_class->child_idx[mi];
                         if (child_idx < class_mod->init->nchildren)
@@ -11129,7 +11219,30 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         }
         changed |=
             cg_func_reach_mark_edge(ctx, cg_class_native_resolve_method_call(ctx, owner, v, NULL));
+
+        /* A parallel.Plan lifecycle call is emitted through the monomorphized
+         * specialization, not through the Plan<T> skeleton the call resolves to,
+         * so the ordinary method edge above marks a generic template body that
+         * is correctly non-executable while cgen names the specialization.  Ask
+         * the emitter's own resolver for the body it will name. */
+        if (v->nargs >= 1) {
+            const XiClassData *plan_class = xicgen_parallel_plan_lifecycle_class(
+                ctx, owner, v, method, (uint16_t) (v->nargs - 1));
+            if (plan_class)
+                changed |= cg_func_reach_mark_edge(
+                    ctx, xicgen_parallel_plan_lifecycle_target(ctx, plan_class, method, NULL));
+        }
     }
+
+    /* A getter reads as a field, so `dt.day` is a LOAD_FIELD rather than a
+     * method call, yet it lowers to a call on the class member -- and to its
+     * boxed adapter when the receiver is not a native pointer.  Without this
+     * edge a closed-world executable pruned the accessor body while the
+     * consuming module still called the adapter, and the link failed on a
+     * symbol cgen itself had emitted the reference for. */
+    if (v->op == XI_LOAD_FIELD)
+        changed |= cg_func_reach_mark_edge(
+            ctx, cg_class_native_resolve_getter_field_method(ctx, owner, v, NULL, NULL));
 
     const XiFunc *ref_target = cg_value_static_func_target(ctx, owner, v);
     if (ref_target && cg_static_func_ref_use_requires_body(ctx, owner, v, ref_target, 0))
@@ -11193,7 +11306,6 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
         cg_func_reach_collect_tree(ctx, ctx->module->init);
     }
     cg_func_reach_mark_hash_eq_roots(ctx);
-    cg_func_reach_mark_dispatch_roots(ctx);
     cg_func_reach_mark_generic_body_roots(ctx);
 
     bool changed;
@@ -11208,6 +11320,7 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
                 continue;
             changed |= cg_func_reach_mark_body_edges_in_owner_module(ctx, source);
         }
+        changed |= cg_func_reach_mark_dispatch_edges(ctx);
     } while (changed);
 
     for (int i = 0; i < ctx->nfunc_reach_memo; i++)

@@ -1,0 +1,61 @@
+// anchor: loop-invariant-rc-value
+// LICM runs after xi_arc_insert, so RETAIN/RELEASE are already materialized as
+// side-effecting values it cannot move. Hoisting a loop-invariant definition
+// that yields an RC-managed reference would therefore run the definition once
+// while its paired RELEASE still ran every iteration — an over-release that
+// aborts the allocator rather than producing a wrong answer.
+//
+// Every case below allocates inside a loop from operands defined outside it,
+// which is exactly the shape LICM wants to hoist.
+
+fn widthLoop(x: int, n: int) -> int {
+    var acc = 0
+    for (i in 0..n) {
+        acc = acc + len(string(x)) + i
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+fn concatLoop(prefix: string, n: int) -> int {
+    var acc = 0
+    for (i in 0..n) {
+        acc = acc + len(prefix + "-tail")
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+fn arrayLoop(a: int, b: int, n: int) -> int {
+    var acc = 0
+    for (i in 0..n) {
+        acc = acc + len([a, b])
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+fn nestedLoop(x: int, n: int) -> int {
+    var acc = 0
+    for (i in 0..n) {
+        for (j in 0..n) {
+            acc = acc + len(string(x))
+        }
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+print(widthLoop(7, 3))
+print(widthLoop(1234, 4))
+print(concatLoop("ab", 3))
+print(arrayLoop(1, 2, 4))
+print(nestedLoop(42, 3))

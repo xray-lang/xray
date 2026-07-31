@@ -1,0 +1,168 @@
+// 1239_generic_method_constraint.xr
+// A class method's OWN generic constraints — `total<T: Iterable<int>>(...)`
+// declared on a method rather than on a top-level fn.
+//
+// REGRESSION: the method parser called xr_parse_constraint_list and threw the
+//             result away ("parse and discard for forward-compat parsing"),
+//             because MethodDeclNode carried only `char **type_param_names`
+//             instead of FunctionDeclNode's `XrGenericParam **type_params`.
+//             The analyzer then passed NULL constraint lists into
+//             xa_symbol_links_set_type_params, so a method's constraints had
+//             no effect anywhere.
+// FAIL_AT:    pre-fix
+//             -> `<K: Hashable>` on a method was invisible, so using K as a
+//                Map key raised E0375 "Type parameter 'K' used as Map key must
+//                be constrained as Hashable" even though K *was* constrained.
+//             -> a constraint-violating explicit type argument was accepted at
+//                compile time and only blew up at runtime.
+// PASS_AT:    post-fix
+//             -> MethodDeclNode carries XrGenericParam, xa_visit_collect_class
+//                resolves the constraints onto the method's symbol links, and
+//                the constraint-aware analyzer sites see them.
+// The negative half (a type argument that violates a method constraint) lives
+// in tests/compile_errors/type/138_generic_method_constraint_violated.xr.
+
+interface Greeter {
+    greet() -> string
+}
+
+class En implements Greeter {
+    constructor() {}
+    greet() -> string { return "hello" }
+}
+
+class Fr implements Greeter {
+    constructor() {}
+    greet() -> string { return "bonjour" }
+}
+
+class Animal {
+    name: string
+    constructor(n: string) { this.name = n }
+}
+
+class Dog extends Animal {
+    constructor(n: string) { super(n) }
+}
+
+// ===== Hashable bound on a method's own type param =====
+// Pre-fix this whole class failed to compile: K looked unconstrained, so
+// `Map<K, int>` in the signature tripped the Hashable key check.
+class Counter {
+    constructor() {}
+
+    sumValues<K: Hashable>(m: Map<K, int>) -> int {
+        var total = 0
+        for (k, v in m) { total = total + v }
+        return total
+    }
+
+    static countKeys<K: Hashable>(m: Map<K, int>) -> int {
+        var n = 0
+        for (k, v in m) { n = n + 1 }
+        return n
+    }
+}
+
+@test
+fn test_hashable_bound_on_instance_method() {
+    var c = Counter()
+    var m: Map<string, int> = #{"a": 1, "b": 2}
+    assert_eq(c.sumValues<string>(m), 3)
+}
+
+@test
+fn test_hashable_bound_on_static_method() {
+    var m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
+    assert_eq(Counter.countKeys<string>(m), 3)
+}
+
+// ===== Interface bound on a method's own type param =====
+class Caller {
+    constructor() {}
+
+    callIt<T: Greeter>(g: T) -> string { return g.greet() }
+
+    static callStatic<T: Greeter>(g: T) -> string { return g.greet() }
+}
+
+@test
+fn test_interface_bound_explicit_type_arg() {
+    var c = Caller()
+    assert_eq(c.callIt<En>(En()), "hello")
+    assert_eq(c.callIt<Fr>(Fr()), "bonjour")
+}
+
+@test
+fn test_interface_bound_inferred_type_arg() {
+    var c = Caller()
+    assert_eq(c.callIt(En()), "hello")
+}
+
+@test
+fn test_interface_bound_static_method() {
+    assert_eq(Caller.callStatic<Fr>(Fr()), "bonjour")
+}
+
+// ===== Class upper bound on a method's own type param =====
+class Kennel {
+    constructor() {}
+
+    nameOf<T: Animal>(a: T) -> string { return a.name }
+}
+
+@test
+fn test_class_upper_bound_accepts_subclass() {
+    var k = Kennel()
+    assert_eq(k.nameOf<Dog>(Dog("Rex")), "Rex")
+    assert_eq(k.nameOf<Animal>(Animal("Generic")), "Generic")
+}
+
+// ===== Multi-constraint intersection on a method =====
+class Passer {
+    constructor() {}
+
+    passThrough<T: Comparable & Hashable>(x: T) -> T { return x }
+
+    // Constrained and unconstrained method params side by side.
+    pick<K: Hashable, V>(k: K, v: V) -> V { return v }
+}
+
+@test
+fn test_method_intersection_constraint() {
+    var p = Passer()
+    assert_eq(p.passThrough<int>(11), 11)
+    assert_eq(p.passThrough<string>("xy"), "xy")
+}
+
+@test
+fn test_method_mixed_constrained_and_unconstrained() {
+    var p = Passer()
+    assert_eq(p.pick<int, string>(1, "one"), "one")
+    assert_eq(p.pick<string, int>("key", 42), 42)
+}
+
+// ===== Method constraint inside a generic class =====
+// Monomorphizing Box<T> must preserve the method-local param U and its bound.
+class Box<T> {
+    value: T
+    constructor(v: T) { this.value = v }
+
+    get() -> T { return this.value }
+
+    tag<U: Hashable>(key: U, m: Map<U, int>) -> int {
+        var total = 0
+        for (k, v in m) { total = total + v }
+        return total
+    }
+}
+
+@test
+fn test_method_constraint_in_generic_class() {
+    var box: Box<int> = Box<int>(10)
+    assert_eq(box.get(), 10)
+    var m: Map<string, int> = #{"x": 5, "y": 6}
+    assert_eq(box.tag<string>("x", m), 11)
+}
+
+print("All generic method constraint tests passed!")

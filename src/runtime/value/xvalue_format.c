@@ -475,15 +475,14 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             xr_strbuf_append_cstr(sb, buf, (size_t) n);
             break;
         }
-        case XR_TFUNCTION: {
-            XrClosure *closure = (XrClosure *) gc;
-            xr_strbuf_append_cstr(sb, "fn ", 3);
-            if (closure->proto && closure->proto->name)
-                xr_strbuf_append_str(sb, closure->proto->name);
-            else
-                xr_strbuf_append_cstr(sb, "<anonymous>", 11);
+        /* A function value renders without its source name. The name is debug
+         * metadata: AOT's callable descriptor does not carry one, and gating it
+         * on the type-name profile would make a program's output depend on how
+         * it was built. One name-free spelling keeps VM and AOT in step on
+         * every profile. */
+        case XR_TFUNCTION:
+            xr_strbuf_append_cstr(sb, "<fn>", 4);
             break;
-        }
         case XR_TCFUNCTION:
             xr_strbuf_append_cstr(sb, "<native fn>", 11);
             break;

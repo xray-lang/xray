@@ -199,6 +199,27 @@ static void emit_quoted_payload(XrFmtContext *ctx, const char *prefix, const uin
     ctx->block_literal_closed = true;
 }
 
+void xfmt_emit_float_literal(XrFmtContext *ctx, double value) {
+    // %.17g round-trips every finite double exactly; shorter forms can change
+    // the value. Then guarantee the result still LOOKS like a float: without a
+    // '.', 'e' or 'E' the lexer would take `0` back as an integer literal and
+    // the expression would silently change type.
+    char buf[64];
+    int n = snprintf(buf, sizeof(buf), "%.17g", value);
+    if (n <= 0 || (size_t) n >= sizeof(buf)) {
+        xfmt_write_str(ctx, "0.0");
+        return;
+    }
+    if (!strpbrk(buf, ".eEnN")) {  // n/N also catch inf/nan spellings
+        if ((size_t) n + 2 < sizeof(buf)) {
+            buf[n] = '.';
+            buf[n + 1] = '0';
+            buf[n + 2] = '\0';
+        }
+    }
+    xfmt_write_str(ctx, buf);
+}
+
 void xfmt_emit_escaped_inline_string(XrFmtContext *ctx, const char *value, int length) {
     emit_quoted_payload(ctx, "", (const uint8_t *) value, length > 0 ? (size_t) length : 0,
                         XR_LITERAL_ESCAPED, XR_LITERAL_INLINE, false, false);
@@ -255,7 +276,7 @@ static void emit_template_parts(XrFmtContext *ctx, TemplateStringNode *tmpl, boo
          * interpolation and leave the block body under-indented. */
         if (block && ctx->line_start)
             lit_indent(ctx);
-        if (part->type == AST_LITERAL_STRING) {
+        if (part->type == AST_LITERAL_STRING && part->as.literal.is_template_chunk) {
             const char *value = part->as.literal.raw_value.string_val;
             emit_payload(ctx, (const uint8_t *) value, value ? strlen(value) : 0, tmpl->escape_mode,
                          block, false, true);

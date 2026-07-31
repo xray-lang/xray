@@ -55,7 +55,6 @@
 #define TYPE_NAME_WEAKMAP "WeakMap"
 #define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_SLICE "Slice"
-#define TYPE_NAME_VIEW "Slice"
 
 /* ========== Runtime Types ========== */
 

@@ -3,7 +3,7 @@
 // Here T carries Comparable, but innerH demands Hashable, so the forwarding
 // must stay an error.
 //
-// Positive coverage: tests/regression/12_type_checking/1237_generic_constraint_forwarding.xr
+// Positive coverage: tests/regression/12_type_checking/1251_generic_constraint_forwarding.xr
 
 fn innerH<U: Hashable>(y: U) -> U {
     return y

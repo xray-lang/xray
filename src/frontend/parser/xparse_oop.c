@@ -915,6 +915,46 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
 /* ========== Method Declaration Parsing ========== */
 
+// Parse a method's own generic type parameters, if present:
+//   <T, U: Interface1 & Interface2>
+// Returns NULL with *out_count == 0 when the method is not generic. Shared by
+// class/struct/enum methods and by interface method signatures so a bound
+// written in an interface means exactly what it means in an implementation.
+XrGenericParam **xr_parse_method_type_params(Parser *parser, int *out_count) {
+    XR_DCHECK(parser != NULL, "parse_method_type_params: NULL parser");
+    XR_DCHECK(out_count != NULL, "parse_method_type_params: NULL out_count");
+
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            char *param_name = token_to_string(parser, &parser->previous);
+
+            // Optional intersection constraint <T: Interface1 & Interface2 ...>
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+
+        xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
+    }
+
+    *out_count = type_param_count;
+    return type_params;
+}
+
 // Parse method declaration
 // Syntax:
 //   greet(name: string): void { ... }
@@ -932,30 +972,9 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     // Check if this is a constructor
     bool is_constructor = (strcmp(name, XR_KEYWORD_CONSTRUCTOR) == 0);
 
-    // Parse optional generic type parameters: methodName<T, U>(...)
-    char **type_param_names = NULL;
+    // Parse optional generic type parameters: methodName<T, U: Hashable>(...)
     int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            // Parse type parameter name
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            XR_PARSE_PUSH(parser, type_param_names, type_param_count, type_param_capacity,
-                          token_to_string(parser, &parser->previous));
-
-            // Skip optional intersection constraint <T: Interface1 & Interface2 ...>
-            // Method-level type-param constraints are not yet stored in the
-            // method-decl AST, so we parse and discard for forward-compat parsing.
-            if (xr_parser_match(parser, TK_COLON)) {
-                int dummy = 0;
-                xr_parse_constraint_list(parser, &dummy);
-            }
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        // Consume closing '>'
-        xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
-    }
+    XrGenericParam **type_params = xr_parse_method_type_params(parser, &type_param_count);
 
     // Parse parameter list
     xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
@@ -1071,7 +1090,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     method_node->as.method_decl.required_count = required_count;
 
     // Set generic type parameters
-    method_node->as.method_decl.type_param_names = type_param_names;
+    method_node->as.method_decl.type_params = type_params;
     method_node->as.method_decl.type_param_count = type_param_count;
 
     return method_node;
@@ -1899,8 +1918,12 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_error_at_current(parser, "'const' modifier only applies to property signatures");
     }
 
-    // Method signature: `name(params): retType`
-    xr_parser_consume(parser, TK_LPAREN, "expected '(' or ':' after interface member name");
+    // Optional generic type parameters: `wrap<T: Hashable>(x: T) -> int`
+    int type_param_count = 0;
+    XrGenericParam **type_params = xr_parse_method_type_params(parser, &type_param_count);
+
+    // Method signature: `name(params) -> retType`
+    xr_parser_consume(parser, TK_LPAREN, "expected '(', '<' or ':' after interface member name");
 
     XrParamNode **params = NULL;
     int param_count = 0;
@@ -1949,6 +1972,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
                                               param_count, return_type, member_line);
     method->as.interface_method.attributes = attributes;
     method->as.interface_method.attr_count = attr_count;
+    method->as.interface_method.type_params = type_params;
+    method->as.interface_method.type_param_count = type_param_count;
     return method;
 }
 

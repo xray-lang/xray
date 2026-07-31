@@ -119,13 +119,12 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(
         xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "ws2_32", &sink, err,
-                                                sizeof(err)));
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "bcrypt", &sink, err,
-                                                sizeof(err)));
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider,
-                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
-                                                sizeof(err)));
+    ASSERT_TRUE(
+        xtc_command_emit_system_library(selection.provider, "ws2_32", &sink, err, sizeof(err)));
+    ASSERT_TRUE(
+        xtc_command_emit_system_library(selection.provider, "bcrypt", &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "api-ms-win-core-synch-l1-2-0",
+                                                &sink, err, sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "/O2"));
     ASSERT_TRUE(command_capture_has(&capture, "/utf-8"));
     ASSERT_TRUE(command_capture_has(&capture, "/fp:strict"));
@@ -405,7 +404,7 @@ TEST(build_tree_runtime_manifest_matches_host_platform) {
     ASSERT_STR_EQ(runtime.object_format, "coff");
     ASSERT_EQ_INT(runtime.system_library_count, 2);
     ASSERT_STR_EQ(runtime.system_libraries[0], "ws2_32");
-    ASSERT_STR_EQ(runtime.system_libraries[1], "synchronization");
+    ASSERT_STR_EQ(runtime.system_libraries[1], "api-ms-win-core-synch-l1-2-0");
 #elif defined(__APPLE__)
     ASSERT_TRUE(xtc_runtime_manifest_load(&target, XR_TOOLCHAIN_PROVIDER_APPLE_CLANG, NULL,
                                           &runtime, &reason, err, sizeof(err)));
@@ -444,10 +443,13 @@ TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
     compile.optimization = XR_OPTIMIZATION_RELEASE;
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "-D_CRT_SECURE_NO_WARNINGS"));
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider,
-                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
-                                                sizeof(err)));
-    ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
+    /* This selection is the Zig provider targeting the MSVC ABI, and Zig ships
+     * the API-set import library under its canonical name, so the manifest's
+     * logical name passes through verbatim.  Only the MSVC provider rewrites it
+     * to synchronization.lib. */
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "api-ms-win-core-synch-l1-2-0",
+                                                &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-lapi-ms-win-core-synch-l1-2-0"));
 }
 
 TEST(msvc_version_parser_accepts_banner_text) {
@@ -456,8 +458,8 @@ TEST(msvc_version_parser_accepts_banner_text) {
         "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35219 for x64", version,
         sizeof(version)));
     ASSERT_STR_EQ(version, "19.44.35219");
-    ASSERT_FALSE(xtc_msvc_version_from_banner("Microsoft C/C++ compiler help", version,
-                                              sizeof(version)));
+    ASSERT_FALSE(
+        xtc_msvc_version_from_banner("Microsoft C/C++ compiler help", version, sizeof(version)));
 }
 
 TEST(cross_target_rejects_explicit_host_without_fallback) {
@@ -627,8 +629,7 @@ TEST(process_capture_and_output_limit) {
     spec.argv[2] = "-NoProfile";
     spec.argv[3] = "-NonInteractive";
     spec.argv[4] = "-Command";
-    spec.argv[5] =
-        "[Console]::Out.Write('123456789'); [Console]::Error.Write('abcdefghi')";
+    spec.argv[5] = "[Console]::Out.Write('123456789'); [Console]::Error.Write('abcdefghi')";
     spec.argv[6] = NULL;
 #else
     ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));

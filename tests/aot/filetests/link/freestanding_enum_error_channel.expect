@@ -9,9 +9,15 @@ c_contains=xrt_pending_error =
 c_contains=xrt_has_pending_error()
 c_contains=xrt_pending_error = XR_NULL_VAL
 c_contains=xrt_pending_error = XR_FROM_INT(
-c_contains=int64_t v7 = XR_TO_INT(xrt_pending_error)
-c_regex=int64_t v[0-9]+ = v[0-9]+;
-c_regex=uint8_t v[0-9]+ = v[0-9]+ == v[0-9]+
+# Locals are hoisted to declarations at the top of the function and assigned
+# separately, and folded ordinals no longer take their own SSA value, so pin
+# the scalar shape rather than a declaration form or a value number.  The
+# c_not_contains assertions below are what actually guard the enum lowering:
+# no boxing, no tag, no map, no xrt_eq.
+c_regex=v[0-9]+ = XR_TO_INT\(xrt_pending_error\);
+c_regex=v[0-9]+ = v[0-9]+;
+c_regex=uint8_t v[0-9]+;
+c_regex=v[0-9]+ = v[0-9]+ == v[0-9]+;
 c_not_contains=_xenum_
 c_not_contains=XR_TAG_ENUM
 c_not_contains=xrt_enum_box_ordinal
