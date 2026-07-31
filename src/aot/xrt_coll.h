@@ -1988,6 +1988,21 @@ static inline XrValue xrt_map_new_vt(int64_t cap, uint8_t value_type) {
     return mv;
 }
 
+/* Untyped-storage map that still records whichever of its declared element
+ * types is a scalar (e.g. Map<string, int> or Map<int, string>: the non-scalar
+ * side forces tagged entry storage). keys() and values() use the recorded types
+ * so their result lanes match the Array<K> / Array<V> layout consumers were
+ * planned with. Typed storage needs both sides scalar, so at least one stays
+ * XR_ELEM_ANY here and xrt_map_is_typed remains false. */
+static inline XrValue xrt_map_new_declared(int64_t cap, uint8_t key_type, uint8_t value_type) {
+    XrValue mv = xrt_map_new_flags(cap, 0);
+    if (mv.ptr) {
+        ((xrt_map_t *) mv.ptr)->key_type = key_type;
+        ((xrt_map_t *) mv.ptr)->value_type = value_type;
+    }
+    return mv;
+}
+
 static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, int32_t *indices,
                                                   XrMapEntry *entries, uint32_t indices_size,
                                                   uint32_t entries_cap, uint8_t key_type,
