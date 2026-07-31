@@ -1,0 +1,15 @@
+// A variant the enum does not declare is a typo, not an arm that never fires.
+// Expression position already answers this, so a pattern must answer the same.
+enum Color { Red, Green, Blue }
+
+fn pick() -> Color { return Color.Red }
+
+fn main() {
+    match (pick()) {
+        Color.Red -> print("red")
+        Color.Purple -> print("purple")
+        _ -> print("other")
+    }
+}
+
+main()
