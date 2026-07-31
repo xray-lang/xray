@@ -251,6 +251,23 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
                                                        XrType *receiver_type);
 XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
                                                  const char *kind);
+/* Shared analyzer utilities the ownership decision needs: AST/statement
+ * traversal, place-path comparison, and whole-binding identity. Defined in
+ * xanalyzer_visitor_stmt.c, used from xa_ownership.c. */
+XR_FUNC bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count);
+XR_FUNC bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int start_index);
+XR_FUNC bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *expr,
+                                                 bool *out_pointer_borrow);
+XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+XR_FUNC bool xa_path_is_same_or_nested(const char *path, const char *prefix);
+XR_FUNC bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr);
+XR_FUNC bool xa_symbol_used_after_current_statement(XaInferContext *ctx, const XaSymbol *symbol);
+XR_FUNC AstNode *xa_unsafe_expr_result(AstNode *expr);
+XR_FUNC XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value);
+XR_FUNC AstNode *xa_whole_binding_value(AstNode *value);
+
+/* The live loan a given borrower holds, if any. */
+XR_FUNC XaActiveLoan *xa_active_loan_for_borrower(XaInferContext *ctx, XaSymbol *borrower_sym);
 XR_FUNC void xa_register_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, AstNode *value,
                                      XrType *value_type);
 /* Closure captures are collected while the closure body is inferred, then

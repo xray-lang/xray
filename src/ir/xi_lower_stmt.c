@@ -3365,6 +3365,9 @@ static void lower_print(XiLower *l, AstNode *node) {
     }
 }
 
+/* An enum variant constructed at the throw is the error value itself, so it is
+ * allocated straight into the shared band. A unit variant needs no such
+ * marking: it is an immutable per-enum singleton that is already shared. */
 static bool stmt_throw_is_direct_enum_constructor(XiLower *l, AstNode *expr) {
     while (expr && (expr->type == AST_GROUPING || expr->type == AST_AS_EXPR))
         expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.as_expr.expr;
