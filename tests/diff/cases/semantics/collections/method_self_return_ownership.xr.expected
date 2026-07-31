@@ -7,9 +7,17 @@ t abcd
 u abcd
 v abcd
 s abcd
+a0 7
+f 5 5
+r0 3
+b 104 105
+rows 1
+s a,b,c 1
 kept 3
 rows0 1
 y 6
 y 4
 y 2
-y 3
+y 1
+y 4
+y 4

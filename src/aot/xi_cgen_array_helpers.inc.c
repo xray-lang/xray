@@ -5395,8 +5395,14 @@ static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
      * bare pointer when select_rep chose PTR for this value, otherwise the
      * tagged XrValue. Without this the statement-expression always produced
      * an XrValue and `void *vN = (XrValue)` failed to compile. */
+    /* An inlined map/filter builds a fresh array, so a result nobody consumes
+     * has to be released rather than cast away.  Same ownership rule as the
+     * symbol dispatchers; see xrt_method_0. */
+    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
+                            ? "xrt_discard_owned(_outv)"
+                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
     fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; %s; })", ctype_str(map.param_rep),
-            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+            yield);
     return true;
 }
 
@@ -5485,8 +5491,13 @@ static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out
             ctype_str(filter.param_rep), filter.dst_info.ctype);
     /* Yield in the destination value's representation (PTR -> bare pointer,
      * else tagged XrValue); matches the `<ctype> vN =` declaration site. */
-    fprintf(out, "_out->length = _out_len; %s; })",
-            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    /* An inlined map/filter builds a fresh array, so a result nobody consumes
+     * has to be released rather than cast away.  Same ownership rule as the
+     * symbol dispatchers; see xrt_method_0. */
+    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
+                            ? "xrt_discard_owned(_outv)"
+                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    fprintf(out, "_out->length = _out_len; %s; })", yield);
     return true;
 }
 

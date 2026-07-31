@@ -8754,8 +8754,8 @@ static void xicgen_emit_stringbuilder_literal_append_reserve(XiCgenCtx *ctx, FIL
     fprintf(out, ", INT64_C(%" PRId64 "));\n", total);
 }
 
-static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                             const char *method, uint16_t nargs) {
+static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const XiValue *v, const char *method, uint16_t nargs) {
     const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
     bool recv_is_stringbuilder = recv_type && recv_type->kind == XR_KIND_INSTANCE &&
                                  recv_type->instance.class_name &&
@@ -8783,9 +8783,13 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             return true;
         }
         const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_strbuf_finish(");
+        /* xrt_strbuf_finish allocates, so a result nobody consumes has to be
+         * released rather than cast away.  Same ownership rule as the symbol
+         * dispatchers; see xrt_method_0. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
+        fprintf(out, discarded ? "xrt_discard_owned(xrt_strbuf_finish(" : "xrt_strbuf_finish(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, discarded ? "))" : ")");
         emit_conversion_suffix(out, suffix);
         return true;
     }
@@ -8806,11 +8810,21 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             emit_codegen_abort_expr(out);
             return true;
         }
+        /* Answering with the receiver hands back a reference the caller owns,
+         * so it is retained exactly like the XRT_SYM_CLEAR arm of
+         * xrt_method_0.  A discarded result would only be retained and
+         * released again, so it skips the pair outright. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
         fprintf(out, "(xrt_strbuf_clear(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, "), ");
+        if (discarded) {
+            fprintf(out, "XR_NULL_VAL)");
+            return true;
+        }
+        fprintf(out, "xrt_method_return_self(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, "))");
         return true;
     }
     if (strcmp(method, "append") != 0 || nargs != 1)
@@ -10242,15 +10256,18 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     }
     int sym = cg_method_sym(method);
-    if (xicgen_emit_stringbuilder_method(ctx, out, v, method, nargs))
+    if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
         return;
     /* string.copyArray<byte>(): the VM dispatches this by name (no stable method-symbol
      * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
     if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_str_to_bytes(");
+        /* Allocates a byte array, so a result nobody consumes has to be
+         * released rather than cast away.  See xrt_method_0. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
+        fprintf(out, discarded ? "xrt_discard_owned(xrt_str_to_bytes(" : "xrt_str_to_bytes(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, discarded ? "))" : ")");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }

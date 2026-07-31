@@ -337,6 +337,21 @@ static inline XrValue xrt_method_return_self(XrValue recv) {
     return recv;
 }
 
+/* Drop an OWNED (+1) result the program does not consume.
+ *
+ * The single expression of "a discarded result is still owned, so releasing it
+ * is the caller's job".  Generated C emits this directly for the lowerings that
+ * bypass the symbol dispatchers (StringBuilder.toString), and xrt_method_discard_N
+ * below routes through it for the ones that do not.
+ *
+ * Answers XR_NULL_VAL rather than void so it composes wherever the value form
+ * was: an unused result still flows through the caller's representation
+ * conversion before being cast away. */
+static inline XrValue xrt_discard_owned(XrValue owned) {
+    xrt_release(owned);
+    return XR_NULL_VAL;
+}
+
 /* Does xrt_method_N hand back an OWNED (+1) result for this method symbol?
  *
  * This is the compiler-visible half of the dispatcher ownership convention
@@ -347,12 +362,14 @@ static inline XrValue xrt_method_return_self(XrValue recv) {
  * wrong releases a borrow, so the default is "no": an unlisted symbol is simply
  * never released, which at worst leaks the way the whole dispatcher used to.
  *
- * Deliberately absent are the arms that answer through a helper returning its
- * own argument at +0 — sort(), reserve(), fill(), resize(), appendFrom(),
- * repeatFrom() — and the arms that answer with an element the receiver still
- * owns: Iterator.next() and Iterator.nth() hand back a borrow of a slot inside
- * the underlying collection.  Wrap the former in xrt_method_return_self before
- * adding them here; the latter can never be added. */
+ * The table is keyed on the symbol alone, so a symbol whose arms disagree —
+ * one receiver kind answering owned and another borrowed — cannot be listed at
+ * all.  Each exclusion below says which arm disqualified it.
+ *
+ * "Owned" has to hold for the whole object graph, not just its outermost
+ * allocation: releasing an array walks its elements, so a freshly allocated
+ * array of borrowed elements is NOT an owned result.  That is the trap the
+ * collection producers fall into; see XRT_SYM_KEYS below. */
 static inline int xrt_method_result_is_owned(int sym) {
     switch (sym) {
         /* Freshly built strings, plus String.toString() answering with a
@@ -361,19 +378,76 @@ static inline int xrt_method_result_is_owned(int sym) {
         case XRT_SYM_REPEAT:
         case XRT_SYM_REPLACE:
         case XRT_SYM_REPLACEALL:
+        case XRT_SYM_SLICE:
+        case XRT_SYM_SLICE_BYTES:
+        case XRT_SYM_TOHEX:
+        case XRT_SYM_TOFIXED:
+        case XRT_SYM_FROM_UTF8:
+        case XRT_SYM_FROM_UTF8_LOSSY:
+        case XRT_SYM_FROM_RUNE:
         /* Freshly built iterator shells, plus Iterator.iterator() answering
          * with a retained receiver. */
         case XRT_SYM_ITERATOR:
         case XRT_SYM_ENTRIES_ITERATOR:
         case XRT_SYM_RUNES:
-        /* Freshly built arrays. */
-        case XRT_SYM_KEYS:
-        case XRT_SYM_VALUES:
-        /* Retained receiver (Array.reverse, StringBuilder.clear); the Map, Set
-         * and Array clear() arms answer with an untracked null. */
+        /* Freshly built arrays whose ELEMENTS are also the caller's: split()
+         * pushes strings it just allocated, and Range.toArray() pushes
+         * integers.  See the note below for why most array producers cannot
+         * be listed. */
+        case XRT_SYM_SPLIT:
+        case XRT_SYM_TO_ARRAY:
+        /* Moved out of the receiver: pop/shift shorten it without releasing
+         * what they hand back, so the reference is the caller's. */
+        case XRT_SYM_POP:
+        case XRT_SYM_SHIFT:
+        /* Map.get() answers through xrt_map_get_owned, which promotes the
+         * stored value to an owned reference. */
+        case XRT_SYM_GET:
+        /* Retained receiver.  reverse() and StringBuilder.clear() answer with
+         * it directly; the in-place array mutators answer through a helper
+         * that returns its own argument, wrapped at the arm.  The Map, Set and
+         * Array clear() arms answer with an untracked null, and Buffer.resize()
+         * with an untracked bool. */
         case XRT_SYM_REVERSE:
         case XRT_SYM_CLEAR:
+        case XRT_SYM_SORT:
+        case XRT_SYM_RESERVE:
+        case XRT_SYM_FILL:
+        case XRT_SYM_RESIZE:
+        case XRT_SYM_APPEND_FROM:
+        case XRT_SYM_REPEATFROM:
             return 1;
+        /* Deliberately absent, even where one reading looks owned:
+         *
+         *   XRT_SYM_NEXT, XRT_SYM_NTH  — a slot of the underlying collection.
+         *   XRT_SYM_JOIN               — Array.join and String.join build a
+         *                                fresh string, but Thread.join answers
+         *                                with thread->retval, which the thread
+         *                                object still owns.  This table is
+         *                                keyed on the symbol alone, so one
+         *                                borrowed arm disqualifies it.
+         *   XRT_SYM_REDUCE             — the accumulator comes back out of a
+         *                                user closure, whose convention this
+         *                                layer cannot see.
+         *   XRT_SYM_KEYS, VALUES,      — SHALLOW COLLECTIONS.  xrt_map_keys,
+         *   ENTRIES, MAP, FILTER         xrt_map_values, xrt_set_values,
+         *                                xrt_json_collect and the typed
+         *                                array HOFs allocate a fresh array
+         *                                and fill it with xrt_array_push,
+         *                                which stores WITHOUT retaining.  The
+         *                                shell is the caller's but the
+         *                                elements still belong to the source,
+         *                                so releasing the shell walks them and
+         *                                frees objects the source still
+         *                                references — ASan catches this as a
+         *                                use-after-free in xrt_map_destroy the
+         *                                moment the values are managed rather
+         *                                than integers.  Listing these needs
+         *                                the producers to retain what they
+         *                                push, which in turn needs every other
+         *                                caller of those helpers to release
+         *                                the result.
+         */
         default:
             return 0;
     }
@@ -416,21 +490,31 @@ static inline XrValue xrt_str_to_bytes(XrValue s) {
  * that convention: it leaves one refcount with two owners, which is how
  * nested_generator.xr came to read a freed iterator.
  *
- * Two groups do still answer borrowed, and both are known:
+ * Three arms still answer borrowed.  Iterator.next() and Iterator.nth() hand
+ * back a slot of the underlying collection, because the pull protocol has no
+ * other value to give; Thread.join() hands back thread->retval, which the
+ * thread object still owns.  None of them is listed in
+ * xrt_method_result_is_owned(), which is what keeps the discard path
+ * (xrt_method_discard_N) from releasing a borrow.
  *
- *   - Iterator.next() and Iterator.nth() hand back a slot of the underlying
- *     collection.  This is inherent to the pull protocol, not an oversight.
- *   - The in-place array mutators that answer through a helper returning its
- *     own argument — sort(), reserve(), fill(), resize(), appendFrom(),
- *     repeatFrom().  These carry the same two-owner defect as reverse() did and
- *     take the same fix: wrap the helper call in xrt_method_return_self and add
- *     the symbol to xrt_method_result_is_owned().  They are untouched here only
- *     because this change was scoped to the arms that answered `recv` directly.
+ * The in-place array mutators — sort(), reserve(), fill(), resize(),
+ * appendFrom(), repeatFrom() — answer through a helper that returns its own
+ * argument, so the arm wraps that call in xrt_method_return_self rather than
+ * changing the helper, whose other callers keep their own conventions.
  *
- * Neither group is listed in xrt_method_result_is_owned(), which is what keeps
- * the discard path (xrt_method_discard_N) from releasing a borrow.  A new arm
- * that returns +1 belongs in that list; a new arm that returns a borrow needs a
- * line in this comment saying why. */
+ * A new arm that returns +1 belongs in xrt_method_result_is_owned(); a new arm
+ * that returns a borrow needs a line in this comment saying why.
+ *
+ * SCOPE.  This convention covers the dispatchers, not the language operation.
+ * The code generator has specialized lowerings that reach the same helpers
+ * directly and answer BORROWED — `Array<byte>.fill()` becomes a bare
+ * xrt_array_fill_value(), and reserve/resize/appendFrom/repeatFrom have their
+ * own emitters.  Each of those is self-consistent (nothing releases what they
+ * return), so the split is safe today, but it is the reason ownership cannot
+ * yet be lifted into Xi: marking these symbols +1 in xi_arc would make the
+ * borrowed lowerings double-free.  Making every lowering agree is the
+ * prerequisite for an ARC pass that drops an owned method result at its death
+ * point, which is what would close the leak in `var b = a.reverse()`. */
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
     /* Container/tuple toString renders via the shared value formatter so AOT
      * matches the VM ("[1, 2, 3]", "#{...}", "#[...]"). Simple enums are
@@ -479,7 +563,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return xrt_method_return_self(recv);
         }
         if (sym == XRT_SYM_SORT)
-            return xrt_array_sort(recv, NULL);
+            return xrt_method_return_self(xrt_array_sort(recv, NULL));
         if (sym == XRT_SYM_ITERATOR)
             return xrt_iterator_new(recv, XRT_ITER_VALUES);
         if (sym == XRT_SYM_ENTRIES_ITERATOR)
@@ -840,9 +924,9 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_RESERVE)
-            return xrt_array_reserve_value(recv, arg0);
+            return xrt_method_return_self(xrt_array_reserve_value(recv, arg0));
         if (sym == XRT_SYM_APPEND_FROM)
-            return xrt_byte_array_append_from_value(recv, arg0);
+            return xrt_method_return_self(xrt_byte_array_append_from_value(recv, arg0));
         if (sym == XRT_SYM_RESIZE)
             xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG);
         if (sym == XRT_SYM_UNSHIFT) {
@@ -861,7 +945,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
-            return xrt_array_fill_value(recv, arg0, XR_FROM_INT(0), XR_FROM_INT(a->length));
+            return xrt_method_return_self(
+                xrt_array_fill_value(recv, arg0, XR_FROM_INT(0), XR_FROM_INT(a->length)));
         }
         if (sym == XRT_SYM_INDEXOF) {
             int handled;
@@ -920,7 +1005,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
             xrt_fn1_t fn = (xrt_fn1_t) cl->callable->sync_entry;
             if (sym == XRT_SYM_SORT)
-                return xrt_array_sort(recv, cl);
+                return xrt_method_return_self(xrt_array_sort(recv, cl));
             if (sym == XRT_SYM_MAP) {
                 return xrt_array_map_typed(recv, arg0, XR_ELEM_ANY);
             }
@@ -1095,12 +1180,13 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
-        return xrt_array_resize_value(recv, arg0, arg1);
+        return xrt_method_return_self(xrt_array_resize_value(recv, arg0, arg1));
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEATFROM)
-        return xrt_byte_array_repeat_from_tail_value(recv, arg0, arg1);
+        return xrt_method_return_self(xrt_byte_array_repeat_from_tail_value(recv, arg0, arg1));
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
-        return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));
+        return xrt_method_return_self(
+            xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length)));
     }
     if (recv.tag == XR_TAG_SYS_CONDVAR)
         return xrt_sys_condvar_method_2(recv, sym, arg0, arg1);
@@ -1117,7 +1203,7 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
-        return xrt_array_fill_value(recv, arg0, arg1, arg2);
+        return xrt_method_return_self(xrt_array_fill_value(recv, arg0, arg1, arg2));
     return XR_NULL_VAL;
 }
 
@@ -1137,48 +1223,34 @@ static inline XrValue xrt_method_4(XrValue recv, int sym, XrValue arg0, XrValue 
  * Releasing here is what lets the arms above retain uniformly instead of
  * choosing +0 or +1 per arm to suit the caller.
  *
- * Answering XR_NULL_VAL rather than void keeps these usable wherever the value
- * form was: an unused result still flows through the caller's representation
- * conversion before being cast away.
- *
  * A discarded call must still run — an arm can mutate the receiver, throw, or
  * set the pending error — so the dispatch is unconditional and only the release
  * is gated. */
 static inline XrValue xrt_method_discard_0(XrValue recv, int sym) {
     XrValue result = xrt_method_0(recv, sym);
-    if (xrt_method_result_is_owned(sym))
-        xrt_release(result);
-    return XR_NULL_VAL;
+    return xrt_method_result_is_owned(sym) ? xrt_discard_owned(result) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_discard_1(XrValue recv, int sym, XrValue arg0) {
     XrValue result = xrt_method_1(recv, sym, arg0);
-    if (xrt_method_result_is_owned(sym))
-        xrt_release(result);
-    return XR_NULL_VAL;
+    return xrt_method_result_is_owned(sym) ? xrt_discard_owned(result) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_discard_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
     XrValue result = xrt_method_2(recv, sym, arg0, arg1);
-    if (xrt_method_result_is_owned(sym))
-        xrt_release(result);
-    return XR_NULL_VAL;
+    return xrt_method_result_is_owned(sym) ? xrt_discard_owned(result) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_discard_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                            XrValue arg2) {
     XrValue result = xrt_method_3(recv, sym, arg0, arg1, arg2);
-    if (xrt_method_result_is_owned(sym))
-        xrt_release(result);
-    return XR_NULL_VAL;
+    return xrt_method_result_is_owned(sym) ? xrt_discard_owned(result) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_method_discard_4(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                            XrValue arg2, XrValue arg3) {
     XrValue result = xrt_method_4(recv, sym, arg0, arg1, arg2, arg3);
-    if (xrt_method_result_is_owned(sym))
-        xrt_release(result);
-    return XR_NULL_VAL;
+    return xrt_method_result_is_owned(sym) ? xrt_discard_owned(result) : XR_NULL_VAL;
 }
 
 #include "xrt_getprop.inc.c"

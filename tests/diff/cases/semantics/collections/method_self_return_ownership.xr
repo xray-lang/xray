@@ -20,12 +20,17 @@ fn aliased_reverse() {
     print("a0-again " + string(a[0]))
 }
 
+// StringBuilder answers clear() and toString() through their own lowering
+// rather than the symbol dispatchers, so both readings need covering there too:
+// clear() aliases the builder, toString() allocates and must not be stranded
+// when the call is written as a statement.
 fn aliased_clear() {
     var sb = StringBuilder()
     sb.append("hello")
     var same = sb.clear()
     same.append("world")
     print("sb " + sb.toString())
+    sb.toString()
     sb.clear()
     print("cleared " + sb.toString())
 }
@@ -41,6 +46,57 @@ fn aliased_string_passthrough() {
     s.repeat(1)
     s.replaceAll("zz", "yy")
     print("s " + s)
+}
+
+// The in-place array mutators answer with the receiver through a helper, so
+// they carry the same two readings as reverse() does.
+fn aliased_mutators() {
+    var a = [3, 1, 2]
+    var s = a.sort()
+    s[0] = 7
+    print("a0 " + string(a[0]))
+    a.sort()
+    a.reserve(16)
+    var f = a.fill(5)
+    print("f " + string(f[0]) + " " + string(a[1]))
+
+    var bytes = Array<byte>(4)
+    bytes.fill(9)
+    var r = bytes.fill(3)
+    print("r0 " + string(r[0]))
+}
+
+// string.copyBytes() has no method-symbol id and is lowered straight to its
+// runtime helper, so it needs the same treatment as the dispatchers.
+fn allocating_helper() {
+    var s = "hi" + " there"
+    s.copyBytes()
+    var b = s.copyBytes()
+    print("b " + string(b[0]) + " " + string(b[1]))
+}
+
+// pop()/shift() move an element out of the receiver, which shortens without
+// releasing, so a discarded one owns what it took. map()/filter()/split() and
+// friends build fresh objects. Map.get() promotes to an owned reference.
+fn discarded_owned_results() {
+    var rows = [[1, 2], [3, 4], [5, 6]]
+    rows.pop()
+    rows.shift()
+    print("rows " + string(len(rows)))
+
+    var a = [3, 1, 2]
+    a.map(fn(x: int) -> int { return x * 2 })
+    a.filter(fn(x: int) -> bool { return x > 1 })
+
+    var s = "a,b,c"
+    s.split(",")
+    s.slice(0, 2)
+    var m = #{"k": [1, 2]}
+    m.get("k")
+    m.keys()
+    m.values()
+    (255).toHex()
+    print("s " + s + " " + string(len(m)))
 }
 
 // The other half of the convention: next() answers with an element the
@@ -62,6 +118,10 @@ fn frames(n: int) -> Iterator<int> {
     for (x in b) {
         yield x * n
     }
+    var sorted = a.sort()
+    yield sorted[0]
+    var filled = a.fill(4)
+    yield filled[0]
     var sb = StringBuilder()
     sb.append("done")
     var same = sb.clear()
@@ -72,6 +132,9 @@ fn frames(n: int) -> Iterator<int> {
 aliased_reverse()
 aliased_clear()
 aliased_string_passthrough()
+aliased_mutators()
+allocating_helper()
+discarded_owned_results()
 discarded_element_borrow()
 for (y in frames(2)) {
     print("y " + string(y))
