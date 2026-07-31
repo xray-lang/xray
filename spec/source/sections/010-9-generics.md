@@ -136,6 +136,20 @@ enum Wrap<T> where T: Comparable { ... }
 
 `where` 只能约束该声明自身的类型参数；命名其他标识符，或在没有类型参数的声明上使用，都是编译错误。
 
+#### 键等价关系
+
+哈希容器按**键等价关系**存取，它与 `==` 运算符是两个关系：
+
+- 键等价必须**自反、对称、传递**。自反性是容器不变量：存进去的键必须能被它自己找回来，否则插入不再覆盖、查找不再命中、删除不再回收。
+- `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
+- 键等价蕴含 `hash(a) == hash(b)`。
+
+内置 `float` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
+
+按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
+
+用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
+
 **当前限制**：
 - 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
 - 不支持默认类型参数（`<T = int>`）。
@@ -413,6 +427,20 @@ enum Wrap<T> where T: Comparable { ... }
 ```
 
 A `where` clause may only constrain type parameters of its own declaration; naming any other identifier, or using `where` on a declaration with no type parameters, is a compile error.
+
+#### The key relation
+
+Hash containers store and retrieve by a **key equivalence relation**, which is a different relation from the `==` operator:
+
+- Key equivalence must be **reflexive, symmetric, and transitive**. Reflexivity is a container invariant: a stored key must find itself, or insert stops replacing, lookup stops hitting, and delete stops reclaiming.
+- `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
+- Key equivalence implies `hash(a) == hash(b)`.
+
+Built-in `float` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+
+Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
+
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with float fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.

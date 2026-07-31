@@ -264,7 +264,7 @@ vmcase(OP_IS) {
     if (XR_IS_INT(type_val)) {
         /* Primitive type ID check */
         int expected_type = (int) XR_TO_INT(type_val);
-        result = (xr_value_typeid(val) == (XrTypeId) expected_type);
+        result = xr_value_is_type_id(val, (XrTypeId) expected_type);
     } else if (xr_value_is_class(type_val)) {
         /* Class instanceof check via inheritance chain */
         XrClass *target_cls = xr_value_to_class(type_val);
@@ -311,7 +311,16 @@ vmcase(OP_CHECKTYPE) {
     if (XR_IS_INT(type_val)) {
         int64_t expected_mask = XR_TO_INT(type_val);
         XrTypeId actual_tid = xr_value_typeid(val);
-        if (!((1LL << actual_tid) & expected_mask)) {
+        bool matches = ((1LL << actual_tid) & expected_mask) != 0;
+        if (!matches && XR_TID_IS_NUMBER(actual_tid)) {
+            /* An erased value reports only its family, so a fixed-width member
+             * of the mask is answered by representability instead. */
+            for (int tid = 0; tid < XR_TID_COUNT && !matches; tid++) {
+                if (((1LL << tid) & expected_mask) != 0)
+                    matches = xr_value_is_type_id(val, (XrTypeId) tid);
+            }
+        }
+        if (!matches) {
             savepc();
             // Build human-readable expected type list from bitmask
             char expect_buf[128];

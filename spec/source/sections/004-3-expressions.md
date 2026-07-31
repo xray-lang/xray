@@ -316,6 +316,7 @@ if (v is User) {
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
 - 适用于 union、可空、class 层级、`Json` 结构匹配。
+- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
 
@@ -992,6 +993,7 @@ if (v is User) {
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
 - Applies to union, nullable, class hierarchies, and `Json` structural matching.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
 

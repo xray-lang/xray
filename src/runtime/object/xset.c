@@ -112,10 +112,10 @@ static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *hea
 /* ========== Swiss Index Lookup ========== */
 
 // Candidate comparator for the shared Swiss probe: type tag then canonical
-// equality. xr_value_eq is type-aware, so the tag pre-check never rejects a
+// equality. xr_value_key_eq is type-aware, so the tag pre-check never rejects a
 // true match; it only short-circuits type-mismatched hash collisions.
 static inline int vm_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
-    return e->val_tt == val_tt && xr_value_eq(e->value, value);
+    return e->val_tt == val_tt && xr_value_key_eq(e->value, value);
 }
 
 // Returns the ctrl/indices slot for `value`, or UINT32_MAX if absent.

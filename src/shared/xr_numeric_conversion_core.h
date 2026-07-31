@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #define XR_NUMERIC_CANONICAL_F32_NAN UINT32_C(0x7fc00000)
+#define XR_NUMERIC_CANONICAL_F64_NAN UINT64_C(0x7ff8000000000000)
 
 /* Copy object representations without requiring a hosted C library.  Character
  * accesses are alias-safe in both C and C++, which keeps this the single
@@ -24,6 +25,57 @@ static inline void xr_numeric_bit_copy(void *destination, const void *source, si
     const unsigned char *src = (const unsigned char *) source;
     for (size_t index = 0; index < byte_count; index++)
         dst[index] = src[index];
+}
+
+/* A dynamically erased value keeps only an i64 or f64 payload — neither width
+ * nor signedness survives. `is i32` therefore cannot read a stored width back;
+ * it asks whether the payload is exactly representable in the target, which is
+ * the same question and is answerable. Within a union this is always true for
+ * the selected member, and outside one (Json, catch bindings) it is the honest
+ * answer instead of a width-blind tag test. */
+static inline bool xr_scalar_rep_holds_i64(uint8_t scalar_rep, int64_t value) {
+    switch ((XrNativeType) scalar_rep) {
+        case XR_NATIVE_I8:
+            return value >= INT8_MIN && value <= INT8_MAX;
+        case XR_NATIVE_U8:
+            return value >= 0 && value <= UINT8_MAX;
+        case XR_NATIVE_I16:
+            return value >= INT16_MIN && value <= INT16_MAX;
+        case XR_NATIVE_U16:
+            return value >= 0 && value <= UINT16_MAX;
+        case XR_NATIVE_I32:
+            return value >= INT32_MIN && value <= INT32_MAX;
+        case XR_NATIVE_U32:
+            return value >= 0 && value <= (int64_t) UINT32_MAX;
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+            /* Every 64-bit pattern is a value of both, and erasure has already
+             * dropped the signedness that would separate them. */
+            return true;
+        case XR_NATIVE_ISIZE:
+            return sizeof(ptrdiff_t) >= 8 || (value >= INT32_MIN && value <= INT32_MAX);
+        case XR_NATIVE_USIZE:
+            return value >= 0 && (sizeof(size_t) >= 8 || value <= (int64_t) UINT32_MAX);
+        default:
+            return false;
+    }
+}
+
+static inline bool xr_scalar_rep_holds_f64(uint8_t scalar_rep, double value) {
+    switch ((XrNativeType) scalar_rep) {
+        case XR_NATIVE_F64:
+            return true;
+        case XR_NATIVE_F32: {
+            float narrowed = (float) value;
+            /* NaN and the infinities all survive the round trip; only finite
+             * values can lose precision, and `!=` on NaN would misreport that. */
+            if (value != value)
+                return true;
+            return (double) narrowed == value;
+        }
+        default:
+            return false;
+    }
 }
 
 static inline uint8_t xr_numeric_scalar_bit_width(uint8_t scalar_rep, uint8_t pointer_bits) {

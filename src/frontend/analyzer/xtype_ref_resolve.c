@@ -1465,6 +1465,28 @@ static const char *undefined_type_hint(const char *name) {
     return NULL;
 }
 
+/* Every declared union funnels through the resolver, so aliases that expand to a
+ * colliding member are caught here alongside the directly spelled form. */
+static bool report_indiscriminable_union(XaAnalyzer *analyzer, const XrTypeRef *tref,
+                                         XrType *resolved) {
+    XrType *first = NULL;
+    XrType *second = NULL;
+    if (!analyzer || !xr_type_union_indiscriminable_pair(resolved, &first, &second))
+        return false;
+    XrLocation loc = {.file = analyzer->current_file,
+                      .line = tref ? tref->line : 0,
+                      .column = tref ? tref->column : 0};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "union members '%s' and '%s' are the same type after erasure, so `is` and `match` "
+             "cannot tell them apart; a union may carry at most one integer member and at most "
+             "one float member",
+             xr_type_to_string(first), xr_type_to_string(second));
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNION_INDISCRIMINABLE,
+                               msg, &loc);
+    return true;
+}
+
 static void report_undefined_public_type(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return;
@@ -1863,7 +1885,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         int count = tref->nchildren < XR_UNION_MAX_MEMBERS ? tref->nchildren : XR_UNION_MAX_MEMBERS;
         for (int i = 0; i < count; i++)
             members[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
-        return xr_type_new_union(analyzer->isolate, members, count);
+        XrType *resolved = xr_type_new_union(analyzer->isolate, members, count);
+        if (report_indiscriminable_union(analyzer, tref, resolved))
+            return xr_type_new_error(NULL);
+        return resolved;
     }
 
     if (tref->kind == XR_TREF_FUNCTION) {

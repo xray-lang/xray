@@ -128,9 +128,11 @@ typedef struct {
 
 static inline int xrt_set_probe_f64_eq(void *ctxp, int64_t slot) {
     xrt_set_probe_f64_ctx *ctx = (xrt_set_probe_f64_ctx *) ctxp;
-    if (ctx->set->elem_type == XR_ELEM_F32)
-        return ((const float *) ctx->set->items)[slot] == (float) ctx->value;
-    return ((const double *) ctx->set->items)[slot] == ctx->value;
+    if (ctx->set->elem_type == XR_ELEM_F32) {
+        return xr_hash_core_key_eq_f64((double) ((const float *) ctx->set->items)[slot],
+                                       (double) (float) ctx->value);
+    }
+    return xr_hash_core_key_eq_f64(((const double *) ctx->set->items)[slot], ctx->value);
 }
 
 typedef struct {

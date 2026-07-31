@@ -1,0 +1,6 @@
+// A dynamically erased value keeps only its i64 family, so `is i16` and
+// `is i32` would answer the same question about the same value. The union has
+// no way to say which member it holds.
+var s: i8 = 3
+var a: i16 | i32 = s
+print("${a}")

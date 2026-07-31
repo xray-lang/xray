@@ -17,6 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "xr_numeric_conversion_core.h"
 
 static inline uint64_t xr_hash_core_mix_u64(uint64_t x) {
     x ^= x >> 30;
@@ -39,6 +40,33 @@ static inline uint64_t xr_hash_core_bytes(const char *p, size_t n) {
 static inline uint32_t xr_hash_core_str_hash_bytes(const char *p, size_t n) {
     uint32_t h = (uint32_t) xr_hash_core_bytes(p, n);
     return h ? h : 1u;
+}
+
+/* Hash containers key on an equivalence relation, not on IEEE `==`.
+ *
+ * Reflexivity is a container invariant: a stored key must always find itself,
+ * or insert stops replacing, lookup stops hitting, and delete stops reclaiming.
+ * IEEE `==` is not reflexive on NaN, so float keys collapse first: every NaN is
+ * one key and -0.0 is the same key as +0.0. `a == b` still implies key
+ * equivalence, which keeps the two relations consistent in the one direction
+ * containers depend on. */
+static inline uint64_t xr_hash_core_f64_key_bits(double d) {
+    uint64_t bits;
+    if (d != d) {
+        /* One quiet NaN stands for the whole NaN space; payload and sign bits
+         * carry no value-level meaning. */
+        return XR_NUMERIC_CANONICAL_F64_NAN;
+    }
+    if (d == 0.0)
+        d = 0.0; /* collapses -0.0, which IEEE `==` already treats as equal */
+    xr_numeric_bit_copy(&bits, &d, sizeof(bits));
+    return bits;
+}
+
+static inline int xr_hash_core_key_eq_f64(double a, double b) {
+    if (a != a || b != b)
+        return (a != a) && (b != b);
+    return a == b;
 }
 
 #endif /* XR_HASH_CORE_H */

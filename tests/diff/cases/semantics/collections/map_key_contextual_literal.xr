@@ -1,0 +1,25 @@
+// anchor: map-key-contextual-literal
+// The key position of an index expression is typed by the container's key type,
+// exactly like the value position. An integer literal keying a Map<float, V> is
+// a float key, not an int key stored in a float map.
+var m: Map<float, string> = #{}
+m[1] = "int-literal"
+print("size after int literal=${len(m)}")
+m[1.0] = "float-literal"
+print("size after float literal=${len(m)}")
+print("get via int literal=${m[1]}")
+print("get via float literal=${m[1.0]}")
+for (k in m.keys()) {
+    print("key=${k}")
+}
+
+var wide: Map<i32, string> = #{}
+wide[1] = "one"
+print("wide size=${len(wide)}")
+print("wide get=${wide[1]}")
+
+var sf: Set<float> = #[]
+sf.add(2)
+sf.add(2.0)
+print("set size=${len(sf)}")
+print("set contains int literal=${sf.contains(2)}")

@@ -33,7 +33,8 @@ typedef struct XrString XrString;
 XR_FUNC uint32_t xr_hash_value(XrValue val);
 XR_FUNC uint32_t xr_hash_string(XrString *str);
 
-// Shallow value equality: primitives by value, strings by content, objects by pointer
+// Shallow value equality: primitives by value, strings by content, objects by pointer.
+// This is the `==` operator relation, so it is IEEE on floats and not reflexive on NaN.
 XR_FUNC bool xr_value_eq(XrValue a, XrValue b);
 
 /* Instance hash / equality hooks.
@@ -54,5 +55,9 @@ typedef bool (*XrValueInstanceHashHook)(XrValue key, uint32_t *out_hash);
 typedef int (*XrValueInstanceEqHook)(XrValue a, XrValue b);
 XR_FUNC void xr_value_set_instance_hooks(XrValueInstanceHashHook hash_hook,
                                          XrValueInstanceEqHook eq_hook);
+// The relation hash containers key on. Identical to xr_value_eq except that it is
+// reflexive on NaN, which is what keeps a stored key reachable by its own value.
+// xr_hash_value already collapses NaN and -0.0, so hash and equality agree.
+XR_FUNC bool xr_value_key_eq(XrValue a, XrValue b);
 
 #endif  // XVALUE_HASH_H

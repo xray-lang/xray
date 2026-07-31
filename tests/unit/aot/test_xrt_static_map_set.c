@@ -88,8 +88,10 @@ static void test_static_map_storage_uses_prehashed_lookup(void) {
     XrValue key = xr_box_str("ada");
     uint32_t hash = xrt_hash32_value(key);
 
-    XrValue value =
-        xrt_map_static_storage_init(&map, ctrl, indices, entries, XR_SWISS_GROUP, 5, XR_ELEM_I64);
+    /* String keys force tagged entry storage, so the declared key element stays
+     * XR_ELEM_ANY while the scalar value element is recorded. */
+    XrValue value = xrt_map_static_storage_init(&map, ctrl, indices, entries, XR_SWISS_GROUP, 5,
+                                                XR_ELEM_ANY, XR_ELEM_I64);
     xrt_map_set_prehashed(&map, key, XR_FROM_INT(7), hash);
     (void) xrt_map_static_storage_freeze(&map);
 

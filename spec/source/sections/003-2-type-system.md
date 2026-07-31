@@ -626,6 +626,7 @@ v = "hello"             // OK
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
 - 成员互不为彼此的子类型（否则会被规范化）。
+- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | float` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
@@ -635,6 +636,21 @@ match v {
     is string -> print("str: ${v}"),
 }
 ```
+
+**成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
+
+- 源类型与某个成员**完全相同** → 选该成员。
+- 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
+- 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
+
+```xray
+var a: int | float = 1        // 精确匹配 int
+var b: int | float = 1.0      // 精确匹配 float
+var c: i32 | string = 7       // 唯一整数族成员：i32
+var d: f32 | string = 1.5     // 唯一浮点族成员：f32
+```
+
+`is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
 **特殊化**：
 - `int | null` 规范化为 `int?`。
@@ -1609,6 +1625,7 @@ v = "hello"             // OK
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
 - Members must not be subtypes of each other (otherwise normalized).
+- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one float-family member**. `i16 | i32` and `f32 | float` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
@@ -1618,6 +1635,21 @@ match v {
     is string -> print("str: ${v}"),
 }
 ```
+
+**Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
+
+- The source type is **exactly** one member → that member is selected.
+- Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
+- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the float-family member when the union has none (matching "an integer literal types into a unique floating context"); a float literal selects the float-family member. The literal must be exactly representable in the selected member.
+
+```xray
+var a: int | float = 1        // exact match: int
+var b: int | float = 1.0      // exact match: float
+var c: i32 | string = 7       // sole integer-family member: i32
+var d: f32 | string = 1.5     // sole float-family member: f32
+```
+
+`is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
 **Special cases**:
 - `int | null` normalizes to `int?`.

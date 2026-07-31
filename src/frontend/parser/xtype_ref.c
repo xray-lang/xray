@@ -202,6 +202,13 @@ XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **
     return t;
 }
 
+XR_FUNC void xr_tref_set_source_position(XrTypeRef *tref, int line, int column) {
+    if (!tref)
+        return;
+    tref->line = line;
+    tref->column = column;
+}
+
 XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
                                                XrTypeRef **params, const XrParamMode *param_modes,
                                                int nparam, XrTypeRef *ret) {

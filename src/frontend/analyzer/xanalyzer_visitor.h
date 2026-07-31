@@ -47,6 +47,12 @@ XR_FUNC XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_call(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node);
+/* Container-derived type for the key position of an index expression, or NULL
+ * when the container does not constrain it. NULL means "leave the key's own
+ * inference alone", not "any key is acceptable". */
+XR_FUNC XrType *xa_index_key_expected_type(XaInferContext *ctx, XrType *container);
+XR_FUNC void xa_add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
+                                     XrType *expected_type);
 XR_FUNC XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node);

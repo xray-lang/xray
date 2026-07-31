@@ -563,10 +563,13 @@ void xr_array_clear(XrArray *arr) {
 
 /* ====== Query Methods ====== */
 
+/* Membership is the same question a Set answers, so it uses the container key
+ * relation rather than `==`: indexOf finds a stored NaN, `nan == nan` stays
+ * false. */
 int xr_array_index_of(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_index_of: NULL array");
     for (int i = 0; i < arr->length; i++) {
-        if (xr_value_eq(xr_array_get_element(arr, i), value)) {
+        if (xr_value_key_eq(xr_array_get_element(arr, i), value)) {
             return i;
         }
     }

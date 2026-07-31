@@ -12,7 +12,8 @@
 #define XRT_ARITH_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h"  // xrt_str_concat used by xrt_add
+#include "../runtime/value/xtype_names.h" /* XrTypeId + scalar-rep mapping */
+#include "xrt_arc.h"                      // xrt_str_concat used by xrt_add
 #include "xrt_range.h"
 #include "xrt_coll.h"  // forward-declares xrt_throw_exc (div/mod by zero); the
                        // definition is provided by xrt_exception.h in the full
@@ -527,6 +528,21 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         default:
             return 17; /* XR_TID_INSTANCE */
     }
+}
+
+/* The `is T` / checked-cast predicate, matching the VM's xr_value_is_type_id.
+ * A dynamically erased value carries no width, so a fixed-width numeric id is
+ * answered by exact representability rather than a type-id compare — the id
+ * side alone would report `int` for every integer and `float` for every
+ * floating value. */
+static inline int xrt_value_is_type_id(XrValue v, int64_t tid) {
+    uint8_t rep = xr_typeid_scalar_rep((XrTypeId) tid);
+    if (rep != XR_SCALAR_REP_NONE) {
+        if (xr_scalar_rep_is_integer(rep))
+            return v.tag == XR_TAG_I64 && xr_scalar_rep_holds_i64(rep, v.i);
+        return v.tag == XR_TAG_F64 && xr_scalar_rep_holds_f64(rep, v.f);
+    }
+    return xrt_typeof_id(v) == tid;
 }
 
 /* typename(x) — return the debug/logging type name as a string value. */

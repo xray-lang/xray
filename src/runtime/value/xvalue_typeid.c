@@ -11,6 +11,7 @@
 #include "xvalue.h"
 #include "xtype.h"
 #include "xtype_names.h"
+#include "../../shared/xr_numeric_conversion_core.h"
 #include "../../base/xchecks.h"
 #include "../class/xenum.h"
 #include "../class/xinstance.h"
@@ -100,6 +101,16 @@ XrTypeId xr_value_typeid(XrValue v) {
         }
     }
     return XR_TID_NULL;
+}
+
+bool xr_value_is_type_id(XrValue v, XrTypeId tid) {
+    uint8_t rep = xr_typeid_scalar_rep(tid);
+    if (rep != XR_SCALAR_REP_NONE) {
+        if (xr_scalar_rep_is_integer(rep))
+            return XR_IS_INT(v) && xr_scalar_rep_holds_i64(rep, XR_TO_INT(v));
+        return XR_IS_FLOAT(v) && xr_scalar_rep_holds_f64(rep, XR_TO_FLOAT(v));
+    }
+    return xr_value_typeid(v) == tid;
 }
 
 XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {

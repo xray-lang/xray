@@ -109,6 +109,7 @@
  * usually means a generic instantiates itself at an ever-larger type, which
  * has no finite monomorphization. */
 #define XR_ERR_ANALYZE_MONO_DEPTH 389
+#define XR_ERR_ANALYZE_UNION_INDISCRIMINABLE 390
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

@@ -426,6 +426,8 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
+The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<float, V>` is the float key `1.0`, not an int key stored in a float map. Key matching uses the key equivalence relation from §9.2, not `==`.
+
 ### 14.9 `Set<T>` Methods
 
 | Member | Type / Description |

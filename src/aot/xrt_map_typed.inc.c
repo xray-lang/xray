@@ -159,9 +159,11 @@ typedef struct {
 
 static inline int xrt_map_probe_f64_eq(void *ctxp, int64_t slot) {
     xrt_map_probe_f64_ctx *ctx = (xrt_map_probe_f64_ctx *) ctxp;
-    if (ctx->map->key_type == XR_ELEM_F32)
-        return ((const float *) ctx->map->keys)[slot] == (float) ctx->key;
-    return ((const double *) ctx->map->keys)[slot] == ctx->key;
+    if (ctx->map->key_type == XR_ELEM_F32) {
+        return xr_hash_core_key_eq_f64((double) ((const float *) ctx->map->keys)[slot],
+                                       (double) (float) ctx->key);
+    }
+    return xr_hash_core_key_eq_f64(((const double *) ctx->map->keys)[slot], ctx->key);
 }
 
 static inline int64_t xrt_map_find_i64_hashed(xrt_map_t *m, uint64_t bits, uint64_t hash) {

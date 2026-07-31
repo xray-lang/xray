@@ -97,7 +97,10 @@ uint32_t xr_hash_value(XrValue val) {
     return xr_hash_value_depth(val, 0);
 }
 
-bool xr_value_eq(XrValue a, XrValue b) {
+/* One comparison body serves two relations that differ only on NaN: `==` is
+ * IEEE, and the container key relation is reflexive. Splitting them into
+ * separate implementations would let the shared cases drift apart. */
+static bool value_eq_core(XrValue a, XrValue b, bool key_equivalence) {
     // Fast path: same tag and value
     if (xr_value_same(a, b))
         return true;
@@ -119,6 +122,8 @@ bool xr_value_eq(XrValue a, XrValue b) {
     if (XR_TID_IS_FLOAT(tid_a)) {
         double fa = XR_TO_FLOAT(a);
         double fb = XR_TO_FLOAT(b);
+        if (key_equivalence)
+            return xr_hash_core_key_eq_f64(fa, fb) != 0;
         if (isnan(fa) || isnan(fb))
             return false;
         if (fa == 0.0 && fb == 0.0)
@@ -147,10 +152,20 @@ bool xr_value_eq(XrValue a, XrValue b) {
                 if (handled >= 0)
                     return handled != 0;
             }
-            if (ia->klass && ia->klass == ib->klass && (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0)
-                return xr_value_deep_eq(a, b);
+            if (ia->klass && ia->klass == ib->klass &&
+                (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0) {
+                return key_equivalence ? xr_value_deep_key_eq(a, b) : xr_value_deep_eq(a, b);
+            }
         }
         return XR_TO_PTR(a) == XR_TO_PTR(b);
     }
     return false;
+}
+
+bool xr_value_eq(XrValue a, XrValue b) {
+    return value_eq_core(a, b, false);
+}
+
+bool xr_value_key_eq(XrValue a, XrValue b) {
+    return value_eq_core(a, b, true);
 }

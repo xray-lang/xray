@@ -468,7 +468,14 @@ static inline xr_Integer xr_int_shr_u_wrap(xr_Integer a, xr_Integer b) {
 /* ========== Type Query ========== */
 
 XR_FUNC XrTypeId xr_value_typeid(XrValue v);
+/* The `is T` predicate. For fixed-width numeric ids the erased value carries no
+ * width, so the test is exact representability in T rather than a tag compare;
+ * xr_value_typeid alone would answer `int` for every integer. */
+XR_FUNC bool xr_value_is_type_id(XrValue v, XrTypeId tid);
 XR_FUNC bool xr_value_deep_eq(XrValue a, XrValue b);
+/* Deep equality under the container key relation: reflexive on NaN, so a key
+ * carrying a NaN field still finds itself. `==` keeps IEEE semantics. */
+XR_FUNC bool xr_value_deep_key_eq(XrValue a, XrValue b);
 
 /* ========== Object Operations ========== */
 

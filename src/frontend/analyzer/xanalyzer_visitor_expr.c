@@ -749,6 +749,32 @@ static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *ind
                                &loc);
 }
 
+XR_FUNC void xa_add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
+                                     XrType *expected_type) {
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Index type '%s' is not assignable to expected type '%s'",
+             xr_type_to_string(index_type), xr_type_to_string(expected_type));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+/* The key position of an index expression is typed by the container, exactly
+ * like the value position of an index write. Without this, `m[1]` on a
+ * Map<float, V> keeps the literal's default `int` type and stores an int key in
+ * a float map — a value no reader of that map can produce or match. */
+XR_FUNC XrType *xa_index_key_expected_type(XaInferContext *ctx, XrType *container) {
+    if (!ctx || !container || XR_TYPE_IS_UNKNOWN(container))
+        return NULL;
+    if (XR_TYPE_IS_MAP(container))
+        return container->map.key_type;
+    if (XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_SLICE(container) ||
+        container->kind == XR_KIND_FIXED_ARRAY || XR_TYPE_IS_POINTER(container) ||
+        xr_type_is_named_class(container, "Range"))
+        return xr_type_new_int(ctx->analyzer->isolate);
+    return NULL;
+}
+
 XR_FUNC bool xa_type_contains_float(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type))
         return false;
