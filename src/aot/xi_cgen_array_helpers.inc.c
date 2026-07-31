@@ -114,7 +114,7 @@ static bool cg_ct_static_fixed_array_value_supported(const XrCtValue *value,
 static bool cg_static_fixed_array_literal_in_module(XiCgenCtx *ctx, const XiModule *module,
                                                     int64_t slot, CgFixedArrayLaneInfo *out_info,
                                                     const XrCtValue **out_value) {
-    if (!ctx || !module || !module->slot_const_literals || slot < 0 || slot >= module->nslots)
+    if (!ctx || !module || slot < 0 || slot >= module->nslots)
         return false;
     /* Hosted translation units may materialize their own immutable comptime
      * arrays as C static data.  Imported hosted constants deliberately retain
@@ -122,8 +122,10 @@ static bool cg_static_fixed_array_literal_in_module(XiCgenCtx *ctx, const XiModu
      * weak-data contract. */
     if (!ctx->freestanding_profile && module != ctx->module)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = ctx->freestanding_profile
+                                    ? cg_module_static_data_literal(module, slot)
+                                    : cg_module_const_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
         return false;
@@ -199,7 +201,9 @@ static bool cg_static_fixed_array_value_ex(XiCgenCtx *ctx, const XiValue *value,
 
     if (!cg_static_fixed_array_literal_in_module(ctx, module, slot, out_info, NULL))
         return false;
-    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    const XiConstLiteral *lit = ctx->freestanding_profile
+                                    ? cg_module_static_data_literal(module, slot)
+                                    : cg_module_const_literal(module, slot);
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, slot);
         ctx->error = true;
@@ -244,11 +248,10 @@ static bool cg_freestanding_static_fixed_matrix_literal_in_module(XiCgenCtx *ctx
                                                                   int64_t slot,
                                                                   CgStaticFixedMatrixInfo *out_info,
                                                                   const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
-        slot >= module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || slot < 0 || slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
         return false;
@@ -321,7 +324,7 @@ static bool cg_freestanding_static_fixed_matrix_value_ex(XiCgenCtx *ctx, const X
 
     if (!cg_freestanding_static_fixed_matrix_literal_in_module(ctx, module, slot, out_info, NULL))
         return false;
-    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, slot);
         ctx->error = true;
@@ -381,11 +384,10 @@ static bool cg_freestanding_static_fixed_cube_literal_in_module(XiCgenCtx *ctx,
                                                                 int64_t slot,
                                                                 CgStaticFixedCubeInfo *out_info,
                                                                 const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
-        slot >= module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || slot < 0 || slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
         return false;
@@ -466,7 +468,7 @@ static bool cg_freestanding_static_fixed_cube_value_ex(XiCgenCtx *ctx, const XiV
 
     if (!cg_freestanding_static_fixed_cube_literal_in_module(ctx, module, slot, out_info, NULL))
         return false;
-    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, slot);
         ctx->error = true;
@@ -529,11 +531,10 @@ static bool cg_static_fixed_struct_array_info_from_type(const XrType *type,
 static bool cg_freestanding_static_fixed_struct_array_literal_in_module(
     XiCgenCtx *ctx, const XiModule *module, int64_t slot, CgStaticFixedStructArrayInfo *out_info,
     const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
-        slot >= module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || slot < 0 || slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
         return false;
@@ -594,7 +595,7 @@ cg_freestanding_static_fixed_struct_array_value_ex(XiCgenCtx *ctx, const XiValue
     if (!cg_freestanding_static_fixed_struct_array_literal_in_module(ctx, module, slot, out_info,
                                                                      NULL))
         return false;
-    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, slot);
         ctx->error = true;
@@ -636,7 +637,7 @@ static void cg_emit_static_fixed_struct_array_type(FILE *out, const XrAggregateL
 static bool cg_emit_freestanding_static_fixed_struct_array_defs(XiCgenCtx *ctx, FILE *out,
                                                                 const XiModule *module,
                                                                 const char *prefix) {
-    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+    if (!ctx || !out || !module || !ctx->freestanding_profile)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -645,7 +646,7 @@ static bool cg_emit_freestanding_static_fixed_struct_array_defs(XiCgenCtx *ctx, 
         if (!cg_freestanding_static_fixed_struct_array_literal_in_module(ctx, module, slot, &info,
                                                                          &value))
             continue;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
         const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
         cg_emit_static_const_storage(out, lit);
         cg_emit_static_fixed_struct_array_type(out, info.layout, prefix);
@@ -707,11 +708,10 @@ static bool cg_static_fixed_tuple_array_info_from_type(const XrType *type,
 static bool cg_freestanding_static_fixed_tuple_array_literal_in_module(
     XiCgenCtx *ctx, const XiModule *module, int64_t slot, CgStaticFixedTupleArrayInfo *out_info,
     const XrCtValue **out_value) {
-    if (!ctx || !ctx->freestanding_profile || !module || !module->slot_const_literals || slot < 0 ||
-        slot >= module->nslots)
+    if (!ctx || !ctx->freestanding_profile || !module || slot < 0 || slot >= module->nslots)
         return false;
-    const XiConstLiteral *lit = &module->slot_const_literals[slot];
-    if (lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
+    if (!lit || lit->kind != XI_CONST_LITERAL_COMPTIME_AGGREGATE || !lit->ct_value ||
         lit->ct_value->kind != XR_CT_FIXED_ARRAY || !lit->type ||
         lit->type->kind != XR_KIND_FIXED_ARRAY)
         return false;
@@ -772,7 +772,7 @@ static bool cg_freestanding_static_fixed_tuple_array_value_ex(XiCgenCtx *ctx, co
     if (!cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot, out_info,
                                                                     NULL))
         return false;
-    const XiConstLiteral *lit = cg_module_const_literal(module, slot);
+    const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
     if (cg_imported_static_const_needs_weak_symbol(ctx, module, lit)) {
         cg_report_imported_static_const_requires_weak(ctx, module, slot);
         ctx->error = true;
@@ -809,7 +809,7 @@ static void cg_emit_static_fixed_tuple_array_type(FILE *out, XrType *tuple_type)
 
 static bool cg_emit_freestanding_static_fixed_tuple_array_defs(XiCgenCtx *ctx, FILE *out,
                                                                const XiModule *module) {
-    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+    if (!ctx || !out || !module || !ctx->freestanding_profile)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -818,7 +818,7 @@ static bool cg_emit_freestanding_static_fixed_tuple_array_defs(XiCgenCtx *ctx, F
         if (!cg_freestanding_static_fixed_tuple_array_literal_in_module(ctx, module, slot, &info,
                                                                         &value))
             continue;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
         const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
         cg_emit_static_const_storage(out, lit);
         cg_emit_static_fixed_tuple_array_type(out, info.tuple_type);
@@ -1185,7 +1185,7 @@ static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                  * its emitted read-only C data symbol. */
                 if (v->op == XI_SLICE_FROM_PTR && a == 2 && v->nargs == 3)
                     continue;
-                if (v->op == XI_INDEX_GET && a == 0)
+                if ((v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && a == 0)
                     continue;
                 if (v->op == XI_SLICE && a == 0 && v->nargs >= 3) {
                     CgFixedArrayLaneInfo info;
@@ -1241,7 +1241,7 @@ static bool cg_static_fixed_matrix_index_ref_safe_uses(XiCgenCtx *ctx, const XiF
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_INDEX_GET && a == 0)
+                if ((v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && a == 0)
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
@@ -1338,7 +1338,7 @@ static bool cg_static_fixed_cube_index_ref_safe_uses(XiCgenCtx *ctx, const XiFun
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_INDEX_GET && a == 0)
+                if ((v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && a == 0)
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
@@ -1504,7 +1504,7 @@ static void cg_emit_static_fixed_array_value(XiCgenCtx *ctx, FILE *out,
 }
 
 static bool cg_emit_static_fixed_array_defs(XiCgenCtx *ctx, FILE *out, const XiModule *module) {
-    if (!ctx || !out || !module || !module->slot_const_literals)
+    if (!ctx || !out || !module)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -1512,7 +1512,9 @@ static bool cg_emit_static_fixed_array_defs(XiCgenCtx *ctx, FILE *out, const XiM
         const XrCtValue *value = NULL;
         if (!cg_static_fixed_array_literal(ctx, slot, &info, &value))
             continue;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = ctx->freestanding_profile
+                                        ? cg_module_static_data_literal(module, slot)
+                                        : cg_module_const_literal(module, slot);
         const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
         cg_emit_static_const_storage(out, lit);
         fprintf(out, "%s ", info.ctype);
@@ -1539,7 +1541,7 @@ static bool cg_emit_static_fixed_array_defs(XiCgenCtx *ctx, FILE *out, const XiM
 
 static bool cg_emit_freestanding_static_fixed_matrix_defs(XiCgenCtx *ctx, FILE *out,
                                                           const XiModule *module) {
-    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+    if (!ctx || !out || !module || !ctx->freestanding_profile)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -1547,7 +1549,7 @@ static bool cg_emit_freestanding_static_fixed_matrix_defs(XiCgenCtx *ctx, FILE *
         const XrCtValue *value = NULL;
         if (!cg_freestanding_static_fixed_matrix_literal(ctx, slot, &info, &value))
             continue;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
         const XrCtFixedArrayValue *outer = &value->as.fixed_array_val;
         cg_emit_static_const_storage(out, lit);
         fprintf(out, "%s ", info.lane.ctype);
@@ -1577,7 +1579,7 @@ static bool cg_emit_freestanding_static_fixed_matrix_defs(XiCgenCtx *ctx, FILE *
 
 static bool cg_emit_freestanding_static_fixed_cube_defs(XiCgenCtx *ctx, FILE *out,
                                                         const XiModule *module) {
-    if (!ctx || !out || !module || !ctx->freestanding_profile || !module->slot_const_literals)
+    if (!ctx || !out || !module || !ctx->freestanding_profile)
         return false;
     bool emitted = false;
     for (uint16_t slot = 0; slot < module->nslots; slot++) {
@@ -1585,7 +1587,7 @@ static bool cg_emit_freestanding_static_fixed_cube_defs(XiCgenCtx *ctx, FILE *ou
         const XrCtValue *value = NULL;
         if (!cg_freestanding_static_fixed_cube_literal(ctx, slot, &info, &value))
             continue;
-        const XiConstLiteral *lit = &module->slot_const_literals[slot];
+        const XiConstLiteral *lit = cg_module_static_data_literal(module, slot);
         const XrCtFixedArrayValue *outer = &value->as.fixed_array_val;
         cg_emit_static_const_storage(out, lit);
         fprintf(out, "%s ", info.lane.ctype);
@@ -1955,6 +1957,74 @@ static bool emit_static_fixed_struct_array_field_get_expr(XiCgenCtx *ctx, FILE *
     return true;
 }
 
+static bool emit_static_fixed_struct_array_field_set_expr(XiCgenCtx *ctx, FILE *out,
+                                                          const XiValue *v) {
+    if (!v || v->op != XI_AGG_SET || v->nargs < 2)
+        return false;
+
+    CgStaticFixedStructArrayInfo nested_info;
+    int64_t nested_slot = -1;
+    const XiModule *nested_module = NULL;
+    const XiValue *nested_elem_access = NULL;
+    const XiValue *nested_elem_index = NULL;
+    int64_t nested_parent_field_idx = -1;
+    const XrAggregateLayout *nested_layout = NULL;
+    if (cg_static_fixed_struct_array_nested_field_value(
+            ctx, v->args[0], &nested_info, &nested_slot, &nested_module, &nested_elem_access,
+            &nested_elem_index, &nested_parent_field_idx, &nested_layout) &&
+        nested_layout) {
+        int64_t nested_field_idx = -1;
+        if (!cg_static_struct_field_access_index(v, nested_layout, &nested_field_idx) ||
+            !cg_static_struct_direct_field_set_supported(&nested_layout->fields[nested_field_idx]))
+            return false;
+        bool unchecked = cg_fixed_array_index_bounds_proven(nested_elem_access, nested_info.count);
+        if (unchecked) {
+            fprintf(out, "(");
+        } else {
+            fprintf(out, "({ int64_t _idx = ");
+            emit_value_as_rep_ctx(ctx, out, nested_elem_index, XR_REP_I64);
+            fprintf(out,
+                    "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) "
+                    "xrt_fixed_index_oob(_idx, %u); ",
+                    (unsigned) nested_info.count, (unsigned) nested_info.count);
+        }
+        cg_emit_static_fixed_struct_array_nested_field_lvalue(
+            ctx, out, nested_module, nested_slot, nested_elem_index, unchecked ? NULL : "_idx",
+            nested_info.layout, nested_parent_field_idx, nested_layout, nested_field_idx);
+        fprintf(out, " = ");
+        emit_struct_field_store_value(ctx, out, nested_layout, nested_field_idx, v->args[1]);
+        fprintf(out, unchecked ? ")" : "; })");
+        return true;
+    }
+
+    CgStaticFixedStructArrayInfo info;
+    int64_t slot = -1;
+    const XiModule *module = NULL;
+    const XiValue *index = NULL;
+    if (!cg_freestanding_static_fixed_struct_array_index_value(ctx, v->args[0], &info, &slot,
+                                                               &module, &index))
+        return false;
+    int64_t field_idx = -1;
+    if (!cg_static_struct_field_access_index(v, info.layout, &field_idx) ||
+        !cg_static_struct_direct_field_set_supported(&info.layout->fields[field_idx]))
+        return false;
+    bool unchecked = cg_fixed_array_index_bounds_proven(v->args[0], info.count);
+    if (unchecked) {
+        fprintf(out, "(");
+    } else {
+        fprintf(out, "({ int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, index, XR_REP_I64);
+        fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
+                (unsigned) info.count, (unsigned) info.count);
+    }
+    cg_emit_static_fixed_struct_array_field_lvalue(ctx, out, module, slot, index, !unchecked,
+                                                   info.layout, field_idx);
+    fprintf(out, " = ");
+    emit_struct_field_store_value(ctx, out, info.layout, field_idx, v->args[1]);
+    fprintf(out, unchecked ? ")" : "; })");
+    return true;
+}
+
 static bool cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(XiCgenCtx *ctx,
                                                                          const XiFunc *f,
                                                                          const XiValue *target,
@@ -1966,6 +2036,10 @@ static bool cg_static_fixed_struct_array_nested_field_ref_safe_uses(XiCgenCtx *c
 static bool cg_static_fixed_struct_array_index_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
                                                              const XiValue *target, int depth) {
     if (!ctx || !f || !target || depth > 8)
+        return false;
+    CgStaticFixedStructArrayInfo info;
+    if (!cg_freestanding_static_fixed_struct_array_index_value(ctx, target, &info, NULL, NULL,
+                                                               NULL))
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -2003,6 +2077,14 @@ static bool cg_static_fixed_struct_array_index_ref_safe_uses(XiCgenCtx *ctx, con
                                                                     NULL, NULL, NULL)) {
                     if (!cg_static_fixed_struct_array_nested_field_ref_safe_uses(ctx, f, v,
                                                                                  depth + 1))
+                        return false;
+                    continue;
+                }
+                if (v->op == XI_AGG_SET && a == 0) {
+                    int64_t field_idx = -1;
+                    if (!cg_static_struct_field_access_index(v, info.layout, &field_idx) ||
+                        !cg_static_struct_direct_field_set_supported(
+                            &info.layout->fields[field_idx]))
                         return false;
                     continue;
                 }
@@ -2045,7 +2127,7 @@ static bool cg_static_fixed_struct_array_fixed_array_field_ref_safe_uses(XiCgenC
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
-                if (v->op == XI_INDEX_GET && a == 0)
+                if ((v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && a == 0)
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
@@ -2103,6 +2185,14 @@ static bool cg_static_fixed_struct_array_nested_field_ref_safe_uses(XiCgenCtx *c
                         continue;
                     }
                     if (!cg_static_fixed_struct_array_field_result_supported(field))
+                        return false;
+                    continue;
+                }
+                if (v->op == XI_AGG_SET && a == 0) {
+                    int64_t field_idx = -1;
+                    if (!cg_static_struct_field_access_index(v, nested_layout, &field_idx) ||
+                        !cg_static_struct_direct_field_set_supported(
+                            &nested_layout->fields[field_idx]))
                         return false;
                     continue;
                 }
@@ -2556,12 +2646,183 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     return true;
 }
 
+static bool emit_static_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                   const CgFixedArrayLaneInfo *info) {
+    if (!ctx || !out || !v || v->op != XI_INDEX_SET || v->nargs < 3 || !info)
+        return false;
+
+    CgStaticFixedMatrixInfo matrix_info;
+    int64_t matrix_slot = -1;
+    const XiModule *matrix_module = NULL;
+    const XiValue *matrix_outer_index = NULL;
+    const XiValue *matrix_access = cg_unwrap_identity_value(v->args[0]);
+    bool matrix_store = cg_freestanding_static_fixed_matrix_index_value(
+        ctx, v->args[0], &matrix_info, &matrix_slot, &matrix_module, &matrix_outer_index);
+    if (matrix_store &&
+        (matrix_info.inner_count != info->count || matrix_info.lane.rep != info->rep ||
+         matrix_info.lane.native_type != info->native_type))
+        matrix_store = false;
+
+    CgStaticFixedCubeInfo cube_info;
+    int64_t cube_slot = -1;
+    const XiModule *cube_module = NULL;
+    const XiValue *cube_outer_index = NULL;
+    const XiValue *cube_middle_index = NULL;
+    const XiValue *cube_middle_access = cg_unwrap_identity_value(v->args[0]);
+    const XiValue *cube_outer_access =
+        (cube_middle_access && cube_middle_access->op == XI_INDEX_GET &&
+         cube_middle_access->nargs >= 1)
+            ? cg_unwrap_identity_value(cube_middle_access->args[0])
+            : NULL;
+    bool cube_store = cg_freestanding_static_fixed_cube_index_value(
+        ctx, v->args[0], &cube_info, &cube_slot, &cube_module, &cube_outer_index,
+        &cube_middle_index);
+    if (cube_store && (cube_info.inner_count != info->count || cube_info.lane.rep != info->rep ||
+                       cube_info.lane.native_type != info->native_type))
+        cube_store = false;
+
+    CgStaticFixedStructArrayInfo struct_info;
+    int64_t struct_slot = -1;
+    const XiModule *struct_module = NULL;
+    const XiValue *struct_access = NULL;
+    const XiValue *struct_index = NULL;
+    int64_t struct_field_idx = -1;
+    const XrAggregateFieldLayout *struct_field = NULL;
+    bool struct_store = cg_static_fixed_struct_array_fixed_array_field_value(
+        ctx, v->args[0], &struct_info, &struct_slot, &struct_module, &struct_access, &struct_index,
+        &struct_field_idx, &struct_field);
+    if (struct_store && (struct_field->elem_count != info->count ||
+                         cg_struct_native_rep(struct_field->elem_native_type) != info->rep))
+        struct_store = false;
+
+    CgStaticFixedStructArrayInfo nested_info;
+    int64_t nested_slot = -1;
+    const XiModule *nested_module = NULL;
+    const XiValue *nested_access = NULL;
+    const XiValue *nested_index = NULL;
+    int64_t nested_parent_field_idx = -1;
+    const XrAggregateLayout *nested_layout = NULL;
+    int64_t nested_field_idx = -1;
+    const XrAggregateFieldLayout *nested_field = NULL;
+    bool nested_store = cg_static_fixed_struct_array_nested_fixed_array_field_value(
+        ctx, v->args[0], &nested_info, &nested_slot, &nested_module, &nested_access, &nested_index,
+        &nested_parent_field_idx, &nested_layout, &nested_field_idx, &nested_field);
+    if (nested_store && (nested_field->elem_count != info->count ||
+                         cg_struct_native_rep(nested_field->elem_native_type) != info->rep))
+        nested_store = false;
+
+    if (!matrix_store && !cube_store && !struct_store && !nested_store)
+        return false;
+
+    bool index_unchecked = cg_fixed_array_index_bounds_proven(v, info->count);
+    bool outer_unchecked = true;
+    bool middle_unchecked = true;
+    if (matrix_store)
+        outer_unchecked =
+            cg_fixed_array_index_bounds_proven(matrix_access, matrix_info.outer_count);
+    else if (cube_store) {
+        outer_unchecked =
+            cg_fixed_array_index_bounds_proven(cube_outer_access, cube_info.outer_count);
+        middle_unchecked =
+            cg_fixed_array_index_bounds_proven(cube_middle_access, cube_info.middle_count);
+    } else if (struct_store)
+        outer_unchecked = cg_fixed_array_index_bounds_proven(struct_access, struct_info.count);
+    else
+        outer_unchecked = cg_fixed_array_index_bounds_proven(nested_access, nested_info.count);
+
+    fprintf(out, "({ ");
+    if (!outer_unchecked) {
+        fprintf(out, "int64_t _outer_idx = ");
+        emit_value_as_rep_ctx(ctx, out,
+                              matrix_store   ? matrix_outer_index
+                              : cube_store   ? cube_outer_index
+                              : struct_store ? struct_index
+                                             : nested_index,
+                              XR_REP_I64);
+        uint32_t outer_count = matrix_store   ? matrix_info.outer_count
+                               : cube_store   ? cube_info.outer_count
+                               : struct_store ? struct_info.count
+                                              : nested_info.count;
+        fprintf(out,
+                "; if (XR_UNLIKELY(_outer_idx < 0 || _outer_idx >= %u)) "
+                "xrt_fixed_index_oob(_outer_idx, %u); ",
+                (unsigned) outer_count, (unsigned) outer_count);
+    }
+    if (cube_store && !middle_unchecked) {
+        fprintf(out, "int64_t _middle_idx = ");
+        emit_value_as_rep_ctx(ctx, out, cube_middle_index, XR_REP_I64);
+        fprintf(out,
+                "; if (XR_UNLIKELY(_middle_idx < 0 || _middle_idx >= %u)) "
+                "xrt_fixed_index_oob(_middle_idx, %u); ",
+                (unsigned) cube_info.middle_count, (unsigned) cube_info.middle_count);
+    }
+    if (!index_unchecked) {
+        fprintf(out, "int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_fixed_index_oob(_idx, %u); ",
+                (unsigned) info->count, (unsigned) info->count);
+    }
+
+    if (matrix_store) {
+        cg_emit_static_fixed_array_name(ctx, out, matrix_module, matrix_slot);
+        fprintf(out, "[");
+        if (outer_unchecked)
+            emit_array_i64_arg(ctx, out, matrix_outer_index);
+        else
+            fprintf(out, "_outer_idx");
+        fprintf(out, "][");
+    } else if (cube_store) {
+        cg_emit_static_fixed_array_name(ctx, out, cube_module, cube_slot);
+        fprintf(out, "[");
+        if (outer_unchecked)
+            emit_array_i64_arg(ctx, out, cube_outer_index);
+        else
+            fprintf(out, "_outer_idx");
+        fprintf(out, "][");
+        if (middle_unchecked)
+            emit_array_i64_arg(ctx, out, cube_middle_index);
+        else
+            fprintf(out, "_middle_idx");
+        fprintf(out, "][");
+    } else if (struct_store) {
+        cg_emit_static_fixed_struct_array_field_lvalue_with_tmp(
+            ctx, out, struct_module, struct_slot, struct_index,
+            outer_unchecked ? NULL : "_outer_idx", struct_info.layout, struct_field_idx);
+        fprintf(out, "[");
+    } else {
+        cg_emit_static_fixed_struct_array_nested_field_lvalue(
+            ctx, out, nested_module, nested_slot, nested_index,
+            outer_unchecked ? NULL : "_outer_idx", nested_info.layout, nested_parent_field_idx,
+            nested_layout, nested_field_idx);
+        fprintf(out, "[");
+    }
+    if (index_unchecked)
+        emit_array_i64_arg(ctx, out, v->args[1]);
+    else
+        fprintf(out, "_idx");
+    fprintf(out, "] = ");
+    emit_fixed_array_lane_store_value(ctx, out, info, v->args[2]);
+    fprintf(out, "; XR_NULL_VAL; })");
+    return true;
+}
+
+static bool emit_static_fixed_array_index_set_from_value(XiCgenCtx *ctx, FILE *out,
+                                                         const XiValue *v) {
+    CgFixedArrayLaneInfo info;
+    return v && v->op == XI_INDEX_SET && v->nargs >= 3 &&
+           cg_fixed_array_lane_info_from_value(v->args[0], &info) &&
+           emit_static_fixed_array_index_set_expr(ctx, out, v, &info);
+}
+
 static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v) {
     CgFixedArrayLaneInfo info;
     if (!v || v->op != XI_INDEX_SET || v->nargs < 3 ||
         !cg_fixed_array_lane_info_from_value(v->args[0], &info))
         return false;
+
+    if (emit_static_fixed_array_index_set_expr(ctx, out, v, &info))
+        return true;
 
     bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
     (void) f;
@@ -2571,8 +2832,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked"
-                                       : "xrt_c90_fixed_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked" : "xrt_c90_fixed_u8_set");
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
         fprintf(out, ", INT64_C(%u), ", (unsigned) info.count);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -4373,8 +4633,8 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_conversion_suffix(out, conv_suffix);
             return true;
         }
-        fprintf(out, "(int64_t)%s(", unchecked ? "xrt_c90_span_u8_get_unchecked"
-                                                : "xrt_c90_span_u8_get");
+        fprintf(out, "(int64_t)%s(",
+                unchecked ? "xrt_c90_span_u8_get_unchecked" : "xrt_c90_span_u8_get");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -4446,8 +4706,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked"
-                                       : "xrt_c90_span_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked" : "xrt_c90_span_u8_set");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);

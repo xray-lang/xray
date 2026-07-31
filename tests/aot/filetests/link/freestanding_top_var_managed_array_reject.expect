@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects Array literal
+contains=use a target-typed fixed array literal when a no-heap layout is required
+not_contains=xrt_shared
+not_contains=CRASH

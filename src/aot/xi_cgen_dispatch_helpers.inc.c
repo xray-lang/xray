@@ -716,16 +716,14 @@ static void xicgen_codegen_opaque(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
     if (rep == XR_REP_I64) {
         bool is_unsigned = v->type && xr_type_is_exact_unsigned_integer(v->type);
-        fprintf(out, "%s(", is_unsigned ? "xrt_codegen_opaque_u64"
-                                         : "xrt_codegen_opaque_i64");
+        fprintf(out, "%s(", is_unsigned ? "xrt_codegen_opaque_u64" : "xrt_codegen_opaque_i64");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
         return;
     }
     if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR) {
         bool is_mut = v->type && v->type->kind == XR_KIND_POINTER && v->type->ptr_is_mut;
-        fprintf(out, "%s(", is_mut ? "xrt_codegen_opaque_ptr"
-                                    : "xrt_codegen_opaque_const_ptr");
+        fprintf(out, "%s(", is_mut ? "xrt_codegen_opaque_ptr" : "xrt_codegen_opaque_const_ptr");
         emit_value_as_rep_ctx(ctx, out, v->args[0], rep);
         fprintf(out, ")");
         return;
@@ -11157,6 +11155,8 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
+    if (emit_static_fixed_struct_array_field_set_expr(ctx, out, v))
+        return;
     XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
     const XiValue *place_load = xicgen_struct_place_load(v->args[0]);
     const XaotValuePlan *place_load_plan = place_load ? cg_value_plan(ctx, place_load) : NULL;
@@ -11365,8 +11365,7 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
-static void xicgen_convert_i64_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                     const XiValue *v) {
+static void xicgen_convert_i64_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
     const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
     uint8_t scalar_rep = xi_to_c_template_width_native_type(v->op);
     (void) f;
@@ -12682,6 +12681,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_codegen_abort_expr(out);
         return;
     }
+    if (emit_static_fixed_array_index_set_from_value(ctx, out, v))
+        return;
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
     if (emit_fixed_array_index_set_expr(ctx, out, f, v))
@@ -12909,18 +12910,16 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         if (v->type->kind == XR_KIND_INT) {
             fprintf(out, source_is_float ? "xrt_numeric_float_to_int_or_throw("
                                          : "xr_numeric_int_convert_i64(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0],
-                                  source_is_float ? XR_REP_F64 : XR_REP_I64);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], source_is_float ? XR_REP_F64 : XR_REP_I64);
             if (!source_is_float)
                 fprintf(out, ", %u", (unsigned) source_scalar);
             fprintf(out, ", %u, (uint8_t)(sizeof(void *) * 8u))", (unsigned) target_scalar);
             return;
         }
         if (v->type->kind == XR_KIND_FLOAT) {
-            fprintf(out, source_is_float ? "xr_numeric_float_convert("
-                                         : "xr_numeric_int_to_float(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0],
-                                  source_is_float ? XR_REP_F64 : XR_REP_I64);
+            fprintf(out,
+                    source_is_float ? "xr_numeric_float_convert(" : "xr_numeric_int_to_float(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], source_is_float ? XR_REP_F64 : XR_REP_I64);
             if (!source_is_float)
                 fprintf(out, ", %u", (unsigned) source_scalar);
             fprintf(out, ", %u", (unsigned) target_scalar);
@@ -13039,9 +13038,8 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
             return true;
         }
         fprintf(out, "(int64_t)%s(",
-                le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE
-                    ? le_unchecked_helper
-                    : unchecked_helper);
+                le_unchecked_helper && const_endian && endian == XR_ENDIAN_LE ? le_unchecked_helper
+                                                                              : unchecked_helper);
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -13808,8 +13806,8 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     }
     if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
-        fprintf(out, "%s(", bounds_proven ? "xrt_c90_span_window_unchecked"
-                                           : "xrt_c90_span_window");
+        fprintf(out, "%s(",
+                bounds_proven ? "xrt_c90_span_window_unchecked" : "xrt_c90_span_window");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -14555,11 +14553,10 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
     XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
-    const char *result_c_type =
-        value_plan && value_plan->rep.c_type &&
-                (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
-            ? value_plan->rep.c_type
-            : "void *";
+    const char *result_c_type = value_plan && value_plan->rep.c_type &&
+                                        (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
+                                    ? value_plan->rep.c_type
+                                    : "void *";
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
@@ -14573,8 +14570,7 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION) != 0 &&
         (emit_struct_scalar_field_addr_expr(ctx, out, f, v->args[0], prefix, result_c_type) ||
-         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0],
-                                                           result_c_type)))
+         emit_class_native_receiver_scalar_field_addr_expr(ctx, out, f, v->args[0], result_c_type)))
         return;
     if (v->type && v->type->kind == XR_KIND_SLICE && cg_type_is_byte_slice(v->type) &&
         v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {

@@ -1,0 +1,1 @@
+export var SHARED_COUNTERS: [int; 2] = [3, 5]

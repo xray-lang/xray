@@ -2541,6 +2541,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME aot_freestanding_static_fixed_array_mutation
+        COMMAND ${XRAY_TEST_BASH}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_static_fixed_array_mutation.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_freestanding_static_fixed_array_mutation PROPERTIES
+        LABELS "aot;freestanding;static-data;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME aot_freestanding_numeric_core_compile
         COMMAND ${XRAY_TEST_BASH}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_numeric_core_compile.sh

@@ -1,0 +1,5 @@
+import { SHARED_COUNTERS } from "./_freestanding_mutable_fixed_array_lib"
+
+fn read_mutable_fixed_array_import(i: int) -> int {
+    return SHARED_COUNTERS[i]
+}
