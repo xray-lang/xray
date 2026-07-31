@@ -269,10 +269,40 @@ struct ErrorSetCtx {
     FunctionValueTarget current_return_target;
     bool current_return_target_seen;
     bool current_return_target_unknown;
+    /* `var t = go f()` bindings: the task variable's symbol id and the spawn
+     * expression it holds, so `await t` can charge the caller with the
+     * coroutine body's errors. */
+    uint32_t task_spawn_alias_ids[64];
+    AstNode *task_spawn_alias_exprs[64];
+    int task_spawn_alias_count;
+    /* Depth of enclosing `linked scope` blocks in the function being walked.
+     * A child spawned at depth > 0 re-raises its failure at the scope's exit,
+     * so its errors belong to this function's error set. */
+    int linked_scope_depth;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
 };
+
+/* Coroutine-boundary facts are per-body.  Expanding a callee's body into this
+ * summary must not carry them in: a `go` inside the callee is detached whatever
+ * scope surrounds the call site, and the callee's own task bindings die with
+ * it.  Save on entry, restore on exit. */
+typedef struct CoroBoundaryState {
+    int task_spawn_alias_count;
+    int linked_scope_depth;
+} CoroBoundaryState;
+
+static void enter_callee_body_coro_boundary(ErrorSetCtx *ctx, CoroBoundaryState *state) {
+    state->task_spawn_alias_count = ctx->task_spawn_alias_count;
+    state->linked_scope_depth = ctx->linked_scope_depth;
+    ctx->linked_scope_depth = 0;
+}
+
+static void leave_callee_body_coro_boundary(ErrorSetCtx *ctx, const CoroBoundaryState *state) {
+    ctx->task_spawn_alias_count = state->task_spawn_alias_count;
+    ctx->linked_scope_depth = state->linked_scope_depth;
+}
 
 static void capture_catch_alias_state(ErrorSetCtx *ctx, CatchAliasState *state);
 static void restore_catch_alias_state(ErrorSetCtx *ctx, const CatchAliasState *state);
@@ -1473,11 +1503,14 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     XaEffectSummary *saved_caught = ctx->current_caught;
     int saved_catch_alias_control_depth = ctx->current_catch_alias_control_depth;
     apply_function_expr_catch_capture(ctx, function_expr);
+    CoroBoundaryState saved_coro_boundary;
+    enter_callee_body_coro_boundary(ctx, &saved_coro_boundary);
     ctx->current_func = NULL;
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
     es_walk_block(ctx, fn->body);
+    leave_callee_body_coro_boundary(ctx, &saved_coro_boundary);
     ctx->current_catch_var = saved_catch_var;
     ctx->current_catch_symbol_id = saved_catch_symbol_id;
     restore_catch_alias_state(ctx, &saved_catch_alias_state);
@@ -1639,9 +1672,12 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
+    CoroBoundaryState saved_coro_boundary;
+    enter_callee_body_coro_boundary(ctx, &saved_coro_boundary);
     ctx->callsite_inline_depth++;
     es_walk_block(ctx, body);
     ctx->callsite_inline_depth--;
+    leave_callee_body_coro_boundary(ctx, &saved_coro_boundary);
 
     restore_function_value_alias_state(ctx, &saved_alias_state);
     ctx->current_return_target = saved_return_target;
@@ -3506,6 +3542,141 @@ static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
     return es_apply_effect_contract(ctx, contract);
 }
 
+/* ========== Coroutine Boundaries (task 248) ========== */
+
+/* An error keeps its channel when it crosses an execution boundary, so it also
+ * keeps its place in the error set: whoever re-raises a coroutine's failure --
+ * `await t` in the awaiting frame, `linked scope` at its exit -- is as fallible
+ * as the coroutine body itself.  Charge those errors to the walking function so
+ * lowering emits the ERR_CHECK that routes them to `catch (e)`, and so callers
+ * see the function as fallible.  A body we cannot name is fail-closed: unknown,
+ * therefore may-throw. */
+
+/* Union the error set of the function a spawn expression starts.  `spawn_expr`
+ * is a `go`'s operand: `go f(x)` (a call) or `go closure` (a function value). */
+static void es_union_spawned_body_effects(ErrorSetCtx *ctx, AstNode *spawn_expr) {
+    if (!ctx || !spawn_expr) {
+        xa_effect_summary_mark_incomplete(ctx ? ctx->current_summary : NULL,
+                                          XA_UNKNOWN_UNRESOLVED_CALLEE);
+        return;
+    }
+
+    const CallExprNode *call = spawn_expr->type == AST_CALL_EXPR ? &spawn_expr->as.call_expr : NULL;
+    AstNode *callee = call ? call->callee : spawn_expr;
+
+    if (es_walk_immediate_function_expr_call(ctx, callee))
+        return;
+    if (es_apply_native_call_contract(ctx, callee))
+        return;
+
+    FunctionValueTarget target = resolve_call_target(ctx, callee);
+    if (!function_value_target_is_exact(target)) {
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+        return;
+    }
+
+    for (int i = 0; i < target.target_count; i++) {
+        AstNode *function_expr = target.target_function_exprs[i];
+        XaSymbol *callee_sym = target.target_symbols[i];
+        if (function_expr) {
+            es_walk_function_expr_body(ctx, function_expr);
+            continue;
+        }
+        if (call && es_walk_callsite_function_decl_body(ctx, callee_sym, call))
+            continue;
+        if (callee_sym &&
+            (callee_sym->kind == XA_SYM_FUNCTION || callee_sym->kind == XA_SYM_METHOD) &&
+            callee_sym->links.effect_id != XA_EFFECT_NONE) {
+            const XaEffectSummary *callee_summary =
+                xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
+            if (callee_summary) {
+                xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
+                                              callee_summary);
+                continue;
+            }
+        }
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_UNRESOLVED_CALLEE);
+    }
+}
+
+static void set_task_spawn_alias(ErrorSetCtx *ctx, uint32_t symbol_id, AstNode *spawn_expr) {
+    if (!ctx || symbol_id == 0)
+        return;
+    for (int i = 0; i < ctx->task_spawn_alias_count; i++) {
+        if (ctx->task_spawn_alias_ids[i] == symbol_id) {
+            ctx->task_spawn_alias_exprs[i] = spawn_expr;
+            return;
+        }
+    }
+    if (ctx->task_spawn_alias_count >= 64)
+        return;
+    int slot = ctx->task_spawn_alias_count++;
+    ctx->task_spawn_alias_ids[slot] = symbol_id;
+    ctx->task_spawn_alias_exprs[slot] = spawn_expr;
+}
+
+/* NULL means "no known spawn": either never bound here, or invalidated by a
+ * rebind we could not follow. */
+static AstNode *task_spawn_alias_expr(ErrorSetCtx *ctx, uint32_t symbol_id) {
+    if (!ctx || symbol_id == 0)
+        return NULL;
+    for (int i = 0; i < ctx->task_spawn_alias_count; i++) {
+        if (ctx->task_spawn_alias_ids[i] == symbol_id)
+            return ctx->task_spawn_alias_exprs[i];
+    }
+    return NULL;
+}
+
+/* The spawn expression behind an awaited operand, or NULL when it cannot be
+ * named from here (a task read out of an array, passed in as a parameter, or
+ * returned by a call). */
+static AstNode *awaited_spawn_expr(ErrorSetCtx *ctx, AstNode *awaited) {
+    AstNode *source = identity_source(awaited);
+    if (!source)
+        return NULL;
+    if (source->type == AST_GO_EXPR)
+        return source->as.go_expr.expr;
+    if (source->type == AST_VARIABLE) {
+        XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, source);
+        return task_spawn_alias_expr(ctx, sym ? sym->id : 0);
+    }
+    return NULL;
+}
+
+/* Only a plain `await t` re-raises.  `await any` / `await all` / `await
+ * anySuccess` aggregate outcomes into a value, `await t timeout ms` yields null
+ * on failure, and `into` collects into a caller-provided slot -- none of them
+ * put the child's error back on an error channel. */
+static bool await_expr_rethrows(const AwaitExprNode *aw) {
+    return aw && !aw->is_any && !aw->is_all && !aw->is_any_success && !aw->timeout && !aw->into;
+}
+
+/* `var t = go f()` — remember the spawn so a later `await t` can find f. */
+static void maybe_record_task_spawn_var_initializer(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node || node->type != AST_VAR_DECL)
+        return;
+    VarDeclNode *decl = &node->as.var_decl;
+    AstNode *init = identity_source(decl->initializer);
+    if (!init || init->type != AST_GO_EXPR || decl->symbol_id == 0)
+        return;
+    set_task_spawn_alias(ctx, decl->symbol_id, init->as.go_expr.expr);
+}
+
+/* `t = go g()` rebinds; `t = <anything else>` makes the binding unknowable from
+ * here.  Both must land in the table -- dropping the second would leave the
+ * stale spawn behind and understate the error set. */
+static void record_task_spawn_assignment(ErrorSetCtx *ctx, AssignmentNode *assign) {
+    if (!ctx || !assign)
+        return;
+    XaSymbol *sym = lookup_assignment_symbol(ctx, assign);
+    uint32_t symbol_id = sym ? sym->id : assign->symbol_id;
+    if (symbol_id == 0)
+        return;
+    AstNode *value = identity_source(assign->value);
+    set_task_spawn_alias(ctx, symbol_id,
+                         value && value->type == AST_GO_EXPR ? value->as.go_expr.expr : NULL);
+}
+
 /* ========== Expression Walking ========== */
 
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
@@ -3686,11 +3857,47 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             /* Lambda: don't propagate its errors to the enclosing function. */
             break;
 
+        case AST_GO_EXPR: {
+            /* Spawning is not itself fallible, and a detached child's failure
+             * is nobody's error until someone awaits it.  Inside a `linked
+             * scope` someone does: the scope re-raises the first child failure
+             * at its exit, in this frame. */
+            AstNode *spawned = node->as.go_expr.expr;
+            if (spawned && spawned->type == AST_CALL_EXPR) {
+                for (int i = 0; i < spawned->as.call_expr.arg_count; i++)
+                    es_walk_expr(ctx, spawned->as.call_expr.arguments[i]);
+                es_walk_expr(ctx, spawned->as.call_expr.callee);
+            } else {
+                es_walk_expr(ctx, spawned);
+            }
+            if (ctx->linked_scope_depth > 0)
+                es_union_spawned_body_effects(ctx, spawned);
+            break;
+        }
+
+        case AST_AWAIT_EXPR: {
+            AwaitExprNode *aw = &node->as.await_expr;
+            es_walk_expr(ctx, aw->expr);
+            es_walk_expr(ctx, aw->timeout);
+            es_walk_expr(ctx, aw->into);
+            if (!await_expr_rethrows(aw))
+                break;
+            AstNode *spawn_expr = awaited_spawn_expr(ctx, aw->expr);
+            if (!spawn_expr) {
+                xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                                  XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+                break;
+            }
+            es_union_spawned_body_effects(ctx, spawn_expr);
+            break;
+        }
+
         case AST_ASSIGNMENT:
             es_walk_expr(ctx, node->as.assignment.value);
             record_catch_alias_assignment(ctx, &node->as.assignment);
             record_catch_aggregate_assignment(ctx, &node->as.assignment);
             record_function_value_assignment(ctx, &node->as.assignment);
+            record_task_spawn_assignment(ctx, &node->as.assignment);
             break;
 
         case AST_INDEX_SET:
@@ -4016,6 +4223,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             maybe_record_catch_alias(ctx, node);
             maybe_record_catch_aggregate_alias(ctx, node);
             maybe_record_function_value_var_initializer(ctx, node);
+            maybe_record_task_spawn_var_initializer(ctx, node);
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
 
@@ -4029,14 +4237,13 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                                              node->as.destructure_decl.initializer);
             es_walk_expr(ctx, node->as.destructure_decl.initializer);
             break;
-            es_walk_expr(ctx, node->as.var_decl.initializer);
-            break;
 
         case AST_ASSIGNMENT:
             es_walk_expr(ctx, node->as.assignment.value);
             record_catch_alias_assignment(ctx, &node->as.assignment);
             record_catch_aggregate_assignment(ctx, &node->as.assignment);
             record_function_value_assignment(ctx, &node->as.assignment);
+            record_task_spawn_assignment(ctx, &node->as.assignment);
             break;
 
         case AST_INDEX_SET:
@@ -4267,6 +4474,21 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_expr(ctx, node->as.defer_stmt.expr);
             break;
 
+        case AST_SCOPE_BLOCK: {
+            /* A `linked scope` re-raises its first failed child at the block's
+             * exit, in this frame, on the channel the child raised it on.  Walk
+             * the body with that depth marked so every `go` inside it charges
+             * the coroutine body's errors to this function.  A plain `scope` is
+             * only a wait barrier and adds nothing. */
+            bool linked = node->as.scope_block.scope_mode == XR_SCOPE_LINKED;
+            if (linked)
+                ctx->linked_scope_depth++;
+            es_walk_block(ctx, node->as.scope_block.body);
+            if (linked)
+                ctx->linked_scope_depth--;
+            break;
+        }
+
         case AST_FUNCTION_DECL:
             /* Nested function: analyzed separately, skip */
             break;
@@ -4298,6 +4520,8 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
+    ctx->task_spawn_alias_count = 0;
+    ctx->linked_scope_depth = 0;
     clear_function_value_param_aliases(ctx, func_node);
     apply_specialized_function_param_targets(ctx, func_node, func_sym);
     es_walk_block(ctx, body);
