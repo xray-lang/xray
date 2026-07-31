@@ -314,6 +314,16 @@ XR_FUNC XaSymbol *xa_analyzer_lookup_at(XaAnalyzer *analyzer, const char *file, 
                                         uint32_t column);
 XR_FUNC XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name);
 
+/* Single answer to "does this symbol denote module `module_name`?", and its
+ * built-in-only variant for VM intrinsics (`Coro.yield()`, `Coro.Local<T>()`,
+ * `CoroPool.submit()`, ...).  Every pass that special-cases a module member must
+ * route the question here: deciding it from the receiver's source spelling makes
+ * the same semantic judgement in several places with several different answers,
+ * and mistakes any user declaration of that name for the module. */
+XR_FUNC bool xa_symbol_is_module(XaAnalyzer *analyzer, XaSymbol *symbol, const char *module_name);
+XR_FUNC bool xa_symbol_is_builtin_module(XaAnalyzer *analyzer, XaSymbol *symbol,
+                                         const char *module_name);
+
 // API: Type queries
 XR_FUNC XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol);
 XR_FUNC XrType *xa_analyzer_get_type_at(XaAnalyzer *analyzer, const char *file, uint32_t line,

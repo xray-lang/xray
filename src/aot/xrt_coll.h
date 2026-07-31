@@ -3374,7 +3374,10 @@ typedef struct {
 } xrt_json_t;
 
 /* =========================================================================
- * Iterator runtime — backs the for-in iterator protocol over Map / Set / Json / string.
+ * Iterator runtime — backs the iterator protocol over Array / Map / Set / Json / string.
+ * for-in over an array lowers to an index loop, but Array.iterator() and
+ * Array.entriesIterator() are part of the public protocol (§14) and must pull
+ * the same elements the VM does.
  * The iterator owns one reference to its source so an in-progress traversal
  * cannot outlive the collection or ARC string it walks. It releases that
  * reference from its builtin ARC destructor.
@@ -3388,7 +3391,7 @@ typedef struct {
 typedef struct XrCoroutine XrCoroutine;
 
 typedef struct {
-    XrValue coll;     /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
+    XrValue coll;     /* XR_TAG_ARRAY, XR_TAG_MAP, XR_TAG_SET, or string being iterated */
     int64_t cursor;   /* collection cursor, or generator phase: 0=idle 1=buffered 2=done */
     int64_t index;    /* logical iteration index; used by string pair iteration */
     uint8_t kind;     /* XRT_ITER_* projection */
@@ -3585,6 +3588,16 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    /* Arrays reach an iterator only through the dynamic protocol — `for (x in
+     * arr)` on a statically known array lowers to len()/index instead. A
+     * nested generic body is that path (only file-scope generics are
+     * monomorphized, so its type parameter survives into lowering), and so is
+     * an explicit arr.iterator(). Mirrors XR_ITERATOR_ARRAY in the VM
+     * (src/runtime/object/xiterator.c). */
+    if (XR_IS_ARRAY(it->coll)) {
+        const xrt_array_t *a = (const xrt_array_t *) it->coll.ptr;
+        return a && it->cursor < a->length;
+    }
     if (XR_IS_STR(it->coll))
         return it->cursor < xr_str_len(it->coll);
     return 0;
@@ -3598,8 +3611,13 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         return XR_NULL_VAL;
 #endif
     }
-    if (!xrt_iterator_has_next(it))
+    /* Past the end there is no value to hand back: next() is typed T, not T?,
+     * so the pull protocol is two-step (LANGUAGE_SPEC 5.3.6) and running off
+     * the end is a contract violation, not a sentinel. */
+    if (!xrt_iterator_has_next(it)) {
+        xrt_throw_error(XR_ERR_ITERATOR_EXHAUSTED, XR_ERROR_CORE_ITERATOR_EXHAUSTED_NEXT_MSG);
         return XR_NULL_VAL;
+    }
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         if (xrt_map_is_boolmap(m)) {
@@ -3630,6 +3648,18 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
     }
     if (xrt_is_json_object_value(it->coll))
         return xrt_json_iterator_next(it);
+    if (XR_IS_ARRAY(it->coll)) {
+        xrt_array_t *a = (xrt_array_t *) it->coll.ptr;
+        int64_t idx = it->cursor++;
+        XrValue elem = xr_typed_get(a->data, (int32_t) idx, a->elem_type);
+        if (it->kind == XRT_ITER_KEYS)
+            return XR_FROM_INT(idx);
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {XR_FROM_INT(idx), elem};
+            return xrt_tuple_make(2, kv);
+        }
+        return elem;
+    }
     if (XR_IS_STR(it->coll)) {
         int64_t char_index = it->index++;
         uint32_t cp = 0;

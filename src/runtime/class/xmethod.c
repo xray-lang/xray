@@ -32,10 +32,6 @@ const char *xr_method_type_name(XrMethodType type) {
             return "Primitive";
         case XMETHOD_YIELDABLE_PRIMITIVE:
             return "YieldablePrimitive";
-        case XMETHOD_GETTER:
-            return "Getter";
-        case XMETHOD_SETTER:
-            return "Setter";
         case XMETHOD_OPERATOR:
             return "Operator";
         default:

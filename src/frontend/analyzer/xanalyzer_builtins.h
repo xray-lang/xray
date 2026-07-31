@@ -23,6 +23,14 @@
 typedef enum XaBuiltinReturnOwnership {
     XA_BUILTIN_RETURN_UNKNOWN = 0,
     XA_BUILTIN_RETURN_FRESH,
+    /* The member hands back its own receiver at +0 (`return self`), so the
+     * result and the receiver are ONE object. Declared by `// @returns_receiver`
+     * on the native declaration; it is a manifest property of the runtime
+     * binding, never inferred from the signature (a method returning the
+     * receiver's TYPE — Array.concat, Array.filter — usually returns a fresh
+     * object). ARC and the independent RC verifier each read this fact to keep
+     * the receiver's reference alive through the aliased result (contract C1). */
+    XA_BUILTIN_RETURN_RECEIVER,
 } XaBuiltinReturnOwnership;
 
 // Built-in member info
@@ -158,6 +166,9 @@ XR_FUNC bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const 
 // Check if member is a method
 XR_FUNC bool xa_builtin_is_method(XrType *type, const char *member_name);
 XR_FUNC bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name);
+// True when the member's runtime binding returns its own receiver (`return
+// self`) rather than a fresh reference. See XA_BUILTIN_RETURN_RECEIVER.
+XR_FUNC bool xa_builtin_member_returns_receiver(XrType *type, const char *member_name);
 
 // ============================================================================
 // Generic API (used by both compiler and LSP)

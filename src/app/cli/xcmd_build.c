@@ -674,8 +674,8 @@ static XrNativeSimdMode xaot_cli_generated_source_simd(const char *path) {
 }
 
 static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest,
-                                    const XrToolchainSelection *plan,
-                                    XrNativeCompileSpec *compile, XrNativeLinkSpec *link) {
+                                    const XrToolchainSelection *plan, XrNativeCompileSpec *compile,
+                                    XrNativeLinkSpec *link) {
     memset(compile, 0, sizeof(*compile));
     memset(link, 0, sizeof(*link));
     compile->optimization = xaot_cli_optimization(manifest->compile.optimization);
@@ -704,8 +704,8 @@ static void xaot_cli_semantic_specs(const XaotLinkManifest *manifest,
      * function islands from a baseline translation unit.  Keep MSVC's
      * /arch-based whole-unit path because cl.exe has no equivalent target
      * attribute. */
-    if ((manifest->target.simd_features &
-         (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0 &&
+    if ((manifest->target.simd_features & (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) !=
+            0 &&
         xaot_cli_provider_supports_x86_vector_islands(plan))
         compile->simd = XR_NATIVE_SIMD_DEFAULT;
     if (!compile->cpu[0] && compile->simd == XR_NATIVE_SIMD_SVE)
@@ -838,7 +838,7 @@ static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
         snprintf(err, err_size, "failed to add ASan flags to AOT link manifest");
         return false;
     }
-#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                         \
+#if defined(XR_OS_WINDOWS) && defined(XRT_BUILD_ASAN_WINDOWS_IMPORT) &&                            \
     defined(XRT_BUILD_ASAN_WINDOWS_THUNK)
     if (selection && selection->provider == XR_TOOLCHAIN_PROVIDER_ZIG &&
         (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--whole-archive") ||
@@ -1470,19 +1470,17 @@ static const char *default_shared_library_output(const XrToolchainTarget *target
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int
-cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
-                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
-                 bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
-                 XiCgenTypeNameProfile type_name_profile,
-                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
-                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
-                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
-                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
-                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
-                 const XrTargetConfig *target_config,
-                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
+static int cmd_build_native(
+    const char *input, const char *output, const char *cc, const char *opt_flag,
+    XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode, bool c_only,
+    bool strip, bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
+    XiCgenCDialect c_dialect, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
+    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
+    bool lto, bool rc_guard, const XrToolchainTarget *target,
+    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
+    const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1792,9 +1790,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (c_dialect == XI_CGEN_C_DIALECT_C90 &&
         (!native_mode || !c_only || !shared_library ||
          profile != XR_CLI_BUILD_PROFILE_FREESTANDING || simd_mode != XAOT_SIMD_SCALAR)) {
-        fprintf(stderr,
-                "Error: --c-dialect c90 requires --native --profile freestanding --shared "
-                "--c-only --simd scalar\n");
+        fprintf(stderr, "Error: --c-dialect c90 requires --native --profile freestanding --shared "
+                        "--c-only --simd scalar\n");
         CMD_BUILD_RETURN(2);
     }
     if (c_dialect == XI_CGEN_C_DIALECT_C90 && !build_c90_target_supported(&target)) {
@@ -1879,14 +1876,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
 
     if (native_mode) {
-        rc = cmd_build_native(
-            input_file, output_file, cc, opt_flag, semantic_optimization, effective_cpu, simd_mode,
-            c_only, strip_symbols, debug_symbols, shared_library, profile, c_dialect,
-            type_name_profile,
-            sysroot, linker_script, verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence,
-            dump_link_manifest, dump_residue, dump_link_command, dry_run_link, c_header, keep_c,
-            cache_dir_arg, rebuild, effective_lto, rc_guard, &target, &toolchain_plan,
-            target_config, project ? project->native_plan : NULL, objcopy_output);
+        rc = cmd_build_native(input_file, output_file, cc, opt_flag, semantic_optimization,
+                              effective_cpu, simd_mode, c_only, strip_symbols, debug_symbols,
+                              shared_library, profile, c_dialect, type_name_profile, sysroot,
+                              linker_script, verbose, dump_xaot_plan, dump_global_evidence,
+                              dump_xi_evidence, dump_link_manifest, dump_residue, dump_link_command,
+                              dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
+                              rc_guard, &target, &toolchain_plan, target_config,
+                              project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc && cc[0] ? cc : "cc", opt_flag, c_only,
@@ -2266,8 +2263,7 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     }
     h = xaot_hash_fold_str(h, sysroot);
     if (manifest) {
-        h = xaot_hash_fold(h, &manifest->target.simd_mode,
-                           sizeof(manifest->target.simd_mode));
+        h = xaot_hash_fold(h, &manifest->target.simd_mode, sizeof(manifest->target.simd_mode));
         h = xaot_hash_fold(h, &manifest->target.simd_features,
                            sizeof(manifest->target.simd_features));
         h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
@@ -2312,8 +2308,7 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     h = xaot_hash_fold_str(h, sysroot);
     if (result) {
         const XaotLinkManifest *manifest = &result->link_manifest;
-        h = xaot_hash_fold(h, &manifest->target.simd_mode,
-                           sizeof(manifest->target.simd_mode));
+        h = xaot_hash_fold(h, &manifest->target.simd_mode, sizeof(manifest->target.simd_mode));
         h = xaot_hash_fold(h, &manifest->target.simd_features,
                            sizeof(manifest->target.simd_features));
         h = xaot_hash_fold(h, &manifest->compile, sizeof(manifest->compile));
@@ -2724,8 +2719,22 @@ static int xaot_verify_native_layouts(const XrNativePackagePlan *native_plan,
         char object[XR_PATH_MAX];
         XrNativeUnit probe_unit;
         if (!layout->resolved) {
+            if (!layout->declared) {
+                /* No compiled module in this build declares the type, so there is
+                 * no layout to disagree with.  Say so rather than failing: a
+                 * package may have several entry points and only some of them
+                 * pull in the C-layout modules.  A name that no entry point ever
+                 * declares is a manifest error, but that is a package-wide lint,
+                 * not a fact this single build can establish. */
+                fprintf(stderr,
+                        "Note: E-NATIVE-LAYOUT: skipping layout proof for '%s': no module in this "
+                        "build declares it\n",
+                        layout->xray_type ? layout->xray_type : "?");
+                continue;
+            }
             fprintf(stderr,
-                    "Error: E-NATIVE-LAYOUT: Xray type '%s' was not resolved to a fixed layout\n",
+                    "Error: E-NATIVE-LAYOUT: Xray type '%s' is declared but has no fixed layout to "
+                    "prove\n",
                     layout->xray_type ? layout->xray_type : "?");
             return 1;
         }
@@ -3182,19 +3191,17 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
     return true;
 }
 
-static int
-cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
-                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
-                 bool c_only, bool strip, bool debug_symbols, bool shared_library,
-                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
-                 XiCgenTypeNameProfile type_name_profile,
-                 const char *sysroot, const char *linker_script, bool verbose, bool dump_xaot_plan,
-                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
-                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
-                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
-                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
-                 const XrTargetConfig *target_config,
-                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
+static int cmd_build_native(
+    const char *input, const char *output, const char *cc, const char *opt_flag,
+    XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode, bool c_only,
+    bool strip, bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
+    XiCgenCDialect c_dialect, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
+    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
+    bool lto, bool rc_guard, const XrToolchainTarget *target,
+    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
+    const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
     XaotTargetCapabilityProvider capability_provider;
@@ -3495,9 +3502,9 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
                                  !verbose && !debug_symbols && !shared_library && !keep_c;
     uint64_t link_output_cache_key = 0;
     if (use_link_output_cache) {
-        link_output_cache_key = xaot_link_output_cache_key(
-            &aot_result, opt_flag, target, toolchain_plan, sysroot, strip, shared_library,
-            c_dialect);
+        link_output_cache_key =
+            xaot_link_output_cache_key(&aot_result, opt_flag, target, toolchain_plan, sysroot,
+                                       strip, shared_library, c_dialect);
         int cache_hit =
             xaot_restore_link_output_cache(cache_dir, link_output_cache_key, output, verbose);
         if (cache_hit > 0) {

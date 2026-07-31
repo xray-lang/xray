@@ -18,7 +18,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **Structural Json + Nominal class**：Json 对象按字段结构兼容（duck typing），class 按名义兼容。
+5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`Record` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -30,6 +30,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
+| 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -232,11 +233,126 @@ fn first(packet: Packet) -> byte {
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
 - `Array<T>`：动态长度、可增长、堆上容器。
-- `Slice<T>`：借用连续存储的视图，不拥有数据。
+- `Slice<T>`：借用连续存储的视图，不拥有数据（见 §2.4.2）。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
-#### 2.4.2 `Map<K, V>`
+#### 2.4.2 `Slice<T>`
+
+> 真值源：`stdlib/prelude/prelude_types.def`（prelude 注册）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（借用跟踪与失效检查）、`src/frontend/analyzer/xa_memory_effect_db.h`（失效判据）、`src/frontend/analyzer/xanalyzer_visitor_decl.c`（返回视图契约）。
+
+`Slice<T>` 是**借用视图**：它描述另一个值所拥有的一段连续元素存储，自身不拥有数据、不参与引用计数、不可放入任何长生命周期存储。它是 prelude 类型（`GENERIC_1`），可以在任何类型注解里直接写出。
+
+##### 构造
+
+视图只能由以下三种来源产生，且**必须有显式目标类型**——没有目标类型时切片表达式是编译错误：
+
+| 来源 | 结果 | 说明 |
+|--|--|--|
+| `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
+| `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
+| `str.bytes()` | `Slice<byte>` | owner 是 `string` 的 UTF-8 字节存储 |
+
+```xray
+var arr: Array<int> = [10, 20, 30, 40]
+var view: Slice<int> = arr[1:3]      // OK：借用 arr
+var all: Slice<int> = arr[:]         // 全长视图，不是拷贝
+var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
+```
+
+owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
+
+```xray
+var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
+```
+
+##### 能力
+
+- `len(view)` 取长度；`view[i]` 读元素；`view[i] = v` 写元素，**直接写入 owner 的存储**。
+- `view[a:b]` 可以再切片，结果仍借用同一个 owner。
+- 视图**没有成员方法**，也没有 `.length`。
+- `const Slice<T>` 与 `const` owner 派生出的视图是只读的，写入是编译错误。
+
+```xray @id=types-slice
+fn main() {
+    var arr: Array<int> = [10, 20, 30, 40]
+    var view: Slice<int> = arr[1:3]        // 借用视图，不是拷贝
+    view[1] = 31
+    print(arr[2])                          // 31 —— 写穿到 owner
+    arr[1] = 21
+    print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
+    var owned: Array<int> = copy(arr[1:3]) // 独立的 Array<T>
+    arr.push(50)                           // OK：此处没有存活的视图
+    print(len(owned))
+}
+
+main()
+```
+
+##### 借用规则
+
+设视图 `v` 借用 owner `o`。在 `v` 的**存活期**内：
+
+1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
+2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
+3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
+4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/Record 字段、Array / Map / Set / tuple / Json / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+
+```xray
+fn ok() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    print(len(view))                 // view 的最后一次使用
+    bytes.push(3)                    // OK：借用已结束（规则 3）
+}
+
+fn rejected() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    bytes.push(3)                    // E0382：view 仍存活
+    print(len(view))
+}
+```
+
+##### 跨函数：返回视图契约
+
+函数可以返回 `Slice<T>`，**当且仅当**返回的视图有**唯一可推断的来源**：某一个参数、receiver，或静态存储。编译器为这样的函数记录一份返回视图契约（来源 + 参数下标），调用点据此把结果继续记在原 owner 的账上，借用规则在调用者一侧照常生效。
+
+来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
+
+```xray
+fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+    return data[start:]              // OK：唯一来源是参数 data
+}
+
+fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+    if (useA) {
+        return a
+    }
+    return b                         // E0384：多来源
+}
+
+fn alsoBad() -> Slice<int> {
+    var local: Array<int> = [1, 2]
+    return local[:]                  // E0384：借自局部值
+}
+```
+
+##### 逃生口：`copy`
+
+需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
+
+```xray
+var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
+```
+
+`copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
+
+##### 与其他借用形式的关系
+
+`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 共用同一套借用跟踪与同一组错误码：`E0382`（owner 在借用存活期内失效）、`E0383`（借用逃逸）、`E0384`（借用来源不稳定或不唯一）。`unsafe` 块不放宽其中任何一条。
+
+#### 2.4.3 `Map<K, V>`
 
 哈希字典，**保持插入顺序**。详见 §14.8。
 
@@ -254,7 +370,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | `Json` / `Object`（结构化） | 见 §2.4.6 |
+| `{ key: value }`（无前缀） | sealed `Record`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.7 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -262,7 +378,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 `K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或提供 `operator==(other: Self) -> bool` 与 `hash() -> int` 的自定义类型。泛型键类型必须显式写成 `K: Hashable`。
 
-#### 2.4.3 `Set<T>`
+#### 2.4.4 `Set<T>`
 
 去重集合。详见 §14.9。
 
@@ -270,7 +386,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 var s: Set<int> = #[1, 2, 3]
 ```
 
-#### 2.4.4 `Channel<T>`
+#### 2.4.5 `Channel<T>`
 
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
@@ -278,7 +394,7 @@ var s: Set<int> = #[1, 2, 3]
 const ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Array<byte>`
+#### 2.4.6 `Array<byte>`
 
 类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
 
@@ -287,7 +403,7 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Record` / `Json` 与对象字面量
+#### 2.4.7 `Record` / `Json` 与对象字面量
 
 裸对象字面量默认推断为 sealed structural `Record`，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
 
@@ -336,11 +452,22 @@ var j: Json = { name: "Alice", age: 30 } // 动态 Json object
 j.extra = "x"        // OK（Json 是动态的）
 ```
 
-#### 2.4.7 `BigInt`
+**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+
+| | 身份 | 字段集 | 用户可定义方法 | 用途 |
+|---|---|---|---|---|
+| `Record` | 结构化 | 声明的，编译期精确检查 | **否** | options、多字段返回值、普通业务数据 |
+| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
+| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
+
+**规范性承诺**：`Record` 与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
+
+#### 2.4.8 `BigInt`
 
 任意精度整数。见 §14.8。
 
-#### 2.4.8 `Range`
+#### 2.4.9 `Range`
 
 `Range` 表示整数区间，由 `a..b` 或 `a..=b` 产生：
 
@@ -362,11 +489,11 @@ for (i in 3..=5) {
 
 范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
-#### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
 
-#### 2.4.10 `WeakMap` / `WeakSet`
+#### 2.4.11 `WeakMap` / `WeakSet`
 
 `WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
@@ -527,17 +654,25 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `T` | `Json`（如果 T 是 Json 兼容） | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
+| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 子集对象类型 | 超集对象类型 | ❌（结构化兼容是 superset → subset） |
+| 字段集不同的 Record | Record | ❌ sealed Record 要求精确字段集 |
 
-> **结构化兼容方向**（duck typing）：字段更多的类型可赋给字段更少的类型。
+> **sealed Record 的宽度规则**：Record 赋值要求**精确字段集**——源的字段名集合必须与目标一致。目标中类型可空的字段允许缺省，其余字段既不能少也不能多。Xray 不提供 width subtyping，`superset → subset` 与 `subset → superset` 两个方向都被拒绝。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK：full 是 User 的超集
+> // var u: User = full            // 编译错误 E0352：extra field 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
+
+> **Record 与 Json 是两个互不连通的语义域**：`Record` 是编译期检查的封闭字段集，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
+> - `Json.encode(value)`：typed value → `Json`
+> - `json as T` / `json as T?`：`Json` → Record 或其它 typed value（结构化 narrowing）
 
 #### 2.10.2 显式 `as`
 
@@ -661,7 +796,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
+5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `Record` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -673,6 +808,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `f32`, `f64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
+| Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
 | Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -875,11 +1011,126 @@ fn first(packet: Packet) -> byte {
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
 - `Array<T>`: dynamic length, growable, heap-backed container.
-- `Slice<T>`: borrowed view over contiguous storage; it does not own data.
+- `Slice<T>`: borrowed view over contiguous storage; it does not own data (see §2.4.2).
 
 The old `[N]T` syntax is not part of the Xray language.
 
-#### 2.4.2 `Map<K, V>`
+#### 2.4.2 `Slice<T>`
+
+> Source of truth: `stdlib/prelude/prelude_types.def` (prelude registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
+
+`Slice<T>` is a **borrowed view**: it denotes a run of contiguous element storage owned by another value. It owns no data, does not participate in reference counting, and cannot be placed in any long-lived storage. It is a prelude type (`GENERIC_1`) and may be written directly in any type annotation.
+
+##### Construction
+
+A view can only arise from the three sources below, and it **requires an explicit target type** — a slice expression without one is a compile error:
+
+| Source | Result | Notes |
+|--|--|--|
+| `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
+| `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
+| `str.bytes()` | `Slice<byte>` | the owner is the string's UTF-8 byte storage |
+
+```xray
+var arr: Array<int> = [10, 20, 30, 40]
+var view: Slice<int> = arr[1:3]      // OK: borrows arr
+var all: Slice<int> = arr[:]         // full-length view, not a copy
+var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
+```
+
+The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
+
+```xray
+var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
+```
+
+##### Capabilities
+
+- `len(view)` for the length; `view[i]` reads an element; `view[i] = v` writes one, **straight into the owner's storage**.
+- `view[a:b]` reslices; the result still borrows the same owner.
+- A view has **no member methods** and no `.length`.
+- A `const Slice<T>`, and any view derived from a `const` owner, is read-only; writing through it is a compile error.
+
+```xray @id=types-slice
+fn main() {
+    var arr: Array<int> = [10, 20, 30, 40]
+    var view: Slice<int> = arr[1:3]        // borrowed view, not a copy
+    view[1] = 31
+    print(arr[2])                          // 31 — the write goes through to the owner
+    arr[1] = 21
+    print(view[0])                         // 21 — element writes on the owner are visible here
+    var owned: Array<int> = copy(arr[1:3]) // an independent Array<T>
+    arr.push(50)                           // OK: no view is live at this point
+    print(len(owned))
+}
+
+main()
+```
+
+##### Borrow rules
+
+Let view `v` borrow owner `o`. While `v` is **live**:
+
+1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
+2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
+3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
+4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / Record fields, Array / Map / Set / tuple / Json / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+
+```xray
+fn ok() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    print(len(view))                 // last use of view
+    bytes.push(3)                    // OK: the borrow already ended (rule 3)
+}
+
+fn rejected() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    bytes.push(3)                    // E0382: view is still live
+    print(len(view))
+}
+```
+
+##### Across functions: the returned-view contract
+
+A function may return `Slice<T>` **if and only if** the returned view has a **uniquely inferable source**: one specific parameter, the receiver, or static storage. The compiler records a returned-view contract (source kind plus parameter index) for such a function; the call site charges the result back to the original owner, so the borrow rules keep applying on the caller's side.
+
+A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
+
+```xray
+fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+    return data[start:]              // OK: the unique source is the parameter data
+}
+
+fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+    if (useA) {
+        return a
+    }
+    return b                         // E0384: multiple sources
+}
+
+fn alsoBad() -> Slice<int> {
+    var local: Array<int> = [1, 2]
+    return local[:]                  // E0384: borrowed from a local
+}
+```
+
+##### The escape hatch: `copy`
+
+When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
+
+```xray
+var owned: Array<int> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
+```
+
+`copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
+
+##### Relationship to other borrows
+
+`ref` parameters and `Ptr<T>` / `MutPtr<T>` share the same borrow tracking and the same error codes: `E0382` (owner invalidated while a borrow is live), `E0383` (borrow escapes), `E0384` (borrow source unstable or not unique). An `unsafe` block relaxes none of them.
+
+#### 2.4.3 `Map<K, V>`
 
 Hash table that **preserves insertion order**. See §14.8.
 
@@ -897,7 +1148,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | `Json` / `Object` (structural) | see §2.4.6 |
+| `{ key: value }` (no prefix) | sealed `Record` (`Json` when the expected type is `Json`) | see §2.4.7 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -905,7 +1156,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 `K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
 
-#### 2.4.3 `Set<T>`
+#### 2.4.4 `Set<T>`
 
 Deduplicated collection. See §14.9.
 
@@ -913,7 +1164,7 @@ Deduplicated collection. See §14.9.
 var s: Set<int> = #[1, 2, 3]
 ```
 
-#### 2.4.4 `Channel<T>`
+#### 2.4.5 `Channel<T>`
 
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
@@ -921,7 +1172,7 @@ Inter-coroutine communication channel. A named channel uses a stable `const` bin
 const ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Array<byte>`
+#### 2.4.6 `Array<byte>`
 
 Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
 
@@ -930,7 +1181,7 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Record` / `Json` and Object Literals
+#### 2.4.7 `Record` / `Json` and Object Literals
 
 Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
@@ -979,11 +1230,22 @@ var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
 
-#### 2.4.7 `BigInt`
+**Responsibilities of the product types**: the line between the structural and nominal domains is whether a type carries methods.
+
+| | Identity | Field set | User-defined methods | Use for |
+|---|---|---|---|---|
+| `Record` | structural | declared, exact at compile time | **no** | options, multi-field returns, ordinary business data |
+| `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
+| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
+| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
+
+**Normative commitment**: `Record` and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
+
+#### 2.4.8 `BigInt`
 
 Arbitrary-precision integer. See §14.8.
 
-#### 2.4.8 `Range`
+#### 2.4.9 `Range`
 
 `Range` represents an integer interval and is produced by `a..b` or `a..=b`:
 
@@ -1005,11 +1267,11 @@ for (i in 3..=5) {
 
 Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
-#### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
 
-#### 2.4.10 `WeakMap` / `WeakSet`
+#### 2.4.11 `WeakMap` / `WeakSet`
 
 Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
@@ -1176,17 +1438,25 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | Typed integer | any floating type | ❌ explicit `as` required |
 | Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `T` | `Json` (if T is Json-compatible) | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON scalar enters the value domain |
+| Any other type | `Json` | ❌ `Json.encode(value)` required |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| Subset object type | Superset object type | ❌ (structural compatibility goes superset → subset) |
+| Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
 
-> **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
+> **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK: full is a superset of User
+> // var u: User = full            // compile error E0352: extra field 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
+
+> **Record and Json are two disconnected semantic domains**: `Record` is a closed field set checked at compile time; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
+> - `Json.encode(value)`: typed value → `Json`
+> - `json as T` / `json as T?`: `Json` → a Record or other typed value (structural narrowing)
 
 #### 2.10.2 Explicit `as`
 

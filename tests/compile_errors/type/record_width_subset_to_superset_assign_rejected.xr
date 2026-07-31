@@ -1,0 +1,11 @@
+// Record width rule: a source with FEWER fields is not assignable to a sealed
+// Record target with more required fields (§2.10.1, both directions rejected).
+type Big = { a: int, b: int }
+
+fn main() {
+    var small = { a: 1 }
+    var b: Big = small
+    print(b.a)
+}
+
+main()

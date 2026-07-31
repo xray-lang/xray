@@ -180,6 +180,14 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
         caps |= XR_AOT_CAP_SEMAPHORE;
     if ((required & XG_CAP_EVENT_COUNT) != 0)
         caps |= XR_AOT_CAP_EVENT_COUNT;
+    /* Parallel was the one capability this projection dropped.  Without it the
+     * translation unit is judged not to need the runtime bridge, so
+     * xaot_coro.h is never included -- while the parallel lowering still emits
+     * xr_parallel_for_range_i64, xrt_global_ctx and XrParallelRangeI64Fn, all
+     * declared there.  A hosted parallel.map/reduce build then produced C that
+     * does not compile. */
+    if ((required & XG_CAP_PARALLEL) != 0)
+        caps |= XR_AOT_CAP_PARALLEL;
     return caps;
 }
 
@@ -223,8 +231,11 @@ static bool cg_can_report_uncaught_error(const XiCgenCtx *ctx) {
 static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtime,
                                               bool can_report) {
     fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
+    /* Top-level (not a go coroutine). An elided root has no scheduler to route
+     * this through XrAotValueOps, so the main entry is the only place the
+     * uncaught value error can be rendered. */
     if (can_report)
-        fprintf(out, "        xrt_report_uncaught_error(xrt_pending_error);\n");
+        fprintf(out, "        xrt_report_uncaught_error(xrt_pending_error, false);\n");
     if (entry_needs_runtime)
         fprintf(out, "        xr_aot_runtime_delete(rt);\n");
     fprintf(out, "        xrt_bump_destroy();\n");
@@ -237,8 +248,15 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
  * of every runtime global; without it they are extern declarations.  Exactly
  * one object per program must define XRT_IMPL (the entry unit), or globals such
  * as xrt_bump_enabled collide at link time. */
+/* Deliberately not short-circuited on the freestanding profile.  This decides
+ * whether the translation unit declares XrAotContext xrt_global_ctx and includes
+ * the bridge header, and emit_xrt_runtime_init writes xrt_global_ctx whenever the
+ * capability set needs a runtime -- profile independent.  Gating the declaration
+ * on the profile while the use is not left a freestanding provider object
+ * referencing an undeclared xrt_global_ctx.  A freestanding image with no hosted
+ * capability still gets false here, because its capability set is empty. */
 static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
-    if (!ctx || ctx->freestanding_profile)
+    if (!ctx)
         return false;
     uint32_t caps = cg_runtime_caps_from_entry_plan(ctx);
     return cg_entry_uses_resumable_frame(ctx) || cg_entry_uses_root_descriptor(ctx) ||
@@ -580,6 +598,12 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "}\n"
         "static void xrt_runtime_value_retain(XrValue value) { xrt_retain(value); }\n"
         "static void xrt_runtime_value_release(XrValue value) { xrt_release(value); }\n"
+        /* The scheduler runtime finalizes a coroutine whose error nothing is
+         * left to observe; the rendering has to happen here, in the generated
+         * program, because the runtime cannot format an AOT value layout. */
+        "static void xrt_runtime_report_uncaught_error(XrValue error, bool in_go_coroutine) {\n"
+        "    xrt_report_uncaught_error(error, in_go_coroutine);\n"
+        "}\n"
         "static const XrAotValueOps xrt_runtime_value_ops = {\n"
         "    .string_new = xrt_runtime_string_new,\n"
         "    .string_data = xrt_runtime_string_data,\n"
@@ -595,6 +619,7 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
         "    .retain = xrt_runtime_value_retain,\n"
         "    .release = xrt_runtime_value_release,\n"
+        "    .report_uncaught_error = xrt_runtime_report_uncaught_error,\n"
         "};\n\n");
 }
 

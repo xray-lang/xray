@@ -1,1 +1,1 @@
-field 'headerPairs' not declared in class 'ResponseHead'
+type 'ResponseHead' has no member 'headerPairs'

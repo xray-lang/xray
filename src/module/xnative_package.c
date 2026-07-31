@@ -1569,6 +1569,26 @@ const char *xr_native_symbol_library(const XrNativeSymbol *symbol) {
     return NULL;
 }
 
+/* Does `assertion` name `xray_type`, either fully qualified or by final path
+ * component? */
+static bool native_layout_assertion_names(const XrNativeLayoutAssertion *assertion,
+                                          const char *xray_type) {
+    if (!assertion || !assertion->xray_type || !xray_type)
+        return false;
+    const char *short_name = strrchr(assertion->xray_type, '.');
+    short_name = short_name ? short_name + 1 : assertion->xray_type;
+    return strcmp(assertion->xray_type, xray_type) == 0 || strcmp(short_name, xray_type) == 0;
+}
+
+void xr_native_package_note_layout_subject(XrNativePackagePlan *plan, const char *xray_type) {
+    if (!plan || !xray_type)
+        return;
+    for (uint32_t i = 0; i < plan->layout_count; i++) {
+        if (native_layout_assertion_names(&plan->layouts[i], xray_type))
+            plan->layouts[i].declared = true;
+    }
+}
+
 bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,
                                       const XrAggregateLayout *layout) {
     bool matched = false;
@@ -1576,11 +1596,9 @@ bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xra
         return false;
     for (uint32_t i = 0; i < plan->layout_count; i++) {
         XrNativeLayoutAssertion *assertion = &plan->layouts[i];
-        const char *short_name = assertion->xray_type ? strrchr(assertion->xray_type, '.') : NULL;
-        short_name = short_name ? short_name + 1 : assertion->xray_type;
-        if (!assertion->xray_type ||
-            (strcmp(assertion->xray_type, xray_type) != 0 && strcmp(short_name, xray_type) != 0))
+        if (!native_layout_assertion_names(assertion, xray_type))
             continue;
+        assertion->declared = true;
         native_free_string_array(assertion->field_names, assertion->field_count);
         xr_free(assertion->field_offsets);
         assertion->field_names = NULL;

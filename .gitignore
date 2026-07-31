@@ -112,6 +112,9 @@ tests/network/ws_tests/autobahn/reports/
 /app.c
 .xray-cache/
 .xray-test-cache/
+# Shared native-build cache for the test suites. Deliberately outside build/ so
+# a clean reconfigure does not discard objects that cost ~30s each to rebuild.
+/.cache/
 
 # ============================================================================
 # Compiled bytecode bundles

@@ -1,0 +1,8 @@
+// Record width rule at a return position: extra field is rejected.
+type Point = { x: int, y: int }
+
+fn make() -> Point { return { x: 1, y: 2, z: 3 } }
+
+fn main() { print(make().x) }
+
+main()

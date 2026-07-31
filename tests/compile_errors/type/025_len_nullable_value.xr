@@ -1,0 +1,7 @@
+// len() dereferences its argument, so it takes the same strict-null gate.
+// The Lengthable check alone sees through the nullable flag and accepted this.
+fn main() {
+    var a: Array<int>? = [1, 2, 3]
+    print(len(a))
+}
+main()

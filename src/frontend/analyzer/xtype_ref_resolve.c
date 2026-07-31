@@ -104,9 +104,9 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
         } else {
             if (source.kind != XR_CT_INT)
                 return ct_fail(err, "numeric conversion source is not an integer constant");
-            out->as.float_val = xr_numeric_int_to_float(
-                source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
-                pointer_bits);
+            out->as.float_val =
+                xr_numeric_int_to_float(source.as.int_val, conversion.source_scalar_rep,
+                                        conversion.target_scalar_rep, pointer_bits);
         }
         return true;
     }
@@ -121,9 +121,9 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
     } else {
         if (source.kind != XR_CT_INT)
             return ct_fail(err, "numeric conversion source is not an integer constant");
-        out->as.int_val = xr_numeric_int_convert_i64(
-            source.as.int_val, conversion.source_scalar_rep, conversion.target_scalar_rep,
-            pointer_bits);
+        out->as.int_val =
+            xr_numeric_int_convert_i64(source.as.int_val, conversion.source_scalar_rep,
+                                       conversion.target_scalar_rep, pointer_bits);
     }
     return true;
 }
@@ -1084,6 +1084,11 @@ static int builtin_interface_type_arity(const char *name) {
     return -1;
 }
 
+/* Arity for type heads the resolver constructs itself.  This table must stay
+ * isolate-independent: the analyzer runs on isolates that never loaded the
+ * prelude module, and a head missing here degrades to a plain class name.
+ * Prelude registration (stdlib/prelude/prelude_types.def) governs *visibility*
+ * of the name; this governs how the resolver shapes it. */
 static int known_type_head_arity(XrVMRuntime *X, const char *name) {
     if (!name)
         return -1;
@@ -1133,9 +1138,7 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     if (xa_is_builtin_interface_name(name))
         return xr_type_new_interface(X, name);
 
-    if (strcmp(name, TYPE_NAME_SLICE) == 0)
-        return xr_type_new_error(NULL);
-    /* Prelude lookup (Array, Map, Set, Channel, Json, ...) */
+    /* Prelude lookup (Array, Map, Set, Channel, Slice, Json, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
     if (symbols) {
         const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, name, strlen(name));
@@ -1197,8 +1200,6 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
     } else if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
     } else if (strcmp(name, TYPE_NAME_SLICE) == 0 && nargs == 1) {
-        result = xr_type_new_slice(X, args[0]);
-    } else if (false && nargs >= 1) {
         result = xr_type_new_slice(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);

@@ -14,9 +14,13 @@ contains=reason=box
 contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
 c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_[0-9a-f]+_Counter \*p0, int64_t p1\)
 c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, void \* \* p0\)
-c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, INT64_C\(41\)\)
-c_regex=xrt_shared\[[0-9]+\] = \(\{ XrValue _xsv = xrt_box_obj\(v[0-9]+\)
-c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, v[0-9]+\)
+# The seed argument is materialized into a value rather than spelled inline; what
+# this guards is the direct `_inst` receiver, with no boxing at the call.
+c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, (v[0-9]+|INT64_C\(41\))\)
+# A shared-slot store now goes through xrt_array_ref_ensure_owned instead of an
+# _xsv statement-expression; the instance is still boxed exactly once.
+c_regex=xrt_shared\[[0-9]+\] = xrt_array_ref_ensure_owned\(xrt_box_obj\(v[0-9]+\)\)
+c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, \(void \* \*\)\(v[0-9]+\)\)
 c_regex=tagged_boundary_[0-9a-f]+_bump_[0-9]+\(NULL, \(\(xrt_native_tagged_boundary_[0-9a-f]+_Counter\*\)v[0-9]+\)\)
 c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_setprop_name(

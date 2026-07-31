@@ -35,7 +35,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_fmt(ctx, "%lld", (long long) node->as.literal.raw_value.int_val);
             break;
         case AST_LITERAL_FLOAT:
-            xfmt_write_fmt(ctx, "%g", node->as.literal.raw_value.float_val);
+            xfmt_emit_float_literal(ctx, node->as.literal.raw_value.float_val);
             break;
         case AST_LITERAL_BIGINT:
             xfmt_write_str(ctx, node->as.literal.raw_value.bigint_val);
@@ -153,22 +153,26 @@ static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAcc
     xfmt_emit_expression(ctx, argument);
 }
 
-static void fmt_call(XrFmtContext *ctx, AstNode *node) {
-    CallExprNode *call = &node->as.call_expr;
-    xfmt_emit_expression(ctx, call->callee);
-    xfmt_emit_generic_args(ctx, call->type_args, call->type_arg_count);
+/* Emit `callee<targs>(a, b, c)`. Split out of fmt_call so the `defer`
+ * reconstruction below can print a call whose arguments do not live in the
+ * CallExpr it is printing. */
+static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_args,
+                          int type_arg_count, AstNode **arguments, XrCallArgAccess *arg_accesses,
+                          int arg_count) {
+    xfmt_emit_expression(ctx, callee);
+    xfmt_emit_generic_args(ctx, type_args, type_arg_count);
 
-    bool wrap = ctx->config && ctx->config->wrap_long_lines && call->arg_count > 0;
+    bool wrap = ctx->config && ctx->config->wrap_long_lines && arg_count > 0;
     XfmtSnapshot snap;
     if (wrap)
         xfmt_snapshot(ctx, &snap);
 
     // Try single-line: foo(a, b, c)
     xfmt_write_char(ctx, '(');
-    for (int i = 0; i < call->arg_count; i++) {
+    for (int i = 0; i < arg_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        fmt_call_argument(ctx, call->arguments[i], call->arg_accesses, i);
+        fmt_call_argument(ctx, arguments[i], arg_accesses, i);
     }
     xfmt_write_char(ctx, ')');
 
@@ -184,16 +188,144 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_char(ctx, '(');
     xfmt_write_newline(ctx);
     ctx->indent_level++;
-    for (int i = 0; i < call->arg_count; i++) {
+    for (int i = 0; i < arg_count; i++) {
         xfmt_write_indent(ctx);
-        fmt_call_argument(ctx, call->arguments[i], call->arg_accesses, i);
-        if (ctx->config->multiline_trailing_comma || i < call->arg_count - 1)
+        fmt_call_argument(ctx, arguments[i], arg_accesses, i);
+        if (ctx->config->multiline_trailing_comma || i < arg_count - 1)
             xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
     }
     ctx->indent_level--;
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, ')');
+}
+
+static void fmt_call(XrFmtContext *ctx, AstNode *node) {
+    CallExprNode *call = &node->as.call_expr;
+    fmt_call_like(ctx, call->callee, call->type_args, call->type_arg_count, call->arguments,
+                  call->arg_accesses, call->arg_count);
+}
+
+/* True if `node` is a reference to the k-th `defer` argument temporary. */
+static bool is_defer_temp(AstNode *node, AstNodeType type, const char *name, int k) {
+    if (!node || node->type != type || !name)
+        return false;
+    size_t prefix_len = sizeof(XR_DEFER_TEMP_PREFIX) - 1;
+    if (strncmp(name, XR_DEFER_TEMP_PREFIX, prefix_len) != 0)
+        return false;
+    char index[16];
+    snprintf(index, sizeof(index), "%d", k);
+    return strcmp(name + prefix_len, index) == 0;
+}
+
+/* Unwrap the anonymous zero-parameter closure every `defer` form builds and
+ * return the single call in its body, or NULL if the body is anything else. A
+ * statement carrying a comment is rejected: the surface forms this enables are
+ * one-liners with nowhere to put it. */
+static AstNode *defer_closure_call(AstNode *closure) {
+    if (!closure || closure->type != AST_FUNCTION_EXPR)
+        return NULL;
+    FunctionDeclNode *fn = &closure->as.function_expr;
+    if (fn->name || fn->param_count != 0 || fn->return_type || fn->type_param_count > 0 ||
+        fn->is_generator || fn->attr_count > 0)
+        return NULL;
+    AstNode *body = fn->body;
+    if (!body || body->type != AST_BLOCK || body->as.block.count != 1)
+        return NULL;
+    AstNode *stmt = body->as.block.statements[0];
+    if (!stmt || stmt->type != AST_EXPR_STMT || stmt->leading_comments || stmt->trailing_comments)
+        return NULL;
+    AstNode *call = stmt->as.expr_stmt;
+    return call && call->type == AST_CALL_EXPR ? call : NULL;
+}
+
+bool xfmt_emit_defer_closure(XrFmtContext *ctx, AstNode *node) {
+    AstNode *call = defer_closure_call(node->as.defer_stmt.expr);
+    /* Only a zero-argument call may be printed back as `defer f()`. A call with
+     * arguments desugars into the eager-capture block instead, so printing
+     * `defer f(a)` for a hand-written `defer { f(a) }` would re-parse into a
+     * different tree — the block would gain the __xr_dtmp_N temporaries. */
+    if (!call || call->as.call_expr.arg_count != 0)
+        return false;
+
+    xfmt_write_indent(ctx);
+    xfmt_write_str(ctx, "defer ");
+    fmt_call(ctx, call);
+    xfmt_write_newline(ctx);
+    return true;
+}
+
+/* Match the block `defer f(a, b)` desugars into and hand back the call whose
+ * callee and argument accesses the surface form needs:
+ *
+ *     {                                  <- block, is_synthetic_defer_capture
+ *         var __xr_dtmp_0 = a            <- one var decl per argument, in order
+ *         var __xr_dtmp_1 = b
+ *         defer fn() { f(__xr_dtmp_0, __xr_dtmp_1) }
+ *     }
+ *
+ * Returns NULL for anything that is not exactly that shape — including a block
+ * a later pass has edited, so a partial match can never be printed as a
+ * `defer` that would evaluate its arguments somewhere else. */
+static CallExprNode *match_defer_capture(AstNode *node) {
+    if (!node || node->type != AST_BLOCK || !node->as.block.is_synthetic_defer_capture)
+        return NULL;
+    BlockNode *block = &node->as.block;
+    int n = block->count - 1; /* one var decl per captured argument */
+    if (n < 1)
+        return NULL;
+
+    for (int k = 0; k < n; k++) {
+        AstNode *decl = block->statements[k];
+        if (!is_defer_temp(decl, AST_VAR_DECL, decl ? decl->as.var_decl.name : NULL, k))
+            return NULL;
+        if (!decl->as.var_decl.initializer || decl->as.var_decl.is_const ||
+            decl->as.var_decl.type_annotation || decl->as.var_decl.attr_count > 0)
+            return NULL;
+    }
+
+    AstNode *defer = block->statements[n];
+    if (!defer || defer->type != AST_DEFER_STMT)
+        return NULL;
+    AstNode *call_node = defer_closure_call(defer->as.defer_stmt.expr);
+    if (!call_node)
+        return NULL;
+
+    CallExprNode *call = &call_node->as.call_expr;
+    if (call->arg_count != n)
+        return NULL;
+    for (int k = 0; k < n; k++) {
+        AstNode *arg = call->arguments[k];
+        if (!is_defer_temp(arg, AST_VARIABLE, arg ? arg->as.variable.name : NULL, k))
+            return NULL;
+    }
+    return call;
+}
+
+bool xfmt_emit_defer_capture(XrFmtContext *ctx, AstNode *node) {
+    CallExprNode *call = match_defer_capture(node);
+    if (!call)
+        return false;
+
+    /* The arguments the user wrote are the temporaries' initializers; the
+     * callee and the per-argument `ref`/`move` modes come from the rewritten
+     * call inside the closure. */
+    BlockNode *block = &node->as.block;
+    int n = block->count - 1;
+    AstNode **arguments = (AstNode **) xr_malloc(sizeof(AstNode *) * (size_t) n);
+    if (!arguments)
+        return false;
+    for (int k = 0; k < n; k++)
+        arguments[k] = block->statements[k]->as.var_decl.initializer;
+
+    xfmt_write_indent(ctx);
+    xfmt_write_str(ctx, "defer ");
+    fmt_call_like(ctx, call->callee, call->type_args, call->type_arg_count, arguments,
+                  call->arg_accesses, n);
+    xfmt_write_newline(ctx);
+
+    xr_free(arguments);
+    return true;
 }
 
 static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
@@ -936,6 +1068,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_char(ctx, ')');
                 break;
             }
+            /* `linked go` is the only link mode the surface grammar spells;
+             * dropping it here would silently unlink the child task. */
+            if (go->link_mode == XR_LINK_LINKED)
+                xfmt_write_str(ctx, "linked ");
             xfmt_write_str(ctx, "go");
             if (go->name) {
                 xfmt_write_char(ctx, '(');
@@ -959,6 +1095,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, " any");
             if (aw->is_all)
                 xfmt_write_str(ctx, " all");
+            if (aw->is_any_success)
+                xfmt_write_str(ctx, " anySuccess");
             if (aw->timeout) {
                 xfmt_write_str(ctx, "(timeout: ");
                 xfmt_emit_expression(ctx, aw->timeout);

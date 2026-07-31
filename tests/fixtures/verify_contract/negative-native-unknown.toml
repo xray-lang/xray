@@ -1,0 +1,8 @@
+# A caller of an extern "C" declaration with no audited native contract cannot
+# be proven allocation-free or suspend-free: the absent body is not evidence.
+version = 1
+
+[[function]]
+symbol = "callsUncontractedNative"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_suspend"]

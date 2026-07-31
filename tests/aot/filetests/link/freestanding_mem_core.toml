@@ -39,3 +39,14 @@ symbol = "xray_mem_bulk"
 [[export.c]]
 xray = "xray_mem_mmio_shape"
 symbol = "xray_mem_mmio_shape"
+
+# The two codegen entry points must be exported or reachability discards them,
+# and the xrt_codegen_* assertions below would silently hold over an empty
+# translation unit.
+[[export.c]]
+xray = "xray_codegen_fenced_opaque"
+symbol = "xray_codegen_fenced_opaque"
+
+[[export.c]]
+xray = "xray_codegen_opaque"
+symbol = "xray_codegen_opaque"

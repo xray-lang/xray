@@ -11,8 +11,10 @@ c_contains=((p0)->f2 = (int64_t)v2)
 c_contains=int64_t _cf0 = p0->base.f0;
 c_contains=int64_t _cf0 = p0->f1;
 c_contains=int64_t _cf1 = p0->f2;
-c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_area_[0-9]+\(NULL,
-c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_kind_plus_[0-9]+\(NULL,
+# Locals are hoisted to top-of-function declarations, so an assignment line
+# carries no type prefix.
+c_regex=v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_area_[0-9]+\(NULL,
+c_regex=v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_kind_plus_[0-9]+\(NULL,
 c_not_contains=xrt_method_
 c_not_contains=xrt_type_register_hot(
 c_not_contains=xrt_type_set_name(

@@ -1,1 +1,1 @@
-类型 'Vec2Dyn' 不允许添加字段 'z'
+type 'Vec2Dyn' does not allow adding field 'z'

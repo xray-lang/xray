@@ -14,6 +14,30 @@ project(Xray
     LANGUAGES C CXX ASM
 )
 
+# ----------------------------------------------------------------------------
+# Compiler cache
+#
+# 1087 translation units means a touched header, a generator flip, or the ASan
+# lane's from-scratch rebuild of the whole compiler all pay full compile cost.
+# ccache turns the repeats into hash lookups. Opt-out rather than opt-in: it is
+# transparent, and XRAY_USE_COMPILER_CACHE=OFF disables it when a build must be
+# measured or bit-reproduced.
+#
+# Silently skipped when no cache program is installed, so this never becomes a
+# build prerequisite.
+# ----------------------------------------------------------------------------
+option(XRAY_USE_COMPILER_CACHE "Route C/C++ compiles through ccache/sccache when available" ON)
+if(XRAY_USE_COMPILER_CACHE AND NOT CMAKE_C_COMPILER_LAUNCHER)
+    find_program(XRAY_COMPILER_CACHE NAMES ccache sccache)
+    if(XRAY_COMPILER_CACHE)
+        set(CMAKE_C_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
+        message(STATUS "Compiler cache: ${XRAY_COMPILER_CACHE}")
+    else()
+        message(STATUS "Compiler cache: not found (install ccache to speed up rebuilds)")
+    endif()
+endif()
+
 # Release identity is captured once at configure time and is shared by the
 # binary, installed marker, and payload manifest.  Release automation rejects
 # dirty/unknown identities; source builds remain explicit instead of silently
@@ -2210,6 +2234,23 @@ if(BUILD_TESTS)
             RUN_SERIAL TRUE
             TIMEOUT 2400
         )
+
+        # Sanitize the compiler's OUTPUT, not the compiler. asan_focused above
+        # instruments xray itself and only emits C for its two real workloads;
+        # nothing ran the generated C under a sanitizer. Since Xray lowers to C,
+        # every UB rule applies to code no human wrote, so that gap was the one
+        # place a miscompile could hide indefinitely. The lane skips cleanly when
+        # the host has no READY AOT toolchain.
+        add_test(
+            NAME aot_ubsan
+            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(aot_ubsan PROPERTIES
+            LABELS "sanitizer;ubsan;aot;codegen"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
     endif()
 
     add_test(
@@ -2764,9 +2805,9 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
-    # Spec 8.1.1 uncaught top-level error diagnostic. A content gate: when this
-    # message went missing it went missing on both backends, so the VM/AOT
-    # differential still agreed and could not catch it.
+    # Spec 8.1.1 uncaught value-return error diagnostic. A content gate: the
+    # dropped-`go` shape exits 0 on both backends, so the VM/AOT differential
+    # agrees even when one of them prints nothing.
     add_test(
         NAME uncaught_error_diagnostics
         COMMAND ${XRAY_TEST_BASH}
@@ -2875,7 +2916,7 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
-                XRAY_TEST_CACHE_ROOT=$<TARGET_FILE_DIR:xray>/.xray-test-cache/deterministic
+                XRAY_TEST_CACHE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/.cache/xray-test/deterministic
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/deterministic_cases.txt
                 XRAY_DIFF_JOBS=${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
                 ${XRAY_TEST_BASH}

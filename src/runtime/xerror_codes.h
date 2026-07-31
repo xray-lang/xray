@@ -34,6 +34,7 @@
 #define XR_ERR_SYN_UNCLOSED_BRACE 205
 #define XR_ERR_SYN_UNCLOSED_BRACKET 206
 #define XR_ERR_SYN_INVALID_ASSIGN 207
+#define XR_ERR_SYN_EFFECTLESS_STMT 208
 
 /* ---- Compile errors (E03xx, 301-319) ---- */
 #define XR_ERR_CMP_UNDEFINED_VAR 301
@@ -84,6 +85,20 @@
 #define XR_ERR_ANALYZE_VISIBILITY 377
 #define XR_ERR_ANALYZE_CONST_FIELD 378
 #define XR_ERR_ANALYZE_POSSIBLY_NULL 379
+#define XR_ERR_ANALYZE_UNKNOWN_FIELD 380
+#define XR_ERR_ANALYZE_MISSING_FIELD 381
+/* Borrowed-view (Slice<T>, Ptr<T>/MutPtr<T>) lifetime violations. */
+#define XR_ERR_ANALYZE_BORROW_CONFLICT 382
+#define XR_ERR_ANALYZE_BORROW_ESCAPE 383
+#define XR_ERR_ANALYZE_BORROW_SOURCE 384
+/* A generator body reached, or could not be proven not to reach, the scheduler.
+ * A generator frame is resumed by the iterator driving it; parking it on the
+ * scheduler instead strands the driver and drops the remaining yields. */
+#define XR_ERR_ANALYZE_GENERATOR_SUSPEND 385
+/* A generator body registered a deferred action.  A generator abandoned before
+ * exhaustion is never resumed, so the deferred action would silently not run --
+ * an unrunnable cleanup in the language's only deterministic cleanup mechanism. */
+#define XR_ERR_ANALYZE_GENERATOR_DEFER 386
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400
@@ -105,9 +120,15 @@
 #define XR_ERR_MOD_BY_ZERO 421
 #define XR_ERR_OVERFLOW 422
 
-/* ---- Runtime index/key errors (E04xx, 430-431) ---- */
+/* ---- Runtime index/key errors (E04xx, 430-432) ---- */
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #define XR_ERR_KEY_NOT_FOUND 431
+/* An Iterator<T> was pulled past its end.  The pull protocol is two-step
+ * (LANGUAGE_SPEC 5.3.6): hasNext() is the exhaustion test and next() returns T,
+ * not T?, so there is no in-band value that can mean "no element left".
+ * Reporting the violation is the only alternative to handing back a zero value
+ * or a null the static type forbids. */
+#define XR_ERR_ITERATOR_EXHAUSTED 432
 
 /* ---- Runtime system errors (E04xx, 440-442) ---- */
 #define XR_ERR_STACK_OVERFLOW 440

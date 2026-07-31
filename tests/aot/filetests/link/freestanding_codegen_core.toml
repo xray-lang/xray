@@ -1,0 +1,19 @@
+[package]
+name = "filetest-freestanding_codegen_core"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_codegen_core.xr"
+
+# Reachability discards an unexported function, which would leave the
+# xrt_codegen_* assertions holding over an empty translation unit.
+[[export.c]]
+xray = "xray_codegen_opaque_u64"
+symbol = "xray_codegen_opaque_u64"
+
+[[export.c]]
+xray = "xray_codegen_opaque_i64"
+symbol = "xray_codegen_opaque_i64"
+
+[[export.c]]
+xray = "xray_codegen_fence_between"
+symbol = "xray_codegen_fence_between"

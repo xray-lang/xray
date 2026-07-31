@@ -140,7 +140,7 @@ def case_dir_key(case_file: Path) -> str:
 
 
 def stable_cache_dir(suite: str, xray_bin: Path) -> Path:
-    root = Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / "build" / ".xray-test-cache")))
+    root = Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / ".cache" / "xray-test")))
     return root / suite / toolchain_key(xray_bin)
 
 
@@ -276,6 +276,7 @@ class CaseResult:
     order: int
     status: str
     output: str
+    name: str = ""
 
 
 @dataclass
@@ -378,7 +379,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     prefix = f"  {name:<84}"
     if len(enabled) < 2:
-        return CaseResult(order, "skip", prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} global={','.join(config.backends)})")
+        return CaseResult(order, "skip", prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} global={','.join(config.backends)})", name)
 
     args = read_args(case)
     stdin_bytes = read_stdin(case)
@@ -415,7 +416,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     if not mismatch:
         suffix = f"PASS (excl:{' '.join(excluded)})" if excluded else "PASS"
-        return CaseResult(order, "pass", prefix + suffix)
+        return CaseResult(order, "pass", prefix + suffix, name)
 
     lines = [prefix + f"FAIL ({mismatch})" + (f"  [anchor: {anchor}]" if anchor else "")]
     for backend in enabled:
@@ -431,7 +432,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         rhs = results[other].stdout if mismatch.startswith("stdout") else results[other].stderr
         lines.append(f"      {ref}: {head_text(lhs, 6)}")
         lines.append(f"      {other}: {head_text(rhs, 6)}")
-    return CaseResult(order, "fail", "\n".join(lines))
+    return CaseResult(order, "fail", "\n".join(lines), name)
 
 
 def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
@@ -602,7 +603,56 @@ def main(argv: list[str]) -> int:
 
     print("")
     print(f"=== Results: {passed} passed, {failed} failed, {skipped} skipped ===")
-    return 0 if failed == 0 else 1
+
+    # -----------------------------------------------------------------------
+    # Ratchet.
+    #
+    # The differential net is the strongest correctness asset in the repo: the
+    # same .xr through VM and AOT, compared byte for byte. It was excluded from
+    # PR CI wholesale because a handful of cases were red — which left the other
+    # ~470 ungated too. Gating everything except a written baseline keeps the net
+    # running while the known divergences get fixed.
+    #
+    # New-failure detection is always valid. The stale-entry check is not: a run
+    # restricted to a case subset never executes most baselined cases, so their
+    # absence from the failure set proves nothing and demanding their deletion
+    # would be wrong.
+    # -----------------------------------------------------------------------
+    baseline_path = Path(os.environ.get("XRAY_DIFF_BASELINE", str(SCRIPT_DIR / "known_failures.txt")))
+    baseline: set[str] = set()
+    if baseline_path.is_file():
+        for line in baseline_path.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line:
+                baseline.add(line)
+
+    failed_names = {r.name for r in results if r.status == "fail" and r.name}
+    skipped_names = {r.name for r in results if r.status == "skip" and r.name}
+
+    status = 0
+    new_failures = sorted(failed_names - baseline)
+    if new_failures:
+        print("")
+        print(f"=== New differential failures (not in {rel_path(baseline_path)}) ===")
+        for name in new_failures:
+            print(f"  {name}")
+        print("A VM/AOT divergence is a correctness bug in one of the two backends.")
+        print("Fix it, or -- only with a written reason -- add it to the baseline.")
+        status = 1
+
+    full_run = not os.environ.get("XRAY_DIFF_CASES_FILE") and shard_total <= 1
+    if full_run:
+        now_passing = sorted(baseline - failed_names - skipped_names)
+        if now_passing:
+            print("")
+            print("=== Baselined cases now pass; delete these entries ===")
+            for name in now_passing:
+                print(f"  {name}")
+            print(f"The baseline may only shrink. Remove the lines above from {rel_path(baseline_path)}.")
+            status = 1
+        print(f"Ratchet: {len(failed_names)} failing, {len(baseline)} baselined.")
+
+    return status
 
 
 if __name__ == "__main__":

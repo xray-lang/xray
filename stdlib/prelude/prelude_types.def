@@ -30,7 +30,7 @@
  */
 
 /* Entries are sorted by `name` for human readability; lookup itself is a
- * linear scan over a small (currently 20-entry) table. */
+ * linear scan over a small (currently 21-entry) table. */
 
 /*           name             native_type        kind           */
 XR_PRELUDE_TYPE("Array",         XR_TARRAY,         GENERIC_1)
@@ -51,5 +51,9 @@ XR_PRELUDE_TYPE("Range",         XR_TINSTANCE,      SIMPLE)
 XR_PRELUDE_TYPE("Regex",         XR_TINSTANCE,      SIMPLE)
 XR_PRELUDE_TYPE("OsRwLock",        XR_TINSTANCE,      SIMPLE)
 XR_PRELUDE_TYPE("Set",           XR_TSET,           GENERIC_1)
+/* Slice<T> is a borrowed view, not a heap object: a slice value is a tagged
+ * XR_IS_SLICE_REF fat reference, so it has no GC type id. Its element storage
+ * is owned by the Array / [T; N] / string it borrows from. */
+XR_PRELUDE_TYPE("Slice",         0,                 GENERIC_1)
 XR_PRELUDE_TYPE("StringBuilder", XR_TINSTANCE,      SIMPLE)
 XR_PRELUDE_TYPE("Thread",        XR_TTHREAD,        GENERIC_1)

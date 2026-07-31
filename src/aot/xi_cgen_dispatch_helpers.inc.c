@@ -597,7 +597,7 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                          const char *prefix) {
     (void) prefix;
     uint16_t param_idx = (uint16_t) v->aux_int;
-    XrRep from_rep = cg_func_param_abi_rep(ctx, f, param_idx);
+    XrRep from_rep = cg_func_param_decl_storage_rep(ctx, f, param_idx);
     XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
     const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
     if (param_value_rep.kind == XAOT_VALUE_TAGGED && value_plan &&
@@ -5280,7 +5280,8 @@ static void emit_direct_call_arg_list(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     }
 }
 
-static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name);
+static void xicgen_emit_map_instance_alloc(XiCgenCtx *ctx, FILE *out, const char *class_name,
+                                           const XiClassData *class_data);
 
 static const char *xicgen_options_action_name(uint8_t action) {
     switch ((XaotOptionsAction) action) {
@@ -5566,7 +5567,9 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         if (!class_name && shared_class_data)
             class_name = shared_class_data->class_name;
         fprintf(out, "({ ");
-        xicgen_emit_map_instance_alloc(out, class_name);
+        xicgen_emit_map_instance_alloc(ctx, out, class_name,
+                                       static_call.class_data ? static_call.class_data
+                                                              : shared_class_data);
         emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
@@ -6603,7 +6606,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                     fprintf(out, ")");
                 } else {
                     fprintf(out, "xrt_to_string(");
-                    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                    emit_value_as_display_tagged(ctx, out, v->args[0]);
                     fprintf(out, ")");
                 }
                 return;
@@ -7958,13 +7961,18 @@ static const XiFunc *xicgen_parallel_plan_lifecycle_target(XiCgenCtx *ctx,
     return NULL;
 }
 
-static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                       const XiValue *v, const char *prefix,
-                                                       const char *method, uint16_t nargs) {
+/* The one place that decides which Plan a lifecycle call belongs to.  A Plan<T>
+ * call resolves through Plan's generic skeleton, but what cgen emits is the
+ * monomorphized specialization found by scanning the closed world -- so anything
+ * that needs to know the callee, reachability included, must ask here rather
+ * than re-derive it from the receiver's class data. */
+static const XiClassData *xicgen_parallel_plan_lifecycle_class(XiCgenCtx *ctx, const XiFunc *f,
+                                                               const XiValue *v, const char *method,
+                                                               uint16_t nargs) {
     if (!method || nargs != 0 ||
         (strcmp(method, "_begin") != 0 && strcmp(method, "_end") != 0 &&
          strcmp(method, "close") != 0))
-        return false;
+        return NULL;
     const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
     if (class_data && class_data->is_generic_skeleton &&
         (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE)) {
@@ -7975,6 +7983,13 @@ static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out
     if (!class_data && (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE) &&
         v->xg_callsite_id == XG_NO_ID && v->xg_method_id == XG_NO_ID)
         class_data = xicgen_find_parallel_plan_class_data(ctx);
+    return class_data;
+}
+
+static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                       const XiValue *v, const char *prefix,
+                                                       const char *method, uint16_t nargs) {
+    const XiClassData *class_data = xicgen_parallel_plan_lifecycle_class(ctx, f, v, method, nargs);
     if (!class_data)
         return false;
     const char *method_prefix = NULL;
@@ -8739,8 +8754,8 @@ static void xicgen_emit_stringbuilder_literal_append_reserve(XiCgenCtx *ctx, FIL
     fprintf(out, ", INT64_C(%" PRId64 "));\n", total);
 }
 
-static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                             const char *method, uint16_t nargs) {
+static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const XiValue *v, const char *method, uint16_t nargs) {
     const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
     bool recv_is_stringbuilder = recv_type && recv_type->kind == XR_KIND_INSTANCE &&
                                  recv_type->instance.class_name &&
@@ -8768,9 +8783,13 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             return true;
         }
         const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_strbuf_finish(");
+        /* xrt_strbuf_finish allocates, so a result nobody consumes has to be
+         * released rather than cast away.  Same ownership rule as the symbol
+         * dispatchers; see xrt_method_0. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
+        fprintf(out, discarded ? "xrt_discard_owned(xrt_strbuf_finish(" : "xrt_strbuf_finish(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, discarded ? "))" : ")");
         emit_conversion_suffix(out, suffix);
         return true;
     }
@@ -8791,11 +8810,21 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
             emit_codegen_abort_expr(out);
             return true;
         }
+        /* Answering with the receiver hands back a reference the caller owns,
+         * so it is retained exactly like the XRT_SYM_CLEAR arm of
+         * xrt_method_0.  A discarded result would only be retained and
+         * released again, so it skips the pair outright. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
         fprintf(out, "(xrt_strbuf_clear(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, "), ");
+        if (discarded) {
+            fprintf(out, "XR_NULL_VAL)");
+            return true;
+        }
+        fprintf(out, "xrt_method_return_self(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, "))");
         return true;
     }
     if (strcmp(method, "append") != 0 || nargs != 1)
@@ -10227,15 +10256,18 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     }
     int sym = cg_method_sym(method);
-    if (xicgen_emit_stringbuilder_method(ctx, out, v, method, nargs))
+    if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
         return;
     /* string.copyArray<byte>(): the VM dispatches this by name (no stable method-symbol
      * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
     if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_str_to_bytes(");
+        /* Allocates a byte array, so a result nobody consumes has to be
+         * released rather than cast away.  See xrt_method_0. */
+        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
+        fprintf(out, discarded ? "xrt_discard_owned(xrt_str_to_bytes(" : "xrt_str_to_bytes(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        fprintf(out, discarded ? "))" : ")");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
@@ -10304,18 +10336,26 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (!xicgen_runtime_method_plan_allows_helper(ctx, out, v, method, nargs, dispatch_plan))
         return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    /* An unused result is dropped by the caller as `(void)(...)`, which would
+     * strand the +1 reference the dispatcher hands back (xrt_method_0's
+     * ownership contract).  Route those through the discard entry points, which
+     * run the same arm and release an owned result.  Xi cannot drop it instead:
+     * xi_arc is shared with the VM, whose builtin methods answer borrowed, so it
+     * leaves every call result alias-uncertain and undropped. */
+    const char *dispatch =
+        cg_unused_call_result_emits_statement(ctx, f, v) ? "xrt_method_discard" : "xrt_method";
     if (nargs == 0) {
-        fprintf(out, "xrt_method_0(");
+        fprintf(out, "%s_0(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d)", sym);
     } else if (nargs == 1) {
-        fprintf(out, "xrt_method_1(");
+        fprintf(out, "%s_1(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 2) {
-        fprintf(out, "xrt_method_2(");
+        fprintf(out, "%s_2(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10323,7 +10363,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 3) {
-        fprintf(out, "xrt_method_3(");
+        fprintf(out, "%s_3(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10333,7 +10373,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 4) {
-        fprintf(out, "xrt_method_4(");
+        fprintf(out, "%s_4(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10394,10 +10434,13 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
  * cannot recover the class. Resolve the constructor from the call's result type
  * (always the constructed instance type) and emit it exactly like a bare class
  * call `X(args)`, keeping AOT consistent with the VM for the `new` form. */
-static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name) {
+static void xicgen_emit_map_instance_alloc(XiCgenCtx *ctx, FILE *out, const char *class_name,
+                                           const XiClassData *class_data) {
     fprintf(out, "XrValue _inst = xrt_map_new(4); xrt_map_set_class_name(_inst, ");
     xicgen_emit_c_string_literal(out, class_name ? class_name : "?");
     fprintf(out, "); ");
+    /* Declaration defaults precede the constructor body, as in the VM. */
+    emit_class_map_field_default_stores(ctx, out, class_data, "_inst");
 }
 
 static bool xicgen_class_data_same_identity(const XiClassData *a, const XiClassData *b) {
@@ -10513,7 +10556,7 @@ static bool xicgen_emit_resolved_user_constructor(XiCgenCtx *ctx, FILE *out, con
     if (!class_name)
         return false;
     fprintf(out, "({ ");
-    xicgen_emit_map_instance_alloc(out, class_name);
+    xicgen_emit_map_instance_alloc(ctx, out, class_name, class_data);
     emit_fname(ctx, out, resolved_prefix ? resolved_prefix : prefix, ctor);
     fprintf(out, "(NULL, _inst");
     for (uint16_t a = 1; a < v->nargs; a++) {
@@ -10667,7 +10710,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
         if (!class_name && call.class_data)
             class_name = call.class_data->class_name;
         fprintf(out, "({ ");
-        xicgen_emit_map_instance_alloc(out, class_name);
+        xicgen_emit_map_instance_alloc(ctx, out, class_name, call.class_data);
         emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
@@ -11445,9 +11488,18 @@ XI_TO_C_TEMPLATE_WIDTH_DRIVERS(XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER)
 
 static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
+    /* A PTR-rep `T?` keeps null as the NULL pointer rather than a tagged
+     * XrValue (see xr_type_rep: "null(0) vs non-null(ptr) distinguishable by
+     * payload"), so its C storage is a bare pointer and `.tag` would not even
+     * compile. Test the pointer instead. Tagged storage keeps the tag test. */
+    XrRep rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
+    if (rep == XR_REP_PTR || rep == XR_REP_RAWPTR || rep == XR_REP_STR) {
+        fprintf(out, "(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, " == NULL)");
+        return;
+    }
     fprintf(out, "(");
     emit_vref(out, v->args[0]);
     fprintf(out, ".tag == XR_TAG_NULL)");
@@ -12961,7 +13013,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_to_string(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_display_tagged(ctx, out, v->args[0]);
             fprintf(out, ")");
         }
     } else if (v->type->kind == XR_KIND_BOOL) {

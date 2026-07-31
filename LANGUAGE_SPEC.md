@@ -123,9 +123,47 @@ A UTF-8 BOM (`EF BB BF`) is optional; the scanner skips a leading BOM.
 
 ### 1.2 Line Endings and Whitespace
 
-Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as horizontal whitespace. A standalone `\r` is also skipped, but it does **not** advance the line counter or trigger smart-semicolon behavior and therefore should not be used as a source line break.
+Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as horizontal whitespace. A standalone `\r` is also skipped, but it does **not** advance the line counter or end a statement, and therefore should not be used as a source line break.
 
-**Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics (**exception**: in generic contexts, splitting consecutive `>>` depends on whitespace context).
+**Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics.
+
+**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<int>>` and `Array<Array<int> >` are exactly equivalent, decided by grammatical position rather than spacing.
+
+#### 1.2.1 Statement Boundaries
+
+Xray does not require a trailing `;`: **a line ending terminates a statement**. When a line ending is reached while an expression is still open, the compiler decides whether the next line continues it or starts a new statement.
+
+A line ending **terminates** the current expression if and only if all of the following hold:
+
+1. The last consumed token can **end** an expression (identifier, literal, `)`, `]`, `}`, postfix `!`, `++`, `--`, `?`, a scalar type name); and
+2. The first token of the new line can **begin** an expression; and
+3. The parser is not inside `(` or `[` — no statement can begin inside a bracket group, so line endings are transparent there.
+
+Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `/` (regex literal / divide), `++`, `--`, `(`, `[`. Hence:
+
+```xray
+var x = a
+!b            // two statements; NOT var x = a!
+```
+
+When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
+
+```xray
+var ok = check(a)
+    && check(b)      // continuation
+
+var total = base +
+            extra    // operator parked at end of line; continuation
+```
+
+To continue a line with `-` or `/`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
+
+```xray
+var d = (total
+    - used)          // line endings are transparent inside a bracket group
+```
+
+> The value of an expression statement is discarded, so **an expression statement with no effect is an error** (`E0208`). This pairs with the boundary rule above: a continuation line that was correctly split off does not become a silent no-op — it is reported immediately, with the rewrite suggested. The REPL is exempt, since it prints the value of a trailing bare expression and that value is therefore observed.
 
 ### 1.3 Comments
 
@@ -225,7 +263,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; `stdlib/prelude/prelude_types.def` introduces them automatically:
-> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`.
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
 > `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 
 #### 1.5.7 Literal Keywords
@@ -523,7 +561,7 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `is` | runtime type check |
 | `as` | type cast |
 
-`!` ambiguity is resolved at parse time: immediately after an expression and with no whitespace, it is force-unwrap; in prefix position, it is logical not.
+`!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
 
 #### 1.7.9 Collection-literal Starters
 
@@ -563,7 +601,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
+5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `Record` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -575,6 +613,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `f32`, `f64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
+| Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
 | Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -777,11 +816,126 @@ fn first(packet: Packet) -> byte {
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
 - `Array<T>`: dynamic length, growable, heap-backed container.
-- `Slice<T>`: borrowed view over contiguous storage; it does not own data.
+- `Slice<T>`: borrowed view over contiguous storage; it does not own data (see §2.4.2).
 
 The old `[N]T` syntax is not part of the Xray language.
 
-#### 2.4.2 `Map<K, V>`
+#### 2.4.2 `Slice<T>`
+
+> Source of truth: `stdlib/prelude/prelude_types.def` (prelude registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
+
+`Slice<T>` is a **borrowed view**: it denotes a run of contiguous element storage owned by another value. It owns no data, does not participate in reference counting, and cannot be placed in any long-lived storage. It is a prelude type (`GENERIC_1`) and may be written directly in any type annotation.
+
+##### Construction
+
+A view can only arise from the three sources below, and it **requires an explicit target type** — a slice expression without one is a compile error:
+
+| Source | Result | Notes |
+|--|--|--|
+| `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
+| `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
+| `str.bytes()` | `Slice<byte>` | the owner is the string's UTF-8 byte storage |
+
+```xray
+var arr: Array<int> = [10, 20, 30, 40]
+var view: Slice<int> = arr[1:3]      // OK: borrows arr
+var all: Slice<int> = arr[:]         // full-length view, not a copy
+var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
+```
+
+The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
+
+```xray
+var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
+```
+
+##### Capabilities
+
+- `len(view)` for the length; `view[i]` reads an element; `view[i] = v` writes one, **straight into the owner's storage**.
+- `view[a:b]` reslices; the result still borrows the same owner.
+- A view has **no member methods** and no `.length`.
+- A `const Slice<T>`, and any view derived from a `const` owner, is read-only; writing through it is a compile error.
+
+```xray
+fn main() {
+    var arr: Array<int> = [10, 20, 30, 40]
+    var view: Slice<int> = arr[1:3]        // borrowed view, not a copy
+    view[1] = 31
+    print(arr[2])                          // 31 — the write goes through to the owner
+    arr[1] = 21
+    print(view[0])                         // 21 — element writes on the owner are visible here
+    var owned: Array<int> = copy(arr[1:3]) // an independent Array<T>
+    arr.push(50)                           // OK: no view is live at this point
+    print(len(owned))
+}
+
+main()
+```
+
+##### Borrow rules
+
+Let view `v` borrow owner `o`. While `v` is **live**:
+
+1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
+2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
+3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
+4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / Record fields, Array / Map / Set / tuple / Json / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+
+```xray
+fn ok() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    print(len(view))                 // last use of view
+    bytes.push(3)                    // OK: the borrow already ended (rule 3)
+}
+
+fn rejected() {
+    var bytes: Array<byte> = [1, 2]
+    var view: Slice<byte> = bytes[:]
+    bytes.push(3)                    // E0382: view is still live
+    print(len(view))
+}
+```
+
+##### Across functions: the returned-view contract
+
+A function may return `Slice<T>` **if and only if** the returned view has a **uniquely inferable source**: one specific parameter, the receiver, or static storage. The compiler records a returned-view contract (source kind plus parameter index) for such a function; the call site charges the result back to the original owner, so the borrow rules keep applying on the caller's side.
+
+A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
+
+```xray
+fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+    return data[start:]              // OK: the unique source is the parameter data
+}
+
+fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+    if (useA) {
+        return a
+    }
+    return b                         // E0384: multiple sources
+}
+
+fn alsoBad() -> Slice<int> {
+    var local: Array<int> = [1, 2]
+    return local[:]                  // E0384: borrowed from a local
+}
+```
+
+##### The escape hatch: `copy`
+
+When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
+
+```xray
+var owned: Array<int> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
+```
+
+`copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
+
+##### Relationship to other borrows
+
+`ref` parameters and `Ptr<T>` / `MutPtr<T>` share the same borrow tracking and the same error codes: `E0382` (owner invalidated while a borrow is live), `E0383` (borrow escapes), `E0384` (borrow source unstable or not unique). An `unsafe` block relaxes none of them.
+
+#### 2.4.3 `Map<K, V>`
 
 Hash table that **preserves insertion order**. See §14.8.
 
@@ -799,7 +953,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | `Json` / `Object` (structural) | see §2.4.6 |
+| `{ key: value }` (no prefix) | sealed `Record` (`Json` when the expected type is `Json`) | see §2.4.7 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -807,7 +961,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 `K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
 
-#### 2.4.3 `Set<T>`
+#### 2.4.4 `Set<T>`
 
 Deduplicated collection. See §14.9.
 
@@ -815,7 +969,7 @@ Deduplicated collection. See §14.9.
 var s: Set<int> = #[1, 2, 3]
 ```
 
-#### 2.4.4 `Channel<T>`
+#### 2.4.5 `Channel<T>`
 
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
@@ -823,7 +977,7 @@ Inter-coroutine communication channel. A named channel uses a stable `const` bin
 const ch: Channel<int> = Channel<int>(10)
 ```
 
-#### 2.4.5 `Array<byte>`
+#### 2.4.6 `Array<byte>`
 
 Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
 
@@ -832,7 +986,7 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Record` / `Json` and Object Literals
+#### 2.4.7 `Record` / `Json` and Object Literals
 
 Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
@@ -881,11 +1035,22 @@ var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
 ```
 
-#### 2.4.7 `BigInt`
+**Responsibilities of the product types**: the line between the structural and nominal domains is whether a type carries methods.
+
+| | Identity | Field set | User-defined methods | Use for |
+|---|---|---|---|---|
+| `Record` | structural | declared, exact at compile time | **no** | options, multi-field returns, ordinary business data |
+| `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
+| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
+| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
+
+**Normative commitment**: `Record` and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
+
+#### 2.4.8 `BigInt`
 
 Arbitrary-precision integer. See §14.8.
 
-#### 2.4.8 `Range`
+#### 2.4.9 `Range`
 
 `Range` represents an integer interval and is produced by `a..b` or `a..=b`:
 
@@ -907,11 +1072,11 @@ for (i in 3..=5) {
 
 Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
-#### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
 
-#### 2.4.10 `WeakMap` / `WeakSet`
+#### 2.4.11 `WeakMap` / `WeakSet`
 
 Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
@@ -1078,17 +1243,25 @@ var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotati
 | Typed integer | any floating type | ❌ explicit `as` required |
 | Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `T` | `Json` (if T is Json-compatible) | ✅ |
+| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON scalar enters the value domain |
+| Any other type | `Json` | ❌ `Json.encode(value)` required |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| Subset object type | Superset object type | ❌ (structural compatibility goes superset → subset) |
+| Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
 
-> **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
+> **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
-> var u: User = full       // OK: full is a superset of User
+> // var u: User = full            // compile error E0352: extra field 'age'
+>
+> type Opt = { name: string, age: int? }
+> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
+
+> **Record and Json are two disconnected semantic domains**: `Record` is a closed field set checked at compile time; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
+> - `Json.encode(value)`: typed value → `Json`
+> - `json as T` / `json as T?`: `Json` → a Record or other typed value (structural narrowing)
 
 #### 2.10.2 Explicit `as`
 
@@ -1213,15 +1386,15 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
-| 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` | left | equality |
-| 9 | `&` | left | bitwise AND |
-| 8 | `^` | left | bitwise XOR |
-| 7 | `\|` | left | bitwise OR (also union types) |
-| 6 | `&&` | left | logical AND (short-circuit) |
-| 5 | `\|\|` | left | logical OR (short-circuit) |
-| 4 | `??` | left | null coalescing |
-| 3 | `..` `..=` | left | range |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -1477,19 +1650,22 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 #### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
 
 ```xray
-0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
-0..=10                 // 0..=10, closed interval (includes both 0 and 10)
+var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)
+var closed = 0..=10    // closed interval (includes both 0 and 10)
 var r = 1..100
 var n = 10
 for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
 - Type: `Range` (int ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
 - `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
 - `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
@@ -1569,13 +1745,13 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
+- Defaults to sealed structural `Record` (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 - Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Array<byte> `Array<byte>(...)`
 
-See §2.4.5 and §14.5.
+See §2.4.6 and §14.5.
 
 #### Channel `Channel<T>(buf?)`
 
@@ -1647,14 +1823,15 @@ Slice ::= Primary '[' Expr? ':' Expr? ']'
 arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
-arr[:]                  // full slice (shallow copy)
+arr[:]                  // full-length view (not a copy)
 var view: Slice<int> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice expression is a scoped borrowed `Slice<T>` selected by its target type and does not modify the owner.
+- A slice expression evaluates to a **borrowed view** of type `Slice<T>`, selected by its target type; no elements are copied. Every form, including `arr[:]`, is a view: writing through the view writes straight into the owner's storage, and element writes on the owner are immediately visible through the view. Use `copy(arr[1:4])` when you need independent data.
+- A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas
 
@@ -1761,7 +1938,7 @@ var p = Point{x: 1, y: 2}      // struct literal
 See §1.6.5. In brief:
 
 ```xray
-"Hello, ${name}! Age: ${user.age + 1}"
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
@@ -1774,9 +1951,37 @@ See §1.6.5. In brief:
 yield expr                  // produce one generator value and suspend
 ```
 
-`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
 Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
+
+#### 3.16.1 The two suspensions are different semantics
+
+`yield expr` and `Coro.yield()` share a word root but are **not the same kind of suspension**. They differ in every property a caller can observe:
+
+| | `yield expr` | `Coro.yield()` |
+|---|---|---|
+| Transfer target | symmetric transfer back to the iterator driving the generator | asymmetric yield to the scheduler |
+| Can migrate OS threads | no | yes (work stealing) |
+| Is a cancellation checkpoint | **no** | yes (§10.5) |
+| Propagates to the caller | **no** — driving a generator does not suspend the driver's own frame | yes, along call edges |
+| Effect contract | rejected by `no_suspend`, accepted by `no_reschedule` | rejected by both |
+
+`xray verify` therefore treats suspension as two independent dimensions: `no_reschedule` asserts "never reaches the scheduler, is not a cancellation point, cannot migrate threads", and `no_suspend` is the stronger "control never leaves this frame". A pure generator satisfies the first but not the second; **a function that merely drives a generator satisfies both**.
+
+#### 3.16.2 A generator body must not reach the scheduler
+
+A generator frame is resumed by whoever drives it, never by the scheduler. A generator function body therefore **must not contain any scheduler suspension point**: `await`, `select`, a `scope` block, `Coro.yield()`, the blocking channel methods, `time.sleep()`, or a call to any function that may suspend. Violations report `E0385`.
+
+The rule is an **effect rule, not a syntactic one**: it composes through the §8 effect product, so calling a function that awaits internally is rejected the same way. Incomplete evidence **fails closed** — a generator that calls through an unresolved function value (such as a function-typed parameter) is rejected, because that target may suspend. This matches the boundary rules for `sys.Thread.spawn` bodies and parallel callbacks.
+
+> The restriction is a deliberate scope decision, not an implementation gap: generators in this version are pull-driven iterators, not async streams.
+
+#### 3.16.3 An abandoned generator runs no further code
+
+When `for-in` leaves early through `break` / `return` / a thrown error, or the iterator is discarded, the generator frame is **not resumed** and the rest of its body never executes. Reclamation timing is not part of the observable semantic contract (§16.8).
+
+A generator body therefore **must not use `defer`** (`E0386`). `defer` is the language's only deterministic cleanup mechanism, and here it might never run; a cleanup that may not run is more dangerous than no cleanup. When cleanup is required, the caller owns the resource and passes it in.
 
 ---
 
@@ -2481,6 +2686,10 @@ allow = []
 
 Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
 
+**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
+
+**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+
 #### Worked Examples
 
 Closure capture and higher-order functions:
@@ -2681,11 +2890,71 @@ class Counter {
 
 **Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
-#### 5.3.6 Custom iterators
+#### 5.3.6 `Iterator<T>` and `Iterable<T>`
 
-Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
+`Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
 
-#### 5.3.7 Worked Examples
+```xray
+interface Iterator<T> {
+    hasNext() -> bool       // is another element available; does not consume one
+    next() -> T             // take the next element and advance
+    nth(index: int) -> T    // advance index elements from the current position and return it
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+Rules:
+
+- Any type implementing `iterator()` can be used with `for-in`; the built-in collections and `string` (by `rune`) already do.
+- `for-in` guarantees only that it pulls through `hasNext()` / `next()`; nothing beyond the number and ordering of those calls is guaranteed.
+- `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
+- `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
+- Mutating the underlying collection during iteration is defined by that collection; the built-in collections invalidate their iterators (§14).
+- `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
+
+A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
+
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: int
+    _h: int
+    constructor(w: int, h: int) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: int { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: int {
+        fn() { return this._w }
+        fn(v: int) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -2765,6 +3034,25 @@ var pt = Point{x: 1.0, y: 2.0}
 var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
+```
+
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
+
+```xray
+struct Config {
+    host: string
+    port: int = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
 ```
 
 **Differences from `class`**:
@@ -3170,7 +3458,7 @@ type Pair<T> = { first: T, second: T }                // generic alias
 - `type T = Json` equals `Json` (not sealed).
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
-See [§2.4.6](#246-json) and [§2.8](#28-type-aliases).
+See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
 
 ### 5.8 `import` / `export`
 
@@ -4179,7 +4467,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
 | `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()` satisfy this constraint. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
+| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map, Set, string, Json, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
@@ -4260,15 +4548,16 @@ render(Square())     // OK
 
 #### Structural objects
 
-Only `object literal` and `type T = {...}` use structural matching:
+Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK: literal matches structurally
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error: sealed type rejects extra fields
+describe({ x: 1.0, y: 2.0 })          // OK: exact field set
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
+describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 ```
 
 ### 9.6 Variance
@@ -4719,6 +5008,8 @@ for (i in 0..1000) {
 ```
 
 `Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
+
+The two share a word root but are not the same suspension: `Coro.yield()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. **A generator body must not call `Coro.yield()`** (`E0385`, see §3.16.2).
 
 ### 10.11 Concurrency safety model
 
@@ -5257,7 +5548,7 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 | `toString()` | container representation |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
-Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent data.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -5739,6 +6030,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed brace |
 | `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed bracket |
 | `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | invalid assignment target or form |
+| `E0208` | `XR_ERR_SYN_EFFECTLESS_STMT` | expression statement has no effect; its result is discarded (see §1.2.1) |
 
 ### 18.2 Compilation and Static Analysis
 
@@ -5793,6 +6085,13 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
 | `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
+| `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
 
 ### 18.3 Runtime
 
@@ -5819,6 +6118,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.6 |
 
 #### System, Calls, Coroutines, and Stdlib
 
@@ -5831,6 +6131,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
+| `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | a Task's transferable result has already been taken and cannot be taken again |
 | `E0470` | `XR_ERR_JSON_PARSE` | JSON parse failure |
 | `E0471` | `XR_ERR_JSON_INVALID` | invalid JSON value or operation |
 | `E0475` | `XR_ERR_REGEX_COMPILE` | regex compilation failure |
@@ -5858,6 +6159,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | Code | C name | Rejected form / meaning |
 |--|--|--|
 | `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` is invalid; return a tuple with `return (a, b)` |
+| `E0802` | `XR_ERR_SYN_BINDING_CAPABILITY_REMOVED` | `owned` / `shared` binding syntax is invalid; use `var` or `const` — ownership and sharing are inferred from value capability and explicit copy/move boundaries |
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | bare key/value `for` form is invalid |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` is invalid; use `-> ()` or omit the return type |
 | `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | parameter modes belong between the colon and the type |
@@ -5958,11 +6260,12 @@ BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
-// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -6075,6 +6378,10 @@ Statement ::= ExprStmt
            |  Block
            // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
 
+// LineBreak is not a token: it is the outcome of deciding that a line ending
+// terminates the statement here. That decision (previous token can end an
+// expression + the new line's first token can begin one + not inside '(' / '[')
+// is normative; see §1.2.1 for the full definition.
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
@@ -6359,7 +6666,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 
 | Dimension | Rust | xray |
 |--|--|--|
-| Memory safety | full borrow checker | inferred uniqueness, `move`, and const/synchronized capabilities across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions |
+| Memory safety | full borrow checker | inferred uniqueness, `move`, and const/synchronized capabilities across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions (see §2.4.2) |
 | Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
 | Type inference | strong Hindley-Milner | bidirectional inference |
 | Traits | full | similar to `interface`, fewer features |
@@ -6397,7 +6704,9 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
-| **Array<byte>** | Byte buffer type (see §2.4.5) |
+| **Array<byte>** | Byte buffer type (see §2.4.6) |
+| **Slice<T>** | Borrowed view over contiguous element storage owned by another value; owns no data and is constrained by borrow lifetimes (see §2.4.2) |
+| **borrow** | Access to another value's storage without taking ownership; `Slice<T>`, `ref` parameters, and `Ptr<T>` / `MutPtr<T>` are all borrows and share the `E0382` / `E0383` / `E0384` rules |
 | **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `u32` (see §2.3.5) |
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
