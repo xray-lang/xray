@@ -182,16 +182,24 @@ int xrt_bump_enabled = 0;  // 0 = calloc (safe default); 1 = bump (fast, no per-
  * iteratively by the outermost xrt_release instead of recursing, so freeing a
  * deep data structure (10k+ node list/tree) cannot overflow the C stack.
  * These are thread-local: concurrent worker releases must not share the
- * recursive destructor queue. */
+ * recursive destructor queue.
+ *
+ * The queue is a side stack, not a list threaded through the queued objects:
+ * a queued object has only reached rc == 0 and its destructor has NOT run yet,
+ * so its first payload word is still a live field. */
 _Thread_local int xrt_release_depth;
-_Thread_local void *xrt_deferred_head;
+_Thread_local XrObjHeader **xrt_deferred_stack;
+_Thread_local uint32_t xrt_deferred_count;
+_Thread_local uint32_t xrt_deferred_cap;
 #else
 extern char *xrt_bump_cursor;
 extern char *xrt_bump_end;
 extern XrtBumpBlock *xrt_bump_blocks;
 extern int xrt_bump_enabled;
 extern _Thread_local int xrt_release_depth;
-extern _Thread_local void *xrt_deferred_head;
+extern _Thread_local XrObjHeader **xrt_deferred_stack;
+extern _Thread_local uint32_t xrt_deferred_count;
+extern _Thread_local uint32_t xrt_deferred_cap;
 #endif
 
 /* Outermost release recurses at most this deep before queuing dead objects for
@@ -334,11 +342,11 @@ static inline int xrt_arc_value_has_header(XrValue v) {
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
-           v.tag == XR_TAG_CELL || v.tag == XR_TAG_ITERATOR ||
-           v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
-           v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||
-           v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE || v.tag == XR_TAG_THREAD ||
-           v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN || v.tag == XR_TAG_NET_LISTENER;
+           v.tag == XR_TAG_CELL || v.tag == XR_TAG_ITERATOR || v.tag == XR_TAG_AGG_REF ||
+           v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK ||
+           v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
+           v.tag == XR_TAG_THREAD || v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN ||
+           v.tag == XR_TAG_NET_LISTENER;
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
@@ -479,6 +487,22 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
         XRT_FREE(hdr);
 }
 
+/* Queue a dead object for iterative finalization. Returns 0 if the stack could
+ * not grow, in which case the caller finalizes recursively instead. */
+static int xrt_deferred_push(XrObjHeader *hdr) {
+    if (xrt_deferred_count == xrt_deferred_cap) {
+        uint32_t new_cap = xrt_deferred_cap ? xrt_deferred_cap * 2u : 64u;
+        XrObjHeader **grown = (XrObjHeader **) XRT_REALLOC(
+            xrt_deferred_stack, (size_t) new_cap * sizeof(XrObjHeader *));
+        if (!grown)
+            return 0;
+        xrt_deferred_stack = grown;
+        xrt_deferred_cap = new_cap;
+    }
+    xrt_deferred_stack[xrt_deferred_count++] = hdr;
+    return 1;
+}
+
 static inline void xrt_release(XrValue v) {
     if (v.tag == XR_TAG_STR)
         return;
@@ -504,24 +528,28 @@ static inline void xrt_release(XrValue v) {
 
     /* Last owner (rc == 0). Depth-bound the destructor cascade: queue and
      * drain iteratively past the limit so deep graphs cannot blow the stack.
-     * The dead object's user data is free, so reuse its first word as the
-     * deferred-list link. */
-    if (xrt_release_depth >= XRT_RELEASE_DEPTH_LIMIT) {
-        *(void **) v.ptr = xrt_deferred_head;
-        xrt_deferred_head = hdr;
+     * The object's destructor has not run yet, so its user data is still live
+     * and cannot hold the queue link — xrt_deferred_push keeps it on the side.
+     * A failed push (OOM) falls through to the recursive path. */
+    if (xrt_release_depth >= XRT_RELEASE_DEPTH_LIMIT && xrt_deferred_push(hdr))
         return;
-    }
 
     xrt_release_depth++;
     xrt_finalize_one(hdr);
     xrt_release_depth--;
 
-    if (xrt_release_depth == 0) {
-        while (xrt_deferred_head) {
-            XrObjHeader *d = (XrObjHeader *) xrt_deferred_head;
-            xrt_deferred_head = *(void **) ((char *) d + sizeof(XrObjHeader));
-            xrt_finalize_one(d);
-        }
+    /* NULL unless this cascade actually went deep, so the common release costs
+     * one thread-local load and a branch, as it did with the intrusive list. */
+    if (xrt_release_depth == 0 && xrt_deferred_stack) {
+        /* Re-read the globals each turn: a destructor run here can queue and
+         * drain again, which reallocates or empties the stack under us. */
+        while (xrt_deferred_count > 0)
+            xrt_finalize_one(xrt_deferred_stack[--xrt_deferred_count]);
+        /* Deep cascades are rare and there is no thread-exit hook to reclaim
+         * the buffer, so release it rather than hold it per thread. */
+        XRT_FREE(xrt_deferred_stack);
+        xrt_deferred_stack = NULL;
+        xrt_deferred_cap = 0;
     }
 }
 
