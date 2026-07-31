@@ -89,4 +89,4 @@ anchor-sha256: src/app/cli/xcmd_verify.c ca9b1e734649830c52da8060b0bba68afffb031
 anchor-sha256: tests/cli/run_verify_contract_tests.sh fe3588ad68af235f00aef1d24cbf27576206c6ce5ae9c987d3d681ebe45b9dc3
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 0bc4d04e1a027edfc0bdff456542f105428110aeb7b6e5a7d450dc3ce2a7848f
 anchor-sha256: tests/unit/analyzer/test_effect_db.c d444b5476930dcda7f57fc331faea237abecba18021ea28091c032cde3d4d865
-anchor-sha256: tests/unit/ir/test_xi_lower.c 788a6d9c4281030537c5146af5eab412fdcfdafac0c0cea163550805b6303f33
+anchor-sha256: tests/unit/ir/test_xi_lower.c 5d0dc50454a7f6c1624b97fdfe75e8d6732dd35e7cea4020dd3be25f2a3eba2d

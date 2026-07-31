@@ -6603,7 +6603,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                     fprintf(out, ")");
                 } else {
                     fprintf(out, "xrt_to_string(");
-                    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                    emit_value_as_display_tagged(ctx, out, v->args[0]);
                     fprintf(out, ")");
                 }
                 return;
@@ -12961,7 +12961,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_to_string(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_display_tagged(ctx, out, v->args[0]);
             fprintf(out, ")");
         }
     } else if (v->type->kind == XR_KIND_BOOL) {

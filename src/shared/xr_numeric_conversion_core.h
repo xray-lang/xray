@@ -147,11 +147,14 @@ static inline double xr_numeric_unsigned_to_f64(uint64_t magnitude, bool negativ
     uint64_t significand =
         shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (52 - high));
     if (shift && significand == (UINT64_C(1) << 53)) {
+        /* Rounding carried into bit 53. Renormalizing drops one bit and bumps
+         * the exponent, leaving the significand already in final position.
+         * (A realignment shift here would be 52 - high + shift == -1, which is
+         * undefined behavior; without the carry it is always 0, so there is
+         * nothing to realign in either case.) */
         significand >>= 1;
         high++;
     }
-    if (shift)
-        significand <<= (52 - high + (int) shift);
     uint64_t fraction = significand & ((UINT64_C(1) << 52) - UINT64_C(1));
     uint64_t bits = ((uint64_t) (high + 1023) << 52) | fraction;
     if (negative)
@@ -169,11 +172,11 @@ static inline double xr_numeric_unsigned_to_f32(uint64_t magnitude, bool negativ
     uint64_t significand =
         shift ? xr_numeric_round_shift_even_u64(magnitude, shift) : (magnitude << (23 - high));
     if (shift && significand == (UINT64_C(1) << 24)) {
+        /* Same carry renormalization as the binary64 path above; the discarded
+         * realignment shift would likewise be -1 here. */
         significand >>= 1;
         high++;
     }
-    if (shift)
-        significand <<= (23 - high + (int) shift);
     uint32_t fraction = (uint32_t) significand & UINT32_C(0x007fffff);
     uint32_t bits = ((uint32_t) (high + 127) << 23) | fraction;
     if (negative)

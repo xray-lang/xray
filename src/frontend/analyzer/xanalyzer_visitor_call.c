@@ -591,10 +591,31 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
  * constructors copy temporary child arrays; no analyzer-owned heap graph
  * escapes. Returns NULL for shapes we do not synthesize; the caller then skips
  * the writeback and keeps prior behavior.
+ *
+ * The rule for adding a shape is round-trip fidelity: synthesize only when
+ * resolving the result reproduces the type it came from. Containers
+ * (Array/Slice/Set/Map/Json) and tuples qualify, and so does a nullable carrier
+ * through XR_TREF_OPTIONAL. Deliberately excluded, because their tref form
+ * cannot carry everything XrType holds and the clone would be typed against a
+ * different type than the call site inferred:
+ *   - function types (throw effect, parameter modes, view-return provenance)
+ *   - unions (resolution normalizes and sorts members)
+ *   - records and field-shaped Json (per-field readonly, sealed-ness)
+ *   - const carriers (xr_type_make_const is not a syntax-level wrapper here)
+ * Those still reach the generic origin erased, which stays a correct callable
+ * body — see xaot_callable_func_has_executable_body_plan.
  */
 static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrType *t) {
     if (!session || !t)
         return NULL;
+    /* A nullable carrier is the same shape one optional level down. Handled
+     * before the kind switch so every synthesizable kind gets it uniformly. */
+    if (t->is_nullable && !t->is_const) {
+        XrType bare = *t;
+        bare.is_nullable = false;
+        XrTypeRef *inner = xa_synth_tref_from_type(session, &bare);
+        return inner ? xr_tref_optional(session, inner) : NULL;
+    }
     switch (t->kind) {
         case XR_KIND_INT:
             return t->scalar_rep == XR_NATIVE_I64 ? xr_tref_int(session)
@@ -610,6 +631,60 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
             return xr_tref_bool(session);
         case XR_KIND_RUNE:
             return xr_tref_char(session);
+        case XR_KIND_ARRAY:
+        case XR_KIND_SLICE:
+        case XR_KIND_SET: {
+            if (t->is_const)
+                return NULL;
+            XrTypeRef *elem = xa_synth_tref_from_type(session, t->container.element_type);
+            if (!elem)
+                return NULL;
+            const char *head = t->kind == XR_KIND_ARRAY   ? "Array"
+                               : t->kind == XR_KIND_SLICE ? TYPE_NAME_SLICE
+                               : t->is_weak               ? "WeakSet"
+                                                          : "Set";
+            return xr_tref_generic(session, head, &elem, 1);
+        }
+        case XR_KIND_MAP: {
+            if (t->is_const)
+                return NULL;
+            XrTypeRef *kv[2];
+            kv[0] = xa_synth_tref_from_type(session, t->map.key_type);
+            kv[1] = xa_synth_tref_from_type(session, t->map.value_type);
+            if (!kv[0] || !kv[1])
+                return NULL;
+            return xr_tref_generic(session, t->is_weak ? "WeakMap" : "Map", kv, 2);
+        }
+        case XR_KIND_TUPLE: {
+            if (t->is_const)
+                return NULL;
+            int n = t->tuple.element_count;
+            if (n < 0 || n > 255 || (n > 0 && !t->tuple.element_types))
+                return NULL;
+            XrTypeRef *stack_elems[8] = {0};
+            XrTypeRef **elems =
+                n <= 8 ? stack_elems : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) n);
+            if (!elems)
+                return NULL;
+            bool complete = true;
+            for (int i = 0; i < n; i++) {
+                elems[i] = xa_synth_tref_from_type(session, t->tuple.element_types[i]);
+                if (!elems[i]) {
+                    complete = false;
+                    break;
+                }
+            }
+            XrTypeRef *result = complete ? xr_tref_tuple(session, elems, n) : NULL;
+            if (elems != stack_elems)
+                xr_free(elems);
+            return result;
+        }
+        case XR_KIND_JSON:
+            /* Only plain `Json`: a field-shaped Json has no NAMED spelling that
+             * resolves back to the same shape. */
+            if (t->is_const || t->object.field_count != 0)
+                return NULL;
+            return xr_tref_named(session, "Json");
         case XR_KIND_TYPE_PARAM:
             return t->type_param.name ? xr_tref_type_param(session, t->type_param.name) : NULL;
         case XR_KIND_ENUM:
@@ -660,10 +735,10 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
     XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth = type_param_count <= 8
-                            ? stack_synth
-                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
-                                                       (size_t) type_param_count);
+    XrTypeRef **synth =
+        type_param_count <= 8
+            ? stack_synth
+            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
@@ -2446,8 +2521,7 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *type_args[1] = {
-        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
+    XrType *type_args[1] = {value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
