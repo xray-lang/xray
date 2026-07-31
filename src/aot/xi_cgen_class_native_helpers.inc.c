@@ -474,6 +474,148 @@ static bool cg_class_native_layout_has_arc_ref_fields(const XrAggregateLayout *l
     return false;
 }
 
+/* Every default literal has a tagged form; only the unboxed native slots below
+ * are picky about which ones they can hold. */
+static void emit_class_field_default_tagged_value(XiCgenCtx *ctx, FILE *out,
+                                                  const XiFieldDefault *def) {
+    switch ((XiFieldDefaultKind) def->kind) {
+        case XI_FIELD_DEFAULT_INT:
+            fprintf(out, "XR_FROM_INT(INT64_C(%lld))", (long long) def->int_val);
+            return;
+        case XI_FIELD_DEFAULT_FLOAT:
+            fprintf(out, "XR_FROM_FLOAT(");
+            emit_c_float_literal(out, def->float_val);
+            fprintf(out, ")");
+            return;
+        case XI_FIELD_DEFAULT_BOOL:
+            fprintf(out, "XR_FROM_BOOL(%d)", def->bool_val ? 1 : 0);
+            return;
+        case XI_FIELD_DEFAULT_RUNE:
+            fprintf(out, "XR_FROM_RUNE((uint32_t)0x%x)", (unsigned) def->rune_val);
+            return;
+        case XI_FIELD_DEFAULT_STRING:
+            cg_emit_str_value(ctx, out, def->string_val ? def->string_val : "");
+            return;
+        case XI_FIELD_DEFAULT_NONE:
+        default:
+            fprintf(out, "XR_NULL_VAL");
+            return;
+    }
+}
+
+static bool cg_class_field_default_fits_native_slot(uint8_t native_type,
+                                                    const XiFieldDefault *def) {
+    if (native_type == XR_NATIVE_STRING || native_type == XR_NATIVE_VALUE)
+        return def->kind != XI_FIELD_DEFAULT_NONE;
+    /* An unboxed slot takes only the scalar literals; a rune or string default
+     * on such a field means the layout and the declaration disagree, which the
+     * layout builder already refuses, so leave the zeroed slot alone. */
+    switch ((XiFieldDefaultKind) def->kind) {
+        case XI_FIELD_DEFAULT_INT:
+        case XI_FIELD_DEFAULT_FLOAT:
+        case XI_FIELD_DEFAULT_BOOL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void emit_class_field_default_native_value(XiCgenCtx *ctx, FILE *out, uint8_t native_type,
+                                                  const XiFieldDefault *def) {
+    if (native_type == XR_NATIVE_STRING || native_type == XR_NATIVE_VALUE) {
+        emit_class_field_default_tagged_value(ctx, out, def);
+        return;
+    }
+    fprintf(out, "(%s)", cg_struct_native_c_type(native_type));
+    switch ((XiFieldDefaultKind) def->kind) {
+        case XI_FIELD_DEFAULT_FLOAT:
+            emit_c_float_literal(out, def->float_val);
+            return;
+        case XI_FIELD_DEFAULT_BOOL:
+            fprintf(out, "%d", def->bool_val ? 1 : 0);
+            return;
+        default:
+            fprintf(out, "INT64_C(%lld)", (long long) def->int_val);
+            return;
+    }
+}
+
+/* Replay the field declaration defaults the VM applies inside
+ * xr_instance_init_inplace(): after the instance slots are cleared, before any
+ * user constructor body runs.  AOT object construction has no XrClassDescriptor
+ * to read them from, so without this a `base: int = 10` field reads back 0 in a
+ * native build while the VM reports 10.
+ *
+ * `cd` supplies the declarations, `owner` is the class the instance is typed as
+ * and is what turns a slot index into a `base.base.fN` path.  The two differ
+ * while walking the super chain: the native layout is flattened parent-first,
+ * so a parent's own field i keeps the same global slot in every subclass
+ * layout and a single index addresses it from either end. */
+static void emit_class_native_field_default_stores(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                                   const XiClassData *owner,
+                                                   const char *inst_expr) {
+    if (!cd || !owner || !owner->instance_layout)
+        return;
+    /* Parent declarations first, matching the flattened layout order. */
+    emit_class_native_field_default_stores(
+        ctx, out, cg_class_native_data_by_name(ctx, cd->super_name), owner, inst_expr);
+    for (uint16_t i = 0; i < cd->instance_field_count; i++) {
+        const XiFieldDefault *def =
+            cd->instance_field_defaults ? &cd->instance_field_defaults[i] : NULL;
+        if (!def || def->kind == XI_FIELD_DEFAULT_NONE)
+            continue;
+        uint16_t slot = (uint16_t) (cd->inherited_field_count + i);
+        const XrAggregateFieldLayout *field = cg_struct_field(owner->instance_layout, slot);
+        const char *slot_name =
+            owner->instance_layout->field_names ? owner->instance_layout->field_names[slot] : NULL;
+        const char *decl_name = cd->instance_field_names ? cd->instance_field_names[i] : NULL;
+        /* Declaration order and layout order agree by construction; check it
+         * rather than risk writing a default into a neighbouring slot. */
+        if (!field || !slot_name || !decl_name || strcmp(slot_name, decl_name) != 0)
+            continue;
+        if (!cg_class_field_default_fits_native_slot(field->native_type, def))
+            continue;
+        emit_class_native_field_ref(ctx, out, owner, inst_expr, slot);
+        fprintf(out, " = ");
+        emit_class_field_default_native_value(ctx, out, field->native_type, def);
+        fprintf(out, "; ");
+    }
+}
+
+/* Same replay for the boxed instance shape: a class whose fields do not all fit
+ * a native layout (a nullable or rune field, say) is built as a keyed map, so
+ * its defaults are property stores rather than struct assignments. */
+static void emit_class_map_field_default_stores(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                                const char *inst_expr) {
+    if (!cd)
+        return;
+    emit_class_map_field_default_stores(ctx, out, cg_class_native_data_by_name(ctx, cd->super_name),
+                                        inst_expr);
+    for (uint16_t i = 0; i < cd->instance_field_count; i++) {
+        const XiFieldDefault *def =
+            cd->instance_field_defaults ? &cd->instance_field_defaults[i] : NULL;
+        const char *name = cd->instance_field_names ? cd->instance_field_names[i] : NULL;
+        if (!def || def->kind == XI_FIELD_DEFAULT_NONE || !name)
+            continue;
+        fprintf(out, "(void)xrt_setprop_key(%s, ", inst_expr);
+        cg_emit_str_value(ctx, out, name);
+        fprintf(out, ", ");
+        emit_class_field_default_tagged_value(ctx, out, def);
+        fprintf(out, "); ");
+    }
+}
+
+static bool cg_class_native_has_field_defaults(XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!cd)
+        return false;
+    for (uint16_t i = 0; i < cd->instance_field_count; i++) {
+        if (cd->instance_field_defaults && cd->instance_field_defaults[i].kind)
+            return true;
+    }
+    return cg_class_native_has_field_defaults(ctx,
+                                              cg_class_native_data_by_name(ctx, cd->super_name));
+}
+
 static void emit_class_native_dtor_name(FILE *out, const char *prefix, const XiClassData *cd) {
     emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
     fprintf(out, "_dtor");
@@ -4293,7 +4435,13 @@ static bool emit_class_native_default_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
     fprintf(out, " *");
     emit_vref(out, v);
     fprintf(out, " = &_ci%u;\n", v->id);
-    (void) ctx;
+    if (cg_class_native_has_field_defaults(ctx, cd)) {
+        fprintf(out, "    ");
+        char inst[32];
+        snprintf(inst, sizeof(inst), "&_ci%u", v->id);
+        emit_class_native_field_default_stores(ctx, out, cd, cd, inst);
+        fprintf(out, "\n");
+    }
     return true;
 }
 
@@ -4321,6 +4469,14 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     fprintf(out, " *");
     emit_vref(out, v);
     fprintf(out, " = &_ci%u;\n", v->id);
+    /* Declaration defaults land before the constructor body, as in the VM. */
+    if (cg_class_native_has_field_defaults(ctx, cd)) {
+        fprintf(out, "    ");
+        char inst[32];
+        snprintf(inst, sizeof(inst), "&_ci%u", v->id);
+        emit_class_native_field_default_stores(ctx, out, cd, cd, inst);
+        fprintf(out, "\n");
+    }
     fprintf(out, "    (void)");
     emit_fname(ctx, out, class_prefix, target);
     fprintf(out, "(NULL, ");
@@ -4348,6 +4504,7 @@ static bool emit_class_native_default_constructor_expr(XiCgenCtx *ctx, FILE *out
     fprintf(out, "*)xrt_obj_alloc((uint16_t)");
     emit_class_native_type_id_expr(ctx, out, cd);
     fprintf(out, ", (uint32_t)sizeof(*_inst)); memset(_inst, 0, sizeof(*_inst)); ");
+    emit_class_native_field_default_stores(ctx, out, cd, cd, "_inst");
     fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
     fprintf(out, "; })");
     return true;
@@ -4369,6 +4526,8 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "*)xrt_obj_alloc((uint16_t)");
     emit_class_native_type_id_expr(ctx, out, info.class_data);
     fprintf(out, ", (uint32_t)sizeof(*_inst)); ");
+    /* Declaration defaults land before the constructor body, as in the VM. */
+    emit_class_native_field_default_stores(ctx, out, info.class_data, info.class_data, "_inst");
     if (cg_func_needs_aot_coro_ctx(ctx, target)) {
         fprintf(out, "void *_ctor_frame = ");
         emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_frame_new");

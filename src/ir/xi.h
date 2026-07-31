@@ -737,6 +737,30 @@ typedef struct XiClassMethod {
     bool is_static_constructor; /* true for static constructor */
 } XiClassMethod;
 
+/* Compile-time value of a field declaration initializer.
+ * Mirrors ast_field_default_to_value() in xi_emit_object.c exactly: the VM
+ * applies these through XrClassDescriptor::instance_fields[].default_value at
+ * instance creation, and AOT object construction has no descriptor to read, so
+ * both backends must accept the same initializer shapes or they diverge. */
+typedef enum {
+    XI_FIELD_DEFAULT_NONE = 0, /* no initializer, or one lowered as IR instead */
+    XI_FIELD_DEFAULT_INT,
+    XI_FIELD_DEFAULT_FLOAT,
+    XI_FIELD_DEFAULT_BOOL,
+    XI_FIELD_DEFAULT_RUNE,
+    XI_FIELD_DEFAULT_STRING,
+} XiFieldDefaultKind;
+
+/* Arena-safe field default for XI_CLASS_CREATE. */
+typedef struct XiFieldDefault {
+    uint8_t kind;           /* XiFieldDefaultKind */
+    int64_t int_val;        /* XI_FIELD_DEFAULT_INT */
+    double float_val;       /* XI_FIELD_DEFAULT_FLOAT */
+    bool bool_val;          /* XI_FIELD_DEFAULT_BOOL */
+    uint32_t rune_val;      /* XI_FIELD_DEFAULT_RUNE */
+    const char *string_val; /* XI_FIELD_DEFAULT_STRING (arena copy) */
+} XiFieldDefault;
+
 /* Lowerer → emitter bridge for XI_CLASS_CREATE.
  * All data is arena-allocated; does NOT depend on AST after lowering. */
 typedef struct XiClassData {
@@ -748,8 +772,9 @@ typedef struct XiClassData {
         *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
     const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
     const char *source_file;  /* arena copy of declaration source path (NULL if unavailable) */
-    const char **instance_field_names; /* declared non-static field names, arena-owned */
+    const char **instance_field_names;        /* declared non-static field names, arena-owned */
     uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
+    XiFieldDefault *instance_field_defaults;  /* declaration defaults parallel to field names */
     uint16_t instance_field_count;
     XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
     uint16_t nmethod;         /* total method count (instance + static) */
@@ -928,36 +953,36 @@ typedef struct XiClosureMeta {
  * Size: ~72 bytes. Values are arena-allocated within XiFunc.
  */
 typedef struct XiValue {
-    uint32_t id;                  /* dense SSA value ID (unique within function) */
-    uint16_t op;                  /* XiOp */
-    XiVarId var_id;               /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
-    uint8_t flags;                /* XI_FLAG_* */
-    uint8_t rep;                  /* XrRep: machine representation (set by select_rep,
-                                   * default XR_REP_TAGGED until STAGE_REPPED) */
-    uint8_t transfer_mode;        /* XrTransferMode for single-value coroutine boundaries.
-                                   * Default 0 = SHARE. GO uses its per-arg aux table. */
-    uint8_t aux_kind;             /* XiAuxKind: disambiguates aux/aux_int layouts */
-    uint8_t escape;               /* XiEscapeLevel (2-bit): escape analysis result
-                                   * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
-    uint8_t mem_group;            /* XiMemGroup (TBAA): memory group for alias analysis
-                                   * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    uint8_t lowering_flags;       /* XI_LOWERING_FLAG_* */
-    uint8_t param_mode;           /* XrParamMode for XI_PARAM values (the single param
-                                   * contract source; default XR_PARAM_READ). Occupies
-                                   * struct padding, so it costs no extra memory. */
-    struct XrType *type;          /* authoritative compile-time type (never NULL) */
-    int64_t aux_int;              /* auxiliary integer: const value, symbol ID, etc. */
-    void *aux;                    /* auxiliary pointer: proto, string literal, etc. */
+    uint32_t id;                    /* dense SSA value ID (unique within function) */
+    uint16_t op;                    /* XiOp */
+    XiVarId var_id;                 /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
+    uint8_t flags;                  /* XI_FLAG_* */
+    uint8_t rep;                    /* XrRep: machine representation (set by select_rep,
+                                     * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode;          /* XrTransferMode for single-value coroutine boundaries.
+                                     * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;               /* XiAuxKind: disambiguates aux/aux_int layouts */
+    uint8_t escape;                 /* XiEscapeLevel (2-bit): escape analysis result
+                                     * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;              /* XiMemGroup (TBAA): memory group for alias analysis
+                                     * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    uint8_t lowering_flags;         /* XI_LOWERING_FLAG_* */
+    uint8_t param_mode;             /* XrParamMode for XI_PARAM values (the single param
+                                     * contract source; default XR_PARAM_READ). Occupies
+                                     * struct padding, so it costs no extra memory. */
+    struct XrType *type;            /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;                /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;                      /* auxiliary pointer: proto, string literal, etc. */
     XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
-    XiCallPlan *call_plan;        /* verified read/ref/move call contract */
-    XiViewEvidence view_evidence; /* Slice origin/range lifetime proof */
-    struct XiValue **args;        /* operand values (SSA uses) */
-    uint16_t nargs;               /* number of args */
-    int16_t uses;                 /* use count (for DCE; -1 = not computed) */
-    uint32_t line;                /* source line number (0 = unknown) */
-    uint32_t xg_callsite_id;      /* stable XgCallsiteId for evidence-backed calls (0 = none) */
-    uint32_t xa_intrinsic_id;     /* stable XaIntrinsicId for canonical semantic operations */
-    uint32_t xg_method_id;        /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    XiCallPlan *call_plan;          /* verified read/ref/move call contract */
+    XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
+    struct XiValue **args;          /* operand values (SSA uses) */
+    uint16_t nargs;                 /* number of args */
+    int16_t uses;                   /* use count (for DCE; -1 = not computed) */
+    uint32_t line;                  /* source line number (0 = unknown) */
+    uint32_t xg_callsite_id;        /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xa_intrinsic_id;       /* stable XaIntrinsicId for canonical semantic operations */
+    uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */

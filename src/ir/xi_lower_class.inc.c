@@ -30,6 +30,43 @@ static bool is_simple_literal(AstNode *init) {
     }
 }
 
+/* Record a simple-literal initializer in the arena-safe form the backends read.
+ * Only the shapes is_simple_literal() accepts are recorded; everything else is
+ * lowered as IR by the constructor prologue and stays XI_FIELD_DEFAULT_NONE. */
+static void class_field_default_from_ast(XiLower *l, AstNode *init, XiFieldDefault *out) {
+    memset(out, 0, sizeof(*out));
+    if (!init)
+        return;
+    switch (init->type) {
+        case AST_LITERAL_INT:
+            out->kind = XI_FIELD_DEFAULT_INT;
+            out->int_val = init->as.literal.raw_value.int_val;
+            break;
+        case AST_LITERAL_FLOAT:
+            out->kind = XI_FIELD_DEFAULT_FLOAT;
+            out->float_val = init->as.literal.raw_value.float_val;
+            break;
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+            out->kind = XI_FIELD_DEFAULT_BOOL;
+            out->bool_val = init->type == AST_LITERAL_TRUE;
+            break;
+        case AST_LITERAL_RUNE:
+            out->kind = XI_FIELD_DEFAULT_RUNE;
+            out->rune_val = init->as.literal.raw_value.rune_val;
+            break;
+        case AST_LITERAL_STRING:
+            /* The AST owns this string only until the frontend arena is
+             * released, so copy it into the IR arena (R-OWN-1). */
+            out->string_val = arena_strdup(l->func, init->as.literal.raw_value.string_val);
+            if (out->string_val)
+                out->kind = XI_FIELD_DEFAULT_STRING;
+            break;
+        default:
+            break;
+    }
+}
+
 static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
     if (!cd)
         return false;
@@ -331,8 +368,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
  * therefore valid only while the analyzer is alive.  Class descriptors live
  * with the emitted proto/IR, so materialize a complete Xi-arena copy instead
  * of leaking analyzer ownership into bytecode emission or VM execution. */
-static XrAggregateLayout *class_clone_value_layout(XiLower *l,
-                                                   const XrAggregateLayout *source,
+static XrAggregateLayout *class_clone_value_layout(XiLower *l, const XrAggregateLayout *source,
                                                    uint32_t depth) {
     if (!l || !l->func || !source || depth > 16 || source->field_count > XR_MAX_AGG_FIELDS)
         return NULL;
@@ -353,10 +389,9 @@ static XrAggregateLayout *class_clone_value_layout(XiLower *l,
     }
 
     for (uint16_t i = 0; i < source->field_count; i++) {
-        copy->field_names[i] =
-            source->field_names && source->field_names[i]
-                ? arena_strdup(l->func, source->field_names[i])
-                : NULL;
+        copy->field_names[i] = source->field_names && source->field_names[i]
+                                   ? arena_strdup(l->func, source->field_names[i])
+                                   : NULL;
         if (source->field_names && source->field_names[i] && !copy->field_names[i])
             return NULL;
 
@@ -757,6 +792,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->source_file = NULL;
     data->instance_field_names = NULL;
     data->instance_field_source_node_ids = NULL;
+    data->instance_field_defaults = NULL;
     data->instance_field_count = 0;
     data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
     data->is_monomorphized = cd->is_monomorphized;
@@ -795,13 +831,18 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     }
     if (declared_instance_fields > 0) {
         size_t names_size = (size_t) declared_instance_fields * sizeof(*data->instance_field_names);
-        size_t ids_size = (size_t) declared_instance_fields *
-                          sizeof(*data->instance_field_source_node_ids);
+        size_t ids_size =
+            (size_t) declared_instance_fields * sizeof(*data->instance_field_source_node_ids);
+        size_t defaults_size =
+            (size_t) declared_instance_fields * sizeof(*data->instance_field_defaults);
         data->instance_field_names =
             (const char **) xi_func_arena_alloc(l->func, (uint32_t) names_size);
         data->instance_field_source_node_ids =
             (uint32_t *) xi_func_arena_alloc(l->func, (uint32_t) ids_size);
-        if (!data->instance_field_names || !data->instance_field_source_node_ids) {
+        data->instance_field_defaults =
+            (XiFieldDefault *) xi_func_arena_alloc(l->func, (uint32_t) defaults_size);
+        if (!data->instance_field_names || !data->instance_field_source_node_ids ||
+            !data->instance_field_defaults) {
             l->had_error = true;
             return;
         }
@@ -815,6 +856,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 arena_strdup(l->func, field_node->as.field_decl.name);
             data->instance_field_source_node_ids[field_index] =
                 xi_lower_source_node_id(l, field_node);
+            class_field_default_from_ast(l, field_node->as.field_decl.initializer,
+                                         &data->instance_field_defaults[field_index]);
             field_index++;
         }
         data->instance_field_count = field_index;
@@ -838,8 +881,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             if (class_info)
                 data->source_file = arena_strdup(l->func, class_info->location.file);
             if (class_info && class_info->struct_layout) {
-                data->struct_layout =
-                    class_clone_value_layout(l, class_info->struct_layout, 0);
+                data->struct_layout = class_clone_value_layout(l, class_info->struct_layout, 0);
                 if (!data->struct_layout) {
                     l->had_error = true;
                     return;
