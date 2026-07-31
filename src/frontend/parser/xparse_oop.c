@@ -849,46 +849,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
 /* ========== Method Declaration Parsing ========== */
 
-// Parse a method's own generic type parameters, if present:
-//   <T, U: Interface1 & Interface2>
-// Returns NULL with *out_count == 0 when the method is not generic. Shared by
-// class/struct/enum methods and by interface method signatures so a bound
-// written in an interface means exactly what it means in an implementation.
-XrGenericParam **xr_parse_method_type_params(Parser *parser, int *out_count) {
-    XR_DCHECK(parser != NULL, "parse_method_type_params: NULL parser");
-    XR_DCHECK(out_count != NULL, "parse_method_type_params: NULL out_count");
-
-    XrGenericParam **type_params = NULL;
-    int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            char *param_name = token_to_string(parser, &parser->previous);
-
-            // Optional intersection constraint <T: Interface1 & Interface2 ...>
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
-    }
-
-    *out_count = type_param_count;
-    return type_params;
-}
-
 // Parse method declaration
 // Syntax:
 //   greet(name: string): void { ... }
@@ -906,9 +866,13 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     // Check if this is a constructor
     bool is_constructor = (strcmp(name, XR_KEYWORD_CONSTRUCTOR) == 0);
 
-    // Parse optional generic type parameters: methodName<T, U: Hashable>(...)
+    /* Parse optional generic type parameters: methodName<T, U: Hashable>(...).
+     * The shared helper installs a scope holding them so the signature and body
+     * resolve T; the caller restores its own scope below. */
+    XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
-    XrGenericParam **type_params = xr_parse_method_type_params(parser, &type_param_count);
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     // Parse parameter list
     xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
@@ -1027,6 +991,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     method_node->as.method_decl.type_params = type_params;
     method_node->as.method_decl.type_param_count = type_param_count;
 
+    parser->type_scope = saved_scope;
+    xr_type_scope_free(generic_scope);
     return method_node;
 }
 
@@ -1817,9 +1783,13 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_error_at_current(parser, "'const' modifier only applies to property signatures");
     }
 
-    // Optional generic type parameters: `wrap<T: Hashable>(x: T) -> int`
+    /* Optional generic type parameters: `wrap<T: Hashable>(x: T) -> int`.
+     * Same shared helper as every other declaration form; it installs the scope
+     * the signature resolves against and the caller restores its own below. */
+    XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
-    XrGenericParam **type_params = xr_parse_method_type_params(parser, &type_param_count);
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     // Method signature: `name(params) -> retType`
     xr_parser_consume(parser, TK_LPAREN, "expected '(', '<' or ':' after interface member name");
@@ -1873,6 +1843,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     method->as.interface_method.attr_count = attr_count;
     method->as.interface_method.type_params = type_params;
     method->as.interface_method.type_param_count = type_param_count;
+    parser->type_scope = saved_scope;
+    xr_type_scope_free(generic_scope);
     return method;
 }
 

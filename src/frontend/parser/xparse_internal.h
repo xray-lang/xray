@@ -282,11 +282,6 @@ XR_FUNC XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count)
  * installed, so constraint types can name the parameters. */
 XR_FUNC void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_count);
 
-/* Parse a method's own generic type parameters `<T, U: A & B>`, if present.
- * Returns NULL with *out_count == 0 when the method is not generic. Shared by
- * class/struct/enum method declarations and interface method signatures. */
-XR_FUNC XrGenericParam **xr_parse_method_type_params(Parser *parser, int *out_count);
-
 /* ========== Destructuring ========== */
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);

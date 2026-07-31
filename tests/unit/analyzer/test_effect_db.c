@@ -396,7 +396,7 @@ TEST(diff_removed_escaping_variant_is_improvement) {
     xa_effect_db_free(db);
 }
 
-TEST(diff_added_new_error_type_is_breaking) {
+TEST(diff_added_new_error_type_is_source_breaking) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
     XaErrorTypeId a = xa_effect_db_register_error_type(db, 0x111u, NULL);
@@ -413,7 +413,7 @@ TEST(diff_added_new_error_type_is_breaking) {
     ASSERT(xa_effect_summary_add_variant(db, &after, b, 0));
 
     XaEffectDiff diff;
-    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_SOURCE_BREAKING);
     ASSERT(diff.added_escaping);
 
     xa_effect_summary_clear(&before);
@@ -478,7 +478,8 @@ TEST(diff_all_variants_widening_and_narrowing) {
     ASSERT(xa_effect_summary_add_all_variants(db, &all, type));
 
     XaEffectDiff widening;
-    ASSERT(xa_effect_summary_diff(db, &specific, &all, &widening) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(xa_effect_summary_diff(db, &specific, &all, &widening) ==
+           XA_EFFECT_DIFF_SOURCE_BREAKING);
     ASSERT(widening.added_escaping);
     ASSERT(!widening.removed_escaping);
 
@@ -492,7 +493,7 @@ TEST(diff_all_variants_widening_and_narrowing) {
     xa_effect_db_free(db);
 }
 
-TEST(diff_addition_dominates_removal_as_breaking) {
+TEST(diff_addition_dominates_removal_as_source_breaking) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
     XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
@@ -507,7 +508,7 @@ TEST(diff_addition_dominates_removal_as_breaking) {
     ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
 
     XaEffectDiff diff;
-    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_SOURCE_BREAKING);
     ASSERT(diff.added_escaping);
     ASSERT(diff.removed_escaping);
 
@@ -821,13 +822,13 @@ int main(void) {
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
     RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
     RUN_TEST(diff_identical_summaries_are_compatible);
-    RUN_TEST(diff_added_escaping_variant_is_breaking);
+    RUN_TEST(diff_added_escaping_variant_is_source_breaking);
     RUN_TEST(diff_removed_escaping_variant_is_improvement);
-    RUN_TEST(diff_added_new_error_type_is_breaking);
+    RUN_TEST(diff_added_new_error_type_is_source_breaking);
     RUN_TEST(diff_complete_to_incomplete_is_breaking);
     RUN_TEST(diff_incomplete_to_complete_is_improvement);
     RUN_TEST(diff_all_variants_widening_and_narrowing);
-    RUN_TEST(diff_addition_dominates_removal_as_breaking);
+    RUN_TEST(diff_addition_dominates_removal_as_source_breaking);
     RUN_TEST(error_type_and_variant_names_round_trip);
     RUN_TEST(json_empty_complete_summary_is_canonical);
     RUN_TEST(json_named_variants_are_labeled);
