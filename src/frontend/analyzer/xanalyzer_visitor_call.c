@@ -5732,7 +5732,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
          * before the Lengthable test, which sees through the nullable flag and
          * would otherwise accept `Array<int>?` and defer the failure to a
          * runtime panic. */
-        if (!xa_check_nullable_access(ctx, node, call->arguments[0], operand_type, "len()") &&
+        if (!xa_check_nullable_access(ctx, node, call->arguments[0], operand_type, "len()",
+                                      false) &&
             !xa_len_type_supported(operand_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
@@ -6463,7 +6464,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         /* A nullable function value is a null-safety problem, not a
          * "not callable" problem: report the cause and the fix (spec §2.13
          * N-12). */
-        if (!xa_check_nullable_access(ctx, node, call->callee, callee_type, "call")) {
+        if (!xa_check_nullable_access(ctx, node, call->callee, callee_type, "call", true)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_NOT_CALLABLE, "Value is not callable", &loc);

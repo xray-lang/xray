@@ -6133,7 +6133,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 /* Iterating a possibly-null source panics at run time, so it
                  * is rejected like any other null-unsafe use (spec §2.13 N-12). */
                 if (coll_type && xa_check_nullable_access(ctx, fi->collection, fi->collection,
-                                                          coll_type, "iteration"))
+                                                          coll_type, "iteration", false))
                     coll_type = xr_type_non_nullable(NULL, coll_type);
             }
 
@@ -6158,7 +6158,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
              * would otherwise accept `Array<int>?` and defer the failure to a
              * runtime "value does not implement Lengthable". `?.` has no for-in
              * spelling, so it is not offered as a remedy. */
-            xa_check_nullable_use(ctx, node, coll_type, "iteration", false);
+            xa_check_nullable_access(ctx, node, fi->collection, coll_type, "iteration", false);
 
             if (is_enum_iter) {
                 XrLocation loc = {

@@ -45,12 +45,6 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);
 XR_FUNC bool xa_body_has_return_expr(AstNode *node);
 XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type);
-/* Strict-null gate (E0379), defined in xanalyzer_visitor_expr.c. Every position
- * that would dereference the value at runtime must route through this, so the
- * rule has one implementation and one wording. Pass optional_chain_applies only
- * where `?.` is actually accepted by the grammar. */
-XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *value_type,
-                                   const char *use_desc, bool optional_chain_applies);
 
 // Cross-TU helpers between xanalyzer_visitor.c (the dispatch / hoisting
 // / infer entry points) and xanalyzer_visitor_decl.c (the bulk of
@@ -332,12 +326,16 @@ XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType 
 XR_FUNC void xa_check_runtime_testable_type(XaInferContext *ctx, AstNode *node, XrTypeRef *tref,
                                             const char *op_name);
 
-/* Report E0379 when a receiver's static type can still be null (spec §2.13
- * N-12). `access_desc` names the operation ("member access", "index access",
- * "call", "arithmetic", "iteration"). Returns true when a diagnostic was
- * emitted. */
+/* Strict-null gate (E0379): the single implementation every position that would
+ * dereference a value at run time routes through, so the rule has one wording
+ * (spec §2.13 N-12). `access_desc` names the operation ("member access",
+ * "index access", "call", "arithmetic", "iteration"). Pass
+ * optional_chain_applies only where `?.` is actually accepted by the grammar —
+ * member access, index access and calls — so a remedy that does not parse is
+ * never suggested. Returns true when a diagnostic was emitted. */
 XR_FUNC bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, AstNode *receiver,
-                                      XrType *recv_type, const char *access_desc);
+                                      XrType *recv_type, const char *access_desc,
+                                      bool optional_chain_applies);
 XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
 struct XrClassInfo;
 XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,

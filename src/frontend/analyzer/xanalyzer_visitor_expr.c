@@ -1546,9 +1546,9 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
                                 string_concatenation;
     if (!null_operand_allowed) {
         bool reported = xa_check_nullable_access(ctx, node->as.binary.left, node->as.binary.left,
-                                                 left, "arithmetic");
+                                                 left, "arithmetic", false);
         reported |= xa_check_nullable_access(ctx, node->as.binary.right, node->as.binary.right,
-                                             right, "arithmetic");
+                                             right, "arithmetic", false);
         if (reported)
             return xr_type_new_error(ctx->analyzer->isolate);
     }
@@ -1666,34 +1666,6 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
 /* ----------------------------------------------------------------------------
  * Member Access Type Inference
  * -------------------------------------------------------------------------- */
-// Under strict null checks (default on), consuming a value whose static type
-// is still nullable is a compile error: the operation would panic at runtime
-// if the value is null. The programmer must narrow first (an `if x != null`
-// check, optional-chaining `?.`, or the `!` non-null assertion), all of which
-// strip the nullable flag before we get here.
-//
-// `?.` is only a remedy where the syntax accepts it — member and index access.
-// Positions that consume the value whole (for-in, len()) can only be narrowed
-// or asserted, so they must not advertise a fix that does not parse.
-//
-// Returns true if an error was reported.
-XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *value_type,
-                                   const char *use_desc, bool optional_chain_applies) {
-    if (!ctx || !ctx->analyzer || !ctx->analyzer->strict_null_checks)
-        return false;
-    if (!value_type || XR_TYPE_IS_UNKNOWN(value_type) || !value_type->is_nullable)
-        return false;
-    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    char msg[256];
-    snprintf(msg, sizeof(msg),
-             "%s on a possibly-null value: narrow it first with `if x != null`%s, "
-             "or assert non-null with `!`",
-             use_desc, optional_chain_applies ? ", use `?.`" : "");
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL, msg,
-                               &loc);
-    return true;
-}
-
 // Under strict null checks (default on), a member access, index, call,
 // arithmetic operand, or iteration source whose static type can still be
 // `null` is a compile error (spec §2.13 N-12): the operation would panic at
@@ -1704,7 +1676,8 @@ XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *v
 // possibly-null: `x = null` followed by `x.f` must not slip through.
 // Returns true if an error was reported.
 bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, AstNode *receiver,
-                              XrType *recv_type, const char *access_desc) {
+                              XrType *recv_type, const char *access_desc,
+                              bool optional_chain_applies) {
     if (!ctx || !ctx->analyzer || !ctx->analyzer->strict_null_checks)
         return false;
     if (!recv_type || XR_TYPE_IS_UNKNOWN(recv_type) || !XR_TYPE_IS_NULLABLE(recv_type))
@@ -1731,10 +1704,14 @@ bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, AstNode *recei
                  "it into one first (`var v = ...`) and check that with `if v != null`",
                  access_desc);
     } else {
+        /* `?.` is only a remedy where the syntax accepts it — member access,
+         * index access and calls. Positions that consume the value whole
+         * (for-in, len(), an arithmetic operand) can only be narrowed or
+         * asserted, so they must not advertise a fix that does not parse. */
         snprintf(msg, sizeof(msg),
-                 "%s on a possibly-null value: narrow it first with `if x != null`, use `?.`, "
+                 "%s on a possibly-null value: narrow it first with `if x != null`%s, "
                  "or assert non-null with `!`",
-                 access_desc);
+                 access_desc, optional_chain_applies ? ", use `?.`" : "");
     }
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL, msg,
                                &loc);
@@ -1836,7 +1813,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         obj_type && obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name &&
         member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
     if (!obj_is_enum_namespace)
-        xa_check_nullable_access(ctx, node, ma->object, obj_type, "member access");
+        xa_check_nullable_access(ctx, node, ma->object, obj_type, "member access", true);
 
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -2778,7 +2755,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
-    xa_check_nullable_access(ctx, node, ig->array, container, "index access");
+    xa_check_nullable_access(ctx, node, ig->array, container, "index access", true);
 
     /* Visit the index expression so variable references get their symbol_id resolved */
     XrType *index_type = NULL;
