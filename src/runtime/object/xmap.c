@@ -106,6 +106,25 @@ static inline XrCoroHeap *map_current_or_owner_heap(XrMap *map) {
     return heap ? heap : (map ? map->owner_heap : NULL);
 }
 
+/* Which heap's live-byte counter do this map's side buffers (ctrl / indices /
+ * entries) belong to?
+ *
+ * The answer is the map's OWN heap, never "whichever coroutine happens to be
+ * running". A map allocated on the system heap (TRANSFER / SHARED storage
+ * domain) has owner_heap == NULL and is charged to nobody: it is not part of
+ * any coroutine heap's live set, and its destroy path
+ * (xr_transfer_destroy_core / xr_shared_destroy_core) has no coroutine heap to
+ * refund. Charging it to the running coroutine made every add unmatched by a
+ * sub, so runtime.liveBytes() grew without bound — 2M map churn reported
+ * 496 MB live against a real 8.6 MB max RSS.
+ *
+ * Both sides of the accounting MUST route through this function; that is what
+ * makes add and sub structurally balanced rather than balanced by coincidence
+ * of which coroutine ran. */
+static inline XrCoroHeap *map_accounting_heap(XrMap *map) {
+    return map ? map->owner_heap : NULL;
+}
+
 static XrVMRuntime *map_owning_isolate(XrCoroHeap *heap) {
     if (heap && heap->owner)
         return xr_coro_vm_owner(heap->owner);
@@ -224,7 +243,7 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
         return false;
     }
     if (!new_on_heap)
-        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
+        xr_coro_heap_add_external(map_accounting_heap(map), (int64_t) (cbytes + ibytes + ebytes));
 
     memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
@@ -256,9 +275,10 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
             xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_coro_heap_sub_external(heap, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
-                                                       sizeof(int32_t) * (size_t) old_isize +
-                                                       sizeof(XrMapEntry) * (size_t) old_ecap));
+            xr_coro_heap_sub_external(map_accounting_heap(map),
+                                      (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                                 sizeof(int32_t) * (size_t) old_isize +
+                                                 sizeof(XrMapEntry) * (size_t) old_ecap));
         }
     }
     return true;
@@ -290,9 +310,6 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap
         xr_free(ent);
         return false;
     }
-    if (heap)
-        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
-
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < isize; i++)
         idx[i] = XR_MAP_IX_EMPTY;
@@ -306,7 +323,10 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap
     map->nentries = 0;
     map->flags &= ~XR_MAP_FLAG_DUMMY;
     map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;  // malloc-backed
+    /* Take ownership before charging, so the charge and the later refund both
+       read the same accounting heap (map_accounting_heap). */
     map->owner_heap = heap;
+    xr_coro_heap_add_external(map_accounting_heap(map), (int64_t) (cbytes + ibytes + ebytes));
     return true;
 }
 
@@ -606,7 +626,9 @@ void xr_obj_destroy_map(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
             xr_free(map->ctrl);
             xr_free(map->indices);
             xr_free(map->entries);
-            xr_coro_heap_sub_external(owner_heap, (int64_t) bytes);
+            /* Refund the heap that was charged, not the one destroying us:
+               a TRANSFER-domain map is destroyed with owner_heap == NULL. */
+            xr_coro_heap_sub_external(map_accounting_heap(map), (int64_t) bytes);
         }
         map->ctrl = NULL;
         map->indices = NULL;

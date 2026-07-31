@@ -1,0 +1,119 @@
+// probe4 — 堆计量可信度（任务 249 阶段 B 的常驻回归用例）
+//
+// 断言：runtime.liveBytes() 是**存活字节**，不是累计分配字节。
+//       任何 add_external 都必须有配平的 sub_external。
+//
+// REGRESSION: 249 缺陷 B —— 带侧缓冲的容器（Map/Set 的 ctrl/indices/entries、
+//             Array 的元素缓冲）把外部字节记账到"恰好正在运行的那个协程堆"，
+//             而 system-heap 存储域（TRANSFER / SHARED）的对象销毁走
+//             xr_transfer_destroy_core / xr_shared_destroy_core，两者都把
+//             NULL heap 交给析构器 —— 扣减静默丢失，只加不减。
+// FAIL_AT:    修复前：200 万 Map churn 报 liveBytes 496,000,064，max RSS 仅
+//             8.6 MB。liveBytes 因此无法作为泄漏观察量：既漏报（真泄漏被
+//             淹没）又虚报（未泄漏的 Map 被报成 496MB）。
+// PASS_AT:    记账归属由对象自己携带（map/set 的 owner_heap、array 的存储域
+//             谓词），add 与 sub 结构性配平，而不是靠"当时哪个协程在跑"。
+//
+// 核心断言（249 §B.4）：liveBytes 与实际占用**同向变化**。churn 组回落到
+// ≈0，保活组按比例增长。
+
+import runtime
+
+@test
+fn test_map_churn_does_not_inflate_live_bytes() {
+    for (var w = 0; w < 1000; w++) {
+        var warm = #{"k": w}
+    }
+    var before = runtime.liveBytes()
+
+    for (var i = 0; i < 200000; i++) {
+        var a = #{"k": i}
+    }
+
+    var after = runtime.liveBytes()
+    // 20 万个立即死亡的 map，每个侧缓冲 248 字节。修复前这里是 +49,600,000。
+    assert(after - before < 100000)
+}
+
+@test
+fn test_set_churn_does_not_inflate_live_bytes() {
+    for (var w = 0; w < 1000; w++) {
+        var warm: Set<int> = Set()
+        warm.add(w)
+    }
+    var before = runtime.liveBytes()
+
+    for (var i = 0; i < 200000; i++) {
+        var s: Set<int> = Set()
+        s.add(i)
+    }
+
+    var after = runtime.liveBytes()
+    assert(after - before < 100000)
+}
+
+@test
+fn test_array_churn_does_not_inflate_live_bytes() {
+    for (var w = 0; w < 1000; w++) {
+        var warm = [w, w + 1, w + 2]
+    }
+    var before = runtime.liveBytes()
+
+    for (var i = 0; i < 200000; i++) {
+        var a = [i, i + 1, i + 2]
+    }
+
+    var after = runtime.liveBytes()
+    assert(after - before < 100000)
+}
+
+// 对照组：保活的容器必须被如实计入。没有这一组，上面三条会因为
+// "计数器整个坏掉/永远返回 0"而假绿。
+@test
+fn test_retained_maps_are_counted() {
+    var before = runtime.liveBytes()
+
+    var keep: Array<Map<string, int>> = []
+    for (var i = 0; i < 20000; i++) {
+        keep.push(#{"k": i})
+    }
+
+    var after = runtime.liveBytes()
+    // 2 万个存活 map，每个至少一个 header + 248 字节侧缓冲。
+    assert(after - before > 2000000)
+    assert(len(keep) == 20000)
+}
+
+@test
+fn test_retained_arrays_are_counted() {
+    var before = runtime.liveBytes()
+
+    var keep: Array<Array<int>> = []
+    for (var i = 0; i < 20000; i++) {
+        keep.push([i, i + 1, i + 2, i + 4])
+    }
+
+    var after = runtime.liveBytes()
+    assert(after - before > 500000)
+    assert(len(keep) == 20000)
+}
+
+// 增长后再释放：liveBytes 必须回到起点附近，证明扩容路径的 add/sub 也配平。
+@test
+fn test_grown_then_dropped_containers_refund_their_bytes() {
+    var before = runtime.liveBytes()
+
+    for (var round = 0; round < 200; round++) {
+        var m: Map<string, int> = #{}
+        for (var i = 0; i < 200; i++) {
+            m[string(i)] = i
+        }
+        var a: Array<int> = []
+        for (var i = 0; i < 500; i++) {
+            a.push(i)
+        }
+    }
+
+    var after = runtime.liveBytes()
+    assert(after - before < 100000)
+}

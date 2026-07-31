@@ -70,6 +70,16 @@ static inline XrCoroHeap *set_current_or_owner_heap(XrSet *set) {
     return heap ? heap : (set ? set->owner_heap : NULL);
 }
 
+/* Which heap's live-byte counter do this set's side buffers belong to?  The
+ * set's OWN heap, never "whichever coroutine happens to be running" — see the
+ * matching map_accounting_heap in xmap.c for the full argument.  A set on the
+ * system heap (TRANSFER / SHARED domain) has owner_heap == NULL and is charged
+ * to nobody, which is what makes add and sub balance: its destroy path has no
+ * coroutine heap to refund. */
+static inline XrCoroHeap *set_accounting_heap(XrSet *set) {
+    return set ? set->owner_heap : NULL;
+}
+
 static XrVMRuntime *set_owning_isolate(XrCoroHeap *heap) {
     if (heap && heap->owner)
         return xr_coro_vm_owner(heap->owner);
@@ -191,7 +201,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
         return false;
     }
     if (!new_on_heap)
-        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
+        xr_coro_heap_add_external(set_accounting_heap(set), (int64_t) (cbytes + ibytes + ebytes));
 
     memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
@@ -209,7 +219,10 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     set->entries_cap = new_ecap;
     set->nentries = w;
     set->flags &= ~XR_SET_FLAG_DUMMY;
-    set->owner_heap = heap;
+    /* Deliberately NOT reassigning owner_heap here.  Accounting ownership is
+       fixed at creation; re-pointing it at the running coroutine would make a
+       charge and its refund land on different heaps (and could outlive the
+       heap for a TRANSFER-domain set). */
     if (new_on_heap)
         set->flags |= XR_SET_FLAG_NODES_ON_GC;
     else
@@ -224,9 +237,10 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
             xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_coro_heap_sub_external(heap, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
-                                                       sizeof(int32_t) * (size_t) old_isize +
-                                                       sizeof(XrSetEntry) * (size_t) old_ecap));
+            xr_coro_heap_sub_external(set_accounting_heap(set),
+                                      (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                                 sizeof(int32_t) * (size_t) old_isize +
+                                                 sizeof(XrSetEntry) * (size_t) old_ecap));
         }
     }
     return true;
@@ -552,7 +566,9 @@ void xr_obj_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
             xr_free(set->ctrl);
             xr_free(set->indices);
             xr_free(set->entries);
-            xr_coro_heap_sub_external(owner_heap, (int64_t) bytes);
+            /* Refund the heap that was charged, not the one destroying us:
+               a TRANSFER-domain set is destroyed with owner_heap == NULL. */
+            xr_coro_heap_sub_external(set_accounting_heap(set), (int64_t) bytes);
         }
         set->ctrl = NULL;
         set->indices = NULL;

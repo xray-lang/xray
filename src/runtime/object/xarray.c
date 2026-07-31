@@ -102,6 +102,22 @@ static void xr_array_storage_account_attach(XrArrayStorage *s, XrCoroHeap *heap,
         xr_coro_heap_add_external(heap, bytes);
 }
 
+/* Does this array's buffer belong in a coroutine heap's live-byte count?
+ *
+ * Only when the array itself lives on a coroutine heap.  An array in a
+ * system-heap storage domain (SHARED or TRANSFER) is destroyed through
+ * xr_shared_destroy_core / xr_transfer_destroy_core, and both hand the
+ * destructor a NULL heap — so a charge made against whichever coroutine
+ * happened to be pushing can never be refunded, and runtime.liveBytes() grows
+ * without bound.  Charge nobody instead; the buffer is not part of any
+ * coroutine heap's live set.
+ *
+ * Every add/sub of array bytes must be gated on this, so the two sides balance
+ * structurally rather than by coincidence of which coroutine ran. */
+static inline bool xr_array_charges_coro_heap(const XrArray *arr) {
+    return arr && !XR_OBJ_IS_SHARED(&arr->hdr) && !XR_OBJ_IS_TRANSFER(&arr->hdr);
+}
+
 static void xr_array_storage_account_resize(XrArrayStorage *s, int64_t new_bytes) {
     if (!s || !s->account_heap)
         return;
@@ -148,7 +164,7 @@ static bool xr_array_ensure_storage(XrArray *arr) {
     /* ANY elements are MOVED (not dup'd): ownership transfers from the old buffer
      * to the storage block. elem_count tracks the owning refs for release. */
     s->elem_count = is_any ? arr->length : 0;
-    if (!XR_OBJ_IS_SHARED(&arr->hdr)) {
+    if (xr_array_charges_coro_heap(arr)) {
         /* Existing malloc-backed local arrays already charged their owner heap;
          * region-backed arrays did not. After promotion, storage owns a system
          * heap buffer, so charge it exactly once to the source heap. */
@@ -852,7 +868,8 @@ void xr_array_grow(XrArray *arr) {
         arr->data = new_data;
         arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
-        xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+        if (xr_array_charges_coro_heap(arr))
+            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -860,11 +877,7 @@ void xr_array_grow(XrArray *arr) {
             return;
         arr->data = new_data;
         arr->capacity = new_capacity;
-        /* Shared arrays carry no per-coroutine accounting: their buffer is freed
-         * via xr_shared_destroy with a NULL heap, so accounting growth to the
-         * pushing coroutine's heap would skew that counter (and underflow the
-         * owner on a cross-coro collection point). */
-        if (!XR_OBJ_IS_SHARED(&arr->hdr))
+        if (xr_array_charges_coro_heap(arr))
             xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
     }
 }
@@ -913,7 +926,8 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         arr->data = new_data;
         arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
-        xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+        if (xr_array_charges_coro_heap(arr))
+            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -921,11 +935,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
             return;
         arr->data = new_data;
         arr->capacity = new_capacity;
-        /* Shared arrays carry no per-coroutine accounting: their buffer is freed
-         * via xr_shared_destroy with a NULL heap, so accounting growth to the
-         * pushing coroutine's heap would skew that counter (and underflow the
-         * owner on a cross-coro collection point). */
-        if (!XR_OBJ_IS_SHARED(&arr->hdr))
+        if (xr_array_charges_coro_heap(arr))
             xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
     }
 }
@@ -1035,7 +1045,8 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
             size_t data_bytes = (size_t) arr->elem_size * arr->capacity;
             xr_free(arr->data);
             arr->data = NULL;
-            xr_coro_heap_sub_external(owner_heap, (int64_t) data_bytes);
+            if (xr_array_charges_coro_heap(arr))
+                xr_coro_heap_sub_external(owner_heap, (int64_t) data_bytes);
         }
     }
 }
