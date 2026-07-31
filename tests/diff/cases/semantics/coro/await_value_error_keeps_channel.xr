@@ -1,0 +1,61 @@
+// anchor: coro-await-value-error-channel
+// An error keeps its channel across a coroutine boundary (task 248): a child's
+// `throw <enum>` is a value error there and must still be a value error at the
+// `await`, so the same `catch (e)` that would have caught it in one frame
+// catches it across two. Both backends used to get this wrong, differently:
+// the VM wrapped the value in a PanicInfo ("Value thrown as exception",
+// uncaught), and AOT dropped it entirely -- no output, exit 0.
+enum E { Boom }
+
+fn failing() -> int {
+    throw E.Boom
+}
+
+fn direct() -> int {
+    return failing()
+}
+
+// The awaiting frame catches it.
+fn caught_here() {
+    try {
+        var t = go failing()
+        print(await t)
+        print("unreachable: await returned")
+    } catch (e) {
+        print("caught at await: " + e.toString())
+    }
+}
+
+// No catch here: it propagates by value to a caller that does have one,
+// exactly as a same-frame throw would.
+fn hop() -> int {
+    var t = go failing()
+    return await t
+}
+
+// Awaiting a coroutine that only ever succeeds stays on the normal path.
+fn ok(n: int) -> int {
+    return n * 2
+}
+
+fn sum_two() -> int {
+    var a = go ok(3)
+    var b = go ok(4)
+    return (await a) + (await b)
+}
+
+try {
+    print(direct())
+} catch (e) {
+    print("caught direct: " + e.toString())
+}
+
+caught_here()
+
+try {
+    print(hop())
+} catch (e) {
+    print("caught propagated: " + e.toString())
+}
+
+print(sum_two())
