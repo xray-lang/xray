@@ -406,6 +406,36 @@ static XrAggregateLayout *class_clone_value_layout(XiLower *l, const XrAggregate
     return copy;
 }
 
+/* True when a synthesized constructor for `cd` must chain to a parent
+ * constructor. A subclass without its own constructor reaches the parent
+ * constructor by ordinary "constructor" method dispatch; a subclass that gains
+ * a *synthesized* constructor (from its own complex field initializer) shadows
+ * that dispatch, so the synthesized body must call super() itself or the
+ * parent's field initialization is silently dropped.
+ *
+ * The base has a constructor to chain to when it (or an ancestor) declares an
+ * explicit one -- found order-independently and across modules via the analyzer
+ * class chain -- or, for a same-module base whose only constructor is itself
+ * synthesized, when the base's already-lowered class data records one. */
+static bool class_synth_ctor_needs_super(XiLower *l, const ClassDeclNode *cd) {
+    if (!l || !cd || (!cd->super_name && !cd->super_module))
+        return false;
+    XrClassInfo *ci = class_info_for_decl(l, cd);
+    if (ci && ci->base && xa_class_info_lookup_member(ci->base, XR_KEYWORD_CONSTRUCTOR))
+        return true;
+    if (cd->super_name && !cd->super_module && l->shared_slot_classes) {
+        for (int i = 0; i < l->var_cap; i++) {
+            XiClassData *d = l->shared_slot_classes[i];
+            if (!d || !d->class_name || strcmp(d->class_name, cd->super_name) != 0)
+                continue;
+            for (uint16_t mi = 0; mi < d->nmethod; mi++)
+                if (d->methods && d->methods[mi].is_constructor)
+                    return true;
+        }
+    }
+    return false;
+}
+
 /* Lower a class method body to a child XiFunc.
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
@@ -584,6 +614,18 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     if (is_ctor && is_inst && cd) {
         int this_var_init = xi_lower_var_create(&ml, 0, "this", this_type);
         XiValue *this_val = xi_lower_braun_read(&ml, this_var_init, ml.cur_block);
+        /* A synthesized constructor (no user body) still has to run the parent
+         * constructor. An explicit constructor supplies its own super(...) as
+         * the required first statement, so inject one only when the body is
+         * absent and the base actually has a constructor to chain to. Reuse the
+         * normal super() lowering by dispatching a zero-arg synthetic node. */
+        if (!m->body && class_synth_ctor_needs_super(l, cd)) {
+            AstNode super_node;
+            memset(&super_node, 0, sizeof(super_node));
+            super_node.type = AST_SUPER_CALL;
+            super_node.as.super_call.method_name = NULL; /* NULL name == constructor */
+            (void) xi_lower_expr(&ml, &super_node);
+        }
         for (int fi = 0; fi < cd->field_count; fi++) {
             if (cd->fields[fi]->type != AST_FIELD_DECL)
                 continue;

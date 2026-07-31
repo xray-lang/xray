@@ -919,9 +919,15 @@ XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db, const XaEffe
     diff.removed_unsafe_call_requirement =
         before->requires_unsafe_at_call && !after->requires_unsafe_at_call;
 
-    if (diff.added_escaping || diff.became_incomplete || diff.widened_unknown ||
-        diff.added_semantic_effects != XA_SEM_EFFECT_NONE || diff.added_unsafe_operation ||
-        diff.added_unsafe_call_requirement)
+    if (diff.added_escaping)
+        /* A newly escaping typed error widens every downstream catch-all's
+         * projected union (202 §4.1), so an exhaustive `match (e)` there stops
+         * compiling (E0371) with the source signature unchanged.  This is the
+         * most severe kind and dominates plain behavioral breaks below. */
+        diff.kind = XA_EFFECT_DIFF_SOURCE_BREAKING;
+    else if (diff.became_incomplete || diff.widened_unknown ||
+             diff.added_semantic_effects != XA_SEM_EFFECT_NONE || diff.added_unsafe_operation ||
+             diff.added_unsafe_call_requirement)
         diff.kind = XA_EFFECT_DIFF_BREAKING;
     else if (diff.removed_escaping || diff.became_complete || diff.narrowed_unknown ||
              diff.removed_semantic_effects != XA_SEM_EFFECT_NONE || diff.removed_unsafe_operation ||

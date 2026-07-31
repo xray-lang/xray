@@ -1,0 +1,99 @@
+// anchor: optional-chain-class-field
+// VM/AOT differential coverage for `?.` field access on a class instance.
+//
+// A `Box?` receiver is still XR_KIND_INSTANCE with is_nullable set, and a
+// PTR-rep `T?` carries null as the NULL pointer rather than a tagged value.
+// Two AOT-only regressions lived here: the optional-chain lowering skipped the
+// class-field-id binding that plain `obj.f` performs (AOT then rejected the
+// load with "stale class field plan ... missing_field_id"), and the null test
+// emitted `.tag == XR_TAG_NULL` against storage declared `void *`. Both paths
+// must agree with the VM, and with the absolute values in the .expected file.
+
+class Box {
+    f: int = 0
+    label: string = "none"
+    constructor(v: int, s: string) {
+        this.f = v
+        this.label = s
+    }
+}
+
+// Implicit constructors with field default initializers, so the case also
+// pins the construction path that feeds `?.` rather than only explicit stores.
+class Base {
+    id: int = 7
+}
+
+class Derived extends Base {
+    extra: int = 9
+}
+
+class Node {
+    value: int = 0
+    next: Node? = null
+    constructor(v: int) { this.value = v }
+}
+
+fn read_field(b: Box?) -> int? {
+    return b?.f
+}
+
+fn main() {
+    // Non-null receiver: the reported reproducer.
+    var ob: Box? = Box(3, "hi")
+    var oc = ob?.f
+    print(oc)
+    print(ob?.label)
+
+    // Null receiver takes the null path and yields null, not a field read.
+    var nb: Box? = null
+    print(nb?.f)
+    print(nb?.label)
+
+    // `??` defaults over both paths.
+    print(ob?.f ?? -1)
+    print(nb?.f ?? -1)
+    print(ob?.label ?? "fallback")
+    print(nb?.label ?? "fallback")
+
+    // Field read flows into arithmetic rather than straight to print.
+    var sum = (ob?.f ?? 0) + 100
+    print(sum)
+
+    // Subclass receiver: own field, then a field inherited from the parent.
+    // The inherited read only resolves if the field id binding walks to Base.
+    var od: Derived? = Derived()
+    print(od?.extra)
+    print(od?.id)
+    var nd: Derived? = null
+    print(nd?.extra)
+    print(nd?.id)
+
+    // Static type Base, dynamic type Derived.
+    var ub: Base? = Derived()
+    print(ub?.id)
+
+    // Chained `?.` where the middle link is a nullable class field.
+    var head = Node(1)
+    head.next = Node(2)
+    var on: Node? = head
+    print(on?.value)
+    print(on?.next?.value)
+    print(on?.next?.next?.value)
+    print(on?.next?.next?.value ?? -5)
+
+    // Receiver arriving as a function parameter, both null and non-null.
+    print(read_field(ob))
+    print(read_field(nb))
+    print(read_field(Box(42, "x")))
+
+    // Nullable receiver reassigned between reads keeps per-read behavior.
+    var swap: Box? = Box(11, "a")
+    print(swap?.f)
+    swap = null
+    print(swap?.f)
+    swap = Box(22, "b")
+    print(swap?.f)
+}
+
+main()

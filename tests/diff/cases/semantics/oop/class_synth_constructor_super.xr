@@ -1,0 +1,58 @@
+// anchor: class-synth-constructor-super
+// Synthesized-constructor super-chaining: a subclass that gains a synthesized
+// constructor from its own complex field initializer must still run the parent
+// constructor, matching a constructor-less subclass's inherited dispatch.
+
+// Parent with an explicit zero-arg constructor; child has a complex initializer
+// (array literal) that forces a synthesized constructor.
+class Base {
+    id: int
+    constructor() { this.id = 42 }
+}
+class Child extends Base {
+    xs: Array<int> = [1, 2, 3]
+}
+
+// Parent whose own constructor is itself synthesized (complex initializer, no
+// explicit constructor); the grandchild must chain through it.
+class GenRoot {
+    roots: Array<int> = [7, 7]
+}
+class GenLeaf extends GenRoot {
+    leaves: Array<int> = [4, 5]
+}
+
+// Mixed simple + complex defaults on the child, explicit parent constructor.
+class Mixed extends Base {
+    n: int = 9
+    ys: Array<int> = [8]
+}
+
+// A subclass whose base has no constructor at all: the synthesized constructor
+// must NOT emit a stray super() call, and its own initializer still applies.
+class Plain {
+    tag: string = "plain"
+}
+class PlainChild extends Plain {
+    zs: Array<int> = [6, 6, 6]
+}
+
+fn main() {
+    var c = Child()
+    print(c.id)          // 42 from Base()
+    print(len(c.xs))     // 3
+
+    var g = GenLeaf()
+    print(len(g.roots))  // 2 from GenRoot's synthesized constructor
+    print(len(g.leaves)) // 2
+
+    var m = Mixed()
+    print(m.id)          // 42
+    print(m.n)           // 9
+    print(len(m.ys))     // 1
+
+    var p = PlainChild()
+    print(p.tag)         // "plain" (field default, no constructor)
+    print(len(p.zs))     // 3
+}
+main()

@@ -346,7 +346,7 @@ TEST(diff_identical_summaries_are_compatible) {
     xa_effect_db_free(db);
 }
 
-TEST(diff_added_escaping_variant_is_breaking) {
+TEST(diff_added_escaping_variant_is_source_breaking) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
     XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
@@ -362,7 +362,7 @@ TEST(diff_added_escaping_variant_is_breaking) {
     ASSERT(xa_effect_summary_add_variant(db, &after, type, 1));
 
     XaEffectDiff diff;
-    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_SOURCE_BREAKING);
     ASSERT(diff.added_escaping);
     ASSERT(!diff.removed_escaping);
 
