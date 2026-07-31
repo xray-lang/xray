@@ -20,6 +20,28 @@ static uint32_t xaot_freestanding_core_capabilities(void) {
     return UINT32_MAX & ~hosted_only;
 }
 
+bool xaot_bundle_uses_parallel_intrinsic(const XaotBundle *bundle) {
+    if (!bundle)
+        return false;
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XiFunc *func = bundle->func_plans[fi].func;
+        if (!func)
+            continue;
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            const XiBlock *block = func->blocks[bi];
+            if (!block)
+                continue;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                const XiValue *value = block->values[vi];
+                if (value && (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP ||
+                              value->op == XI_PAR_REDUCE))
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 uint32_t xaot_entry_plan_required_provider_hooks(const XrEntryPlan *plan) {
     uint32_t hooks = 0;
     uint32_t caps;
@@ -220,6 +242,13 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
         out->required_capability_bits |= XG_CAP_COROUTINE;
     xr_free(reachable);
+
+    /* The parallel capability is not carried by any body's summary bits; the
+     * prepared IR is where it is visible.  Record it here so every consumer --
+     * the scheduler mode below, the C emitter's runtime-bridge decision, and
+     * the link feature set -- reads it from one place. */
+    if (xaot_bundle_uses_parallel_intrinsic(bundle))
+        out->required_capability_bits |= XG_CAP_PARALLEL;
 
     out->runtime_component_bits = out->required_capability_bits;
     if (entry_root_uses_resumable_frame(bundle, root, out->reachable_effect_bits))

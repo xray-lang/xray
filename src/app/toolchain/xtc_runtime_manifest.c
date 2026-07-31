@@ -118,8 +118,7 @@ static bool xtc_runtime_has_suffix(const char *value, const char *suffix) {
 }
 
 static bool xtc_runtime_windows_artifact_matches(const XrToolchainTarget *target,
-                                                 XrToolchainProviderId provider,
-                                                 const char *path) {
+                                                 XrToolchainProviderId provider, const char *path) {
     if (!target || target->os != XR_TOOLCHAIN_TARGET_OS_WINDOWS)
         return true;
     if (target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC)
@@ -295,8 +294,10 @@ static bool xtc_runtime_load_build_tree(const XrToolchainTarget *target,
 #if defined(XR_OS_WINDOWS)
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "ws2_32");
+    /* Canonical API-set name: MSVC maps it to synchronization.lib and Zig ships
+     * it under this name directly. */
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
-             "%s", "synchronization");
+             "%s", "api-ms-win-core-synch-l1-2-0");
 #else
     snprintf(out->system_libraries[out->system_library_count++], sizeof(out->system_libraries[0]),
              "%s", "m");

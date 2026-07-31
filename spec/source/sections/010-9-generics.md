@@ -168,15 +168,16 @@ render(Square())     // OK
 
 #### 结构化对象
 
-仅`object literal` 与 `type T = {...}` 是结构化匹配：
+仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK：字面量结构匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字段
+describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
+describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 ```
 
 ### 9.6 方差（Variance）
@@ -370,15 +371,16 @@ render(Square())     // OK
 
 #### Structural objects
 
-Only `object literal` and `type T = {...}` use structural matching:
+Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
 type Point = { x: float, y: float }
 
 fn describe(p: Point) { ... }
 
-describe({ x: 1.0, y: 2.0 })   // OK: literal matches structurally
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error: sealed type rejects extra fields
+describe({ x: 1.0, y: 2.0 })          // OK: exact field set
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
+describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 ```
 
 ### 9.6 Variance

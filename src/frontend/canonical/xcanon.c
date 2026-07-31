@@ -366,10 +366,19 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
     uint32_t sid = node->as.inc.symbol_id;
     int line = node->line;
     bool is_inc = (node->type == AST_INC);
+    XrType *target_type = canon_node_type(ctx, node);
 
-    /* Build literal 1 */
-    AstNode *one = xr_ast_literal_int(ctx->session, 1, line);
+    /* Build the step operand.  It must match the target's exact numeric type
+     * and literal kind: a node synthesized after inference has no conversion
+     * witness, so an untyped `1` against a sized target (u32, i16, ...) reaches
+     * lowering as an unwitnessed numeric boundary, and an *integer* `1` carrying
+     * a float type would lower as an integer constant and silently add nothing.
+     */
+    bool float_target = target_type && XR_TYPE_IS_FLOAT(target_type) && !target_type->is_nullable;
+    AstNode *one = float_target ? xr_ast_literal_float(ctx->session, (xr_Number) 1.0, line)
+                                : xr_ast_literal_int(ctx->session, 1, line);
     XR_DCHECK(one != NULL, "canon_inc_dec: literal alloc");
+    canon_set_node_type(ctx, one, target_type);
 
     /* Mutate in-place → AST_COMPOUND_ASSIGNMENT(name, +=/-=, 1) */
     node->type = AST_COMPOUND_ASSIGNMENT;

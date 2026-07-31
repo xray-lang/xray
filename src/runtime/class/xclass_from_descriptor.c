@@ -58,10 +58,6 @@ static XrClosure *create_method_closure_with_context(XrVMRuntime *isolate, XrVMC
 static XrMethodType determine_method_type(const XrMethodDescriptorEntry *method) {
     if (method->is_operator)
         return XMETHOD_OPERATOR;
-    if (method->name && strncmp(method->name, "get:", 4) == 0)
-        return XMETHOD_GETTER;
-    if (method->name && strncmp(method->name, "set:", 4) == 0)
-        return XMETHOD_SETTER;
     return XMETHOD_CLOSURE;
 }
 

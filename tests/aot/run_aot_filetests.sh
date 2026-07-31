@@ -142,6 +142,35 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Ratchet baseline.  Every case listed here is a known, tracked failure; the
+# suite still gates every other case.  The list may only shrink: a new failure
+# outside it fails the run, and a listed case that starts passing also fails the
+# run so the entry gets deleted instead of masking a future regression.
+BASELINE_FILE="${XRAY_AOT_FILETEST_BASELINE:-$SCRIPT_DIR/filetests_known_failures.txt}"
+FAILED_LIST="$WORK/failed.list"
+# Cases that did not run at all.  A skipped case produced no verdict, so it can
+# neither be a new failure nor evidence that a baselined entry is now fixed.
+SKIPPED_LIST="$WORK/skipped.list"
+: >"$FAILED_LIST"
+: >"$SKIPPED_LIST"
+
+# Record one case verdict for the ratchet.  Runs inside parallel subshells, so
+# it must communicate through the file, never through a variable.
+note_case_verdict() {
+    local case_id="$1"
+    local status="$2"
+    if [ "$status" -ne 0 ]; then
+        printf '%s\n' "$case_id" >>"$FAILED_LIST"
+    fi
+}
+
+read_baseline() {
+    if [ ! -f "$BASELINE_FILE" ]; then
+        return 0
+    fi
+    sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$BASELINE_FILE"
+}
+
 rel_path() {
     case "$1" in
         "$PROJECT_DIR"/*) printf '%s' "${1#"$PROJECT_DIR"/}" ;;
@@ -409,27 +438,75 @@ check_expect() {
     return 0
 }
 
+# Extract the `--target <triple>` a case builds for, if any.  Generated C for a
+# foreign target pulls in that target's intrinsics and libc headers, so the host
+# compiler cannot parse it without being pointed at the same target.
+expect_target_triple() {
+    local args="$1"
+    local prev=""
+    local tok
+    for tok in $args; do
+        case "$prev" in
+            --target)
+                printf '%s' "$tok"
+                return 0
+                ;;
+        esac
+        case "$tok" in
+            --target=*)
+                printf '%s' "${tok#--target=}"
+                return 0
+                ;;
+        esac
+        prev="$tok"
+    done
+    return 0
+}
+
 check_c_syntax() {
     local expect="$1"
     local c_out="$2"
-    local compiler="${CC:-cc}"
     local syntax_log="$3"
+    local extra_args="${4:-}"
+    local compiler="${CC:-cc}"
+    local -a compile_cmd
 
     if ! grep -Fqx 'c_syntax=pass' "$expect" 2>/dev/null; then
         return 0
     fi
-    if ! command -v "$compiler" >/dev/null 2>&1; then
-        echo "FAIL (C compiler not found for c_syntax: $compiler)"
-        FAIL=$((FAIL + 1))
-        return 1
+
+    local triple
+    triple="$(expect_target_triple "$extra_args")"
+    if [ -n "$triple" ]; then
+        # Cross target: only a toolchain shipping that target's headers can parse
+        # the result.  `zig cc` bundles them; without it this is reported as a
+        # skip, never as a pass.  zig cc rejects -fsyntax-only, so compile to a
+        # throwaway object instead.
+        local zig="${ZIG:-zig}"
+        if ! command -v "$zig" >/dev/null 2>&1; then
+            echo "SKIP (c_syntax needs a cross toolchain for $triple; set ZIG)"
+            SKIP=$((SKIP + 1))
+            return 2
+        fi
+        compile_cmd=("$zig" cc -target "$triple" -c -o "$syntax_log.o")
+    else
+        if ! command -v "$compiler" >/dev/null 2>&1; then
+            echo "FAIL (C compiler not found for c_syntax: $compiler)"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+        compile_cmd=("$compiler" -fsyntax-only)
     fi
-    if ! "$compiler" -fsyntax-only -I"$PROJECT_DIR/src/aot" -I"$PROJECT_DIR/src" \
+
+    if ! "${compile_cmd[@]}" -I"$PROJECT_DIR/src/aot" -I"$PROJECT_DIR/src" \
             "$c_out" >"$syntax_log" 2>&1; then
         echo "FAIL (generated C syntax check failed)"
         show_excerpt "$syntax_log"
+        rm -f "$syntax_log.o"
         FAIL=$((FAIL + 1))
         return 1
     fi
+    rm -f "$syntax_log.o"
     return 0
 }
 
@@ -476,6 +553,20 @@ filetest_skip_for_sanitizer() {
     grep -Eq -- '^(contains|regex)=.*(-nostdlib|-ffreestanding)' "$expect"
 }
 
+# A case that builds for a foreign target needs a toolchain shipping that
+# target's sysroot; cross compilation is bound to zig.  Report the gap as a skip
+# with the triple named, so a runner without zig loses that coverage visibly
+# instead of turning 14 cross cases into indistinguishable build failures.
+filetest_missing_cross_toolchain() {
+    local extra_args="$1"
+    local triple
+    triple="$(expect_target_triple "$extra_args")"
+    [ -n "$triple" ] || return 1
+    command -v "${ZIG:-zig}" >/dev/null 2>&1 && return 1
+    printf '%s' "$triple"
+    return 0
+}
+
 run_one() {
     local mode="$1"
     local xr_file="$2"
@@ -513,6 +604,15 @@ run_one() {
     if filetest_skip_for_sanitizer "$expect"; then
         echo "SKIP (freestanding link flags incompatible with sanitizer runtime)"
         SKIP=$((SKIP + 1))
+        return 0
+    fi
+
+    local missing_triple
+    missing_triple="$(filetest_missing_cross_toolchain "$extra_args")"
+    if [ -n "$missing_triple" ]; then
+        echo "SKIP (no cross toolchain for $missing_triple; install zig or set ZIG)"
+        SKIP=$((SKIP + 1))
+        printf '%s\n' "$test_name" >>"$SKIPPED_LIST"
         return 0
     fi
 
@@ -625,9 +725,13 @@ run_one() {
         c_check="$WORK/${mode}_${base}.expect.c"
         normalize_link_c_for_expect "$c_out" "$c_check"
     fi
-    if ! check_c_syntax "$expect" "$c_out" "$WORK/${mode}_${base}.syntax.log"; then
-        return 1
-    fi
+    check_c_syntax "$expect" "$c_out" "$WORK/${mode}_${base}.syntax.log" "$extra_args"
+    case "$?" in
+        0) ;;
+        # 2 means the case was already reported as a skip, not a verdict.
+        2) return 0 ;;
+        *) return 1 ;;
+    esac
     check_expect "$expect" "$dump" "$c_check"
 }
 
@@ -693,7 +797,9 @@ run_selected_parallel() {
         status="$WORK/logs/selected_${idx}.status"
         (
             run_one "$mode" "$f" "$dir_key" >"$log" 2>&1
-            printf '%s\n' "$?" >"$status"
+            one_status="$?"
+            printf '%s\n' "$one_status" >"$status"
+            note_case_verdict "$(rel_path "$f")" "$one_status"
             printf '.' >&9
         ) &
         pids="$pids $!"
@@ -757,6 +863,7 @@ if [ "$JOBS" -le 1 ]; then
             [ -f "$f" ] || continue
             is_collected_test "$f" || continue
             run_one "$mode" "$f"
+            note_case_verdict "$(rel_path "$f")" "$?"
         done
         echo ""
     done
@@ -767,4 +874,39 @@ else
 fi
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
-[ "$FAIL" -eq 0 ] && exit 0 || exit 1
+
+# ---------------------------------------------------------------------------
+# Ratchet evaluation.  A full-suite run is the only run whose baseline
+# comparison is meaningful; a --mode subset can only be checked for new
+# failures, never for stale baseline entries.
+# ---------------------------------------------------------------------------
+sort -u "$FAILED_LIST" >"$WORK/failed.sorted"
+read_baseline | sort -u >"$WORK/baseline.sorted"
+
+new_failures="$(comm -23 "$WORK/failed.sorted" "$WORK/baseline.sorted")"
+ratchet_status=0
+
+if [ -n "$new_failures" ]; then
+    echo ""
+    echo "=== New filetest failures (not in $(rel_path "$BASELINE_FILE")) ==="
+    printf '%s\n' "$new_failures" | sed 's/^/  /'
+    echo "Fix the case, or -- only with a written reason -- add it to the baseline."
+    ratchet_status=1
+fi
+
+if [ "$MODE" = "all" ]; then
+    sort -u "$SKIPPED_LIST" >"$WORK/skipped.sorted"
+    fixed="$(comm -13 "$WORK/failed.sorted" "$WORK/baseline.sorted" |
+        comm -23 - "$WORK/skipped.sorted")"
+    if [ -n "$fixed" ]; then
+        echo ""
+        echo "=== Baselined filetests now pass; delete these entries ==="
+        printf '%s\n' "$fixed" | sed 's/^/  /'
+        echo "The baseline may only shrink. Remove the lines above from $(rel_path "$BASELINE_FILE")."
+        ratchet_status=1
+    fi
+    echo ""
+    echo "Ratchet: $(wc -l <"$WORK/failed.sorted" | tr -d ' ') failing, $(wc -l <"$WORK/baseline.sorted" | tr -d ' ') baselined."
+fi
+
+exit "$ratchet_status"

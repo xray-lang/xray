@@ -1,0 +1,15 @@
+// anchor: range-precedence-arithmetic
+// `..` binds looser than every arithmetic operator, so an endpoint's +,-,*,/
+// group before the range does. Each of these would fail if `..` bound at
+// multiplicative level.
+fn main() {
+    print(len(1..2*3))          // 1..6  -> 5
+    print(len(1..2+3))          // 1..5  -> 4
+    print(len(1..=2*3))         // 1..=6 -> 6
+    var n = 3
+    print(len(0..n*2+1))        // 0..7  -> 7
+    var a = [10, 20, 30, 40]
+    for (i in 0..len(a)-1) { print(a[i]) }   // 0..3 -> 10 20 30
+}
+
+main()

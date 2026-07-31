@@ -137,7 +137,7 @@ const char *xr_type_to_string(XrType *type) {
     if (XR_TYPE_IS_SLICE(type)) {
         XrType *elem_type = type->container.element_type;
         const char *elem = elem_type ? xr_type_to_string(elem_type) : "<error>";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_VIEW, elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_SLICE, elem);
         return xr_pool_strdup(pool, buf);
     }
 

@@ -273,14 +273,10 @@ TEST(type_assignable) {
     ASSERT(xr_type_numeric_conversion_kind(t_i16, t_i8) == XR_CONVERSION_LOSSLESS_WIDEN);
     ASSERT(xr_type_numeric_conversion_kind(t_i8, t_i16) == XR_CONVERSION_EXPLICIT_TRUNCATE);
     ASSERT(xr_type_numeric_conversion_kind(t_u8, t_i8) == XR_CONVERSION_EXPLICIT_SIGN_CHANGE);
-    ASSERT(xr_type_numeric_conversion_kind(t_isize, t_int) ==
-           XR_CONVERSION_EXPLICIT_TARGET_WIDTH);
-    ASSERT(xr_type_numeric_conversion_kind(t_float, t_f32) ==
-           XR_CONVERSION_LOSSLESS_WIDEN);
-    ASSERT(xr_type_numeric_conversion_kind(t_f32, t_float) ==
-           XR_CONVERSION_EXPLICIT_TRUNCATE);
-    ASSERT(xr_type_numeric_conversion_kind(t_float, t_int) ==
-           XR_CONVERSION_EXPLICIT_INT_FLOAT);
+    ASSERT(xr_type_numeric_conversion_kind(t_isize, t_int) == XR_CONVERSION_EXPLICIT_TARGET_WIDTH);
+    ASSERT(xr_type_numeric_conversion_kind(t_float, t_f32) == XR_CONVERSION_LOSSLESS_WIDEN);
+    ASSERT(xr_type_numeric_conversion_kind(t_f32, t_float) == XR_CONVERSION_EXPLICIT_TRUNCATE);
+    ASSERT(xr_type_numeric_conversion_kind(t_float, t_int) == XR_CONVERSION_EXPLICIT_INT_FLOAT);
     ASSERT(xr_type_assignable(t_i16, t_i8));
     ASSERT(!xr_type_assignable(t_i8, t_i16));
     ASSERT(!xr_type_assignable(t_u8, t_i8));
@@ -1365,12 +1361,59 @@ TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
     const XaEffectSummary *transitive = analyzer_function_effect_summary(a, "transitive");
     const XaEffectSummary *dynamic = analyzer_function_effect_summary(a, "dynamic");
     ASSERT(worker && suspends && transitive && dynamic);
-    ASSERT(!xa_effect_summary_has_semantic_effect(worker, XA_SEM_EFFECT_SUSPEND));
-    ASSERT(xa_effect_summary_has_semantic_effect(suspends, XA_SEM_EFFECT_SUSPEND));
-    ASSERT(xa_effect_summary_has_semantic_effect(transitive, XA_SEM_EFFECT_SUSPEND));
-    ASSERT((dynamic->unknown_semantic_effects & XA_SEM_EFFECT_SUSPEND) != 0);
+    ASSERT(!xa_effect_summary_has_semantic_effect(worker, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(suspends, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(transitive, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT((dynamic->unknown_semantic_effects & XA_SEM_EFFECT_SCHED_SUSPEND) != 0);
     ASSERT(dynamic->error_set_completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((dynamic->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+/* `yield expr` hands control to the iterator driving the generator; it never
+ * reaches the scheduler.  Publishing it as one undifferentiated "suspend" made
+ * every generator, and every function that merely drives one, fail `no_suspend`
+ * and be treated as a cancellation point. */
+TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "fn counter(n: int) -> Iterator<int> {\n"
+                         "    for (var i = 0; i < n; i++) { yield i }\n"
+                         "}\n"
+                         "fn drive() -> int {\n"
+                         "    var sum = 0\n"
+                         "    for (x in counter(3)) { sum = sum + x }\n"
+                         "    return sum\n"
+                         "}\n"
+                         "fn asyncGen() -> Iterator<int> {\n"
+                         "    var task = go drive()\n"
+                         "    yield await task\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "generator_suspend_effect.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    const XaEffectSummary *counter = analyzer_function_effect_summary(a, "counter");
+    const XaEffectSummary *drive = analyzer_function_effect_summary(a, "drive");
+    const XaEffectSummary *async_gen = analyzer_function_effect_summary(a, "asyncGen");
+    ASSERT(counter && drive && async_gen);
+
+    /* A pure generator: generator suspension only. */
+    ASSERT(xa_effect_summary_has_semantic_effect(counter, XA_SEM_EFFECT_GEN_SUSPEND));
+    ASSERT(!xa_effect_summary_has_semantic_effect(counter, XA_SEM_EFFECT_SCHED_SUSPEND));
+    ASSERT((counter->unknown_semantic_effects & XA_SEM_EFFECT_SCHED_SUSPEND) == 0);
+
+    /* Driving a generator resumes the generator's frame, not the driver's, so
+     * neither dimension propagates to the caller. */
+    ASSERT(!xa_effect_summary_has_semantic_effect(drive, XA_SEM_EFFECT_GEN_SUSPEND));
+    ASSERT(!xa_effect_summary_has_semantic_effect(drive, XA_SEM_EFFECT_SCHED_SUSPEND));
+
+    /* A generator that also awaits publishes both, independently. */
+    ASSERT(xa_effect_summary_has_semantic_effect(async_gen, XA_SEM_EFFECT_GEN_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(async_gen, XA_SEM_EFFECT_SCHED_SUSPEND));
 
     xa_analyzer_free(a);
     setup_pool();
@@ -1637,15 +1680,13 @@ TEST(analyzer_inferred_effects_accept_function_values) {
 TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    AstNode *program = xr_parse(
-        g_session,
-        "import codegen\n"
-        "fn guarded(value: u64, pointer: Ptr<byte>) -> u64 {\n"
-        "  var hidden = codegen.opaque(value)\n"
-        "  var samePointer = codegen.opaque(pointer)\n"
-        "  codegen.compilerFence()\n"
-        "  return hidden\n"
-        "}\n");
+    AstNode *program = xr_parse(g_session, "import codegen\n"
+                                           "fn guarded(value: u64, pointer: Ptr<byte>) -> u64 {\n"
+                                           "  var hidden = codegen.opaque(value)\n"
+                                           "  var samePointer = codegen.opaque(pointer)\n"
+                                           "  codegen.compilerFence()\n"
+                                           "  return hidden\n"
+                                           "}\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "codegen_controls_positive.xr", program);
     int count = 0;
@@ -1663,14 +1704,13 @@ TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
 
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    program = xr_parse(g_session,
-                       "import codegen\n"
-                       "var text = codegen.opaque(\"x\")\n"
-                       "var floating = codegen.opaque(1.25)\n"
-                       "var truth = codegen.opaque(true)\n"
-                       "var aggregate = codegen.opaque([1, 2])\n"
-                       "var nullable: u64? = null\n"
-                       "var maybe = codegen.opaque(nullable)\n");
+    program = xr_parse(g_session, "import codegen\n"
+                                  "var text = codegen.opaque(\"x\")\n"
+                                  "var floating = codegen.opaque(1.25)\n"
+                                  "var truth = codegen.opaque(true)\n"
+                                  "var aggregate = codegen.opaque([1, 2])\n"
+                                  "var nullable: u64? = null\n"
+                                  "var maybe = codegen.opaque(nullable)\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "codegen_controls_negative.xr", program);
     ASSERT(analyzer_diag_contains(a, "codegen.opaque accepts only non-null integer scalars"));
@@ -1683,10 +1723,9 @@ TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
 TEST(analyzer_call_context_accepts_u64_only_literals) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source =
-        "fn take(value: u64) -> u64 { return value }\n"
-        "fn check(got: u64, want: u64) { print(got == want) }\n"
-        "check(take(11400714785074694791), 15845353736191888555)\n";
+    const char *source = "fn take(value: u64) -> u64 { return value }\n"
+                         "fn check(got: u64, want: u64) { print(got == want) }\n"
+                         "check(take(11400714785074694791), 15845353736191888555)\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "contextual_u64_call.xr", program);
@@ -6301,6 +6340,7 @@ int main(void) {
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
+    RUN_TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
     RUN_TEST(analyzer_inferred_effects_accept_function_values);

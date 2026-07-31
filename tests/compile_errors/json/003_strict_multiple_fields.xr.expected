@@ -1,1 +1,1 @@
-类型 'Vec2' 不允许添加字段 'z'
+type 'Vec2' does not allow adding field 'z'

@@ -584,8 +584,9 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     if (!repl_symbols)
         return result;
 
-    // Parse
-    AstNode *ast = xr_parse(session, source);
+    // Parse. REPL units observe the value of a trailing bare expression (see
+    // repl_plan_* below), so they must not be rejected as effectless (E0208).
+    AstNode *ast = xr_parse_repl_unit(session, source);
     if (!ast)
         return result;
 

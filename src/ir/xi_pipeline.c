@@ -482,8 +482,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
          * lowering, and every other value-cloning rewrite.  Earlier attachment
          * would turn error-only ownership into normal SSA uses and inhibit
          * dead-value/representation cleanup on the successful hot path. */
-        if (cfg->run_escape && cfg->run_arc)
+        if (cfg->run_escape && cfg->run_arc) {
             xi_arc_attach_error_cleanups(ir);
+            xi_arc_verify_error_cleanups_or_ice(ir, "xi_arc_attach_error_cleanups");
+        }
         next = xi_program_plan_backend((XiReppedProgram *) program, transition_error,
                                        sizeof(transition_error));
         if (!next) {
@@ -542,8 +544,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
             xr_vm_proto_free(proto);
             res.proto = NULL;
             xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_EMIT,
-                                  XI_VERIFY_EMISSION, ir, NULL, NULL,
-                                  snapshot_error);
+                                  XI_VERIFY_EMISSION, ir, NULL, NULL, snapshot_error);
             return res;
         }
         /* Transfer Xi IR ownership to proto for AOT direct lowering.
@@ -565,8 +566,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         char snapshot_error[256];
         if (!xi_semantic_snapshot_detach_ex(ir, snapshot_error, sizeof(snapshot_error))) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_BACKEND,
-                                  XI_VERIFY_AOT_PLAN, ir, NULL, NULL,
-                                  snapshot_error);
+                                  XI_VERIFY_AOT_PLAN, ir, NULL, NULL, snapshot_error);
             return res;
         }
     }

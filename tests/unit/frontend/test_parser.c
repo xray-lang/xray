@@ -70,13 +70,27 @@ static AstNode *parse_first(const char *source) {
     return first_stmt(program);
 }
 
+/* Helper: parse a bare expression and return its AST node.
+ *
+ * An expression is not a statement on its own — a statement whose value is
+ * discarded and that cannot do anything is E0208 (see §1.2.1). Expression
+ * shape is therefore probed through a binding, which is also how expressions
+ * appear in real code. */
+static AstNode *parse_expr(const char *expr) {
+    char source[512];
+    snprintf(source, sizeof(source), "var __probe = %s", expr);
+    AstNode *stmt = parse_first(source);
+    assert(stmt->type == AST_VAR_DECL && "parse_expr: expected a var declaration");
+    AstNode *init = stmt->as.var_decl.initializer;
+    assert(init != NULL && "parse_expr: missing initializer");
+    return init;
+}
+
 /* ========== Literal Tests ========== */
 
 TEST(parser_int_literal) {
     setup();
-    AstNode *stmt = parse_first("42");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("42");
     ASSERT_EQ_INT(expr->type, AST_LITERAL_INT);
     ASSERT_EQ_INT((int) expr->as.literal.raw_value.int_val, 42);
     teardown();
@@ -84,9 +98,7 @@ TEST(parser_int_literal) {
 
 TEST(parser_float_literal) {
     setup();
-    AstNode *stmt = parse_first("3.14");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("3.14");
     ASSERT_EQ_INT(expr->type, AST_LITERAL_FLOAT);
     ASSERT_TRUE(expr->as.literal.raw_value.float_val > 3.13 &&
                 expr->as.literal.raw_value.float_val < 3.15);
@@ -95,9 +107,7 @@ TEST(parser_float_literal) {
 
 TEST(parser_string_literal) {
     setup();
-    AstNode *stmt = parse_first("\"hello\"");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("\"hello\"");
     ASSERT_EQ_INT(expr->type, AST_LITERAL_STRING);
     ASSERT_STR_EQ(expr->as.literal.raw_value.string_val, "hello");
     teardown();
@@ -239,18 +249,14 @@ TEST(parser_template_interpolation_skips_nested_variable_quote_block) {
 
 TEST(parser_bool_literal) {
     setup();
-    AstNode *stmt = parse_first("true");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("true");
     ASSERT_EQ_INT(expr->type, AST_LITERAL_TRUE);
     teardown();
 }
 
 TEST(parser_null_literal) {
     setup();
-    AstNode *stmt = parse_first("null");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("null");
     ASSERT_EQ_INT(expr->type, AST_LITERAL_NULL);
     teardown();
 }
@@ -259,9 +265,7 @@ TEST(parser_null_literal) {
 
 TEST(parser_binary_add) {
     setup();
-    AstNode *stmt = parse_first("1 + 2");
-    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("1 + 2");
     ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
     ASSERT_EQ_INT(expr->as.binary.left->type, AST_LITERAL_INT);
     ASSERT_EQ_INT(expr->as.binary.right->type, AST_LITERAL_INT);
@@ -271,8 +275,7 @@ TEST(parser_binary_add) {
 TEST(parser_binary_precedence) {
     setup();
     // 1 + 2 * 3 should parse as 1 + (2 * 3)
-    AstNode *stmt = parse_first("1 + 2 * 3");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("1 + 2 * 3");
     ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
     ASSERT_EQ_INT(expr->as.binary.left->type, AST_LITERAL_INT);
     ASSERT_EQ_INT(expr->as.binary.right->type, AST_BINARY_MUL);
@@ -281,8 +284,7 @@ TEST(parser_binary_precedence) {
 
 TEST(parser_unary_neg) {
     setup();
-    AstNode *stmt = parse_first("-42");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("-42");
     ASSERT_EQ_INT(expr->type, AST_UNARY_NEG);
     ASSERT_EQ_INT(expr->as.unary.operand->type, AST_LITERAL_INT);
     teardown();
@@ -290,8 +292,7 @@ TEST(parser_unary_neg) {
 
 TEST(parser_unary_not) {
     setup();
-    AstNode *stmt = parse_first("!true");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("!true");
     ASSERT_EQ_INT(expr->type, AST_UNARY_NOT);
     ASSERT_EQ_INT(expr->as.unary.operand->type, AST_LITERAL_TRUE);
     teardown();
@@ -300,8 +301,7 @@ TEST(parser_unary_not) {
 TEST(parser_grouping) {
     setup();
     // (1 + 2) * 3 should parse as (1+2) * 3
-    AstNode *stmt = parse_first("(1 + 2) * 3");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("(1 + 2) * 3");
     ASSERT_EQ_INT(expr->type, AST_BINARY_MUL);
     // left should be grouping containing add
     AstNode *left = expr->as.binary.left;
@@ -312,8 +312,7 @@ TEST(parser_grouping) {
 
 TEST(parser_comparison) {
     setup();
-    AstNode *stmt = parse_first("a == b");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("a == b");
     ASSERT_EQ_INT(expr->type, AST_BINARY_EQ);
     teardown();
 }
@@ -321,8 +320,7 @@ TEST(parser_comparison) {
 TEST(parser_logical_and_or) {
     setup();
     // a && b || c should parse as (a && b) || c
-    AstNode *stmt = parse_first("a && b || c");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("a && b || c");
     ASSERT_EQ_INT(expr->type, AST_BINARY_OR);
     ASSERT_EQ_INT(expr->as.binary.left->type, AST_BINARY_AND);
     teardown();
@@ -675,8 +673,7 @@ TEST(parser_return_stmt) {
 
 TEST(parser_array_literal) {
     setup();
-    AstNode *stmt = parse_first("[1, 2, 3]");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("[1, 2, 3]");
     ASSERT_EQ_INT(expr->type, AST_ARRAY_LITERAL);
     ASSERT_EQ_INT(expr->as.array_literal.count, 3);
     teardown();
@@ -684,8 +681,7 @@ TEST(parser_array_literal) {
 
 TEST(parser_index_get) {
     setup();
-    AstNode *stmt = parse_first("arr[0]");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("arr[0]");
     ASSERT_EQ_INT(expr->type, AST_INDEX_GET);
     teardown();
 }
@@ -978,8 +974,7 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
 
 TEST(parser_member_access) {
     setup();
-    AstNode *stmt = parse_first("obj.field");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("obj.field");
     ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
     ASSERT_STR_EQ(expr->as.member_access.name, "field");
     teardown();
@@ -987,8 +982,7 @@ TEST(parser_member_access) {
 
 TEST(parser_member_generic_call_uintsize_type_arg) {
     setup();
-    AstNode *stmt = parse_first("mem.sizeOf<usize>()");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("mem.sizeOf<usize>()");
     ASSERT_EQ_INT(expr->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.call_expr.type_arg_count, 1);
     ASSERT_NOT_NULL(expr->as.call_expr.type_args);
@@ -999,8 +993,7 @@ TEST(parser_member_generic_call_uintsize_type_arg) {
 
 TEST(parser_member_generic_call_uintsize_after_binary_op) {
     setup();
-    AstNode *stmt = parse_first("mem.sizeOf<usize>() + mem.alignOf<isize>()");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("mem.sizeOf<usize>() + mem.alignOf<isize>()");
     ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
     ASSERT_EQ_INT(expr->as.binary.left->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.binary.left->as.call_expr.type_arg_count, 1);
@@ -1159,8 +1152,7 @@ TEST(parser_tuple_field_access) {
     setup();
     /* `t.0` parses as AST_MEMBER_ACCESS with member name "0" -- the
      * analyzer recognises digit-only names on tuple receivers. */
-    AstNode *stmt = parse_first("t.0");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("t.0");
     ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
     ASSERT_STR_EQ(expr->as.member_access.name, "0");
     teardown();
@@ -1280,8 +1272,7 @@ TEST(parser_tuple_field_access_chained) {
     /* `t.0.1` -- the lexer recognises that the second digit run starts
      * right after a member-access dot and refuses to extend it into a
      * float literal, so the chain tokenises as `t . 0 . 1`. */
-    AstNode *stmt = parse_first("t.0.1");
-    AstNode *expr = stmt->as.expr_stmt;
+    AstNode *expr = parse_expr("t.0.1");
     ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
     ASSERT_STR_EQ(expr->as.member_access.name, "1");
     AstNode *inner = expr->as.member_access.object;

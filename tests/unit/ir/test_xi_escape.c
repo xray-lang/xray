@@ -742,8 +742,7 @@ static XiValue *find_release_for_value(const XiFunc *f, const XiValue *target) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *value = blk->values[i];
-            if (value && value->op == XI_RELEASE && value->nargs == 1 &&
-                value->args[0] == target)
+            if (value && value->op == XI_RELEASE && value->nargs == 1 && value->args[0] == target)
                 return value;
         }
     }
@@ -769,18 +768,17 @@ static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, ui
 }
 
 static void test_arc_builtin_iterator_results_are_fresh(void) {
-    assert_arc_iterator_method_result_is_fresh(
-        &t_string, XI_CALL_METHOD, "runes", "discarded string.runes iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(&t_string, XI_CALL_METHOD, "runes",
+                                               "discarded string.runes iterator must be released");
     assert_arc_iterator_method_result_is_fresh(
         &t_array, XI_CALL_METHOD_DIRECT, "entriesIterator",
         "discarded array entries iterator must be released after direct lowering");
-    assert_arc_iterator_method_result_is_fresh(
-        &t_map, XI_CALL_METHOD, "iterator", "discarded map iterator must be released");
-    assert_arc_iterator_method_result_is_fresh(
-        &t_set, XI_CALL_METHOD, "iterator", "discarded set iterator must be released");
-    assert_arc_iterator_method_result_is_fresh(
-        &t_json, XI_CALL_METHOD, "entriesIterator",
-        "discarded Json entries iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(&t_map, XI_CALL_METHOD, "iterator",
+                                               "discarded map iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(&t_set, XI_CALL_METHOD, "iterator",
+                                               "discarded set iterator must be released");
+    assert_arc_iterator_method_result_is_fresh(&t_json, XI_CALL_METHOD, "entriesIterator",
+                                               "discarded Json entries iterator must be released");
 }
 
 static void test_arc_generator_iterator_result_is_fresh(void) {
@@ -839,8 +837,7 @@ static void test_arc_err_check_carries_cold_edge_cleanup(void) {
     int producer_uses_before = fallible->uses;
     xi_arc_attach_error_cleanups(f);
 
-    ASSERT_EQ(check->nargs, 1,
-              "unit ERR_CHECK should carry one cold-edge owner");
+    ASSERT_EQ(check->nargs, 1, "unit ERR_CHECK should carry one cold-edge owner");
     ASSERT_EQ(fallible->uses, producer_uses_before,
               "ERR_CHECK must not force an otherwise-unused producer result to materialize");
     ASSERT_EQ(check->args[XI_ERR_CHECK_CLEANUP_ARG_BASE] == builder, true,
@@ -919,6 +916,59 @@ static void test_arc_err_check_cleanup_requires_dominating_owner(void) {
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
               "dominance-filtered error cleanup must preserve the ARC contract");
+    xi_func_free(f);
+}
+
+static void test_arc_err_check_skips_boxed_ref_load_borrow(void) {
+    XiFunc *f = make_func("arc_err_check_boxed_ref_borrow", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *place = xi_value_new(f, entry, XI_PARAM, &t_array, 0);
+    set_single_param(f, place);
+    XiValue *borrowed = xi_value_new(f, entry, XI_PLACE_LOAD, &t_array, 1);
+    borrowed->args[0] = place;
+    XiValue *boxed = xi_value_new(f, entry, XI_BOX, &t_array, 1);
+    boxed->args[0] = borrowed;
+    XiValue *fallible = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_int, 0);
+    fallible->aux = (void *) "fallible";
+    fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
+    use->args[0] = boxed;
+    xi_block_set_return(entry, use);
+
+    xi_arc_attach_error_cleanups(f);
+
+    ASSERT_EQ(check->nargs, 0,
+              "representation adapter over ref-loaded Array must stay borrowed on error edge");
+    xi_func_free(f);
+}
+
+static void test_arc_err_check_keeps_boxed_fresh_owner(void) {
+    XiFunc *f = make_func("arc_err_check_boxed_fresh_owner", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
+    builder->aux = (void *) "StringBuilder";
+    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *boxed = xi_value_new(f, entry, XI_BOX, &t_stringbuilder, 1);
+    boxed->args[0] = builder;
+    XiValue *fallible = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_int, 0);
+    fallible->aux = (void *) "fallible";
+    fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
+    use->args[0] = boxed;
+    xi_block_set_return(entry, use);
+
+    xi_arc_attach_error_cleanups(f);
+
+    ASSERT_EQ(check->nargs, 1,
+              "representation adapter over a fresh owner must retain cold-edge cleanup");
+    ASSERT_EQ(check->args[0] == boxed, true,
+              "cold edge should release the live boxed representation of the fresh owner");
     xi_func_free(f);
 }
 
@@ -1270,6 +1320,8 @@ int main(void) {
     test_arc_err_check_carries_cold_edge_cleanup();
     test_arc_err_check_without_throwing_source_stays_operand_free();
     test_arc_err_check_cleanup_requires_dominating_owner();
+    test_arc_err_check_skips_boxed_ref_load_borrow();
+    test_arc_err_check_keeps_boxed_fresh_owner();
     test_arc_span_borrow_flows_through_phi();
     test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();

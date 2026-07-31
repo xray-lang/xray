@@ -488,8 +488,11 @@ static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
 static bool stmt_function_may_suspend(XiLower *l) {
     if (!l || !l->func)
         return true;
-    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) & XA_SEM_EFFECT_SUSPEND) !=
-        0)
+    /* Storage placement asks whether control can leave this body and come back,
+     * so both suspension kinds count: a generator frame outlives `yield expr`
+     * exactly as a coroutine frame outlives `await`. */
+    if (((l->func->semantic_effects | l->func->unknown_semantic_effects) &
+         XA_SEM_EFFECT_ANY_SUSPEND) != 0)
         return true;
     if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
         return false;

@@ -4,7 +4,9 @@ contains=value v7 op=LOCAL_ADDR kind=view rep=rawptr c_type=void *
 c_regex=static int64_t .*_bump_[0-9]+\(xrt_closure_t \*_cl, int64_t \* p0\)
 c_regex=static int64_t .*_fill_[0-9]+\(xrt_closure_t \*_cl, int64_t \* p0\)
 c_contains=(*(int64_t *)(v0))
-c_contains=(void *)(&
+# Generated pointer casts are now the exact pointer type instead of `void *`;
+# the address-of itself is unchanged.
+c_regex=\(int64_t \*\)\(&v[0-9]+\)
 c_not_contains=_cfn
 c_not_contains=_boxed
 c_not_contains=xrt_box

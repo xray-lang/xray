@@ -10,10 +10,10 @@
 #                          XRAY_TEST_JOBS also works)
 #   XRAY_AOT_ISOLATE_BUILD_CACHE_DIR
 #                          persistent AOT object cache for cold symbol-gate
-#                          builds (default: build/.xray-test-cache/aot-isolate-objects)
+#                          builds (default: .cache/xray-test/aot-isolate-objects)
 #   XRAY_AOT_ISOLATE_BIN_CACHE_DIR
 #                          persistent native binary cache for warm symbol-gate
-#                          reruns (default: build/.xray-test-cache/aot-isolate-bin/<toolchain-key>)
+#                          reruns (default: .cache/xray-test/aot-isolate-bin/<toolchain-key>)
 #
 # Pure tiny AOT cases and runtime-time-sleep are also hard size gates. They keep
 # optimized paths from silently drifting back toward VM/toolchain-shaped

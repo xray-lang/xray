@@ -81,6 +81,12 @@ XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
 /* Verify f and all nested children. Returns true if every function passes. */
 XR_FUNC bool xi_arc_verify_tree(XiFunc *f, XiArcVerifyReport *report);
 
+/* Mandatory narrow check after late ERR_CHECK cleanup publication.  It rejects
+ * representation adapters over borrowed values without re-running the full
+ * post-optimization balance lattice (whose debug-only pass checks may include
+ * benign immortal-value rewrites). */
+XR_FUNC void xi_arc_verify_error_cleanups_or_ice(XiFunc *f, const char *stage_label);
+
 /* Pipeline entry point: verify the whole tree and, on violation, print the
  * diagnostic + counterexample path, dump the offending function's IR, and
  * abort() as an internal compiler error. `stage_label` names the pass/point
