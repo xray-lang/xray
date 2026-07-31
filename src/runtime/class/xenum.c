@@ -401,6 +401,18 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
         return value;
     XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
     value = xr_enum_adt_construct_in(&core->module_alloc, enum_type, member_index, NULL, 0);
+    if (value) {
+        /* A unit variant carries no payload and never changes, and this one
+         * value is cached on the enum type for the life of the module. That
+         * makes it an immortal shared constant, not a coroutine-local object:
+         * mark it so, or crossing an execution boundary -- a task's error
+         * payload, a channel send -- fails the publish check that requires
+         * shared or transferred storage. Sticky RC keeps every retain/release
+         * on it a no-op, which is what an immortal value wants on both the
+         * atomic and the thread-local fast path. */
+        XR_OBJ_SET_STORAGE(&value->hdr, XR_OBJ_STORAGE_SHARED);
+        atomic_store_explicit(&value->hdr.refcount, XR_RC_STICKY, memory_order_relaxed);
+    }
     enum_type->members[member_index].value = value;
     return value;
 }
