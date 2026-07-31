@@ -1,0 +1,5 @@
+var ROWS: [Array<int>; 1] = [[1, 2]]
+
+fn xray_top_var_managed_array_reject() -> int {
+    return len(ROWS[0])
+}

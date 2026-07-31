@@ -1,0 +1,30 @@
+struct CpuState {
+    id: int
+    ticks: int
+    scratch: [int; 2]
+}
+
+var COUNTERS: [int; 3] = [1, 2, 3]
+var MATRIX: [[int; 2]; 2] = [
+    [4, 5],
+    [6, 7],
+]
+var CUBE: [[[int; 2]; 2]; 2] = [
+    [[8, 9], [10, 11]],
+    [[12, 13], [14, 15]],
+]
+var CPUS: [CpuState; 3] = [
+    CpuState{id: 0, ticks: 16, scratch: [17, 18]},
+    CpuState{id: 1, ticks: 19, scratch: [20, 21]},
+    CpuState{id: 2, ticks: 22, scratch: [23, 24]},
+]
+
+fn xray_top_var_fixed_array_static(cpu: int, lane: int) -> int {
+    COUNTERS[cpu] = COUNTERS[cpu] + 1
+    MATRIX[1][lane] = MATRIX[1][lane] + 2
+    CUBE[1][0][lane] = CUBE[1][0][lane] + 3
+    CPUS[cpu].ticks = CPUS[cpu].ticks + 4
+    CPUS[cpu].scratch[lane] = CPUS[cpu].scratch[lane] + 5
+    return COUNTERS[cpu] + MATRIX[1][lane] + CUBE[1][0][lane] +
+        CPUS[cpu].id + CPUS[cpu].ticks + CPUS[cpu].scratch[lane]
+}

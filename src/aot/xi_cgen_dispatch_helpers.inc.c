@@ -11211,6 +11211,8 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
+    if (emit_static_fixed_struct_array_field_set_expr(ctx, out, v))
+        return;
     XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
     const XiValue *place_load = xicgen_struct_place_load(v->args[0]);
     const XaotValuePlan *place_load_plan = place_load ? cg_value_plan(ctx, place_load) : NULL;
@@ -12757,6 +12759,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_codegen_abort_expr(out);
         return;
     }
+    if (emit_static_fixed_array_index_set_from_value(ctx, out, v))
+        return;
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
     if (emit_fixed_array_index_set_expr(ctx, out, f, v))

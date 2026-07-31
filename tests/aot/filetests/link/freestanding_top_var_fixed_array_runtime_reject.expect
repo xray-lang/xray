@@ -1,0 +1,6 @@
+args=--profile freestanding
+status=fail
+contains=freestanding profile rejects top-level var declaration
+contains=recursively scalar fixed-array/struct/union consteval initializers are supported as static mutable module storage
+not_contains=xrt_shared
+not_contains=CRASH

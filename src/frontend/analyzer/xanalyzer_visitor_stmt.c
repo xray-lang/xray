@@ -29,7 +29,8 @@ static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
 
 static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
                                                                VarDeclNode *var,
-                                                               XrType *declared_type);
+                                                               XrType *declared_type,
+                                                               bool allow_fixed_array);
 
 static bool xa_freestanding_top_const_aggregate_value_allowed(const XrCtValue *value,
                                                               bool allow_string_array_elements);
@@ -5444,7 +5445,8 @@ static bool xa_freestanding_top_const_allowed(XaInferContext *ctx, VarDeclNode *
 }
 
 static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ctx, VarDeclNode *var,
-                                                              bool allow_aggregate) {
+                                                              bool allow_aggregate,
+                                                              bool allow_fixed_array) {
     if (!ctx || !ctx->analyzer || !var || !var->initializer)
         return false;
     XrCtValue value = {0};
@@ -5463,6 +5465,9 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
         case XR_CT_STRUCT_VALUE:
             return allow_aggregate &&
                    xa_freestanding_top_const_aggregate_value_allowed(&value, false);
+        case XR_CT_FIXED_ARRAY:
+            return allow_aggregate && allow_fixed_array &&
+                   xa_freestanding_top_const_root_fixed_array_allowed(&value);
         default:
             return false;
     }
@@ -5470,11 +5475,12 @@ static bool xa_freestanding_shared_static_initializer_allowed(XaInferContext *ct
 
 static bool xa_freestanding_top_var_static_initializer_allowed(XaInferContext *ctx,
                                                                VarDeclNode *var,
-                                                               XrType *declared_type) {
+                                                               XrType *declared_type,
+                                                               bool allow_fixed_array) {
     if (!var)
         return false;
     if (var->initializer)
-        return xa_freestanding_shared_static_initializer_allowed(ctx, var, true);
+        return xa_freestanding_shared_static_initializer_allowed(ctx, var, true, allow_fixed_array);
     if (!declared_type || XR_TYPE_IS_UNKNOWN(declared_type) ||
         !xa_type_is_default_initializable(ctx, declared_type))
         return false;
@@ -8250,8 +8256,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     }
     if (xa_freestanding_profile_enabled(ctx->analyzer) && xa_is_module_level_scope(ctx->analyzer) &&
         !(node->type == AST_CONST_DECL && xa_freestanding_top_const_allowed(ctx, var)) &&
-        !(node->type == AST_VAR_DECL && xa_freestanding_top_var_static_initializer_allowed(
-                                            ctx, var, links ? links->declared_type : NULL))) {
+        !(node->type == AST_VAR_DECL &&
+          xa_freestanding_top_var_static_initializer_allowed(
+              ctx, var, links ? links->declared_type : NULL, !sym->is_exported))) {
         xa_freestanding_report_unavailable(
             ctx, node,
             node->type == AST_CONST_DECL ? "top-level const declaration"
@@ -8263,8 +8270,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                   "freestanding slice"
                 : "only int/float/bool/char/string/null consteval initializers, typed "
                   "int/float/bool zero defaults, typed nullable scalar/string/null defaults, or "
-                  "recursively scalar struct/union consteval initializers are supported as static "
-                  "mutable module storage in the current freestanding slice");
+                  "module-local recursively scalar fixed-array/struct/union consteval "
+                  "initializers are "
+                  "supported as static mutable module storage in the current freestanding slice");
     }
 
     // Variable declarations must have a type annotation or initializer.

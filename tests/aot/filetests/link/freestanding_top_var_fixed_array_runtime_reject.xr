@@ -1,0 +1,9 @@
+fn runtimeOnly() -> int {
+    return 1
+}
+
+var COUNTERS: [int; 2] = [runtimeOnly(), 2]
+
+fn xray_top_var_fixed_array_runtime_reject() -> int {
+    return COUNTERS[0]
+}
