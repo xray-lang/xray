@@ -1,0 +1,26 @@
+// Iterating an UNBOUNDED type parameter must be rejected at compile time.
+//
+// Nothing is known about a bare T inside a generic body, so `for (i in xs)`
+// cannot be given an element type. Rejecting it here beats deferring to a
+// runtime "method 'iterator' not found".
+//
+// The diagnostic names the fix (add an iterable bound) rather than listing the
+// concrete built-ins, which is what the pre-fix message did — it said
+// "expected an Array, Map, Set, string, ..." even though the collection was a
+// type parameter and no concrete type could ever be written there.
+//
+// The positive half lives in
+// tests/regression/12_type_checking/1237_for_in_type_param.xr.
+
+class Summer {
+    constructor() {}
+
+    total<T>(xs: T) -> int {
+        var n = 0
+        for (i in xs) { n = n + i }
+        return n
+    }
+}
+
+var c = Summer()
+print(c.total([1, 2, 3]))

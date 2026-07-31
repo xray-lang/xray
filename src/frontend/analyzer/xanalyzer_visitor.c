@@ -1520,10 +1520,9 @@ static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *nod
         double value = node->as.literal.raw_value.float_val;
         if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Floating literal is out of range for contextual type 'f32'",
-                                       &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "Floating literal is out of range for contextual type 'f32'", &loc);
         }
         return target;
     }
@@ -1673,12 +1672,19 @@ static bool xa_is_hashable_interface_type(XrType *type) {
            strcmp(type->instance.class_name, "Hashable") == 0;
 }
 
-static bool xa_type_param_link_has_hashable(XaSymbolLinks *links, const char *name,
-                                            bool *out_found) {
+// Constraint list a single declaration records for the type parameter `name`,
+// or NULL when that declaration does not declare it. *out_found distinguishes
+// "declares it, unconstrained" from "does not declare it" — the caller must not
+// keep searching outward once a declaration owns the name, or an outer `T`
+// would answer for an inner one.
+static XrType **xa_links_type_param_constraints(XaSymbolLinks *links, const char *name,
+                                                int *out_count, bool *out_found) {
+    if (out_count)
+        *out_count = 0;
     if (out_found)
         *out_found = false;
     if (!links || !name)
-        return false;
+        return NULL;
     int count = xa_symbol_links_get_type_param_count(links);
     for (int i = 0; i < count; i++) {
         const char *param_name = xa_symbol_links_get_type_param_name(links, i);
@@ -1686,64 +1692,65 @@ static bool xa_type_param_link_has_hashable(XaSymbolLinks *links, const char *na
             continue;
         if (out_found)
             *out_found = true;
-        int constraint_count = 0;
-        XrType **constraints =
-            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
-        for (int j = 0; j < constraint_count; j++) {
-            if (xa_is_hashable_interface_type(constraints ? constraints[j] : NULL))
-                return true;
-        }
-        return false;
+        return xa_symbol_links_get_type_param_constraints(links, i, out_count);
     }
-    return false;
+    return NULL;
 }
 
-static bool xa_type_param_has_hashable_constraint(XaInferContext *ctx, XaSymbolLinks *generic_links,
-                                                  const char *name, bool *out_found) {
+// Resolve the `<T: A & B>` bounds of the type parameter `name` visible here:
+// the declaration the caller already has, else the nearest enclosing generic
+// function or class. Shared by every constraint-driven check so they all agree
+// on which declaration owns a given name.
+static XrType **xa_lookup_type_param_constraints(XaInferContext *ctx, XaSymbolLinks *generic_links,
+                                                 const char *name, int *out_count,
+                                                 bool *out_found) {
     bool found = false;
-    if (xa_type_param_link_has_hashable(generic_links, name, &found)) {
-        if (out_found)
-            *out_found = true;
-        return true;
-    }
+    XrType **constraints = xa_links_type_param_constraints(generic_links, name, out_count, &found);
     if (found) {
         if (out_found)
             *out_found = true;
-        return false;
+        return constraints;
     }
 
     for (XaScope *scope = ctx && ctx->analyzer ? ctx->analyzer->current_scope : NULL; scope;
          scope = scope->parent) {
         if (scope->function_symbol) {
-            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->function_symbol);
-            if (xa_type_param_link_has_hashable(links, name, &found)) {
-                if (out_found)
-                    *out_found = true;
-                return true;
-            }
+            constraints = xa_links_type_param_constraints(
+                xa_analyzer_get_links(ctx->analyzer, scope->function_symbol), name, out_count,
+                &found);
             if (found) {
                 if (out_found)
                     *out_found = true;
-                return false;
+                return constraints;
             }
         }
         if (scope->class_symbol) {
-            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->class_symbol);
-            if (xa_type_param_link_has_hashable(links, name, &found)) {
-                if (out_found)
-                    *out_found = true;
-                return true;
-            }
+            constraints = xa_links_type_param_constraints(
+                xa_analyzer_get_links(ctx->analyzer, scope->class_symbol), name, out_count, &found);
             if (found) {
                 if (out_found)
                     *out_found = true;
-                return false;
+                return constraints;
             }
         }
     }
 
+    if (out_count)
+        *out_count = 0;
     if (out_found)
         *out_found = false;
+    return NULL;
+}
+
+static bool xa_type_param_has_hashable_constraint(XaInferContext *ctx, XaSymbolLinks *generic_links,
+                                                  const char *name, bool *out_found) {
+    int count = 0;
+    XrType **constraints =
+        xa_lookup_type_param_constraints(ctx, generic_links, name, &count, out_found);
+    for (int i = 0; i < count; i++) {
+        if (xa_is_hashable_interface_type(constraints ? constraints[i] : NULL))
+            return true;
+    }
     return false;
 }
 
@@ -6082,6 +6089,40 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                              xr_type_to_string(coll_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else if (coll_type->kind == XR_KIND_TYPE_PARAM) {
+                    /* A generic parameter is iterable exactly when one of its
+                     * declared bounds is: `<T: Iterable<int>>` makes `for (i in
+                     * xs)` legal and gives i the bound's element type. Nothing
+                     * else is known about T inside the generic body, so an
+                     * unbounded T must be rejected rather than deferred to a
+                     * runtime "method 'iterator' not found". */
+                    const char *tp_name = coll_type->type_param.name;
+                    int constraint_count = 0;
+                    XrType **constraints = xa_lookup_type_param_constraints(
+                        ctx, NULL, tp_name, &constraint_count, NULL);
+                    XrType *elem = NULL;
+                    bool iterable = false;
+                    for (int ci = 0; ci < constraint_count; ci++) {
+                        if (constraints && constraints[ci] &&
+                            xa_analyzer_is_iterable(ctx->analyzer, constraints[ci], &elem) &&
+                            elem) {
+                            iterable = true;
+                            break;
+                        }
+                    }
+                    if (iterable) {
+                        item_type = elem;
+                    } else {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "type parameter '%s' is not iterable; add an iterable bound such "
+                                 "as '<%s: Iterable<int>>' to iterate it",
+                                 tp_name ? tp_name : "?", tp_name ? tp_name : "T");
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    }
                 } else {
                     /* Anything else (instance of a class / struct, json
                      * literal type, etc.) iterates only via the
