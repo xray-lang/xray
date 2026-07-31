@@ -459,6 +459,15 @@ static void task_store_result_payload(XrTask *task, XrValue value) {
     atomic_store_explicit(&task->payload_taken, 0, memory_order_relaxed);
 }
 
+/* Record which channel the terminal error arrived on, so an awaiter can
+ * re-raise it on that same channel instead of guessing. */
+static void task_store_error_channel(XrTask *task, bool error_is_value) {
+    if (error_is_value)
+        task->flags |= XR_TASK_FLG_ERROR_IS_VALUE;
+    else
+        task->flags &= (uint8_t) ~XR_TASK_FLG_ERROR_IS_VALUE;
+}
+
 static void task_store_error_payload(XrTask *task, XrValue value) {
     uint8_t owner = task_payload_owner_for_value(value);
     if (task->error_owner != XR_TASK_PAYLOAD_NONE &&
@@ -512,11 +521,12 @@ void xr_task_complete(XrTask *task, XrValue result) {
     xr_task_fire_completion(task);
 }
 
-void xr_task_fail(XrTask *task, XrValue error) {
+void xr_task_fail(XrTask *task, XrValue error, bool error_is_value) {
     if (!task)
         return;
     error = xr_task_validate_publish_value(task, error);
     task_store_error_payload(task, error);
+    task_store_error_channel(task, error_is_value);
     if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING), XR_TASK_FAILED))
         return;
     xr_task_fire_completion(task);
@@ -711,11 +721,12 @@ void xr_task_cancel_tree(XrTask *task) {
 
 /* ========== Error Propagation ========== */
 
-void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
+void xr_task_fail_with_propagation(XrTask *task, XrValue error, bool error_is_value) {
     if (!task)
         return;
     error = xr_task_validate_publish_value(task, error);
     task_store_error_payload(task, error);
+    task_store_error_channel(task, error_is_value);
 
     child_lock_acquire(&task->child_lock);
     bool has_children = (task->first_child != NULL);
