@@ -2296,12 +2296,17 @@ static XrValue aot_task_result_from_block(const XrAotContext *ctx, XrTask *task,
     return aot_task_result_member(ctx, 4);
 }
 
+/* Re-raise an awaited task's terminal failure on the channel the child raised
+ * it on (task 248).  A cancellation is always a panic: nobody in this frame
+ * threw it as a value. */
 static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task) {
     uint8_t state =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
     XrValue error;
+    bool error_is_value = false;
     if (state == XR_TASK_FAILED) {
         error = aot_task_failure_value(ctx, task);
+        error_is_value = xr_task_error_is_value(task);
     } else {
         XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
         if (aot_vm_host_available(vm_host) && vm_host.ops->exception_new) {
@@ -2313,7 +2318,7 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
             error = msg ? xr_string_value(msg) : xr_null();
         }
     }
-    return xr_aot_error(error, false);
+    return xr_aot_error(error, error_is_value);
 }
 
 static XrAotResult aot_task_already_taken_error(const XrAotContext *ctx, XrTask *task) {

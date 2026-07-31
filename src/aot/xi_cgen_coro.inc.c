@@ -476,15 +476,38 @@ static uint16_t cg_coro_param_count(const XiFunc *f) {
     return f ? (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0)) : 0;
 }
 
-static void emit_coro_scope_exit_error_check(FILE *out, uint32_t id) {
-    fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", id);
+/* An error crossing a coroutine boundary keeps its channel (task 248): a value
+ * error lands in the pending-error slot for the following ERR_CHECK to route to
+ * `catch (e)` or propagate by value, a panic keeps unwinding out of the frame.
+ * Shared by every re-raising boundary in a generated coroutine. */
+static void emit_coro_boundary_error_check(FILE *out, const char *temp, uint32_t id) {
+    fprintf(out, "    if (%s%u.kind == XR_AOT_RUN_ERROR) {\n", temp, id);
     fprintf(out, "        f->state = 0;\n");
-    fprintf(out, "        if (_scope_exit_%u.error_is_value) {\n", id);
-    fprintf(out, "            xrt_pending_error = _scope_exit_%u.error;\n", id);
+    fprintf(out, "        if (%s%u.error_is_value) {\n", temp, id);
+    fprintf(out, "            xrt_pending_error = %s%u.error;\n", temp, id);
     fprintf(out, "        } else {\n");
-    fprintf(out, "            return _scope_exit_%u;\n", id);
+    fprintf(out, "            return %s%u;\n", temp, id);
     fprintf(out, "        }\n");
     fprintf(out, "    }\n");
+}
+
+static void emit_coro_scope_exit_error_check(FILE *out, uint32_t id) {
+    emit_coro_boundary_error_check(out, "_scope_exit_", id);
+}
+
+/* Tail of a coroutine-to-coroutine call's terminal-failure branch.  The callee
+ * ended on the value channel: hand the error to this frame's pending-error slot
+ * and rejoin the normal path, where the call's ERR_CHECK routes it exactly as it
+ * would a same-frame throw.  A panic, or a cancellation, still ends this frame.
+ * Emitted inside the branch, after the caller's own frame cleanup. */
+static void emit_coro_call_error_channel_dispatch(FILE *out, uint32_t id, int sid) {
+    fprintf(out, "        f->state = 0;\n");
+    fprintf(out, "        if (_call_%u.kind == XR_AOT_RUN_ERROR && _call_%u.error_is_value) {\n",
+            id, id);
+    fprintf(out, "            xrt_pending_error = _call_%u.error;\n", id);
+    fprintf(out, "            goto S%d_DONE;\n", sid);
+    fprintf(out, "        }\n");
+    fprintf(out, "        return _call_%u;\n", id);
 }
 
 static void emit_aot_coro_op_stmt(FILE *out, const XiFunc *f, const XiValue *v) {
@@ -2414,8 +2437,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     emit_coro_callable_switch_release(ctx, out, plan, v, "        ");
     fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
     fprintf(out, "        f->call_target_id_%u = 0;\n", v->id);
-    fprintf(out, "        f->state = 0;\n");
-    fprintf(out, "        return _call_%u;\n", v->id);
+    emit_coro_call_error_channel_dispatch(out, v->id, sid);
     fprintf(out, "    }\n");
     fprintf(out, "    return _call_%u;\n", v->id);
     fprintf(out, "S%d_DONE:;\n", sid);
@@ -2849,10 +2871,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _await_%u;\n", v->id);
-        fprintf(out, "    }\n");
+        emit_coro_boundary_error_check(out, "_await_", v->id);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
@@ -2935,10 +2954,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
-        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _await_%u;\n", v->id);
-        fprintf(out, "    }\n");
+        emit_coro_boundary_error_check(out, "_await_", v->id);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if (one_shot_await && !await_all && !await_any &&
@@ -3074,8 +3090,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _call_%u;\n", v->id);
+        emit_coro_call_error_channel_dispatch(out, v->id, sid);
         fprintf(out, "    }\n");
         fprintf(out, "    return _call_%u;\n", v->id);
         fprintf(out, "S%d:;\n", sid);
@@ -3115,8 +3130,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _call_%u;\n", v->id);
+        emit_coro_call_error_channel_dispatch(out, v->id, sid);
         fprintf(out, "    }\n");
         fprintf(out, "    return _call_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
@@ -4794,14 +4808,29 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_ERR_CHECK) {
-        if (cg_coro_value_has_storage(f, v)) {
-            fprintf(out, "    ");
-            emit_vref(out, v);
-            if (cg_rep(v) == XR_REP_TAGGED)
-                fprintf(out, " = XR_FROM_BOOL(xrt_has_pending_error());\n");
-            else
-                fprintf(out, " = xrt_has_pending_error();\n");
+        /* Bool form: inside a try, the CFG branches to the catch on the result.
+         * Unit form: outside one, an error propagates by ending this frame --
+         * for a coroutine that means a value-channel XR_AOT_RUN_ERROR, which
+         * the worker records on the task and the awaiter re-raises by value.
+         * Generating nothing for the unit form is how a value error raised
+         * across a coroutine boundary used to vanish (task 248). */
+        if (cg_value_type_is_bool(v)) {
+            if (cg_coro_value_has_storage(f, v)) {
+                fprintf(out, "    ");
+                emit_vref(out, v);
+                if (cg_rep(v) == XR_REP_TAGGED)
+                    fprintf(out, " = XR_FROM_BOOL(xrt_has_pending_error());\n");
+                else
+                    fprintf(out, " = xrt_has_pending_error();\n");
+            }
+            return;
         }
+        fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
+        fprintf(out, "        XrValue _err_check_%u = xrt_pending_error;\n", v->id);
+        fprintf(out, "        xrt_pending_error = XR_NULL_VAL;\n");
+        fprintf(out, "        f->state = 0;\n");
+        fprintf(out, "        return xr_aot_error(_err_check_%u, true);\n", v->id);
+        fprintf(out, "    }\n");
         return;
     }
 
