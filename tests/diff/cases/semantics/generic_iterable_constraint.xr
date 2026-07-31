@@ -2,11 +2,13 @@
 // VM/AOT differential coverage for Iterable<T> / Lengthable generic
 // constraints.
 //
-// The two instantiation shapes lower differently and both are covered:
+// The instantiation shapes lower differently and all are covered:
 //   - a named type argument (Range) monomorphizes, so the clone iterates
 //     through len()/index;
 //   - a container type argument does not synthesize a type ref, so the body
-//     stays erased and iterates through the runtime iterator() protocol.
+//     stays erased and iterates through the runtime iterator() protocol;
+//   - an Iterator<int> from a generator monomorphizes and then drives the
+//     iterator protocol on the generator itself.
 //
 // Each generic here sticks to one of the two shapes. A single generic
 // function instantiated both ways in one program currently fails to build
@@ -54,6 +56,26 @@ fn sizeOfRange<T: Lengthable>(x: T) -> int {
     return len(x)
 }
 
+fn totalIterator<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+/* Straight-line yields on purpose. A generator that carries a loop variable
+ * across its yields emits phi temporaries that AOT cgen fails to declare once
+ * the Iterator is passed as a value instead of being iterated in place — a
+ * pre-existing defect reachable without generics
+ * (`fn f(xs: Iterator<int>)` + `f(upTo(4))` fails the same way on main). */
+fn upTo(limit: int) -> Iterator<int> {
+    yield 1
+    yield 2
+    yield 3
+    yield limit
+}
+
 var s: Set<int> = #[1, 2, 3]
 var m: Map<string, int> = #{"aa": 1, "bbb": 2}
 var j: Json = { "a": 1, "bb": 2 }
@@ -72,3 +94,4 @@ print(sizeOfContainer(m))
 print(sizeOfContainer(j))
 print(sizeOfRange(1..4))
 print(sizeOfRange(r))
+print(totalIterator(upTo(4)))

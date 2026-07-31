@@ -27,6 +27,12 @@
 // interfaces only by declaring them, never by name. Covered in
 // tests/compile_errors/type/024_generic_user_range_not_iterable.xr.
 //
+// The constraint admits every for-in domain that runs through the iterator
+// protocol, including the Iterator<T> a generator returns. Channel<T> is the
+// one for-in form left out: it lowers to a dedicated receive loop and carries
+// no iterator(), so admitting it would compile and then panic. Covered in
+// tests/compile_errors/type/025_channel_not_iterable_constraint.xr.
+//
 // Generic functions here are declared at file scope: only file-scope generics
 // are monomorphized, so a nested one keeps its type parameter into lowering
 // and iterates through the runtime iterator() protocol instead
@@ -165,6 +171,21 @@ fn test_iterable_and_lengthable_intersection() {
 @test
 fn test_explicit_type_argument() {
     assert_eq(total<Array<int>>([2, 3]), 5)
+}
+
+// ===== Iterator<T>: what a generator returns is its own iterable =====
+fn upTo(limit: int) -> Iterator<int> {
+    var i = 1
+    while (i <= limit) {
+        yield i
+        i = i + 1
+    }
+}
+
+@test
+fn test_generator_iterator_through_type_param() {
+    assert_eq(total(upTo(4)), 10)  // 1+2+3+4
+    assert_eq(count(upTo(3)), 3)
 }
 
 // ===== Nested generic: no monomorphization, runtime iterator() protocol =====

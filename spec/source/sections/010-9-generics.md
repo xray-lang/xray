@@ -87,7 +87,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
 | `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Map、Json、string、Range 与自定义 `iterator()` 满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
+| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map、Set、string、Json、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
@@ -289,7 +289,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
 | `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()` satisfy this constraint. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
+| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map, Set, string, Json, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
