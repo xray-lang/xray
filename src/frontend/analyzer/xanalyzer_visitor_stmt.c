@@ -252,7 +252,7 @@ static bool xa_symbol_is_local_thread_handle(XaSymbol *sym, XaScope *current_sco
     if (xa_symbol_has_shared_storage(sym) || sym->is_exported || sym->is_imported)
         return false;
     XaSymbolLinks *links = &sym->links;
-    return links->type && xr_type_is_named_class(links->type, "Thread");
+    return links->type && xr_type_is_builtin_named_class(links->type, "Thread");
 }
 
 static XrType *xa_lifecycle_lint_param_type(XaInferContext *ctx, XrParamNode *param) {
@@ -5898,7 +5898,7 @@ static bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *ex
          receiver_type->kind == XR_KIND_FIXED_ARRAY)) {
         preserves = true;
     } else if (strcmp(member->name, "borrowPtr") == 0 && receiver_type &&
-               xr_type_is_named_class(receiver_type, "Buffer")) {
+               xr_type_is_builtin_named_class(receiver_type, "Buffer")) {
         preserves = true;
     } else if (strcmp(member->name, "offset") == 0 && receiver_type &&
                XR_TYPE_IS_POINTER(receiver_type)) {
@@ -5957,7 +5957,7 @@ XR_FUNC bool xa_type_can_own_span_view(XrType *type) {
         return false;
     if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_STRING(type))
         return true;
-    return xr_type_is_named_class(type, "Buffer");
+    return xr_type_is_builtin_named_class(type, "Buffer");
 }
 
 XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
@@ -7742,7 +7742,8 @@ static bool xa_return_storage_prepass_is_channel_receive(XaReturnStoragePrepass 
         return false;
     AstNode *receiver = callee->as.member_access.object;
     XrType *type = receiver ? xa_analyzer_get_node_type(scan->ctx->analyzer, receiver) : NULL;
-    return type && (type->kind == XR_KIND_CHANNEL || xr_type_is_named_class(type, "Channel"));
+    return type &&
+           (type->kind == XR_KIND_CHANNEL || xr_type_is_builtin_named_class(type, "Channel"));
 }
 
 static void xa_return_storage_prepass_bind_pattern(XaReturnStoragePrepass *scan, AstNode *pattern,

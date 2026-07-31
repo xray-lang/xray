@@ -329,7 +329,7 @@ static bool cg_ownership_op_is_noop(bool freestanding_profile, const XiValue *v)
         return false;
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
     if (freestanding_profile && arg && arg->type)
-        return !xr_type_is_named_class(arg->type, "Buffer");
+        return !xr_type_is_builtin_named_class(arg->type, "Buffer");
     return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 

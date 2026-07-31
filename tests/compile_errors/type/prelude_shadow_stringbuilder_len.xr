@@ -1,0 +1,15 @@
+// Same rule for a builtin that has its own construction path: `StringBuilder(0)`
+// must build the user class in scope, not the builtin, so the resulting value
+// is not Lengthable and len() is a compile error.
+
+class StringBuilder {
+    v: int
+    constructor(v: int) { this.v = v }
+}
+
+fn main() {
+    var b = StringBuilder(0)
+    print(len(b))
+}
+
+main()

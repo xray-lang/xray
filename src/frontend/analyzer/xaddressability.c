@@ -167,7 +167,7 @@ static bool pointer_projection_receiver(XaInferContext *ctx, AstNode *call_expr,
          receiver_type->kind == XR_KIND_FIXED_ARRAY)) {
         projection = true;
     } else if (strcmp(member->name, "borrowPtr") == 0 && receiver_type &&
-               xr_type_is_named_class(receiver_type, "Buffer")) {
+               xr_type_is_builtin_named_class(receiver_type, "Buffer")) {
         projection = true;
     }
     if (projection && out_receiver)

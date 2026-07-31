@@ -189,7 +189,7 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
         cg_emit_str_value(ctx, out, (const char *) v->aux);
-    } else if (xr_type_is_named_class(v->type, "BigInt") && v->aux) {
+    } else if (xr_type_is_builtin_named_class(v->type, "BigInt") && v->aux) {
         xicgen_emit_bigint_literal_value(ctx, out, v, false);
     } else if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux) {
         const XiEnumData *ed = (const XiEnumData *) v->aux;
@@ -999,9 +999,10 @@ static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                        const char *prefix) {
     (void) f;
     (void) prefix;
-    if (v && xr_type_is_named_class(v->type, "BigInt")) {
+    if (v && xr_type_is_builtin_named_class(v->type, "BigInt")) {
         const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
-        if (arg && arg->op == XI_CONST && xr_type_is_named_class(arg->type, "BigInt") && arg->aux) {
+        if (arg && arg->op == XI_CONST && arg->aux &&
+            xr_type_is_builtin_named_class(arg->type, "BigInt")) {
             xicgen_emit_bigint_literal_value(ctx, out, arg, true);
             return;
         }
@@ -4281,7 +4282,7 @@ static void xicgen_len(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         fprintf(out, "XR_TO_INT(xr_aot_work_queue_length(%s, ", xicgen_aot_context_expr(ctx, f));
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, "))");
-    } else if (xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+    } else if (xr_type_is_builtin_named_class(v->args[0]->type, "Buffer")) {
         fprintf(out, "xrt_buffer_length(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -9036,11 +9037,11 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
         return strcmp(method, "toUInt32") == 0 && nargs == 0;
     if (receiver_type && receiver_type->kind == XR_KIND_STRING)
         return (strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0) && nargs == 0;
-    if (xr_type_is_named_class(receiver_type, "Iterator"))
+    if (xr_type_is_builtin_named_class(receiver_type, "Iterator"))
         return ((strcmp(method, "hasNext") == 0 || strcmp(method, "next") == 0 ||
                  strcmp(method, "iterator") == 0) &&
                 nargs == 0);
-    if (xr_type_is_named_class(receiver_type, "StringBuilder"))
+    if (xr_type_is_builtin_named_class(receiver_type, "StringBuilder"))
         return ((strcmp(method, "toString") == 0 || strcmp(method, "clear") == 0) && nargs == 0) ||
                (strcmp(method, "append") == 0 && nargs == 1);
 
@@ -9960,7 +9961,7 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
 static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                       const char *method, uint16_t nargs) {
     if (!v || v->nargs < 1 || !method || nargs != 0 ||
-        !xr_type_is_named_class(v->args[0]->type, "BigInt"))
+        !xr_type_is_builtin_named_class(v->args[0]->type, "BigInt"))
         return false;
 
     if (strcmp(method, "sign") == 0) {
@@ -10189,8 +10190,14 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     if (xicgen_emit_event_count_method(out, v, method, nargs))
         return;
+    /* The receiver tests below must stay builtin-only. Each branch emits a
+     * direct call into the runtime C helper for the named type, so a user
+     * class that reuses the name and declares a same-shaped method — a
+     * `class Buffer` with its own `borrowPtr()` — would have its own object
+     * passed to xrt_buffer_borrow_ptr: a type-confused call, not merely a
+     * mistyped one. Builtin identity, never the spelling, selects a helper. */
     if (method && (strcmp(method, "asBytes") == 0 || strcmp(method, "asMutBytes") == 0) &&
-        nargs == 0 && v->nargs >= 1 && xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+        nargs == 0 && v->nargs >= 1 && xr_type_is_builtin_named_class(v->args[0]->type, "Buffer")) {
         if (cg_value_plan_is_span_aggregate(ctx, v)) {
             fprintf(out, "%s(",
                     strcmp(method, "asBytes") == 0 ? "xrt_buffer_as_bytes"
@@ -10205,7 +10212,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     }
     if (method && strcmp(method, "borrowPtr") == 0 && nargs == 0 && v->nargs >= 1 &&
-        xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+        xr_type_is_builtin_named_class(v->args[0]->type, "Buffer")) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_buffer_borrow_ptr(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
@@ -10214,7 +10221,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     }
     if (method && strcmp(method, "test") == 0 && nargs == 1 && v->nargs >= 2 &&
-        xr_type_is_named_class(v->args[0]->type, "Regex")) {
+        xr_type_is_builtin_named_class(v->args[0]->type, "Regex")) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_regex_test(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);

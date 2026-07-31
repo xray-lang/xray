@@ -1434,10 +1434,10 @@ XrConversionKind xr_type_numeric_conversion_kind(const XrType *target, const XrT
                                            : XR_CONVERSION_EXPLICIT_TRUNCATE;
     }
 
-    bool target_sized = target->scalar_rep == XR_NATIVE_ISIZE ||
-                        target->scalar_rep == XR_NATIVE_USIZE;
-    bool source_sized = source->scalar_rep == XR_NATIVE_ISIZE ||
-                        source->scalar_rep == XR_NATIVE_USIZE;
+    bool target_sized =
+        target->scalar_rep == XR_NATIVE_ISIZE || target->scalar_rep == XR_NATIVE_USIZE;
+    bool source_sized =
+        source->scalar_rep == XR_NATIVE_ISIZE || source->scalar_rep == XR_NATIVE_USIZE;
     if (target_sized || source_sized)
         return XR_CONVERSION_EXPLICIT_TARGET_WIDTH;
     if (xr_scalar_rep_is_unsigned(target->scalar_rep) !=
@@ -1755,8 +1755,11 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_assignable(te, se) && xr_type_assignable(se, te);
     }
 
-    // Task type compatibility: both are INSTANCE with class_name="Task"
-    if (xr_type_is_named_class(target, "Task") && xr_type_is_named_class(source, "Task")) {
+    // Task type compatibility: both are the builtin INSTANCE named "Task".
+    // A user class of that name is nominal like any other and must not get
+    // the builtin's type-argument variance.
+    if (xr_type_is_builtin_named_class(target, "Task") &&
+        xr_type_is_builtin_named_class(source, "Task")) {
         XrType *tr = (target->instance.type_arg_count > 0) ? target->instance.type_args[0] : NULL;
         XrType *sr = (source->instance.type_arg_count > 0) ? source->instance.type_args[0] : NULL;
         if (!tr || !sr)

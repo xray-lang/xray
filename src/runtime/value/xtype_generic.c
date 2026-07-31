@@ -112,7 +112,10 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         return type;
     }
 
-    if (xr_type_is_named_class(type, "Task")) {
+    /* Builtin Task only: xr_type_new_task rebuilds a bare named instance, so
+     * routing a user `class Task<T>` through here would drop its class_ref
+     * and hand it the builtin's identity. User generics substitute below. */
+    if (xr_type_is_builtin_named_class(type, "Task")) {
         XrType *old_result =
             (type->instance.type_arg_count > 0) ? type->instance.type_args[0] : NULL;
         XrType *result = xr_type_substitute(X, old_result, param_names, actual_types, count);
@@ -396,7 +399,7 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // Not a builtin comparable — fall through to user-class check
             } else if (strcmp(iface_name, "Hashable") == 0) {
                 if (xr_kind_is_primitive(type->kind) || type->kind == XR_KIND_ENUM ||
-                    xr_type_is_named_class(type, "BigInt"))
+                    xr_type_is_builtin_named_class(type, "BigInt"))
                     return true;
                 // Not a builtin hashable — fall through to user-class check
             } else if (strcmp(iface_name, "Stringable") == 0) {

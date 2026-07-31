@@ -350,6 +350,26 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
     return t->instance.class_name && (strcmp(t->instance.class_name, name) == 0);
 }
 
+/* Same check, but only for the *builtin* class of that name — never a user
+ * class that reuses it. Builtin type names are ordinary identifiers rather
+ * than keywords, so `class Range { ... }` is legal source. A name-only test
+ * hands such a class the builtin's typing and lowering, which turns what
+ * should be a compile error ("no operator[]", "not Lengthable") into a
+ * runtime panic.
+ *
+ * class_ref is the discriminator: every registry that fabricates a builtin
+ * named instance leaves it NULL (xr_type_new_named_instance, the prelude
+ * branches in xtype_ref_resolve.c, the .xrd handle path), while a user class
+ * instance always carries the XrClassInfo it was declared from.
+ *
+ * Not every named-class test wants this. Stdlib classes that are themselves
+ * written in xray — sys.Process, sys.Pipe — are ordinary user classes to the
+ * analyzer and do carry a class_ref, so the lints over them keep using
+ * xr_type_is_named_class. */
+static inline bool xr_type_is_builtin_named_class(const XrType *t, const char *name) {
+    return xr_type_is_named_class(t, name) && t->instance.class_ref == NULL;
+}
+
 /* Whether a type denotes a runtime-managed object whose lifetime belongs to
  * the runtime/scheduler, NOT the compiler's per-coroutine RC. The compiler
  * (xi_arc / xi_own) must not insert dup/drop for such values: they are held by
@@ -366,7 +386,7 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
 static inline bool xr_type_is_runtime_managed(const XrType *t) {
     if (!t)
         return false;
-    if (xr_type_is_named_class(t, "Task") || xr_type_is_named_class(t, "Coroutine"))
+    if (xr_type_is_builtin_named_class(t, "Task") || xr_type_is_builtin_named_class(t, "Coroutine"))
         return true;
     return false;
 }
@@ -883,8 +903,7 @@ XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 // cases using the same XrConversionKind domain.
 XR_FUNC XrConversionKind xr_type_numeric_conversion_kind(const XrType *target,
                                                          const XrType *source);
-XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target,
-                                                    const XrType *source);
+XR_FUNC bool xr_type_numeric_implicitly_convertible(const XrType *target, const XrType *source);
 // Returns one operand type when both numeric operands have a unique implicit
 // common type, otherwise NULL.  No C usual-arithmetic-conversion fallback.
 XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);

@@ -660,10 +660,10 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
     if (!session || !call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
         return;
     XrTypeRef *stack_synth[8] = {0};
-    XrTypeRef **synth = type_param_count <= 8
-                            ? stack_synth
-                            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) *
-                                                       (size_t) type_param_count);
+    XrTypeRef **synth =
+        type_param_count <= 8
+            ? stack_synth
+            : (XrTypeRef **) xr_malloc(sizeof(XrTypeRef *) * (size_t) type_param_count);
     if (!synth)
         return;
     for (int i = 0; i < type_param_count; i++) {
@@ -2446,8 +2446,7 @@ static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *nod
             value_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *type_args[1] = {
-        value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
+    XrType *type_args[1] = {value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate)};
     return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
 }
 
@@ -3166,7 +3165,7 @@ static XrType *xa_mem_assume_initialized_return_type(XaInferContext *ctx, AstNod
                            ? xa_lookup_visible_symbol(ctx, source->as.variable.name)
                            : NULL;
     XrType *buffer_type = xa_visit_infer_expr(ctx, call->arguments[0]);
-    if (!buffer || !buffer_type || !xr_type_is_named_class(buffer_type, "Buffer")) {
+    if (!buffer || !buffer_type || !xr_type_is_builtin_named_class(buffer_type, "Buffer")) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "mem.assumeInitialized<T>() expects `move` of a mem.Buffer",
                                    &loc);
@@ -3863,7 +3862,7 @@ static bool xa_method_call_creates_span_borrow(XaInferContext *ctx, XrType *rece
     if (!ctx || !ctx->analyzer || !receiver_type || !method_name)
         return false;
     bool canonical_view_method =
-        (xr_type_is_named_class(receiver_type, "Buffer") &&
+        (xr_type_is_builtin_named_class(receiver_type, "Buffer") &&
          (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "asMutBytes") == 0)) ||
         (XR_TYPE_IS_SLICE(receiver_type) &&
          (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0)) ||
@@ -4241,7 +4240,7 @@ static bool xa_method_stores_argument(XrType *receiver_type, const char *method_
                (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
                 strcmp(method_name, "sendTimeout") == 0);
     }
-    if (xr_type_is_named_class(receiver_type, "WorkQueue"))
+    if (xr_type_is_builtin_named_class(receiver_type, "WorkQueue"))
         return strcmp(method_name, "push") == 0 && slot == 0;
     return false;
 }
@@ -5314,6 +5313,14 @@ static bool xa_len_type_supported(XrType *type) {
                         return true;
                 }
             }
+            /* The name list below is the builtin allowlist: those types answer
+             * len() natively without declaring Lengthable. A user class that
+             * reuses one of the names has already had its own interfaces
+             * checked above, so it must not inherit the builtin's answer —
+             * `class Range { }` is not Lengthable and len() on it is a
+             * compile error, not a runtime panic. */
+            if (info)
+                return false;
             return class_name &&
                    (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
                     strcmp(class_name, "WorkQueue") == 0 || strcmp(class_name, "Range") == 0);

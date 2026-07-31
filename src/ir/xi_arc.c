@@ -607,7 +607,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
  * wrapper per message. Extend this table as more native return-ownership
  * facts are encoded. */
 static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValue *v) {
-    if (!v || !xr_type_is_named_class(v->type, "Buffer"))
+    if (!v || !xr_type_is_builtin_named_class(v->type, "Buffer"))
         return false;
 
     const char *member = NULL;
@@ -660,7 +660,7 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
         return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
-        xr_type_is_named_class(v->type, "StringBuilder"))
+        xr_type_is_builtin_named_class(v->type, "StringBuilder"))
         return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;
@@ -1685,8 +1685,7 @@ static void arc_precompute_sigs(XiFunc *f) {
 }
 
 static XiArcOwnMode arc_target_own_mode(const XiFunc *f, const XiValue *target,
-                                        const XiBorrowSig *own_sig,
-                                        const XiValue *borrowed_recv) {
+                                        const XiBorrowSig *own_sig, const XiValue *borrowed_recv) {
     if (target == borrowed_recv)
         return OWN_BORROWED;
     if (f->operator_borrowed && target->op == XI_PARAM)
@@ -1774,8 +1773,7 @@ static void arc_insert_rec(XiFunc *f) {
 
     bool cfg_changed = false;
     for (uint32_t i = 0; i < targets.count; i++) {
-        XiArcOwnMode mode =
-            arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
+        XiArcOwnMode mode = arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
         cfg_changed |= process_value_ex(f, targets.items[i], mode);
     }
     xr_free(targets.items);
@@ -1842,8 +1840,8 @@ static bool arc_value_is_defined_before_block_index(const XiValue *target, const
 }
 
 static bool arc_value_live_after_block_index(const ArcLive *live, uint32_t index) {
-    return live && (live->live_out || live->use_at_end ||
-                    (live->has_use && live->last_use > index));
+    return live &&
+           (live->live_out || live->use_at_end || (live->has_use && live->last_use > index));
 }
 
 /* Attach error-edge owner operands for one function after ordinary
@@ -1862,8 +1860,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
     xi_ensure_dominators(f);
 
     for (uint16_t p = 0; p < f->nparams; p++) {
-        if (f->params[p] && tracks_rc(f->params[p]) &&
-            !xi_value_vec_push(&targets, f->params[p]))
+        if (f->params[p] && tracks_rc(f->params[p]) && !xi_value_vec_push(&targets, f->params[p]))
             goto oom;
     }
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -1879,11 +1876,9 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
              * error edge and must not gain cleanup operands (which would also
              * make otherwise-dead owners look live on the hot path). */
             if (v->op == XI_ERR_CHECK && (!v->type || v->type->kind != XR_KIND_BOOL) &&
-                v->nargs == 0 && arc_err_check_source(v) != NULL &&
-                !xi_value_vec_push(&checks, v))
+                v->nargs == 0 && arc_err_check_source(v) != NULL && !xi_value_vec_push(&checks, v))
                 goto oom;
-            if (v->op == XI_PARAM ||
-                stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
+            if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
             if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
                 goto oom;
@@ -1948,8 +1943,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
         XR_CHECK(nargs <= UINT16_MAX, "xi_arc: too many unit ERR_CHECK cleanup owners");
         XiValue **args = NULL;
         if (nargs != 0) {
-            args = (XiValue **) xi_func_arena_alloc(
-                f, (uint32_t) ((size_t) nargs * sizeof(*args)));
+            args = (XiValue **) xi_func_arena_alloc(f, (uint32_t) ((size_t) nargs * sizeof(*args)));
             XR_CHECK(args != NULL, "xi_arc: out of memory publishing ERR_CHECK cleanups");
             for (uint32_t i = 0; i < cleanups[ci].count; i++)
                 args[i] = cleanups[ci].items[i];

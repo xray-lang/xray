@@ -760,12 +760,12 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
         case AST_LITERAL_INT:
             value = xi_const_int(l->func, l->cur_block, node->as.literal.raw_value.int_val,
                                  analyzed_type && XR_TYPE_IS_NUMERIC(analyzed_type) ? analyzed_type
-                                                                                   : l->type_int);
+                                                                                    : l->type_int);
             break;
         case AST_LITERAL_FLOAT:
-            value = xi_const_float(l->func, l->cur_block, node->as.literal.raw_value.float_val,
-                                   analyzed_type && XR_TYPE_IS_FLOAT(analyzed_type) ? analyzed_type
-                                                                                   : l->type_float);
+            value = xi_const_float(
+                l->func, l->cur_block, node->as.literal.raw_value.float_val,
+                analyzed_type && XR_TYPE_IS_FLOAT(analyzed_type) ? analyzed_type : l->type_float);
             break;
         case AST_LITERAL_TRUE:
             return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
@@ -812,9 +812,8 @@ static XiValue *lower_ct_scalar_value(XiLower *l, const XrCtValue *value) {
 XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *source_node,
                                                            XiValue *value,
                                                            struct XrType *target_type) {
-    if (!l || !source_node || !value || !value->type || !target_type ||
-        target_type->is_nullable || !XR_TYPE_IS_NUMERIC(value->type) ||
-        !XR_TYPE_IS_NUMERIC(target_type))
+    if (!l || !source_node || !value || !value->type || !target_type || target_type->is_nullable ||
+        !XR_TYPE_IS_NUMERIC(value->type) || !XR_TYPE_IS_NUMERIC(target_type))
         return value;
 
     XrConversionWitness witness = {0};
@@ -827,14 +826,12 @@ XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *
         return value;
     bool has_witness = xa_typed_program_conversion(l->typed_program, source_node, &witness);
     if (!has_witness) {
-        fprintf(stderr,
-                "[LOWER] numeric boundary lacks analyzer conversion evidence at line %d\n",
+        fprintf(stderr, "[LOWER] numeric boundary lacks analyzer conversion evidence at line %d\n",
                 (int) source_node->line);
         l->had_error = true;
         return NULL;
     }
-    if (!xr_conversion_kind_is_numeric(witness.kind) ||
-        witness.kind == XR_CONVERSION_DISALLOWED ||
+    if (!xr_conversion_kind_is_numeric(witness.kind) || witness.kind == XR_CONVERSION_DISALLOWED ||
         witness.source_scalar_rep != value->type->scalar_rep ||
         witness.target_scalar_rep != target_type->scalar_rep ||
         (witness.is_implicit && !xr_conversion_kind_is_implicit(witness.kind))) {
@@ -1180,8 +1177,8 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         struct XrType *var_type = l->vars[var_id].type;
-        val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val,
-                                                        var_type);
+        val =
+            xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val, var_type);
         if (!val)
             return NULL;
         val = xi_lower_apply_primitive_type_view(l, node, val, var_type);
@@ -1236,8 +1233,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     /* Check for program-level variable from nested scope */
     XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
     if (xi_top_binding_valid(tb)) {
-        val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val,
-                                                        tb.type);
+        val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val, tb.type);
         if (!val)
             return NULL;
         val = xi_lower_apply_primitive_type_view(l, node, val, tb.type);
@@ -1840,9 +1836,8 @@ static bool lower_math_call_preserves_int_args(const char *member, XiValue **arg
                                                int arg_count) {
     if (!member || !lower_math_args_all_int(arg_vals, arg_count))
         return false;
-    return (strcmp(member, "abs") == 0 && arg_count == 1) ||
-           strcmp(member, "min") == 0 || strcmp(member, "max") == 0 ||
-           (strcmp(member, "clamp") == 0 && arg_count == 3);
+    return (strcmp(member, "abs") == 0 && arg_count == 1) || strcmp(member, "min") == 0 ||
+           strcmp(member, "max") == 0 || (strcmp(member, "clamp") == 0 && arg_count == 3);
 }
 
 static struct XrType *lower_math_call_result_type(XiLower *l, const char *member,
@@ -1868,7 +1863,7 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
 
 static bool lower_type_has_sequence_evidence(const struct XrType *type) {
     return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
-                    xr_type_is_named_class(type, "StringBuilder"));
+                    xr_type_is_builtin_named_class(type, "StringBuilder"));
 }
 
 static XiValue *lower_type_namespace_member(XiLower *l, const MemberAccessNode *ma) {
@@ -2954,10 +2949,9 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
         elem_vals[slot] = xi_lower_expr(l, child);
         if (!elem_vals[slot])
             return NULL;
-        struct XrType *elem_type =
-            result_type && XR_TYPE_IS_TUPLE(result_type)
-                ? xr_type_tuple_get(result_type, (int) slot)
-                : NULL;
+        struct XrType *elem_type = result_type && XR_TYPE_IS_TUPLE(result_type)
+                                       ? xr_type_tuple_get(result_type, (int) slot)
+                                       : NULL;
         elem_vals[slot] =
             xi_lower_apply_numeric_conversion_witness(l, child, elem_vals[slot], elem_type);
         if (!elem_vals[slot])
@@ -4982,8 +4976,8 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                 arg_vals[i] = xi_lower_checktype_for_type(l, node, arg_vals[i], pt);
             if (i < call->arg_count && call->arguments[i] &&
                 call->arguments[i]->type != AST_SPREAD_EXPR) {
-                arg_vals[i] = xi_lower_apply_numeric_conversion_witness(
-                    l, call->arguments[i], arg_vals[i], pt);
+                arg_vals[i] = xi_lower_apply_numeric_conversion_witness(l, call->arguments[i],
+                                                                        arg_vals[i], pt);
                 if (!arg_vals[i])
                     return NULL;
             }
@@ -5588,7 +5582,7 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
 
     receiver_type = xi_lower_node_type(l, member->object);
     is_sequence = lower_type_has_sequence_evidence(receiver_type);
-    is_string_builder = xr_type_is_named_class(receiver_type, "StringBuilder");
+    is_string_builder = xr_type_is_builtin_named_class(receiver_type, "StringBuilder");
 
     if (is_sequence) {
         if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
@@ -6270,7 +6264,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         bool is_time_sleep = n == 1 && ma->name && strcmp(ma->name, "sleep") == 0 &&
                              lower_value_is_whole_module_import(l, recv, "time");
 
-        if (recv->type && xr_type_is_named_class(recv->type, "CoroLocal") && ma->name) {
+        if (recv->type && xr_type_is_builtin_named_class(recv->type, "CoroLocal") && ma->name) {
             int sub = -1;
             if (strcmp(ma->name, "set") == 0 && n == 1)
                 sub = XI_CORO_SUB_SET_LOCAL;
@@ -6925,18 +6919,16 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (result_type && XR_TYPE_IS_MAP(result_type)) {
         for (int i = 0; i < n; i++) {
-            key_vals[i] = xi_lower_apply_numeric_conversion_witness(
-                l, map->keys[i], key_vals[i], result_type->map.key_type);
-            val_vals[i] = xi_lower_apply_numeric_conversion_witness(
-                l, map->values[i], val_vals[i], result_type->map.value_type);
+            key_vals[i] = xi_lower_apply_numeric_conversion_witness(l, map->keys[i], key_vals[i],
+                                                                    result_type->map.key_type);
+            val_vals[i] = xi_lower_apply_numeric_conversion_witness(l, map->values[i], val_vals[i],
+                                                                    result_type->map.value_type);
             if (!key_vals[i] || !val_vals[i])
                 return NULL;
-            key_vals[i] =
-                xi_lower_narrow_for_static_type(l, map->keys[i], key_vals[i],
-                                                result_type->map.key_type);
-            val_vals[i] =
-                xi_lower_narrow_for_static_type(l, map->values[i], val_vals[i],
-                                                result_type->map.value_type);
+            key_vals[i] = xi_lower_narrow_for_static_type(l, map->keys[i], key_vals[i],
+                                                          result_type->map.key_type);
+            val_vals[i] = xi_lower_narrow_for_static_type(l, map->values[i], val_vals[i],
+                                                          result_type->map.value_type);
         }
     }
     XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
@@ -8225,8 +8217,18 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                                 XrCallArgAccess *arg_accesses, int arg_count) {
     XR_DCHECK(cname != NULL, "construct must have class name");
 
+    /* The parser rewrites `Map(..)`, `Array(..)`, `StringBuilder(..)` and the
+     * rest of xr_is_construct_only_type_name() into a new-expr before any
+     * scope exists, so the name alone cannot say which type is meant. The
+     * analyzer has since resolved it: a user class that shadows the builtin
+     * yields an instance type carrying its XrClassInfo, and constructing the
+     * builtin here would leave the runtime object disagreeing with that
+     * static type. Fall straight through to the ordinary constructor call. */
+    bool user_class_shadows_builtin = result_type && result_type->kind == XR_KIND_INSTANCE &&
+                                      result_type->instance.class_ref != NULL;
+
     /* Built-in collection types: emit specialized ops (no constructor call) */
-    if (module_name == NULL) {
+    if (module_name == NULL && !user_class_shadows_builtin) {
         if (strcmp(cname, "Map") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
@@ -8457,7 +8459,7 @@ generic_constructor:;
      * are populated into the VM builtins array by the prelude module
      * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
      * XI_GET_BUILTIN before falling back to null. */
-    if (!cls && cname)
+    if (!cls && cname && !user_class_shadows_builtin)
         cls = xi_lower_emit_builtin_class(l, cname, node->line);
     if (!cls) {
         cls = xi_const_null(l->func, l->cur_block, l->type_null);
@@ -9083,8 +9085,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         XR_TYPE_IS_NUMERIC(source_type)) {
         if (!has_conversion || !xr_conversion_kind_is_numeric(conversion.kind) ||
             conversion.kind == XR_CONVERSION_DISALLOWED) {
-            fprintf(stderr,
-                    "[LOWER] numeric `as` lacks a valid conversion witness at line %d\n",
+            fprintf(stderr, "[LOWER] numeric `as` lacks a valid conversion witness at line %d\n",
                     (int) node->line);
             l->had_error = true;
             return NULL;
@@ -9281,8 +9282,8 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
                     continue;
                 struct XrType *field_type =
                     xi_lower_struct_field_type(l, val_vals[i]->type, slayout, fidx);
-                val_vals[i] = xi_lower_apply_numeric_conversion_witness(
-                    l, sl->field_values[i], val_vals[i], field_type);
+                val_vals[i] = xi_lower_apply_numeric_conversion_witness(l, sl->field_values[i],
+                                                                        val_vals[i], field_type);
                 if (!val_vals[i])
                     return NULL;
                 XiValue *field_val = xi_lower_narrow_for_native_field(

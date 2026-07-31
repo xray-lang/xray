@@ -183,14 +183,18 @@ static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
     return false;
 }
 
+/* Types whose `.length` / `.size` / `.isEmpty` should be redirected to
+ * len(value). Only the builtins qualify: a user class reusing one of these
+ * names answers neither the property nor len(), so it must get the ordinary
+ * "no member" diagnostic rather than advice that would not compile either. */
 static bool xa_type_has_len_query(XrType *type) {
-    return type &&
-           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
-            XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
-            type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
-            xr_type_is_named_class(type, "StringBuilder") ||
-            xr_type_is_named_class(type, "Buffer") || xr_type_is_named_class(type, "WorkQueue") ||
-            xr_type_is_named_class(type, "ResultGroup"));
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
+                    XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
+                    type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
+                    xr_type_is_builtin_named_class(type, "StringBuilder") ||
+                    xr_type_is_builtin_named_class(type, "Buffer") ||
+                    xr_type_is_builtin_named_class(type, "WorkQueue") ||
+                    xr_type_is_builtin_named_class(type, "ResultGroup"));
 }
 
 static void xa_report_span_member_error(XaInferContext *ctx, AstNode *node, XrType *type,
@@ -629,7 +633,7 @@ static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType
                                                      const char *name, AstNode *node) {
     if (!receiver || !name)
         return false;
-    bool is_view_method = (xr_type_is_named_class(receiver, "Buffer") &&
+    bool is_view_method = (xr_type_is_builtin_named_class(receiver, "Buffer") &&
                            (strcmp(name, "asBytes") == 0 || strcmp(name, "asMutBytes") == 0)) ||
                           (XR_TYPE_IS_SLICE(receiver) &&
                            (strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0));
@@ -1440,16 +1444,13 @@ static XrType *xa_binary_numeric_literal_context(XaInferContext *ctx, XrType *ty
     return xr_type_non_nullable(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL, type);
 }
 
-static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left,
-                                               XrType *right) {
+static XrType *xa_equality_numeric_common_type(XaInferContext *ctx, XrType *left, XrType *right) {
     if (!left || !right || !XR_TYPE_IS_NUMERIC(left) || !XR_TYPE_IS_NUMERIC(right))
         return NULL;
-    XrType *left_value = left->is_nullable
-                             ? xr_type_non_nullable(ctx->analyzer->isolate, left)
-                             : left;
-    XrType *right_value = right->is_nullable
-                              ? xr_type_non_nullable(ctx->analyzer->isolate, right)
-                              : right;
+    XrType *left_value =
+        left->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, left) : left;
+    XrType *right_value =
+        right->is_nullable ? xr_type_non_nullable(ctx->analyzer->isolate, right) : right;
     return xr_type_numeric_common_type(left_value, right_value);
 }
 
@@ -2250,7 +2251,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
-    if (xr_type_is_named_class(obj_type, "Buffer") && ma->name &&
+    if (xr_type_is_builtin_named_class(obj_type, "Buffer") && ma->name &&
         strcmp(ma->name, "borrowPtr") == 0 && ctx->unsafe_depth == 0) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
@@ -2319,7 +2320,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    if (xr_type_is_named_class(obj_type, "RegexMatch")) {
+    if (xr_type_is_builtin_named_class(obj_type, "RegexMatch")) {
         if (strcmp(ma->name, "start") == 0 || strcmp(ma->name, "end") == 0)
             return xr_type_new_int(NULL);
         if (strcmp(ma->name, "text") == 0)
@@ -2396,11 +2397,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      obj_type->kind == XR_KIND_CHANNEL) &&
                     obj_type->container.element_type) {
                     single_type_arg = obj_type->container.element_type;
-                } else if ((xr_type_is_named_class(obj_type, "Task") ||
-                            xr_type_is_named_class(obj_type, "WorkQueue") ||
-                            xr_type_is_named_class(obj_type, "Atomic") ||
-                            xr_type_is_named_class(obj_type, "Thread") ||
-                            xr_type_is_named_class(obj_type, "CoroLocal")) &&
+                } else if ((xr_type_is_builtin_named_class(obj_type, "Task") ||
+                            xr_type_is_builtin_named_class(obj_type, "WorkQueue") ||
+                            xr_type_is_builtin_named_class(obj_type, "Atomic") ||
+                            xr_type_is_builtin_named_class(obj_type, "Thread") ||
+                            xr_type_is_builtin_named_class(obj_type, "CoroLocal")) &&
                            obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args) {
                     single_type_arg = obj_type->instance.type_args[0];
                 }
@@ -2704,7 +2705,11 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             add_index_type_error(ctx, node, index_type, container->map.key_type);
         return xa_const_projection_type(ctx, container, container->map.value_type);
     }
-    if (xr_type_is_named_class(container, "Range")) {
+    /* Only the builtin Range indexes as an int sequence. A user-declared
+     * `class Range` falls through to the operator[] resolution below and is
+     * rejected there when it declares none, instead of typing as int and
+     * panicking at runtime. */
+    if (xr_type_is_builtin_named_class(container, "Range")) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xr_type_new_int(ctx->analyzer->isolate);
@@ -3563,6 +3568,24 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     return type;
 }
 
+/* Whether a *user* class declaration owns this name, shadowing any builtin of
+ * the same name. Native type names are registered as synthetic class symbols
+ * (xa_register_native_class_symbol) carrying is_builtin and no class_info, so
+ * requiring a real XrClassInfo separates a declared class from the builtin
+ * registration — the same class_ref distinction xr_type_is_builtin_named_class
+ * makes on instance types. */
+static bool xa_class_name_shadowed_by_user_class(XaInferContext *ctx, const char *name) {
+    if (!ctx || !ctx->analyzer || !name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    if (!sym)
+        sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
+    if (!sym || sym->kind != XA_SYM_CLASS || sym->is_builtin)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return links && links->class_info != NULL;
+}
+
 XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -3634,8 +3657,15 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     /* Builtin heap types: return the correct container/channel type
      * directly, bypassing class-symbol lookup. Container construction must
      * resolve its type arguments explicitly, contextually, or from a value
-     * argument; an erased success type is never constructed. */
-    if (ne->class_name && !ne->module_name) {
+     * argument; an erased success type is never constructed.
+     *
+     * A user class of the same name shadows the builtin (prelude.h documents
+     * the Rust prelude rule), so it has to be resolved through the ordinary
+     * class path below. Bypassing that would type `StringBuilder(3)` as the
+     * builtin even where `class StringBuilder { }` is in scope, and every
+     * later builtin-vs-user-class distinction would already have lost. */
+    if (ne->class_name && !ne->module_name &&
+        !xa_class_name_shadowed_by_user_class(ctx, ne->class_name)) {
         XrVMRuntime *X = ctx->analyzer->isolate;
         const char *cn = ne->class_name;
         XrType *bt = NULL;
@@ -5168,7 +5198,7 @@ static XrType *xa_await_array_result_element(XaInferContext *ctx, AstNode *node,
         return xr_type_new_unknown(ctx->analyzer->isolate);
     if (XR_TYPE_IS_ERROR(elem))
         return xr_type_new_error(ctx->analyzer->isolate);
-    if (!xr_type_is_named_class(elem, "Task") || elem->instance.type_arg_count <= 0) {
+    if (!xr_type_is_builtin_named_class(elem, "Task") || elem->instance.type_arg_count <= 0) {
         return xa_report_await_task_array_expected(ctx, node, await, array_type);
     }
 
@@ -5436,7 +5466,7 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
         // Single await: extract result type from Task<T>
         // Failed/cancelled tasks propagate via exception, not null.
-        if (xr_type_is_named_class(expr_type, "Task")) {
+        if (xr_type_is_builtin_named_class(expr_type, "Task")) {
             XrType *result_type =
                 (expr_type->instance.type_arg_count > 0) ? expr_type->instance.type_args[0] : NULL;
             if (!result_type)

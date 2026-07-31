@@ -365,7 +365,7 @@ XR_FUNC bool xa_task_result_requires_consuming_await(const XrType *result) {
 }
 
 XR_FUNC bool xa_task_type_requires_consuming_await(const XrType *type) {
-    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
+    if (!xr_type_is_builtin_named_class(type, "Task") || type->instance.type_arg_count <= 0)
         return false;
     return xa_task_result_requires_consuming_await(type->instance.type_args[0]);
 }
@@ -382,7 +382,7 @@ XR_FUNC bool xa_task_result_requires_shared_copy_publication(const XrType *resul
 }
 
 XR_FUNC bool xa_task_type_requires_shared_copy_publication(const XrType *type) {
-    if (!xr_type_is_named_class(type, "Task") || type->instance.type_arg_count <= 0)
+    if (!xr_type_is_builtin_named_class(type, "Task") || type->instance.type_arg_count <= 0)
         return false;
     return xa_task_result_requires_shared_copy_publication(type->instance.type_args[0]);
 }
@@ -1520,10 +1520,9 @@ static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *nod
         double value = node->as.literal.raw_value.float_val;
         if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Floating literal is out of range for contextual type 'f32'",
-                                       &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "Floating literal is out of range for contextual type 'f32'", &loc);
         }
         return target;
     }
@@ -1770,7 +1769,7 @@ static bool xa_type_is_builtin_hashable(XrType *type) {
         return true;
     if (type->kind == XR_KIND_NULL || type->kind == XR_KIND_ENUM)
         return true;
-    return xr_type_is_named_class(type, "BigInt");
+    return xr_type_is_builtin_named_class(type, "BigInt");
 }
 
 static bool xa_method_return_is(XaSymbol *method, XrTypeKind kind) {
@@ -2367,7 +2366,8 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
     }
 
     // Task<T> vs Task<int> -> T = int
-    if (xr_type_is_named_class(param_type, "Task") && xr_type_is_named_class(arg_type, "Task")) {
+    if (xr_type_is_builtin_named_class(param_type, "Task") &&
+        xr_type_is_builtin_named_class(arg_type, "Task")) {
         XrType *pt =
             (param_type->instance.type_arg_count > 0) ? param_type->instance.type_args[0] : NULL;
         XrType *at =

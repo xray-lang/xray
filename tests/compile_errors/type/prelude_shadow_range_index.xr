@@ -1,0 +1,15 @@
+// Prelude type names are ordinary identifiers, so `class Range` is legal.
+// The declared class must not inherit the builtin Range's indexing: it has
+// no operator[], so `r[0]` is a compile error rather than a runtime panic.
+
+class Range {
+    v: int
+    constructor(v: int) { this.v = v }
+}
+
+fn main() {
+    var r = Range(3)
+    print(r[0])
+}
+
+main()

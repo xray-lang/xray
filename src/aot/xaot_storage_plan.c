@@ -137,7 +137,7 @@ static bool value_is_buffer_pointer_borrow(const XiValue *value) {
     return value && (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
            value->nargs > 0 && value->args[0] && value->aux &&
            strcmp((const char *) value->aux, "borrowPtr") == 0 &&
-           xr_type_is_named_class(value->args[0]->type, "Buffer");
+           xr_type_is_builtin_named_class(value->args[0]->type, "Buffer");
 }
 
 static bool add_captures_recursive(XaotBundle *bundle, const XiFunc *func) {
