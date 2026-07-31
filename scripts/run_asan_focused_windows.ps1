@@ -11,7 +11,9 @@ $buildDir = if ([System.IO.Path]::IsPathRooted($buildName)) {
 } else {
     [System.IO.Path]::GetFullPath((Join-Path $repoRoot $buildName))
 }
-$jobs = if ($env:XR_ASAN_JOBS) { [int]$env:XR_ASAN_JOBS } else { 8 }
+# Default to all cores: this lane is RUN_SERIAL, so it owns the machine and the
+# ASan rebuild is its dominant cost. (Was hard-coded to 8.)
+$jobs = if ($env:XR_ASAN_JOBS) { [int]$env:XR_ASAN_JOBS } else { [Environment]::ProcessorCount }
 $configuration = if ($env:XR_ASAN_CONFIGURATION) {
     $env:XR_ASAN_CONFIGURATION
 } else {
@@ -53,7 +55,24 @@ if ($env:XR_ASAN_SKIP_BUILD -ne '1') {
 
 $xrayExe = Join-Path $buildDir "$configuration\xray.exe"
 if (-not (Test-Path -LiteralPath $xrayExe -PathType Leaf)) {
+    if ($env:XR_ASAN_SKIP_BUILD -eq '1') {
+        throw "XR_ASAN_SKIP_BUILD=1 but no ASan binary at ${xrayExe}: build it first."
+    }
     throw "ASan xray executable is missing: $xrayExe"
+}
+
+# When the build was skipped, refuse a binary older than the sources it claims
+# to represent — a stale pass is worse than no run.
+if ($env:XR_ASAN_SKIP_BUILD -eq '1') {
+    $binTime = (Get-Item -LiteralPath $xrayExe).LastWriteTimeUtc
+    $srcDirs = @('src', 'include', 'stdlib') | ForEach-Object { Join-Path $repoRoot $_ } |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+    $stale = Get-ChildItem -Path $srcDirs -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTimeUtc -gt $binTime } | Select-Object -First 1
+    if ($stale) {
+        throw "ASan binary is stale: $($stale.FullName) is newer than $xrayExe. Rebuild or unset XR_ASAN_SKIP_BUILD."
+    }
+    Write-Host "== [asan_focused/windows] XR_ASAN_SKIP_BUILD=1: reusing up-to-date ASan binary"
 }
 
 # The MSVC ASan runtime ships beside cl.exe.  Visual Studio normally stages it

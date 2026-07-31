@@ -35,7 +35,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT}"
 
-JOBS="${XR_ASAN_JOBS:-8}"
+# Default to all cores. This lane is registered RUN_SERIAL, so it owns the whole
+# machine while it runs — there is nothing to over-subscribe against, and the
+# ASan Debug rebuild is the single biggest cost in the lane. (Was hard-coded to
+# 8, leaving most cores idle on an 18-core host.)
+if command -v nproc >/dev/null 2>&1; then
+    DEFAULT_JOBS="$(nproc)"
+elif command -v sysctl >/dev/null 2>&1; then
+    DEFAULT_JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 8)"
+else
+    DEFAULT_JOBS=8
+fi
+JOBS="${XR_ASAN_JOBS:-${DEFAULT_JOBS}}"
 ASAN_BUILD="${XR_ASAN_BUILD_DIR:-build-asan}"
 CTEST_REGEX="${XR_ASAN_CTEST_REGEX:-^test_}"
 # Exclude native-toolchain / subprocess integration tests from the ASan
@@ -105,7 +116,25 @@ fi
 XRAY_BIN="${ROOT}/${ASAN_BUILD}/xray"
 if [[ ! -x "${XRAY_BIN}" ]]; then
     echo "!! [asan_focused] ASan xray binary not found at ${XRAY_BIN}" >&2
+    if [[ "${XR_ASAN_SKIP_BUILD:-0}" == "1" ]]; then
+        echo "!! XR_ASAN_SKIP_BUILD=1 was set but no binary exists — build it first:" >&2
+        echo "!!   cmake --build ${ASAN_BUILD} -j${JOBS}" >&2
+    fi
     exit 1
+fi
+
+# When the build was skipped, the binary must not be older than the sources it
+# is supposed to represent. A stale binary is worse than no binary: the lane
+# would report a clean ASan result the current tree never earned. Fail loudly
+# with the exact command to refresh it, rather than silently certifying old code.
+if [[ "${XR_ASAN_SKIP_BUILD:-0}" == "1" ]]; then
+    STALE_SRC="$(find src include stdlib CMakeLists.txt -type f -newer "${XRAY_BIN}" 2>/dev/null | head -1 || true)"
+    if [[ -n "${STALE_SRC}" ]]; then
+        echo "!! [asan_focused] the ASan binary is stale: ${STALE_SRC} is newer than ${XRAY_BIN}" >&2
+        echo "!! rebuild it (cmake --build ${ASAN_BUILD} -j${JOBS}) or unset XR_ASAN_SKIP_BUILD" >&2
+        exit 1
+    fi
+    echo "== [asan_focused] XR_ASAN_SKIP_BUILD=1: reusing up-to-date ASan binary"
 fi
 
 # Checked even when the build is skipped: the caller points XR_ASAN_BUILD_DIR at
