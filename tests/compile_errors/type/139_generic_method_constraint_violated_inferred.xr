@@ -1,0 +1,32 @@
+// Same as 138, but with NO explicit type argument: `c.tag(Nope())` instead of
+// `c.tag<Nope>(Nope())`. The type parameter is inferred from the argument, and
+// the method's own constraint must still reject it.
+//
+// REGRESSION: the implicit-instantiation branch of xa_visit_call was hard-bound
+// to `call->callee->type == AST_VARIABLE`, so it only ever ran for plain
+// function calls. An instance method call reached it as AST_MEMBER_ACCESS and
+// silently skipped every constraint. This is the shape the original bug report
+// used (`c.total([1, 2, 3])`), so it matters more than the explicit form.
+//
+// As in 138, `tag` never touches the Greeter API: pre-fix this program compiled
+// AND ran, printing "tagged" with exit code 0.
+//
+// The positive half lives in
+// tests/regression/12_type_checking/1236_generic_method_constraint.xr.
+
+interface Greeter {
+    greet() -> string
+}
+
+class Nope {
+    constructor() {}
+}
+
+class Caller {
+    constructor() {}
+
+    tag<T: Greeter>(g: T) -> string { return "tagged" }
+}
+
+var c = Caller()
+print(c.tag(Nope()))

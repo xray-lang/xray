@@ -1130,7 +1130,7 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
         OPTYPE_ADD;  // Default value (doesn't matter since is_operator=false)
 
     // Initialize generic type parameters
-    node->as.method_decl.type_param_names = NULL;
+    node->as.method_decl.type_params = NULL;
     node->as.method_decl.type_param_count = 0;
     return node;
 }

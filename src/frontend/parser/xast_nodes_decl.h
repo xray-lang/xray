@@ -134,7 +134,7 @@ typedef struct FieldDeclNode {
 } FieldDeclNode;
 
 // Method declaration node
-// Supports generic methods: add<T>(item: T): void { ... }
+// Supports generic methods: add<T: Hashable>(item: T): void { ... }
 typedef struct MethodDeclNode {
     char *name;
     XrParamNode **params;
@@ -156,7 +156,7 @@ typedef struct MethodDeclNode {
     int base_arg_count;
     bool is_operator;
     OperatorType op_type;
-    char **type_param_names;  // Generic type parameters
+    XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
     int type_param_count;
 } MethodDeclNode;
 

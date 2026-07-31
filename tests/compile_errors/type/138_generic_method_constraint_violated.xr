@@ -1,0 +1,32 @@
+// A type argument that violates a class method's OWN generic constraint must
+// be rejected at compile time, exactly as it is for a top-level fn.
+//
+// REGRESSION: the method parser discarded the constraint list and
+// MethodDeclNode had no XrGenericParam storage, so the method's `<T: Greeter>`
+// bound reached the analyzer empty and `Nope` was silently accepted.
+//
+// `tag` deliberately never touches the Greeter API: pre-fix this whole program
+// compiled AND ran, printing "tagged" with exit code 0. A body that did call
+// g.greet() would instead have died at run time, which this harness scores as
+// a rejection — so the missing constraint check has to be the only defect for
+// the case to bite.
+//
+// The positive half lives in
+// tests/regression/12_type_checking/1236_generic_method_constraint.xr.
+
+interface Greeter {
+    greet() -> string
+}
+
+class Nope {
+    constructor() {}
+}
+
+class Caller {
+    constructor() {}
+
+    tag<T: Greeter>(g: T) -> string { return "tagged" }
+}
+
+var c = Caller()
+print(c.tag<Nope>(Nope()))

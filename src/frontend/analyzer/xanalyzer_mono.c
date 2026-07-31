@@ -351,6 +351,26 @@ static char **clone_str_array(char **arr, int count) {
     return result;
 }
 
+/* Clone method-local generic params. Constraints go through sub_tref so a
+ * bound that mentions an enclosing class type param (for example
+ * `find<U: Comparable<T>>` inside `Box<T>`) lands on the substituted type. */
+static XrGenericParam **clone_generic_params(XrGenericParam **arr, int count, XrMonoTypeMap *map,
+                                             int mc) {
+    if (!arr || count <= 0)
+        return NULL;
+    XrGenericParam **result = (XrGenericParam **) xr_calloc((size_t) count, sizeof(*result));
+    for (int i = 0; i < count; i++) {
+        if (!arr[i])
+            continue;
+        XrGenericParam *gp = (XrGenericParam *) xr_calloc(1, sizeof(XrGenericParam));
+        gp->name = clone_str(arr[i]->name);
+        gp->constraints = clone_tref_array(arr[i]->constraints, arr[i]->constraint_count, map, mc);
+        gp->constraint_count = gp->constraints ? arr[i]->constraint_count : 0;
+        result[i] = gp;
+    }
+    return result;
+}
+
 static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                                  XrAstCloneCtx *clone_ctx) {
     XR_DCHECK(map != NULL || mc == 0, "xr_ast_clone: map is NULL with non-zero mc");
@@ -943,7 +963,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             // params (for example T in Box<T>) but must preserve method-local
             // params (for example U in map<U>). Clearing them makes the
             // post-mono analyzer treat U as an ordinary unresolved type name.
-            dst->type_param_names = clone_str_array(src->type_param_names, src->type_param_count);
+            dst->type_params =
+                clone_generic_params(src->type_params, src->type_param_count, map, mc);
             dst->type_param_count = src->type_param_count;
             break;
         }

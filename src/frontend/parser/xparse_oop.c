@@ -932,8 +932,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     // Check if this is a constructor
     bool is_constructor = (strcmp(name, XR_KEYWORD_CONSTRUCTOR) == 0);
 
-    // Parse optional generic type parameters: methodName<T, U>(...)
-    char **type_param_names = NULL;
+    // Parse optional generic type parameters: methodName<T, U: Hashable>(...)
+    XrGenericParam **type_params = NULL;
     int type_param_count = 0;
     int type_param_capacity = 0;
 
@@ -941,16 +941,21 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         do {
             // Parse type parameter name
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            XR_PARSE_PUSH(parser, type_param_names, type_param_count, type_param_capacity,
-                          token_to_string(parser, &parser->previous));
+            char *param_name = token_to_string(parser, &parser->previous);
 
-            // Skip optional intersection constraint <T: Interface1 & Interface2 ...>
-            // Method-level type-param constraints are not yet stored in the
-            // method-decl AST, so we parse and discard for forward-compat parsing.
+            // Parse optional intersection constraint <T: Interface1 & Interface2 ...>
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
             if (xr_parser_match(parser, TK_COLON)) {
-                int dummy = 0;
-                xr_parse_constraint_list(parser, &dummy);
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
+
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         // Consume closing '>'
@@ -1071,7 +1076,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     method_node->as.method_decl.required_count = required_count;
 
     // Set generic type parameters
-    method_node->as.method_decl.type_param_names = type_param_names;
+    method_node->as.method_decl.type_params = type_params;
     method_node->as.method_decl.type_param_count = type_param_count;
 
     return method_node;
