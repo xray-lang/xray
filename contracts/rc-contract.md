@@ -22,4 +22,4 @@ be enabled explicitly; it does not replace the mandatory post-ARC run.
 
 ## Digest anchors
 
-anchor-sha256: src/ir/xi_arc_verify.c 1b8fe1fcaa61176c38ac877a33fbf40bbed00ddb3aad4012f2cdb79282f5b98d
+anchor-sha256: src/ir/xi_arc_verify.c a782ea60e54609978c42c8c475d3e0a987da80eaf1796a370e1a942a068f8642

@@ -37,6 +37,16 @@
  *   C5  an operand pointing at a value with no live definition (stale user,
  *       incident 4) and a RETAIN/RELEASE on a non-RC value (metadata, the
  *       incident-5 class).
+ *
+ * RECEIVER ALIASES — per-SSA-value deltas have one blind spot. A member
+ * declared `// @returns_receiver` hands its receiver straight back, so the
+ * result and the receiver are ONE object under two SSA names. Releasing the
+ * receiver and then using the result reads freed memory, yet each name's own
+ * delta stays at 0 and nothing above fires. The verifier therefore reads that
+ * declaration (xi_receiver_alias) and folds such a result into its receiver's
+ * tracked reference, so an over-released receiver is visible at every use of
+ * the alias. It reads the DECLARATION only — no ARC closure or alias code — so
+ * the two implementations stay independent as the contract requires.
  */
 
 #include "xi_arc_verify.h"
@@ -44,6 +54,7 @@
 #include "xi_analysis.h"
 #include "xi_ops_gen.h"
 #include "xi_op_name.h"
+#include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -59,6 +70,7 @@ typedef struct ArcVerify {
     XiValue **def;      /* def[id] = defining value pointer (NULL = none) */
     bool *is_rc;        /* is_rc[id] = RC-managed */
     int32_t *owner;     /* owner[id] = base RC value id this value borrows, or -1 (C3) */
+    int32_t *alias;     /* alias[id] = receiver id this `return self` result IS, or -1 */
     int32_t *track;     /* track[id] = compact delta index, or -1 (not retained/released) */
     uint32_t ntracked;  /* number of distinct retained/released references */
     int16_t *delta_in;  /* [nblocks*ntracked] net (retain-release) on entry (min over preds) */
@@ -286,6 +298,49 @@ static void build_owners(ArcVerify *av) {
     }
 }
 
+/* Record, for every call result the native declaration marks `@returns_receiver`,
+ * the receiver it aliases. Both names denote one object, so they must share one
+ * reference budget. Chains collapse to the original owner: `a.reverse().sort()`
+ * makes both results alias `a`. */
+static void build_aliases(ArcVerify *av) {
+    XiFunc *f = av->f;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->id >= av->n || !av->is_rc[v->id])
+                continue;
+            if (!xi_call_result_aliases_receiver(v))
+                continue;
+            XiValue *recv = v->args[0];
+            if (recv && recv->id < av->n && av->is_rc[recv->id] && recv->id != v->id)
+                av->alias[v->id] = (int32_t) recv->id;
+        }
+    }
+}
+
+/* Follow alias edges to the owning reference. Bounded by av->n so a malformed
+ * cycle cannot hang the verifier. */
+static uint32_t alias_root(ArcVerify *av, uint32_t id) {
+    uint32_t cur = id;
+    for (uint32_t guard = 0; guard <= av->n; guard++) {
+        if (cur >= av->n || av->alias[cur] < 0)
+            return cur;
+        cur = (uint32_t) av->alias[cur];
+    }
+    return cur;
+}
+
+/* Delta slot for a value, resolved through any receiver-alias chain. */
+static int32_t track_slot(ArcVerify *av, uint32_t id) {
+    if (id >= av->n)
+        return -1;
+    uint32_t root = alias_root(av, id);
+    return root < av->n ? av->track[root] : -1;
+}
+
 /* A value whose definition is an immortal literal (XI_CONST — interned strings,
  * etc.) is never actually freed: xrt_release on it is a no-op. Optimizations
  * legitimately hoist such a constant out of a loop while leaving a per-iteration
@@ -315,10 +370,25 @@ static void build_tracked(ArcVerify *av) {
             if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
                 continue;
             XiValue *x = v->args[0];
-            if (x && x->id < av->n && av->is_rc[x->id] && av->track[x->id] < 0 &&
-                !value_is_immortal(av, x->id))
-                av->track[x->id] = (int32_t) av->ntracked++;
+            if (!x || x->id >= av->n)
+                continue;
+            /* A retain/release on a receiver alias moves the ONE underlying
+             * reference, so the slot belongs to the owner it aliases. */
+            uint32_t root = alias_root(av, x->id);
+            if (root < av->n && av->is_rc[root] && av->track[root] < 0 &&
+                !value_is_immortal(av, root))
+                av->track[root] = (int32_t) av->ntracked++;
         }
+    }
+    /* An aliased result may be USED past its receiver's release without either
+     * name being retained (precisely the missed C1). Give the receiver a slot
+     * so that path is measurable even when nothing retains the alias. */
+    for (uint32_t id = 0; id < av->n; id++) {
+        if (av->alias[id] < 0)
+            continue;
+        uint32_t root = alias_root(av, id);
+        if (root < av->n && av->is_rc[root] && av->track[root] < 0 && !value_is_immortal(av, root))
+            av->track[root] = (int32_t) av->ntracked++;
     }
 }
 
@@ -448,14 +518,25 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
                 XiBlock *pred = blk->preds[a];
                 if (!in || in->id >= av->n || !pred || pred->id >= av->f->nblocks)
                     continue;
-                /* C1: the merged owning reference itself is over-released. */
-                if (av->track[in->id] >= 0) {
-                    int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[in->id]];
+                /* C1: the merged owning reference itself is over-released.
+                 * track_slot resolves a `return self` result to the receiver it
+                 * aliases, so merging one whose receiver already died on this
+                 * edge is caught here too. */
+                int32_t in_slot = track_slot(av, in->id);
+                if (in_slot >= 0) {
+                    int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) in_slot];
                     if (d < 0) {
-                        char detail[128];
-                        snprintf(detail, sizeof(detail),
-                                 "phi merges over-released value v%u from pred b%u", in->id,
-                                 pred->id);
+                        uint32_t root = alias_root(av, in->id);
+                        char detail[176];
+                        if (root != in->id)
+                            snprintf(detail, sizeof(detail),
+                                     "phi merges v%u, which is its receiver v%u returned by "
+                                     "`return self`, after v%u was released on pred b%u",
+                                     in->id, root, root, pred->id);
+                        else
+                            snprintf(detail, sizeof(detail),
+                                     "phi merges over-released value v%u from pred b%u", in->id,
+                                     pred->id);
                         return report_violation(av, XI_ARC_C1_USE_AFTER_RELEASE, in->id, pred->id,
                                                 blk->id, detail);
                     }
@@ -497,14 +578,15 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
             continue;
         if (v->op == XI_RETAIN) {
             XiValue *x = (v->nargs >= 1) ? v->args[0] : NULL;
-            if (x && x->id < av->n && av->track[x->id] >= 0)
-                work[av->track[x->id]]++;
+            int32_t t = x ? track_slot(av, x->id) : -1;
+            if (t >= 0)
+                work[t]++;
             continue;
         }
         if (v->op == XI_RELEASE) {
             XiValue *x = (v->nargs >= 1) ? v->args[0] : NULL;
-            if (x && x->id < av->n && av->track[x->id] >= 0) {
-                int32_t t = av->track[x->id];
+            int32_t t = x ? track_slot(av, x->id) : -1;
+            if (t >= 0) {
                 if (report && work[t] < 0) {
                     char detail[96];
                     snprintf(detail, sizeof(detail), "release of already-released v%u", x->id);
@@ -515,10 +597,53 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
             }
             continue;
         }
+        /* C1 on a receiver alias: this value IS its receiver, so reading it
+         * after the receiver's reference has been released past balance is a
+         * use-after-release. Restricted to declared aliases — an ordinary
+         * value's uses are already covered by the phi/release checks, and this
+         * is the one shape where two SSA names share a single reference. */
+        if (report) {
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                XiValue *x = v->args[a];
+                if (!x || x->id >= av->n || av->alias[x->id] < 0)
+                    continue;
+                int32_t t = track_slot(av, x->id);
+                if (t < 0 || work[t] >= 0)
+                    continue;
+                uint32_t root = alias_root(av, x->id);
+                char detail[176];
+                snprintf(detail, sizeof(detail),
+                         "%s reads v%u, which is its receiver v%u returned by `return self`, "
+                         "after v%u was released without a compensating retain",
+                         xi_op_name(v->op), x->id, root, root);
+                return report_violation(av, XI_ARC_C1_USE_AFTER_RELEASE, x->id,
+                                        find_release_block(av, root), blk->id, detail);
+            }
+        }
         /* A fresh SSA definition (re)starts the reference at delta 0; this also
-         * clears any stale delta carried around a loop back-edge. */
-        if (v->id < av->n && av->track[v->id] >= 0)
+         * clears any stale delta carried around a loop back-edge. An aliased
+         * result defines no new reference (track_slot resolves it to the
+         * receiver's), so it must NOT reset — that would erase the very
+         * release the check above looks for. */
+        if (v->id < av->n && av->alias[v->id] < 0 && av->track[v->id] >= 0)
             work[av->track[v->id]] = 0;
+    }
+
+    /* The return terminator consumes blk->control; an alias returned after its
+     * receiver died is the `return a.reverse()` counterexample. */
+    if (report && blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->id < av->n &&
+        av->alias[blk->control->id] >= 0) {
+        int32_t t = track_slot(av, blk->control->id);
+        if (t >= 0 && work[t] < 0) {
+            uint32_t root = alias_root(av, blk->control->id);
+            char detail[176];
+            snprintf(detail, sizeof(detail),
+                     "return transfers v%u, which is its receiver v%u returned by `return self`, "
+                     "after v%u was released without a compensating retain",
+                     blk->control->id, root, root);
+            return report_violation(av, XI_ARC_C1_USE_AFTER_RELEASE, blk->control->id,
+                                    find_release_block(av, root), blk->id, detail);
+        }
     }
     return true;
 }
@@ -618,24 +743,29 @@ XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
     av.is_rc = (bool *) verifier_calloc(&av, av.n, sizeof(bool));
     av.track = (int32_t *) verifier_malloc(&av, av.n * sizeof(int32_t));
     av.owner = (int32_t *) verifier_malloc(&av, av.n * sizeof(int32_t));
-    if (!av.def || !av.is_rc || !av.track || !av.owner) {
+    av.alias = (int32_t *) verifier_malloc(&av, av.n * sizeof(int32_t));
+    if (!av.def || !av.is_rc || !av.track || !av.owner || !av.alias) {
         xr_free(av.def);
         xr_free(av.is_rc);
         xr_free(av.track);
         xr_free(av.owner);
+        xr_free(av.alias);
         av.def = NULL;
         av.is_rc = NULL;
         av.track = NULL;
         av.owner = NULL;
+        av.alias = NULL;
         return report_resource_failure(&av, "verifier state allocation failed");
     }
     for (uint32_t i = 0; i < av.n; i++) {
         av.track[i] = -1;
         av.owner[i] = -1;
+        av.alias[i] = -1;
     }
 
     build_defs(&av);
     build_owners(&av);
+    build_aliases(&av);
 
     bool ok = check_stale_uses(&av); /* C5 (SSA completeness) */
     if (ok)
@@ -661,6 +791,7 @@ XR_FUNC bool xi_arc_verify_with_options(XiFunc *f, XiArcVerifyReport *report,
     xr_free(av.is_rc);
     xr_free(av.track);
     xr_free(av.owner);
+    xr_free(av.alias);
     return ok;
 }
 

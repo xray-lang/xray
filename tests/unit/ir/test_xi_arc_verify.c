@@ -421,6 +421,123 @@ static void test_legal_trivial(void) {
     xi_func_free(f);
 }
 
+/* ========== Receiver aliases (C1): `return self` outlives its receiver ==== */
+
+/* A call to a member the native declaration marks `// @returns_receiver`.
+ * Array.reverse is such a member; its result IS args[0]. */
+static XiValue *self_returning_call(XiFunc *f, XiBlock *b, XiValue *recv, const char *method) {
+    XiValue *c = xi_value_new(f, b, XI_CALL_METHOD, &t_array, 1);
+    c->args[0] = recv;
+    c->aux = (void *) method;
+    return c;
+}
+
+/* `fn f() { var a = [..]; return a.reverse() }` before ARC learned the alias:
+ * the receiver's own reference is dropped at its death point, then the result —
+ * the SAME object under a second SSA name — is transferred out. Two SSA names,
+ * one reference: no per-name delta ever goes negative, so this shape is exactly
+ * what the receiver-alias fold exists to see. */
+static void test_receiver_alias_returned_after_receiver_release(void) {
+    XiFunc *f = make_func("alias_return", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    release(f, b0, a); /* a dies — but r is the same object */
+    xi_block_set_return(b0, r);
+
+    ASSERT_CONTRACT(f, XI_ARC_C1_USE_AFTER_RELEASE,
+                    "receiver alias: returned self outlives released receiver");
+    xi_func_free(f);
+}
+
+/* Same object, read rather than returned: INDEX_GET on the alias after the
+ * receiver's release. */
+static void test_receiver_alias_read_after_receiver_release(void) {
+    XiFunc *f = make_func("alias_read", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "sort");
+    release(f, b0, a);
+    XiValue *u = index_get(f, b0, r);
+    xi_block_set_return(b0, u);
+
+    ASSERT_CONTRACT(f, XI_ARC_C1_USE_AFTER_RELEASE,
+                    "receiver alias: read of self after receiver release");
+    xi_func_free(f);
+}
+
+/* The optional-chain shape: the alias reaches its use through a phi, and the
+ * receiver died on that predecessor edge. */
+static void test_receiver_alias_phi_merges_released_receiver(void) {
+    XiFunc *f = make_func("alias_phi", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    release(f, b0, a);
+    xi_block_set_jump(b0, b1);
+
+    XiPhi *p = xi_phi_new(f, b1, &t_array, b1->npreds);
+    p->value.args[0] = r;
+    XiValue *u = index_get(f, b1, &p->value);
+    xi_block_set_return(b1, u);
+
+    ASSERT_CONTRACT(f, XI_ARC_C1_USE_AFTER_RELEASE,
+                    "receiver alias: phi merges self whose receiver died on the edge");
+    xi_func_free(f);
+}
+
+/* The fix ARC now emits: retain the alias before the receiver's death drop.
+ * One object, two references — legal, and must not be reported. */
+static void test_legal_retained_receiver_alias(void) {
+    XiFunc *f = make_func("legal_alias_retained", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    retain(f, b0, r); /* compensating retain (C1's escape hatch) */
+    release(f, b0, a);
+    xi_block_set_return(b0, r);
+
+    ASSERT_OK(f, "legal: retained receiver alias survives the receiver");
+    xi_func_free(f);
+}
+
+/* Using the alias BEFORE the receiver dies needs no retain at all. */
+static void test_legal_receiver_alias_used_before_release(void) {
+    XiFunc *f = make_func("legal_alias_ordered", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    XiValue *u = index_get(f, b0, r);
+    release(f, b0, a);
+    xi_block_set_return(b0, u);
+
+    ASSERT_OK(f, "legal: alias read before the receiver's release");
+    xi_func_free(f);
+}
+
+/* A method that returns a FRESH array of the receiver's type must not be folded
+ * into the receiver's reference: Array.concat has the same result type as
+ * Array.reverse but allocates. Folding it would false-positive on correct ARC
+ * output, so this pins the fact to the declaration rather than the signature. */
+static void test_legal_fresh_returning_method_is_not_an_alias(void) {
+    XiFunc *f = make_func("legal_fresh_result", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = self_returning_call(f, b0, a, "concat");
+    release(f, b0, a); /* legal: r is a different object */
+    xi_block_set_return(b0, r);
+
+    ASSERT_OK(f, "legal: concat result is fresh, not a receiver alias");
+    xi_func_free(f);
+}
+
 static void test_verifier_resource_failure_is_not_success(void) {
     XiFunc *f = make_func("resource_failure", &t_array);
     XiValue *v = rc_new(f, f->entry);
@@ -442,6 +559,9 @@ int main(void) {
     test_incident4_stale_use();
     test_incident5_rc_op_metadata();
     test_double_release();
+    test_receiver_alias_returned_after_receiver_release();
+    test_receiver_alias_read_after_receiver_release();
+    test_receiver_alias_phi_merges_released_receiver();
 
     test_legal_loop_header_borrow_phi();
     test_legal_move_out();
@@ -450,6 +570,9 @@ int main(void) {
     test_legal_retained_borrow_view_outlives_owner();
     test_released_retain_does_not_promote_borrow_view();
     test_legal_branch_local_release();
+    test_legal_retained_receiver_alias();
+    test_legal_receiver_alias_used_before_release();
+    test_legal_fresh_returning_method_is_not_an_alias();
     test_legal_trivial();
     test_verifier_resource_failure_is_not_success();
 

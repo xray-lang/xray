@@ -1,0 +1,175 @@
+// 0804_self_returning_method_rc.xr
+// Members declared `// @returns_receiver` hand back the receiver itself, so the
+// result and the receiver are ONE object. Each case below lets the receiver's
+// owner die BEFORE the result is used — the shape that used to release the
+// object once for the receiver and once for the result (rc-contract C1/C2,
+// a heap use-after-free). Reading correct contents back proves the aliased
+// result kept the object alive.
+
+// ===== escaping through a return =====
+
+fn build_reversed() -> Array<int> {
+    var a = [1, 2, 3]
+    return a.reverse()
+}
+
+@test
+fn test_reverse_escapes_receiver_death() {
+    var r = build_reversed()
+    assert_eq(len(r), 3)
+    assert_eq(r[0], 3)
+    assert_eq(r[1], 2)
+    assert_eq(r[2], 1)
+}
+
+fn build_sorted() -> Array<int> {
+    var a = [3, 1, 2]
+    return a.sort()
+}
+
+@test
+fn test_sort_escapes_receiver_death() {
+    var r = build_sorted()
+    assert_eq(len(r), 3)
+    assert_eq(r[0], 1)
+    assert_eq(r[2], 3)
+}
+
+fn build_filled() -> Array<int> {
+    var a = [0, 0, 0]
+    return a.fill(7)
+}
+
+@test
+fn test_fill_escapes_receiver_death() {
+    var r = build_filled()
+    assert_eq(len(r), 3)
+    assert_eq(r[0], 7)
+    assert_eq(r[2], 7)
+}
+
+fn build_reserved() -> Array<int> {
+    var a = [4, 5]
+    return a.reserve(32)
+}
+
+@test
+fn test_reserve_escapes_receiver_death() {
+    var r = build_reserved()
+    assert_eq(len(r), 2)
+    assert_eq(r[0], 4)
+    assert_eq(r[1], 5)
+}
+
+fn build_resized() -> Array<int> {
+    var a = [4, 5]
+    return a.resize(4, 9)
+}
+
+@test
+fn test_resize_escapes_receiver_death() {
+    var r = build_resized()
+    assert_eq(len(r), 4)
+    assert_eq(r[0], 4)
+    assert_eq(r[3], 9)
+}
+
+fn build_appended() -> StringBuilder {
+    var b = StringBuilder()
+    return b.append("xy")
+}
+
+@test
+fn test_stringbuilder_append_escapes_receiver_death() {
+    assert_eq(build_appended().toString(), "xy")
+}
+
+fn build_cleared() -> StringBuilder {
+    var b = StringBuilder()
+    b.append("dropped")
+    return b.clear()
+}
+
+@test
+fn test_stringbuilder_clear_escapes_receiver_death() {
+    assert_eq(build_cleared().toString(), "")
+}
+
+// ===== escaping through an optional-chain merge =====
+// The aliased result reaches the print/compare through a phi, so the retain has
+// to land on the branch that actually called the method.
+
+@test
+fn test_optional_chain_merge() {
+    var a: Array<int>? = [1, 2, 3]
+    var r = a?.reverse()
+    assert_eq(len(r!), 3)
+    assert_eq(r![0], 3)
+}
+
+@test
+fn test_optional_chain_null_receiver() {
+    var a: Array<int>? = null
+    var r: Array<int>? = a?.reverse()
+    assert_eq(r == null, true)
+}
+
+// ===== chained self-returns =====
+// Each link aliases the same object; the chain must not release it twice.
+
+fn build_chained() -> Array<int> {
+    var a = [3, 1, 2]
+    return a.sort().reverse()
+}
+
+@test
+fn test_chained_self_returns() {
+    var r = build_chained()
+    assert_eq(len(r), 3)
+    assert_eq(r[0], 3)
+    assert_eq(r[2], 1)
+}
+
+// ===== the result is still usable alongside the receiver =====
+// The alias must not be over-retained either: receiver and result are the same
+// object, and mutating through one is visible through the other.
+
+@test
+fn test_alias_shares_storage_with_receiver() {
+    var a = [1, 2, 3]
+    var r = a.reverse()
+    a.push(4)
+    assert_eq(len(r), 4)
+    assert_eq(r[3], 4)
+}
+
+// ===== loop-carried: one alias per iteration, no leak, no early free =====
+
+@test
+fn test_self_return_in_loop() {
+    var total = 0
+    var i = 0
+    while (i < 20) {
+        var a = [1, 2, 3]
+        var r = a.reverse()
+        total = total + r[0]
+        i = i + 1
+    }
+    assert_eq(total, 60)
+}
+
+// ===== Set algebra returns a fresh set, never the receiver =====
+// union/difference/symmetricDifference are declared to return a NEW Set<T>;
+// mutating the receiver afterwards must not be visible through the result.
+
+@test
+fn test_set_union_result_is_independent() {
+    var s = Set<int>()
+    s.add(1)
+    var other = Set<int>()
+    other.add(2)
+    var u = s.union(other)
+    s.add(3)
+    assert_eq(len(u), 2)
+    assert_eq(u.contains(3), false)
+}
