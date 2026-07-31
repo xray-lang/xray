@@ -110,6 +110,7 @@ static void coro_heap_init_runtime_state(XrCoroHeap *heap) {
     heap->is_collecting = 0;
     heap->cycle_collection_disabled = 0;
     heap->cycle_collecting = 0;
+    heap->is_tearing_down = 0;
     heap->cycle_collect_threshold = XR_CYCLE_COLLECT_THRESHOLD_INIT;
     heap->cycle_collect_count = 0;
     heap->object_count = 0;
@@ -327,6 +328,7 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
         return;
     XR_DCHECK(!heap->is_collecting, "coro_heap_destroy called while collecting");
 
+    heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
     xr_region_destroy(&heap->region);
     coro_heap_free_large_objects(heap);
@@ -375,6 +377,7 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     XR_DCHECK(new_owner != NULL, "coro_heap_reset: NULL new_owner");
     XR_DCHECK(!heap->is_collecting, "coro_heap_reset called while collecting");
 
+    heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
     xr_region_reset(&heap->region);
     coro_heap_free_large_objects(heap);
@@ -421,6 +424,17 @@ static inline void coro_heap_update_alloc_stats(XrCoroHeap *heap, uint32_t total
 
 XR_FUNC void xr_coro_heap_recycle_obj(XrCoroHeap *heap, XrObjHeader *obj) {
     if (!heap || !obj)
+        return;
+
+    /* Teardown/reset: the caller reclaims every block in bulk immediately after
+     * the finalize walk (region blocks, then whatever is still in large_set),
+     * so reclaiming anything here is at best wasted work. For a large object it
+     * is worse than wasted: the walk iterates a snapshot of finalize_set and
+     * reads each entry's header to skip the already-destroyed ones, and a
+     * cascade that freed a snapshot entry outright would leave that read
+     * dangling. Counters are not adjusted either — they are zeroed by
+     * coro_heap_init_runtime_state, or die with the heap. */
+    if (heap->is_tearing_down)
         return;
 
     /* A dead object (rc==0) no longer counts toward live bytes — mirror the

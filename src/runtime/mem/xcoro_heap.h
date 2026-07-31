@@ -130,7 +130,14 @@ typedef struct XrCoroHeap {
                                         // gates the automatic cycle collector (xr_cycle_add_root
                                         // auto-trigger)
     uint8_t cycle_collecting;           // Re-entry guard for the auto-triggered cycle collector
-    uint8_t _pad1[5];                   // alignment
+    // Set for the whole destroy/reset sequence. While it is set, drop-to-zero
+    // reclaims nothing individually: the finalize walk iterates a snapshot of
+    // finalize_set and reads each entry's header to skip already-destroyed
+    // objects, so a destructor cascade that freed a snapshot entry outright
+    // (large objects go straight back to malloc/munmap) would dangle it. Every
+    // block is reclaimed in bulk right after the walk instead.
+    uint8_t is_tearing_down;
+    uint8_t _pad1[4];  // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
     XrHeapPtrSet large_set;  // All large objects (O(1) insert/remove)
