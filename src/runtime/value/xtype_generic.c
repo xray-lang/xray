@@ -282,6 +282,18 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
     return type;
 }
 
+/* Whether a type is the prelude `Range` rather than a user class reusing the
+ * name. Prelude names are ordinary identifiers, so `class Range { ... }` is
+ * legal; the prelude registry builds its named instances with a NULL
+ * class_ref while user class instances always carry one. A user Range earns
+ * Iterable / Lengthable the same way any other class does — by declaring the
+ * interface — so it must not inherit the builtin's domain here. Twin of
+ * xa_type_is_prelude_range() in the analyzer and the matching test in
+ * is_index_iterable_collection() (src/ir/xi_lower_stmt.c). */
+static bool is_prelude_range(const XrType *type) {
+    return xr_type_is_named_class(type, "Range") && type->instance.class_ref == NULL;
+}
+
 // Element type produced when iterating `type` for built-in iterables.
 // Returns NULL when type is not iterable in this sense; the caller falls
 // back to bare-kind checks. Map iterates over keys.
@@ -298,9 +310,39 @@ static XrType *iterable_element_of(XrType *type) {
             return type->map.key_type;
         case XR_KIND_STRING:
             return xr_type_new_rune(NULL);
+        case XR_KIND_JSON:
+            // Single-variable Json iteration yields field names.
+            return xr_type_new_string(NULL);
+        case XR_KIND_INSTANCE:
+            // Prelude `Range` iterates its int domain.
+            return is_prelude_range(type) ? xr_type_new_int(NULL) : NULL;
         default:
             return NULL;
     }
+}
+
+// Types `for-in` drives without a user-defined `iterator()`: the built-in
+// container kinds plus Json and the prelude `Range` class. `Range` is an
+// XR_KIND_INSTANCE, so a bare kind test cannot see it. Keep this in sync with
+// iterable_element_of and the analyzer's for-in domains.
+static bool builtin_iterable_type(XrType *type) {
+    if (!type)
+        return false;
+    if (xr_kind_is_builtin_iterable(type->kind) || type->kind == XR_KIND_JSON)
+        return true;
+    return is_prelude_range(type);
+}
+
+// Types `len()` answers directly: sized containers, string, Json, and the
+// prelude `Range` class.
+static bool builtin_lengthable_type(XrType *type) {
+    if (!type)
+        return false;
+    XrTypeKind k = type->kind;
+    if (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING || k == XR_KIND_MAP ||
+        k == XR_KIND_SET || k == XR_KIND_JSON)
+        return true;
+    return is_prelude_range(type);
 }
 
 // Index pair (key_type, value_type) produced by built-in indexable types.
@@ -381,7 +423,7 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
             return true;
         if (iface_name) {
             if (strcmp(iface_name, "Iterable") == 0) {
-                if (xr_kind_is_builtin_iterable(type->kind)) {
+                if (builtin_iterable_type(type)) {
                     if (targs >= 1 && args && args[0]) {
                         XrType *elem = iterable_element_of(type);
                         return type_arg_match(args[0], elem);
@@ -426,9 +468,7 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 }
                 // Not a builtin indexable — fall through to user-class check
             } else if (strcmp(iface_name, "Lengthable") == 0) {
-                XrTypeKind k = type->kind;
-                if (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING ||
-                    k == XR_KIND_MAP || k == XR_KIND_SET)
+                if (builtin_lengthable_type(type))
                     return true;
                 // Not a builtin lengthable — fall through to user-class check
             } else if (strcmp(iface_name, "Callable") == 0) {

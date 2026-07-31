@@ -1,0 +1,13 @@
+// A type parameter is iterable only through its constraints: the generic body
+// is analyzed before monomorphization, so an unconstrained T carries no
+// iteration domain. `<T: Iterable<int>>` is what makes this loop legal.
+
+fn count<T>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + 1
+    }
+    return n
+}
+
+print(count([1, 2, 3]))

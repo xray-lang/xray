@@ -1,0 +1,74 @@
+// generic_iterable_constraint.xr
+// VM/AOT differential coverage for Iterable<T> / Lengthable generic
+// constraints.
+//
+// The two instantiation shapes lower differently and both are covered:
+//   - a named type argument (Range) monomorphizes, so the clone iterates
+//     through len()/index;
+//   - a container type argument does not synthesize a type ref, so the body
+//     stays erased and iterates through the runtime iterator() protocol.
+//
+// Each generic here sticks to one of the two shapes. A single generic
+// function instantiated both ways in one program currently fails to build
+// under AOT: the clone plan marks the erased origin non-executable while the
+// unspecialized call site still targets it
+// (xaot_callable_func_has_executable_body_plan).
+
+fn totalContainer<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+fn totalRange<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+fn keyLengths<T: Iterable<string>>(xs: T) -> int {
+    var n = 0
+    for (k in xs) {
+        n = n + len(k)
+    }
+    return n
+}
+
+fn indexedSum<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (k, v in xs) {
+        n = n + k + v
+    }
+    return n
+}
+
+fn sizeOfContainer<T: Lengthable>(x: T) -> int {
+    return len(x)
+}
+
+fn sizeOfRange<T: Lengthable>(x: T) -> int {
+    return len(x)
+}
+
+var s: Set<int> = #[1, 2, 3]
+var m: Map<string, int> = #{"aa": 1, "bbb": 2}
+var j: Json = { "a": 1, "bb": 2 }
+var r = 2..6
+
+print(totalContainer([1, 2, 3]))
+print(totalContainer(s))
+print(totalRange(1..5))
+print(totalRange(r))
+print(keyLengths(m))
+print(keyLengths(j))
+print(indexedSum([10, 20]))
+print(sizeOfContainer([1, 2, 3]))
+print(sizeOfContainer("hey"))
+print(sizeOfContainer(m))
+print(sizeOfContainer(j))
+print(sizeOfRange(1..4))
+print(sizeOfRange(r))

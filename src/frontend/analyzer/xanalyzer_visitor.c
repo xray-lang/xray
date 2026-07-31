@@ -1520,10 +1520,9 @@ static XrType *contextual_numeric_literal_type(XaInferContext *ctx, AstNode *nod
         double value = node->as.literal.raw_value.float_val;
         if (target->scalar_rep == XR_NATIVE_F32 && isfinite(value) && fabs(value) > FLT_MAX) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Floating literal is out of range for contextual type 'f32'",
-                                       &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "Floating literal is out of range for contextual type 'f32'", &loc);
         }
         return target;
     }
@@ -5183,6 +5182,106 @@ static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType
     return xa_analyzer_is_iterator(analyzer, rt, out_elem);
 }
 
+/* Element type a single constraint promises when the constrained value is
+ * iterated. The built-in `Iterable<E>` interface names E directly; every other
+ * constraint (a class upper bound with `iterator()`, an `Iterator<E>` bound)
+ * answers through the analyzer's structural check. */
+static bool xa_constraint_iteration_element(XaAnalyzer *analyzer, XrType *constraint,
+                                            XrType **out_elem) {
+    if (!constraint)
+        return false;
+    if (constraint->kind == XR_KIND_INTERFACE && constraint->instance.class_name &&
+        strcmp(constraint->instance.class_name, "Iterable") == 0) {
+        if (out_elem) {
+            *out_elem = (constraint->instance.type_arg_count >= 1 &&
+                         constraint->instance.type_args && constraint->instance.type_args[0])
+                            ? constraint->instance.type_args[0]
+                            : xr_type_new_unknown(NULL);
+        }
+        return true;
+    }
+    return xa_analyzer_is_iterable(analyzer, constraint, out_elem);
+}
+
+/* Scan one declaration's type-parameter table for `name`. `*out_found` reports
+ * whether the table declares the parameter at all, so the caller can stop at
+ * the nearest declaration instead of letting an outer scope's same-named
+ * parameter answer for it. */
+static bool xa_type_param_link_iteration_element(XaAnalyzer *analyzer, XaSymbolLinks *links,
+                                                 const char *name, XrType **out_elem,
+                                                 bool *out_found) {
+    if (out_found)
+        *out_found = false;
+    if (!links || !name)
+        return false;
+    int count = xa_symbol_links_get_type_param_count(links);
+    for (int i = 0; i < count; i++) {
+        const char *param_name = xa_symbol_links_get_type_param_name(links, i);
+        if (!param_name || strcmp(param_name, name) != 0)
+            continue;
+        if (out_found)
+            *out_found = true;
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
+        for (int j = 0; j < constraint_count; j++) {
+            if (xa_constraint_iteration_element(analyzer, constraints ? constraints[j] : NULL,
+                                                out_elem))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+/* Why a type parameter did or did not qualify as a for-in collection. */
+typedef enum {
+    XA_TP_ITER_OK,        /* a constraint promises iteration */
+    XA_TP_ITER_NONE,      /* declared, but no constraint promises iteration */
+    XA_TP_ITER_UNTRACKED, /* declared by a method, whose constraints are dropped */
+} XaTypeParamIterKind;
+
+/* Iteration element promised by a type parameter's constraints.
+ *
+ * A generic body is analyzed before monomorphization, so `for (x in xs)` over
+ * `xs: T` can only be justified by what T was constrained to — the concrete
+ * collection type is not known until the clone for each instantiation is
+ * analyzed. Constraints are recorded on the enclosing generic declaration's
+ * symbol links rather than on the XR_KIND_TYPE_PARAM value, so walk the scope
+ * chain the way xa_type_param_has_hashable_constraint does.
+ *
+ * A method's own `<T: ...>` list is parsed and discarded (xparse_oop.c), so its
+ * parameters arrive here with an empty constraint list no matter what the
+ * source said. UNTRACKED separates that from a genuinely unconstrained
+ * parameter, which lets the caller avoid telling the user to write a
+ * constraint they already wrote. */
+static XaTypeParamIterKind xa_type_param_iteration_element(XaInferContext *ctx, XrType *type_param,
+                                                           XrType **out_elem) {
+    if (!ctx || !ctx->analyzer || !type_param || type_param->kind != XR_KIND_TYPE_PARAM)
+        return XA_TP_ITER_NONE;
+    if (xa_constraint_iteration_element(ctx->analyzer, type_param->type_param.constraint, out_elem))
+        return XA_TP_ITER_OK;
+
+    const char *name = type_param->type_param.name;
+    if (!name)
+        return XA_TP_ITER_NONE;
+    for (XaScope *scope = ctx->analyzer->current_scope; scope; scope = scope->parent) {
+        XaSymbol *owners[2] = {scope->function_symbol, scope->class_symbol};
+        for (int i = 0; i < 2; i++) {
+            if (!owners[i])
+                continue;
+            bool found = false;
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, owners[i]);
+            if (xa_type_param_link_iteration_element(ctx->analyzer, links, name, out_elem, &found))
+                return XA_TP_ITER_OK;
+            if (found) {
+                return owners[i]->kind == XA_SYM_METHOD ? XA_TP_ITER_UNTRACKED : XA_TP_ITER_NONE;
+            }
+        }
+    }
+    return XA_TP_ITER_NONE;
+}
+
 static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_node, AstNode *value,
                                            XrType *value_type) {
     if (!ctx || !yield_node || !value || !xa_type_needs_borrow_escape_guard(value_type) ||
@@ -5204,6 +5303,32 @@ static bool xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_n
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
     return true;
+}
+
+/* Whether a type is the prelude `Range`, as opposed to a user class that
+ * happens to reuse the name. Prelude names are ordinary identifiers, so
+ * `class Range { ... }` is legal; user class instances always carry a
+ * class_ref, while the prelude registry builds its named instances with a
+ * NULL one. A user Range still has to supply iterator() to be iterable, so
+ * it must not inherit the builtin's int-sequence domain. The matching
+ * distinction in is_index_iterable_collection() (src/ir/xi_lower_stmt.c)
+ * keeps lowering in step with what is accepted here. */
+static bool xa_type_is_prelude_range(const XrType *type) {
+    return xr_type_is_named_class(type, "Range") && type->instance.class_ref == NULL;
+}
+
+/* A range is a flat sequence of ints, so it has no second yield to bind. The
+ * check lives here because both range for-in forms — the inline `a..b`
+ * literal and a stored `Range` value — must reject key-value iteration
+ * identically; without it the value form reaches lowering and fails at
+ * runtime with "method 'entriesIterator' not found". */
+static void xa_for_in_reject_range_keyvalue(XaInferContext *ctx, AstNode *node,
+                                            const ForInStmtNode *fi) {
+    if (!fi->is_keyvalue)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               "Range iteration yields values only; use `for (i in range)`", &loc);
 }
 
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
@@ -5992,6 +6117,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     item_type = enum_type ? enum_type : xr_type_new_unknown(NULL);
                 }
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
+                xa_for_in_reject_range_keyvalue(ctx, node, fi);
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
                 if (xr_type_is_enum_metadata_named(coll_type, XR_ENUM_VARIANTS_TYPE_NAME)) {
@@ -6054,6 +6180,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
+                } else if (xa_type_is_prelude_range(coll_type)) {
+                    /* A `Range` held in a variable, parameter, or field is the
+                     * same iteration domain as the inline `a..b` form above —
+                     * the literal is just the fast path that never materializes
+                     * the object. Both yield int. */
+                    xa_for_in_reject_range_keyvalue(ctx, node, fi);
+                    item_type = xr_type_new_int(NULL);
                 } else if (XR_TYPE_IS_STRING(coll_type)) {
                     item_type = xr_type_new_rune(NULL);
                     if (fi->is_keyvalue) {
@@ -6082,6 +6215,47 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                              xr_type_to_string(coll_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else if (coll_type->kind == XR_KIND_TYPE_PARAM) {
+                    /* Generic body, analyzed before monomorphization: the
+                     * collection's real type is unknown here, so iterability
+                     * comes from the type parameter's constraints. The clone
+                     * produced for each concrete instantiation is re-analyzed
+                     * against the substituted collection type. */
+                    XrType *elem = NULL;
+                    const char *param_name =
+                        coll_type->type_param.name ? coll_type->type_param.name : "T";
+                    XaTypeParamIterKind iter_kind =
+                        xa_type_param_iteration_element(ctx, coll_type, &elem);
+                    if (iter_kind == XA_TP_ITER_OK) {
+                        if (fi->is_keyvalue) {
+                            /* Key/value shape depends on the instantiation
+                             * (Map yields K,V; Array yields index,element),
+                             * so leave both to the monomorphized clone. */
+                            item_type = xr_type_new_unknown(NULL);
+                            value_type = xr_type_new_unknown(NULL);
+                        } else if (elem) {
+                            item_type = elem;
+                        }
+                    } else {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[288];
+                        if (iter_kind == XA_TP_ITER_UNTRACKED) {
+                            snprintf(msg, sizeof(msg),
+                                     "type parameter '%s' is not iterable: a method's own generic "
+                                     "constraints are not tracked yet, so '%s' carries none here; "
+                                     "move the generic to a top-level function or to the class",
+                                     param_name, param_name);
+                        } else {
+                            snprintf(msg, sizeof(msg),
+                                     "type parameter '%s' is not iterable; constrain it with "
+                                     "'Iterable<T>' (e.g. '<%s: Iterable<int>>') or with a type "
+                                     "that has an 'iterator()' method",
+                                     param_name, param_name);
+                        }
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    }
                 } else {
                     /* Anything else (instance of a class / struct, json
                      * literal type, etc.) iterates only via the
@@ -6099,7 +6273,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "type '%s' is not iterable; expected an Array, Map, Set, string, "
-                                 "Json, range or a class with an 'iterator()' method",
+                                 "Json, Range or a class with an 'iterator()' method",
                                  xr_type_to_string(coll_type));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
