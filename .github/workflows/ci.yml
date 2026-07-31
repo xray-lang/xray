@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main, master]
 
+# A superseded PR run is spending a runner on an answer nobody will read. The
+# suite is long enough that without this, pushes queue behind their own
+# predecessors.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   XRAY_CI_RELEASE09_EXTRA_EXCLUDE_RE: '^(test_vm_exception|sys_thread_vm|stdlib_embedded_layout|parallel_plan_vm_scaling_gate|http_static_route_full_parse|test_stdlib_boundary_manifest|stdlib_migration_contracts|stdlib_self_hosting_consistency|binary_stdlib_surface_inventory|binary_public_native_readiness|query_surface_residue|string_surface_residue|byte_array_aot_c90_hotpath|aot_freestanding_allowlist|aot_freestanding_provider_abi|aot_manifest_sweep|aot_isolate_symbol_gate|install_public_surface|backend_diff|task190_extern_backend_diff|backend_diff_deterministic)$'
@@ -159,6 +166,22 @@ jobs:
       run: |
         ./scripts/install_zig_toolchain.sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Cache compiler objects
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ccache
+          ~/Library/Caches/ccache
+          .cache/xray-test
+        key: ccache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-
+
+    - name: Install ccache
+      run: |
+        if [ "$RUNNER_OS" = "macOS" ]; then brew install ccache; else sudo apt-get update && sudo apt-get install -y ccache; fi
+        ccache --max-size=2G
 
     - name: Configure (Debug)
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
