@@ -209,26 +209,6 @@ static XrValue vm_task_result_from_terminal(XrVMRuntime *isolate, XrTask *task,
     return vm_task_result_member(isolate, 4);
 }
 
-static XrDispatchAction vm_task_raise_terminal(XrVMRuntime *isolate, XrTask *task,
-                                               XrBcCallFrame *frame, XrInstruction *pc) {
-    uint8_t state =
-        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
-    XrValue exc;
-    if (state == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
-        exc = task->error;
-        if (!xr_value_is_panic_info(isolate, exc))
-            exc = xr_panic_info_from_value(isolate, exc);
-    } else if (state == XR_TASK_FAILED) {
-        exc = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
-    } else {
-        exc = xr_panic_info_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
-    }
-    if (frame)
-        frame->pc = pc;
-    xr_vm_unwind_with_trace(isolate, exc);
-    return XR_DISP_RAISE;
-}
-
 static XrValue vm_task_result_from_block(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro,
                                          XrCoroBlockResult block, XrValue raw_value,
                                          bool timeout_enabled) {
