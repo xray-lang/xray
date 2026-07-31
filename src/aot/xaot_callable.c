@@ -160,7 +160,6 @@ XR_FUNC bool xaot_callable_func_has_executable_body_plan(const XaotBundle *bundl
         return false;
     if (!bundle || func->xg_body_func_id == XG_NO_ID)
         return !func->is_generic_template;
-    bool mentioned = false;
     bool selected = false;
     for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
         const XaotGenericBodyPlan *plan = &bundle->generic_body_plans[i];
@@ -177,14 +176,20 @@ XR_FUNC bool xaot_callable_func_has_executable_body_plan(const XaotBundle *bundl
             case XAOT_GENERIC_BODY_REJECT:
                 break;
         }
-        if (plan->origin_body_func_id == func->xg_body_func_id ||
-            plan->specialized_body_func_id == func->xg_body_func_id)
-            mentioned = true;
     }
-    /* Function-level generic origins intentionally retain an erased callable
-     * ABI and therefore are not tagged `is_generic_template`. A clone plan
-     * still makes that origin non-executable. */
-    return mentioned ? selected : !func->is_generic_template;
+    /* A specialized clone body is executable because its plan selects it; it
+     * carries no ABI of its own until then.
+     *
+     * The origin is a separate question. `is_generic_template` marks the bodies
+     * that have no erased ABI at all — those nested in an uninstantiated
+     * generic class skeleton (see xi_lower_class.inc.c and
+     * pending_body_is_generic_template). Function- and method-level generic
+     * origins keep a canonical erased body with a real callable ABI, so a clone
+     * plan covering *some* call sites must not retire it: type arguments the
+     * frontend cannot spell as a type ref (tuples, unions, shaped Json, ...)
+     * still reach the origin erased. Emission stays gated on reachability, so
+     * an origin whose call sites all specialized is still dropped. */
+    return selected || !func->is_generic_template;
 }
 
 static CallableFuncFacts *callable_func_facts(CallableAnalysis *a, const XiFunc *func) {

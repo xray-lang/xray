@@ -440,6 +440,23 @@ static void xrt_print_value(XrValue v, int depth) {
     xrt_format_value(v, NULL, depth);
 }
 
+/* True when xrt_format_value renders v structurally rather than falling through
+ * to its "<object@%p>" placeholder. Callers that must not emit a raw address
+ * (string(x), x.toString()) gate on this. */
+static inline int xrt_value_kind_is_formattable_aggregate(XrValue v) {
+    switch (xrt_value_kind(v)) {
+        case XR_TAG_ARRAY:
+        case XR_TAG_MAP:
+        case XR_TAG_SET:
+        case XR_TAG_TUPLE:
+            return 1;
+        case XR_TAG_PTR:
+            return v.ptr && (xrt_is_json_object_value(v) || v.heap_type == XR_TINSTANCE);
+        default:
+            return 0;
+    }
+}
+
 /* value.toString() for containers and other non-scalars: render via the shared
  * formatter into a string (matches the VM's xr_value_to_string output). */
 static inline XrValue xrt_value_to_string(XrValue v) {

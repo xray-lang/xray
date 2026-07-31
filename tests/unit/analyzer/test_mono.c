@@ -108,6 +108,36 @@ TEST(mono_mangle_preserves_const_capability_identity) {
     free(map_name);
 }
 
+TEST(mono_mangle_distinguishes_container_element_types) {
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *int_children[] = {&int_t};
+    XrTypeRef *str_children[] = {&str_t};
+    XrTypeRef int_array = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = int_children};
+    XrTypeRef str_array = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = str_children};
+    XrTypeRef int_set = {
+        .kind = XR_TREF_GENERIC, .name = "Set", .nchildren = 1, .children = int_children};
+
+    XrTypeRef *int_array_args[] = {&int_array};
+    XrTypeRef *str_array_args[] = {&str_array};
+    XrTypeRef *int_set_args[] = {&int_set};
+    char *int_array_name = xr_mono_mangle("tagOf", int_array_args, 1);
+    char *str_array_name = xr_mono_mangle("tagOf", str_array_args, 1);
+    char *int_set_name = xr_mono_mangle("tagOf", int_set_args, 1);
+    /* Array<int> and Array<string> must not share an instance: the clone the
+     * first call site produces types its parameters against int. */
+    ASSERT_STR_EQ(int_array_name, "tagOf$Array_i64");
+    ASSERT_STR_EQ(str_array_name, "tagOf$Array_str");
+    ASSERT_STR_EQ(int_set_name, "tagOf$Set_i64");
+    ASSERT(strcmp(int_array_name, str_array_name) != 0);
+    ASSERT(strcmp(int_array_name, int_set_name) != 0);
+    free(int_array_name);
+    free(str_array_name);
+    free(int_set_name);
+}
+
 TEST(monomorphized_stdlib_type_preserves_sealed_capabilities) {
     const uint32_t expected = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
     ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "Mutex"), expected);
@@ -348,6 +378,7 @@ int main(void) {
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
     RUN_TEST(mono_mangle_preserves_const_capability_identity);
+    RUN_TEST(mono_mangle_distinguishes_container_element_types);
     RUN_TEST(monomorphized_stdlib_type_preserves_sealed_capabilities);
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);

@@ -1,0 +1,77 @@
+// anchor: generic-container-type-args
+// A generic call whose type argument is inferred to a container must reach
+// monomorphization exactly like an explicitly written one: the analyzer writes
+// the inferred Array/Slice/Set/Map/Json back onto the call node, the clone is
+// keyed on the full type argument (Array<int> and Array<string> are distinct
+// instances), and AOT specializes the body instead of running it erased.
+//
+// widthOf keeps the erased origin honest: a tuple type argument has no type-ref
+// spelling, so that call site still targets the generic origin while its Array
+// sibling is specialized. AOT must emit both.
+
+fn tagOf<T>(x: T) -> int {
+    return len(string(x))
+}
+
+fn firstOr<T>(xs: Array<T>, dflt: T) -> T {
+    if (len(xs) > 0) {
+        return xs[0]
+    }
+    return dflt
+}
+
+// A Slice cannot cross an escaping parameter, so it is only reachable as a type
+// argument the callee never inspects. It still has to survive the round trip
+// through the writeback and specialize on the span ABI.
+fn bumpFor<T>(x: T, k: int) -> int {
+    return k + 1
+}
+
+// The loop plus the size guard keep this out of the inliner, so the erased
+// origin has to survive as a real callable body rather than being folded away.
+fn widthOf<T>(x: T, n: int) -> int {
+    var tag = len(string(x))
+    var acc = 0
+    for (i in 0..n) {
+        acc = acc + tag + i
+    }
+    if (acc > 100000) {
+        return 0
+    }
+    return acc
+}
+
+fn main() {
+    var ints = [1, 2, 3]
+    var words = ["ab", "cd"]
+    var scores = #{"k": 1}
+    var letters = #["a", "b"]
+    var doc = {"a": 1}
+    var view: Slice<int> = ints[1:3]
+
+    // Same generic, one instance per distinct container type argument.
+    print(tagOf(ints))
+    print(tagOf(words))
+    print(tagOf(scores))
+    print(tagOf(letters))
+    print(tagOf(doc))
+    print(tagOf(1..5))
+    print(tagOf(42))
+    print(tagOf("xy"))
+    print(bumpFor(view, 4))
+    print(bumpFor(ints, 4))
+
+    // Array<T> parameters must bind T from the element type instead of
+    // collapsing every Array into one instance.
+    print(firstOr(ints, 0))
+    print(firstOr(words, "z"))
+
+    // Mixed specialization: the Array and Map call sites clone, the tuple call
+    // site stays on the erased origin.
+    var pair = (1, 2)
+    print(widthOf(ints, 3))
+    print(widthOf(pair, 3))
+    print(widthOf(scores, 2))
+}
+
+main()

@@ -179,15 +179,18 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     if (!name || count <= 0 || !type_args)
         return xr_strdup(name ? name : "");
 
-    /* A bare "const" tag would collapse const Array<int> and const Map<K,V>
-     * into one instance. Qualified arguments therefore use a recursive,
-     * identifier-safe tag while legacy unqualified tags remain unchanged. */
+    /* A bare "const" or head-only "Array" tag would collapse const Array<int>
+     * and const Map<K,V>, or Array<int> and Array<string>, into one instance —
+     * the second call site would then be rewritten to a clone whose parameter
+     * types belong to the first. Both carriers therefore use a recursive,
+     * identifier-safe tag; scalars keep their legacy unqualified tags. */
     char type_bufs[XR_MONO_MAX_PER_GENERIC][256];
     const char *tags[XR_MONO_MAX_PER_GENERIC];
     if (count > XR_MONO_MAX_PER_GENERIC)
         return xr_strdup(name);
     for (int i = 0; i < count; i++) {
-        if (type_args[i] && type_args[i]->kind == XR_TREF_CONST) {
+        if (type_args[i] &&
+            (type_args[i]->kind == XR_TREF_CONST || type_args[i]->kind == XR_TREF_GENERIC)) {
             mono_qualified_type_tag(type_args[i], type_bufs[i], sizeof(type_bufs[i]));
             tags[i] = type_bufs[i];
         } else {
