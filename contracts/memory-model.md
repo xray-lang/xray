@@ -99,6 +99,6 @@ anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1
 anchor-sha256: src/ir/xi_opt_gvn_pre.c 9eaa49c8c91f83534dc5fe159b411e13c404b5443eff44951bc71043c420ddfd
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 53050362c3fd0681aa791e80479334349655eee7b7340769bb4c399654a1a6fc
-anchor-sha256: src/coro/xtask.c e05e804f7c83841bbd77481ce6793469364f8f1e36f65c355c29df5853c438b7
+anchor-sha256: src/coro/xtask.c f5a0fae1cf5cf5a5c90be51b1b6a356676310818b988a4f9fd80b88fac961c63
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
 anchor-sha256: src/frontend/canonical/xcanon.c 6511de9fd3a2a07df02441ceae660a0e47d1cb784fe0a8c6a0cea674f9785ff3
