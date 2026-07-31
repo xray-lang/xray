@@ -1,0 +1,21 @@
+// anchor: defer-panic-escapes-body-terminates
+// Spec 8.3.1 rule D3: a panic that would escape a defer body is a cleanup
+// failure, not a recoverable condition. It is not delivered to the enclosing
+// `catch panic`; the process terminates with E0443 / exit 70. VM and AOT must
+// agree on the stdout produced before the termination and on the exit code.
+fn cleanup_that_panics() {
+    var z = 0
+    print(10 / z)
+}
+
+fn f() {
+    defer { cleanup_that_panics() }
+    print("body-ran")
+}
+
+try {
+    f()
+} catch panic (p) {
+    print("outer-handler-must-not-run")
+}
+print("unreachable-after-terminate")

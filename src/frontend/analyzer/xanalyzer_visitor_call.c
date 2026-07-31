@@ -63,7 +63,6 @@ static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *cal
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *object);
-static bool xa_type_is_pod_span_elem(XrType *type);
 static bool xa_type_layout_has_flexible_tail(const XrType *type);
 
 static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
@@ -151,25 +150,6 @@ static void xa_check_intrinsic_shuffle_lanes(XaInferContext *ctx, const AstNode 
     }
 }
 
-static bool xa_builtin_receiver_intrinsic_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver && XR_TYPE_IS_ARRAY(receiver);
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
-                   xa_type_is_pod_span_elem(receiver->container.element_type);
-    }
-    return false;
-}
-
 static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMethodId method_id) {
     switch (method_id) {
         case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT:
@@ -233,7 +213,7 @@ static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode 
         return compiler_owned;
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        if (!xa_builtin_receiver_intrinsic_matches(receiver, spec->receiver) ||
+        if (!xa_builtin_receiver_matches_type(receiver, spec->receiver) ||
             strcmp(spec->source_name, name) != 0)
             continue;
         return xa_builtin_receiver_method_intrinsic_id(spec->method_id);
@@ -2193,20 +2173,6 @@ static bool xa_type_is_supported_byte_slice_typed_scalar(XrType *type) {
     }
     return XR_TYPE_IS_FLOAT(type) &&
            (type->scalar_rep == XR_NATIVE_F32 || type->scalar_rep == XR_NATIVE_F64);
-}
-
-static bool xa_type_is_pod_span_elem(XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
 }
 
 static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
@@ -5010,7 +4976,7 @@ static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (spec->effect == XA_BUILTIN_EFFECT_MUTATES_RECEIVER &&
-            xa_builtin_receiver_intrinsic_matches(receiver_type, spec->receiver) &&
+            xa_builtin_receiver_matches_type(receiver_type, spec->receiver) &&
             strcmp(spec->source_name, method_name) == 0)
             return true;
     }

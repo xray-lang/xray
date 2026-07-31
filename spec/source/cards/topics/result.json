@@ -8,7 +8,11 @@
     "catch",
     "try",
     "error",
-    "value_return_error"
+    "value_return_error",
+    "defer",
+    "cleanup",
+    "E0387",
+    "E0443"
   ],
   "lead": "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.",
   "sections": [
@@ -23,6 +27,10 @@
     {
       "heading": "Error propagation",
       "markdown": "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation."
+    },
+    {
+      "heading": "defer must not let errors escape",
+      "markdown": "A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1). The compiler rejects a deferred callable whose inferred error set is non-empty with `E0387`; absorb the error inside the body instead: `defer { try { close(c) } catch (e) { log.warn(\"close failed\") } }`. An error or panic the body catches itself has not escaped. What static analysis cannot decide is backstopped at runtime: an error escaping a defer body terminates the process with `E0443`, exit status 70, uncatchable — it neither replaces nor suppresses an in-flight error. Go's \"the defer's error wins\" semantics were rejected because xray marks neither signatures nor call sites, so the substitution would be invisible in the source."
     },
     {
       "heading": "Design principles",

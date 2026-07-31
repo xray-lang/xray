@@ -99,6 +99,7 @@
  * exhaustion is never resumed, so the deferred action would silently not run --
  * an unrunnable cleanup in the language's only deterministic cleanup mechanism. */
 #define XR_ERR_ANALYZE_GENERATOR_DEFER 386
+#define XR_ERR_ANALYZE_DEFER_MAY_THROW 387
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400
@@ -130,10 +131,13 @@
  * or a null the static type forbids. */
 #define XR_ERR_ITERATOR_EXHAUSTED 432
 
-/* ---- Runtime system errors (E04xx, 440-442) ---- */
+/* ---- Runtime system errors (E04xx, 440-443) ---- */
 #define XR_ERR_STACK_OVERFLOW 440
 #define XR_ERR_OUT_OF_MEMORY 441
 #define XR_ERR_MATCH_FAILURE 442
+/* Error escaped a defer body past the E0387 static rule (FFI boundary).
+ * Uncatchable: terminates the process. See spec §8.3.1 rule D3. */
+#define XR_ERR_DEFER_THROW 443
 
 /* ---- Runtime argument errors (E04xx, 450-451) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450

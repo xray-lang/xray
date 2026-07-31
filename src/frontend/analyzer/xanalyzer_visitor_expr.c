@@ -103,20 +103,6 @@ static bool xa_type_is_u8_slice_type(XrType *type) {
     return xr_type_is_u8_slice(type);
 }
 
-static bool xa_type_is_pod_span_elem(XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, AstNode *object,
                                                           const char *name, AstNode *node) {
     if (!ctx || !object || object->type != AST_VARIABLE || !name ||
@@ -367,25 +353,6 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
 
 #include "xbuiltin_receiver_registry.h"
 
-static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver && XR_TYPE_IS_ARRAY(receiver);
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
-                   xa_type_is_pod_span_elem(receiver->container.element_type);
-    }
-    return false;
-}
-
 static const XaBuiltinReceiverMethodSpec *xa_find_builtin_receiver_method_spec(XrType *receiver,
                                                                                const char *name) {
     if (!name)
@@ -393,7 +360,7 @@ static const XaBuiltinReceiverMethodSpec *xa_find_builtin_receiver_method_spec(X
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (strcmp(spec->source_name, name) == 0 &&
-            xa_builtin_receiver_matches(receiver, spec->receiver))
+            xa_builtin_receiver_matches_type(receiver, spec->receiver))
             return spec;
     }
     return NULL;

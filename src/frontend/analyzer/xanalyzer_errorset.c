@@ -3433,23 +3433,36 @@ static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx
     return xa_builtin_get_handle_method_effect_contract(handle_name, ma->name);
 }
 
-static const XaEffectContract *es_exact_integer_intrinsic_effect_contract(XrType *receiver_type,
-                                                                          const char *name) {
-    if (!receiver_type || !name || receiver_type->kind != XR_KIND_INT || receiver_type->is_nullable)
+/* Error contract of a receiver-specialized builtin intrinsic.
+ *
+ * The intrinsic table (xbuiltin_receiver_method.def) carries signatures and
+ * memory effects but no error contract, so without this lookup every
+ * `arr.clear()` / `arr.push(x)` left the caller's effect summary incomplete and
+ * nothing that touches a collection could ever be proven no-throw — including
+ * the cleanup idioms spec 8.3.1 rule D1 has to accept.
+ *
+ * These are Array / Slice / exact-integer primitives implemented in C: they
+ * raise panics, never value-return errors (see
+ * xa_builtin_receiver_method_is_nothrow). The higher-order ones are excluded
+ * there because they re-raise whatever their callback throws, so they stay
+ * unproven and the caller's summary stays incomplete — fail-closed, per 8.0. */
+static const XaEffectContract *es_receiver_intrinsic_effect_contract(XrType *receiver_type,
+                                                                     const char *name) {
+    if (!receiver_type || !name)
         return NULL;
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        bool receiver_matches = spec->receiver == XA_BUILTIN_RECEIVER_EXACT_INTEGER ||
-                                (spec->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER &&
-                                 xr_type_is_exact_unsigned_integer(receiver_type));
-        if (receiver_matches && strcmp(spec->source_name, name) == 0) {
-            static const XaEffectContract nothrow = {
-                .kind = XA_EFFECT_CONTRACT_NOTHROW,
-                .errors = NULL,
-                .error_count = 0,
-            };
-            return &nothrow;
-        }
+        if (!xa_builtin_receiver_matches_type(receiver_type, spec->receiver) ||
+            strcmp(spec->source_name, name) != 0)
+            continue;
+        if (!xa_builtin_receiver_method_is_nothrow(spec))
+            return NULL;
+        static const XaEffectContract nothrow = {
+            .kind = XA_EFFECT_CONTRACT_NOTHROW,
+            .errors = NULL,
+            .error_count = 0,
+        };
+        return &nothrow;
     }
     return NULL;
 }
@@ -3474,7 +3487,7 @@ static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCt
     }
 
     XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
-    contract = es_exact_integer_intrinsic_effect_contract(receiver_type, ma->name);
+    contract = es_receiver_intrinsic_effect_contract(receiver_type, ma->name);
     if (contract)
         return contract;
     contract = xa_builtin_get_type_member_effect_contract(receiver_type, ma->name, false);
@@ -4338,13 +4351,16 @@ static void collect_function_expr_pre(AstNode *node, void *userdata) {
  * conclusion after named-function fixpoint and publish it on the expression's
  * analyzed type. Stored and passed lambdas can then satisfy inferred callable
  * constraints without relying on syntax. */
-static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
-    if (!ctx || !node || node->type != AST_FUNCTION_EXPR)
-        return;
+/* Walk an anonymous function body into `out`, which the caller must have
+ * initialized and must clear. Shared by throw-effect publication and by the
+ * defer rule (spec 8.3.1 D1), which needs the escaping error set itself rather
+ * than the collapsed no-throw bit. */
+static bool compute_function_expr_summary(ErrorSetCtx *ctx, AstNode *node, XaEffectSummary *out) {
+    if (!ctx || !node || !out || node->type != AST_FUNCTION_EXPR)
+        return false;
     AstNode *body = function_like_body(node);
-    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
-    if (!body || !type || type->kind != XR_KIND_FUNCTION)
-        return;
+    if (!body)
+        return false;
 
     XaScope *saved_scope = ctx->analyzer->current_scope;
     XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, node);
@@ -4364,9 +4380,7 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     XaEffectSummary *saved_caught = ctx->current_caught;
     int saved_catch_alias_control_depth = ctx->current_catch_alias_control_depth;
 
-    XaEffectSummary summary;
-    xa_effect_summary_init(&summary);
-    ctx->current_summary = &summary;
+    ctx->current_summary = out;
     ctx->current_func = NULL;
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
@@ -4374,10 +4388,6 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     apply_function_expr_capture(ctx, node);
     apply_function_expr_catch_capture(ctx, node);
     es_walk_block(ctx, body);
-    XrFnThrowEffect effect =
-        xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
-    xr_type_function_set_throw_effect(type, effect);
-    xa_effect_summary_clear(&summary);
 
     ctx->current_summary = saved_summary;
     ctx->current_func = saved_func;
@@ -4391,6 +4401,24 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     ctx->current_caught = saved_caught;
     ctx->current_catch_alias_control_depth = saved_catch_alias_control_depth;
     ctx->analyzer->current_scope = saved_scope;
+    return true;
+}
+
+static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node || node->type != AST_FUNCTION_EXPR)
+        return;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
+    if (!type || type->kind != XR_KIND_FUNCTION)
+        return;
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    if (compute_function_expr_summary(ctx, node, &summary)) {
+        XrFnThrowEffect effect =
+            xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+        xr_type_function_set_throw_effect(type, effect);
+    }
+    xa_effect_summary_clear(&summary);
 }
 
 static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **out, int *count,
@@ -4612,6 +4640,120 @@ static void validate_no_throw_value_constraints(ErrorSetCtx *ctx, AstNode *ast) 
         xa_ast_walk(ast, no_throw_constraint_scan_pre, NULL, ctx);
 }
 
+/* ---- defer must not throw (spec §8.3.1 rule D1) ---- */
+
+/* Name the deferred target for the diagnostic. The parser desugars `defer
+ * callee(args)` into an anonymous closure wrapping the rewritten call (see
+ * defer_wrap_in_closure), so the useful name lives one level in: report the
+ * inner callee rather than "<anonymous>". */
+static const char *defer_target_name(ErrorSetCtx *ctx, AstNode *target) {
+    target = identity_source(target);
+    if (!target)
+        return "defer body";
+    if (target->type == AST_FUNCTION_EXPR && !target->as.function_expr.name) {
+        AstNode *body = target->as.function_expr.body;
+        if (body && body->type == AST_BLOCK && body->as.block.count == 1) {
+            AstNode *only = body->as.block.statements[0];
+            if (only && only->type == AST_EXPR_STMT) {
+                AstNode *inner = identity_source(only->as.expr_stmt);
+                if (inner && inner->type == AST_CALL_EXPR)
+                    return no_throw_argument_name(ctx, inner->as.call_expr.callee);
+            }
+        }
+        return "defer body";
+    }
+    return no_throw_argument_name(ctx, target);
+}
+
+/* Escaping error set of a resolved defer target, if the analyzer has one. */
+static const XaEffectSummary *defer_symbol_summary(ErrorSetCtx *ctx, XaSymbol *sym) {
+    if (!ctx || !sym)
+        return NULL;
+    return xa_effect_db_get(ctx->analyzer->effect_db, sym->links.effect_id);
+}
+
+/* Does the deferred callable demonstrably throw — i.e. did inference land on a
+ * non-empty escaping error set, not merely fail to prove emptiness?
+ *
+ * The distinction is the whole design of spec 8.3.1. Rule D1 is deliberately
+ * NOT fail-closed here, unlike the throw-effect bit in 8.0: xray has no
+ * user-writable no-throw annotation, so a fail-closed defer rule would reject
+ * correct cleanup code (an indirect call, a higher-order intrinsic, any member
+ * whose native contract is still unwritten) with no way for the author to
+ * discharge the obligation. Rule D3's runtime backstop is what covers the
+ * unproven remainder, and keeping it live is what makes the layering honest.
+ * If a user-facing no-throw annotation is ever added, D1 can tighten to
+ * "must be proven" and D3 becomes unreachable-by-construction. */
+static bool defer_target_definitely_throws(ErrorSetCtx *ctx, AstNode *target) {
+    target = identity_source(target);
+    if (!ctx || !target)
+        return false;
+
+    if (target->type == AST_FUNCTION_EXPR) {
+        XaEffectSummary summary;
+        xa_effect_summary_init(&summary);
+        bool throws =
+            compute_function_expr_summary(ctx, target, &summary) && summary.escaping.count > 0;
+        xa_effect_summary_clear(&summary);
+        return throws;
+    }
+
+    FunctionValueTarget resolved = resolve_function_value_expr_target(ctx, target, 0);
+    if (!function_value_target_is_exact(resolved))
+        return false;
+    for (int i = 0; i < resolved.target_count; i++) {
+        if (resolved.target_function_exprs[i]) {
+            XaEffectSummary summary;
+            xa_effect_summary_init(&summary);
+            bool throws =
+                compute_function_expr_summary(ctx, resolved.target_function_exprs[i], &summary) &&
+                summary.escaping.count > 0;
+            xa_effect_summary_clear(&summary);
+            if (throws)
+                return true;
+            continue;
+        }
+        const XaEffectSummary *summary = defer_symbol_summary(ctx, resolved.target_symbols[i]);
+        if (summary && summary->escaping.count > 0)
+            return true;
+    }
+    return false;
+}
+
+/* A `defer` is a resource-cleanup edge, not an error-propagation edge: cleanup
+ * that fails leaves the resource in an unknown state, so the language neither
+ * replaces the in-flight error (the Go model) nor swallows the cleanup error.
+ *
+ * The parser reduces every defer form — `defer call(...)`, `defer { block }`,
+ * and a bare callable value — to one deferred callable, so the rule is exactly
+ * "that callable must not throw". Errors must be absorbed inside the defer body
+ * with try/catch. The runtime backstop for what static analysis cannot see is
+ * XR_ERR_DEFER_THROW; see spec 8.3.1 rule D3. */
+static void defer_no_throw_scan_pre(AstNode *node, void *userdata) {
+    ErrorSetCtx *ctx = (ErrorSetCtx *) userdata;
+    if (!ctx || !node || node->type != AST_DEFER_STMT)
+        return;
+    AstNode *target = node->as.defer_stmt.expr;
+    if (!target || !defer_target_definitely_throws(ctx, target))
+        return;
+
+    char message[512];
+    snprintf(message, sizeof(message),
+             "deferred target '%s' throws: a defer body must not let errors escape. "
+             "Absorb it inside the defer: defer { try { ... } catch (e) { ... } }",
+             defer_target_name(ctx, target));
+    XrLocation location = {.file = ctx->analyzer->current_file,
+                           .line = (uint32_t) node->line,
+                           .column = (uint32_t) node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_DEFER_MAY_THROW,
+                               message, &location);
+}
+
+static void validate_defer_no_throw(ErrorSetCtx *ctx, AstNode *ast) {
+    if (ctx && ast)
+        xa_ast_walk(ast, defer_no_throw_scan_pre, NULL, ctx);
+}
+
 /* ========== Public Entry Point ========== */
 
 void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
@@ -4675,6 +4817,7 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 
     publish_specialized_param_throw_effects(&ctx);
     validate_no_throw_value_constraints(&ctx, ast);
+    validate_defer_no_throw(&ctx, ast);
 
 cleanup:
     xr_free(function_exprs.items);
