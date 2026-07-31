@@ -45,6 +45,12 @@ void xa_writeback_inferred_type_args(XrCompilerSession *session, CallExprNode *c
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);
 XR_FUNC bool xa_body_has_return_expr(AstNode *node);
 XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type);
+/* Strict-null gate (E0379), defined in xanalyzer_visitor_expr.c. Every position
+ * that would dereference the value at runtime must route through this, so the
+ * rule has one implementation and one wording. Pass optional_chain_applies only
+ * where `?.` is actually accepted by the grammar. */
+XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *value_type,
+                                   const char *use_desc, bool optional_chain_applies);
 
 // Cross-TU helpers between xanalyzer_visitor.c (the dispatch / hoisting
 // / infer entry points) and xanalyzer_visitor_decl.c (the bulk of

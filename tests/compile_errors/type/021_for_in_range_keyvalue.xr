@@ -1,0 +1,10 @@
+// A Range is a flat sequence of ints, so it has no second value to bind.
+// Both the inline literal and a stored Range value must be rejected at
+// compile time — not fail at runtime looking for `entriesIterator`.
+fn main() {
+    var r = 1..5
+    for (i, v in r) {
+        print(i)
+    }
+}
+main()

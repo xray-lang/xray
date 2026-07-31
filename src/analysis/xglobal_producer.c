@@ -13,6 +13,8 @@
 #include "../base/xfileio.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
+#include "../os/os_fs.h"
+#include "../os/os_proc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -10612,6 +10614,38 @@ static bool add_module_ast(XgProducer *p, XgModuleId module_id, const AstNode *a
 
 static uint64_t module_source_hash(const XrModuleSpec *spec);
 
+/*
+ * Identity of the compiler that produced a cached evidence payload.
+ *
+ * The payload encodes what *this* compiler concluded about the source, so the
+ * cache key has to name the compiler, not just its semantic version. Two
+ * binaries built from the same version disagree the moment either the frontend
+ * or the producer changes, and replaying the older one's evidence surfaces far
+ * downstream as a decl that no longer exists — "module storage provenance is
+ * missing" — rather than as a stale cache.
+ *
+ * The image's size and mtime change on every rebuild and cost one stat, taken
+ * once per process. A compiler we cannot locate or stat falls back to the
+ * version hash alone: degrading to today's behavior beats refusing to build.
+ */
+static uint64_t compiler_image_hash(void) {
+    static uint64_t cached;
+    static bool computed;
+    char exe[4096];
+    XrFsStat st;
+    if (computed)
+        return cached;
+    computed = true;
+    cached = XG_COMPILER_SEMVER_HASH;
+    if (xr_proc_self_exe_path(exe, sizeof(exe)) != 0)
+        return cached;
+    if (xr_fs_stat(exe, &st) != 0 || st.kind != XR_FS_FILE)
+        return cached;
+    cached = fold_u64(cached, st.size);
+    cached = fold_u64(cached, (uint64_t) st.mtime_ns);
+    return cached;
+}
+
 static uint64_t fold_graph_module_source(uint64_t h, uint64_t module_id, const XrModuleSpec *spec) {
     size_t len = 0;
     char *source = NULL;
@@ -10720,7 +10754,7 @@ XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
     }
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash;
-    key.compiler_semver_hash = XG_COMPILER_SEMVER_HASH;
+    key.compiler_semver_hash = compiler_image_hash();
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = 1;
@@ -10736,7 +10770,7 @@ XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleG
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = XG_COMPILER_SEMVER_HASH;
+    key.compiler_semver_hash = compiler_image_hash();
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);

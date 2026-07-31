@@ -35,7 +35,12 @@ emission, and native linking:
 - T2: the native `Slice<T>` value ABI is always 16 bytes with 8-byte alignment,
   `data` at offset zero, and its signed 64-bit length at offset eight. ILP32 C
   targets carry explicit padding; they must not silently expose a 12-byte host
-  structure against the frozen Xi representation.
+  structure against the frozen Xi representation. That pair carries no element
+  type, so a consumer that must interpret elements (`string()`, concatenation,
+  the shared formatter) receives a typed borrowed `xrt_array_t` view built at
+  the use site instead. The view is a display shape, not a second Slice ABI:
+  slices continue to cross call, iterator, and native-class boundaries as the
+  16-byte pair.
 - T3: portable SIMD reinterpretation is byte-order neutral. Logical byte zero
   is the least-significant byte of logical numeric lane zero on every target;
   big-endian C lowering reconstructs lanes instead of treating native `memcpy`
@@ -166,12 +171,12 @@ download a provider.
 anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
 anchor-sha256: src/aot/xaot_prepare.c 0a2119ede579c5a66139a24bdb77628679fc97548f70a9a4b3221d6e5fb6e66e
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 23c5a1ef1dba481d98dc444de42ae01c87deb77bb63144e368f6b7fd87e11da4
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 6bca7d61399352dc8de2ed3d0ad08e52f009c613ef86fa8dc38e154310c03ded
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 192f1144a0c2e0526ee864799172a74a6f066314a85b596a3261b9ae7eb1e9d8
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c a6755baa2e24c52f34a72adfd25689eb94ba31070e4ee385e5b859dc0e9068c5
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 888c31e4df025df2e31e90b79aa4f9f0b1191c74081ba107f78ea8bf9097658d
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bc860359654ec6597cfbebe6fcd3944436af9b085010d3ebc92acac68a7c1601
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c e8ee66e62fb25a806901db700a15cf8a0464fc08e1650534beba4af9ac60d6bd
+anchor-sha256: src/aot/xi_cgen.c 78d76a0da985ac8b68d8f8890f38d926be33719a95cd1ba0eaa197b09e9baf35
 anchor-sha256: src/aot/xrt_coll.h 64558381bc704437434bd90a9c140f77da32ffdca5cb28e4fa21aef45c2e0a5c
 anchor-sha256: src/aot/xrt_core_freestanding.h 0bc07a44d027e6a9a048f54104687f33ea0a18c45f4224482a9f6af7fb7a7ec1
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
