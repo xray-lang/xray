@@ -1,0 +1,77 @@
+// 0690_user_hashable_key.xr
+// 测试：手写 Hashable（hash() + operator ==）的类可作 Map 键与 Set 元素，按值判等
+//
+// A class that implements Hashable by hand keys a Map/Set by value: two
+// distinct instances with equal fields are the same key. Before the value
+// hash/eq hooks, the runtime keyed such instances by object identity, so a
+// freshly built lookup key never matched a stored one (panic 431).
+
+class Key implements Hashable {
+    a: int
+    b: string
+    constructor(a: int, b: string) {
+        this.a = a
+        this.b = b
+    }
+    operator ==(other: Key) -> bool {
+        return this.a == other.a && this.b == other.b
+    }
+    hash() -> int {
+        return this.a * 31 + len(this.b)
+    }
+}
+
+@test
+fn test_map_lookup_by_value() {
+    var m = Map<Key, int>()
+    m[Key(1, "x")] = 10
+    m[Key(2, "yy")] = 20
+    // A different instance with equal fields must find the stored entry.
+    assert_eq(m[Key(1, "x")], 10)
+    assert_eq(m[Key(2, "yy")], 20)
+    assert_true(m.containsKey(Key(1, "x")))
+    assert_true(!m.containsKey(Key(9, "z")))
+}
+
+@test
+fn test_map_overwrite_and_distinct_keys() {
+    var m = Map<Key, int>()
+    m[Key(1, "x")] = 10
+    m[Key(1, "y")] = 20  // same a, different b -> distinct key
+    m[Key(1, "x")] = 11  // overwrite the first
+    assert_eq(len(m), 2)
+    assert_eq(m[Key(1, "x")], 11)
+    assert_eq(m[Key(1, "y")], 20)
+}
+
+@test
+fn test_map_delete_by_value() {
+    var m = Map<Key, int>()
+    m[Key(5, "p")] = 1
+    m[Key(6, "q")] = 2
+    assert_true(m.delete(Key(5, "p")))
+    assert_eq(len(m), 1)
+    assert_true(!m.containsKey(Key(5, "p")))
+    assert_true(m.containsKey(Key(6, "q")))
+}
+
+@test
+fn test_set_dedup_by_value() {
+    var s = Set<Key>()
+    s.add(Key(2, "p"))
+    s.add(Key(2, "p"))  // duplicate by value -> collapses
+    s.add(Key(3, "q"))
+    assert_eq(len(s), 2)
+    assert_true(s.contains(Key(2, "p")))
+    assert_true(!s.contains(Key(4, "r")))
+}
+
+@test
+fn test_primitive_keys_unaffected() {
+    // The hooks must not disturb ordinary primitive-keyed maps.
+    var m = Map<string, int>()
+    m["a"] = 1
+    m["b"] = 2
+    assert_eq(m["a"], 1)
+    assert_eq(len(m), 2)
+}
