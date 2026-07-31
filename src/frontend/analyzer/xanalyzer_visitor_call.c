@@ -4053,6 +4053,25 @@ static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index) {
     return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
 }
 
+/* Passing a binding as a `ref` argument hands the callee a writable place, so
+ * every narrowing of that binding ends at the call and it reverts to its
+ * declared type (spec §2.13 N-11.2). */
+static void xa_invalidate_narrowing_for_ref_arg(XaInferContext *ctx, AstNode *arg_node) {
+    if (!ctx || !ctx->flow || !arg_node)
+        return;
+    while (arg_node->type == AST_GROUPING)
+        arg_node = arg_node->as.grouping;
+    if (arg_node->type != AST_VARIABLE || !arg_node->as.variable.name)
+        return;
+    XaSymbol *sym = xa_lookup_visible_symbol(ctx, arg_node->as.variable.name);
+    if (!sym || (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER))
+        return;
+    XrType *declared = xa_analyzer_get_type(ctx->analyzer, sym);
+    if (!declared || XR_TYPE_IS_UNKNOWN(declared))
+        return;
+    xa_flow_create_assignment(ctx->flow, NULL, arg_node->as.variable.name, declared);
+}
+
 static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
                                          const char **reason) {
     while (arg_node && arg_node->type == AST_GROUPING)
@@ -4193,6 +4212,7 @@ XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *cal
     }
 
     XrParamMode required = access == XR_CALL_ARG_REF ? XR_PARAM_REF : XR_PARAM_MOVE;
+    (void) 0;
     if (param_mode != required) {
         XrLocation loc = {.file = ctx->file_path,
                           .line = arg_node ? arg_node->line : call_node->line,
@@ -4217,6 +4237,10 @@ XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *cal
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        msg, &loc);
         }
+        /* The callee may write through the place, so any narrowing of the
+         * binding ends here and it reverts to its declared type
+         * (spec §2.13 N-11.2). */
+        xa_invalidate_narrowing_for_ref_arg(ctx, arg_node);
     }
 }
 
@@ -5662,8 +5686,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(NULL);
 
     CallExprNode *call = &node->as.call_expr;
+    /* `f?.(args)` (chain_type 3) and `obj?.method(args)` (chain_type 2) both
+     * short-circuit to null when the receiver is null, so the call's result is
+     * nullable in both shapes (spec §3.6). */
     bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
-                                  call->callee->as.optional_chain.chain_type == 3;
+                                  (call->callee->as.optional_chain.chain_type == 3 ||
+                                   call->callee->as.optional_chain.chain_type == 2);
 
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "len") == 0 && call->arg_count == 1) {
@@ -6424,9 +6452,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_report_arg_accesses_require_known_contract(ctx, node, call);
             return callee_type;
         }
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                                   "Value is not callable", &loc);
+        /* A nullable function value is a null-safety problem, not a
+         * "not callable" problem: report the cause and the fix (spec §2.13
+         * N-12). */
+        if (!xa_check_nullable_access(ctx, node, call->callee, callee_type, "call")) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_NOT_CALLABLE, "Value is not callable", &loc);
+        }
         xa_report_arg_accesses_require_known_contract(ctx, node, call);
         return xr_type_new_error(ctx->analyzer->isolate);
     }

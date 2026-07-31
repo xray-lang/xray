@@ -1,0 +1,14 @@
+// Spec §2.13 N-2: a field is not a narrowable subject; the check on `u.name`
+// does not make the later `u.name` access safe. Extract a local (N-3).
+class User {
+    name: string?
+    constructor(name: string?) { this.name = name }
+}
+
+fn show(u: User) {
+    if (u.name != null) {
+        print(len(u.name))
+    }
+}
+
+show(User("abc"))

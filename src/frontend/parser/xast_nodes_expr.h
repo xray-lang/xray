@@ -203,6 +203,15 @@ typedef struct OptionalChainNode {
     char *name;
     AstNode *index;
     int chain_type;
+    /* True for a link the programmer wrote with a plain `.` / `[` / `(` that
+     * continues an optional chain (`a?.b.c` — spec §3.6). Such a link only
+     * short-circuits on a null prefix: its own member must be non-null, which
+     * the analyzer enforces. */
+    bool implicit_link;
+    /* Analysis result: this link's own member/element type is nullable, i.e.
+     * the link can produce null for a reason other than the chain's
+     * short-circuit. The next implicit link uses it to demand a `?.`. */
+    bool value_nullable;
 } OptionalChainNode;
 
 // Range expression node

@@ -91,6 +91,14 @@ jobs:
       # public surface. The checker allows only explicitly recorded legacy debt.
       run: python3 ./scripts/check_stdlib_surface_uniqueness.py --root .
 
+    - name: narrowing rules (spec <-> tests <-> analyzer)
+      # Narrowing decides the type lowering sees, so a rule without an
+      # implementation or without a conformance test is a VM/AOT divergence
+      # risk. Three-way reconciliation blocks merge on either gap.
+      run: |
+        chmod +x ./scripts/check_narrowing_rules.sh
+        ./scripts/check_narrowing_rules.sh
+
   # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================

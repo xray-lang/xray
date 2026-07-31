@@ -1,0 +1,11 @@
+// Spec §2.13 N-4: only the listed condition forms produce facts. A boolean
+// binding that happens to hold the result of a null check is not one of them.
+fn main() {
+    var a: string? = "abc"
+    const ok = a != null
+    if (ok) {
+        print(len(a))
+    }
+}
+
+main()

@@ -1136,7 +1136,8 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     // modules, type aliases never narrow because their type is the
     // declared identity, not a value.
     if (ctx->flow && ctx->flow->current_flow && declared_type &&
-        (sym->kind == XA_SYM_VARIABLE || sym->kind == XA_SYM_PARAMETER)) {
+        (sym->kind == XA_SYM_VARIABLE || sym->kind == XA_SYM_PARAMETER) &&
+        !xa_flow_narrowing_suppressed(ctx->flow, name)) {
         XrType *narrowed = xa_flow_get_type_of_reference(ctx->flow, name, declared_type,
                                                          ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
@@ -1455,7 +1456,7 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
 
     if (!right && (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) && ctx->flow &&
         ctx->flow->current_flow) {
-        // Short-circuit narrowing: the right operand only runs once the left's
+        // Short-circuit narrowing (spec §2.13 N-5): the right operand only runs once the left's
         // truthiness is known. `a && b` evaluates b assuming a is true; `a || b`
         // evaluates b assuming a is false. This lets idioms like
         // `x != null && x.field` and `x == null || x.field` narrow x for the
@@ -1479,6 +1480,27 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         xa_freestanding_report_unavailable(
             ctx, node, "string concatenation",
             "use static string literals or write into an explicit user buffer");
+    }
+
+    /* A possibly-null operand of an arithmetic, relational, or bitwise operator
+     * is a null-safety error, not an operator-typing error (spec §2.13 N-12).
+     * Three exclusions: `==` / `!=`, because comparing against null is how
+     * narrowing starts; `&&` / `||`, whose operands are checked as conditions;
+     * and string concatenation, where a null operand renders as "null" by
+     * definition (§2.5). */
+    bool string_concatenation =
+        node->type == AST_BINARY_ADD && (XR_TYPE_IS_STRING(xr_type_non_nullable(NULL, left)) ||
+                                         XR_TYPE_IS_STRING(xr_type_non_nullable(NULL, right)));
+    bool null_operand_allowed = node->type == AST_BINARY_EQ || node->type == AST_BINARY_NE ||
+                                node->type == AST_BINARY_AND || node->type == AST_BINARY_OR ||
+                                string_concatenation;
+    if (!null_operand_allowed) {
+        bool reported = xa_check_nullable_access(ctx, node->as.binary.left, node->as.binary.left,
+                                                 left, "arithmetic");
+        reported |= xa_check_nullable_access(ctx, node->as.binary.right, node->as.binary.right,
+                                             right, "arithmetic");
+        if (reported)
+            return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Deterministic result types: language rules independent of operand types
@@ -1622,6 +1644,53 @@ XR_FUNC bool xa_check_nullable_use(XaInferContext *ctx, AstNode *node, XrType *v
     return true;
 }
 
+// Under strict null checks (default on), a member access, index, call,
+// arithmetic operand, or iteration source whose static type can still be
+// `null` is a compile error (spec §2.13 N-12): the operation would panic at
+// run time. The programmer must narrow first (`if x != null`, `?.`, or the `!`
+// assertion), all of which strip nullability before we get here.
+//
+// A type that is *always* `null` (the type of the `null` literal) counts as
+// possibly-null: `x = null` followed by `x.f` must not slip through.
+// Returns true if an error was reported.
+bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, AstNode *receiver,
+                              XrType *recv_type, const char *access_desc) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->strict_null_checks)
+        return false;
+    if (!recv_type || XR_TYPE_IS_UNKNOWN(recv_type) || !XR_TYPE_IS_NULLABLE(recv_type))
+        return false;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    const char *closure_written = NULL;
+    if (receiver && receiver->type == AST_VARIABLE &&
+        xa_flow_narrowing_suppressed(ctx->flow, receiver->as.variable.name))
+        closure_written = receiver->as.variable.name;
+    char msg[320];
+    if (XR_TYPE_IS_NULL(recv_type)) {
+        snprintf(msg, sizeof(msg), "%s on a value that is always null", access_desc);
+    } else if (closure_written) {
+        snprintf(msg, sizeof(msg),
+                 "%s on a possibly-null value: '%s' is assigned inside a closure, so it never "
+                 "narrows; copy it into a binding that is never written and narrow that instead",
+                 access_desc, closure_written);
+    } else if (receiver && receiver->type != AST_VARIABLE) {
+        /* Fields, indices, and call results are not narrowable subjects, so
+         * "narrow it first" is only actionable after extracting a local
+         * binding (spec §2.13 N-3). */
+        snprintf(msg, sizeof(msg),
+                 "%s on a possibly-null value: only a local binding or parameter narrows, so copy "
+                 "it into one first (`var v = ...`) and check that with `if v != null`",
+                 access_desc);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "%s on a possibly-null value: narrow it first with `if x != null`, use `?.`, "
+                 "or assert non-null with `!`",
+                 access_desc);
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL, msg,
+                               &loc);
+    return true;
+}
+
 static bool xa_member_receiver_is_generic_type_param(XaInferContext *ctx, const AstNode *object) {
     if (!ctx || !ctx->analyzer || !object || object->type != AST_VARIABLE ||
         !object->as.variable.name || xa_lookup_visible_symbol(ctx, object->as.variable.name))
@@ -1717,7 +1786,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         obj_type && obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name &&
         member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
     if (!obj_is_enum_namespace)
-        xa_check_nullable_use(ctx, node, obj_type, "member access", true);
+        xa_check_nullable_access(ctx, node, ma->object, obj_type, "member access");
 
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -2659,7 +2728,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
-    xa_check_nullable_use(ctx, node, container, "index access", true);
+    xa_check_nullable_access(ctx, node, ig->array, container, "index access");
 
     /* Visit the index expression so variable references get their symbol_id resolved */
     XrType *index_type = NULL;
@@ -4294,9 +4363,22 @@ XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {
     XrType *cond_type = xa_visit_infer_expr(ctx, tern->condition);
     xa_check_condition_type(ctx, tern->condition, cond_type);
     // Bidirectional inference: propagate outer expected_type to both branches
-    // (expected_type is already set by the caller, just pass through)
+    // (expected_type is already set by the caller, just pass through).
+    // Each arm sees the condition's fact for its own direction, exactly like
+    // the branches of an `if` (spec §2.13 N-7).
+    XaFlowNode *saved_flow = ctx->flow ? ctx->flow->current_flow : NULL;
+    if (ctx->flow)
+        ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, tern->condition, true);
     XrType *then_type = xa_visit_infer_expr(ctx, tern->true_expr);
+    if (ctx->flow) {
+        /* The else arm branches from the condition, not from the end of the
+         * then arm. */
+        ctx->flow->current_flow = saved_flow;
+        ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, tern->condition, false);
+    }
     XrType *else_type = xa_visit_infer_expr(ctx, tern->false_expr);
+    if (ctx->flow)
+        ctx->flow->current_flow = saved_flow;
 
     if (xr_type_equals(then_type, else_type)) {
         return then_type;
@@ -4342,9 +4424,15 @@ static bool xa_optional_is_legacy_unknown(XrType *type) {
     return type && type->kind == XR_KIND_UNKNOWN;
 }
 
-static XrType *xa_optional_nullable_result(XaInferContext *ctx, XrType *type) {
+/* Result of one optional-chain link (spec §2.13 N-13): the member type plus the chain's null.
+ * Records whether this link's own value can be null, which the next implicit
+ * link (a plain `.` / `[` continuing the chain, spec §3.6) needs in order to
+ * demand its own `?.`. */
+static XrType *xa_optional_nullable_result(XaInferContext *ctx, AstNode *node, XrType *type) {
     if (!ctx || !ctx->analyzer || !type)
         return xa_optional_error(ctx);
+    if (node)
+        node->as.optional_chain.value_nullable = XR_TYPE_IS_NULLABLE(type);
     XrType *copy = xr_type_copy(ctx->analyzer->isolate, type);
     return copy ? xr_type_make_nullable(ctx->analyzer->isolate, copy) : xa_optional_error(ctx);
 }
@@ -4385,6 +4473,26 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     if (XR_TYPE_IS_ERROR(obj_type))
         return obj_type;
 
+    /* An implicit link inherits the chain's short-circuit, which only covers a
+     * null *prefix*. If the preceding link's own value can be null, this link
+     * would dereference it, so the programmer must write `?.` here too
+     * (spec §3.6). */
+    AstNode *chain_object = node->as.optional_chain.object;
+    if (node->as.optional_chain.implicit_link && chain_object &&
+        chain_object->type == AST_OPTIONAL_CHAIN &&
+        chain_object->as.optional_chain.value_nullable) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        const char *prev = chain_object->as.optional_chain.name;
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "member access on a possibly-null value: %s%s%s is itself nullable, so this link "
+                 "needs `?.` as well",
+                 prev ? "'" : "the previous link", prev ? prev : "", prev ? "'" : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_POSSIBLY_NULL,
+                                   msg, &loc);
+        return xa_optional_error(ctx);
+    }
+
     // Legacy unknown remains a recovery/imprecision boundary for now. Do not turn it into a
     // successful user-visible result in new paths below.
     if (xa_optional_is_legacy_unknown(obj_type))
@@ -4401,7 +4509,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     // Optional function-call callee: func?.()
     if (node->as.optional_chain.chain_type == 3) {
         if (XR_TYPE_IS_FUNCTION(base_type))
-            return xa_optional_nullable_result(ctx, base_type);
+            return xa_optional_nullable_result(ctx, node, base_type);
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[192];
         snprintf(msg, sizeof(msg), "optional call receiver type '%s' is not callable",
@@ -4422,7 +4530,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
 
         // Built-in properties — result is nullable (object may be null)
         if (xa_symbol_is_collection_length(xr_builtin_symbol_from_name(prop_name), base_type)) {
-            return xa_optional_nullable_result(ctx, xr_type_new_int(NULL));
+            return xa_optional_nullable_result(ctx, node, xr_type_new_int(NULL));
         }
 
         // Named class/instance member. Some local-class paths still do not carry complete field
@@ -4445,7 +4553,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 if (member) {
                     XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                     if (ml && ml->type) {
-                        return xa_optional_nullable_result(ctx, ml->type);
+                        return xa_optional_nullable_result(ctx, node, ml->type);
                     }
                 }
             }
@@ -4455,7 +4563,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         // Plain Json is an explicit dynamic data domain. Optional field access stays inside Json
         // instead of falling back to the language-wide unknown type.
         if (XR_TYPE_IS_JSON(base_type) && base_type->object.field_count == 0)
-            return xa_optional_nullable_result(ctx, xr_type_new_json(ctx->analyzer->isolate));
+            return xa_optional_nullable_result(ctx, node, xr_type_new_json(ctx->analyzer->isolate));
 
         // Record/Json field access through optional chain: result is nullable
         // because the receiver may be null.
@@ -4463,7 +4571,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             for (int i = 0; i < base_type->object.field_count; i++) {
                 if (base_type->object.field_names[i] &&
                     strcmp(base_type->object.field_names[i], prop_name) == 0) {
-                    return xa_optional_nullable_result(ctx, base_type->object.field_types[i]);
+                    return xa_optional_nullable_result(ctx, node, base_type->object.field_types[i]);
                 }
             }
             if (base_type->object.is_sealed) {
@@ -4485,7 +4593,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             if (sig) {
                 XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                 if (fn_type) {
-                    return xa_optional_nullable_result(ctx, fn_type);
+                    return xa_optional_nullable_result(ctx, node, fn_type);
                 }
             }
         }
@@ -4499,7 +4607,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                     type_str++;
                 XrType *prop_type = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
                 if (prop_type)
-                    return xa_optional_nullable_result(ctx, prop_type);
+                    return xa_optional_nullable_result(ctx, node, prop_type);
             }
         }
 
@@ -4520,7 +4628,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
                 return xa_optional_error(ctx);
             }
-            return xa_optional_nullable_result(ctx, base_type->container.element_type);
+            return xa_optional_nullable_result(ctx, node, base_type->container.element_type);
         }
         if (XR_TYPE_IS_MAP(base_type) && base_type->map.value_type) {
             if (index_type && base_type->map.key_type &&
@@ -4529,7 +4637,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 add_index_type_error(ctx, node, index_type, base_type->map.key_type);
                 return xa_optional_error(ctx);
             }
-            return xa_optional_nullable_result(ctx, base_type->map.value_type);
+            return xa_optional_nullable_result(ctx, node, base_type->map.value_type);
         }
         if (base_type && base_type->kind == XR_KIND_FIXED_ARRAY &&
             base_type->fixed_array.element_type) {
@@ -4538,7 +4646,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
                 return xa_optional_error(ctx);
             }
-            return xa_optional_nullable_result(ctx, base_type->fixed_array.element_type);
+            return xa_optional_nullable_result(ctx, node, base_type->fixed_array.element_type);
         }
         return xa_optional_report_not_indexable(ctx, node, base_type);
     }
@@ -4872,24 +4980,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         ctx->return_storage_mixed = false;
         ctx->return_storage_unknown = false;
 
-        // Isolate flow graph for lambda body (same reason as named functions)
-        XaFlowNode *saved_flow = NULL;
-        XrFlowLabel *saved_break = NULL;
-        XrFlowLabel *saved_continue = NULL;
-        XrFlowLabel *saved_return_tgt = NULL;
-        XrFlowLabel *saved_exception = NULL;
-        if (ctx->flow) {
-            saved_flow = ctx->flow->current_flow;
-            saved_break = ctx->flow->current_break_target;
-            saved_continue = ctx->flow->current_continue_target;
-            saved_return_tgt = ctx->flow->current_return_target;
-            saved_exception = ctx->flow->current_exception_target;
-            xa_flow_create_start(ctx->flow);
-            ctx->flow->current_break_target = NULL;
-            ctx->flow->current_continue_target = NULL;
-            ctx->flow->current_return_target = NULL;
-            ctx->flow->current_exception_target = NULL;
-        }
+        /* Flow-graph isolation lives in xa_visit_function_body_unified. */
 
         const char *saved_pending_parallel_callback_name = ctx->pending_parallel_callback_name;
         bool saved_in_parallel_callback_body = ctx->in_parallel_callback_body;
@@ -5016,15 +5107,6 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             }
             ctx->analyzer->diagnostics_tail = new_tail;
             ctx->analyzer->diagnostic_count = saved_diag_count + kept;
-        }
-
-        // Restore flow state to enclosing function's context
-        if (ctx->flow) {
-            ctx->flow->current_flow = saved_flow;
-            ctx->flow->current_break_target = saved_break;
-            ctx->flow->current_continue_target = saved_continue;
-            ctx->flow->current_return_target = saved_return_tgt;
-            ctx->flow->current_exception_target = saved_exception;
         }
 
         // Restore outer function's return type state

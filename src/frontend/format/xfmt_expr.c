@@ -890,14 +890,18 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_OPTIONAL_CHAIN: {
             OptionalChainNode *oc = &node->as.optional_chain;
             xfmt_emit_expression(ctx, oc->object);
+            /* A link the programmer wrote as a plain `.` / `[` continuing an
+             * optional chain (spec §3.6) is stored as a chain link but must be
+             * printed back the way it was written. */
+            const char *dot = oc->implicit_link ? "." : "?.";
             if (oc->index) {
                 // Optional index: obj?[index]
-                xfmt_write_str(ctx, "?[");
+                xfmt_write_str(ctx, oc->implicit_link ? "[" : "?[");
                 xfmt_emit_expression(ctx, oc->index);
                 xfmt_write_char(ctx, ']');
             } else {
                 // Optional property/method/function-call callee: obj?.name / func?.
-                xfmt_write_str(ctx, "?.");
+                xfmt_write_str(ctx, dot);
                 if (oc->name) {
                     xfmt_write_str(ctx, oc->name);
                 }

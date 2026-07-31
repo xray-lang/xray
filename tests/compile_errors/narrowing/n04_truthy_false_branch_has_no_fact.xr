@@ -1,0 +1,12 @@
+// Spec §2.13 N-4: the false branch of a truthiness test produces no fact
+// (0 / "" / false are falsy too, so the value is not known to be null).
+fn main() {
+    var a: string? = "abc"
+    if (a) {
+        print(len(a))
+    } else {
+        print(len(a))
+    }
+}
+
+main()

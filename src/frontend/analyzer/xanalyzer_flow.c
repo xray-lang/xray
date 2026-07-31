@@ -12,6 +12,7 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../parser/xast.h"
+#include "xanalyzer_ast_visitor.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../base/xmalloc.h"
@@ -30,6 +31,34 @@ static int type_member_to_tid(AstNode *node) {
 static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
     if (!type || !tref)
         return false;
+    /* Primitive keyword type refs (`x is int`) carry their own kind rather than
+     * a name, so they must be matched before the NAMED/GENERIC path. Spec
+     * §2.13 N-6 requires both narrowing directions to treat them exactly like
+     * named types. */
+    switch (tref->kind) {
+        case XR_TREF_INT:
+        case XR_TREF_INT_WIDTH:
+            return type->kind == XR_KIND_INT;
+        case XR_TREF_FLOAT:
+        case XR_TREF_FLOAT_WIDTH:
+            return type->kind == XR_KIND_FLOAT;
+        case XR_TREF_STRING:
+            return type->kind == XR_KIND_STRING;
+        case XR_TREF_BOOL:
+            return type->kind == XR_KIND_BOOL;
+        case XR_TREF_RUNE:
+            return type->kind == XR_KIND_RUNE;
+        case XR_TREF_UNIT:
+            return type->kind == XR_KIND_UNIT;
+        case XR_TREF_NULL:
+            return type->kind == XR_KIND_NULL;
+        case XR_TREF_TUPLE:
+            return type->kind == XR_KIND_TUPLE;
+        case XR_TREF_FUNCTION:
+            return type->kind == XR_KIND_FUNCTION;
+        default:
+            break;
+    }
     if (tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) {
         const char *name = tref->name;
         if (!name)
@@ -72,22 +101,87 @@ static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
     return false;
 }
 
-static XrType *flow_narrow_by_tref(XrType *base_type, const XrTypeRef *tref, bool assume_true) {
-    if (!base_type || !tref || !XR_TYPE_IS_UNION(base_type))
-        return NULL;
-    XrType *members[XR_UNION_MAX_MEMBERS];
-    int count = 0;
-    for (int i = 0; i < xr_type_union_count(base_type) && count < XR_UNION_MAX_MEMBERS; i++) {
-        XrType *member = xr_type_union_member(base_type, i);
-        bool matches = flow_type_matches_tref(member, tref);
-        if (matches == assume_true)
-            members[count++] = member;
+/* Narrow the non-null part of a type by an `is T` test (spec §2.13 N-6).
+ *
+ * `null` is carried by a flag rather than a union member, so the caller peels
+ * it off first and re-attaches it; this function only sees non-null types.
+ * A union keeps the members that match (true direction) or that do not match
+ * (false direction). A non-union base narrows to the resolved target in the
+ * true direction — that is what makes a downcast `animal is Dog` useful — and
+ * only collapses to `never` when the test is statically impossible. */
+static XrType *flow_narrow_nonnull_by_tref(XrType *base_type, const XrTypeRef *tref,
+                                           bool assume_true) {
+    if (!base_type || !tref)
+        return base_type;
+    if (XR_TYPE_IS_UNION(base_type)) {
+        XrType *members[XR_UNION_MAX_MEMBERS];
+        int count = 0;
+        for (int i = 0; i < xr_type_union_count(base_type) && count < XR_UNION_MAX_MEMBERS; i++) {
+            XrType *member = xr_type_union_member(base_type, i);
+            if (flow_type_matches_tref(member, tref) == assume_true)
+                members[count++] = member;
+        }
+        if (count == 0)
+            return xr_type_new_never(NULL);
+        if (count == 1)
+            return members[0];
+        return xr_type_new_union(NULL, members, count);
     }
-    if (count == 0)
-        return xr_type_new_never(NULL);
-    if (count == 1)
-        return members[0];
-    return xr_type_new_union(NULL, members, count);
+    bool matches = flow_type_matches_tref(base_type, tref);
+    if (assume_true) {
+        if (matches)
+            return base_type;
+        /* Not a syntactic match: either an impossible test or a downcast to a
+         * subtype the name comparison cannot see. Resolving the target keeps
+         * `animal is Dog` useful; an unresolvable target leaves the base type
+         * untouched rather than inventing an unknown. */
+        XrType *resolved = xr_tref_resolve(NULL, tref);
+        if (!resolved || XR_TYPE_IS_UNKNOWN(resolved) || XR_TYPE_IS_ERROR(resolved))
+            return base_type;
+        return resolved;
+    }
+    /* False direction: only an exact match can be removed. Anything else may
+     * still hold at run time (a base class, an interface, `Json`), so the type
+     * is left alone. */
+    return matches ? xr_type_new_never(NULL) : base_type;
+}
+
+static XrType *flow_narrow_by_tref(XrType *base_type, const XrTypeRef *tref, bool assume_true) {
+    if (!base_type || !tref)
+        return NULL;
+
+    /* `x is null` is the type-test spelling of a null check. */
+    if (tref->kind == XR_TREF_NULL)
+        return xa_narrow_by_null_check(base_type, true, assume_true);
+
+    bool has_null = XR_TYPE_IS_NULLABLE(base_type);
+    XrType *non_null = has_null ? xr_type_non_nullable(NULL, base_type) : base_type;
+    if (XR_TYPE_IS_NULL(base_type)) {
+        /* The whole type is `null`: a non-null test can only fail. */
+        return assume_true ? xr_type_new_never(NULL) : base_type;
+    }
+
+    XrType *narrowed = flow_narrow_nonnull_by_tref(non_null, tref, assume_true);
+    if (!narrowed)
+        return NULL;
+    /* `null` never satisfies a non-null type test, so it survives only on the
+     * false side. */
+    if (has_null && !assume_true) {
+        if (XR_TYPE_IS_NEVER(narrowed))
+            return xr_type_new_null(NULL);
+        return xr_type_make_nullable(NULL, narrowed);
+    }
+    return narrowed;
+}
+
+/* Is this expression the narrowable subject `var_name` (spec §2.13 N-1)?
+ * Only a bare identifier qualifies; parentheses around it are transparent.
+ * Fields, indices, and call results are deliberately excluded (N-2). */
+static bool flow_expr_is_subject(const AstNode *node, const char *var_name) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node && node->type == AST_VARIABLE && node->as.variable.name && var_name &&
+           strcmp(node->as.variable.name, var_name) == 0;
 }
 
 // Apply type narrowing based on condition expression
@@ -102,20 +196,22 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
 
     // Pattern: x (truthiness check - variable used directly as condition)
     if (type == AST_VARIABLE) {
-        if (node->as.variable.name && strcmp(node->as.variable.name, var_name) == 0) {
+        if (flow_expr_is_subject(node, var_name)) {
             return xa_narrow_by_truthiness(base_type, assume_true);
         }
         return base_type;
     }
 
-    // Pattern: !x (negated truthiness)
+    // Pattern: (e) — grouping is transparent to narrowing (spec §2.13 N-4).
+    if (type == AST_GROUPING) {
+        return apply_condition_narrowing((XrAstNode *) node->as.grouping, var_name, base_type,
+                                         assume_true);
+    }
+
+    // Pattern: !e — the operand's facts swap direction (spec §2.13 N-4).
     if (type == AST_UNARY_NOT) {
-        AstNode *operand = node->as.unary.operand;
-        if (operand && operand->type == AST_VARIABLE && operand->as.variable.name &&
-            strcmp(operand->as.variable.name, var_name) == 0) {
-            return xa_narrow_by_truthiness(base_type, !assume_true);
-        }
-        return base_type;
+        return apply_condition_narrowing((XrAstNode *) node->as.unary.operand, var_name, base_type,
+                                         !assume_true);
     }
 
     // Pattern: x == null, x != null
@@ -127,10 +223,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
         bool is_equal = (type == AST_BINARY_EQ);
 
         // Check if comparing variable to null
-        bool var_on_left = (left && left->type == AST_VARIABLE && left->as.variable.name &&
-                            strcmp(left->as.variable.name, var_name) == 0);
-        bool var_on_right = (right && right->type == AST_VARIABLE && right->as.variable.name &&
-                             strcmp(right->as.variable.name, var_name) == 0);
+        bool var_on_left = flow_expr_is_subject(left, var_name);
+        bool var_on_right = flow_expr_is_subject(right, var_name);
         bool null_on_left = (left && left->type == AST_LITERAL_NULL);
         bool null_on_right = (right && right->type == AST_LITERAL_NULL);
 
@@ -162,9 +256,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             type_id = type_member_to_tid(left);
         }
 
-        if (typeof_operand && type_id >= 0 && typeof_operand->type == AST_VARIABLE &&
-            typeof_operand->as.variable.name &&
-            strcmp(typeof_operand->as.variable.name, var_name) == 0) {
+        if (typeof_operand && type_id >= 0 && flow_expr_is_subject(typeof_operand, var_name)) {
             // typeOf(x) == Type.xxx with assume_true => narrow to type
             // typeOf(x) != Type.xxx with assume_true => exclude type
             bool effective_true = (is_equal == assume_true);
@@ -198,25 +290,15 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
         return base_type;
     }
 
-    // Pattern: x is ClassName (instanceof check)
+    // Pattern: x is T (spec §2.13 N-6). Both directions narrow, and every type
+    // ref kind — primitive keyword, named class, generic instance — goes
+    // through the same path.
     if (type == AST_IS_EXPR) {
         IsExprNode *is_expr = &node->as.is_expr;
-        if (is_expr->expr && is_expr->expr->type == AST_VARIABLE &&
-            is_expr->expr->as.variable.name &&
-            strcmp(is_expr->expr->as.variable.name, var_name) == 0 && is_expr->type) {
-            XrTypeRef *tref = is_expr->type;
-            // Extract class name from NAMED / GENERIC type refs
-            if ((tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) && tref->name) {
-                XrType *precise = flow_narrow_by_tref(base_type, tref, assume_true);
-                if (precise)
-                    return precise;
-                return xa_narrow_by_instanceof(base_type, tref->name, assume_true);
-            }
-            // For primitive type checks (x is int, x is string, etc.)
-            // resolve the type ref and narrow directly
-            if (assume_true) {
-                return xr_tref_resolve(NULL, tref);
-            }
+        if (is_expr->type && flow_expr_is_subject(is_expr->expr, var_name)) {
+            XrType *precise = flow_narrow_by_tref(base_type, is_expr->type, assume_true);
+            if (precise)
+                return precise;
         }
     }
 
@@ -272,6 +354,8 @@ void xa_flow_builder_free(XaFlowBuilder *builder) {
     }
     if (builder->all_nodes)
         xr_free(builder->all_nodes);
+    if (builder->closure_written_names)
+        xr_free(builder->closure_written_names);
 
     xr_free(builder);
 }
@@ -328,21 +412,6 @@ XaFlowNode *xa_flow_create_condition(XaFlowBuilder *builder, XrAstNode *expr, bo
     return flow;
 }
 
-// Create call node
-XaFlowNode *xa_flow_create_call(XaFlowBuilder *builder, XrAstNode *call) {
-    if (builder->current_flow->flags & XA_FLOW_UNREACHABLE) {
-        return builder->current_flow;
-    }
-
-    XaFlowNode *flow = flow_node_alloc(builder, XA_FLOW_CALL);
-    flow->node = call;
-
-    xa_flow_add_antecedent(flow, builder->current_flow);
-    builder->current_flow = flow;
-
-    return flow;
-}
-
 // Add antecedent to a node
 void xa_flow_add_antecedent(XaFlowNode *node, XaFlowNode *antecedent) {
     if (!node || !antecedent)
@@ -389,22 +458,6 @@ XaFlowNode *xa_flow_finish_label(XaFlowBuilder *builder, XaFlowNode *label) {
     }
 
     return label;
-}
-
-// Set current flow
-void xa_flow_set_current(XaFlowBuilder *builder, XaFlowNode *flow) {
-    if (builder)
-        builder->current_flow = flow ? flow : builder->unreachable_flow;
-}
-
-// Get current flow
-XaFlowNode *xa_flow_get_current(XaFlowBuilder *builder) {
-    return builder ? builder->current_flow : NULL;
-}
-
-// Check if current flow is unreachable
-bool xa_flow_is_unreachable(XaFlowBuilder *builder) {
-    return builder && (builder->current_flow->flags & XA_FLOW_UNREACHABLE);
 }
 
 // Create flow cache (open-addressing hash, power-of-2 capacity)
@@ -574,7 +627,8 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder, const char *name,
             result = declared_type;
         }
     } else if (flow->flags & XA_FLOW_BRANCH_LABEL) {
-        // Branch merge: union of all antecedent types
+        // Branch merge (spec §2.13 N-9): union of all antecedent types;
+        // unreachable predecessors contribute `never` and are absorbed.
         if (flow->antecedent_count == 0) {
             result = xr_type_new_never(NULL);
         } else if (flow->antecedent_count == 1) {
@@ -591,13 +645,17 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder, const char *name,
             result = union_type;
         }
     } else if (flow->flags & XA_FLOW_LOOP_LABEL) {
-        // Loop: union of all antecedents (entry path + back-edges).
-        // Same logic as BRANCH_LABEL — loop body may assign different types.
+        // Loop header: union of the entry edge and every back edge (spec
+        // §2.13 N-10). A back edge that reaches this header again without
+        // passing an assignment carries the header's own type — assignments
+        // terminate the walk — so the cycle contributes nothing and the union
+        // is decided by the entry edge and by the assignments in the body.
+        if (flow->flags & XA_FLOW_IN_PROGRESS) {
+            return xr_type_new_never(NULL);
+        }
+        flow->flags |= XA_FLOW_IN_PROGRESS;
         if (flow->antecedent_count == 0) {
             result = declared_type;
-        } else if (flow->antecedent_count == 1) {
-            result = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
-                                           cache, depth + 1);
         } else {
             XrType *union_type = NULL;
             for (int i = 0; i < flow->antecedent_count; i++) {
@@ -607,6 +665,7 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder, const char *name,
             }
             result = union_type;
         }
+        flow->flags &= ~(uint32_t) XA_FLOW_IN_PROGRESS;
     } else if (flow->flags & XA_FLOW_START) {
         // Function start: use declared type
         result = declared_type;
@@ -744,52 +803,127 @@ XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true) {
     }
 }
 
-// Check if a type is an instance of a specific class (by name)
-static bool type_is_class_instance(XrType *t, const char *class_name) {
-    return XR_TYPE_IS_INSTANCE(t) && t->instance.class_name &&
-           strcmp(t->instance.class_name, class_name) == 0;
+// ============================================================================
+// Closure-written bindings (spec §2.13 N-11.4)
+//
+// A binding assigned from inside a nested closure can change whenever that
+// closure runs, which the flow graph does not model, so it never narrows. The
+// set is collected before a function body is traversed, so a closure written
+// *after* the narrowing site suppresses it just the same. Name-keyed, like
+// narrowing itself (§2.13 N-1 limits subjects to plain identifiers).
+// ============================================================================
+
+typedef struct XaClosureWriteScan {
+    XaFlowBuilder *builder;
+    int closure_depth;
+} XaClosureWriteScan;
+
+static void flow_closure_write_add(XaFlowBuilder *builder, const char *name) {
+    if (!builder || !name)
+        return;
+    for (int i = 0; i < builder->closure_written_count; i++) {
+        if (strcmp(builder->closure_written_names[i], name) == 0)
+            return;
+    }
+    if (builder->closure_written_count >= builder->closure_written_capacity) {
+        int new_cap = builder->closure_written_capacity ? builder->closure_written_capacity * 2 : 8;
+        XR_REALLOC_OR_ABORT(builder->closure_written_names, sizeof(const char *) * (size_t) new_cap,
+                            "closure-written names grow");
+        builder->closure_written_capacity = new_cap;
+    }
+    builder->closure_written_names[builder->closure_written_count++] = name;
 }
 
-// Narrow by instanceof
-XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assume_true) {
-    if (!type || !class_name)
-        return type;
+static bool flow_node_opens_closure(const AstNode *node) {
+    return node->type == AST_FUNCTION_EXPR || node->type == AST_FUNCTION_DECL ||
+           node->type == AST_METHOD_DECL;
+}
 
-    if (assume_true) {
-        // x instanceof ClassName is true => x is ClassName instance
-        XrType *instance_type = xr_type_new_instance(NULL, NULL);
-        if (instance_type) {
-            instance_type->instance.class_name = class_name;
-        }
-        return instance_type;
-    } else {
-        // x instanceof ClassName is false => exclude ClassName from the type
-
-        // Union type: rebuild without the excluded class
-        if (XR_TYPE_IS_UNION(type)) {
-            int total = xr_type_union_count(type);
-            XrType *remaining[XR_UNION_MAX_MEMBERS];
-            int count = 0;
-            for (int i = 0; i < total && count < XR_UNION_MAX_MEMBERS; i++) {
-                XrType *m = xr_type_union_member(type, i);
-                if (!type_is_class_instance(m, class_name)) {
-                    remaining[count++] = m;
-                }
-            }
-            if (count == 0)
-                return xr_type_new_never(NULL);
-            if (count == 1)
-                return remaining[0];
-            XrType *result = xr_type_new_union(NULL, remaining, count);
-            return result ? result : type;
-        }
-
-        // Non-union: exact match => never
-        if (type_is_class_instance(type, class_name)) {
-            return xr_type_new_never(NULL);
-        }
-        return type;
+static void flow_closure_write_pre(AstNode *node, void *vscan) {
+    XaClosureWriteScan *scan = (XaClosureWriteScan *) vscan;
+    if (flow_node_opens_closure(node)) {
+        scan->closure_depth++;
+        return;
     }
+    if (scan->closure_depth == 0)
+        return;
+    switch (node->type) {
+        case AST_ASSIGNMENT:
+            flow_closure_write_add(scan->builder, node->as.assignment.name);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            flow_closure_write_add(scan->builder, node->as.compound_assignment.name);
+            break;
+        case AST_INC:
+            flow_closure_write_add(scan->builder, node->as.inc.name);
+            break;
+        case AST_DEC:
+            flow_closure_write_add(scan->builder, node->as.dec.name);
+            break;
+        default:
+            break;
+    }
+}
+
+static void flow_closure_write_post(AstNode *node, void *vscan) {
+    XaClosureWriteScan *scan = (XaClosureWriteScan *) vscan;
+    if (flow_node_opens_closure(node))
+        scan->closure_depth--;
+}
+
+int xa_flow_closure_writes_collect(XaFlowBuilder *builder, XrAstNode *body) {
+    if (!builder)
+        return 0;
+    int saved = builder->closure_written_count;
+    if (body) {
+        XaClosureWriteScan scan = {.builder = builder, .closure_depth = 0};
+        xa_ast_walk((AstNode *) body, flow_closure_write_pre, flow_closure_write_post, &scan);
+    }
+    return saved;
+}
+
+void xa_flow_closure_writes_restore(XaFlowBuilder *builder, int saved_count) {
+    if (builder)
+        builder->closure_written_count = saved_count;
+}
+
+bool xa_flow_narrowing_suppressed(const XaFlowBuilder *builder, const char *name) {
+    if (!builder || !name)
+        return false;
+    for (int i = 0; i < builder->closure_written_count; i++) {
+        if (strcmp(builder->closure_written_names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* `assert(cond)` / `assert_true(cond)` / `assert_false(cond)` inject the
+ * condition's fact into the following code (spec §2.13 N-7). The assert
+ * builtins always evaluate and always throw on failure — they are never
+ * stripped — so code after them may rely on the condition holding. */
+void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr) {
+    if (!builder || !expr)
+        return;
+    AstNode *node = (AstNode *) expr;
+    if (node->type != AST_CALL_EXPR)
+        return;
+    CallExprNode *call = &node->as.call_expr;
+    if (!call->callee || call->callee->type != AST_VARIABLE || call->arg_count < 1)
+        return;
+    const char *name = call->callee->as.variable.name;
+    if (!name)
+        return;
+    bool assume_true;
+    if (strcmp(name, "assert") == 0 || strcmp(name, "assert_true") == 0)
+        assume_true = true;
+    else if (strcmp(name, "assert_false") == 0)
+        assume_true = false;
+    else
+        return;
+    AstNode *condition = call->arguments ? call->arguments[0] : NULL;
+    if (!condition)
+        return;
+    builder->current_flow = xa_flow_create_condition(builder, (XrAstNode *) condition, assume_true);
 }
 
 // ============================================================================

@@ -1,0 +1,110 @@
+// anchor: narrowing-codegen-parity
+// Narrowing is semantics, not a diagnostic pass: the narrowed type is what
+// lowering sees, so VM and AOT must derive the same one (spec §2.13). Each
+// block below exercises one fact operator through a value-producing path.
+
+class Leaf {
+    value: int
+    tag: string?
+
+    constructor(value: int, tag: string?) {
+        this.value = value
+        this.tag = tag
+    }
+
+    doubled() -> int {
+        return this.value * 2
+    }
+}
+
+class Branch {
+    leaf: Leaf
+    maybeLeaf: Leaf?
+
+    constructor(leaf: Leaf, maybeLeaf: Leaf?) {
+        this.leaf = leaf
+        this.maybeLeaf = maybeLeaf
+    }
+}
+
+// N-4 / N-5: null checks and short-circuit inheritance.
+fn describe(s: string?) -> string {
+    if (s != null && len(s) > 2) {
+        return "long:" + s
+    }
+    if (s == null || len(s) == 0) {
+        return "empty"
+    }
+    return "short:" + s
+}
+
+print(describe("abcd"))     // long:abcd
+print(describe("ab"))       // short:ab
+print(describe(""))         // empty
+print(describe(null))       // empty
+
+// N-6: `is` in both directions over a union.
+fn render(v: int | string) -> string {
+    if (v is int) {
+        return "int:" + string(v + 1)
+    }
+    return "str:" + string(len(v))
+}
+
+print(render(41))           // int:42
+print(render("abc"))        // str:3
+
+// N-7: ternary arms, loop entry, assert.
+var cur: string? = "abc"
+print(cur != null ? len(cur) : -1)    // 3
+
+var drained = 0
+while (cur != null) {
+    drained = drained + len(cur)
+    cur = null
+}
+print(drained)              // 3
+
+var checked: string? = "wxyz"
+assert(checked != null)
+print(len(checked))         // 4
+
+// N-8: early exit narrows the rest of the function.
+fn tail(s: string?) -> int {
+    if (s == null) { return 0 }
+    return len(s)
+}
+
+print(tail("hello"))        // 5
+print(tail(null))           // 0
+
+// N-9: join of two narrowed paths.
+fn joined(flag: bool) -> int {
+    var a: string? = null
+    if (flag) {
+        a = "abc"
+    } else {
+        a = "de"
+    }
+    return len(a)
+}
+
+print(joined(true))         // 3
+print(joined(false))        // 2
+
+// §3.6: whole-chain optional short-circuit, including a method-call link.
+var b: Branch? = Branch(Leaf(21, "tagged"), null)
+print(b?.leaf.value)        // 21
+print(b?.leaf.doubled())    // 42
+print(b?.leaf.tag)          // tagged
+print(b?.maybeLeaf?.value)  // null
+
+var none: Branch? = null
+print(none?.leaf.value)     // null
+print(none?.leaf.doubled()) // null
+print(none?.leaf.value ?? -1)  // -1
+
+// N-13: force unwrap and coalescing after narrowing.
+var maybe: string? = "unwrapped"
+print(maybe!)               // unwrapped
+print(maybe ?? "other")     // unwrapped

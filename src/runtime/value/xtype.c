@@ -1041,6 +1041,17 @@ XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b) {
     if (XR_TYPE_IS_NULL(b) && !XR_TYPE_IS_NULL(a))
         return xr_type_make_nullable(X, a);
 
+    // T | T? = T?. Nullability decorates a base type instead of being a union
+    // member, so the narrowed and unnarrowed forms of one type must collapse
+    // rather than produce the malformed union `T | T?`. Control-flow joins
+    // (a narrowed branch merging with a nullable one) hit this constantly.
+    if (a->is_nullable != b->is_nullable) {
+        XrType *base_a = xr_type_non_nullable(X, a);
+        XrType *base_b = xr_type_non_nullable(X, b);
+        if (base_a && base_b && xr_type_equals(base_a, base_b))
+            return a->is_nullable ? a : b;
+    }
+
     // General case: create real union
     XrType *pair[2] = {a, b};
     return xr_type_new_union(X, pair, 2);

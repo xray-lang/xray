@@ -793,6 +793,31 @@ TEST(extern_block_roundtrip) {
     teardown();
 }
 
+/* An optional chain continued with a plain `.` / `[` (spec §3.6) is stored as
+ * a chain link, but the formatter must print it back exactly as written — a
+ * rewrite to `?.` would silently churn every such line. */
+TEST(optional_chain_implicit_link_roundtrip) {
+    setup();
+    const char *src = "fn probe(b: Branch?, rows: Array<Array<int>>?) {\n"
+                      "    print(b?.leaf.value)\n"
+                      "    print(b?.leaf.doubled())\n"
+                      "    print(b?.maybeLeaf?.value)\n"
+                      "    print(rows?[0][1])\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "optional-chain.xr");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "b?.leaf.value"));
+    ASSERT_TRUE(contains(fmt1, "b?.leaf.doubled()"));
+    ASSERT_TRUE(contains(fmt1, "b?.maybeLeaf?.value"));
+    ASSERT_TRUE(contains(fmt1, "rows?[0][1]"));
+    char *fmt2 = parse_and_format(fmt1, "optional-chain-formatted.xr");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(parameter_modes_comments_roundtrip) {
     setup();
     const char *src = "/// function docs\n"
@@ -1243,6 +1268,7 @@ RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
 RUN_TEST(unknown_effect_attribute_rejected);
 RUN_TEST(extern_block_roundtrip);
+RUN_TEST(optional_chain_implicit_link_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);
 
 RUN_TEST(branch_arrows_default_aligned);

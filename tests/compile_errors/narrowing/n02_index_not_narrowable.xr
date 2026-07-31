@@ -1,0 +1,9 @@
+// Spec §2.13 N-2: an index expression is not a narrowable subject.
+fn main() {
+    var rows: Array<string?> = ["a"]
+    if (rows[0] != null) {
+        print(len(rows[0]))
+    }
+}
+
+main()

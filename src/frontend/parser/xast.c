@@ -948,6 +948,8 @@ AstNode *xr_ast_optional_chain(XrCompilerSession *session, AstNode *object, cons
     }
     node->as.optional_chain.index = index;
     node->as.optional_chain.chain_type = chain_type;
+    node->as.optional_chain.implicit_link = false;
+    node->as.optional_chain.value_nullable = false;
     return node;
 }
 

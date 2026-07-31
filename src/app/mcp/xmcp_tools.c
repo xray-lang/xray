@@ -53,7 +53,8 @@ static const XmcpToolDef TOOL_TABLE[] = {
      "Look up Xray language syntax by topic. Returns code examples. "
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
-     "concurrency_rules, modules, testing, operators, builtin_functions, result.",
+     "concurrency_rules, modules, testing, operators, builtin_functions, result, "
+     "narrowing.",
      XMCP_TOOLSET_KNOWLEDGE, xmcp_schema_syntax, xmcp_schema_syntax_output,
      xmcp_tool_xray_syntax_lookup, true, false},
     {"xray_stdlib_search", "Xray Stdlib Search",

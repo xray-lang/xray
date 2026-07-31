@@ -1,0 +1,13 @@
+// Spec §2.13 N-11.2: passing a binding as a `ref` argument hands the callee a
+// writable place, so the narrowing ends at the call.
+fn clear(x: ref string?) { x = null }
+
+fn main() {
+    var a: string? = "abc"
+    if (a != null) {
+        clear(ref a)
+        print(len(a))
+    }
+}
+
+main()

@@ -7236,6 +7236,96 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
     {
+        .id = "narrowing",
+        .title = "Type Narrowing",
+        .aliases_csv = "narrowing,narrow,smart_cast,type_guard,null_check,possibly_null,E0379,flow_analysis,nullable_unwrap",
+        .body =
+            "[Language reference](#213-\xe6\xb5\x81\xe6\x95\x8f\xe6\x84\x9f\xe7\xb1\xbb\xe5\x9e\x8b\xe6\x94\xb6\xe7\xaa\x84)\n"
+            "\n"
+            "## Type Narrowing\n"
+            "\n"
+            "Narrowing tightens the static type of a binding at a control-flow position. It is semantics, not a diagnostic optimization: narrowed types drive member lookup, overload resolution, match exhaustiveness, and code generation, and the VM and AOT backends must agree. Normative rules N-1..N-13 live in spec section 2.13.\n"
+            "\n"
+            "### What can be narrowed (N-1, N-2)\n"
+            "Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.\n"
+            "\n"
+            "Never narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).\n"
+            "```xray\n"
+            "class Address { city: string\n"
+            "    constructor(city: string) { this.city = city } }\n"
+            "class User { address: Address?\n"
+            "    constructor(address: Address?) { this.address = address } }\n"
+            "\n"
+            "fn show(u: User) {\n"
+            "    var addr = u.address          // extract into a simple binding\n"
+            "    if (addr != null) {\n"
+            "        print(addr.city)          // OK: addr is narrowed to Address\n"
+            "    }\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Fact table (N-4)\n"
+            "| Condition | True branch | False branch |\n"
+            "|--|--|--|\n"
+            "| `x` | remove `null` | no fact |\n"
+            "| `!e` | false fact of `e` | true fact of `e` |\n"
+            "| `(e)` | true fact of `e` | false fact of `e` |\n"
+            "| `x == null` | keep only `null` | remove `null` |\n"
+            "| `x != null` | remove `null` | keep only `null` |\n"
+            "| `x is T` | intersect with `T` | remove intersection with `T` |\n"
+            "| `typeOf(x) == Type.K` | keep kind `K` | remove kind `K` |\n"
+            "| `e1 && e2` | true facts of both | no fact |\n"
+            "| `e1 \\|\\| e2` | no fact | false facts of both |\n"
+            "\n"
+            "Forms not in the table produce no facts.\n"
+            "\n"
+            "### Short-circuit inheritance (N-5)\n"
+            "`T?` cannot be used directly as a condition, so `&&` / `||` inheritance is the standard way to work with nullable values: the right operand of `&&` is analyzed under the left operand's true fact, and the right operand of `||` under its false fact.\n"
+            "```xray\n"
+            "fn check(a: string?) -> bool {\n"
+            "    if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string\n"
+            "    if (a == null || len(a) == 0) { return false }   // e2 analyzed with a: string\n"
+            "    return true\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Where facts apply (N-7, N-8, N-9, N-10)\n"
+            "`if` then/else bodies, both arms of `c ? a : b`, loop-body entry and the code after `while` / `for`, the right operand of `&&` / `||`, and the code after `assert(c)`. A branch that necessarily terminates gives the following code the opposite fact.\n"
+            "```xray\n"
+            "fn nameLen(s: string?) -> int {\n"
+            "    if (s == null) { return 0 }\n"
+            "    return len(s)                 // s is narrowed to string here\n"
+            "}\n"
+            "```\n"
+            "```xray\n"
+            "fn drain(first: string?) {\n"
+            "    var cur = first\n"
+            "    while (cur != null) {         // cur is string at loop-body entry\n"
+            "        print(cur)\n"
+            "        cur = null                // back edge contributes null; header re-joins\n"
+            "    }\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Invalidation (N-11)\n"
+            "Narrowing is invalidated by assignment / compound assignment / `++` / `--`, by passing the binding as a `ref` argument, and by `move`. A binding captured by a closure **and** assigned anywhere never narrows in that function. An ordinary call does not invalidate narrowing, because a narrowable subject cannot be written by a callee.\n"
+            "```xray\n"
+            "fn f(a: string?) {\n"
+            "    if (a != null) {\n"
+            "        print(len(a))             // OK\n"
+            "        a = null                  // assignment invalidates the narrowing\n"
+            "        print(a ?? \"\")            // must be unwrapped again\n"
+            "    }\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Unwrapping and E0379 (N-12, N-13)\n"
+            "`E0379` fires when a receiver's static type can still be `null` (including a type that is always `null`) and the program does member access, indexing, a call, arithmetic, or iteration on it.\n"
+            "\n"
+            "Three unwrapping forms: `x!` (statically removes `null`, panics with `NullError` at run time \xe2\x80\x94 not undefined behavior), `x ?? d`, and `x?.f` (whole-chain short-circuit, nullable result).\n"
+            "",
+    },
+    {
         .id = "operators",
         .title = "Operators",
         .aliases_csv = "operator,arithmetic,comparison,logical,bitwise",
@@ -7271,9 +7361,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var v = nullable_expr ?? default_value\n"
             "```\n"
             "```xray\n"
-            "var nameLen = name == null ? null : len(name!)\n"
+            "var city = user?.address        // optional property access\n"
             "var item = arr?[0]              // optional index\n"
             "var value = callback?.(input)   // optional function call\n"
+            "var road = user?.address.street // whole-chain short-circuit: null when user is null\n"
             "```\n"
             "",
     },
@@ -7647,7 +7738,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
 };
-XR_DATADEF const int xmcp_generated_topic_count = 19;
+XR_DATADEF const int xmcp_generated_topic_count = 20;
 
 XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     {

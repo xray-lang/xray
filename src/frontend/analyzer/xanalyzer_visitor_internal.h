@@ -298,6 +298,13 @@ XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType 
  * malformed Xi IR rather than a user-facing diagnostic. */
 XR_FUNC void xa_check_runtime_testable_type(XaInferContext *ctx, AstNode *node, XrTypeRef *tref,
                                             const char *op_name);
+
+/* Report E0379 when a receiver's static type can still be null (spec §2.13
+ * N-12). `access_desc` names the operation ("member access", "index access",
+ * "call", "arithmetic", "iteration"). Returns true when a diagnostic was
+ * emitted. */
+XR_FUNC bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, AstNode *receiver,
+                                      XrType *recv_type, const char *access_desc);
 XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
 struct XrClassInfo;
 XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,

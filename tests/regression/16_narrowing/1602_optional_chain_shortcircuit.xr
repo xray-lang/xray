@@ -1,0 +1,90 @@
+// 1602_optional_chain_shortcircuit.xr
+// Conformance: LANGUAGE_SPEC §3.6 whole-chain optional short-circuit and
+// §2.13 N-13 unwrapping forms.
+
+class Leaf {
+    value: int
+    tag: string?
+
+    constructor(value: int, tag: string?) {
+        this.value = value
+        this.tag = tag
+    }
+
+    doubled() -> int {
+        return this.value * 2
+    }
+}
+
+class Branch {
+    leaf: Leaf
+    maybeLeaf: Leaf?
+
+    constructor(leaf: Leaf, maybeLeaf: Leaf?) {
+        this.leaf = leaf
+        this.maybeLeaf = maybeLeaf
+    }
+}
+
+fn makeBranch() -> Branch {
+    return Branch(Leaf(21, "tagged"), null)
+}
+
+// A plain `.` after `?.` stays inside the chain: null prefix → null result.
+
+@test
+fn test_chain_reaches_value() {
+    var b: Branch? = makeBranch()
+    assert_eq(b?.leaf.value, 21)
+}
+
+@test
+fn test_chain_short_circuits_on_null_prefix() {
+    var b: Branch? = null
+    assert_eq(b?.leaf.value, null)
+}
+
+@test
+fn test_chain_method_call_reaches_value() {
+    var b: Branch? = makeBranch()
+    assert_eq(b?.leaf.doubled(), 42)
+}
+
+@test
+fn test_chain_method_call_short_circuits() {
+    var b: Branch? = null
+    assert_eq(b?.leaf.doubled(), null)
+}
+
+@test
+fn test_chain_last_link_may_be_nullable() {
+    var b: Branch? = makeBranch()
+    assert_eq(b?.leaf.tag, "tagged")
+}
+
+@test
+fn test_explicit_link_for_nullable_member() {
+    var b: Branch? = makeBranch()
+    assert_eq(b?.maybeLeaf?.value, null)
+}
+
+@test
+fn test_optional_index_chain() {
+    var rows: Array<Array<int>>? = [[1, 2], [3, 4]]
+    assert_eq(rows?[1][0], 3)
+    var missing: Array<Array<int>>? = null
+    assert_eq(missing?[1][0], null)
+}
+
+@test
+fn test_grouping_ends_the_chain() {
+    var b: Branch? = makeBranch()
+    var inner = (b?.leaf)
+    assert_eq(inner != null ? inner.value : 0, 21)
+}
+
+@test
+fn test_chain_result_feeds_coalesce() {
+    var b: Branch? = null
+    assert_eq(b?.leaf.value ?? -1, -1)
+}

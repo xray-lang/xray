@@ -2024,6 +2024,32 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Narrowing rules (LANGUAGE_SPEC §2.13) must stay reconciled across the
+    # spec section, the conformance tests, and the analyzer that implements
+    # them. Narrowed types reach code generation, so a dropped rule is a
+    # VM/AOT divergence risk rather than a documentation gap.
+    add_test(
+        NAME narrowing_rules_reconciliation
+        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_narrowing_rules.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(narrowing_rules_reconciliation PROPERTIES
+        LABELS "frontend;analyzer;spec"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME narrowing_conformance
+        COMMAND $<TARGET_FILE:xray> test ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/16_narrowing
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(narrowing_conformance PROPERTIES
+        LABELS "frontend;analyzer;spec"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
     add_test(
         NAME query_surface_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_query_surface_residue.py

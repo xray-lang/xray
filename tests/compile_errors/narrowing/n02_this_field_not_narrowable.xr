@@ -1,0 +1,14 @@
+// Spec §2.13 N-2: `this.field` is not a narrowable subject.
+class Holder {
+    name: string?
+    constructor(name: string?) { this.name = name }
+
+    show() -> int {
+        if (this.name != null) {
+            return len(this.name)
+        }
+        return 0
+    }
+}
+
+print(Holder("ab").show())

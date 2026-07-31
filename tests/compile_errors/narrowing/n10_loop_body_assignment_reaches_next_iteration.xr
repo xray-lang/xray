@@ -1,0 +1,16 @@
+// Spec §2.13 N-10: an assignment in the loop body joins at the loop header,
+// so the narrowing from the previous iteration does not survive it.
+fn main() {
+    var cur: string? = "abc"
+    var n = 0
+    while (n < 2) {
+        n = n + 1
+        if (cur != null) {
+            print(len(cur))
+        }
+        cur = null
+        print(len(cur))
+    }
+}
+
+main()
