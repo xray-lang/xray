@@ -23,10 +23,10 @@
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
 #   XRAY_DIFF_CACHE_DIR native object cache for AOT backend builds
-#                       (default: build/.xray-test-cache/aot-objects/<xray-key>/O<opt>)
+#                       (default: .cache/xray-test/aot-objects/<xray-key>/O<opt>)
 #   XRAY_DIFF_BIN_CACHE_DIR
 #                       cached AOT backend test binaries
-#                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
+#                       (default: .cache/xray-test/backend-diff-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   AOT C compiler optimization level for correctness gates
 #                       (default: 0; set to 3 for optimized smoke/CI)
 #   XRAY_AOT_FAST_TEST_BUILD

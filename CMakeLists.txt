@@ -14,6 +14,30 @@ project(Xray
     LANGUAGES C CXX ASM
 )
 
+# ----------------------------------------------------------------------------
+# Compiler cache
+#
+# 1087 translation units means a touched header, a generator flip, or the ASan
+# lane's from-scratch rebuild of the whole compiler all pay full compile cost.
+# ccache turns the repeats into hash lookups. Opt-out rather than opt-in: it is
+# transparent, and XRAY_USE_COMPILER_CACHE=OFF disables it when a build must be
+# measured or bit-reproduced.
+#
+# Silently skipped when no cache program is installed, so this never becomes a
+# build prerequisite.
+# ----------------------------------------------------------------------------
+option(XRAY_USE_COMPILER_CACHE "Route C/C++ compiles through ccache/sccache when available" ON)
+if(XRAY_USE_COMPILER_CACHE AND NOT CMAKE_C_COMPILER_LAUNCHER)
+    find_program(XRAY_COMPILER_CACHE NAMES ccache sccache)
+    if(XRAY_COMPILER_CACHE)
+        set(CMAKE_C_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
+        message(STATUS "Compiler cache: ${XRAY_COMPILER_CACHE}")
+    else()
+        message(STATUS "Compiler cache: not found (install ccache to speed up rebuilds)")
+    endif()
+endif()
+
 # Release identity is captured once at configure time and is shared by the
 # binary, installed marker, and payload manifest.  Release automation rejects
 # dirty/unknown identities; source builds remain explicit instead of silently

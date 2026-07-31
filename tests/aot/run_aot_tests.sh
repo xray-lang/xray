@@ -8,10 +8,10 @@
 #   XRAY_AOT_JOBS       parallel test workers (default: auto, capped by
 #                       XRAY_AOT_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
 #   XRAY_AOT_CACHE_DIR  shared native object cache for AOT test builds
-#                       (default: build/.xray-test-cache/aot-objects)
+#                       (default: .cache/xray-test/aot-objects)
 #   XRAY_AOT_BIN_CACHE_DIR
 #                       cached native test binaries
-#                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
+#                       (default: .cache/xray-test/aot-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
 #                       gates (default: 0; set to 3 for optimized smoke/CI)
 #   XRAY_AOT_SHARD_TOTAL / XRAY_AOT_SHARD_INDEX
