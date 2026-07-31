@@ -233,8 +233,7 @@ static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
            (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
 
-static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx,
-                                                         const XiFunc *func) {
+static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx, const XiFunc *func) {
     if (!ctx || !ctx->target || !func)
         return 0;
     if ((ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX512) != 0 &&
@@ -246,8 +245,7 @@ static uint8_t cg_static_x86_compile_width_for_func_tree(const XiCgenCtx *ctx,
         cg_func_requires_x86_vector_target(ctx, func, 32))
         selected = 32;
     for (uint16_t i = 0; i < func->nchildren; i++) {
-        uint8_t child_width =
-            cg_static_x86_compile_width_for_func_tree(ctx, func->children[i]);
+        uint8_t child_width = cg_static_x86_compile_width_for_func_tree(ctx, func->children[i]);
         if (child_width == 64)
             return 64;
         if (child_width == 32)
@@ -570,6 +568,12 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "}\n"
         "static void xrt_runtime_value_retain(XrValue value) { xrt_retain(value); }\n"
         "static void xrt_runtime_value_release(XrValue value) { xrt_release(value); }\n"
+        /* The scheduler runtime finalizes a coroutine whose error nothing is
+         * left to observe; the rendering has to happen here, in the generated
+         * program, because the runtime cannot format an AOT value layout. */
+        "static void xrt_runtime_report_uncaught_error(XrValue error, bool in_go_coroutine) {\n"
+        "    xrt_report_uncaught_error(error, in_go_coroutine);\n"
+        "}\n"
         "static const XrAotValueOps xrt_runtime_value_ops = {\n"
         "    .string_new = xrt_runtime_string_new,\n"
         "    .string_data = xrt_runtime_string_data,\n"
@@ -585,6 +589,7 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
         "    .retain = xrt_runtime_value_retain,\n"
         "    .release = xrt_runtime_value_release,\n"
+        "    .report_uncaught_error = xrt_runtime_report_uncaught_error,\n"
         "};\n\n");
 }
 

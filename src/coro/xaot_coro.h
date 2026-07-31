@@ -149,6 +149,12 @@ struct XrAotValueOps {
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
     void (*retain)(XrValue value);
     void (*release)(XrValue value);
+    /* Report a coroutine's uncaught value-return error (spec §8.1.1). The
+     * runtime decides *when* — it alone knows whether anything is left to
+     * observe the error — while the generated program owns the rendering,
+     * because only it can format its own value layouts. NULL in profiles that
+     * have no stderr to write to. */
+    void (*report_uncaught_error)(XrValue error, bool in_go_coroutine);
 };
 
 typedef struct XrAotContext {

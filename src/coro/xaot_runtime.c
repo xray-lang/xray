@@ -279,6 +279,24 @@ static XrValue aot_bridge_result_to_runtime(XrCoroutine *coro, XrAotRuntime *run
     return aot_bridge_result_value_to_runtime(core, value);
 }
 
+/* Uncaught value-return error diagnostic for a coroutine nothing is left to
+ * observe (spec §8.1.1). Mirrors the VM's run_finalize in xvm_coro_backend.c:
+ * an awaited or scope-linked coroutine's error is surfaced by the awaiting task
+ * or the parent scope, so reprinting it here would double-report. The one shape
+ * that would otherwise vanish silently is a statement-form fire-and-forget
+ * `go f()` — no Task handle, no parent scope.
+ *
+ * The main coroutine is excluded on purpose: the generated entry reports the
+ * top-level case itself after xr_aot_run_main returns. */
+static void aot_report_dropped_error(XrCoroutine *coro, XrAotRuntime *runtime, XrValue error) {
+    if (!coro || !runtime || XR_IS_NULL(error))
+        return;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) || coro->task || xr_coro_parent_scope(coro))
+        return;
+    if (runtime->value_ops && runtime->value_ops->report_uncaught_error)
+        runtime->value_ops->report_uncaught_error(error, /*in_go_coroutine=*/true);
+}
+
 static bool aot_coro_cancelled(const XrCoroutine *coro) {
     return coro && xr_coro_flags_has((XrCoroutine *) coro,
                                      XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED);
@@ -306,8 +324,14 @@ static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
         case XR_AOT_RUN_CANCELLED:
             return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
         case XR_AOT_RUN_ERROR:
-            if (result.error_is_value)
+            if (result.error_is_value) {
+                /* Report before bridging: the reporter is the generated
+                 * program's own formatter, so it must see the AOT-native value.
+                 * Bridging rewrites an AOT string into a runtime XrString,
+                 * which that formatter cannot read. */
+                aot_report_dropped_error(coro, runtime, result.error);
                 result.error = aot_bridge_result_to_runtime(coro, runtime, result.error);
+            }
             return xr_coro_run_error(result.error, result.error_is_value);
         default:
             return xr_coro_run_error(result.error, result.error_is_value);
