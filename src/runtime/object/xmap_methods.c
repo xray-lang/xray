@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmap_methods.c - Map / WeakMap method bodies + dispatch table.
+ * xmap_methods.c - Map method bodies + dispatch table.
  */
 
 #include "xmap_methods.h"
@@ -29,10 +29,6 @@
 static inline XrMap *map_self(XrValue self) {
     XR_DCHECK(XR_IS_MAP(self), "map method: receiver is not a Map");
     return XR_TO_MAP(self);
-}
-
-static inline bool map_is_weak(const XrMap *m) {
-    return (m->flags & XR_MAP_FLAG_WEAK) != 0;
 }
 
 static XrValue xr_map_method_contains_key(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -61,14 +57,6 @@ static XrValue xr_map_method_get(XrVMRuntime *iso, XrValue self, XrValue *args, 
 
 static XrValue xr_map_method_set(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrMap *m = map_self(self);
-    /* WeakMap contract: key must be a heap object. */
-    if (map_is_weak(m) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INVALID_ARG_TYPE,
-                                         "WeakMap key must be a heap object, got %s",
-                                         xr_typeid_name(xr_value_typeid(args[0])));
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
     if (argc >= 2) {
         xr_map_set(m, args[0], args[1]);
     }
@@ -87,8 +75,6 @@ static XrValue xr_map_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     xr_map_clear(m);
     return xr_null();
 }
@@ -98,8 +84,6 @@ static XrValue xr_map_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args,
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     return xr_value_from_array(xr_map_keys(NULL, m));
 }
 
@@ -108,8 +92,6 @@ static XrValue xr_map_method_values(XrVMRuntime *iso, XrValue self, XrValue *arg
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     return xr_value_from_array(xr_map_values(NULL, m));
 }
 
@@ -118,8 +100,6 @@ static XrValue xr_map_method_entries(XrVMRuntime *iso, XrValue self, XrValue *ar
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     return xr_value_from_array(xr_map_entries(NULL, m));
 }
 
@@ -128,8 +108,6 @@ static XrValue xr_map_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *a
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     /* Single-variable `for (k in m)` resolves through this method.
      * It yields each key K, matching the analyzer's item-type inference
      * (which already binds the loop variable to map.key_type). Use
@@ -143,8 +121,6 @@ static XrValue xr_map_method_entries_iterator(XrVMRuntime *iso, XrValue self, Xr
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     XrIterator *iter = xr_map_entries_iterator(iso, m);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
@@ -162,10 +138,6 @@ static XrValue xr_map_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *ar
     if (!cb)
         return xr_null();
     XrMap *m = map_self(self);
-    // WeakMap deliberately disables forEach: holding callbacks could keep
-    // entries alive across collection windows, defeating weak semantics.
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
     xr_map_foreach(iso, m, cb);
     return xr_null();
 }

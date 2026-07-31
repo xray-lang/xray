@@ -8419,16 +8419,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "WeakMap") == 0 && arg_count == 0) {
-            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = cap;
-            v->aux_int = 0x04; /* weak flag in C field bit 2 */
-            v->line = (uint32_t) node->line;
-            return v;
-        }
         if (strcmp(cname, "Array") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
@@ -8492,16 +8482,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             } else {
                 v->aux_int = 0;
             }
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-        if (strcmp(cname, "WeakSet") == 0 && arg_count == 0) {
-            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = cap;
-            v->aux_int = 0x04; /* weak flag in B field bit 2 */
             v->line = (uint32_t) node->line;
             return v;
         }

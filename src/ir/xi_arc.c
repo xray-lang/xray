@@ -1069,7 +1069,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
                            xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
-                     * like Map.get / WeakMap.get hands back a stored reference,
+                     * like Map.get hands back a stored reference,
                      * not a fresh +1 — keeps the receiver (arg 0) live until the
                      * result's last use; otherwise releasing the receiver frees
                      * storage the borrowed result still points into. Proven

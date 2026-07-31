@@ -140,13 +140,12 @@ static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
             XrMap *map = (XrMap *) obj;
             if (xr_map_isdummy(map) || !map->entries)
                 break;
-            bool is_weak = (map->flags & XR_MAP_FLAG_WEAK) != 0;
             uint32_t count = map->nentries;
             for (uint32_t i = 0; i < count; i++) {
                 XrMapEntry *node = &map->entries[i];
                 if (XR_MAP_ENTRY_EMPTY(node))
                     continue;
-                if (!is_weak && XR_IS_PTR(node->key)) {
+                if (XR_IS_PTR(node->key)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(node->key);
                     if (child)
                         visitor(child, ctx);
@@ -162,8 +161,6 @@ static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
         case XR_TSET: {
             XrSet *set = (XrSet *) obj;
             if (!set->entries)
-                break;
-            if (set->flags & XR_SET_FLAG_WEAK)
                 break;
             for (uint32_t i = 0; i < set->nentries; i++) {
                 XrSetEntry *e = &set->entries[i];

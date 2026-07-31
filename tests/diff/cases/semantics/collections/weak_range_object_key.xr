@@ -1,8 +1,0 @@
-var wm = WeakMap<Range, string>()
-var r = 1..4
-wm.set(r, "range")
-print(wm.get(r))
-
-var ws = WeakSet<Range>()
-ws.add(r)
-print(ws.contains(r))

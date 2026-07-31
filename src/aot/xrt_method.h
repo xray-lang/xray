@@ -46,40 +46,6 @@ static inline void xrt_set_builtin_enum_error(const char *enum_name, const char 
     xrt_pending_error = xrt_enum_aggregate_box(err);
 }
 
-static inline int xrt_weak_value_is_heap_object(XrValue v) {
-    if (!v.ptr)
-        return 0;
-    switch (xrt_value_kind(v)) {
-        case XR_TAG_PTR:
-        case XR_TAG_STR:
-        case XR_TAG_ARRAY:
-        case XR_TAG_MAP:
-        case XR_TAG_STRBUF:
-        case XR_TAG_CLOSURE:
-        case XR_TAG_STR_ARC:
-        case XR_TAG_CELL:
-        case XR_TAG_TUPLE:
-        case XR_TAG_SET:
-        case XR_TAG_AGG_REF:
-        case XR_TAG_REGEX:
-        case XR_TAG_SYS_MUTEX:
-        case XR_TAG_SYS_RWLOCK:
-        case XR_TAG_SYS_CONDVAR:
-        case XR_TAG_SYS_BARRIER:
-        case XR_TAG_SYS_ONCE:
-        case XR_TAG_THREAD:
-        case XR_TAG_BUFFER:
-        case XR_TAG_NET_CONN:
-        case XR_TAG_NET_LISTENER:
-        case XR_TAG_RANGE:
-        case XR_TAG_ENUM:
-        case XR_TAG_ITERATOR:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
 /* toString helper. */
 
 static inline int xrt_rune_encode(uint32_t cp, char *tmp) {
@@ -586,8 +552,6 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(xrt_map_len(m));
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_map_len(m) == 0);
-        if (!xrt_map_is_boolmap(m) && (m->flags & XR_MAP_FLAG_WEAK))
-            return XR_NULL_VAL;
         if (sym == XRT_SYM_CLEAR) {
             xrt_map_clear(m);
             return XR_NULL_VAL;
@@ -624,8 +588,6 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(xrt_set_len(s));
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_set_len(s) == 0);
-        if (s->flags & XR_SET_FLAG_WEAK)
-            return XR_NULL_VAL;
         if (sym == XRT_SYM_CLEAR) {
             xrt_set_clear(s);
             return XR_NULL_VAL;
@@ -1044,8 +1006,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
         if (sym == XRT_SYM_ADD) {
-            if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
-                return XR_NULL_VAL;
             (void) xrt_set_add(s, arg0);
             return XR_NULL_VAL;
         }
@@ -1203,8 +1163,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return xrt_sys_condvar_method_2(recv, sym, arg0, arg1);
     if (XR_IS_MAP(recv) && sym == XRT_SYM_SET) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
-        if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
-            return XR_NULL_VAL;
         xrt_map_set(m, arg0, arg1);
         return XR_NULL_VAL;
     }

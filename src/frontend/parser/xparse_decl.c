@@ -883,8 +883,7 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 bool xr_is_construct_only_type_name(const char *name) {
     if (!name)
         return false;
-    static const char *const names[] = {"Map",     "WeakMap", "Array",         "Set",
-                                        "WeakSet", "Channel", "StringBuilder", NULL};
+    static const char *const names[] = {"Map", "Array", "Set", "Channel", "StringBuilder", NULL};
     for (const char *const *p = names; *p; p++) {
         if (strcmp(name, *p) == 0)
             return true;

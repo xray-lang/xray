@@ -621,7 +621,6 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
                 return NULL;
             const char *head = t->kind == XR_KIND_ARRAY   ? "Array"
                                : t->kind == XR_KIND_SLICE ? TYPE_NAME_SLICE
-                               : t->is_weak               ? "WeakSet"
                                                           : "Set";
             return xr_tref_generic(session, head, &elem, 1);
         }
@@ -633,7 +632,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
             kv[1] = xa_synth_tref_from_type(session, t->map.value_type);
             if (!kv[0] || !kv[1])
                 return NULL;
-            return xr_tref_generic(session, t->is_weak ? "WeakMap" : "Map", kv, 2);
+            return xr_tref_generic(session, "Map", kv, 2);
         }
         case XR_KIND_TUPLE: {
             if (t->is_const)

@@ -46,7 +46,6 @@ typedef struct XrRuntimeCore {
     struct XrSystemHeap *sys_heap;
     struct XrGlobalStringPool *global_string_pool;
     struct XrStrBuf *tmp_strbuf;
-    void *weak_registry;
     struct XrVMRuntime *vm_owner;
 
     /* Storage lifetime and task identity are deliberately orthogonal.  These

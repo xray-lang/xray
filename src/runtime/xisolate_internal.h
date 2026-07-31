@@ -76,7 +76,7 @@ struct XrVMRuntime {
     XrayCoreClasses *core;  // Core classes (Object, Class, String, etc.)
 
     // VM-neutral runtime core: GC, system heap, string pool, config,
-    // script metadata, weak registry, and extension type registry.
+    // script metadata and extension type registry.
     XrRuntimeCore *core_rt;
 
     // Entry execution state
@@ -145,9 +145,6 @@ struct XrVMRuntime {
     const char *const *module_allowlist;
     size_t module_allowlist_count;
 
-    /* WeakMap / WeakSet registry. Lazily allocated by the first weak insert
-     * and swept when a weakable target reaches RC zero. Kept opaque here so
-     * the isolate core does not depend on container internals. */
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)

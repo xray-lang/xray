@@ -26,7 +26,6 @@
 #include "xstring.h"
 #include "../mem/xalloc_unified.h"
 #include "../core/xr_exec_context.h"
-#include "../mem/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
 #include "../../shared/xr_hash_core.h"
@@ -97,10 +96,6 @@ static inline int entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_
     return xr_value_key_eq(e->key, key);
 }
 
-static inline bool map_is_weak(const XrMap *map) {
-    return (map->flags & XR_MAP_FLAG_WEAK) != 0;
-}
-
 static inline XrCoroHeap *map_current_or_owner_heap(XrMap *map) {
     XrCoroHeap *heap = xr_current_coro_heap();
     return heap ? heap : (map ? map->owner_heap : NULL);
@@ -132,23 +127,14 @@ static XrVMRuntime *map_owning_isolate(XrCoroHeap *heap) {
 }
 
 static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroHeap *heap) {
-    if (!map_is_weak(map))
-        xr_rc_release_value(heap, e->key);
+    xr_rc_release_value(heap, e->key);
     xr_rc_release_value(heap, e->value);
     e->key = xr_null();
     e->value = xr_null();
 }
 
-static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
-    if (!map_is_weak(map) || !XR_IS_PTR(key))
-        return;
-    XrObjHeader *target = XR_VALUE_GCPTR(key);
-    XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_map(map_owning_isolate(heap), map);
-}
-
 static XrValue map_canonicalize_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
-    if (map_is_weak(map) || !XR_IS_STRING(key))
+    if (!XR_IS_STRING(key))
         return key;
     XrVMRuntime *iso = map_owning_isolate(heap);
     XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
@@ -427,10 +413,6 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     map->count++;
 
     xr_swiss_indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
-    if (map_is_weak(map)) {
-        xr_map_prepare_weak_key(map, key, heap);
-        xr_rc_release_value(heap, key);
-    }
 }
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
@@ -607,8 +589,6 @@ void xr_map_debug_print(XrMap *map) {
 
 void xr_obj_destroy_map(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrMap *map = (XrMap *) obj;
-    if (map->flags & XR_MAP_FLAG_WEAK_REGISTERED)
-        xr_weak_registry_unregister_map(map_owning_isolate(owner_heap), map);
     if (!xr_map_isdummy(map) && map->entries) {
         for (uint32_t i = 0; i < map->nentries; i++) {
             XrMapEntry *e = &map->entries[i];

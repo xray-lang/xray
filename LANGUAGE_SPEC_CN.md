@@ -617,7 +617,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
-| 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
@@ -667,8 +666,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `StringBuilder` | prelude |
 | `Task<T>` | 解析器内建 |
 | `Thread<T>` | prelude |
-| `WeakMap<K, V>` | 解析器内建 |
-| `WeakSet<T>` | 解析器内建 |
 
 **内置 enum**
 
@@ -1157,10 +1154,6 @@ for (i in 3..=5) {
 #### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
-
-#### 2.4.11 `WeakMap` / `WeakSet`
-
-`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
 ### 2.5 可空类型
 
@@ -6410,17 +6403,60 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
 
-### 16.2 内存分配
+### 16.2 语义所有权域
 
-| 区域 | 用途 |
+存储由**两个正交的轴**描述，任何一处混用都会得出错误结论：
+
+- **语义所有权域**（本节）：谁拥有这块存储、它活多久、跨执行边界时按什么规则迁移。这是**语义契约**。
+- **后端物化**（§16.2.1）：后端实际把它放在哪（内联、栈、静态数据、某个堆）。这是**实现选择**。
+
+> 真值源：`src/base/xstorage.h` 的 `XrSemanticStorageDomain`、`XrBackendMaterialization`、`XrTransferAction`。
+
+一个值恰好属于六个语义域之一：
+
+| 域 | 归属与生命周期 | 引用计数 | 典型来源 |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | 当前执行体（协程）独占；随该执行体的堆一起结束 | 非原子 | 普通局部对象、字面量构造的容器与实例 |
+| **`TRANSFERABLE`** | 唯一所有权，可跨执行边界**整体移交**；移交后源侧不再可用 | 非原子 | `move` 的目标、跨协程传递的唯一值 |
+| **`CONST_SHARED`** | 已发布的不可变根，多个执行体并发只读共享 | 原子 | 发布后的 `const` 根、`freeze` 的结果 |
+| **`SYNC_SHARED`** | 受审计的并发句柄，多个执行体并发访问，同步由句柄自身保证 | 原子 | channel、mutex 等并发原语持有的值 |
+| **`MODULE_STATIC`** | 归属模块，活到模块卸载；**默认不提供并发安全性** | 按模块 owner | 顶层 `const` / `var` |
+| **`FOREIGN`** | 由 Xray 之外的分配器拥有；运行时不管理其生命周期 | 无 | FFI 指针、外部缓冲 |
+
+**域决定并发可见性与回收责任，不决定物理位置。** 例如 `EXEC_LOCAL` 的值可能被内联进持有者、放在栈上、或分配在执行堆上——三种物化都不改变"它随该协程结束"这一契约。
+
+#### 16.2.1 后端物化
+
+后端在满足语义域契约的前提下，为每个值选择一种物化：
+
+| 物化 | 含义 |
 |--|--|
-| **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
-| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 seal + publish 的顶层 `const` |
-| **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **const/sync shared domain** | 已发布 const 根与受审计并发句柄，root-only 原子引用计数 |
-| **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
-| **栈** | `struct` 值、局部 immediate、函数帧 |
-| **Arena** | parser 临时分配、frame allocation |
+| `INLINE` | 内联在持有者的存储里，无独立地址身份 |
+| `STACK` | 函数帧上；随帧退出而失效，不可增长、不可释放 |
+| `STATIC_DATA` | 只读静态数据段（consteval 结果、字面量池） |
+| `EXEC_HEAP` | 当前执行体的堆（`XrCoroHeap`）；引用计数回收 |
+| `SYSTEM_HEAP` | 系统堆；跨执行体可见的对象走这里 |
+| `SROA` | 被标量替换后拆散到寄存器，聚合体本身不再具体存在 |
+| `EXTERNAL` | 外部分配器持有 |
+| `INVALID` | 未决定；出现在最终计划里即为内部错误 |
+
+> **改变物化不得授予更强的语义域或迁移能力。** 把一个 `EXEC_LOCAL` 的值物化到 `SYSTEM_HEAP` 不会让它变得可以跨执行体共享；反过来，把 `CONST_SHARED` 的值物化到栈上是非法的——它的域要求地址在共享期内稳定。物化是语义域的**下游**，永远不是理由。
+
+#### 16.2.2 跨执行边界的域迁移
+
+值跨越执行边界（闭包捕获进 `go`、送入 channel、作为 task 结果返回）时，由其**源域**与可变性决定一个迁移动作。这是编译期判定，不是运行时降级：
+
+| 动作 | 何时选用 | 语义 |
+|--|--|--|
+| `INLINE_COPY` | 标量、且非可变捕获 | 按值复制，两侧此后独立 |
+| `CONST_SHARE` | 源域为 `CONST_SHARED` | 共享同一不可变根，原子引用计数 |
+| `SYNC_SHARE` | 源域为 `SYNC_SHARED`，或捕获形态本身是并发句柄 | 共享同一句柄，同步由句柄保证 |
+| `MOVE_UNIQUE` | 源域为 `TRANSFERABLE` | 整体移交所有权，源侧此后不可用 |
+| `EXPLICIT_COPY` | **仅**源码写了 `copy(...)` | 物化一个独立的值再迁移 |
+| `MODULE_READ` | 源域为 `MODULE_STATIC` 且不可变 | 只读引用模块绑定 |
+| **`REJECT`** | **以上都不成立** | **编译错误** |
+
+`REJECT` 是这张表里最重要的一项：**跨执行边界没有隐式深拷贝兜底**。可变的模块绑定、可变或被重新赋值的普通捕获、没有 const/sync/move 证据的托管值，全部是编译错误而不是"悄悄拷一份"。需要独立副本时，源码必须显式写 `copy(...)`。
 
 ### 16.3 对象生命周期与回收
 

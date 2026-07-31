@@ -53,8 +53,6 @@
 #define TYPE_NAME_ARRAY "Array"
 #define TYPE_NAME_MAP "Map"
 #define TYPE_NAME_SET "Set"
-#define TYPE_NAME_WEAKMAP "WeakMap"
-#define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_SLICE "Slice"
 
 /* ========== Runtime Types ========== */
@@ -178,8 +176,6 @@ typedef enum {
     XR_TID_THREAD,          // 41
     XR_TID_BUFFER,          // 42
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 43
-    XR_TID_WEAKSET,  // 44
     // char and Record are runtime-visible scalar/struct names outside the
     // concurrency block.
     XR_TID_RUNE,

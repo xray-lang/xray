@@ -1,0 +1,17 @@
+// 247_weak_containers_removed.xr
+// Expected: compile error — WeakMap and WeakSet no longer exist.
+//
+// Task 247 phase B removed them outright. They solved object-identity
+// side-tables, not the problem RC actually needs a weak reference for
+// (breaking a cycle); their clearing step is a finalizer in all but name,
+// which spec 16.8 rejects; the two backends disagreed on what they meant
+// (the VM released the key, AOT never did — so an AOT WeakMap was a strong
+// map that only ever grew); and nothing in the repo used them.
+//
+// A deleted surface that still parses is worse than one that never existed,
+// so this asserts the names are unknown types rather than quietly accepted.
+
+var wm = WeakMap<string, int>()
+var ws = WeakSet<string>()
+print(wm)
+print(ws)

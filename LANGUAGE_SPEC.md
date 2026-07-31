@@ -616,7 +616,6 @@ Xray is statically typed; every expression has a determined type at compile time
 | Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
-| Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
@@ -666,8 +665,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `StringBuilder` | prelude |
 | `Task<T>` | resolver built-in |
 | `Thread<T>` | prelude |
-| `WeakMap<K, V>` | resolver built-in |
-| `WeakSet<T>` | resolver built-in |
 
 **Built-in enums**
 
@@ -1156,10 +1153,6 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 #### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
-
-#### 2.4.11 `WeakMap` / `WeakSet`
-
-Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
 ### 2.5 Nullable Types
 
@@ -6424,17 +6417,60 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
 
-### 16.2 Memory Allocation
+### 16.2 Semantic Ownership Domains
 
-| Region | Use |
+Storage is described by **two orthogonal axes**. Conflating them yields wrong conclusions:
+
+- **Semantic ownership domain** (this section): who owns the storage, how long it lives, and what rule governs its migration across an execution boundary. This is a **semantic contract**.
+- **Backend materialization** (§16.2.1): where the backend actually puts it (inline, stack, static data, some heap). This is an **implementation choice**.
+
+> Source of truth: `XrSemanticStorageDomain`, `XrBackendMaterialization`, and `XrTransferAction` in `src/base/xstorage.h`.
+
+Every value belongs to exactly one of six semantic domains:
+
+| Domain | Ownership and lifetime | Reference counting | Typical origin |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | Owned exclusively by the current execution (coroutine); ends with that execution's heap | Non-atomic | Ordinary local objects; containers and instances built from literals |
+| **`TRANSFERABLE`** | Unique ownership that can be **handed over whole** across an execution boundary; unusable on the source side afterwards | Non-atomic | The target of a `move`; unique values passed between coroutines |
+| **`CONST_SHARED`** | A published immutable root, read concurrently by several executions | Atomic | A published `const` root; the result of `freeze` |
+| **`SYNC_SHARED`** | An audited concurrency handle accessed by several executions, where the handle itself provides the synchronization | Atomic | Values held by channels, mutexes, and other concurrency primitives |
+| **`MODULE_STATIC`** | Owned by the module, alive until it unloads; **not concurrency-safe by default** | Per module owner | Top-level `const` / `var` |
+| **`FOREIGN`** | Owned by an allocator outside Xray; the runtime does not manage its lifetime | None | FFI pointers, external buffers |
+
+**A domain fixes concurrency visibility and reclamation responsibility, not physical location.** An `EXEC_LOCAL` value may be inlined into its holder, placed on the stack, or allocated on the execution heap — none of the three changes the contract that it ends with that coroutine.
+
+#### 16.2.1 Backend Materialization
+
+Subject to the semantic domain's contract, the backend picks one materialization per value:
+
+| Materialization | Meaning |
 |--|--|
-| **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
-| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then sealed + published |
-| **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Const/synchronized shared domain** | published const roots and audited concurrency handles, with root-only atomic reference counting |
-| **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
-| **Stack** | `struct` values, local immediates, function frames |
-| **Arena** | parser temporary allocation, frame allocation |
+| `INLINE` | Inlined into the holder's storage, with no separate address identity |
+| `STACK` | On the function frame; dies with the frame, cannot grow, cannot be freed |
+| `STATIC_DATA` | Read-only static data (consteval results, literal pools) |
+| `EXEC_HEAP` | The current execution's heap (`XrCoroHeap`), reclaimed by reference counting |
+| `SYSTEM_HEAP` | The system heap; objects visible across executions live here |
+| `SROA` | Scalar-replaced into registers; the aggregate no longer exists concretely |
+| `EXTERNAL` | Held by an external allocator |
+| `INVALID` | Undecided; reaching a final plan is an internal error |
+
+> **Changing materialization must never grant a stronger semantic domain or transfer capability.** Materializing an `EXEC_LOCAL` value on the `SYSTEM_HEAP` does not make it shareable across executions; conversely, materializing a `CONST_SHARED` value on the stack is invalid, because its domain requires a stable address for as long as it is shared. Materialization is **downstream** of the semantic domain, never a justification.
+
+#### 16.2.2 Domain Migration Across Execution Boundaries
+
+When a value crosses an execution boundary (captured into `go`, sent through a channel, returned as a task result), its **source domain** and mutability select a transfer action. This is decided at compile time; it is not a runtime downgrade:
+
+| Action | Selected when | Semantics |
+|--|--|--|
+| `INLINE_COPY` | Scalar, and not a mutable capture | Copied by value; the two sides are independent afterwards |
+| `CONST_SHARE` | Source domain is `CONST_SHARED` | Shares the same immutable root under atomic reference counting |
+| `SYNC_SHARE` | Source domain is `SYNC_SHARED`, or the capture is itself a concurrency handle | Shares the same handle; the handle provides synchronization |
+| `MOVE_UNIQUE` | Source domain is `TRANSFERABLE` | Ownership is handed over whole; the source is unusable afterwards |
+| `EXPLICIT_COPY` | **Only** where the source wrote `copy(...)` | Materializes an independent value, then migrates it |
+| `MODULE_READ` | Source domain is `MODULE_STATIC` and immutable | Reads the module binding by reference |
+| **`REJECT`** | **None of the above holds** | **Compile error** |
+
+`REJECT` is the most important row: **there is no implicit deep-copy fallback across an execution boundary.** A mutable module binding, an ordinary capture that is mutable or reassigned, and a managed value with no const/sync/move evidence are all compile errors rather than a silent copy. Where an independent copy is wanted, the source must say `copy(...)`.
 
 ### 16.3 Object Lifetime and Reclamation
 

@@ -29,7 +29,6 @@
 #include "../../base/xmalloc.h"
 #include "../mem/xalloc_unified.h"
 #include "../core/xr_exec_context.h"
-#include "../mem/xweak_registry.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../core/xr_runtime_core.h"
@@ -61,10 +60,6 @@ static inline void xr_set_release_entry(XrSetEntry *e, XrCoroHeap *heap) {
     e->value = xr_null();
 }
 
-static inline bool set_is_weak(const XrSet *set) {
-    return (set->flags & XR_SET_FLAG_WEAK) != 0;
-}
-
 static inline XrCoroHeap *set_current_or_owner_heap(XrSet *set) {
     XrCoroHeap *heap = xr_current_coro_heap();
     return heap ? heap : (set ? set->owner_heap : NULL);
@@ -86,23 +81,8 @@ static XrVMRuntime *set_owning_isolate(XrCoroHeap *heap) {
     return NULL;
 }
 
-static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroHeap *heap) {
-    if (!set_is_weak(set))
-        xr_set_release_entry(e, heap);
-    else
-        e->value = xr_null();
-}
-
-static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
-    if (!set_is_weak(set) || !XR_IS_PTR(value))
-        return;
-    XrObjHeader *target = XR_VALUE_GCPTR(value);
-    XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_set(set_owning_isolate(heap), set);
-}
-
 static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
-    if (set_is_weak(set) || !XR_IS_STRING(value))
+    if (!XR_IS_STRING(value))
         return value;
     XrVMRuntime *iso = set_owning_isolate(heap);
     XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
@@ -332,10 +312,6 @@ bool xr_set_add(XrSet *set, XrValue value) {
     set->count++;
 
     xr_swiss_indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
-    if (set_is_weak(set)) {
-        xr_set_prepare_weak_value(set, value, heap);
-        xr_rc_release_value(heap, value);
-    }
     return true;
 }
 
@@ -362,7 +338,7 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrSetEntry *e = &set->entries[ix];
-    xr_set_release_stored_entry(set, e, set_current_or_owner_heap(set));
+    xr_set_release_entry(e, set_current_or_owner_heap(set));
     e->val_tt = XR_SET_ENTRY_NIL;
     set->indices[slot] = XR_SET_IX_EMPTY;
     xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
@@ -379,7 +355,7 @@ void xr_set_clear(XrSet *set) {
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {
-            xr_set_release_stored_entry(set, e, heap);
+            xr_set_release_entry(e, heap);
             e->val_tt = XR_SET_ENTRY_NIL;
         }
     }
@@ -547,13 +523,11 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 void xr_obj_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrSet *set = (XrSet *) obj;
-    if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
-        xr_weak_registry_unregister_set(set_owning_isolate(owner_heap), set);
     if (!xr_set_isdummy(set) && set->entries) {
         for (uint32_t i = 0; i < set->nentries; i++) {
             XrSetEntry *e = &set->entries[i];
             if (e->val_tt != XR_SET_ENTRY_NIL)
-                xr_set_release_stored_entry(set, e, owner_heap);
+                xr_set_release_entry(e, owner_heap);
         }
         size_t bytes = (size_t) set->indices_size + XR_SWISS_GROUP +
                        sizeof(int32_t) * (size_t) set->indices_size +

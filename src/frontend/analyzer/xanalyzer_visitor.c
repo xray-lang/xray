@@ -1973,19 +1973,12 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
         return;
     switch (type->kind) {
         case XR_KIND_MAP:
-            if (type->is_weak)
-                xa_validate_hashable_key_type(ctx, type->map.key_type, generic_links, context, loc);
-            else
-                xa_validate_hashable_type(ctx, type->map.key_type, generic_links, "Map key", loc);
+            xa_validate_hashable_type(ctx, type->map.key_type, generic_links, "Map key", loc);
             xa_validate_hashable_key_type(ctx, type->map.value_type, generic_links, context, loc);
             break;
         case XR_KIND_SET:
-            if (type->is_weak)
-                xa_validate_hashable_key_type(ctx, type->container.element_type, generic_links,
-                                              context, loc);
-            else
-                xa_validate_hashable_type(ctx, type->container.element_type, generic_links,
-                                          "Set element", loc);
+            xa_validate_hashable_type(ctx, type->container.element_type, generic_links,
+                                      "Set element", loc);
             break;
         case XR_KIND_ARRAY:
         case XR_KIND_SLICE:

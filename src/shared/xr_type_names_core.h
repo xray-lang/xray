@@ -43,8 +43,6 @@
 #define TYPE_NAME_ARRAY "Array"
 #define TYPE_NAME_MAP "Map"
 #define TYPE_NAME_SET "Set"
-#define TYPE_NAME_WEAKMAP "WeakMap"
-#define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_SLICE "Slice"
 
 /* ========== Runtime Types ========== */
@@ -163,8 +161,6 @@ typedef enum {
     XR_TID_EVENTCOUNT,     /* 40 */
     XR_TID_THREAD,         /* 41 */
     XR_TID_BUFFER,         /* 42 */
-    XR_TID_WEAKMAP,        /* 43, analyzer-only */
-    XR_TID_WEAKSET,        /* 44, analyzer-only */
     XR_TID_COUNT
 } XrTypeId;
 
@@ -259,10 +255,6 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_THREAD;
         case XR_TID_BUFFER:
             return TYPE_NAME_BUFFER;
-        case XR_TID_WEAKMAP:
-            return TYPE_NAME_WEAKMAP;
-        case XR_TID_WEAKSET:
-            return TYPE_NAME_WEAKSET;
         default:
             return TYPE_NAME_UNKNOWN;
     }

@@ -73,13 +73,14 @@ typedef struct XrMapCore {
     XR_MAP_ABI_FIELDS;
 } XrMapCore;
 
-#define XR_MAP_FLAG_WEAK 0x01
-#define XR_MAP_FLAG_DUMMY 0x02           /* Empty map: no ctrl/indices/entries allocation */
-#define XR_MAP_FLAG_NODES_ON_GC 0x04     /* ctrl/indices/entries live on Region GC heap */
-#define XR_MAP_FLAG_WEAK_REGISTERED 0x08 /* Registered in the runtime weak registry */
-#define XR_MAP_FLAG_NODES_ON_STACK 0x10  /* AOT stack Map nodes; never free or resize */
-#define XR_MAP_FLAG_ENUM_TYPE 0x20       /* AOT lightweight enum type map */
-#define XR_MAP_FLAG_STATIC_READONLY 0x40 /* AOT static-lifetime immutable table */
+/* Bits are repacked with no holes after WeakMap's removal (task 247 phase B).
+ * Nothing persists these across a build, and Xray keeps no compatibility
+ * surface, so a hole reserved for a deleted feature would be pure debt. */
+#define XR_MAP_FLAG_DUMMY 0x01           /* Empty map: no ctrl/indices/entries allocation */
+#define XR_MAP_FLAG_NODES_ON_GC 0x02     /* ctrl/indices/entries live on Region GC heap */
+#define XR_MAP_FLAG_NODES_ON_STACK 0x04  /* AOT stack Map nodes; never free or resize */
+#define XR_MAP_FLAG_ENUM_TYPE 0x08       /* AOT lightweight enum type map */
+#define XR_MAP_FLAG_STATIC_READONLY 0x10 /* AOT static-lifetime immutable table */
 
 #define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
 
@@ -208,12 +209,10 @@ typedef struct XrSetCore {
     XR_SET_ABI_FIELDS;
 } XrSetCore;
 
-#define XR_SET_FLAG_WEAK 0x01
-#define XR_SET_FLAG_DUMMY 0x02           /* Empty set: no ctrl/indices/entries allocation */
-#define XR_SET_FLAG_NODES_ON_GC 0x04     /* ctrl/indices/entries live on Region GC heap */
-#define XR_SET_FLAG_WEAK_REGISTERED 0x08 /* Registered in the runtime weak registry */
-#define XR_SET_FLAG_NODES_ON_STACK 0x10  /* AOT stack Set nodes; never free or resize */
-#define XR_SET_FLAG_STATIC_READONLY 0x40 /* AOT static-lifetime immutable table */
+#define XR_SET_FLAG_DUMMY 0x01           /* Empty set: no ctrl/indices/entries allocation */
+#define XR_SET_FLAG_NODES_ON_GC 0x02     /* ctrl/indices/entries live on Region GC heap */
+#define XR_SET_FLAG_NODES_ON_STACK 0x04  /* AOT stack Set nodes; never free or resize */
+#define XR_SET_FLAG_STATIC_READONLY 0x08 /* AOT static-lifetime immutable table */
 
 #define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
 

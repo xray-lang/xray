@@ -11,7 +11,6 @@
 #include "xr_runtime_core.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xsystem_heap.h"
-#include "../mem/xweak_registry.h"
 #include "../object/xstring.h"
 #include "../xstrbuf.h"
 #include <string.h>
@@ -86,8 +85,6 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     if (!core)
         return;
     xr_fixed_heap_cleanup(&core->fixed_heap);
-    if (core->fixed_heap.isolate)
-        xr_weak_registry_destroy(core->fixed_heap.isolate);
 }
 
 struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
