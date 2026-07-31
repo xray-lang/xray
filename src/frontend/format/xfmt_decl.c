@@ -566,6 +566,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
+        xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0)

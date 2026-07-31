@@ -245,6 +245,11 @@ XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *na
  */
 XR_FUNC XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count);
 
+/* Parse a method's own generic type parameters `<T, U: A & B>`, if present.
+ * Returns NULL with *out_count == 0 when the method is not generic. Shared by
+ * class/struct/enum method declarations and interface method signatures. */
+XR_FUNC XrGenericParam **xr_parse_method_type_params(Parser *parser, int *out_count);
+
 /* ========== Destructuring ========== */
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);

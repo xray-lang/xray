@@ -1,0 +1,2 @@
+E0358
+Type 'Thing' does not satisfy constraint 'Hashable' for type parameter 'T'

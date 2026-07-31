@@ -2915,6 +2915,20 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         msym->location.line = m->line;
         XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
         xa_publish_deprecated_attrs(mlinks, im->attributes, im->attr_count);
+        // An interface method may carry its own generic params and constraints.
+        // They are stored, and the method published as the signature scope's
+        // active generic owner, before the signature is resolved — that is what
+        // lets `x: T` resolve to a type parameter instead of an undefined type,
+        // and what lets the constraint-aware checks see the bounds.
+        XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
+        XaSymbol *saved_signature_function =
+            signature_scope ? signature_scope->function_symbol : NULL;
+        if (im->type_param_count > 0 && im->type_params) {
+            xa_store_type_params_with_constraints(ctx, mlinks, im->type_params,
+                                                  im->type_param_count, m);
+            if (signature_scope)
+                signature_scope->function_symbol = msym;
+        }
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
@@ -2931,6 +2945,25 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XrType *ret_type = im->return_type
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->return_type)
                                : xr_type_new_unit(NULL);
+        // Resolve CLASS("T") → TYPE_PARAM("T") for generic interface methods,
+        // so a bound `T` in the signature is a type parameter rather than an
+        // undefined class name.
+        if (im->type_param_count > 0 && im->type_params) {
+            const char **tp_names = xr_malloc(sizeof(const char *) * (size_t) im->type_param_count);
+            if (tp_names) {
+                for (int j = 0; j < im->type_param_count; j++)
+                    tp_names[j] = im->type_params[j] ? im->type_params[j]->name : NULL;
+                for (int j = 0; j < im->param_count; j++) {
+                    param_types[j] = resolve_class_to_type_param(NULL, param_types[j], tp_names,
+                                                                 im->type_param_count);
+                }
+                ret_type =
+                    resolve_class_to_type_param(NULL, ret_type, tp_names, im->type_param_count);
+                xr_free(tp_names);
+            }
+        }
+        if (signature_scope)
+            signature_scope->function_symbol = saved_signature_function;
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
         if (mlinks->type && ret_type && XR_TYPE_IS_SLICE(ret_type) &&
