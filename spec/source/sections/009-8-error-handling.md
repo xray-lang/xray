@@ -264,6 +264,26 @@ fn main() {
 main()
 ```
 
+#### 8.2.4 未捕获 panic 的顶层诊断
+
+未被任何 `catch panic` 捕获的 panic 到达顶层时，打印一行到 stderr 并以退出码 1 结束：
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+例如除零打印 `[Uncaught Panic] E0420: division by zero`，越界打印
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`。
+
+**后端契约**：VM 与 AOT（`xray build --native`）对同一故障产生**逐字节相同**的可观测结果——退出码、stdout、以及这一行 stderr（错误码 + 消息均取自同一套共享格式化器）。契约内容仅限于此。
+
+**不属于契约的呈现细节**：
+
+- **调用栈**是 opt-in 诊断，默认不打印。设 `XRAY_BACKTRACE=1` 时，VM 在报告行后追加 `Stack trace:` 帧列表；AOT 原生路径不携带 unwind 状态，故不追加。让栈保持默认关闭，正是两个后端默认输出得以一致的原因。
+- **颜色**按 stderr 是否为 TTY 决定：交互终端下 `[Uncaught Panic]` 标签为粗红色，管道/重定向时为纯文本。
+
+> 对照值返回通道（§8.1.1）：未捕获的顶层 error 打印 `[Uncaught Error] <enum value>`，退出码同为 1。两个通道的前缀风格一致（`[Uncaught Error]` / `[Uncaught Panic]`）。
+
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
@@ -744,6 +764,38 @@ fn main() {
 
 main()
 ```
+
+#### 8.2.4 Top-level diagnostic for an uncaught panic
+
+A panic that reaches the top level uncaught by any `catch panic` prints one line
+to stderr and exits with code 1:
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+For example, division by zero prints `[Uncaught Panic] E0420: division by zero`,
+and an out-of-bounds write prints
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`.
+
+**Backend contract**: the VM and AOT (`xray build --native`) produce
+**byte-identical** observable results for the same fault — exit code, stdout, and
+this stderr line (both the code and the message come from the same shared
+formatters). The contract covers exactly that surface.
+
+**Presentation details, outside the contract**:
+
+- The **stack trace** is an opt-in diagnostic, off by default. With
+  `XRAY_BACKTRACE=1` the VM appends a `Stack trace:` frame list after the report
+  line; the AOT native path carries no unwind state and appends nothing. Keeping
+  the trace off by default is exactly what lets the two backends' default output
+  agree.
+- **Colour** follows whether stderr is a TTY: the `[Uncaught Panic]` tag is bold
+  red on an interactive terminal and plain text when piped or redirected.
+
+> Compare the value-return channel (§8.1.1): an uncaught top-level error prints
+> `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
+> the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
 
 ### 8.3 `defer` — resource cleanup
 

@@ -3841,6 +3841,38 @@ fn main() {
 main()
 ```
 
+#### 8.2.4 Top-level diagnostic for an uncaught panic
+
+A panic that reaches the top level uncaught by any `catch panic` prints one line
+to stderr and exits with code 1:
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+For example, division by zero prints `[Uncaught Panic] E0420: division by zero`,
+and an out-of-bounds write prints
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`.
+
+**Backend contract**: the VM and AOT (`xray build --native`) produce
+**byte-identical** observable results for the same fault — exit code, stdout, and
+this stderr line (both the code and the message come from the same shared
+formatters). The contract covers exactly that surface.
+
+**Presentation details, outside the contract**:
+
+- The **stack trace** is an opt-in diagnostic, off by default. With
+  `XRAY_BACKTRACE=1` the VM appends a `Stack trace:` frame list after the report
+  line; the AOT native path carries no unwind state and appends nothing. Keeping
+  the trace off by default is exactly what lets the two backends' default output
+  agree.
+- **Colour** follows whether stderr is a TTY: the `[Uncaught Panic]` tag is bold
+  red on an interactive terminal and plain text when piped or redirected.
+
+> Compare the value-return channel (§8.1.1): an uncaught top-level error prints
+> `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
+> the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
