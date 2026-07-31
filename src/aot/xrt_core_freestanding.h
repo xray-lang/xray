@@ -1992,6 +1992,23 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     return XR_NULL_VAL;
 }
 
+/* Statement-position dispatch, the freestanding counterpart of the hosted
+ * xrt_method_discard_N (see xrt_method.h).  Generated C emits these wherever a
+ * builtin method call's result has no consumer, so the freestanding profile has
+ * to answer the same names.  Nothing is released: the whole dispatch surface
+ * here is Buffer, whose arms answer with a length, a raw borrowed pointer, or a
+ * resize status — never an owned reference.  An arm that starts returning one
+ * needs the hosted gate (xrt_method_result_is_owned) mirrored here. */
+static inline XrValue xrt_method_discard_0(XrValue recv, int sym) {
+    (void) xrt_method_0(recv, sym);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_method_discard_1(XrValue recv, int sym, XrValue arg0) {
+    (void) xrt_method_1(recv, sym, arg0);
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     if (obj.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_0(obj, (int) symbol_id);

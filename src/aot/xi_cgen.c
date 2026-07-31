@@ -85,6 +85,8 @@ static bool cg_direct_ref_param_noescape(XiCgenCtx *ctx, const XiFunc *target, u
 static bool cg_static_direct_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v);
 static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v);
 
 static const char *ctype_str(XrRep rep) {
     switch (rep) {

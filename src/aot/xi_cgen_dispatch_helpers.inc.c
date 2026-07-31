@@ -5280,7 +5280,8 @@ static void emit_direct_call_arg_list(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     }
 }
 
-static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name);
+static void xicgen_emit_map_instance_alloc(XiCgenCtx *ctx, FILE *out, const char *class_name,
+                                           const XiClassData *class_data);
 
 static const char *xicgen_options_action_name(uint8_t action) {
     switch ((XaotOptionsAction) action) {
@@ -5566,7 +5567,9 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         if (!class_name && shared_class_data)
             class_name = shared_class_data->class_name;
         fprintf(out, "({ ");
-        xicgen_emit_map_instance_alloc(out, class_name);
+        xicgen_emit_map_instance_alloc(ctx, out, class_name,
+                                       static_call.class_data ? static_call.class_data
+                                                              : shared_class_data);
         emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {
@@ -10316,18 +10319,26 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (!xicgen_runtime_method_plan_allows_helper(ctx, out, v, method, nargs, dispatch_plan))
         return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    /* An unused result is dropped by the caller as `(void)(...)`, which would
+     * strand the +1 reference the dispatcher hands back (xrt_method_0's
+     * ownership contract).  Route those through the discard entry points, which
+     * run the same arm and release an owned result.  Xi cannot drop it instead:
+     * xi_arc is shared with the VM, whose builtin methods answer borrowed, so it
+     * leaves every call result alias-uncertain and undropped. */
+    const char *dispatch =
+        cg_unused_call_result_emits_statement(ctx, f, v) ? "xrt_method_discard" : "xrt_method";
     if (nargs == 0) {
-        fprintf(out, "xrt_method_0(");
+        fprintf(out, "%s_0(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d)", sym);
     } else if (nargs == 1) {
-        fprintf(out, "xrt_method_1(");
+        fprintf(out, "%s_1(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 2) {
-        fprintf(out, "xrt_method_2(");
+        fprintf(out, "%s_2(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10335,7 +10346,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 3) {
-        fprintf(out, "xrt_method_3(");
+        fprintf(out, "%s_3(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10345,7 +10356,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 4) {
-        fprintf(out, "xrt_method_4(");
+        fprintf(out, "%s_4(", dispatch);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -10406,10 +10417,13 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
  * cannot recover the class. Resolve the constructor from the call's result type
  * (always the constructed instance type) and emit it exactly like a bare class
  * call `X(args)`, keeping AOT consistent with the VM for the `new` form. */
-static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name) {
+static void xicgen_emit_map_instance_alloc(XiCgenCtx *ctx, FILE *out, const char *class_name,
+                                           const XiClassData *class_data) {
     fprintf(out, "XrValue _inst = xrt_map_new(4); xrt_map_set_class_name(_inst, ");
     xicgen_emit_c_string_literal(out, class_name ? class_name : "?");
     fprintf(out, "); ");
+    /* Declaration defaults precede the constructor body, as in the VM. */
+    emit_class_map_field_default_stores(ctx, out, class_data, "_inst");
 }
 
 static bool xicgen_class_data_same_identity(const XiClassData *a, const XiClassData *b) {
@@ -10525,7 +10539,7 @@ static bool xicgen_emit_resolved_user_constructor(XiCgenCtx *ctx, FILE *out, con
     if (!class_name)
         return false;
     fprintf(out, "({ ");
-    xicgen_emit_map_instance_alloc(out, class_name);
+    xicgen_emit_map_instance_alloc(ctx, out, class_name, class_data);
     emit_fname(ctx, out, resolved_prefix ? resolved_prefix : prefix, ctor);
     fprintf(out, "(NULL, _inst");
     for (uint16_t a = 1; a < v->nargs; a++) {
@@ -10679,7 +10693,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
         if (!class_name && call.class_data)
             class_name = call.class_data->class_name;
         fprintf(out, "({ ");
-        xicgen_emit_map_instance_alloc(out, class_name);
+        xicgen_emit_map_instance_alloc(ctx, out, class_name, call.class_data);
         emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
         fprintf(out, "(NULL, _inst");
         for (uint16_t a = 1; a < v->nargs; a++) {

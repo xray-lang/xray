@@ -4142,18 +4142,22 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
     if (nargs > 3)
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    /* Same ownership rule as the general runtime dispatch: a result nobody
+     * consumes has to be released, not just cast away.  See xrt_method_0. */
+    const char *dispatch =
+        cg_unused_call_result_emits_statement(ctx, f, v) ? "xrt_method_discard" : "xrt_method";
     if (nargs == 0) {
-        fprintf(out, "xrt_method_0(");
+        fprintf(out, "%s_0(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d)", sym);
     } else if (nargs == 1) {
-        fprintf(out, "xrt_method_1(");
+        fprintf(out, "%s_1(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 2) {
-        fprintf(out, "xrt_method_2(");
+        fprintf(out, "%s_2(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -4161,7 +4165,7 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 3) {
-        fprintf(out, "xrt_method_3(");
+        fprintf(out, "%s_3(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);

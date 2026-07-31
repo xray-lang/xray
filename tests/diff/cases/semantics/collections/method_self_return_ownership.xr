@@ -1,0 +1,78 @@
+// anchor: method-self-return-ownership
+// A builtin method that answers with its own receiver hands back a reference
+// the caller owns, so an aliasing binding and the original are two independent
+// owners of one object, and a statement-position call owns -- and drops -- its
+// own result. Both readings have to survive: releasing the alias must not free
+// the object out from under the original, and running the call for its side
+// effect must not strand the reference it was given.
+//
+// The AOT side answers these through xrt_method_return_self / the discard
+// dispatch (src/aot/xrt_method.h); the VM answers them borrowed. The two must
+// still agree on every value printed here.
+
+fn aliased_reverse() {
+    var a = [3, 1, 2]
+    var b = a.reverse()
+    print("b0 " + string(b[0]))
+    b[0] = 9
+    print("a0 " + string(a[0]))
+    a.reverse()
+    print("a0-again " + string(a[0]))
+}
+
+fn aliased_clear() {
+    var sb = StringBuilder()
+    sb.append("hello")
+    var same = sb.clear()
+    same.append("world")
+    print("sb " + sb.toString())
+    sb.clear()
+    print("cleared " + sb.toString())
+}
+
+// The string arms answer with the receiver whenever the result would equal the
+// input: repeat(1), and a replace whose pattern does not occur.
+fn aliased_string_passthrough() {
+    var s = "ab" + "cd"
+    print("t " + s.replace("zz", "yy"))
+    print("u " + s.repeat(1))
+    print("v " + s.replaceAll("zz", "yy"))
+    s.replace("zz", "yy")
+    s.repeat(1)
+    s.replaceAll("zz", "yy")
+    print("s " + s)
+}
+
+// The other half of the convention: next() answers with an element the
+// collection still owns, so a discarded next() must NOT be released.
+fn discarded_element_borrow() {
+    var rows = [[1, 2], [3, 4]]
+    var it = rows.iterator()
+    it.next()
+    var kept = it.next()
+    print("kept " + string(kept[0]))
+    print("rows0 " + string(rows[0][0]))
+}
+
+// Generator frames release their slots on teardown, which is what turns a
+// borrowed self-return into a use-after-free rather than a harmless alias.
+fn frames(n: int) -> Iterator<int> {
+    var a = [1, 2, 3]
+    var b = a.reverse()
+    for (x in b) {
+        yield x * n
+    }
+    var sb = StringBuilder()
+    sb.append("done")
+    var same = sb.clear()
+    same.append("x")
+    yield a[0]
+}
+
+aliased_reverse()
+aliased_clear()
+aliased_string_passthrough()
+discarded_element_borrow()
+for (y in frames(2)) {
+    print("y " + string(y))
+}
