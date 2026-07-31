@@ -1689,8 +1689,15 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                          * Array, Map, Slice and fixed-length arrays.  A literal
                          * `null` stays acceptable for a nullable field because
                          * it denotes the absent value rather than a narrower
-                         * field type that could later be read back. */
+                         * field type that could later be read back.
+                         *
+                         * A nullable target field is optional, not a variance
+                         * position: writing `int` into `int?` is how every
+                         * options record is spelled (`{url, timeoutMs}` against
+                         * `{url, method: string?, timeoutMs: int?}`), so the
+                         * reverse direction is not required there. */
                         if (!XR_TYPE_IS_NULL(source_field_type) &&
+                            !target_field_type->is_nullable &&
                             !xr_type_assignable(source_field_type, target_field_type)) {
                             return false;
                         }
