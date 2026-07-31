@@ -164,9 +164,16 @@ typedef struct XrCoroHeap {
     // the threshold, objects are pushed onto deferred_drops instead of being
     // destroyed recursively. The top-level destroy call drains the queue
     // iteratively before returning.
-    uint16_t destroy_depth;       // current recursion depth of rc_destroy
-    uint16_t _pad_drop[3];        // alignment
-    XrObjHeader *deferred_drops;  // singly-linked list via object header (reuse a field)
+    //
+    // The queue is a side stack, not a list threaded through the objects: a
+    // deferred object has only reached rc==0, its destructor has NOT run yet,
+    // so every payload word it holds is still live (XrArray::data,
+    // XrInstance::klass, ...) and cannot be borrowed as a link field.
+    uint16_t destroy_depth;        // current recursion depth of rc_destroy
+    uint16_t _pad_drop[3];         // alignment
+    XrObjHeader **deferred_drops;  // LIFO stack of objects awaiting destroy
+    uint32_t deferred_drop_count;  // entries in use
+    uint32_t deferred_drop_cap;    // allocated entries (NULL/0 until first defer)
 
     // === Cycle collector (Bacon-Rajan trial deletion) ===
     // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and

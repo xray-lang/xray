@@ -249,6 +249,9 @@ static void heap_ptrset_destroy(XrHeapPtrSet *set) {
 
 /* ========== Common Helpers for Destroy/Reset ========== */
 
+/* Defined with the rest of the deferred-drop stack, below. */
+static void deferred_drops_destroy(XrCoroHeap *heap);
+
 static void coro_heap_finalize_registered_objects(XrCoroHeap *heap) {
     XrHeapPtrSet set = heap_ptrset_take(&heap->finalize_set);
     for (uint32_t i = 0; i < set.cap; i++) {
@@ -328,6 +331,7 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     xr_region_destroy(&heap->region);
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);
+    deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
@@ -375,6 +379,7 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     xr_region_reset(&heap->region);
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);
+    deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
 
     coro_heap_init_runtime_state(heap);
@@ -585,23 +590,47 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
         xr_coro_heap_recycle_obj(heap, obj);
 }
 
-/* Push an object onto the deferred-drop list for iterative draining.
- * Uses the first pointer-sized region past the header as a next-link
- * (safe because the object is already logically dead / RC == 0). */
-static void deferred_push(XrCoroHeap *heap, XrObjHeader *obj) {
-    /* Encode the linked list via a cast to void** at header+1. */
-    void **link = (void **) (obj + 1);
-    *link = heap->deferred_drops;
-    heap->deferred_drops = obj;
+/* Push an object onto the deferred-drop stack for iterative draining.
+ *
+ * The stack is held on the side rather than threaded through the objects.
+ * A deferred object has only dropped to RC == 0 — its destructor has not run
+ * yet, so its whole payload is still live. Borrowing the first word past the
+ * header as a next-link overwrote XrArray::data / XrInstance::klass (both sit
+ * at exactly header+1), and the deferred destructor then dereferenced the list
+ * link as if it were that field.
+ *
+ * Returns false only if the stack could not grow; the caller then destroys
+ * recursively instead, trading stack depth for correctness. */
+static bool deferred_push(XrCoroHeap *heap, XrObjHeader *obj) {
+    if (heap->deferred_drop_count == heap->deferred_drop_cap) {
+        uint32_t new_cap = heap->deferred_drop_cap ? heap->deferred_drop_cap * 2 : 64;
+        XrObjHeader **grown = (XrObjHeader **) xr_realloc(heap->deferred_drops,
+                                                          (size_t) new_cap * sizeof(XrObjHeader *));
+        if (!grown)
+            return false;
+        heap->deferred_drops = grown;
+        heap->deferred_drop_cap = new_cap;
+    }
+    heap->deferred_drops[heap->deferred_drop_count++] = obj;
+    return true;
 }
 
+/* Pops via heap->deferred_drops on every call: draining is re-entrant (a
+ * destructor run from the drain loop can defer again and drain in turn), so no
+ * caller may cache the array base across a pop — a push can realloc it. */
 static XrObjHeader *deferred_pop(XrCoroHeap *heap) {
-    XrObjHeader *obj = heap->deferred_drops;
-    if (!obj)
+    if (heap->deferred_drop_count == 0)
         return NULL;
-    void **link = (void **) (obj + 1);
-    heap->deferred_drops = (XrObjHeader *) *link;
-    return obj;
+    return heap->deferred_drops[--heap->deferred_drop_count];
+}
+
+static void deferred_drops_destroy(XrCoroHeap *heap) {
+    if (!heap->deferred_drops)
+        return;
+    xr_free(heap->deferred_drops);
+    heap->deferred_drops = NULL;
+    heap->deferred_drop_count = 0;
+    heap->deferred_drop_cap = 0;
 }
 
 /* drop-to-zero reclamation: run the type destructor (if any), then return
@@ -632,10 +661,11 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
     }
 
     /* Depth-limit guard: if we are already deep in a recursive destroy
-     * chain, defer this object for iterative processing later. */
+     * chain, defer this object for iterative processing later. On OOM the
+     * push fails and we fall through to the recursive path. */
     if (heap && heap->destroy_depth >= XR_DESTROY_DEPTH_LIMIT) {
-        deferred_push(heap, obj);
-        return;
+        if (deferred_push(heap, obj))
+            return;
     }
 
     /* Track recursion depth. */
@@ -649,9 +679,9 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
     if (heap) {
         heap->destroy_depth--;
         if (heap->destroy_depth == 0) {
-            while (heap->deferred_drops) {
-                XrObjHeader *deferred = deferred_pop(heap);
-                if (deferred && !(deferred->extra & XR_OBJ_DEAD))
+            XrObjHeader *deferred;
+            while ((deferred = deferred_pop(heap)) != NULL) {
+                if (!(deferred->extra & XR_OBJ_DEAD))
                     rc_destroy_one(heap, deferred);
             }
         }
