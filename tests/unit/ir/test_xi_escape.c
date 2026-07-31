@@ -384,8 +384,22 @@ static int count_ops(const XiFunc *f, uint16_t op) {
     return count;
 }
 
-static void test_arc_no_escape_skipped(void) {
-    /* Local array (NO_ESCAPE) should get zero RETAIN/RELEASE */
+static void test_arc_no_escape_still_released_without_stack_rewrite(void) {
+    /* A NO_ESCAPE heap allocation is still a HEAP allocation until something
+     * actually rewrites it. escape + ARC alone (the VM's pipeline: see
+     * xi_pipeline.c, where xi_stack_alloc_rewrite is gated on
+     * run_backend_lower) leaves XI_ARRAY_NEW allocating on the heap, so it
+     * needs exactly one release at its death point.
+     *
+     * ARC used to skip NO_ESCAPE heap allocations outright, on the assumption
+     * that stack_alloc_rewrite would claim them. On the VM that pass never
+     * runs — and it is also what promotes an allocation it CANNOT stack
+     * allocate back to ESC_ARG — so those values were left on the heap with
+     * nothing to release them. 2M non-escaping closures cost 143 MB max RSS;
+     * 2M non-escaping array literals cost 301 MB. See task 249.
+     *
+     * The stack-allocated counterpart is asserted by
+     * test_arc_stack_alloc_not_released below. */
     XiFunc *f = make_func("arc_local", &t_int);
     XiBlock *b0 = f->entry;
 
@@ -397,10 +411,41 @@ static void test_arc_no_escape_skipped(void) {
     xi_block_set_return(b0, get);
 
     xi_escape_analyze(f);
+    ASSERT_EQ(arr->escape, (uint8_t) XI_ESC_NONE, "local array does not escape");
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "NO_ESCAPE array should have 0 retains");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "NO_ESCAPE array should have 0 releases");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "single-use array is never dup'd");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1, "heap-allocated array is released once");
+    xi_func_free(f);
+}
+
+static void test_arc_stack_alloc_not_released(void) {
+    /* Once stack_alloc_rewrite HAS claimed the allocation (the AOT pipeline),
+     * it has frame lifetime and must not be released. This is the assertion
+     * that "NO_ESCAPE means no release" was standing in for; keyed on what the
+     * value IS, not on what a later pass might do to it.
+     *
+     * A map with a constant capacity is used because XI_ARRAY_NEW is one of
+     * the ops stack_alloc_rewrite explicitly declines (a stack array would
+     * start at length 0 and trap on the literal's index-sets), and a declined
+     * allocation is promoted to ESC_ARG — which is exactly the released case
+     * above. */
+    XiFunc *f = make_func("arc_stack", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *cap = xi_const_int(f, b0, 0, &t_int);
+    XiValue *map = xi_value_new(f, b0, XI_MAP_NEW, &t_map, 1);
+    map->args[0] = cap;
+    XiValue *ret = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, ret);
+
+    xi_escape_analyze(f);
+    xi_stack_alloc_rewrite(f);
+    ASSERT_EQ(map->op, (uint16_t) XI_STACK_ALLOC, "const-capacity map is stack-allocated");
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "stack-allocated map has 0 retains");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "stack-allocated map has 0 releases");
     xi_func_free(f);
 }
 
@@ -1302,7 +1347,8 @@ int main(void) {
     test_set_shared_escape();
     test_call_arg_escape();
     test_index_set_container_no_escape();
-    test_arc_no_escape_skipped();
+    test_arc_no_escape_still_released_without_stack_rewrite();
+    test_arc_stack_alloc_not_released();
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();

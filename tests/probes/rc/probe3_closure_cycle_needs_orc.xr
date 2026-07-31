@@ -1,0 +1,155 @@
+// probe3 — 闭包环当前只由环收集器回收（任务 247 的 §1.8）
+//
+// 247 §1.8 的静态结论：闭包按引用捕获（XrCell），cell 与 closure 被**无条件**
+// 标记为环候选；811 让环收集器遍历闭包捕获边后，闭包环才不再泄漏。
+//
+//   ⇒ 环收集器目前是 Xray 唯一回收闭包环的机制。247 阶段 E 移除它之前，
+//     必须先回答闭包环怎么办（§2.4 的裁决：编译期硬错误 + defer 惯用法）。
+//
+// 观察量前提（249）：本探针在 249 修复前跑不出有效结果。
+//
+// 本探针记录**当前**行为，供 247 阶段 A.6 / D / E 前后对照：
+//
+//   现在                  闭包环被环收集器回收 ⇒ 残留低
+//   247 阶段 A.6 之后     直接形态 `b.onClick = fn() { b... }` 变成编译错误，
+//                         本文件的直接形态用例需要改写成间接形态
+//   247 阶段 E 之后       闭包环不再被回收 ⇒ 残留高，由检测器报出
+//
+// 因此这里只 print 观察量、断言语义正确性，不锁死残留量——锁死会让它在
+// 每个阶段都要改一次，反而掩盖真实变化。
+
+import runtime
+
+// 注：字段写成非可空并给一个不捕获的默认闭包，而不是 `(() -> int)?`。
+// 后者当前被解析成单元素元组的可空版本（`(fn(): int,)?`），赋闭包字面量
+// 时报 E0352——那是独立于本任务的类型解析问题。
+class Button {
+    onClick: () -> int
+    clicks: int
+
+    constructor() {
+        this.onClick = fn() -> int { return 0 }
+        this.clicks = 0
+    }
+
+    render() -> int {
+        this.clicks = this.clicks + 1
+        return this.clicks
+    }
+}
+
+// 直接形态：闭包捕获 b，闭包又被存入 b 自己的字段 ⇒ b ⇄ closure 成环。
+// 这是 247 A.6 要在编译期拒绝的形态。
+fn make_direct_closure_cycle() {
+    var b = Button()
+    b.onClick = fn() -> int {
+        return b.render()
+    }
+}
+
+// 间接形态：闭包存入另一个对象，而那个对象由被捕获的对象持有。
+// A.6 明确**不**报这一形态（零误报优先），由阶段 D 的检测器兜底。
+class Holder {
+    handler: () -> int
+
+    constructor() {
+        this.handler = fn() -> int { return 0 }
+    }
+}
+
+class Owner {
+    holder: Holder
+    value: int
+
+    constructor() {
+        this.holder = Holder()
+        this.value = 0
+    }
+
+    bump() -> int {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+fn make_indirect_closure_cycle() {
+    var o = Owner()
+    o.holder.handler = fn() -> int {
+        return o.bump()
+    }
+}
+
+// 无环对照：闭包捕获后不被存入捕获对象可达的位置。
+fn make_closure_without_cycle() -> int {
+    var b = Button()
+    var f = fn() -> int {
+        return b.render()
+    }
+    return f()
+}
+
+@test
+fn test_closure_without_cycle_is_reclaimed() {
+    for (var w = 0; w < 200; w++) {
+        make_closure_without_cycle()
+    }
+    var before = runtime.liveObjects()
+
+    for (var i = 0; i < 20000; i++) {
+        make_closure_without_cycle()
+    }
+
+    var after = runtime.liveObjects()
+    // 不成环的闭包必须被纯 RC 回收，与环收集器无关。
+    assert(after - before < 1000)
+}
+
+@test
+fn test_direct_closure_cycle_observable() {
+    var before = runtime.liveObjects()
+
+    for (var i = 0; i < 10000; i++) {
+        make_direct_closure_cycle()
+    }
+
+    var after = runtime.liveObjects()
+    print("probe3 direct_closure_cycle_residue=" + string(after - before))
+}
+
+@test
+fn test_indirect_closure_cycle_observable() {
+    var before = runtime.liveObjects()
+
+    for (var i = 0; i < 10000; i++) {
+        make_indirect_closure_cycle()
+    }
+
+    var after = runtime.liveObjects()
+    print("probe3 indirect_closure_cycle_residue=" + string(after - before))
+}
+
+// defer 惯用法（247 §2.4 写进规范正文的那一段）：显式断环后必须完全回收。
+// 这一条在阶段 E 之后仍然必须通过——它是"不给语言机制、只给惯用法"这条
+// 裁决能成立的前提。
+fn make_closure_cycle_broken_by_defer() {
+    var b = Button()
+    b.onClick = fn() -> int {
+        return b.render()
+    }
+    defer b.onClick = fn() -> int { return 0 }
+}
+
+@test
+fn test_defer_breaks_the_closure_cycle() {
+    for (var w = 0; w < 200; w++) {
+        make_closure_cycle_broken_by_defer()
+    }
+    var before = runtime.liveObjects()
+
+    for (var i = 0; i < 10000; i++) {
+        make_closure_cycle_broken_by_defer()
+    }
+
+    var after = runtime.liveObjects()
+    assert(after - before < 1000)
+}

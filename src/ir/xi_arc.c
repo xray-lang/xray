@@ -730,8 +730,17 @@ static bool tracks_rc(const XiValue *v) {
      * return-ownership summary (Roc/Koka style) refines this. */
     if (op_is_call(v->op))
         return xi_own_type_is_rc(v->type);
-    if (v->escape == XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
-        return false; /* will be (or is) stack-allocated */
+    /* A heap allocation is tracked on the strength of what it IS, never of what
+     * a later pass might turn it into. The XI_STACK_ALLOC case above is the
+     * only "this one has frame lifetime" answer.
+     *
+     * Skipping NO_ESCAPE heap allocs here used to stand in for "stack alloc
+     * rewrite will get this one", but that pass runs only when backend
+     * lowering does — AOT. It is also what promotes an allocation it cannot
+     * stack-allocate to ESC_ARG (xi_stack_alloc_rewrite), which is what put
+     * those values back in scope for tracking. On the VM neither half runs, so
+     * a NO_ESCAPE allocation stayed on the heap with nothing to release it:
+     * every non-escaping closure leaked (2M closures => 143 MB max RSS). */
     return xi_own_type_is_rc(v->type);
 }
 
