@@ -21,26 +21,32 @@
 # One case path per line. Comments and blank lines ignored.
 
 # --- Group 1: xr_aot_scope_exit arity ---------------------------------------
-# Generated C calls xr_aot_scope_exit(ctx, mode) but the helper declares three
-# parameters (ctx, scope_mode, out_value) — 14 call sites, so the AOT build
-# fails outright (rc=200) while the VM passes. The signature and the emitter
-# are out of step; whichever is authoritative, the other must follow.
-tests/diff/cases/semantics/coro/scope_child_failure_isolation.xr
-tests/diff/cases/semantics/coro/scope_outcomes.xr
-tests/diff/cases/semantics/generator/generator_in_coroutine.xr
-tests/diff/cases/semantics/stdlib/sys_process_direct.xr
-tests/regression/11_coroutine/1110_scope.xr
-tests/regression/11_coroutine/1120_scope_basic.xr
-tests/regression/11_coroutine/1157_select_after_scope_cancel.xr
+# Cleared 2026-07-31. The emitter had been updated to call
+# xr_aot_scope_exit(ctx, mode) while the helper still declared a third
+# out_value parameter, so the AOT build failed outright. A scope block is a
+# statement and produces no value, and the value the scope settles on already
+# rides in XrAotResult.value — the out-parameter was a second output channel
+# for the same value that no caller ever read, so the declaration followed the
+# emitter rather than the other way round. The seventh case filed here,
+# sys_process_direct.xr, was never a scope_exit failure at all; it is a missing
+# stdlib member and has moved to Group 2.
 
-# --- Group 2: native struct members absent from generated C ------------------
-# The emitted C declares these stdlib types without the fields the program
-# reads: DateTime.year/month/timestamp, CookieJar.count, Process.id. The VM
-# resolves them through its own object model, so only AOT breaks — exactly the
-# class of divergence this net exists to surface.
+# --- Group 2: native struct members missing from the language surface --------
+# The program reads members the type does not declare: DateTime.year/month/
+# timestamp, CookieJar.count, Process.id.
+#
+# datetime_* and http_cookie_* fail only under AOT — the emitted C omits fields
+# the VM resolves through its own object model, which is exactly the class of
+# divergence this net exists to surface.
+#
+# sys_process_direct.xr is different and must not be read as the same bug: both
+# backends reject it identically with "type 'Process' has no member 'id'", so
+# the member is absent from the analyzer's surface, not just from the emitted
+# C. It is filed here because the missing member is the shared root cause.
 tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
 tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
 tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
+tests/diff/cases/semantics/stdlib/sys_process_direct.xr
 
 # --- Group 3: union overlay literals -----------------------------------------
 # "literal for type 'U32Bytes' is missing field 'b'" — a union literal is
