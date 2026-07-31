@@ -1941,6 +1941,24 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
             } else
                 fprintf(out, rep == XR_REP_TAGGED ? " = XR_NULL_VAL;\n" : " = 0;\n");
         }
+
+        /* Each predecessor captures all incoming PHI values before publishing
+         * any of them. Those edge temporaries need function scope here too: a
+         * resume body reaches every block through goto — including the state
+         * dispatch at entry — so an inline declaration would be jumped over.
+         * A frame-resident phi still copies through a plain local temp, so this
+         * covers frame and non-frame phis alike; the slot type must match the
+         * phi's own declaration, hence cg_coro_decl_ctype. */
+        for (uint16_t pred_idx = 0; pred_idx < blk->npreds; pred_idx++) {
+            for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
+                    continue;
+                fprintf(out, "    %s ", cg_coro_decl_ctype(ctx, f, &phi->value));
+                emit_phi_tmp_ref(out, blk, phi, pred_idx);
+                fprintf(out, ";\n");
+            }
+        }
+
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             if (cg_value_is_i64_optional_blocking_result_root(v) &&

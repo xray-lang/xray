@@ -8133,9 +8133,11 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         if (!cg_phi_copy_should_emit(ctx, f, phi, pred_idx))
             continue;
         any = true;
+        /* Edge temporaries are never declared inline. Both declaration passes
+         * (emit_declarations for a sync body, emit_coro_local_declarations for a
+         * resume body) put them at function scope, because a CFG edge — or a
+         * coroutine state-dispatch goto — may jump over an inline declaration. */
         fprintf(out, "    ");
-        if (!ctx->pre_decl_all)
-            fprintf(out, "%s ", local_ctype_str_ctx(ctx, f, &phi->value));
         emit_phi_tmp_ref(out, target, phi, pred_idx);
         fprintf(out, " = ");
         emit_phi_incoming_as_rep(ctx, out, phi, pred_idx, pred_ran_defer);

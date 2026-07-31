@@ -1,0 +1,51 @@
+// anchor: generator-iterator-param-loop-carried
+// A generator whose loop variable lives across its yields needs real phis in
+// the AOT resume body. Consuming the Iterator through a parameter keeps the
+// generator out of the caller's for-in, so the resume body is the only place
+// those phis are eliminated: its edge temporaries must be declared there.
+
+fn totalIt(xs: Iterator<int>) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+fn firstOf(xs: Iterator<int>) -> int {
+    for (i in xs) {
+        return i
+    }
+    return -1
+}
+
+fn upTo(limit: int) -> Iterator<int> {
+    var i = 1
+    while (i <= limit) {
+        yield i
+        i = i + 1
+    }
+}
+
+fn evensUpTo(limit: int) -> Iterator<int> {
+    var i = 0
+    var seen = 0
+    while (i <= limit) {
+        if (i % 2 == 0) {
+            seen = seen + 1
+            yield i * 10 + seen
+        }
+        i = i + 1
+    }
+}
+
+print(totalIt(upTo(4)))
+print(totalIt(upTo(0)))
+print(firstOf(upTo(4)))
+print(totalIt(evensUpTo(6)))
+
+var direct = 0
+for (v in upTo(4)) {
+    direct = direct + v
+}
+print(direct)
