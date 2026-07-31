@@ -2571,8 +2571,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked"
-                                       : "xrt_c90_fixed_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_fixed_u8_set_unchecked" : "xrt_c90_fixed_u8_set");
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
         fprintf(out, ", INT64_C(%u), ", (unsigned) info.count);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -3500,6 +3499,14 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_RETAIN:
         case XI_RELEASE:
             return arg_index == 0;
+        case XI_ERR_CHECK:
+            /* Cleanup operands are owners released only on the cold
+             * error-propagation edge, and that release is emitted as a
+             * synthetic XI_RELEASE through the same representation-aware drop
+             * path as an ordinary one (see xicgen_emit_err_check_arc_cleanups).
+             * A cleanup use therefore neither aliases nor escapes the array and
+             * is exactly as safe as the XI_RELEASE case above. */
+            return arg_index >= XI_ERR_CHECK_CLEANUP_ARG_BASE;
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
@@ -3514,8 +3521,13 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
 static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
                                              const XiValue *value) {
     const XiValue *target = cg_unwrap_identity_value(value);
-    if (!ctx || ctx->pre_decl_all || !f || !target || target != value ||
-        cg_value_has_cell(ctx, target) || !cg_array_is_native_local_alloc(target))
+    /* Deliberately independent of ctx->pre_decl_all: the pre-declaration pass
+     * emits the C type for this value and the emission pass emits its
+     * initializer, so the two must reach the same representation or the
+     * declaration and the constructor disagree.  The analysis below reads only
+     * the function body, which is identical in both passes. */
+    if (!ctx || !f || !target || target != value || cg_value_has_cell(ctx, target) ||
+        !cg_array_is_native_local_alloc(target))
         return false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -4130,18 +4142,22 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
     if (nargs > 3)
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    /* Same ownership rule as the general runtime dispatch: a result nobody
+     * consumes has to be released, not just cast away.  See xrt_method_0. */
+    const char *dispatch =
+        cg_unused_call_result_emits_statement(ctx, f, v) ? "xrt_method_discard" : "xrt_method";
     if (nargs == 0) {
-        fprintf(out, "xrt_method_0(");
+        fprintf(out, "%s_0(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d)", sym);
     } else if (nargs == 1) {
-        fprintf(out, "xrt_method_1(");
+        fprintf(out, "%s_1(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 2) {
-        fprintf(out, "xrt_method_2(");
+        fprintf(out, "%s_2(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -4149,7 +4165,7 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 3) {
-        fprintf(out, "xrt_method_3(");
+        fprintf(out, "%s_3(", dispatch);
         emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
         fprintf(out, ", %d, ", sym);
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -4319,6 +4335,13 @@ static bool cg_span_value_u8_info(XiCgenCtx *ctx, const XiValue *value, CgArrayE
     return true;
 }
 
+/* Whether a typed borrowed view can be built for this span (see
+ * emit_value_as_display_tagged, which probes before emitting). */
+static bool cg_span_value_has_elem_info(XiCgenCtx *ctx, const XiValue *value) {
+    CgArrayElemInfo info;
+    return cg_span_elem_info_from_value(ctx, value, &info) && info.elem_name && info.ctype;
+}
+
 static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     CgArrayElemInfo info;
     if (!cg_span_elem_info_from_value(ctx, value, &info) || !info.elem_name || !info.ctype)
@@ -4373,8 +4396,8 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_conversion_suffix(out, conv_suffix);
             return true;
         }
-        fprintf(out, "(int64_t)%s(", unchecked ? "xrt_c90_span_u8_get_unchecked"
-                                                : "xrt_c90_span_u8_get");
+        fprintf(out, "(int64_t)%s(",
+                unchecked ? "xrt_c90_span_u8_get_unchecked" : "xrt_c90_span_u8_get");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -4446,8 +4469,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             emit_codegen_abort_expr(out);
             return true;
         }
-        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked"
-                                       : "xrt_c90_span_u8_set");
+        fprintf(out, "%s(", unchecked ? "xrt_c90_span_u8_set_unchecked" : "xrt_c90_span_u8_set");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -5380,8 +5402,14 @@ static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
      * bare pointer when select_rep chose PTR for this value, otherwise the
      * tagged XrValue. Without this the statement-expression always produced
      * an XrValue and `void *vN = (XrValue)` failed to compile. */
+    /* An inlined map/filter builds a fresh array, so a result nobody consumes
+     * has to be released rather than cast away.  Same ownership rule as the
+     * symbol dispatchers; see xrt_method_0. */
+    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
+                            ? "xrt_discard_owned(_outv)"
+                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
     fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; %s; })", ctype_str(map.param_rep),
-            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+            yield);
     return true;
 }
 
@@ -5470,8 +5498,13 @@ static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out
             ctype_str(filter.param_rep), filter.dst_info.ctype);
     /* Yield in the destination value's representation (PTR -> bare pointer,
      * else tagged XrValue); matches the `<ctype> vN =` declaration site. */
-    fprintf(out, "_out->length = _out_len; %s; })",
-            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    /* An inlined map/filter builds a fresh array, so a result nobody consumes
+     * has to be released rather than cast away.  Same ownership rule as the
+     * symbol dispatchers; see xrt_method_0. */
+    const char *yield = cg_unused_call_result_emits_statement(ctx, current, v)
+                            ? "xrt_discard_owned(_outv)"
+                            : (cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    fprintf(out, "_out->length = _out_len; %s; })", yield);
     return true;
 }
 

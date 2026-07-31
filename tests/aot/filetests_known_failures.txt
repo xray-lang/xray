@@ -1,0 +1,73 @@
+# AOT filetest ratchet baseline
+#
+# Every line is a case that fails today and is tracked, not forgotten.  The
+# suite runs in CI and gates all 534 other cases; these are excluded from the
+# verdict so that a red baseline cannot hide a fresh regression.
+#
+# Rules
+#   - The list may only shrink.  `run_aot_filetests.sh` fails the run when a
+#     case outside this list fails AND when a listed case starts passing, so a
+#     fix must delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green.
+#
+# Established 2026-07-30, when the suite was moved out of the CI exclusion list
+# (it had been excluded from all three workflows and treated as a known-failing
+# "AOT boundary" suite by scripts/run_release_09_gate.sh).  Triage of the 40
+# entries below is recorded per group.
+
+# Group A is empty: all four entries were real compiler defects and were fixed
+# on 2026-07-30 rather than re-baselined.  See the report for the four root
+# causes (math alias domain, freestanding codegen allowlist, nullable narrowing
+# treated as a numeric boundary, redundant CHECKTYPE blocking unboxing).
+
+# ---------------------------------------------------------------------------
+# Group B -- was a real regression; 7 of 8 fixed on 2026-07-30.
+#
+# Two defects, both in the native-local decision that picks between the unboxed
+# xrt_array_t* construction chain and the boxed XrValue one:
+#
+#   1. XI_ERR_CHECK was missing from the safe-use list. Its operands are owners
+#      released only on the cold error edge, through the same
+#      representation-aware drop path as an ordinary XI_RELEASE, so a cleanup
+#      use neither aliases nor escapes the array. An Array<string> with two or
+#      more pushes acquires such a cleanup operand and so lost unboxing.
+#   2. The decision consulted ctx->pre_decl_all. The pre-declaration pass emits
+#      the C type and the emission pass emits the initializer, so disabling the
+#      analysis in one of them guaranteed the two disagreed and forced the boxed
+#      form for every array that needs a hoisted declaration (any array built in
+#      a loop).
+#
+# The one entry left is a different mechanism, not this one:
+# typed_container_plan expects a class-field array to be constructed directly
+# into the field (`(p0)->f0 = (xrt_array_t*)xrt_array_new_typed_uninit(...)`)
+# via the XaotArrayClassFieldAllocPlan path. Refusing native-local there is
+# correct -- storing into a field is an escape -- and the current emission is
+# also safer than the expectation, which has no release of the field's previous
+# array and would leak on reassignment (ArrayBag.refill does reassign). Fixing
+# this means making the class-field alloc plan apply, then re-deriving what the
+# expectation should assert; do not simply relax it.
+# ---------------------------------------------------------------------------
+tests/aot/filetests/container/typed_container_plan.xr
+
+# Groups C, D and E are empty: all 16 entries were expectation drift and were
+# updated on 2026-07-30 after confirming, per case, that the property each case
+# exists to guard still holds.
+#   C -- folded constants no longer take their own SSA value, and locals are
+#        hoisted to declarations, so those expectations pinned a value number
+#        and a declaration form rather than a shape.
+#   D -- a value assigned in more than one branch gets a hoisted declaration, so
+#        the assignment line lost its `XrValue ` prefix.  Only the six failing
+#        cases were relaxed; the other 36 json cases still assert the prefix.
+#   E -- the enum payload compound literal moved inside XRT_ENUM_AGGREGATE_MAKE,
+#        so it no longer appears at the call site; the assertion now pins the
+#        macro call with exactly two inline payloads.
+
+# Group F is empty: all 12 entries were expectation drift, confirmed per case
+# against the property each one guards.  Three causes, none of them a loss:
+#   - generated pointer casts are now the exact pointer type instead of `void *`
+#     (the address-of and the pointee are unchanged);
+#   - locals are hoisted to top-of-function declarations, so assignment lines
+#     carry no type prefix;
+#   - containers, strings and receivers are passed unboxed with an explicit
+#     cast, so call sites read `(void *)(vN)` where they used to read `vN`.

@@ -1552,6 +1552,15 @@ static inline uint64_t xrt_hash_value(XrValue v) {
         }
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
+        case XR_TAG_PTR: {
+            /* A hand-written hash() keys the instance by value; the compiled
+             * boxed method is recorded on the class. Instances without one fall
+             * to identity below. */
+            XrtUserHashFn hash_fn = xrt_instance_user_hash_fn(v);
+            if (hash_fn)
+                return (uint64_t) (uint32_t) hash_fn(NULL, v.ptr);
+            return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
+        }
         case XR_TAG_AGG_REF:
             if (XR_IS_ARRAY_REF(v)) {
                 if (!v.ptr)
@@ -1731,15 +1740,29 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
     m->class_name = NULL;
 }
 
+/* Instance equality that honors a hand-written operator ==. Both keys are the
+ * same class (their equal hashes put them in one bucket), so the query's eq_fn
+ * governs; falls through to xrt_eq (reference identity) when the class has none.
+ * Pointers are borrowed, matching the specialized-plan convention. */
+static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
+    if (query.tag == XR_TAG_PTR && query.heap_type == XR_TINSTANCE && query.ptr && stored.ptr &&
+        stored.tag == XR_TAG_PTR && stored.heap_type == XR_TINSTANCE) {
+        XrtUserEqFn eq_fn = xrt_instance_user_eq_fn(query);
+        if (eq_fn)
+            return eq_fn(NULL, stored.ptr, query.ptr) != 0;
+    }
+    return xrt_eq(stored, query) != 0;
+}
+
 /* Candidate comparators for the shared Swiss probe (xr_{map,set}_lookup_slot):
- * type tag then canonical equality. xrt_eq is type-aware, so the tag pre-check
- * only short-circuits type-mismatched hash collisions. Return int (not bool) to
- * match the runtime's bool-free generated-C convention. */
+ * type tag then canonical equality. xrt_value_key_eq is type-aware, so the tag
+ * pre-check only short-circuits type-mismatched hash collisions. Return int (not
+ * bool) to match the runtime's bool-free generated-C convention. */
 static inline int xrt_map_key_eq(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
-    return e->key_tt == key_tt && xrt_eq(e->key, key) != 0;
+    return e->key_tt == key_tt && xrt_value_key_eq(e->key, key);
 }
 static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
-    return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
+    return e->val_tt == val_tt && xrt_value_key_eq(e->value, value);
 }
 
 typedef struct xrt_closure xrt_closure_t;
@@ -3374,7 +3397,10 @@ typedef struct {
 } xrt_json_t;
 
 /* =========================================================================
- * Iterator runtime — backs the for-in iterator protocol over Map / Set / Json / string.
+ * Iterator runtime — backs the iterator protocol over Array / Map / Set / Json / string.
+ * for-in over an array lowers to an index loop, but Array.iterator() and
+ * Array.entriesIterator() are part of the public protocol (§14) and must pull
+ * the same elements the VM does.
  * The iterator owns one reference to its source so an in-progress traversal
  * cannot outlive the collection or ARC string it walks. It releases that
  * reference from its builtin ARC destructor.
@@ -3388,7 +3414,7 @@ typedef struct {
 typedef struct XrCoroutine XrCoroutine;
 
 typedef struct {
-    XrValue coll;     /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
+    XrValue coll;     /* XR_TAG_ARRAY, XR_TAG_MAP, XR_TAG_SET, or string being iterated */
     int64_t cursor;   /* collection cursor, or generator phase: 0=idle 1=buffered 2=done */
     int64_t index;    /* logical iteration index; used by string pair iteration */
     uint8_t kind;     /* XRT_ITER_* projection */
@@ -3585,6 +3611,16 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    /* Arrays reach an iterator only through the dynamic protocol — `for (x in
+     * arr)` on a statically known array lowers to len()/index instead. A
+     * nested generic body is that path (only file-scope generics are
+     * monomorphized, so its type parameter survives into lowering), and so is
+     * an explicit arr.iterator(). Mirrors XR_ITERATOR_ARRAY in the VM
+     * (src/runtime/object/xiterator.c). */
+    if (XR_IS_ARRAY(it->coll)) {
+        const xrt_array_t *a = (const xrt_array_t *) it->coll.ptr;
+        return a && it->cursor < a->length;
+    }
     if (XR_IS_STR(it->coll))
         return it->cursor < xr_str_len(it->coll);
     return 0;
@@ -3598,8 +3634,13 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         return XR_NULL_VAL;
 #endif
     }
-    if (!xrt_iterator_has_next(it))
+    /* Past the end there is no value to hand back: next() is typed T, not T?,
+     * so the pull protocol is two-step (LANGUAGE_SPEC 5.3.6) and running off
+     * the end is a contract violation, not a sentinel. */
+    if (!xrt_iterator_has_next(it)) {
+        xrt_throw_error(XR_ERR_ITERATOR_EXHAUSTED, XR_ERROR_CORE_ITERATOR_EXHAUSTED_NEXT_MSG);
         return XR_NULL_VAL;
+    }
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         if (xrt_map_is_boolmap(m)) {
@@ -3630,6 +3671,18 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
     }
     if (xrt_is_json_object_value(it->coll))
         return xrt_json_iterator_next(it);
+    if (XR_IS_ARRAY(it->coll)) {
+        xrt_array_t *a = (xrt_array_t *) it->coll.ptr;
+        int64_t idx = it->cursor++;
+        XrValue elem = xr_typed_get(a->data, (int32_t) idx, a->elem_type);
+        if (it->kind == XRT_ITER_KEYS)
+            return XR_FROM_INT(idx);
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {XR_FROM_INT(idx), elem};
+            return xrt_tuple_make(2, kv);
+        }
+        return elem;
+    }
     if (XR_IS_STR(it->coll)) {
         int64_t char_index = it->index++;
         uint32_t cp = 0;

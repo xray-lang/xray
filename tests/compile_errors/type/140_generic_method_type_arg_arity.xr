@@ -1,0 +1,20 @@
+// A generic method called with the wrong number of explicit type arguments
+// must be rejected, exactly as a top-level generic function is.
+//
+// REGRESSION: the arity check lived in the early xa_visit_call block, which
+// runs before an instance method's links are resolved, so `fn_links` was NULL
+// and the check was skipped entirely. Only the constraint half had been moved
+// past receiver inference; arity was left behind. `c.id<int, string>(1)`
+// compiled and printed 1.
+//
+// Arity and constraint checking now live in one helper (xa_check_explicit_type_args)
+// so a call site cannot pick up half the checking again.
+
+class C {
+    constructor() {}
+
+    id<T>(x: T) -> T { return x }
+}
+
+var c = C()
+print(c.id<int, string>(1))

@@ -79,13 +79,25 @@ static XrValue xr_set_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
     return xr_null();
 }
 
+/* Degenerate-argument result for the set-algebra methods. Each of union /
+ * difference / symmetricDifference with no operand is the receiver's own
+ * contents, but it must be a FRESH set: these are declared to return a new
+ * Set<T>, so callers own the result at +1 and release it. Returning `self`
+ * here would hand back the receiver's single reference under a second name and
+ * make that release a double release (rc-contract C1/C2) — the same defect
+ * class the `@returns_receiver` methods declare explicitly. Intersection
+ * already returns a fresh empty set on this path. */
+static XrValue set_fresh_copy_value(XrSet *s) {
+    return xr_value_from_set(xr_set_union(NULL, s, s));
+}
+
 static XrValue xr_set_method_union(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
-        return self;
+        return set_fresh_copy_value(s);
     XrSet *result = xr_set_union(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
@@ -108,7 +120,7 @@ static XrValue xr_set_method_difference(XrVMRuntime *iso, XrValue self, XrValue 
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
-        return self;
+        return set_fresh_copy_value(s);
     XrSet *result = xr_set_difference(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
@@ -120,7 +132,7 @@ static XrValue xr_set_method_symmetric_difference(XrVMRuntime *iso, XrValue self
     if (set_is_weak(s))
         return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
-        return self;
+        return set_fresh_copy_value(s);
     XrSet *result = xr_set_symmetric_difference(NULL, s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }

@@ -1,0 +1,39 @@
+// anchor: array-class-throw-cleanup-lifetime
+enum ParseError {
+    Invalid(int)
+}
+
+class ParsedType {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn parseFunctionType() -> ParsedType {
+    throw ParseError.Invalid(42)
+}
+
+fn parseTypeSection(types: ref Array<ParsedType>) {
+    types.push(parseFunctionType())
+}
+
+fn parseSections() -> Array<ParsedType> {
+    var types: Array<ParsedType> = []
+    parseTypeSection(ref types)
+    return types
+}
+
+fn parseOwned() -> Array<ParsedType> {
+    return parseSections()
+}
+
+var caught = false
+try {
+    parseOwned()
+} catch ParseError.Invalid(code) {
+    caught = code == 42
+}
+
+print(caught)

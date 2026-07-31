@@ -1,0 +1,36 @@
+// anchor: slice-value-to-string
+// A Slice's tagged form is a bare data+length pair: its element type lives only
+// in the compile-time plan. Value-semantic consumers (string(), concatenation,
+// the shared formatter) must therefore be handed the same typed borrowed view
+// print() uses, or they see an opaque reference and render a placeholder while
+// print() of the same slice renders elements correctly.
+
+fn describe(s: Slice<int>) -> int {
+    return len(s)
+}
+
+fn main() {
+    var ints = [10, 20, 30, 40]
+    var names = ["ab", "cd", "ef"]
+    var view: Slice<int> = ints[1:3]
+    var nview: Slice<string> = names[0:2]
+    var empty: Slice<int> = ints[2:2]
+    var whole: Slice<int> = ints[0:4]
+
+    print(view)
+    print(string(view))
+    print(string(nview))
+    print(string(empty))
+    print(string(whole))
+
+    // Concatenation and interpolation go through the same tagged conversion.
+    print("v=" + string(view))
+    print("n=" + string(nview))
+    print(len(string(view)))
+    print(len(string(nview)))
+
+    // A slice crossing a call boundary keeps its ordinary borrowed-view ABI.
+    print(describe(view))
+}
+
+main()

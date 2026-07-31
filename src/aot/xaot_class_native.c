@@ -43,6 +43,15 @@ XR_FUNC const XiClassData *xaot_class_native_data_for_type(const XaotBundle *bun
     if (!bundle || !type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
         !type->instance.class_name)
         return NULL;
+    /* A builtin named instance carries no declaration identity and therefore
+     * has no native class layout, however a module spells its own classes.
+     * Without this, `class Range { ... }` makes an ordinary `2..6` value plan
+     * that class's native pointer storage, and the emitted C declares a
+     * `void *` local initialized from a tagged XrValue. Name matching is kept
+     * for the user-class case, where it also has to reach monomorphized
+     * generics through their display / origin names. */
+    if (type->kind == XR_KIND_INSTANCE && !type->instance.class_ref)
+        return NULL;
 
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;

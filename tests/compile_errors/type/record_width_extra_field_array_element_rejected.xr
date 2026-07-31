@@ -1,0 +1,10 @@
+// Array<T> is invariant: an element shape with an extra field is not assignable
+// to Array<Point>, so the width rule is not bypassed through a container.
+type Point = { x: int, y: int }
+
+fn main() {
+    var arr: Array<Point> = [{ x: 1, y: 2, z: 3 }]
+    print(arr[0].x)
+}
+
+main()

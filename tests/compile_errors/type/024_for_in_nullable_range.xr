@@ -1,0 +1,8 @@
+// A nullable Range takes the same rule as any other nullable collection.
+fn main() {
+    var r: Range? = 1..5
+    for (i in r) {
+        print(i)
+    }
+}
+main()

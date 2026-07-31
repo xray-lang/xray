@@ -240,6 +240,10 @@ XR_FUNC bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack);
 XR_FUNC XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args,
                                    int nargs);
 
+// Install the Map/Set instance hash/eq hooks (xvm_value_hooks.c) so a user
+// Hashable class keys by value. Idempotent; called from isolate init.
+XR_FUNC void xr_vm_install_value_hooks(void);
+
 // VM execution
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC XrVMResult xr_vm_interpret(const char *source);
@@ -250,6 +254,13 @@ XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto)
 XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark);
+
+/*
+ * Uncaught value-return error diagnostic (spec §8.1.1). Shared by every
+ * top-level finalization path so the wording stays in one place; honours
+ * suppress_exception_print and ignores a null error. Defined in xvm_api.c.
+ */
+XR_FUNC void xr_vm_report_uncaught_error(XrVMRuntime *isolate, XrValue error, bool in_go_coroutine);
 
 /*
  * Single-call throw helper: records the full call chain into

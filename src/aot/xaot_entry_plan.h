@@ -38,6 +38,12 @@ XR_FUNC bool xaot_entry_plan_derive(const struct XaotBundle *bundle,
                                     const XgGlobalEvidence *evidence, uint32_t profile,
                                     XrEntryPlan *out);
 XR_FUNC uint32_t xaot_entry_plan_required_provider_hooks(const XrEntryPlan *plan);
+/* True when any prepared function contains a parallel range/map/reduce
+ * intrinsic.  The source-summary capability bits do not record this, so the
+ * prepared IR is the authority; both the entry plan and the link feature set
+ * must agree on it or the generated C references the parallel runtime without
+ * declaring it. */
+XR_FUNC bool xaot_bundle_uses_parallel_intrinsic(const struct XaotBundle *bundle);
 XR_FUNC const char *xaot_root_representation_name(uint8_t value);
 XR_FUNC const char *xaot_scheduler_mode_name(uint8_t value);
 XR_FUNC const char *xaot_entry_unproven_reason_name(uint8_t value);

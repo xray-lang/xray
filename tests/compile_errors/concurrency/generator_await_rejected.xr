@@ -1,0 +1,11 @@
+// A generator frame is resumed by its driver, not by the scheduler. Awaiting
+// inside one used to compile and silently drop every remaining yield.
+fn work() -> int { return 7 }
+
+fn gen() -> Iterator<int> {
+    var t = go work()
+    yield await t
+    yield 2
+}
+
+for (x in gen()) { print(x) }

@@ -38,6 +38,7 @@
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
 #include "xi_value_query.h"
+#include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -448,6 +449,29 @@ static bool op_produces_borrow(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
+/* Representation selection runs after ordinary ARC insertion and may wrap a
+ * borrowed RC value in BOX/UNBOX/CONVERT adapters.  Those adapters change only
+ * the backend representation; they do not acquire ownership.  Late error-edge
+ * cleanup discovery must therefore follow the adapter back to its source or a
+ * ref-loaded Array<T> is mistaken for a fresh owner and released by the
+ * callee.  SOURCE_MOVE/OWNER_FORWARD are deliberately excluded: they perform
+ * an ownership transfer rather than preserve a borrow. */
+static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
+    if (!value || depth > 16)
+        return false;
+    if (op_produces_borrow(value->op))
+        return true;
+    switch (value->op) {
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_CONVERT:
+            return value->nargs == 1 &&
+                   arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
+        default:
+            return false;
+    }
+}
+
 /* Is this op a call whose result ownership we cannot determine without a
  * per-callee return-ownership summary? */
 static bool op_is_call(uint16_t op) {
@@ -607,7 +631,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
  * wrapper per message. Extend this table as more native return-ownership
  * facts are encoded. */
 static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValue *v) {
-    if (!v || !xr_type_is_named_class(v->type, "Buffer"))
+    if (!v || !xr_type_is_builtin_named_class(v->type, "Buffer"))
         return false;
 
     const char *member = NULL;
@@ -660,7 +684,7 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
         return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
-        xr_type_is_named_class(v->type, "StringBuilder"))
+        xr_type_is_builtin_named_class(v->type, "StringBuilder"))
         return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;
@@ -1020,6 +1044,13 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                             break;
                         }
                     }
+                } else if (xi_call_result_aliases_receiver(u)) {
+                    /* A declared `return self` result IS the receiver, so the
+                     * receiver must outlive it. Listed first because some of
+                     * these members lower to XI_CALL_BUILTIN intrinsics
+                     * (array_reserve / array_resize), which the method-call
+                     * test below never sees. */
+                    is_member_borrow = u->args[0] == member;
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
                            xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
@@ -1685,15 +1716,27 @@ static void arc_precompute_sigs(XiFunc *f) {
 }
 
 static XiArcOwnMode arc_target_own_mode(const XiFunc *f, const XiValue *target,
-                                        const XiBorrowSig *own_sig,
-                                        const XiValue *borrowed_recv) {
+                                        const XiBorrowSig *own_sig, const XiValue *borrowed_recv) {
     if (target == borrowed_recv)
         return OWN_BORROWED;
     if (f->operator_borrowed && target->op == XI_PARAM)
         return OWN_BORROWED;
     if (target->op == XI_PARAM && param_is_borrowed(f, target, own_sig))
         return OWN_BORROWED;
-    if (op_produces_borrow(target->op))
+    if (arc_value_is_borrow_alias(target, 0))
+        return OWN_BORROWED;
+    /* A declared `return self` result (xi_receiver_alias) is the receiver's own
+     * reference under a second SSA name, handed back at +0. That is a BORROW,
+     * exactly like the ops whose ops.def result-ownership column already says
+     * BORROWED for the same shape (xi.byte.array.append.from and friends).
+     *
+     * OWN_CALL_RESULT is unsound for it: that mode skips the retain at a
+     * consume which is the result's last use, so `return a.reverse()` moves out
+     * a reference the function never held while `a`'s own death-drop frees the
+     * object (contract C1, then C2 on the caller's release). OWN_BORROWED
+     * retains at EVERY consuming use and never drops, which is the convention
+     * a +0 alias actually has. */
+    if (xi_call_result_aliases_receiver(target))
         return OWN_BORROWED;
     if (op_is_call(target->op) && !call_returns_fresh(f, target))
         return OWN_CALL_RESULT;
@@ -1774,8 +1817,7 @@ static void arc_insert_rec(XiFunc *f) {
 
     bool cfg_changed = false;
     for (uint32_t i = 0; i < targets.count; i++) {
-        XiArcOwnMode mode =
-            arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
+        XiArcOwnMode mode = arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
         cfg_changed |= process_value_ex(f, targets.items[i], mode);
     }
     xr_free(targets.items);
@@ -1842,8 +1884,8 @@ static bool arc_value_is_defined_before_block_index(const XiValue *target, const
 }
 
 static bool arc_value_live_after_block_index(const ArcLive *live, uint32_t index) {
-    return live && (live->live_out || live->use_at_end ||
-                    (live->has_use && live->last_use > index));
+    return live &&
+           (live->live_out || live->use_at_end || (live->has_use && live->last_use > index));
 }
 
 /* Attach error-edge owner operands for one function after ordinary
@@ -1862,8 +1904,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
     xi_ensure_dominators(f);
 
     for (uint16_t p = 0; p < f->nparams; p++) {
-        if (f->params[p] && tracks_rc(f->params[p]) &&
-            !xi_value_vec_push(&targets, f->params[p]))
+        if (f->params[p] && tracks_rc(f->params[p]) && !xi_value_vec_push(&targets, f->params[p]))
             goto oom;
     }
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -1879,11 +1920,9 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
              * error edge and must not gain cleanup operands (which would also
              * make otherwise-dead owners look live on the hot path). */
             if (v->op == XI_ERR_CHECK && (!v->type || v->type->kind != XR_KIND_BOOL) &&
-                v->nargs == 0 && arc_err_check_source(v) != NULL &&
-                !xi_value_vec_push(&checks, v))
+                v->nargs == 0 && arc_err_check_source(v) != NULL && !xi_value_vec_push(&checks, v))
                 goto oom;
-            if (v->op == XI_PARAM ||
-                stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
+            if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
             if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
                 goto oom;
@@ -1948,8 +1987,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
         XR_CHECK(nargs <= UINT16_MAX, "xi_arc: too many unit ERR_CHECK cleanup owners");
         XiValue **args = NULL;
         if (nargs != 0) {
-            args = (XiValue **) xi_func_arena_alloc(
-                f, (uint32_t) ((size_t) nargs * sizeof(*args)));
+            args = (XiValue **) xi_func_arena_alloc(f, (uint32_t) ((size_t) nargs * sizeof(*args)));
             XR_CHECK(args != NULL, "xi_arc: out of memory publishing ERR_CHECK cleanups");
             for (uint32_t i = 0; i < cleanups[ci].count; i++)
                 args[i] = cleanups[ci].items[i];

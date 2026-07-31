@@ -108,6 +108,70 @@ TEST(mono_mangle_preserves_const_capability_identity) {
     free(map_name);
 }
 
+TEST(mono_mangle_distinguishes_container_element_types) {
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *int_children[] = {&int_t};
+    XrTypeRef *str_children[] = {&str_t};
+    XrTypeRef int_array = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = int_children};
+    XrTypeRef str_array = {
+        .kind = XR_TREF_GENERIC, .name = "Array", .nchildren = 1, .children = str_children};
+    XrTypeRef int_set = {
+        .kind = XR_TREF_GENERIC, .name = "Set", .nchildren = 1, .children = int_children};
+
+    XrTypeRef *int_array_args[] = {&int_array};
+    XrTypeRef *str_array_args[] = {&str_array};
+    XrTypeRef *int_set_args[] = {&int_set};
+    char *int_array_name = xr_mono_mangle("tagOf", int_array_args, 1);
+    char *str_array_name = xr_mono_mangle("tagOf", str_array_args, 1);
+    char *int_set_name = xr_mono_mangle("tagOf", int_set_args, 1);
+    /* Array<int> and Array<string> must not share an instance: the clone the
+     * first call site produces types its parameters against int. */
+    ASSERT_STR_EQ(int_array_name, "tagOf$Array_i64");
+    ASSERT_STR_EQ(str_array_name, "tagOf$Array_str");
+    ASSERT_STR_EQ(int_set_name, "tagOf$Set_i64");
+    ASSERT(strcmp(int_array_name, str_array_name) != 0);
+    ASSERT(strcmp(int_array_name, int_set_name) != 0);
+    free(int_array_name);
+    free(str_array_name);
+    free(int_set_name);
+}
+
+TEST(mono_mangle_distinguishes_tuple_and_optional_shapes) {
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *pair_children[] = {&int_t, &int_t};
+    XrTypeRef *swap_children[] = {&int_t, &str_t};
+    XrTypeRef *one_children[] = {&int_t};
+    XrTypeRef pair = {.kind = XR_TREF_TUPLE, .nchildren = 2, .children = pair_children};
+    XrTypeRef swap = {.kind = XR_TREF_TUPLE, .nchildren = 2, .children = swap_children};
+    XrTypeRef single = {.kind = XR_TREF_TUPLE, .nchildren = 1, .children = one_children};
+    XrTypeRef opt_int = {.kind = XR_TREF_OPTIONAL, .nchildren = 1, .children = one_children};
+
+    XrTypeRef *pair_args[] = {&pair};
+    XrTypeRef *swap_args[] = {&swap};
+    XrTypeRef *single_args[] = {&single};
+    XrTypeRef *opt_args[] = {&opt_int};
+    char *pair_name = xr_mono_mangle("tagOf", pair_args, 1);
+    char *swap_name = xr_mono_mangle("tagOf", swap_args, 1);
+    char *single_name = xr_mono_mangle("tagOf", single_args, 1);
+    char *opt_name = xr_mono_mangle("tagOf", opt_args, 1);
+    /* Arity is part of the tag: without it a 1-tuple of int and a 2-tuple whose
+     * element tags concatenate the same way would share an instance. */
+    ASSERT_STR_EQ(pair_name, "tagOf$tup2_i64_i64");
+    ASSERT_STR_EQ(swap_name, "tagOf$tup2_i64_str");
+    ASSERT_STR_EQ(single_name, "tagOf$tup1_i64");
+    ASSERT_STR_EQ(opt_name, "tagOf$opt_i64");
+    ASSERT(strcmp(pair_name, swap_name) != 0);
+    ASSERT(strcmp(pair_name, single_name) != 0);
+    ASSERT(strcmp(opt_name, single_name) != 0);
+    free(pair_name);
+    free(swap_name);
+    free(single_name);
+    free(opt_name);
+}
+
 TEST(monomorphized_stdlib_type_preserves_sealed_capabilities) {
     const uint32_t expected = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
     ASSERT_EQ(xa_stdlib_type_capability_flags("sync", "Mutex"), expected);
@@ -348,6 +412,8 @@ int main(void) {
     RUN_TEST(mono_mangle_single);
     RUN_TEST(mono_mangle_multi);
     RUN_TEST(mono_mangle_preserves_const_capability_identity);
+    RUN_TEST(mono_mangle_distinguishes_container_element_types);
+    RUN_TEST(mono_mangle_distinguishes_tuple_and_optional_shapes);
     RUN_TEST(monomorphized_stdlib_type_preserves_sealed_capabilities);
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);

@@ -1,0 +1,14 @@
+// The rule is an effect, not a syntax check: a called function that suspends is
+// rejected exactly like an inline `await`.
+fn work() -> int { return 7 }
+
+fn helper() -> int {
+    var t = go work()
+    return await t
+}
+
+fn gen() -> Iterator<int> {
+    yield helper()
+}
+
+for (x in gen()) { print(x) }

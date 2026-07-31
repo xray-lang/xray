@@ -10,7 +10,7 @@ c_contains=xrt_enum_aggregate_check_layout(value.layout_id
 c_contains=xrt_enum_aggregate_check_payload_count(value.layout_id, value.payload_count, 1
 c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(value.payloads[0]), "FastResult")
 c_contains=xrt_enum_aggregate_check_known_tag(value.layout_id
-c_contains=xrt_enum_aggregate_make(
+c_contains=XRT_ENUM_AGGREGATE_MAKE(
 c_contains=out.layout_id =
 c_contains=.payload.raw[0]
 c_contains=.tag

@@ -304,7 +304,8 @@ static void verify_buffer_materialize_contract(VerifyCtx *ctx, const XiFunc *f, 
         return;
     if (v->nargs != 1)
         return;
-    if (!v->args[0] || !v->args[0]->type || !xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+    if (!v->args[0] || !v->args[0]->type ||
+        !xr_type_is_builtin_named_class(v->args[0]->type, "Buffer")) {
         verr(ctx, "func '%s': v%u BUFFER_MATERIALIZE in b%u does not consume Buffer", f->name,
              v->id, blk->id);
         return;
@@ -854,8 +855,8 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
         }
         bool safe = (v->aux_int & 1) != 0;
         if (safe != (kind == XR_CONVERSION_DYNAMIC_NULLABLE)) {
-            verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence",
-                 f->name, v->id, blk->id);
+            verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence", f->name,
+                 v->id, blk->id);
             return false;
         }
         return true;
@@ -872,8 +873,7 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
         }
         if (XR_TYPE_IS_FLOAT(v->args[0]->type) && XR_TYPE_IS_INT(v->type) &&
             (v->flags & XI_FLAG_MAY_THROW) == 0) {
-            verr(ctx,
-                 "func '%s': v%u float-to-int XI_CONVERT in b%u lacks numeric-overflow effect",
+            verr(ctx, "func '%s': v%u float-to-int XI_CONVERT in b%u lacks numeric-overflow effect",
                  f->name, v->id, blk->id);
             return false;
         }
@@ -881,8 +881,8 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
     }
 
     if (kind == XR_CONVERSION_DYNAMIC_CHECKED || kind == XR_CONVERSION_DYNAMIC_NULLABLE) {
-        verr(ctx, "func '%s': v%u %s in b%u carries dynamic evidence outside XI_AS", f->name,
-             v->id, xi_op_name(v->op), blk->id);
+        verr(ctx, "func '%s': v%u %s in b%u carries dynamic evidence outside XI_AS", f->name, v->id,
+             xi_op_name(v->op), blk->id);
         return false;
     }
     if (xr_conversion_kind_is_numeric(kind) && v->nargs > 0 && v->args[0] && v->args[0]->type &&

@@ -25,12 +25,15 @@
  *   - Hoists pure values whose op declares safe speculation.
  *   - Hoists loads that are provably alias-free with all stores
  *     and calls inside the loop body (using TBAA).
+ *   - Never hoists an RC-managed definition: this pass runs after
+ *     xi_arc_insert, so its paired RELEASE is already pinned in the body.
  *   - Requires a unique preheader; skips loops without one.
  */
 
 #include "xi_opt_licm.h"
 #include "xi_effect.h"
 #include "xi_loop.h"
+#include "xi_own.h"
 #include "xi_tbaa.h"
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
@@ -85,6 +88,15 @@ static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
 static bool licm_can_hoist_value(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
                                  const bool *in_loop, uint32_t nblocks, const XiLoop *L) {
     if (!v)
+        return false;
+
+    /* This pipeline runs LICM on post-xi_arc_insert IR, where RETAIN/RELEASE
+     * are materialized as side-effecting values that LICM must not move.
+     * Hoisting a definition that yields an RC-managed reference would run the
+     * definition once while its paired RELEASE keeps running every iteration —
+     * an over-release that aborts the allocator. Keyed on the shared ownership
+     * model so this stays in step with what ARC actually refcounts. */
+    if (xi_own_type_is_rc(v->type))
         return false;
 
     bool is_speculatable = licm_is_speculatable_value(v);

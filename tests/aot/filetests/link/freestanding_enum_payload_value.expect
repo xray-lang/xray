@@ -6,7 +6,7 @@ contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=typedef struct xrt_enum_
-c_contains=xrt_enum_aggregate_make(
+c_contains=XRT_ENUM_AGGREGATE_MAKE(
 c_contains=xrt_enum_aggregate_check_layout(
 c_contains=xrt_enum_aggregate_check_payload_count(
 c_contains=xrt_enum_aggregate_check_payload_type(

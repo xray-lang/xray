@@ -1,0 +1,4 @@
+var a: int? = null
+var b = true
+var x = a
+!b

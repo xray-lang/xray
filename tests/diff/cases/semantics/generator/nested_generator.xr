@@ -1,0 +1,49 @@
+// anchor: generator-nested
+// One generator driving another: each `yield expr` is a symmetric transfer to its
+// own driver, so the frames must nest rather than interleave. Both backends must
+// agree on production order and on how far the inner generator advanced when the
+// outer one is abandoned early.
+
+fn inner(n: int) -> Iterator<int> {
+    for (var i = 0; i < n; i++) {
+        print("inner " + string(i))
+        yield i
+    }
+    print("inner-end")
+}
+
+fn doubled(n: int) -> Iterator<int> {
+    for (v in inner(n)) {
+        print("outer " + string(v))
+        yield v * 2
+    }
+    print("outer-end")
+}
+
+print("-- drained")
+var sum = 0
+for (x in doubled(3)) {
+    print("take " + string(x))
+    sum = sum + x
+}
+print("sum " + string(sum))
+
+print("-- outer abandoned")
+for (x in doubled(4)) {
+    print("take " + string(x))
+    if (x == 2) {
+        break
+    }
+}
+
+// Three levels deep, to catch a driver that only handles a single nesting level.
+fn triple(n: int) -> Iterator<int> {
+    for (v in doubled(n)) {
+        yield v + 1
+    }
+}
+
+print("-- three levels")
+for (x in triple(2)) {
+    print("deep " + string(x))
+}

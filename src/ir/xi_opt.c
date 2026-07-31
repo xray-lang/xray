@@ -36,6 +36,7 @@
 #include "xi_opt_reduction.h"
 #include "xi_opt_call_specialize.h"
 #include "xi_opt_comptime.h"
+#include "xi_cfg_edit.h"
 #include "xi_range.h"
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
@@ -1892,7 +1893,7 @@ static bool sr_type_is_task_instance(const XrType *type) {
     if (!type)
         return false;
     if (type->kind == XR_KIND_INSTANCE)
-        return type->instance.class_name && strcmp(type->instance.class_name, "Task") == 0;
+        return xr_type_is_builtin_named_class(type, "Task");
     if (type->kind == XR_KIND_UNION) {
         for (uint8_t i = 0; i < type->union_type.member_count; i++) {
             if (sr_type_is_task_instance(type->union_type.members[i]))
@@ -3745,6 +3746,138 @@ XR_FUNC XiPassChange xi_opt_compact_enum_payload_type_lookup(XiFunc *f) {
 /* ========== BOX/UNBOX Peephole Elimination ========== */
 
 /*
+ * Fold IF blocks whose condition became a constant, then isolate the blocks
+ * that lose their last predecessor.  This pass owns the constant it
+ * introduced in fold_null_test_over_untagged_box, and it runs after the
+ * semantic optimizer, so no SCCP round is left to consume it.  Every caller of
+ * representation selection runs box_elim, but not all of them follow with a
+ * general DCE, so an uncleaned dead arm would reach codegen as unreachable
+ * statements with locals of their own.  Same rewrite shape as SCCP's
+ * constant-branch case, but legal at STAGE_REPPED because it needs no lattice.
+ */
+static bool box_elim_const_control_value(const XiValue *v, bool *taken) {
+    while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1)
+        v = v->args[0];
+    if (!v || v->op != XI_CONST || !v->type)
+        return false;
+    if (v->type->kind != XR_KIND_BOOL && !XR_TYPE_IS_INT(v->type))
+        return false;
+    *taken = v->aux_int != 0;
+    return true;
+}
+
+static XiPassChange box_elim_fold_const_branches(XiFunc *f) {
+    XiPassChange chg = xi_pass_no_change();
+    bool changed = true;
+
+    while (changed) {
+        changed = false;
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            XiBlock *blk = f->blocks[bi];
+            bool taken_edge0 = false;
+            if (!blk || blk->kind != XI_BLOCK_IF ||
+                !box_elim_const_control_value(blk->control, &taken_edge0))
+                continue;
+
+            XiBlock *taken = taken_edge0 ? blk->succs[0] : blk->succs[1];
+            XiBlock *dropped = taken_edge0 ? blk->succs[1] : blk->succs[0];
+            if (dropped && dropped != taken) {
+                while (xi_cfg_remove_pred(dropped, blk)) {
+                }
+            }
+            blk->kind = XI_BLOCK_PLAIN;
+            blk->succs[0] = taken;
+            blk->succs[1] = NULL;
+            blk->control = NULL;
+            blk->line = 0;
+            changed = true;
+            chg.cfg_changed = true;
+        }
+
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            if (xi_cfg_mark_unreachable_if_isolated(f, f->blocks[bi])) {
+                changed = true;
+                chg.cfg_changed = true;
+            }
+        }
+    }
+
+    uint32_t removed = xi_cfg_compact_blocks(f);
+    if (removed > 0) {
+        chg.cfg_changed = true;
+        chg.n_removed += removed;
+    }
+    return chg;
+}
+
+/* Delete the boxing adapters that fold_null_test_over_untagged_box orphaned.
+ * Scoped to XI_BOX so this stays the pass cleaning up after itself rather than
+ * a second dead-code eliminator: an unused pure box is dead by construction,
+ * and leaving it behind makes codegen declare a C local it never assigns. */
+static XiPassChange box_elim_drop_dead_boxes(XiFunc *f) {
+    XiPassChange chg = xi_pass_no_change();
+    bool changed = true;
+
+    while (changed) {
+        changed = false;
+        compute_use_counts(f);
+        for (uint32_t b = 0; b < f->nblocks; b++) {
+            XiBlock *blk = f->blocks[b];
+            for (uint32_t i = 0; i < blk->nvalues;) {
+                XiValue *v = blk->values[i];
+                if (!v || v->op != XI_BOX || v->uses > 0 ||
+                    (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))) {
+                    i++;
+                    continue;
+                }
+                for (uint16_t a = 0; a < v->nargs; a++) {
+                    if (v->args[a])
+                        v->args[a]->uses--;
+                }
+                block_remove_value(blk, i);
+                changed = true;
+                chg.values_changed = true;
+                chg.n_removed++;
+            }
+        }
+    }
+    return chg;
+}
+
+/*
+ * A null test over a boxing adapter whose source already carries an untagged
+ * scalar representation is statically false: XR_FROM_INT/XR_FROM_FLOAT/
+ * XR_FROM_BOOL cannot produce XR_TAG_NULL.  Only representation selection can
+ * create this shape, so the fold belongs here rather than in the semantic
+ * peephole.  It is what a guard-fused container read leaves behind: the
+ * containsKey guard lets select_rep give `get` the native i64 value rep, the
+ * force-unwrap still asks whether the result is null, and answering that
+ * question is the sole reason the box exists.  Folding the test lets the two
+ * cleanups above delete both, keeping the guarded path entirely untagged.
+ *
+ * PTR is excluded on purpose: a boxed managed reference preserves a null
+ * pointer, so its null test is a real runtime question.
+ */
+static bool fold_null_test_over_untagged_box(XiValue *v) {
+    const XiValue *src;
+    if (!v || v->op != XI_ISNULL || v->nargs != 1 || !v->args[0])
+        return false;
+    src = v->args[0];
+    if (src->op != XI_BOX || src->nargs != 1 || !src->args[0])
+        return false;
+    src = src->args[0];
+    switch ((XrRep) src->rep) {
+        case XR_REP_I64:
+        case XR_REP_F64:
+            break;
+        default:
+            return false;
+    }
+    rewrite_to_const_int(v, 0);
+    return true;
+}
+
+/*
  * Eliminate inverse BOX/UNBOX pairs:
  *   UNBOX(BOX(x)) -> COPY(x)
  *   BOX(UNBOX(x)) -> COPY(x)
@@ -3753,6 +3886,7 @@ XR_FUNC XiPassChange xi_opt_compact_enum_payload_type_lookup(XiFunc *f) {
 XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_box_elim: NULL func");
     XiPassChange chg = xi_pass_no_change();
+    bool folded_null_test = false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -3763,6 +3897,12 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
             XiValue *v = blk->values[vi];
             if (!v || v->nargs < 1 || !v->args[0])
                 continue;
+
+            if (fold_null_test_over_untagged_box(v)) {
+                chg.values_changed = true;
+                folded_null_test = true;
+                continue;
+            }
 
             XiValue *inner = v->args[0];
             if (inner->nargs < 1 || !inner->args[0])
@@ -3778,6 +3918,11 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
                 chg.values_changed = true;
             }
         }
+    }
+
+    if (folded_null_test) {
+        chg = xi_pass_merge(chg, box_elim_fold_const_branches(f));
+        chg = xi_pass_merge(chg, box_elim_drop_dead_boxes(f));
     }
 
     for (uint16_t i = 0; i < f->nchildren; i++) {

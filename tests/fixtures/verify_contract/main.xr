@@ -1,5 +1,12 @@
 import { callPrivateWide } from "./helper"
 
+// A bodyless extern "C" declaration that no [native.symbol.contract] covers.
+// Its effects are unknowable, so every contract over a caller must fail closed
+// instead of reading the absent body as a proof (LANGUAGE_SPEC 5.2.11).
+extern "C" {
+    fn uncontracted_native(value: i32) -> i32
+}
+
 export fn pure(value: int) -> int {
     return value + 1
 }
@@ -7,6 +14,28 @@ export fn pure(value: int) -> int {
 export fn allocates(value: int) -> int {
     var values = [value]
     return len(values)
+}
+
+export fn callsUncontractedNative(value: i32) -> i32 {
+    return unsafe { uncontracted_native(value) }
+}
+
+// `yield expr` hands the frame to the iterator driving it; the scheduler is
+// never involved, so this proves `no_reschedule` but not `no_suspend`.
+export fn counter(n: int) -> Iterator<int> {
+    for (var i = 0; i < n; i++) {
+        yield i
+    }
+}
+
+// Driving a generator resumes the generator's frame and returns normally, so
+// neither suspension dimension reaches this caller.
+export fn driveCounter(n: int) -> int {
+    var sum = 0
+    for (x in counter(n)) {
+        sum = sum + x
+    }
+    return sum
 }
 
 print(pure(41))

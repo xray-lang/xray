@@ -9,7 +9,7 @@ c_contains=xrt_enum_aggregate_check_payload_count(value.layout_id, value.payload
 c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, xrt_instance_exact_type(value.payloads[0], (uint16_t)
 c_contains=Payload")
 c_contains=out.layout_id =
-c_contains=xrt_enum_aggregate_make(
+c_contains=XRT_ENUM_AGGREGATE_MAKE(
 c_contains=_to_base(
 c_not_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, 1, "Payload")
 c_not_contains=.payload0

@@ -1,0 +1,70 @@
+// generic_iterable_constraint.xr
+// VM/AOT differential coverage for Iterable<T> / Lengthable generic
+// constraints.
+//
+// Every instantiation monomorphizes, and the clones do not lower alike:
+// Range and the containers iterate through len()/index, Map and Json through
+// the iterator protocol, and an Iterator<int> from a generator drives that
+// protocol on the generator itself. `total` deliberately mixes all of them,
+// since a clone plan per type argument has to leave no call site pointing at
+// the generic origin.
+
+fn total<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (i in xs) {
+        n = n + i
+    }
+    return n
+}
+
+fn keyLengths<T: Iterable<string>>(xs: T) -> int {
+    var n = 0
+    for (k in xs) {
+        n = n + len(k)
+    }
+    return n
+}
+
+fn indexedSum<T: Iterable<int>>(xs: T) -> int {
+    var n = 0
+    for (k, v in xs) {
+        n = n + k + v
+    }
+    return n
+}
+
+fn sizeOf<T: Lengthable>(x: T) -> int {
+    return len(x)
+}
+
+/* Straight-line yields on purpose. A generator that carries a loop variable
+ * across its yields emits phi temporaries that AOT cgen fails to declare once
+ * the Iterator is passed as a value instead of being iterated in place — a
+ * pre-existing defect reachable without generics
+ * (`fn f(xs: Iterator<int>)` + `f(upTo(4))` fails the same way on main). */
+fn upTo(limit: int) -> Iterator<int> {
+    yield 1
+    yield 2
+    yield 3
+    yield limit
+}
+
+var s: Set<int> = #[1, 2, 3]
+var m: Map<string, int> = #{"aa": 1, "bbb": 2}
+var j: Json = { "a": 1, "bb": 2 }
+var r = 2..6
+
+print(total([1, 2, 3]))
+print(total(s))
+print(total(1..5))
+print(total(r))
+print(total(upTo(4)))
+print(keyLengths(m))
+print(keyLengths(j))
+print(indexedSum([10, 20]))
+print(sizeOf([1, 2, 3]))
+print(sizeOf("hey"))
+print(sizeOf(m))
+print(sizeOf(j))
+print(sizeOf(1..4))
+print(sizeOf(r))

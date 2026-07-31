@@ -23,6 +23,7 @@
 #include "frontend/parser/xast_api.h"
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
+#include "frontend/parser/xast_walk.h"
 #include "xray_vm.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
@@ -154,7 +155,10 @@ static int check_idempotent(const char *path) {
 }
 
 /* Recursively scan a directory for .xr files and check idempotency. */
-static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped) {
+typedef int (*FileCheckFn)(const char *path);
+
+static int scan_dir(const char *dir_path, FileCheckFn check, int *total, int *passed,
+                    int *skipped) {
 #ifdef _WIN32
     char pattern[1024];
     snprintf(pattern, sizeof(pattern), "%s\\*", dir_path);
@@ -169,13 +173,13 @@ static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped)
         char path[1024];
         snprintf(path, sizeof(path), "%s\\%s", dir_path, entry.cFileName);
         if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            scan_dir(path, total, passed, skipped);
+            scan_dir(path, check, total, passed, skipped);
             continue;
         }
         size_t nlen = strlen(entry.cFileName);
         if (nlen > 3 && strcmp(entry.cFileName + nlen - 3, ".xr") == 0) {
             (*total)++;
-            int result = check_idempotent(path);
+            int result = check(path);
             if (result == 1)
                 (*passed)++;
             else if (result == -1)
@@ -203,12 +207,12 @@ static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped)
             continue;
 
         if (S_ISDIR(st.st_mode)) {
-            scan_dir(path, total, passed, skipped);
+            scan_dir(path, check, total, passed, skipped);
         } else if (S_ISREG(st.st_mode)) {
             size_t nlen = strlen(ent->d_name);
             if (nlen > 3 && strcmp(ent->d_name + nlen - 3, ".xr") == 0) {
                 (*total)++;
-                int r = check_idempotent(path);
+                int r = check(path);
                 if (r == 1)
                     (*passed)++;
                 else if (r == -1)
@@ -224,8 +228,7 @@ static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped)
 static bool path_is_directory(const char *path) {
 #ifdef _WIN32
     DWORD attributes = GetFileAttributesA(path);
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-           (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #else
     struct stat st;
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
@@ -255,13 +258,237 @@ TEST(idempotency_regression_corpus) {
     }
 
     int total = 0, passed = 0, skipped = 0;
-    scan_dir(regression_dir, &total, &passed, &skipped);
+    scan_dir(regression_dir, check_idempotent, &total, &passed, &skipped);
 
     int tested = total - skipped;
     fprintf(stderr, "  Formatter idempotency: %d/%d tested (%d skipped re-parse)\n", passed, tested,
             skipped);
     ASSERT_TRUE(tested > 0);
     /* All files that survive re-parse must be idempotent. */
+    ASSERT_EQ(passed, tested);
+
+    teardown();
+}
+
+/* ====================================================================== */
+/* E6-1b: AST preservation over regression + diff corpora                  */
+/* ====================================================================== */
+
+/* Formatting must not change what the program means. Idempotency alone does
+ * not check that: a formatter that drops a paren, re-wraps a line so the next
+ * line binds differently, or loses a `!` can still be perfectly idempotent on
+ * its own (wrong) output. The load-bearing property is
+ *
+ *     AST(fmt(src)) is structurally identical to AST(src)
+ *
+ * checked here through the generic walker in frontend/parser/xast_walk.h, so
+ * this gate never needs its own copy of the AST's shape and cannot silently
+ * skip a node type it has not been taught (unknown types fail). Source
+ * positions are excluded by construction — formatting is supposed to move
+ * things around. */
+
+/* A growable text buffer for the canonical AST digest. */
+typedef struct {
+    char *data;
+    size_t len;
+    size_t cap;
+    bool failed;
+} Digest;
+
+static void digest_add(Digest *d, const char *text) {
+    if (d->failed)
+        return;
+    size_t n = strlen(text);
+    if (d->len + n + 1 > d->cap) {
+        size_t next = d->cap ? d->cap * 2 : 4096;
+        while (next < d->len + n + 1)
+            next *= 2;
+        char *grown = (char *) xr_realloc(d->data, next);
+        if (!grown) {
+            d->failed = true;
+            return;
+        }
+        d->data = grown;
+        d->cap = next;
+    }
+    memcpy(d->data + d->len, text, n);
+    d->len += n;
+    d->data[d->len] = '\0';
+}
+
+/* Depth is encoded so that "same signatures, different nesting" cannot hash to
+ * the same digest. The scratch buffers live here rather than on the stack: the
+ * walk recurses once per AST level, and 16 KB of locals per frame overflows the
+ * stack on a deep expression. */
+typedef struct {
+    Digest *digest;
+    int depth;
+    char sig[8192];
+    char line[8320];
+} DigestWalk;
+
+static void digest_node(AstNode *node, DigestWalk *w);
+
+static bool digest_child(AstNode *child, void *user_data) {
+    DigestWalk *w = (DigestWalk *) user_data;
+    w->depth++;
+    digest_node(child, w);
+    w->depth--;
+    return !w->digest->failed;
+}
+
+static void digest_node(AstNode *node, DigestWalk *w) {
+    if (w->digest->failed)
+        return;
+
+    if (!node) {
+        snprintf(w->line, sizeof(w->line), "%*s<absent>\n", w->depth * 2, "");
+        digest_add(w->digest, w->line);
+        return;
+    }
+
+    if (!xr_ast_node_signature(node, w->sig, sizeof(w->sig))) {
+        snprintf(w->line, sizeof(w->line), "%*s<node type %d not covered by xast_walk.c>\n",
+                 w->depth * 2, "", (int) node->type);
+        digest_add(w->digest, w->line);
+        w->digest->failed = true;
+        return;
+    }
+    snprintf(w->line, sizeof(w->line), "%*s%s\n", w->depth * 2, "", w->sig);
+    digest_add(w->digest, w->line);
+
+    if (!xr_ast_for_each_child(node, digest_child, w))
+        w->digest->failed = true;
+}
+
+/* Canonical digest of a program. Returns NULL if any node type is unknown —
+ * fail-closed, so an untaught node type cannot be silently treated as equal. */
+static char *ast_digest(AstNode *program) {
+    Digest d = {NULL, 0, 0, false};
+    DigestWalk *w = (DigestWalk *) xr_malloc(sizeof(DigestWalk));
+    if (!w)
+        return NULL;
+    w->digest = &d;
+    w->depth = 0;
+    digest_node(program, w);
+    xr_free(w);
+    if (d.failed) {
+        xr_free(d.data);
+        return NULL;
+    }
+    return d.data;
+}
+
+/* Report the first differing line of two digests. */
+static void report_digest_diff(const char *path, const char *a, const char *b) {
+    int line = 1;
+    const char *pa = a;
+    const char *pb = b;
+    while (*pa && *pb && *pa == *pb) {
+        if (*pa == '\n')
+            line++;
+        pa++;
+        pb++;
+    }
+    /* Rewind both to the start of the differing line for a readable message. */
+    while (pa > a && pa[-1] != '\n')
+        pa--;
+    while (pb > b && pb[-1] != '\n')
+        pb--;
+    fprintf(stderr, "  FAIL (formatting changed the AST): %s\n", path);
+    fprintf(stderr, "    first difference at digest line %d\n", line);
+    fprintf(stderr, "    before: %.400s", pa);
+    fprintf(stderr, "    after:  %.400s", pb);
+}
+
+/* Every file in both corpora is required to survive the round trip. This gate
+ * used to carry a k_known_ast_divergence[] ratchet of files whose formatted
+ * output re-parsed differently; all of them were real formatter defects and all
+ * are fixed, so there is no exemption list left to grow back into. A file that
+ * starts failing here is a formatter regression, not a candidate for the list.
+ */
+
+/* Returns 1 pass, 0 fail, -1 skip (unparseable source, or formatter output the
+ * parser rejects — both already covered by the idempotency gate above).
+ *
+ * Only one program is alive at a time: each parse owns its arena, and holding
+ * two open across the session's arena stack is not a supported pattern. */
+static int check_ast_preserved(const char *path) {
+    char *src = read_file_contents(path);
+    if (!src)
+        return -1;
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    AstNode *before = xr_parse_with_trivia(session, src, path);
+    if (!before) {
+        xr_free(src);
+        return -1;
+    }
+
+    /* The AST points into `src` for literal payloads and comment trivia, so
+     * the source must outlive both the formatter and the digest. */
+    char *formatted = xfmt_format_ast(before, NULL, g_iso);
+    char *digest_before = formatted ? ast_digest(before) : NULL;
+    xr_program_destroy(before);
+    xr_free(src);
+    if (!formatted || !digest_before) {
+        free(formatted);
+        xr_free(digest_before);
+        return formatted ? 0 : -1;
+    }
+
+    AstNode *after = xr_parse_with_trivia(session, formatted, path);
+    if (!after) {
+        free(formatted);
+        xr_free(digest_before);
+        return -1;
+    }
+    char *digest_after = ast_digest(after);
+    xr_program_destroy(after);
+    free(formatted);
+
+    bool preserved = digest_after && strcmp(digest_before, digest_after) == 0;
+    int result = 1;
+    if (!preserved) {
+        report_digest_diff(path, digest_before, digest_after ? digest_after : "<null>\n");
+        result = 0;
+    }
+    xr_free(digest_before);
+    xr_free(digest_after);
+    return result;
+}
+
+TEST(ast_preserved_over_corpora) {
+    setup();
+
+    /* regression/ covers language surface; diff/ covers VM-vs-AOT semantics
+     * and is the densest collection of real programs in the repo. */
+    static const char *corpora[] = {"tests/regression", "tests/diff", NULL};
+    static const char *prefixes[] = {"../", "../../", "../../../", NULL};
+
+    int total = 0, passed = 0, skipped = 0;
+    int roots_found = 0;
+    for (int c = 0; corpora[c]; c++) {
+        char dir[512];
+        const char *found = NULL;
+        for (int p = 0; prefixes[p] && !found; p++) {
+            snprintf(dir, sizeof(dir), "%s%s", prefixes[p], corpora[c]);
+            if (path_is_directory(dir))
+                found = dir;
+        }
+        if (!found) {
+            fprintf(stderr, "  SKIP: %s not found\n", corpora[c]);
+            continue;
+        }
+        roots_found++;
+        scan_dir(found, check_ast_preserved, &total, &passed, &skipped);
+    }
+
+    int tested = total - skipped;
+    fprintf(stderr, "  Formatter AST preservation: %d/%d tested (%d skipped, %d corpora)\n", passed,
+            tested, skipped, roots_found);
+    ASSERT_TRUE(roots_found > 0);
+    ASSERT_TRUE(tested > 0);
     ASSERT_EQ(passed, tested);
 
     teardown();
@@ -995,6 +1222,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Formatter roundtrip (E6)");
 
 RUN_TEST(idempotency_regression_corpus);
+RUN_TEST(ast_preserved_over_corpora);
 
 RUN_TEST(doc_comment_before_function);
 RUN_TEST(block_comment_before_statement);

@@ -448,6 +448,11 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "static ");
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
+        } else if (m->is_operator && m->op_type == OPTYPE_LEN) {
+            /* `operator len` is stored as `__operator_len` to keep the named
+             * operator out of the ordinary member namespace; op_type carries
+             * the spelling the source used. */
+            xfmt_write_str(ctx, "operator len");
         } else if (m->is_operator) {
             xfmt_write_str(ctx, "operator");
             xfmt_write_str(ctx, m->name);
@@ -455,15 +460,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, m->name);
         }
 
-        if (m->type_param_count > 0) {
-            xfmt_write_char(ctx, '<');
-            for (int j = 0; j < m->type_param_count; j++) {
-                if (j > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, m->type_param_names[j]);
-            }
-            xfmt_write_char(ctx, '>');
-        }
+        xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
 
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
@@ -574,6 +571,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
+        xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0)
@@ -649,15 +647,7 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "static ");
         xfmt_write_str(ctx, "fn ");
         xfmt_write_str(ctx, m->name);
-        if (m->type_param_count > 0) {
-            xfmt_write_char(ctx, '<');
-            for (int j = 0; j < m->type_param_count; j++) {
-                if (j > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, m->type_param_names[j]);
-            }
-            xfmt_write_char(ctx, '>');
-        }
+        xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0)

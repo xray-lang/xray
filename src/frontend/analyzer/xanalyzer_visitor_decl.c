@@ -64,6 +64,61 @@ static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attr
     xa_symbol_links_set_deprecated(links, false, NULL);
 }
 
+// Store `<T, U: A & B>` generic params, with every intersection-style
+// constraint resolved to a runtime XrType, on the declaration's symbol links.
+// Shared by functions, classes and methods so a method's own constraints are
+// tracked exactly like a top-level function's.
+static void xa_store_type_params_with_constraints(XaInferContext *ctx, XaSymbolLinks *links,
+                                                  XrGenericParam **type_params, int count,
+                                                  AstNode *node) {
+    if (!links || !type_params || count <= 0)
+        return;
+
+    const char **names = xr_malloc(sizeof(const char *) * count);
+    XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * count);
+    int *constraint_counts = xr_malloc(sizeof(int) * count);
+
+    if (names && constraint_lists && constraint_counts) {
+        for (int i = 0; i < count; i++) {
+            XrGenericParam *gp = type_params[i];
+            names[i] = gp ? gp->name : NULL;
+
+            int cn = gp ? gp->constraint_count : 0;
+            if (cn > 0 && gp->constraints) {
+                XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
+                for (int j = 0; j < cn; j++) {
+                    // Use analyzer-aware resolver so class-bounded constraints
+                    // (e.g. <T: Animal>) keep their inheritance chain.
+                    resolved[j] =
+                        gp->constraints[j]
+                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
+                            : NULL;
+                    xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
+                                                      "generic constraint", gp->name, node->line,
+                                                      node->column);
+                }
+                constraint_lists[i] = resolved;
+                constraint_counts[i] = cn;
+            } else {
+                constraint_lists[i] = NULL;
+                constraint_counts[i] = 0;
+            }
+        }
+
+        xa_symbol_links_set_type_params(links, names, constraint_lists, constraint_counts, count);
+
+        // set_type_params deep-copies constraint arrays — release temporaries.
+        for (int i = 0; i < count; i++) {
+            if (constraint_lists[i])
+                xr_free(constraint_lists[i]);
+        }
+    }
+
+    xr_free(names);
+    xr_free(constraint_lists);
+    xr_free(constraint_counts);
+}
+
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (!elem || elem->is_nullable)
         return XR_NATIVE_VALUE;
@@ -386,7 +441,6 @@ typedef struct XaParamEscapeSummary {
     XrClassInfo *receiver_info;
     XrViewReturnSourceKind view_return_source;
     int view_return_param;
-    XaViewRangeTransform view_return_range;
     bool view_return_seen;
 } XaParamEscapeSummary;
 
@@ -816,20 +870,14 @@ static void xa_summary_mark_return(XaParamEscapeSummary *summary, AstNode *expr)
                                              strcmp(root->as.variable.name, "this") == 0)))
             source = XR_VIEW_RETURN_RECEIVER;
     }
-    XaViewRangeTransform range =
-        expr->type == AST_SLICE_EXPR ? XA_VIEW_RANGE_SUBRANGE : XA_VIEW_RANGE_IDENTITY;
     if (!summary->view_return_seen) {
         summary->view_return_seen = true;
         summary->view_return_source = source;
         summary->view_return_param = source_param;
-        summary->view_return_range = range;
     } else if (summary->view_return_source != source ||
                (source == XR_VIEW_RETURN_PARAM && summary->view_return_param != source_param)) {
         summary->view_return_source = XR_VIEW_RETURN_MULTI;
         summary->view_return_param = -1;
-        summary->view_return_range = XA_VIEW_RANGE_UNKNOWN;
-    } else if (summary->view_return_range != range) {
-        summary->view_return_range = XA_VIEW_RANGE_AFFINE;
     }
     xa_summary_mark_expr(summary, expr);
 }
@@ -1232,7 +1280,7 @@ static void xa_report_return_type_contains_span_view(XaInferContext *ctx, AstNod
                  "return an owner container or an owned Array value",
                  kind ? kind : "function", name ? name : "?");
     }
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE, msg,
                                &loc);
 }
 
@@ -1438,21 +1486,13 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
                                     .ctx = ctx,
                                     .receiver_info = receiver_info,
                                     .view_return_source = XR_VIEW_RETURN_UNKNOWN,
-                                    .view_return_param = -1,
-                                    .view_return_range = XA_VIEW_RANGE_UNKNOWN};
+                                    .view_return_param = -1};
     xa_summary_walk(&summary, body);
 
     if (xa_type_contains_span_view(return_type)) {
         links->return_view.origin =
             summary.view_return_seen ? summary.view_return_source : XR_VIEW_RETURN_UNKNOWN;
         links->return_view.param_index = (int16_t) summary.view_return_param;
-        links->return_view.range_transform = summary.view_return_range;
-        links->return_view.required_capability = XA_CAPABILITY_READONLY;
-        links->return_view.element_type_id =
-            return_type && XR_TYPE_IS_SLICE(return_type) && return_type->container.element_type
-                ? return_type->container.element_type->semantic_type_id
-                : 0;
-        links->return_view.required_alignment = 0;
         links->return_view.complete = links->return_view.origin == XR_VIEW_RETURN_PARAM ||
                                       links->return_view.origin == XR_VIEW_RETURN_RECEIVER ||
                                       links->return_view.origin == XR_VIEW_RETURN_STATIC;
@@ -2267,53 +2307,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Store generic type parameters and intersection-style constraint lists.
-    if (fn->type_param_count > 0 && fn->type_params) {
-        int n = fn->type_param_count;
-        const char **type_param_names = xr_malloc(sizeof(const char *) * n);
-        XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * n);
-        int *constraint_counts = xr_malloc(sizeof(int) * n);
-
-        if (type_param_names && constraint_lists && constraint_counts) {
-            for (int i = 0; i < n; i++) {
-                XrGenericParam *gp = fn->type_params[i];
-                type_param_names[i] = gp->name;
-
-                int cn = gp->constraint_count;
-                if (cn > 0 && gp->constraints) {
-                    XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
-                    for (int j = 0; j < cn; j++) {
-                        // Use analyzer-aware resolver so class-bounded constraints
-                        // (e.g. <T: Animal>) keep their inheritance chain.
-                        resolved[j] =
-                            gp->constraints[j]
-                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
-                                : NULL;
-                        xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
-                                                          "generic constraint", gp->name,
-                                                          node->line, node->column);
-                    }
-                    constraint_lists[i] = resolved;
-                    constraint_counts[i] = cn;
-                } else {
-                    constraint_lists[i] = NULL;
-                    constraint_counts[i] = 0;
-                }
-            }
-
-            xa_symbol_links_set_type_params(links, type_param_names, constraint_lists,
-                                            constraint_counts, n);
-
-            // set_type_params deep-copies constraint arrays — release temporaries.
-            for (int i = 0; i < n; i++) {
-                if (constraint_lists[i])
-                    xr_free(constraint_lists[i]);
-            }
-        }
-
-        xr_free(type_param_names);
-        xr_free(constraint_lists);
-        xr_free(constraint_counts);
-    }
+    xa_store_type_params_with_constraints(ctx, links, fn->type_params, fn->type_param_count, node);
 
     XrLocation sig_loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     for (int i = 0; i < fn->param_count; i++) {
@@ -2876,6 +2870,13 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     // its declared type parameters so generic resolution can plug arguments
     // in later (the type_args slot is empty at the declaration site).
     links->type = xr_type_new_interface(ctx->analyzer->isolate, iface->name);
+    // Carry the declaration identity on the type, exactly as a class instance
+    // does. Interface names are ordinary identifiers too, so `interface
+    // Lengthable { ... }` is legal source and must not be mistaken for the
+    // builtin of that name: xr_type_is_builtin_named_type reads a NULL
+    // class_ref as "builtin", and the builtin interface registry leaves it NULL.
+    if (links->type)
+        links->type->instance.class_ref = info;
     info->base = NULL;  // interfaces never carry an inheritance chain here
     info->base_name = NULL;
 
@@ -2906,6 +2907,20 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         msym->location.line = m->line;
         XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
         xa_publish_deprecated_attrs(mlinks, im->attributes, im->attr_count);
+        // An interface method may carry its own generic params and constraints.
+        // They are stored, and the method published as the signature scope's
+        // active generic owner, before the signature is resolved — that is what
+        // lets `x: T` resolve to a type parameter instead of an undefined type,
+        // and what lets the constraint-aware checks see the bounds.
+        XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
+        XaSymbol *saved_signature_function =
+            signature_scope ? signature_scope->function_symbol : NULL;
+        if (im->type_param_count > 0 && im->type_params) {
+            xa_store_type_params_with_constraints(ctx, mlinks, im->type_params,
+                                                  im->type_param_count, m);
+            if (signature_scope)
+                signature_scope->function_symbol = msym;
+        }
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
@@ -2922,6 +2937,25 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XrType *ret_type = im->return_type
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->return_type)
                                : xr_type_new_unit(NULL);
+        // Resolve CLASS("T") → TYPE_PARAM("T") for generic interface methods,
+        // so a bound `T` in the signature is a type parameter rather than an
+        // undefined class name.
+        if (im->type_param_count > 0 && im->type_params) {
+            const char **tp_names = xr_malloc(sizeof(const char *) * (size_t) im->type_param_count);
+            if (tp_names) {
+                for (int j = 0; j < im->type_param_count; j++)
+                    tp_names[j] = im->type_params[j] ? im->type_params[j]->name : NULL;
+                for (int j = 0; j < im->param_count; j++) {
+                    param_types[j] = resolve_class_to_type_param(NULL, param_types[j], tp_names,
+                                                                 im->type_param_count);
+                }
+                ret_type =
+                    resolve_class_to_type_param(NULL, ret_type, tp_names, im->type_param_count);
+                xr_free(tp_names);
+            }
+        }
+        if (signature_scope)
+            signature_scope->function_symbol = saved_signature_function;
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
         if (mlinks->type && ret_type && XR_TYPE_IS_SLICE(ret_type) &&
@@ -3035,11 +3069,17 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
 
         // Built-in interfaces have no XrClassInfo* attached. Hashable is the
         // one builtin with a user-visible structural contract.
-        if (strcmp(iface_name, "Hashable") == 0) {
+        //
+        // Identity, not spelling, decides which is which: `interface Lengthable
+        // { ... }` written in user code carries its own declaration info, and is
+        // audited as an ordinary interface below against the methods it actually
+        // declares — not against the builtin's `operator len() -> int` contract.
+        const bool is_builtin_iface = iface_type->instance.class_ref == NULL;
+        if (is_builtin_iface && strcmp(iface_name, "Hashable") == 0) {
             xa_validate_hashable_contract_for_class(ctx, cls_node, cls_info);
             continue;
         }
-        if (xa_is_builtin_interface_name(iface_name)) {
+        if (is_builtin_iface && xa_is_builtin_interface_name(iface_name)) {
             if (strcmp(iface_name, "Lengthable") == 0) {
                 XaSymbol *found = xa_class_info_lookup_member(cls_info, "__operator_len");
                 XaSymbolLinks *found_links =
@@ -3392,52 +3432,8 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 skip_interfaces:
 
     // Store generic type parameters and intersection-style constraint lists.
-    if (cls->type_param_count > 0 && cls->type_params) {
-        int n = cls->type_param_count;
-        const char **type_param_names = xr_malloc(sizeof(const char *) * n);
-        XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * n);
-        int *constraint_counts = xr_malloc(sizeof(int) * n);
-
-        if (type_param_names && constraint_lists && constraint_counts) {
-            for (int i = 0; i < n; i++) {
-                XrGenericParam *gp = cls->type_params[i];
-                type_param_names[i] = gp->name;
-
-                int cn = gp->constraint_count;
-                if (cn > 0 && gp->constraints) {
-                    XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
-                    for (int j = 0; j < cn; j++) {
-                        // Use analyzer-aware resolver so class-bounded constraints
-                        // (e.g. <T: Animal>) keep their inheritance chain.
-                        resolved[j] =
-                            gp->constraints[j]
-                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
-                                : NULL;
-                        xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
-                                                          "generic constraint", gp->name,
-                                                          node->line, node->column);
-                    }
-                    constraint_lists[i] = resolved;
-                    constraint_counts[i] = cn;
-                } else {
-                    constraint_lists[i] = NULL;
-                    constraint_counts[i] = 0;
-                }
-            }
-
-            xa_symbol_links_set_type_params(links, type_param_names, constraint_lists,
-                                            constraint_counts, n);
-
-            for (int i = 0; i < n; i++) {
-                if (constraint_lists[i])
-                    xr_free(constraint_lists[i]);
-            }
-        }
-
-        xr_free(type_param_names);
-        xr_free(constraint_lists);
-        xr_free(constraint_counts);
-    }
+    xa_store_type_params_with_constraints(ctx, links, cls->type_params, cls->type_param_count,
+                                          node);
 
     // Enter class scope
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
@@ -3455,6 +3451,7 @@ skip_interfaces:
             field_sym->is_private = fd->is_private;
             field_sym->is_protected = fd->is_protected;
             field_sym->is_const = fd->is_const;
+            field_sym->has_declared_default = (fd->initializer != NULL);
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
@@ -3488,7 +3485,7 @@ skip_interfaces:
                          "cannot live in long-lived storage",
                          decl_label ? decl_label : "class", fd->name ? fd->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                           XR_ERR_ANALYZE_BORROW_ESCAPE, msg, &loc);
             }
             xa_class_info_add_field(info, field_sym);
         }
@@ -3574,6 +3571,18 @@ skip_interfaces:
 
     // Compute fixed-layout aggregate layout (VALUE_TYPE only, skip generic struct templates)
     int struct_type_param_count = is_struct_decl ? node->as.struct_decl.type_param_count : 0;
+    /* Tell the native plan this program declares the type, before deciding
+     * whether it gets a fixed layout.  A [[native.layout]] assertion naming a
+     * type that no compiled module declares is vacuous for this build; one
+     * naming a type that IS declared but has no fixed layout is a real error.
+     * Without this signal the two are indistinguishable. */
+    if (is_aggregate_decl && cls->name) {
+        XrNativePackagePlan *layout_subject_plan =
+            (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
+                ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+        if (layout_subject_plan)
+            xr_native_package_note_layout_subject(layout_subject_plan, cls->name);
+    }
     if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
         XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));
@@ -3819,9 +3828,13 @@ skip_layout:
             XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
             XaSymbol *saved_signature_function =
                 signature_scope ? signature_scope->function_symbol : NULL;
-            if (md->type_param_count > 0 && md->type_param_names) {
-                xa_symbol_links_set_type_params(method_links, (const char **) md->type_param_names,
-                                                NULL, NULL, md->type_param_count);
+            // A method carries its own generic params and constraints, resolved
+            // here so the constraint-aware analyzer sites (call-site constraint
+            // checks, the Hashable key check) see them while the signature and
+            // the body are still being processed.
+            if (md->type_param_count > 0 && md->type_params) {
+                xa_store_type_params_with_constraints(ctx, method_links, md->type_params,
+                                                      md->type_param_count, method);
                 if (signature_scope)
                     signature_scope->function_symbol = method_sym;
             }
@@ -3899,14 +3912,20 @@ skip_layout:
             }
 
             // Resolve CLASS("T") → TYPE_PARAM("T") for generic methods
-            if (md->type_param_count > 0 && md->type_param_names) {
-                for (int j = 0; j < md->param_count; j++) {
-                    param_types[j] = resolve_class_to_type_param(
-                        NULL, param_types[j], (const char **) md->type_param_names,
-                        md->type_param_count);
+            if (md->type_param_count > 0 && md->type_params) {
+                const char **tp_names =
+                    xr_malloc(sizeof(const char *) * (size_t) md->type_param_count);
+                if (tp_names) {
+                    for (int j = 0; j < md->type_param_count; j++)
+                        tp_names[j] = md->type_params[j] ? md->type_params[j]->name : NULL;
+                    for (int j = 0; j < md->param_count; j++) {
+                        param_types[j] = resolve_class_to_type_param(NULL, param_types[j], tp_names,
+                                                                     md->type_param_count);
+                    }
+                    ret_type =
+                        resolve_class_to_type_param(NULL, ret_type, tp_names, md->type_param_count);
+                    xr_free(tp_names);
                 }
-                ret_type = resolve_class_to_type_param(
-                    NULL, ret_type, (const char **) md->type_param_names, md->type_param_count);
             }
             if (signature_scope)
                 signature_scope->function_symbol = saved_signature_function;
@@ -3951,23 +3970,8 @@ skip_layout:
                 }
             }
 
-            // Store generic type parameters for the method.  Method-level
-            // constraints aren't tracked in the method-decl AST yet, so the
-            // intersection lists are empty for now.
-            if (md->type_param_count > 0 && md->type_param_names) {
-                int mc = md->type_param_count;
-                const char **type_param_names = xr_malloc(sizeof(const char *) * mc);
-
-                for (int j = 0; j < mc; j++) {
-                    type_param_names[j] = md->type_param_names[j];
-                }
-
-                xa_symbol_links_set_type_params(method_links, type_param_names,
-                                                /* constraint_lists  */ NULL,
-                                                /* constraint_counts */ NULL, mc);
-
-                xr_free(type_param_names);
-            }
+            // Generic type params (and their constraints) were stored on
+            // method_links above, before the signature was resolved.
 
             XrLocation sig_loc = {
                 .file = ctx->file_path, .line = method->line, .column = method->column};

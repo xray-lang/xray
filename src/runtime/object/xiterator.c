@@ -23,6 +23,7 @@
 #include "xstring.h"
 #include "xpanic_info.h"
 #include "../xerror_codes.h"
+#include "../../shared/xr_error_messages.h"
 #include "../../base/xmalloc.h"
 #include "../mem/xobj_header.h"
 #include "../mem/xsystem_heap.h"
@@ -513,21 +514,40 @@ XrNativeBodyDesc *xr_iterator_native_body_desc(void) {
 
 #include "../value/xvalue_format.h"
 
+/* Hand a generator producer's failure to the consumer. A generator that ended
+ * by throwing is not an exhausted iterator: its own error is the diagnosis, so
+ * every pull site raises this before it reports exhaustion. Returns true when
+ * an error was raised. */
+static bool iterator_raise_generator_error(XrVMRuntime *iso, XrIterator *iter) {
+    if (iter->type != XR_ITERATOR_GENERATOR || !iter->source.gen ||
+        XR_IS_NULL(iter->source.gen->error))
+        return false;
+    XrValue err = iter->source.gen->error;
+    if (iter->source.gen->error_is_value)
+        xr_vm_set_pending_error(iso, err);
+    else
+        xr_vm_throw_exception(iso, err);
+    iter->source.gen->error = xr_null();
+    return true;
+}
+
+/* Raise the two-step protocol violation (LANGUAGE_SPEC 5.3.6): a pull past the
+ * end of a one-shot iterator. Every kind reports it identically -- the wrong
+ * answer used to depend on the source (0 for a generator or an array, null for
+ * a rune iterator whose static element type is non-nullable `rune`). */
+static void iterator_throw_exhausted(XrVMRuntime *iso, const char *message) {
+    XrValue exc = xr_panic_info_newf(iso, XR_ERR_ITERATOR_EXHAUSTED, "%s", message);
+    xr_vm_throw_exception(iso, exc);
+}
+
 static XrValue m_iter_has_next(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrIterator *iter = xr_value_to_iterator(self);
     XR_DCHECK(iter != NULL, "Iterator.hasNext: invalid iterator");
     bool has_next = xr_iterator_has_next(iter);
-    if (!has_next && iter->type == XR_ITERATOR_GENERATOR && iter->source.gen &&
-        !XR_IS_NULL(iter->source.gen->error)) {
-        XrValue err = iter->source.gen->error;
-        if (iter->source.gen->error_is_value)
-            xr_vm_set_pending_error(iso, err);
-        else
-            xr_vm_throw_exception(iso, err);
-        iter->source.gen->error = xr_null();
-    }
+    if (!has_next)
+        (void) iterator_raise_generator_error(iso, iter);
     return xr_bool(has_next);
 }
 
@@ -536,16 +556,16 @@ static XrValue m_iter_next(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     (void) argc;
     XrIterator *iter = xr_value_to_iterator(self);
     XR_DCHECK(iter != NULL, "Iterator.next: invalid iterator");
-    XrValue value = xr_iterator_next(iter);
-    if (iter->type == XR_ITERATOR_GENERATOR && iter->source.gen &&
-        !XR_IS_NULL(iter->source.gen->error)) {
-        XrValue err = iter->source.gen->error;
-        if (iter->source.gen->error_is_value)
-            xr_vm_set_pending_error(iso, err);
-        else
-            xr_vm_throw_exception(iso, err);
-        iter->source.gen->error = xr_null();
+    /* The same test hasNext() performs, so an in-contract next() is unchanged:
+     * for a generator it drives the producer one step and buffers the yield,
+     * which is exactly what the unguarded next() used to do inline. */
+    if (!xr_iterator_has_next(iter)) {
+        if (!iterator_raise_generator_error(iso, iter))
+            iterator_throw_exhausted(iso, XR_ERROR_CORE_ITERATOR_EXHAUSTED_NEXT_MSG);
+        return xr_null();
     }
+    XrValue value = xr_iterator_next(iter);
+    (void) iterator_raise_generator_error(iso, iter);
     return value;
 }
 
@@ -563,12 +583,13 @@ static XrValue m_iter_nth(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     xr_Integer index = XR_TO_INT(args[0]);
     for (xr_Integer i = 0; i <= index; i++) {
         if (!xr_iterator_has_next(iter)) {
-            XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-                                             "Iterator.nth index out of bounds");
-            xr_vm_throw_exception(iso, exc);
+            if (!iterator_raise_generator_error(iso, iter))
+                iterator_throw_exhausted(iso, XR_ERROR_CORE_ITERATOR_EXHAUSTED_NTH_MSG);
             return xr_null();
         }
         XrValue value = xr_iterator_next(iter);
+        if (iterator_raise_generator_error(iso, iter))
+            return xr_null();
         if (i == index)
             return value;
     }

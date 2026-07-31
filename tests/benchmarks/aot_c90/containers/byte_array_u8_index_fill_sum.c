@@ -16,17 +16,21 @@ static int64_t run(int64_t n, int64_t rounds) {
         i = i + 1;
     }
 
+    /* The Xray program accumulates into an `int`, so the accumulator here is
+     * int64_t too.  A uint8_t accumulator wraps to a different answer and skips
+     * the widening the paired AOT code has to do, which makes the comparison
+     * measure two different computations. */
     int64_t r = 0;
-    uint8_t sum = 0;
+    int64_t sum = 0;
     while (r < rounds) {
         int64_t j = 0;
         while (j < n) {
-            sum = (uint8_t) (sum + bytes[j]);
+            sum = sum + (int64_t) bytes[j];
             j = j + 1;
         }
         r = r + 1;
     }
-    int64_t result = (int64_t) sum;
+    int64_t result = sum;
     free(bytes);
     return result;
 }

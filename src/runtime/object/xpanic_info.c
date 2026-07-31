@@ -378,31 +378,29 @@ void xr_register_panic_info_class(XrVMRuntime *X) {
 
 /* ========== Output ========== */
 
-void xr_panic_info_print(XrVMRuntime *X, XrValue exception) {
+// Print a panic's captured stack trace to `stream`, if it has one. The header
+// line (fault code + message) is emitted separately by xr_panic_report_emit so
+// the VM and AOT backends share one wording; this frame list is the VM-only
+// opt-in tail, shown under XRAY_BACKTRACE and absent from the cross-backend
+// contract because the AOT native path carries no unwind state.
+void xr_panic_info_print_trace(XrVMRuntime *X, XrValue exception, FILE *stream) {
     XrInstance *inst = exception_instance(X, exception);
-    if (!inst) {
-        fprintf(stderr, "Error: Not an exception object\n");
+    if (!inst)
         return;
-    }
-
-    XrErrorCode code = xr_panic_info_get_code(X, exception);
-    const char *message = xr_panic_info_get_message(X, exception);
-    fprintf(stderr, "\033[1;31mUncaught %s [%d]:\033[0m %s\n",
-            inst->klass && inst->klass->name ? inst->klass->name : "PanicInfo", (int) code,
-            message ? message : "");
 
     XrValue stack_val = inst->fields[PANIC_INFO_FIELD_STACK];
-    if (XR_IS_ARRAY(stack_val)) {
-        XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
-        if (stack->length > 0) {
-            fprintf(stderr, "\nStack trace:\n");
-            for (int i = 0; i < stack->length; i++) {
-                XrValue frame = ((XrValue *) stack->data)[i];
-                if (XR_IS_STRING(frame)) {
-                    XrString *str = (XrString *) XR_TO_PTR(frame);
-                    fprintf(stderr, "  %s\n", str->data);
-                }
-            }
+    if (!XR_IS_ARRAY(stack_val))
+        return;
+    XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
+    if (stack->length <= 0)
+        return;
+
+    fprintf(stream, "\nStack trace:\n");
+    for (int i = 0; i < stack->length; i++) {
+        XrValue frame = ((XrValue *) stack->data)[i];
+        if (XR_IS_STRING(frame)) {
+            XrString *str = (XrString *) XR_TO_PTR(frame);
+            fprintf(stream, "  %s\n", str->data);
         }
     }
 }

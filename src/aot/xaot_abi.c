@@ -229,16 +229,28 @@ static bool type_can_use_compact_adt_return(const XaotBundle *bundle, const XrTy
     return adt_enum_plan_for_type(bundle, type) != NULL;
 }
 
+/* Value-struct layout for a class/instance type, resolved by class identity.
+ *
+ * The bundle scan exists because a declaration's struct_layout may only be
+ * attached to the Xi class data, not to the analyzer XrClassInfo the type
+ * points at. It matches on class_info — XiClassData documents class_name as
+ * diagnostic only — so it cannot confuse two same-named classes from different
+ * modules, and cannot hand a builtin the layout of a user class that reuses
+ * its name. A builtin named instance carries no class_ref at all and therefore
+ * has no value-struct layout: `class Range { ... }` in the module must not make
+ * an ordinary `2..6` value plan native-struct storage, which produced a
+ * `void *` slot for a tagged XrValue and generated C that would not compile. */
 static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
                                                        const XrType *type) {
-    const char *name;
     if (!type || type->is_nullable ||
         (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
         return NULL;
-    if (type->instance.class_ref && type->instance.class_ref->struct_layout)
-        return type->instance.class_ref->struct_layout;
-    name = type->instance.class_name;
-    if (!bundle || !name)
+    const XrClassInfo *info = type->instance.class_ref;
+    if (!info)
+        return NULL;
+    if (info->struct_layout)
+        return info->struct_layout;
+    if (!bundle)
         return NULL;
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
@@ -246,7 +258,7 @@ static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
             continue;
         for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
             const XiClassData *cd = mod->classes[ci];
-            if (cd && cd->class_name && cd->struct_layout && strcmp(cd->class_name, name) == 0)
+            if (cd && cd->class_info == info && cd->struct_layout)
                 return cd->struct_layout;
         }
     }

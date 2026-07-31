@@ -182,6 +182,10 @@ typedef struct XrNativeLayoutAssertion {
     bool assert_size;
     bool assert_align;
     bool assert_fields;
+    /* Some compiled module declares an aggregate with this name.  Distinguishes
+     * "declared but has no fixed layout" (an error) from "not part of this
+     * program" (vacuous for this build). */
+    bool declared;
     bool resolved;
     uint32_t expected_size;
     uint32_t expected_align;
@@ -295,6 +299,10 @@ XR_FUNC const char *xr_native_symbol_library(const XrNativeSymbol *symbol);
 struct XrAggregateLayout;
 XR_FUNC bool xr_native_package_resolve_layout(XrNativePackagePlan *plan, const char *xray_type,
                                               const struct XrAggregateLayout *layout);
+/* Record that the program declares an aggregate named `xray_type`, whether or
+ * not it turned out to have a fixed layout. */
+XR_FUNC void xr_native_package_note_layout_subject(XrNativePackagePlan *plan,
+                                                   const char *xray_type);
 XR_FUNC bool xr_native_package_validate_symbol_arity(const XrNativePackagePlan *plan,
                                                      const char *xray_name, uint32_t arity,
                                                      char *errbuf, size_t errbuf_len);

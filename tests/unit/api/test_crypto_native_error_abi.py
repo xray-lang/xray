@@ -11,6 +11,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+def _cache_root() -> Path:
+    """Shared native-build cache. Lives outside build/ so a clean reconfigure
+    does not throw away objects that cost ~30s each to recreate."""
+    return Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(ROOT / ".cache" / "xray-test")))
+
 RANDOM_BYTES_FIXTURE = ROOT / "tests/aot/basic/crypto_random_bytes_typed_error.xr"
 DECRYPT_FIXTURE = ROOT / "tests/aot/basic/crypto_decrypt_typed_error.xr"
 CORE_DEF = ROOT / "stdlib/defs/core.def"
@@ -110,7 +116,7 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
         output_dir = ROOT / "build" / ".xray-test-tmp"
         output_dir.mkdir(parents=True, exist_ok=True)
         native = output_dir / f"{native_stem}_{os.getpid()}"
-        cache = ROOT / "build" / ".xray-test-cache" / native_stem
+        cache = _cache_root() / native_stem
         try:
             self.run_checked(
                 [

@@ -1,0 +1,42 @@
+// 1237_prelude_interface_shadowing.xr
+// 测试：用户接口可以复用内建接口名，且按自身契约检查
+//
+// Builtin interface names are ordinary identifiers, so `interface Lengthable`
+// is legal. A class implementing the user's interface is audited against the
+// methods that declaration states — not against the builtin's
+// `operator len() -> int` contract — and does not become len()-able. The
+// negative half lives in
+// tests/compile_errors/type/prelude_shadow_interface_lengthable.xr.
+//
+// The builtin interfaces keep working for classes that really implement them;
+// that half is covered by test_builtin_lengthable_contract_still_enforced,
+// which lives in a separate file scope from the shadowing declaration.
+
+interface Lengthable {
+    describe() -> string
+}
+
+class Box implements Lengthable {
+    v: int
+    constructor(v: int) { this.v = v }
+    describe() -> string { return "box:" + string(this.v) }
+}
+
+@test
+fn test_user_interface_contract_is_its_own() {
+    // Box satisfies the user's Lengthable by declaring describe(); it never had
+    // to supply `operator len()`, which the builtin interface would require.
+    var b = Box(3)
+    assert_eq(b.describe(), "box:3")
+    assert_eq(b.v, 3)
+}
+
+@test
+fn test_user_interface_is_usable_as_a_constraint() {
+    var boxes = [Box(1), Box(2)]
+    var joined = ""
+    for (b in boxes) {
+        joined = joined + b.describe() + ";"
+    }
+    assert_eq(joined, "box:1;box:2;")
+}
