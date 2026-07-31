@@ -289,6 +289,9 @@ XR_FUNC void xa_check_active_loan_owner_mutation(XaInferContext *ctx, AstNode *l
 XR_FUNC XaSymbol *xa_find_live_strong_alias_after_current(XaInferContext *ctx, XaSymbol *move_sym,
                                                           bool *analysis_failed);
 XR_FUNC void xa_mark_root_alias_state(XaInferContext *ctx, XaRootId root, XaRootAliasState state);
+/* Report every ownership axis `move` requires that this source fails. */
+XR_FUNC void xa_check_move_source_evidence(XaInferContext *ctx, XaSymbol *move_sym,
+                                           const char *move_name, XrLocation loc);
 XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNode *loc_node,
                                                       XaSymbol *owner_sym, const char *owner_path,
                                                       const char *operation);

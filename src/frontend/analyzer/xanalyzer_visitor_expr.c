@@ -5734,63 +5734,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
-    if (move_links) {
-        if (move_links->root_id == 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
-                                       "cannot move value: no ownership root exists", &loc);
-        } else if (move_links->root_alias == XA_ROOT_ALIAS_UNKNOWN) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
-                "cannot move value: unique ownership is unknown (OWN-E-UNKNOWN-CALL)", &loc);
-        } else if (move_links->root_alias == XA_ROOT_ESCAPED) {
-            char msg[256];
-            snprintf(msg, sizeof(msg),
-                     "cannot move '%s': the value was stored into a heap graph and other "
-                     "references to it may still exist (OWN-E-ESCAPED-ROOT); use copy(%s)",
-                     move_name ? move_name : "?", move_name ? move_name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
-        }
-        if (move_links->value_capability == XA_CAP_UNKNOWN) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
-                                       "cannot move value: capability is unknown", &loc);
-        } else if (move_links->value_capability == XA_CAP_CONST) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move const-capability value", &loc);
-        } else if (move_links->value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot move synchronization capability", &loc);
-        }
-        if (move_links->storage_domain == XR_STORAGE_MODULE_STATIC) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       "cannot consume a module-static binding", &loc);
-        }
-        if (!move_links->allocation_plan.complete) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MOVE_NOT_UNIQUE,
-                "cannot move value: storage/ownership plan is incomplete (OWN-E-STORAGE-PLAN)",
-                &loc);
-        }
-        bool alias_analysis_failed = false;
-        XaSymbol *live_alias =
-            xa_find_live_strong_alias_after_current(ctx, move_sym, &alias_analysis_failed);
-        if (alias_analysis_failed) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
-                                       "ownership alias analysis failed (AnalysisResourceFailure)",
-                                       &loc);
-        } else if (live_alias) {
-            char msg[224];
-            snprintf(msg, sizeof(msg),
-                     "cannot move '%s': strong alias '%s' remains live (OWN-E-LIVE-ALIAS)",
-                     move_name ? move_name : "?", live_alias->name ? live_alias->name : "?");
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_MOVE_NOT_UNIQUE, msg, &loc);
-        } else if (move_links->root_alias == XA_ROOT_LOCAL_ALIASED) {
-            xa_mark_root_alias_state(ctx, move_links->root_id, XA_ROOT_UNIQUE);
-        }
-    }
+    xa_check_move_source_evidence(ctx, move_sym, move_name, loc);
     xa_check_active_loan_owner_mutation(ctx, node, move_sym, "moving the owner");
 
     // Check: cannot move synchronization/concurrency handles.
