@@ -115,3 +115,101 @@ fn test_map_field_cycles_are_treated_like_array_field_cycles() {
     var high = array_residue < map_residue ? map_residue : array_residue
     assert(high <= low * 4 + 5000)
 }
+
+// G2 / G6 的端到端半边：Json 字段与 struct 穿透。
+//
+// 这两条在 analyzer 单元测试里查不到符号（测试基建的 lookup 限制，与 L0
+// 无关），所以在这里用运行期观察补齐：类型图标记正确时，这些环与普通字段
+// 环得到同样的处置。
+//
+// 阶段 E 移除环收集器后，三组都会变成"泄漏"，断言的"三组一致"仍然成立。
+
+class JsonNode {
+    blob: Json
+    peer: JsonNode?
+
+    constructor() {
+        this.blob = {}
+        this.peer = null
+    }
+}
+
+// G6（struct 穿透边）的可达性边界，2026-08-01 实测：
+//
+//   struct S { label: string }        ← 允许
+//   struct S { items: Array<int> }    ← 拒绝："cannot use a dynamic container type"
+//   struct S { parent: Node? }        ← 拒绝："only scalar values, raw pointers,
+//                                        fixed arrays and other structs are supported"
+//
+// 即 247 §A.4.2 举的漏标形态（`class Node { data: S }` + `struct S { parent: Node? }`）
+// 在当前语言表面下**构造不出来**——分析器先拒绝了 struct 的引用字段。
+// 类型图的 struct 穿透因此是**防御性**的：它是正确的裁决（struct 无 RC 身份，
+// 是环的传导路径而非成员），一旦 struct 字段限制放开就自动生效，但今天没有
+// 可达的漏标形态需要它救。
+//
+// 这里能测的是它的另一半：穿透**不得**造成误标。struct 只能装标量、string、
+// 定长数组和其它 struct，全都不可能成环，所以持有 struct 的类不该被标记。
+struct ScalarLink {
+    tag: int
+    label: string
+}
+
+class StructNode {
+    data: ScalarLink
+    tag: int
+
+    constructor(tag) {
+        this.data = ScalarLink(tag, "n")
+        this.tag = tag
+    }
+}
+
+fn make_json_field_cycle() {
+    var a = JsonNode()
+    var b = JsonNode()
+    a.peer = b
+    b.peer = a
+}
+
+// 持有 struct 的类，struct 里只有不可能成环的东西 ⇒ 必须完全被纯 RC 回收。
+fn make_struct_holder(i: int) {
+    var a = StructNode(i)
+    var b = StructNode(i + 1)
+}
+
+@test
+fn test_json_field_cycles_and_struct_holders() {
+    for (var w = 0; w < 200; w++) {
+        make_array_cycle(w)
+        make_json_field_cycle()
+        make_struct_holder(w)
+    }
+
+    var plain_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_array_cycle(i)
+    }
+    var plain_residue = runtime.liveObjects() - plain_before
+
+    var json_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_json_field_cycle()
+    }
+    var json_residue = runtime.liveObjects() - json_before
+
+    var struct_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_struct_holder(i)
+    }
+    var struct_residue = runtime.liveObjects() - struct_before
+
+    print("probe1 plain_residue=" + string(plain_residue))
+    print("probe1 json_residue=" + string(json_residue))
+    print("probe1 struct_residue=" + string(struct_residue))
+
+    // Json 字段的环与普通字段环同阶（G2：Json 是通配边，持有者无条件标记）。
+    assert(json_residue <= plain_residue * 4 + 5000)
+    // struct 里装不下能成环的东西，因此穿透必须得出"无边"，持有者被纯 RC
+    // 完全回收。若穿透误发一条边，这里会因为被标为候选而残留。
+    assert(struct_residue < 1000)
+}

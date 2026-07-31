@@ -38,12 +38,37 @@ class Button {
     }
 }
 
-// 直接形态：闭包捕获 b，闭包又被存入 b 自己的字段 ⇒ b ⇄ closure 成环。
-// 这是 247 A.6 要在编译期拒绝的形态。
+// 直接形态（`b.onClick = fn(){ b... }`）自 247 A.6 起是**编译错误**，正例在
+// tests/compile_errors/cycles/247_closure_cycle_direct.xr。这里改用 A.6 明确
+// 不报的一级间接形态：闭包存入 b 的字段所指的另一个对象。零误报优先，这一
+// 类交给阶段 D 的运行期检测器兜底。
+class Slot {
+    handler: () -> int
+
+    constructor() {
+        this.handler = fn() -> int { return 0 }
+    }
+}
+
+class Widget {
+    slot: Slot
+    clicks: int
+
+    constructor() {
+        this.slot = Slot()
+        this.clicks = 0
+    }
+
+    render() -> int {
+        this.clicks = this.clicks + 1
+        return this.clicks
+    }
+}
+
 fn make_direct_closure_cycle() {
-    var b = Button()
-    b.onClick = fn() -> int {
-        return b.render()
+    var w = Widget()
+    w.slot.handler = fn() -> int {
+        return w.render()
     }
 }
 
@@ -146,11 +171,11 @@ fn test_indirect_closure_cycle_observable() {
 // 这一条在阶段 E 之后仍然必须通过——它是"不给语言机制、只给惯用法"这条
 // 裁决能成立的前提。
 fn make_closure_cycle_broken_by_defer() {
-    var b = Button()
-    b.onClick = fn() -> int {
-        return b.render()
+    var w = Widget()
+    w.slot.handler = fn() -> int {
+        return w.render()
     }
-    defer b.onClick = fn() -> int { return 0 }
+    defer w.slot.handler = fn() -> int { return 0 }
 }
 
 @test
@@ -184,11 +209,11 @@ fn test_defer_breaks_the_closure_cycle() {
 
     // 与残留无关、任何阶段都必须成立的一条：断环后对象仍然可用，defer 没有
     // 提前释放任何东西。
-    var b = Button()
-    b.onClick = fn() -> int { return b.render() }
-    var handler = b.onClick
+    var w = Widget()
+    w.slot.handler = fn() -> int { return w.render() }
+    var handler = w.slot.handler
     assert(handler() == 1)
-    b.onClick = fn() -> int { return 0 }
-    var cleared = b.onClick
+    w.slot.handler = fn() -> int { return 0 }
+    var cleared = w.slot.handler
     assert(cleared() == 0)
 }

@@ -211,6 +211,57 @@ TEST(diagnostics_multiple_documents) {
     xlsp_server_free(server);
 }
 
+/* Task 247 A.6: the closure-cycle check lives in the analyzer's escape pass
+ * SPECIFICALLY so it reaches the editor. The Xi IR could decide the same thing
+ * more precisely -- SSA identity instead of variable names -- but the LSP never
+ * runs the IR pipeline, so an IR-side diagnostic would be invisible where it
+ * matters most. This asserts the reason that trade was made. */
+TEST(diagnostics_closure_cycle_reaches_lsp) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *code = "class Button {\n"
+                       "    onClick: () -> int\n"
+                       "    clicks: int\n"
+                       "    constructor() {\n"
+                       "        this.onClick = fn() -> int { return 0 }\n"
+                       "        this.clicks = 0\n"
+                       "    }\n"
+                       "    render() -> int {\n"
+                       "        this.clicks = this.clicks + 1\n"
+                       "        return this.clicks\n"
+                       "    }\n"
+                       "}\n"
+                       "fn install() {\n"
+                       "    var b = Button()\n"
+                       "    b.onClick = fn() -> int { return b.render() }\n"
+                       "}\n";
+    XrLspDocument *doc = open_and_parse(server, "file:///cycle.xr", code);
+    ASSERT(doc != NULL);
+
+    XrJsonValue *diags = xlsp_analyze_diagnostics(doc);
+    ASSERT(diags != NULL);
+
+    int found = 0;
+    for (int i = 0; i < xjson_array_len(diags); i++) {
+        XrJsonValue *d = xjson_array_get(diags, i);
+        const char *msg = d ? xjson_get_string(d, "message") : NULL;
+        if (msg && strstr(msg, "closure cycle")) {
+            found = 1;
+            /* The message has to carry the fix, not just the complaint: this
+             * shape has no `weak` answer, only the defer idiom. */
+            ASSERT(strstr(msg, "defer") != NULL);
+            ASSERT(xjson_get_object(d, "range") != NULL);
+            break;
+        }
+    }
+    ASSERT(found);
+
+    xjson_free(diags);
+    xlsp_document_close(server, "file:///cycle.xr");
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -224,6 +275,7 @@ int main(void) {
     RUN_TEST(diagnostics_valid_code);
     RUN_TEST(diagnostics_syntax_error);
     RUN_TEST(diagnostics_null_document);
+    RUN_TEST(diagnostics_closure_cycle_reaches_lsp);
 
     // Enable/Disable
     RUN_TEST(diagnostics_disabled_config);

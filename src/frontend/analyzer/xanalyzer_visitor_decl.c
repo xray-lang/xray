@@ -4681,27 +4681,190 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
 #define CYC_ON_STACK 1
 #define CYC_DONE 2
 
-/* Check if field type refers to a class declared in this module. */
-static const char *extract_class_name_from_type(XrType *type) {
-    if (!type)
-        return NULL;
+/* Edges out of one field's type.
+ *
+ * The rule is one-sided on purpose: over-marking costs a cheap flag test,
+ * MISSING a mark is a correctness hole — an unmarked class never becomes a
+ * cycle candidate, so nothing downstream can see its cycles at all.
+ *
+ * This replaced a "return the first class name found" helper whose losses were
+ * all missed marks: it stopped at the first matching union member, never
+ * looked inside Map/Set (a `children: Map<string, Node>` produced no edge at
+ * all), had no way to say "this field can hold any object", and matched
+ * classes by name so two modules' `Node` were the same node.
+ */
+#define XA_CYCLE_MAX_EDGES 64
+#define XA_CYCLE_TYPE_DEPTH_MAX 16
+
+typedef struct {
+    /* Concrete references. XrClassInfo is the identity where the type carries
+     * one; the name is the fallback for types that only got a name. */
+    XrClassInfo *edge_info[XA_CYCLE_MAX_EDGES];
+    const char *edge_name[XA_CYCLE_MAX_EDGES];
+    int edge_count;
+    /* A field that can hold an arbitrary object yields no usable edge: Json,
+     * and function/closure types (a closure captures whatever it likes). The
+     * holder becomes a candidate on its own, because the graph cannot rule a
+     * cycle out. Edge-table overflow sets this too. */
+    bool opaque;
+} CycleEdgeSet;
+
+static void cycle_edge_add(CycleEdgeSet *set, XrClassInfo *info, const char *name) {
+    if (!set || (!info && !name))
+        return;
+    for (int i = 0; i < set->edge_count; i++) {
+        if (info && set->edge_info[i] == info)
+            return;
+        if (!info && !set->edge_info[i] && set->edge_name[i] && name &&
+            strcmp(set->edge_name[i], name) == 0)
+            return;
+    }
+    if (set->edge_count >= XA_CYCLE_MAX_EDGES) {
+        set->opaque = true; /* out of room: fail towards marking */
+        return;
+    }
+    set->edge_info[set->edge_count] = info;
+    set->edge_name[set->edge_count] = name;
+    set->edge_count++;
+}
+
+static void cycle_collect_type_edges(XaAnalyzer *analyzer, XrType *type, CycleEdgeSet *set,
+                                     int depth);
+
+/* A struct is a value type: it has no reference-count identity of its own, so
+ * it can never BE a member of a cycle. It can still be a step ALONG one, so it
+ * is not a graph node but a pass-through, and the edges out of its fields are
+ * attributed to the class holding it. (Skipping structs outright was the old
+ * behaviour; treating one as a node would be wrong in the other direction.)
+ *
+ * Today this is DEFENSIVE rather than load-bearing. Measured 2026-08-01, the
+ * analyzer already rejects the field types that would make a struct part of a
+ * cycle:
+ *
+ *   struct S { label: string }     accepted
+ *   struct S { items: Array<int> } rejected, "cannot use a dynamic container type"
+ *   struct S { parent: Node? }     rejected, "only scalar values, raw pointers,
+ *                                   fixed arrays and other structs are supported"
+ *
+ * so `class Node { data: S }` + `struct S { parent: Node? }` cannot currently
+ * be written. The pass-through is still the right shape: it costs nothing, it
+ * is what keeps the walk from mistaking a struct for a node, and it starts
+ * carrying real cycles the moment the field restriction is relaxed. */
+static void cycle_collect_struct_edges(XaAnalyzer *analyzer, XrClassInfo *info, CycleEdgeSet *set,
+                                       int depth) {
+    if (!analyzer || !info || depth >= XA_CYCLE_TYPE_DEPTH_MAX) {
+        if (set && depth >= XA_CYCLE_TYPE_DEPTH_MAX)
+            set->opaque = true;
+        return;
+    }
+    /* A boxed self-referential struct (`struct S { child: S? }`) would recur
+     * forever without the depth bound above; unboxed self-containment is
+     * impossible (infinite size) and rejected earlier. */
+    for (XrClassInfo *c = info; c; c = c->base) {
+        for (int f = 0; f < c->field_count; f++) {
+            XaSymbol *field_sym = c->fields[f];
+            if (!field_sym || field_sym->is_static)
+                continue;
+            XaSymbolLinks *fl = xa_analyzer_get_links(analyzer, field_sym);
+            if (fl && fl->type)
+                cycle_collect_type_edges(analyzer, fl->type, set, depth + 1);
+        }
+    }
+}
+
+static void cycle_collect_type_edges(XaAnalyzer *analyzer, XrType *type, CycleEdgeSet *set,
+                                     int depth) {
+    if (!type || !set)
+        return;
+    if (depth >= XA_CYCLE_TYPE_DEPTH_MAX) {
+        set->opaque = true;
+        return;
+    }
+
     switch (type->kind) {
         case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return type->instance.class_name;
-        case XR_KIND_UNION:
-            /* Check all union members. */
-            for (int i = 0; i < type->union_type.member_count; i++) {
-                const char *name = extract_class_name_from_type(type->union_type.members[i]);
-                if (name)
-                    return name;
+        case XR_KIND_INSTANCE: {
+            XrClassInfo *info = type->instance.class_ref;
+            /* struct_layout is the discriminator, NOT the type's is_value_type
+             * flag: a field whose type refers to a struct carries
+             * is_value_type == 0, while the struct's own class symbol carries
+             * 1. Reading the field's flag looked past every struct. */
+            if (info && info->struct_layout) {
+                /* Pass through the struct rather than pointing at it. */
+                cycle_collect_struct_edges(analyzer, info, set, depth);
+            } else {
+                cycle_edge_add(set, info, type->instance.class_name);
             }
-            return NULL;
+            /* Generic arguments are reachable through the instance's fields. */
+            for (int i = 0; i < type->instance.type_arg_count; i++)
+                cycle_collect_type_edges(analyzer, type->instance.type_args[i], set, depth + 1);
+            return;
+        }
+        case XR_KIND_UNION:
+            /* EVERY member, not the first one that happens to be a class. */
+            for (int i = 0; i < type->union_type.member_count; i++)
+                cycle_collect_type_edges(analyzer, type->union_type.members[i], set, depth + 1);
+            return;
         case XR_KIND_ARRAY:
-            return extract_class_name_from_type(type->container.element_type);
+        case XR_KIND_SLICE:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+            cycle_collect_type_edges(analyzer, type->container.element_type, set, depth + 1);
+            return;
+        case XR_KIND_FIXED_ARRAY:
+            cycle_collect_type_edges(analyzer, type->fixed_array.element_type, set, depth + 1);
+            return;
+        case XR_KIND_MAP:
+            cycle_collect_type_edges(analyzer, type->map.key_type, set, depth + 1);
+            cycle_collect_type_edges(analyzer, type->map.value_type, set, depth + 1);
+            return;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++)
+                cycle_collect_type_edges(analyzer, type->tuple.element_types[i], set, depth + 1);
+            return;
+        case XR_KIND_JSON:
+        case XR_KIND_FUNCTION:
+            /* Holds anything: a Json slot takes any object, a closure captures
+             * whatever it was built over. No edge is derivable, so the holder
+             * is a candidate unconditionally. */
+            set->opaque = true;
+            return;
+        case XR_KIND_TYPE_PARAM:
+            /* Erased here; the monomorphic instance carries the real type. Its
+             * constraint is the only thing visible, and a constrained type
+             * parameter can still be bound to a cycle participant. */
+            set->opaque = true;
+            return;
         default:
-            return NULL;
+            return;
     }
+}
+
+/* Which node in class_syms does this edge point at?
+ *
+ * XrClassInfo identity first: matching by name alone made two modules' `Node`
+ * the same node, which could mark the wrong class and miss the right one. The
+ * name is only consulted for a type that carries no class_ref, and then EVERY
+ * same-named node is reported rather than the first — an ambiguous name must
+ * over-mark, never pick one and stop. Returns the count reported. */
+static int cycle_resolve_edge(XaAnalyzer *analyzer, XaSymbol **class_syms, int count,
+                              XrClassInfo *want_info, const char *want_name, int *out,
+                              int out_cap) {
+    int n = 0;
+    for (int j = 0; j < count && n < out_cap; j++) {
+        if (!class_syms[j])
+            continue;
+        XaSymbolLinks *jl = xa_analyzer_get_links(analyzer, class_syms[j]);
+        XrClassInfo *jinfo = jl ? jl->class_info : NULL;
+        if (want_info) {
+            if (jinfo == want_info)
+                out[n++] = j;
+            continue;
+        }
+        if (want_name && class_syms[j]->name && strcmp(class_syms[j]->name, want_name) == 0)
+            out[n++] = j;
+    }
+    return n;
 }
 
 /* Recursive DFS marking. Returns true if any node in the subtree is on-stack
@@ -4717,35 +4880,43 @@ static bool cycle_dfs(XaAnalyzer *analyzer, XaSymbol **class_syms, uint8_t *stat
 
     XrClassInfo *info = links->class_info;
 
-    /* Iterate instance fields, find references to other classes. */
-    for (int f = 0; f < info->field_count; f++) {
-        XaSymbol *field_sym = info->fields[f];
-        if (!field_sym || field_sym->is_static)
-            continue;
-        XaSymbolLinks *fl = xa_analyzer_get_links(analyzer, field_sym);
-        if (!fl || !fl->type)
-            continue;
-
-        const char *ref_name = extract_class_name_from_type(fl->type);
-        if (!ref_name)
-            continue;
-
-        /* Self-reference: A has field of type A → cycle candidate. */
-        if (info->name && strcmp(ref_name, info->name) == 0) {
-            is_candidate[idx] = true;
-            found_cycle = true;
-            continue;
+    CycleEdgeSet set = {0};
+    /* Inherited fields are not in info->fields, so walk the base chain: a
+     * cycle through a field declared on a superclass is still a cycle. */
+    for (XrClassInfo *c = info; c; c = c->base) {
+        for (int f = 0; f < c->field_count; f++) {
+            XaSymbol *field_sym = c->fields[f];
+            if (!field_sym || field_sym->is_static)
+                continue;
+            XaSymbolLinks *fl = xa_analyzer_get_links(analyzer, field_sym);
+            if (!fl || !fl->type)
+                continue;
+            cycle_collect_type_edges(analyzer, fl->type, &set, 0);
         }
+    }
 
-        /* Find the referenced class in the symbol list. */
-        for (int j = 0; j < count; j++) {
-            if (j == idx)
-                continue;
-            if (!class_syms[j] || !class_syms[j]->name)
-                continue;
-            if (strcmp(class_syms[j]->name, ref_name) != 0)
-                continue;
+    /* A field that can hold any object: no edge is derivable, so this class is
+     * a candidate on its own. */
+    if (set.opaque) {
+        is_candidate[idx] = true;
+        found_cycle = true;
+    }
 
+    for (int e = 0; e < set.edge_count; e++) {
+        int hits[XA_CYCLE_MAX_EDGES];
+        int nhits = cycle_resolve_edge(analyzer, class_syms, count, set.edge_info[e],
+                                       set.edge_name[e], hits, XA_CYCLE_MAX_EDGES);
+        for (int h = 0; h < nhits; h++) {
+            int j = hits[h];
+            if (j == idx) {
+                /* Self-reference. `class Node { children: Array<Node> }` is a
+                 * tree, but the TYPE graph has a self-loop and L0 is a
+                 * type-level approximation — it cannot and must not try to
+                 * tell a downward edge from an upward one. */
+                is_candidate[idx] = true;
+                found_cycle = true;
+                continue;
+            }
             if (state[j] == CYC_ON_STACK) {
                 /* Back edge: cycle found. Mark both. */
                 is_candidate[idx] = true;
@@ -4762,7 +4933,6 @@ static bool cycle_dfs(XaAnalyzer *analyzer, XaSymbol **class_syms, uint8_t *stat
                 is_candidate[idx] = true;
                 found_cycle = true;
             }
-            break;
         }
     }
 

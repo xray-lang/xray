@@ -56,6 +56,22 @@ typedef struct {
     int capacity;
 } EaScope;
 
+/* Outer names a function-expression body referenced, for the closure-cycle
+ * check (task 247 A.6). in_fn_closure alone cannot say WHICH closure captured
+ * a name — nested closures would blend into one set — so the collection is a
+ * stack, pushed and popped alongside the closure walk. */
+#define EA_CAPTURE_STACK_MAX 16
+#define EA_CAPTURE_NAMES_MAX 32
+
+typedef struct {
+    const char *names[EA_CAPTURE_NAMES_MAX];
+    int count;
+    /* More distinct outer names than we track. The check then declines to
+     * fire: A.6's rule is zero false positives, and an incomplete set can
+     * only produce those. */
+    bool overflowed;
+} EaCaptureSet;
+
 typedef struct {
     EaScope *scopes;        // dynamic array, grows on demand
     int depth;              // current scope index (0 = top-level)
@@ -68,7 +84,39 @@ typedef struct {
     int fn_scope_boundary;  // scope depth where the function expression starts
     XaAnalyzer *analyzer;   // optional: for emitting diagnostics
     const char *file_path;  // source file path for diagnostic locations
+
+    /* Closure-cycle check state. */
+    EaCaptureSet capture_stack[EA_CAPTURE_STACK_MAX];
+    int capture_depth;              // 0 = not inside a collected closure
+    bool capture_stack_overflowed;  // nesting deeper than the stack; stop collecting
+    EaCaptureSet last_closure;      // capture set of the closure that just finished
+    bool last_closure_valid;
 } EaContext;
+
+static void ea_capture_note(EaContext *ctx, const char *name) {
+    if (ctx->capture_depth <= 0 || !name)
+        return;
+    EaCaptureSet *set = &ctx->capture_stack[ctx->capture_depth - 1];
+    for (int i = 0; i < set->count; i++) {
+        if (set->names[i] && strcmp(set->names[i], name) == 0)
+            return;
+    }
+    if (set->count >= EA_CAPTURE_NAMES_MAX) {
+        set->overflowed = true;
+        return;
+    }
+    set->names[set->count++] = name;
+}
+
+static bool ea_capture_set_contains(const EaCaptureSet *set, const char *name) {
+    if (!set || set->overflowed || !name)
+        return false;
+    for (int i = 0; i < set->count; i++) {
+        if (set->names[i] && strcmp(set->names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
 
 /*
  * Emit an analyzer diagnostic if an analyzer handle is attached.
@@ -321,10 +369,15 @@ static void ea_mark_borrowed_capture_for_closure(EaContext *ctx, AstNode *ref_no
 static void ea_mark_named_access(EaContext *ctx, AstNode *node, const char *name) {
     if ((!ctx->in_go_closure && !ctx->in_fn_closure) || !name || ea_is_local_name(ctx, name))
         return;
-    if (ctx->in_go_closure)
+    if (ctx->in_go_closure) {
+        /* `go` closures are excluded from the closure-cycle check: they are
+         * already barred from capturing an outer `var` at all, so the shape
+         * cannot arise on this path. */
         ea_mark_capture_for_go(ctx, node, name);
-    else if (ctx->in_fn_closure)
+    } else if (ctx->in_fn_closure) {
+        ea_capture_note(ctx, name);
         ea_mark_borrowed_capture_for_closure(ctx, node, name);
+    }
 }
 
 static void ea_mark_destructure_targets(EaContext *ctx, AstNode *node,
@@ -475,14 +528,84 @@ static void ea_walk_function_expr_closure(EaContext *ctx, FunctionDeclNode *fn) 
     ctx->func_boundary = ctx->depth;
     ctx->in_fn_closure = true;
     ctx->fn_scope_boundary = ctx->depth;
+
+    /* One capture set per closure, so a nested closure's captures do not leak
+     * into the enclosing one's. */
+    bool collecting = ctx->capture_depth < EA_CAPTURE_STACK_MAX;
+    if (collecting) {
+        ctx->capture_stack[ctx->capture_depth].count = 0;
+        ctx->capture_stack[ctx->capture_depth].overflowed = false;
+        ctx->capture_depth++;
+    } else {
+        ctx->capture_stack_overflowed = true;
+    }
+
     ea_register_params(ctx, fn);
     if (fn->body)
         ea_walk(ctx, fn->body);
+
+    if (collecting) {
+        ctx->capture_depth--;
+        /* Hand the finished set to the caller: an assignment whose value is
+         * this closure literal is walked immediately after it. */
+        ctx->last_closure = ctx->capture_stack[ctx->capture_depth];
+        ctx->last_closure_valid = true;
+    } else {
+        ctx->last_closure_valid = false;
+    }
 
     ctx->func_boundary = old_boundary;
     ctx->in_fn_closure = old_in_closure;
     ctx->fn_scope_boundary = old_closure_boundary;
     ea_pop_scope(ctx);
+}
+
+/* `x.field = <closure literal>` where the closure captured `x` itself.
+ *
+ * The object and the closure then keep each other alive, and nothing reclaims
+ * that: `weak` is a field modifier and cannot reach a capture edge, so the
+ * only fix is to break the reference explicitly (spec 16.8's `defer` idiom).
+ * Both halves are dataflow facts right here — the capture set from the walk
+ * just finished, the target from the assignment — so it is a hard error rather
+ * than something to find at runtime.
+ *
+ * The rule is deliberately narrow. It fires only when the assignment target is
+ * a plain variable that appears in the capture set. One level of indirection
+ * (`b.child.handler = C`), storage through a container, and a closure passed
+ * to another function before being stored all go unreported and are left to
+ * the runtime detector. This check is judged on having no false positives:
+ * matching is by NAME, not by SSA identity, so a wider rule would start
+ * accusing shadowed names. Under-reporting has a backstop; a diagnostic that
+ * cries wolf does not. */
+static void ea_check_closure_cycle(EaContext *ctx, AstNode *node) {
+    if (!ctx->analyzer || !ctx->last_closure_valid)
+        return;
+    AstNode *object = node->as.member_set.object;
+    AstNode *value = node->as.member_set.value;
+    if (!object || !value || value->type != AST_FUNCTION_EXPR)
+        return;
+    if (object->type != AST_VARIABLE)
+        return;
+    const char *root = object->as.variable.name;
+    if (!ea_capture_set_contains(&ctx->last_closure, root))
+        return;
+
+    const char *field = node->as.member_set.member;
+    char msg[512];
+    snprintf(msg, sizeof(msg),
+             "closure cycle: this closure captures '%s' and is stored into '%s.%s'\n"
+             "Xray does not reclaim reference cycles, and `weak` is a field modifier "
+             "that cannot break a capture edge.\n"
+             "hint: clear the field when the scope ends — defer %s.%s = null — "
+             "or pass '%s' as a parameter instead of capturing it",
+             root, root, field ? field : "?", root, field ? field : "?", root);
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = node->line,
+        .column = node->column,
+    };
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CLOSURE_CYCLE, msg,
+                               &loc);
 }
 
 static void ea_walk_go_like_spawn(EaContext *ctx, AstNode *expr) {
@@ -711,7 +834,10 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         case AST_MEMBER_SET:
             ea_walk(ctx, node->as.member_set.object);
+            ctx->last_closure_valid = false;
             ea_walk(ctx, node->as.member_set.value);
+            ea_check_closure_cycle(ctx, node);
+            ctx->last_closure_valid = false;
             break;
 
         case AST_ARRAY_LITERAL:
@@ -867,20 +993,14 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         }
 
         // ---- Variable reference: check for go-closure captures ----
-        case AST_VARIABLE: {
-            if (ctx->in_go_closure) {
-                const char *name = node->as.variable.name;
-                if (name && !ea_is_local_name(ctx, name)) {
-                    ea_mark_capture_for_go(ctx, node, name);
-                }
-            } else if (ctx->in_fn_closure) {
-                const char *name = node->as.variable.name;
-                if (name && !ea_is_local_name(ctx, name)) {
-                    ea_mark_borrowed_capture_for_closure(ctx, node, name);
-                }
-            }
+        case AST_VARIABLE:
+            /* Routed through ea_mark_named_access rather than calling the two
+             * per-kind handlers directly: that function is the single point
+             * where "an outer name was referenced from inside a closure" is
+             * known, and the closure-cycle check (A.6) collects there. An
+             * inlined copy of the same test silently bypassed the collection. */
+            ea_mark_named_access(ctx, node, node->as.variable.name);
             break;
-        }
 
         // ---- Leaf nodes ----
         case AST_LITERAL_INT:

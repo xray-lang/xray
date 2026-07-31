@@ -1013,6 +1013,36 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
+/* ========== L0 cycle-candidate marking (task 247 phase A) ========== */
+
+/* is_cycle_candidate is the ONLY truth about L0 marking. Runtime residue is a
+ * downstream proxy that stops working once task 247 phase E removes the cycle
+ * collector, so these assert the flag directly. */
+static bool analyzer_class_is_cycle_candidate(XaAnalyzer *analyzer, const char *class_name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, class_name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, class_name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, class_name);
+    if (!sym)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    return links && links->type && links->type->is_cycle_candidate;
+}
+
+static XaAnalyzer *analyzer_run_source(const char *file, const char *source) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    if (!a)
+        return NULL;
+    AstNode *program = xr_parse(g_session, source);
+    if (!program) {
+        xa_analyzer_free(a);
+        return NULL;
+    }
+    xa_analyzer_analyze(a, file, program);
+    return a;
+}
+
 static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     int count = 0;
     XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &count);
@@ -2483,6 +2513,99 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
 
     xa_analyzer_free(a);
     setup_pool();
+}
+
+/* Task 247 phase A: the six field shapes that reach a class. Every one of
+ * these was a MISSED mark before — an unmarked class never becomes a cycle
+ * candidate, so nothing downstream (collector today, detector after phase E)
+ * can see its cycles. */
+TEST(cycle_candidate_marks_every_field_shape) {
+    XaAnalyzer *a = analyzer_run_source("cycle_field_shapes.xr",
+                                        /* direct: was already marked */
+                                        "class DirectA { peer: DirectB? }\n"
+                                        "class DirectB { peer: DirectA? }\n"
+                                        /* Array element: was already marked */
+                                        "class ArrA { peers: Array<ArrB> }\n"
+                                        "class ArrB { peers: Array<ArrA> }\n"
+                                        /* Map value: G1, produced no edge */
+                                        "class MapA { peers: Map<string, MapB> }\n"
+                                        "class MapB { peers: Map<string, MapA> }\n"
+                                        /* Map key: G1, produced no edge */
+                                        "class KeyA { peers: Map<KeyB, int> }\n"
+                                        "class KeyB { peers: Map<KeyA, int> }\n"
+                                        /* Set element: G1, produced no edge */
+                                        "class SetA { peers: Set<SetB> }\n"
+                                        "class SetB { peers: Set<SetA> }\n"
+                                        /* union beyond the first member: G3 */
+                                        "class UniA { peer: int | string | UniB | null }\n"
+                                        "class UniB { peer: int | string | UniA | null }\n"
+                                        /* tuple member */
+                                        "class TupA { peer: (int, TupB)? }\n"
+                                        "class TupB { peer: (int, TupA)? }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "DirectA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "DirectB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ArrA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ArrB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "MapA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "MapB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "KeyA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "KeyB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "SetA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "SetB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "UniA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "UniB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TupA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TupB"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(cycle_candidate_follows_inherited_fields) {
+    XaAnalyzer *a = analyzer_run_source("cycle_inherited_field.xr",
+                                        "class Base { peer: Derived?\n"
+                                        "  constructor() { this.peer = null } }\n"
+                                        "class Derived extends Base { n: int\n"
+                                        "  constructor() { super(); this.n = 0 } }\n"
+                                        "class LoneBase { n: int\n"
+                                        "  constructor() { this.n = 0 } }\n"
+                                        "class LoneDerived extends LoneBase { label: string\n"
+                                        "  constructor() { super(); this.label = \"\" } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "Base"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "Derived"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "LoneBase"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "LoneDerived"));
+
+    xa_analyzer_free(a);
+}
+
+/* A.5's second requirement, written down so nobody "optimizes" it away:
+ *
+ * `class Node { children: Array<Node> }` is a TREE, but the TYPE graph has a
+ * self-loop, and it must still be marked. L0 is a type-level approximation; it
+ * cannot tell a downward edge from an upward one, and any heuristic that tried
+ * would start missing real cycles. This is also what bounds the
+ * no_reference_cycles contract (247 section 9.3): a recursive type does not
+ * pass, and the diagnostic says "cannot prove", not "cycle detected". */
+TEST(cycle_candidate_marks_recursive_tree_types) {
+    XaAnalyzer *a = analyzer_run_source("cycle_recursive_tree.xr",
+                                        "class TreeNode { children: Array<TreeNode>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class ListNode { next: ListNode?\n"
+                                        "  constructor() { this.next = null } }\n"
+                                        "class Leaf { value: int\n"
+                                        "  constructor() { this.value = 0 } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TreeNode"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ListNode"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Leaf"));
+
+    xa_analyzer_free(a);
 }
 
 TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
@@ -6338,6 +6461,9 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
+    RUN_TEST(cycle_candidate_marks_every_field_shape);
+    RUN_TEST(cycle_candidate_follows_inherited_fields);
+    RUN_TEST(cycle_candidate_marks_recursive_tree_types);
     RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);

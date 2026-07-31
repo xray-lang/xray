@@ -1,0 +1,31 @@
+// 247_closure_cycle_direct.xr
+// Expected: compile error — a closure captures `b` and is then stored into a
+// field of `b`, so the object and the closure keep each other alive.
+//
+// Xray does not reclaim reference cycles (spec 16.8), and `weak` is a field
+// modifier that cannot reach a capture edge — this shape has no language
+// mechanism to break it. Both halves are dataflow facts at the assignment
+// (task 247 A.6), so it is rejected at compile time rather than left to the
+// runtime detector.
+
+class Button {
+    onClick: () -> int
+    clicks: int
+
+    constructor() {
+        this.onClick = fn() -> int { return 0 }
+        this.clicks = 0
+    }
+
+    render() -> int {
+        this.clicks = this.clicks + 1
+        return this.clicks
+    }
+}
+
+fn install() {
+    var b = Button()
+    b.onClick = fn() -> int { return b.render() }
+}
+
+install()
