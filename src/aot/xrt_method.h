@@ -35,6 +35,10 @@
 
 extern XR_THREAD_LOCAL XrValue xrt_pending_error;
 
+/* Defined by the exception layer (xrt_exception.h hosted, xrt_core_freestanding.h
+ * freestanding); xrt.h orders that header after this one. */
+static inline int xrt_has_pending_error(void);
+
 static inline void xrt_set_builtin_enum_error(const char *enum_name, const char *member_name,
                                               uint32_t member_index) {
     XrAotEnumAggregate err =
@@ -311,6 +315,33 @@ static inline XrValue xrt_json_collect(XrValue recv, uint8_t kind) {
     return arr;
 }
 
+/* Return the receiver as an OWNED (+1) result.
+ *
+ * These dispatchers have no single ownership convention, and the callers do not
+ * either: generated C stores a method result in a frame slot and releases it
+ * later, but discards a statement-position result without releasing it. So an
+ * arm that answers with its own receiver cannot be uniformly +0 or +1 — it has
+ * to match how that particular result is consumed.
+ *
+ * Used where the result provably lands in an owned slot. `iterator()` on an
+ * iterator is the case that forced this: `for (v in gen)` inside a generator
+ * puts both the generator and the iterator it returns into frame slots that
+ * release_frame releases, so returning the receiver borrowed left one refcount
+ * with two owners. nested_generator.xr freed the iterator when the loop ended
+ * and read it again when the frame was torn down.
+ *
+ * Array.reverse() and StringBuilder.clear() have the same shape but are
+ * normally called as statements, where the result is discarded unreleased;
+ * retaining there would leak. They stay +0 until the discard path releases what
+ * it drops, which is the real fix and a separate change.
+ *
+ * A no-op for values ARC does not track, since xrt_retain early-returns on them.
+ */
+static inline XrValue xrt_method_return_self(XrValue recv) {
+    xrt_retain(recv);
+    return recv;
+}
+
 /* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
@@ -384,6 +415,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_SORT)
             return xrt_array_sort(recv, NULL);
+        if (sym == XRT_SYM_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_VALUES);
+        if (sym == XRT_SYM_ENTRIES_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_PAIRS);
     }
     if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
@@ -443,7 +478,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (recv.tag == XR_TAG_ITERATOR) {
         xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
         if (sym == XRT_SYM_ITERATOR)
-            return recv;
+            return xrt_method_return_self(recv);
         if (sym == XRT_SYM_HAS_NEXT)
             return XR_FROM_BOOL(xrt_iterator_has_next(it));
         if (sym == XRT_SYM_NEXT)
@@ -717,8 +752,14 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (arg0.i < 0)
             xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Iterator.nth index must be non-negative");
         for (int64_t i = 0; i <= arg0.i; i++) {
-            if (!xrt_iterator_has_next(it))
-                xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Iterator.nth index out of bounds");
+            /* Same contract as next(): nth(index) needs index+1 elements left,
+             * and running dry is a protocol violation, not a bad index. A
+             * generator that ran dry by failing already reported its own error
+             * through hasNext(); do not bury that under the violation. */
+            if (!xrt_iterator_has_next(it) &&
+                !(it->kind == XRT_ITER_GENERATOR && xrt_has_pending_error()))
+                xrt_throw_error(XR_ERR_ITERATOR_EXHAUSTED,
+                                XR_ERROR_CORE_ITERATOR_EXHAUSTED_NTH_MSG);
             XrValue value = xrt_iterator_next(it);
             if (i == arg0.i)
                 return value;

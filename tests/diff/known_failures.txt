@@ -51,7 +51,8 @@ tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
 tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
 
 # --- Group 4: AOT crash ------------------------------------------------------
-# The AOT binary dies on signal 5 while the VM completes normally. A crash in
-# generated code is the most severe entry in this file; it should be the first
-# one removed.
-tests/diff/cases/semantics/generator/nested_generator.xr
+# Cleared 2026-07-31. nested_generator.xr died on signal 5 (heap-use-after-free
+# in libmalloc) because iterator() on an iterator returned the receiver without
+# retaining it: `for (v in gen)` inside a generator put the generator and its
+# iterator into two frame slots that both get released. See
+# xrt_method_return_self in src/aot/xrt_method.h.
