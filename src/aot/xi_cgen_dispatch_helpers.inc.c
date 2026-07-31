@@ -10938,6 +10938,7 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         }
     }
     emit_class_native_type_derive_init(ctx, out, cd, prefix, "_tid");
+    emit_class_user_hash_eq_init(ctx, out, cd, prefix, "_tid");
     fprintf(out, "XR_FROM_INT(_tid); })");
 }
 
@@ -12720,12 +12721,17 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             return;
         }
     }
+    /* The _ctx form boxes a native-pointer operand into a tagged XrValue; the
+     * plain form does not, which left an instance key as a bare void * passed to
+     * xrt_index_set's XrValue parameter. Mirror the index-get path so a
+     * user-Hashable instance key round-trips (its by-value hash/eq then fire in
+     * the runtime map/set core). */
     fprintf(out, "xrt_index_set(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 

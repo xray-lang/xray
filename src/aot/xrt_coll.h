@@ -1552,6 +1552,15 @@ static inline uint64_t xrt_hash_value(XrValue v) {
         }
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
+        case XR_TAG_PTR: {
+            /* A hand-written hash() keys the instance by value; the compiled
+             * boxed method is recorded on the class. Instances without one fall
+             * to identity below. */
+            XrtUserHashFn hash_fn = xrt_instance_user_hash_fn(v);
+            if (hash_fn)
+                return (uint64_t) (uint32_t) hash_fn(NULL, v.ptr);
+            return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
+        }
         case XR_TAG_AGG_REF:
             if (XR_IS_ARRAY_REF(v)) {
                 if (!v.ptr)
@@ -1731,15 +1740,29 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
     m->class_name = NULL;
 }
 
+/* Instance equality that honors a hand-written operator ==. Both keys are the
+ * same class (their equal hashes put them in one bucket), so the query's eq_fn
+ * governs; falls through to xrt_eq (reference identity) when the class has none.
+ * Pointers are borrowed, matching the specialized-plan convention. */
+static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
+    if (query.tag == XR_TAG_PTR && query.heap_type == XR_TINSTANCE && query.ptr && stored.ptr &&
+        stored.tag == XR_TAG_PTR && stored.heap_type == XR_TINSTANCE) {
+        XrtUserEqFn eq_fn = xrt_instance_user_eq_fn(query);
+        if (eq_fn)
+            return eq_fn(NULL, stored.ptr, query.ptr) != 0;
+    }
+    return xrt_eq(stored, query) != 0;
+}
+
 /* Candidate comparators for the shared Swiss probe (xr_{map,set}_lookup_slot):
- * type tag then canonical equality. xrt_eq is type-aware, so the tag pre-check
- * only short-circuits type-mismatched hash collisions. Return int (not bool) to
- * match the runtime's bool-free generated-C convention. */
+ * type tag then canonical equality. xrt_value_key_eq is type-aware, so the tag
+ * pre-check only short-circuits type-mismatched hash collisions. Return int (not
+ * bool) to match the runtime's bool-free generated-C convention. */
 static inline int xrt_map_key_eq(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
-    return e->key_tt == key_tt && xrt_eq(e->key, key) != 0;
+    return e->key_tt == key_tt && xrt_value_key_eq(e->key, key);
 }
 static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
-    return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
+    return e->val_tt == val_tt && xrt_value_key_eq(e->value, value);
 }
 
 typedef struct xrt_closure xrt_closure_t;

@@ -10999,6 +10999,25 @@ static void cg_func_reach_mark_hash_eq_roots(XiCgenCtx *ctx) {
         cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->hash_func_id, NULL));
         cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, plan->eq_func_id, NULL));
     }
+    /* Also seed hash() / operator == for every class that declares them. The
+     * runtime type table dispatches to these by class for a user-Hashable key
+     * (xrt_type_set_user_hash_eq), an edge no static plan or direct call site
+     * exposes, so without seeding they would be pruned and the type-table setup
+     * would reference undefined symbols. */
+    for (int mi = 0; mi < ctx->all_nmodules; mi++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[mi] : NULL;
+        if (!mod || !mod->classes)
+            continue;
+        for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
+            const XiClassData *cd = mod->classes[ci];
+            const XiFunc *hash_fn = cg_class_instance_method_func(ctx, cd, "hash");
+            const XiFunc *eq_fn = cg_class_instance_method_func(ctx, cd, "==");
+            if (hash_fn && eq_fn) {
+                cg_func_reach_mark_root(ctx, hash_fn);
+                cg_func_reach_mark_root(ctx, eq_fn);
+            }
+        }
+    }
 }
 
 static void cg_func_reach_mark_dispatch_roots(XiCgenCtx *ctx) {

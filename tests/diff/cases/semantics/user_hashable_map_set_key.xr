@@ -1,0 +1,44 @@
+// user_hashable_map_set_key.xr
+// VM/AOT differential coverage for a class used as a Map key / Set element via
+// its own hash() + operator ==.
+//
+// The runtime keys such instances by value, not by object address, in both
+// backends: the VM invokes the methods reentrantly through the value hash/eq
+// hooks, and AOT records the compiled hash/eq on the class type table and the
+// generic map/set runtime dispatches on it. A fresh lookup key built from the
+// same fields must find the stored entry identically on both.
+
+class Key implements Hashable {
+    a: int
+    b: string
+    constructor(a: int, b: string) {
+        this.a = a
+        this.b = b
+    }
+    operator ==(other: Key) -> bool {
+        return this.a == other.a && this.b == other.b
+    }
+    hash() -> int {
+        return this.a * 31 + len(this.b)
+    }
+}
+
+var m = Map<Key, string>()
+m[Key(1, "x")] = "one"
+m[Key(2, "yy")] = "two"
+m[Key(1, "x")] = "ONE"  // overwrite by value
+print(len(m))
+print(m[Key(1, "x")])
+print(m[Key(2, "yy")])
+print(m.containsKey(Key(1, "x")))
+print(m.containsKey(Key(3, "z")))
+print(m.delete(Key(2, "yy")))
+print(len(m))
+
+var s = Set<Key>()
+s.add(Key(5, "p"))
+s.add(Key(5, "p"))
+s.add(Key(6, "q"))
+print(len(s))
+print(s.contains(Key(5, "p")))
+print(s.contains(Key(9, "z")))

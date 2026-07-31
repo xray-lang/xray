@@ -3473,6 +3473,43 @@ static const XiClassData *cg_class_data_for_type_name(XiCgenCtx *ctx, const XrTy
     return cg_class_native_data_for_type(ctx, type);
 }
 
+/* Compiled XiFunc for an instance method of `cd` by name, or NULL. */
+static const XiFunc *cg_class_instance_method_func(XiCgenCtx *ctx, const XiClassData *cd,
+                                                   const char *method_name) {
+    if (!cd || !cd->methods || !cd->child_idx || !method_name)
+        return NULL;
+    const XiModule *mod = cg_class_native_module_for_data(ctx, cd);
+    if (!mod || !mod->init)
+        return NULL;
+    for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+        const XiClassMethod *m = &cd->methods[mi];
+        if (m->is_static || !m->name || strcmp(m->name, method_name) != 0)
+            continue;
+        uint16_t child_idx = cd->child_idx[mi];
+        if (child_idx >= mod->init->nchildren)
+            return NULL;
+        return mod->init->children[child_idx];
+    }
+    return NULL;
+}
+
+/* Record a class's own hash() / operator == on the runtime type table so the
+ * generic Map/Set path keys its instances by value, whatever creation form the
+ * container came from. The typed method bodies take the receiver as its native
+ * pointer, ABI-compatible with the void* hash/eq slots. */
+static void emit_class_user_hash_eq_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                         const char *prefix, const char *tid_expr) {
+    const XiFunc *hash_func = cg_class_instance_method_func(ctx, cd, "hash");
+    const XiFunc *eq_func = cg_class_instance_method_func(ctx, cd, "==");
+    if (!hash_func || !eq_func)
+        return;
+    fprintf(out, "xrt_type_set_user_hash_eq(%s, (XrtUserHashFn)", tid_expr);
+    emit_fname(ctx, out, prefix, hash_func);
+    fprintf(out, ", (XrtUserEqFn)");
+    emit_fname(ctx, out, prefix, eq_func);
+    fprintf(out, "); ");
+}
+
 static bool cg_class_native_value_has_ptr_storage(XiCgenCtx *ctx, const XiValue *v) {
     return cg_class_native_value_type_data(ctx, v) &&
            cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
