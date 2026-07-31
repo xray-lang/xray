@@ -6583,9 +6583,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         owner && owner->enum_type.enum_name ? owner->enum_type.enum_name : "Enum",
                         param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
                 } else {
-                    snprintf(msg, sizeof(msg),
-                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                             slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                    char reason[192];
+                    if (xr_type_record_mismatch_reason(param_type, arg_type, reason,
+                                                       sizeof(reason))) {
+                        snprintf(
+                            msg, sizeof(msg),
+                            "Argument %d: type '%s' is not assignable to parameter type '%s'; %s",
+                            slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type),
+                            reason);
+                    } else {
+                        snprintf(msg, sizeof(msg),
+                                 "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                                 slot + 1, xr_type_to_string(arg_type),
+                                 xr_type_to_string(param_type));
+                    }
                 }
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
