@@ -1775,9 +1775,17 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     for (int ti = 0; ti < nmodules; ti++) {
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
-        if (spec->ast)
-            xa_mono_pass_with_external_structs_and_analyzer((AstNode *) spec->ast, mono_roots,
-                                                            nmodules, X, shared_analyzer);
+        if (!spec->ast)
+            continue;
+        /* A budget failure must stop here rather than fall through to the
+         * re-analysis below: the module's generic calls were left unexpanded,
+         * so every later stage would report consequences of the first error. */
+        if (!xa_mono_pass((AstNode *) spec->ast, mono_roots, nmodules, X, shared_analyzer)) {
+            (void) report_analyzer_diagnostics(shared_analyzer, spec->source_path);
+            fprintf(stderr, "Error: monomorphization budget exceeded for '%s'\n",
+                    spec->source_path ? spec->source_path : "<unknown>");
+            goto fail_free_analyzer;
+        }
     }
 
     for (int ti = 0; ti < nmodules; ti++) {

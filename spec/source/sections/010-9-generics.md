@@ -109,10 +109,38 @@ counts.set(Token(7), 99)
 
 只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
+#### `where` 子句
+
+约束也可以写在签名之后。`where` 是**同一机制的另一种拼写**，不是第二套规则：它把约束追加到 `<T: C>` 填的那张列表，因此两种写法由同一条路径检查（`E0358`），并且在同一个参数上**取交集**而非互相覆盖。
+
+```ebnf
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+WhereItem   ::= Identifier ':' ConstraintList
+```
+
+```xray @id=generics-where-clause
+// 约束列表长时，写在后面不会把参数挤出一行
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// 内联与 where 在同一参数上取交集：T 必须同时满足 Comparable 与 Stringable
+fn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }
+
+class Registry<K, V> where K: Hashable { ... }
+struct Holder<T> where T: Comparable { ... }
+interface Seq<T> where T: Comparable { ... }
+enum Wrap<T> where T: Comparable { ... }
+```
+
+`where` 只能约束该声明自身的类型参数；命名其他标识符，或在没有类型参数的声明上使用，都是编译错误。
+
 **当前限制**：
-- 约束只能位于类型参数后，不支持 where 子句。
-- 不支持**高阶类型**（`F<_>` 作为参数）。
+- 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
 - 不支持默认类型参数（`<T = int>`）。
+- `where` 只接受与内联约束相同的表达力（`T: A & B`）；不支持对关联类型或嵌套类型的约束（`where T.Item: Hashable`），因为关联类型本身不存在。
+- 同一个类型参数列表中不得出现重名参数（`<T, T>`）。
 - 接口实现仍需**显式 `implements`**（在类声明位置，不是约束位置，详见 §5.4）。
 
 ### 9.3 类型推断与显式实例化
@@ -141,26 +169,44 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 ### 9.4 特化与 monomorphization
 
-**实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
+**实现策略**：构建期 monomorphization（单态化）。**具体类型实参元组即实例身份**，函数泛型与 class / struct 泛型适用同一条规则。
 
-- **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
-- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、调试类型名与名义类型语义精确。
-- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
-- 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
+- **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
+- **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
+- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
+#### 单态化预算
+
+两个预算防的是两类不同的风险，互不可替代：
+
+| 预算 | 值 | 防什么 | 超限 |
+|---|:---:|---|---|
+| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<int>` 构造 `RouteMatch<int>` 构造 `Entry<int>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0388` |
+| `XR_MONO_MAX_INSTANCES` | 16384 | **广度**。每个实例克隆一份完整声明，因此这是编译期内存兜底，不是语言规则。取值远高于任何现实程序 | `E0387` |
+
+**超限一律是硬错误，绝不静默降级。** 把调用留在泛型状态会在 `xray verify` 的 `forbid=["box"]` 合同下面重新引入装箱，而合同刚刚"证明"了它不存在——这类不可见的去优化正是版本化 effect 合同要排除的东西。
+
+`E0388` 的诊断会打印完整实例化链（`a$i64 -> b$Box_i64 -> ...`），否则报出的类型是用户从未写过、也无法检索的。
+
 **性能影响**：
-- 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
-- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
+- 单态化让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path。
+- 逐类型特化会增加代码和元数据体积（大致按“类型组合数 × 声明体积”增长），换来精确布局、调试类型名保真和按类型特化；体积回收由上述 AOT 共享计划按阈值完成。
 - 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
 
-**当前缓项**：
-- 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
+**特性状态**（使用 §0.4.3 的状态标记）：
+
+| 特性 | 状态 | 说明 |
+|---|---|---|
+| `where` 子句 | **稳定** | 见 §9.2 |
+| 声明点方差（`out T` / `in T`） | **未实现** | 有前置依赖，见 §9.6 |
+| 默认类型参数（`<T = int>`） | **未实现** | 语法当前是错误，不是被忽略 |
+| 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
 ### 9.5 协议（duck typing）与名义类型
 
@@ -200,9 +246,20 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 
 ### 9.6 方差（Variance）
 
-当前不支持显式方差标注（`out T` / `in T`）。默认行为：
+**状态：未实现**（声明点方差标注 `out T` / `in T`）。当前行为是完整且健全的基线，不是占位：
+
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
+
+**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+
+### 9.6.1 高阶类型（HKT）
+
+**状态：明确不提供**（不是"暂缓"）。Xray 不支持类型构造器参数（`F<_>`、`Functor<F>` 之类）。
+
+**为什么是永久决定**：HKT 与全程序单态化在根本上冲突。对类型构造器抽象意味着实例集合在编译期不再有限可枚举，实现只能退回字典传递或类型擦除——两者都会重新引入 Xray 的整条 AOT 路线（无装箱表示、精确布局、`xray verify` 的 shape 合同）明确要消除的间接层。这与"轻量脚本语言"的定位也不一致。
+
+需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: (T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
 
 ### 9.7 泛型与类型身份
 
@@ -330,10 +387,38 @@ counts.set(Token(7), 99)
 
 Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
+#### `where` clauses
+
+Constraints may also be written after the signature. `where` is **another spelling of the same mechanism**, not a second set of rules: it appends to the very list `<T: C>` fills, so both forms are checked by one path (`E0358`) and they **intersect** on a shared parameter rather than overriding each other.
+
+```ebnf
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+WhereItem   ::= Identifier ':' ConstraintList
+```
+
+```xray @id=generics-where-clause
+// A long constraint list after the signature keeps the parameters on one line
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// Inline and where intersect on T: it must satisfy Comparable and Stringable
+fn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }
+
+class Registry<K, V> where K: Hashable { ... }
+struct Holder<T> where T: Comparable { ... }
+interface Seq<T> where T: Comparable { ... }
+enum Wrap<T> where T: Comparable { ... }
+```
+
+A `where` clause may only constrain type parameters of its own declaration; naming any other identifier, or using `where` on a declaration with no type parameters, is a compile error.
+
 **Current limitations**:
-- Constraints may only follow type parameters; there is no `where` clause.
-- **Higher-kinded types** (`F<_>` as a parameter) are not supported.
+- **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.
 - Default type parameters (`<T = int>`) are not supported.
+- `where` accepts exactly the expressiveness of an inline constraint (`T: A & B`); constraints on associated or nested types (`where T.Item: Hashable`) are not supported, because associated types do not exist.
+- Duplicate names in one type-parameter list (`<T, T>`) are rejected.
 - Interface implementation still requires **explicit `implements`** at the class declaration site (not at the constraint site; see §5.4).
 
 ### 9.3 Type Inference and Explicit Instantiation
@@ -362,26 +447,44 @@ var result = identity<float>(0)            // the type argument supplies a uniqu
 
 ### 9.4 Specialization and Monomorphization
 
-**Implementation strategy**: build-time monomorphization, with different representation policies for different generic kinds.
+**Implementation strategy**: build-time monomorphization. **The concrete type-argument tuple is the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike.
 
-- **Generic functions**: the compiler collects concrete call sites and applies rep-sharing by runtime representation. The current representation groups are I64 / F64 / PTR / BOOL, so one generic function produces at most four representation versions. Reference types that share the PTR representation reuse one function body, avoiding code-size growth proportional to the number of reference types.
-- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and debug type-name semantics.
-- Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`.
-- The total number of monomorphization instances is capped by `XR_MONO_MAX_INSTANCES = 256` to prevent recursive or combinatorial explosion.
+- **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
+- **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
+- Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
 - Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
 
+#### Monomorphization budgets
+
+Two budgets guard two different risks, and they are not interchangeable:
+
+| Budget | Value | Guards | On breach |
+|---|:---:|---|---|
+| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<int>` building `RouteMatch<int>` building `Entry<int>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0388` |
+| `XR_MONO_MAX_INSTANCES` | 16384 | **Breadth**. Each instance clones a whole declaration, so this is a compile-time memory backstop rather than a language rule. It sits far above any realistic program | `E0387` |
+
+**Exceeding a budget is always a hard error, never a silent downgrade.** Leaving a call generic would reintroduce boxing underneath an `xray verify` `forbid=["box"]` contract that just "proved" it absent — exactly the kind of invisible de-optimization versioned effect contracts exist to rule out.
+
+The `E0388` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 -> ...`); without it the reported type is one the user never wrote and cannot search for.
+
 **Performance impact**:
-- Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
-- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
+- Monomorphization lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations.
+- Per-type specialization grows code and metadata size roughly with "type combinations x declaration size"; this buys exact layout, faithful debug type names, and per-type specialization. Size is recovered by the AOT sharing plan above, against its threshold.
 - Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
 **Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
 
-**Deferred features**:
-- Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.
+**Feature status** (using the §0.4.3 status markers):
+
+| Feature | Status | Notes |
+|---|---|---|
+| `where` clauses | **Stable** | see §9.2 |
+| Declaration-site variance (`out T` / `in T`) | **Unimplemented** | has a prerequisite, see §9.6 |
+| Default type parameters (`<T = int>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
+| Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
 ### 9.5 Protocols (Duck Typing) vs. Nominal Typing
 
@@ -421,9 +524,20 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 
 ### 9.6 Variance
 
-Explicit variance annotations (`out T` / `in T`) are not currently supported. Default behavior:
+**Status: Unimplemented** (declaration-site variance annotations `out T` / `in T`). The current behavior is a complete and sound baseline, not a placeholder:
+
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
+
+**Why not in this round**: variance states rules *on top of* the subtype relation, so it has a prerequisite — the width direction for structural types must be settled first (see the exact-field-set rule in §2.10.1). Introducing declaration-site variance while the subtype relation itself has not converged multiplies an undecided semantics by another layer, and it cannot be patched backward-compatibly afterwards. Invariance is the safe, AOT-friendly starting point, and it can be relaxed at any time.
+
+### 9.6.1 Higher-Kinded Types (HKT)
+
+**Status: explicitly not provided** — a non-goal, not a deferral. Xray has no type-constructor parameters (`F<_>`, `Functor<F>`, and the like).
+
+**Why this is permanent**: HKT is fundamentally at odds with whole-program monomorphization. Abstracting over a type constructor means the instance set is no longer finitely enumerable at compile time, leaving only dictionary passing or type erasure — and both reintroduce exactly the indirection that Xray's AOT line (unboxed representations, exact layout, `xray verify` shape contracts) exists to remove. It is also inconsistent with the lightweight-scripting-language positioning.
+
+Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: (T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
 
 ### 9.7 Generics and Type Identity
 

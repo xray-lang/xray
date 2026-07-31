@@ -13,8 +13,10 @@
  *   combination gets its own specialized AST and bytecode.
  *
  * WHY THIS DESIGN:
- *   - Rep-sharing: all reference types (string, Array, class) share one PTR
- *     version, so each generic produces at most 3 versions (I64, F64, PTR)
+ *   - Instance identity is the concrete type tuple. A duck-typed body resolves
+ *     `x.foo()` against that concrete argument, so two ABI-equivalent
+ *     instantiations are not interchangeable at this stage; merging them is an
+ *     AOT decision made after resolution, with evidence.
  *   - Duck-typed: no trait bounds needed, errors reported at instantiation
  */
 
@@ -23,6 +25,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/xerror_codes.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
@@ -33,15 +36,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ========== Safety Limits ========== */
-
-// Max total mono instances across all generics in one program
-#define XR_MONO_MAX_INSTANCES 256
-
-// Max instantiations per single generic (prevents combinatorial explosion)
-#define XR_MONO_MAX_PER_GENERIC 32
-
 /* ========== Name Mangling ========== */
+
+/* Rendering capacity for one qualified type-argument tag. Nested tags recurse
+ * into their own smaller buffers, so this only bounds the outermost tag. */
+#define XR_MONO_TYPE_TAG_CAP 256
 
 /* User-facing display name for a concrete type argument.
  * Returns canonical names: "int", "float", "string", "bool", etc.
@@ -214,15 +213,28 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
      * belong to the first: "const" would merge const Array<int> with
      * const Map<K,V>, "Array" would merge Array<int> with Array<string>, and
      * "unknown"/"opt" would merge every tuple and every optional. Scalars carry
-     * their whole identity in the tag itself and keep the flat form. */
-    char type_bufs[XR_MONO_MAX_PER_GENERIC][256];
-    const char *tags[XR_MONO_MAX_PER_GENERIC];
-    if (count > XR_MONO_MAX_PER_GENERIC)
+     * their whole identity in the tag itself and keep the flat form.
+     *
+     * The qualified buffers are heap-allocated rather than a fixed array: a
+     * capped array had to fall back to the unmangled name past its bound,
+     * which collapses every instance of that generic onto one symbol. Mangling
+     * must never lose an argument -- the mangled name *is* instance identity. */
+    char *qualified = NULL;
+    const char **tags = (const char **) xr_calloc((size_t) count, sizeof(const char *));
+    if (!tags)
         return xr_strdup(name);
     for (int i = 0; i < count; i++) {
         if (type_args[i] && mono_tag_needs_children(type_args[i]->kind)) {
-            mono_qualified_type_tag(type_args[i], type_bufs[i], sizeof(type_bufs[i]));
-            tags[i] = type_bufs[i];
+            if (!qualified) {
+                qualified = (char *) xr_calloc((size_t) count, XR_MONO_TYPE_TAG_CAP);
+                if (!qualified) {
+                    xr_free((void *) tags);
+                    return xr_strdup(name);
+                }
+            }
+            char *slot = qualified + (size_t) i * XR_MONO_TYPE_TAG_CAP;
+            mono_qualified_type_tag(type_args[i], slot, XR_MONO_TYPE_TAG_CAP);
+            tags[i] = slot;
         } else {
             tags[i] = xr_mono_type_tag(type_args[i]);
         }
@@ -236,8 +248,11 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     len += 1;  // null terminator
 
     char *buf = (char *) xr_malloc(len);
-    if (!buf)
+    if (!buf) {
+        xr_free(qualified);
+        xr_free((void *) tags);
         return xr_strdup(name);
+    }
 
     char *p = buf;
     size_t remaining = len;
@@ -255,6 +270,8 @@ char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
         p += written;
         remaining -= written;
     }
+    xr_free(qualified);
+    xr_free((void *) tags);
     return buf;
 }
 
@@ -1075,6 +1092,8 @@ void xa_mono_collector_init(XaMonoCollector *c) {
     c->capacity = 0;
     c->analyzer = NULL;
     c->tref_rewrite_count = 0;
+    c->expanding = -1;
+    c->budget_reported = false;
 }
 
 void xa_mono_collector_free(XaMonoCollector *c) {
@@ -1088,43 +1107,8 @@ void xa_mono_collector_free(XaMonoCollector *c) {
     c->count = 0;
     c->capacity = 0;
     c->analyzer = NULL;
-}
-
-/* Derive a slot-type category from XrTypeRef for rep-sharing dedup.
- * Returns a 4-bit value: distinguishes int/float/bool/string/ptr(ref). */
-static uint8_t tref_slot_category(XrTypeRef *t) {
-    if (!t)
-        return XR_SLOT_ANY;
-    switch ((XrTypeRefKind) t->kind) {
-        case XR_TREF_INT:
-        case XR_TREF_INT_WIDTH:
-            return XR_SLOT_I64;
-        case XR_TREF_FLOAT:
-        case XR_TREF_FLOAT_WIDTH:
-            return XR_SLOT_F64;
-        case XR_TREF_BOOL:
-            return XR_SLOT_BOOL;
-        case XR_TREF_STRING:
-            return XR_SLOT_PTR;
-        case XR_TREF_NAMED:
-        case XR_TREF_GENERIC:
-        case XR_TREF_OPTIONAL:
-        case XR_TREF_FUNCTION:
-            return XR_SLOT_PTR;
-        default:
-            return XR_SLOT_ANY;
-    }
-}
-
-// Compute slot-type signature for deduplication: combine slot categories.
-// Distinguishes bool from int (BOOL=11 vs I64=7) for function generics.
-static uint32_t compute_rep_signature(XrTypeRef **type_args, int count) {
-    uint32_t sig = 0;
-    for (int i = 0; i < count && i < 8; i++) {
-        uint8_t st = tref_slot_category(type_args[i]);
-        sig = (sig << 4) | (st & 0xF);
-    }
-    return sig;
+    c->expanding = -1;
+    c->budget_reported = false;
 }
 
 static char *mono_effect_mangle(const char *generic_name, XrTypeRef **type_args, int type_arg_count,
@@ -1143,14 +1127,67 @@ static char *mono_effect_mangle(const char *generic_name, XrTypeRef **type_args,
     return result;
 }
 
+/* Render the chain that led to `parent` as "a<int> -> b<Box<int>> -> ...".
+ * Without it an E0388 names only the deepest type, which is a type the user
+ * never wrote and cannot search for. */
+static void mono_render_chain(const XaMonoCollector *c, int parent, char *buf, size_t cap) {
+    if (!buf || cap == 0)
+        return;
+    buf[0] = '\0';
+    if (parent < 0)
+        return;
+
+    /* Walk to the root, then print root-first. The chain is bounded by
+     * XR_MONO_MAX_DEPTH, so a fixed index array is exact, not a guess. */
+    int chain[XR_MONO_MAX_DEPTH + 1];
+    int n = 0;
+    for (int i = parent; i >= 0 && n <= XR_MONO_MAX_DEPTH; i = c->instances[i].parent)
+        chain[n++] = i;
+
+    /* A chain at the limit is far too long to print whole, and the middle is
+     * the least informative part: what the reader needs is where the expansion
+     * started and what it is doing now. Keep both ends and elide the rest. */
+    const int edge = 6;
+    bool elide = n > 2 * edge + 1;
+
+    size_t used = 0;
+    for (int pos = 0; pos < n && used < cap; pos++) {
+        int i = n - 1 - pos; /* root-first */
+        if (elide && pos == edge) {
+            int written = snprintf(buf + used, cap - used, " -> ... (%d more) ...", n - 2 * edge);
+            if (written < 0)
+                return;
+            used += (size_t) written;
+        }
+        if (elide && pos >= edge && pos < n - edge)
+            continue;
+        int written = snprintf(buf + used, cap - used, "%s%s", used ? " -> " : "",
+                               c->instances[chain[i]].mangled_name);
+        if (written < 0)
+            return;
+        used += (size_t) written;
+    }
+}
+
+static void mono_report(XaMonoCollector *c, int code, const char *message, const XrLocation *loc) {
+    /* One budget diagnostic per compile: every later instantiation would repeat
+     * the same exhausted budget and bury the first, most actionable one. The
+     * flag also tells the pass to fail, so the count of suppressed duplicates
+     * never changes the outcome. */
+    if (c->budget_reported)
+        return;
+    c->budget_reported = true;
+    XrLocation at = loc ? *loc : (XrLocation) {0};
+    xa_analyzer_add_diagnostic(c->analyzer, XR_DIAG_SEV_ERROR, code, message, &at);
+}
+
 static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *generic_name,
                                                 XrTypeRef **type_args, int type_arg_count,
                                                 bool is_class_generic,
-                                                XaMonoThrowEffect throw_effect) {
+                                                XaMonoThrowEffect throw_effect,
+                                                const XrLocation *loc) {
     if (!c || !generic_name)
         return NULL;
-
-    uint32_t rep_sig = compute_rep_signature(type_args, type_arg_count);
 
     char *candidate_mangled =
         mono_effect_mangle(generic_name, type_args, type_arg_count, throw_effect);
@@ -1159,32 +1196,42 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
 
     // Concrete type arguments define instance identity. ABI-equivalent instances
     // may share code only through explicit verified plans, not collector dedup.
-    int per_generic = 0;
     for (int i = 0; i < c->count; i++) {
-        if (strcmp(c->instances[i].generic_name, generic_name) == 0) {
-            bool is_dup = strcmp(c->instances[i].mangled_name, candidate_mangled) == 0;
-            if (is_dup) {
-                xr_free(candidate_mangled);
-                return c->instances[i].mangled_name;  // Already registered
-            }
-            per_generic++;
+        if (strcmp(c->instances[i].generic_name, generic_name) == 0 &&
+            strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
+            xr_free(candidate_mangled);
+            return c->instances[i].mangled_name;  // Already registered
         }
     }
 
-    // Safety: total instance limit
-    if (c->count >= XR_MONO_MAX_INSTANCES) {
-        xr_log_warning("mono",
-                       "monomorphization limit reached (%d instances), "
-                       "skipping %s",
-                       XR_MONO_MAX_INSTANCES, generic_name);
+    int parent = c->expanding;
+    int depth = parent >= 0 ? c->instances[parent].depth + 1 : 0;
+
+    /* Depth guard: a specialized body instantiating an ever-larger type has no
+     * finite expansion. Dedup cannot catch it -- every round is a new tuple. */
+    if (depth > XR_MONO_MAX_DEPTH) {
+        char chain[512];
+        mono_render_chain(c, parent, chain, sizeof(chain));
+        char msg[896];
+        snprintf(msg, sizeof(msg),
+                 "generic instantiation of '%s' nested deeper than %d levels\n"
+                 "  instantiated through: %s -> %s\n"
+                 "  note: a generic that instantiates itself at a larger type (f<T> requesting "
+                 "f<Box<T>>) has no finite specialization and always reaches this limit",
+                 generic_name, XR_MONO_MAX_DEPTH, chain, candidate_mangled);
+        mono_report(c, XR_ERR_ANALYZE_MONO_DEPTH, msg, loc);
         xr_free(candidate_mangled);
         return NULL;
     }
 
-    // Safety: per-generic instance limit
-    if (per_generic >= XR_MONO_MAX_PER_GENERIC) {
-        xr_log_warning("mono", "too many instantiations of '%s' (%d), skipping", generic_name,
-                       XR_MONO_MAX_PER_GENERIC);
+    /* Breadth guard: a compile-time memory backstop, not a language rule. */
+    if (c->count >= XR_MONO_MAX_INSTANCES) {
+        char msg[320];
+        snprintf(msg, sizeof(msg),
+                 "program exceeds the monomorphization budget of %d generic instances "
+                 "(reached while instantiating '%s')",
+                 XR_MONO_MAX_INSTANCES, generic_name);
+        mono_report(c, XR_ERR_ANALYZE_MONO_BUDGET, msg, loc);
         xr_free(candidate_mangled);
         return NULL;
     }
@@ -1201,17 +1248,18 @@ static const char *xa_mono_collector_add_effect(XaMonoCollector *c, const char *
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
     inst->mangled_name = candidate_mangled;
-    inst->rep_signature = rep_sig;
     inst->is_class_generic = is_class_generic;
     inst->throw_effect = throw_effect;
+    inst->parent = parent;
+    inst->depth = depth;
     return inst->mangled_name;
 }
 
 const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
-                                  XrTypeRef **type_args, int type_arg_count,
-                                  bool is_class_generic) {
+                                  XrTypeRef **type_args, int type_arg_count, bool is_class_generic,
+                                  const XrLocation *loc) {
     return xa_mono_collector_add_effect(c, generic_name, type_args, type_arg_count,
-                                        is_class_generic, XA_MONO_EFFECT_NONE);
+                                        is_class_generic, XA_MONO_EFFECT_NONE, loc);
 }
 
 // Lookup the exact concrete instance.
@@ -1512,6 +1560,19 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
     }
 }
 
+/* Source location of the instantiation site, so a budget diagnostic points at
+ * the code the user wrote rather than at the generic's declaration. */
+static XrLocation mono_node_loc(const AstNode *node) {
+    XrLocation loc = {0};
+    if (!node)
+        return loc;
+    loc.line = (uint32_t) (node->line > 0 ? node->line : 0);
+    loc.column = (uint32_t) (node->column > 0 ? node->column : 0);
+    loc.end_line = (uint32_t) (node->end_line > 0 ? node->end_line : 0);
+    loc.end_column = (uint32_t) (node->end_column > 0 ? node->end_column : 0);
+    return loc;
+}
+
 // Phase 2: Walk AST to find generic call sites (CallExpr with type_args)
 static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *registry,
                                         XaMonoCollector *collector,
@@ -1523,6 +1584,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     // Check call expression with explicit type arguments
     if (node->type == AST_CALL_EXPR) {
         CallExprNode *call = &node->as.call_expr;
+        XrLocation loc = mono_node_loc(node);
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_VARIABLE) {
             const char *fn_name = call->callee->as.variable.name;
             XaGenericDecl *decl = registry_find(registry, fn_name);
@@ -1532,7 +1594,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                     (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
                 xa_mono_collector_add_effect(collector, fn_name, call->type_args,
-                                             call->type_arg_count, is_cls, effect);
+                                             call->type_arg_count, is_cls, effect, &loc);
             }
         }
         const char *member_name = NULL;
@@ -1544,7 +1606,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                     (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
                 XaMonoThrowEffect effect = mono_call_throw_effect(decl, call, collector);
                 xa_mono_collector_add_effect(collector, member_name, call->type_args,
-                                             call->type_arg_count, is_cls, effect);
+                                             call->type_arg_count, is_cls, effect, &loc);
             }
         }
         // Recurse into callee and arguments
@@ -1565,8 +1627,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             XaGenericDecl *decl = registry_find(registry, ne->class_name);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == ne->type_arg_count) {
+                XrLocation loc = mono_node_loc(node);
                 xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count,
-                                      true);
+                                      true, &loc);
             }
         }
         for (int i = 0; i < ne->arg_count; i++)
@@ -1582,8 +1645,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
             if (decl && (!local_only || !decl->is_external) &&
                 decl->type_param_count == sl->type_arg_count) {
+                XrLocation loc = mono_node_loc(node);
                 xa_mono_collector_add(collector, sl->struct_name, sl->type_args, sl->type_arg_count,
-                                      true);
+                                      true, &loc);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
@@ -2353,20 +2417,30 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         // may itself construct other generics parameterized by the now-concrete
         // type args (e.g. Router<int>.wrap building RouteMatch<int>). Collect
         // those nested instantiations so this loop — which runs while
-        // collector->count keeps growing — injects them too. collector_add
-        // dedups by mangled name, so the fixpoint terminates.
-        if (import_aliases)
+        // collector->count keeps growing — injects them too.
+        //
+        // Dedup alone does NOT make this terminate: polymorphic recursion
+        // (`f<T>` instantiating `f<Box<T>>`) produces a distinct mangled name
+        // every round, so nothing repeats and the loop diverges. `expanding`
+        // attributes what this clone requests to instance i, giving those
+        // instances depth i+1 and letting the depth budget cut the chain.
+        if (import_aliases) {
+            int saved_expanding = collector->expanding;
+            collector->expanding = i;
             collect_instantiation_sites(cloned, registry, collector, import_aliases, false);
+            collector->expanding = saved_expanding;
+        }
     }
 }
 
 /* ========== Public API ========== */
 
-static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int external_root_count,
+static bool xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int external_root_count,
                                   XrVMRuntime *isolate, XaAnalyzer *analyzer) {
     if (!root || root->type != AST_PROGRAM)
-        return;
+        return true;
 
+    bool ok = true;
     XaGenericRegistry registry;
     registry_init(&registry);
 
@@ -2429,25 +2503,14 @@ static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
 
 cleanup:
     mono_import_aliases_free(&root_imports);
+    ok = !collector.budget_reported;
     xa_mono_collector_free(&collector);
     xr_free(registry.decls);
+    return ok;
 }
 
-void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
-    xa_mono_pass_internal(root, NULL, 0, isolate, NULL);
-}
-
-void xa_mono_pass_with_analyzer(AstNode *root, XrVMRuntime *isolate, XaAnalyzer *analyzer) {
-    xa_mono_pass_internal(root, NULL, 0, isolate, analyzer);
-}
-
-void xa_mono_pass_with_external_structs(AstNode *root, AstNode **external_roots,
-                                        int external_root_count, XrVMRuntime *isolate) {
-    xa_mono_pass_internal(root, external_roots, external_root_count, isolate, NULL);
-}
-
-void xa_mono_pass_with_external_structs_and_analyzer(AstNode *root, AstNode **external_roots,
-                                                     int external_root_count, XrVMRuntime *isolate,
-                                                     XaAnalyzer *analyzer) {
-    xa_mono_pass_internal(root, external_roots, external_root_count, isolate, analyzer);
+bool xa_mono_pass(AstNode *root, AstNode **external_roots, int external_root_count,
+                  XrVMRuntime *isolate, XaAnalyzer *analyzer) {
+    XR_DCHECK(analyzer != NULL, "xa_mono_pass: NULL analyzer; budgets need a diagnostic sink");
+    return xa_mono_pass_internal(root, external_roots, external_root_count, isolate, analyzer);
 }

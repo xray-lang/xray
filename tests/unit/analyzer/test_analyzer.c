@@ -1825,7 +1825,7 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     ASSERT(program != NULL);
 
     xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
-    xa_mono_pass_with_analyzer(program, g_isolate, a);
+    xa_mono_pass(program, NULL, 0, g_isolate, a);
     xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
 
     int diagnostic_count = 0;
@@ -2342,7 +2342,7 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
 
     xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
     ASSERT(!analyzer_diag_contains(a, "error"));
-    xa_mono_pass(program, g_isolate);
+    xa_mono_pass(program, NULL, 0, g_isolate, a);
     xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 

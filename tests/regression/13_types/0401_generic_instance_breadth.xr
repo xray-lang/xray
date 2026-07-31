@@ -1,0 +1,174 @@
+// Instance identity is the concrete type tuple, so N reference types through
+// one generic produce N instances. This used to trip a per-generic cap of 32
+// that silently skipped the rest, leaving those calls generic -- correct
+// results, quiet boxing, and only a stderr warning. Breadth well past the old
+// cap must now compile cleanly.
+
+class C0 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C1 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C2 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C3 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C4 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C5 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C6 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C7 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C8 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C9 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C10 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C11 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C12 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C13 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C14 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C15 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C16 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C17 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C18 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C19 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C20 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C21 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C22 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C23 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C24 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C25 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C26 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C27 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C28 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C29 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C30 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C31 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C32 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C33 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C34 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C35 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C36 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C37 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C38 { v: int
+    constructor(v: int) { this.v = v }
+}
+class C39 { v: int
+    constructor(v: int) { this.v = v }
+}
+
+fn tag<T>(x: T) -> int { return 1 }
+
+@test
+fn test_many_reference_instantiations() {
+    var total = 0
+    total = total + tag<C0>(C0(0))
+    total = total + tag<C1>(C1(1))
+    total = total + tag<C2>(C2(2))
+    total = total + tag<C3>(C3(3))
+    total = total + tag<C4>(C4(4))
+    total = total + tag<C5>(C5(5))
+    total = total + tag<C6>(C6(6))
+    total = total + tag<C7>(C7(7))
+    total = total + tag<C8>(C8(8))
+    total = total + tag<C9>(C9(9))
+    total = total + tag<C10>(C10(10))
+    total = total + tag<C11>(C11(11))
+    total = total + tag<C12>(C12(12))
+    total = total + tag<C13>(C13(13))
+    total = total + tag<C14>(C14(14))
+    total = total + tag<C15>(C15(15))
+    total = total + tag<C16>(C16(16))
+    total = total + tag<C17>(C17(17))
+    total = total + tag<C18>(C18(18))
+    total = total + tag<C19>(C19(19))
+    total = total + tag<C20>(C20(20))
+    total = total + tag<C21>(C21(21))
+    total = total + tag<C22>(C22(22))
+    total = total + tag<C23>(C23(23))
+    total = total + tag<C24>(C24(24))
+    total = total + tag<C25>(C25(25))
+    total = total + tag<C26>(C26(26))
+    total = total + tag<C27>(C27(27))
+    total = total + tag<C28>(C28(28))
+    total = total + tag<C29>(C29(29))
+    total = total + tag<C30>(C30(30))
+    total = total + tag<C31>(C31(31))
+    total = total + tag<C32>(C32(32))
+    total = total + tag<C33>(C33(33))
+    total = total + tag<C34>(C34(34))
+    total = total + tag<C35>(C35(35))
+    total = total + tag<C36>(C36(36))
+    total = total + tag<C37>(C37(37))
+    total = total + tag<C38>(C38(38))
+    total = total + tag<C39>(C39(39))
+    assert_eq(total, 40)
+}

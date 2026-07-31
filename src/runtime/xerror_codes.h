@@ -100,6 +100,15 @@
  * an unrunnable cleanup in the language's only deterministic cleanup mechanism. */
 #define XR_ERR_ANALYZE_GENERATOR_DEFER 386
 #define XR_ERR_ANALYZE_DEFER_MAY_THROW 387
+/* Monomorphization budgets.  Both are hard errors because the alternative --
+ * leaving the call generic -- silently reintroduces boxing under a contract
+ * that may have proven it absent. */
+/* The whole-program instance budget was exhausted (breadth). */
+#define XR_ERR_ANALYZE_MONO_BUDGET 388
+/* A specialization chain exceeded the nesting budget (depth).  Reaching this
+ * usually means a generic instantiates itself at an ever-larger type, which
+ * has no finite monomorphization. */
+#define XR_ERR_ANALYZE_MONO_DEPTH 389
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

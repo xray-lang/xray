@@ -9,8 +9,13 @@
  *
  * KEY CONCEPT:
  *   Duck-typed generics: compile-time instantiation of generic code for each
- *   concrete type combination. Generates up to 3 versions per generic (I64,
- *   F64, PTR) by rep-sharing. No trait syntax needed.
+ *   concrete type combination. The concrete type tuple defines instance
+ *   identity -- the frontend never merges two distinct type arguments, so
+ *   member resolution, field layout and debug type names stay exact. Code
+ *   sharing between ABI-equivalent bodies is an AOT decision (see the
+ *   generic-body-plan / generic-code-size-plan evidence rows), not a frontend
+ *   one, because a duck-typed body resolves `x.foo()` against the concrete
+ *   type argument and cannot be shared before that resolution is known.
  *
  * WHY THIS DESIGN:
  *   - Type erasure forces TAGGED (16B boxed) for all generic params
@@ -26,8 +31,41 @@
 #include "../../runtime/value/xtype.h"
 #include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
+#include "../../base/xlocation.h"
 
-#define XR_MONO_MAX_DEPTH 8
+/* ========== Instantiation Budgets ==========
+ *
+ * Two budgets guard two different risks, and they are not interchangeable:
+ *
+ *   XR_MONO_MAX_DEPTH     bounds *nesting*. A specialized body may instantiate
+ *                         further generics (Router<int> building RouteMatch<int>
+ *                         building Entry<int>), so the expansion in
+ *                         inject_mono_decls is a fixpoint. Polymorphic
+ *                         recursion (`fn f<T>() { f<Box<T>>() }`) makes that
+ *                         fixpoint diverge, and depth is the only thing that
+ *                         can detect it: every round produces a genuinely new
+ *                         type tuple, so no dedup or counter can distinguish
+ *                         divergence from legitimate breadth. This budget is
+ *                         load-bearing for termination.
+ *
+ *                         A depth counter cannot tell a diverging chain from a
+ *                         deep but finite one, so the limit must clear any
+ *                         plausible real chain by a wide margin -- rejecting
+ *                         honest code to catch divergence sooner is a bad
+ *                         trade when divergence is caught either way.
+ *
+ *   XR_MONO_MAX_INSTANCES bounds *breadth*. Each instance clones a whole
+ *                         declaration, so this is a compile-time memory
+ *                         backstop, not a language rule. It is set far above
+ *                         any plausible real program: a program that trips it
+ *                         has a generic expansion problem worth seeing.
+ *
+ * Both are hard errors (E0388 / E0387). Exceeding a budget never silently
+ * leaves a call unspecialized -- a silent fallback would reintroduce boxing
+ * underneath an `xray verify` no-box contract that claims it cannot happen.
+ */
+#define XR_MONO_MAX_DEPTH 128
+#define XR_MONO_MAX_INSTANCES 16384
 
 typedef struct XaAnalyzer XaAnalyzer;
 
@@ -84,9 +122,15 @@ typedef struct {
     XrTypeRef **type_args;     // Concrete type ref arguments
     int type_arg_count;
     const char *mangled_name;  // Mangled name (heap-allocated)
-    uint32_t rep_signature;    // Combined slot-type signature for ABI planning
     bool is_class_generic;     // true for class/struct generics
     XaMonoThrowEffect throw_effect;
+    /* Expansion provenance. `parent` is the index of the instance whose
+     * specialized body requested this one, or -1 for a site in user-written
+     * code; `depth` is that chain's length. Together they reconstruct the
+     * instantiation chain printed by the E0388 diagnostic -- without it a
+     * depth error names a type the user never wrote. */
+    int parent;
+    int depth;
 } XaMonoInstance;
 
 typedef struct {
@@ -99,40 +143,47 @@ typedef struct {
      * around each class/struct body so a declaration whose member signatures
      * changed can be marked for re-collection in the post-mono analysis pass. */
     uint32_t tref_rewrite_count;
+    /* Index of the instance whose clone is currently being scanned for nested
+     * instantiations, or -1 while scanning user-written code. */
+    int expanding;
+    /* A budget diagnostic is reported once. The pass keeps running so the user
+     * still gets the rest of the program's errors, but every later
+     * instantiation would report the same exhausted budget. */
+    bool budget_reported;
 } XaMonoCollector;
 
 XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);
 XR_FUNC void xa_mono_collector_free(XaMonoCollector *c);
 
-// Add a generic instantiation. Returns the mangled name (owned by collector).
+// Add a generic instantiation. Returns the mangled name (owned by collector),
+// or NULL when a budget is exhausted -- in which case a diagnostic has been
+// reported and compilation will fail.
 // Concrete type arguments define identity for function, class, and struct instances.
 XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
                                           XrTypeRef **type_args, int type_arg_count,
-                                          bool is_class_generic);
+                                          bool is_class_generic, const XrLocation *loc);
 
 /* ========== Mono Pass ========== */
 
-// Run the full monomorphization pass on a program AST.
-// Collects generic declarations and instantiation sites, clones+substitutes
-// for each concrete type combination, injects into program, rewrites call sites.
-// Safe to call on programs with no generics (no-op).
-XR_FUNC void xa_mono_pass(AstNode *root, XrVMRuntime *isolate);
-
-// Analyzer-backed variant used by production compilation after the first
-// semantic pass. It splits generic HOFs into MAY_THROW / NO_THROW bodies.
-XR_FUNC void xa_mono_pass_with_analyzer(AstNode *root, XrVMRuntime *isolate, XaAnalyzer *analyzer);
-
-// AOT/module-graph variant: the current module may instantiate generic value
-// structs imported from dependency modules, and may rewrite imported generic
-// class/function namespace calls to specializations injected by their defining
-// modules. Value-struct clones remain local to the using module so lowering has
-// a concrete local layout.
-XR_FUNC void xa_mono_pass_with_external_structs(AstNode *root, AstNode **external_roots,
-                                                int external_root_count, XrVMRuntime *isolate);
-XR_FUNC void xa_mono_pass_with_external_structs_and_analyzer(AstNode *root,
-                                                             AstNode **external_roots,
-                                                             int external_root_count,
-                                                             XrVMRuntime *isolate,
-                                                             XaAnalyzer *analyzer);
+/* Run the full monomorphization pass on a program AST: collect generic
+ * declarations and instantiation sites, clone+substitute for each concrete
+ * type combination, inject into the program, rewrite call sites. A program
+ * with no generics is a no-op.
+ *
+ * `external_roots` are dependency-module ASTs (may be NULL/0 for a single
+ * unit). The current module may instantiate generic value structs imported
+ * from them, and may rewrite imported generic class/function namespace calls
+ * to specializations injected by their defining modules. Value-struct clones
+ * stay local to the using module so lowering has a concrete local layout.
+ *
+ * `analyzer` is required, not optional: it is both the throw-effect oracle
+ * that splits generic HOFs into MAY_THROW / NO_THROW bodies and the sink for
+ * E0387/E0388. A pass that cannot report an exhausted budget could only
+ * respond by silently leaving calls generic.
+ *
+ * Returns false when a budget diagnostic was reported; the caller must not
+ * proceed to lowering. */
+XR_FUNC bool xa_mono_pass(AstNode *root, AstNode **external_roots, int external_root_count,
+                          XrVMRuntime *isolate, XaAnalyzer *analyzer);
 
 #endif  // XANALYZER_MONO_H

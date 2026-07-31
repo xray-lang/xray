@@ -1,0 +1,5 @@
+// 'where' with nothing to constrain is a typo, not an empty clause.
+fn plain() -> int where T: Comparable {
+    return 1
+}
+print(plain())

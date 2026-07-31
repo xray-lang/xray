@@ -611,53 +611,12 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     memcpy(func_name, name_token.start, name_token.length);
     func_name[name_token.length] = '\0';
 
-    // Parse generic type params <T: Constraint, U>
-    XrGenericParam **type_params = NULL;
-    int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            Token param_token = parser->previous;
-
-            char *param_name =
-                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
-            memcpy(param_name, param_token.start, param_token.length);
-            param_name[param_token.length] = '\0';
-
-            // Parse optional intersection constraint <T: Interface1 & Interface2 & ...>
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
-    }
-
-    // Register generic type params in type_scope for type annotation parsing
-    // This allows T in "fn identity<T>(x: T): T" to be recognised as type param.
+    /* Parse generic type params <T: Constraint, U = int>. The helper installs a
+     * scope holding them so `T` resolves in the signature and body below. */
     XrTypeScope *saved_scope = parser->type_scope;
-    XrTypeScope *generic_scope = NULL;
-    if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *type_param =
-                xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
-        }
-        parser->type_scope = generic_scope;
-    }
+    int type_param_count = 0;
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     xr_parser_consume(parser, TK_LPAREN, "expected '(' after function name");
 
@@ -772,6 +731,10 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         parser->panic_mode = 0;
         return_type = xr_parse_type_annotation(parser);
     }
+
+    /* `fn f<T>(x: T) -> T where T: Comparable { ... }` — after the signature so
+     * long constraint lists do not push the parameters off the line. */
+    xr_parse_where_clause(parser, type_params, type_param_count);
 
     // Parse function body. Functions declared in an extern block are bodyless: the implementation
     // lives in a foreign C library, so the signature stands alone (optionally

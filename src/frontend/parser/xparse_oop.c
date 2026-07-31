@@ -148,49 +148,12 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     char *class_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
-    // Parse generic type parameters <T, U: Constraint>
-    XrGenericParam **type_params = NULL;
-    int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            Token param_token = parser->previous;
-
-            char *param_name = token_to_string(parser, &param_token);
-
-            // Parse optional intersection constraint <T: Interface1 & Interface2 & ...>
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
-    }
-
-    // Register generic type params in type_scope for field/method type parsing.
+    /* Parse generic type parameters <T, U: Constraint, V = int>. The helper
+     * installs a scope holding them so they resolve in fields and methods. */
     XrTypeScope *saved_scope = parser->type_scope;
-    XrTypeScope *generic_scope = NULL;
-    if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *type_param =
-                xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
-        }
-        parser->type_scope = generic_scope;
-    }
+    int type_param_count = 0;
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     // Parse extends clause (optional)
     // Supports: extends Class or extends module.Class
@@ -242,6 +205,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         (void) interface_count;
         return NULL;
     }
+
+    /* `class Box<T> implements Show where T: Comparable { ... }` */
+    xr_parse_where_clause(parser, type_params, type_param_count);
 
     // Parse class body
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start class body");
@@ -382,49 +348,14 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     char *struct_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
-    // Parse generic type parameters <T, U: Constraint>
-    XrGenericParam **type_params = NULL;
+    /* Parse generic type parameters <T, U: Constraint, V = int>. The helper
+     * installs a scope holding them so they resolve in field types. */
+    XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            Token param_token = parser->previous;
-
-            char *param_name = token_to_string(parser, &param_token);
-
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
-    }
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     uint32_t explicit_align = xr_parse_struct_align_clause(parser);
-
-    // Register generic type params in type_scope for field/method type parsing.
-    XrTypeScope *saved_scope = parser->type_scope;
-    XrTypeScope *generic_scope = NULL;
-    if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
-        }
-        parser->type_scope = generic_scope;
-    }
 
     // Structs do not support extends (no inheritance)
     if (xr_parser_check(parser, TK_EXTENDS)) {
@@ -447,6 +378,9 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     }
 
     // Parse struct body
+    /* `struct Pair<K, V> where K: Hashable { ... }` */
+    xr_parse_where_clause(parser, type_params, type_param_count);
+
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start struct body");
 
     AstNode **fields = NULL;
@@ -1717,51 +1651,13 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     char *interface_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
-    // Parse generic type parameters <T, U: Constraint> — mirrors class parsing
-    XrGenericParam **type_params = NULL;
-    int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            Token param_token = parser->previous;
-
-            char *param_name =
-                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
-            memcpy(param_name, param_token.start, param_token.length);
-            param_name[param_token.length] = '\0';
-
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-
-        } while (xr_parser_match(parser, TK_COMMA));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
-    }
-
-    // Register generic type params in type_scope so member type annotations
-    // such as `iterator(): Iterator<T>` recognise T as a type parameter.
+    /* Parse generic type parameters <T, U: Constraint, V = int>. The helper
+     * installs a scope holding them so member type annotations such as
+     * `iterator(): Iterator<T>` recognise T as a type parameter. */
     XrTypeScope *saved_scope = parser->type_scope;
-    XrTypeScope *generic_scope = NULL;
-    if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
-        }
-        parser->type_scope = generic_scope;
-    }
+    int type_param_count = 0;
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     // Parse extends clause (optional, interface can extend multiple interfaces).
     // Use full type-reference parser so `extends Pair<K, V>` works.
@@ -1779,6 +1675,9 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     }
 
     // Parse interface body
+    /* `interface Seq<T> where T: Comparable { ... }` */
+    xr_parse_where_clause(parser, type_params, type_param_count);
+
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start interface body");
 
     // Collect method and property signatures into separate arrays so consumers
@@ -2106,45 +2005,12 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     char *enum_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
-    // Parse optional generic type parameters <T, E: Constraint>
-    XrGenericParam **type_params = NULL;
-    int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            char *param_name = token_to_string(parser, &parser->previous);
-
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                constraints = xr_parse_constraint_list(parser, &constraint_count);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
-    }
-
-    // Register generic type params in type_scope for payload type parsing.
+    /* Parse optional generic type parameters <T, E: Constraint, F = int>. The
+     * helper installs a scope holding them so payload types resolve. */
     XrTypeScope *saved_scope = parser->type_scope;
-    XrTypeScope *generic_scope = NULL;
-    if (type_param_count > 0) {
-        generic_scope = xr_type_scope_new(parser->type_scope);
-        for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
-            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
-        }
-        parser->type_scope = generic_scope;
-    }
+    int type_param_count = 0;
+    XrGenericParam **type_params = xr_parse_generic_params(parser, &type_param_count);
+    XrTypeScope *generic_scope = type_param_count > 0 ? parser->type_scope : NULL;
 
     if (xr_parser_match(parser, TK_COLON)) {
         xr_parser_error(parser, "enum backing types have been removed");
@@ -2169,6 +2035,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     }
 
     // Parse enum body
+    /* `enum Tree<T> where T: Comparable { ... }` */
+    xr_parse_where_clause(parser, type_params, type_param_count);
+
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start enum body");
 
     // Collect variants and methods

@@ -112,6 +112,7 @@ typedef enum {
     TK_EXTENDS,                 // extends
     TK_INTERFACE,               // interface
     TK_IMPLEMENTS,              // implements
+    TK_WHERE,                   // where (generic constraint clause)
     TK_FN,                      // fn (unified function keyword)
     TK_NEW,                     // new
     TK_THIS,                    // this
