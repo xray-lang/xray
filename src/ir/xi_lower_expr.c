@@ -228,6 +228,41 @@ static struct XrType *xi_lower_call_constructor_type(XiLower *l, const CallExprN
     return xi_lower_class_constructor_type(l, class_sym);
 }
 
+/* Does `T(args)` construct a user class instance?  The fact is about the
+ * callee's symbol kind, not about the class declaring an explicit constructor:
+ * a class without one gets a synthesized constructor during class lowering and
+ * the call still allocates a fresh instance (xr_instance_new).  Requiring an
+ * XrClassInfo excludes the builtin classes, which dispatch through a `call`
+ * static method that may hand back an existing object.
+ *
+ * ARC consumes the resulting XI_LOWERING_FLAG_CONSTRUCTOR_CALL to own and drop
+ * the result; a false positive would be a double release, so every uncertain
+ * shape answers false and keeps the alias-uncertain treatment. */
+static bool xi_lower_call_constructs_instance(XiLower *l, const CallExprNode *call,
+                                              const struct XrType *result_type) {
+    if (!l || !l->analyzer || !call || !call->callee || call->callee->type != AST_VARIABLE)
+        return false;
+    /* Constructing yields an instance of the constructed class. */
+    if (!result_type || result_type->kind != XR_KIND_INSTANCE)
+        return false;
+    const VariableNode *callee = &call->callee->as.variable;
+    XaSymbol *class_sym = NULL;
+    if (callee->symbol_id) {
+        /* A callee id resolving to something other than a class (a local that
+         * shadows the class name) is not a construction.  Deliberately no name
+         * fallback here: that would look straight past the shadowing. */
+        XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, callee->symbol_id);
+        if (sym && sym->kind == XA_SYM_CLASS)
+            class_sym = sym;
+    } else if (callee->name) {
+        class_sym = xi_lower_lookup_class_symbol(l, callee->name);
+    }
+    if (!class_sym)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, class_sym);
+    return links && links->class_info != NULL;
+}
+
 static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
                                          const char *member_name, struct XrType *type, int line) {
     if (!l || !module_name)
@@ -5166,6 +5201,8 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     v->line = (uint32_t) node->line;
     if (is_self_call)
         v->aux_int = 1;
+    if (xi_lower_call_constructs_instance(l, call, result_type))
+        v->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     v->call_plan = call_plan;
     lower_instantiate_call_view_evidence(v, static_callee, callee_type, false);
 
@@ -8630,6 +8667,12 @@ generic_constructor:;
         call->args[i + 1] = arg_vals[i];
     call->aux = (void *) "constructor";
     call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    /* Same fresh-result fact as the class-binding call path: a user class
+     * allocates its instance here.  A builtin class reaches this path too and
+     * stays unmarked, since its `call` static method may return an existing
+     * object. */
+    if (has_user_class_info && result_type && result_type->kind == XR_KIND_INSTANCE)
+        call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;

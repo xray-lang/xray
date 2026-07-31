@@ -682,6 +682,12 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
         return false;
     if (v->op == XI_GEN_CALL)
         return true;
+    /* Constructing a class allocates its instance, so the result cannot alias
+     * an argument. Lowering proved this (XI_LOWERING_FLAG_CONSTRUCTOR_CALL);
+     * the callee's spelling would not, because `super(...)` lowers to the same
+     * method call named "constructor" while returning the receiver at +0. */
+    if (xi_value_is_constructor_call(v))
+        return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
         xr_type_is_builtin_named_class(v->type, "StringBuilder"))
