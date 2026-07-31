@@ -129,42 +129,75 @@ static void collect_matched_type_members(AstNode *pattern, XrTypeKind *kinds, in
 }
 
 // Helper: add enum member name to collection
-static void add_enum_member(const char *member, const char ***names, int *count, int *cap) {
+/* Name of a type that may denote an enum by name: a monomorphized generic
+ * enum arrives as an instance type, and the parser resolves a bare enum name
+ * to a class type. Both carry the declared name. */
+static const char *pattern_named_type_name(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS)
+        return type->instance.class_name;
+    return NULL;
+}
+
+static XrType *pattern_enum_type_by_name(XaInferContext *ctx, const char *name) {
+    if (!ctx || !ctx->analyzer || !name)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (links && links->type && XR_TYPE_IS_ENUM(links->type))
+        return links->type;
+    return NULL;
+}
+
+/* One `Enum.Variant` written in a match arm. The site is kept alongside the
+ * name so a diagnostic can point at the arm that wrote it, not at the match. */
+typedef struct XaMatchedEnumMember {
+    const char *name;
+    AstNode *site;
+} XaMatchedEnumMember;
+
+static void add_enum_member(const char *member, AstNode *site, XaMatchedEnumMember **members,
+                            int *count, int *cap) {
     if (!member)
         return;
     if (*count >= *cap) {
         *cap = *cap ? *cap * 2 : 8;
-        *names = xr_realloc(*names, sizeof(const char *) * (*cap));
+        *members = xr_realloc(*members, sizeof(XaMatchedEnumMember) * (*cap));
     }
-    (*names)[(*count)++] = member;
+    (*members)[*count].name = member;
+    (*members)[*count].site = site;
+    (*count)++;
 }
 
 // Helper: collect enum member names from a match arm pattern
-static void collect_matched_enum_members(AstNode *pattern, const char ***names, int *count,
-                                         int *cap) {
+static void collect_matched_enum_members(AstNode *pattern, XaMatchedEnumMember **members,
+                                         int *count, int *cap) {
     if (!pattern)
         return;
 
     if (pattern->type == AST_ENUM_ACCESS) {
-        add_enum_member(pattern->as.enum_access.member_name, names, count, cap);
+        add_enum_member(pattern->as.enum_access.member_name, pattern, members, count, cap);
     } else if (pattern->type == AST_MEMBER_ACCESS) {
-        add_enum_member(pattern->as.member_access.name, names, count, cap);
+        add_enum_member(pattern->as.member_access.name, pattern, members, count, cap);
     } else if (pattern->type == AST_PATTERN_LITERAL && pattern->as.pattern_literal.value) {
         // Unwrap: AST_PATTERN_LITERAL wrapping AST_MEMBER_ACCESS or AST_ENUM_ACCESS
-        collect_matched_enum_members(pattern->as.pattern_literal.value, names, count, cap);
+        collect_matched_enum_members(pattern->as.pattern_literal.value, members, count, cap);
     } else if (pattern->type == AST_PATTERN_ADT) {
         /* ADT variant pattern: extract member name from variant node */
         AstNode *variant = pattern->as.pattern_adt.variant;
         if (variant) {
             if (variant->type == AST_ENUM_ACCESS)
-                add_enum_member(variant->as.enum_access.member_name, names, count, cap);
+                add_enum_member(variant->as.enum_access.member_name, variant, members, count, cap);
             else if (variant->type == AST_MEMBER_ACCESS)
-                add_enum_member(variant->as.member_access.name, names, count, cap);
+                add_enum_member(variant->as.member_access.name, variant, members, count, cap);
         }
     } else if (pattern->type == AST_PATTERN_MULTI) {
         PatternMultiNode *multi = &pattern->as.pattern_multi;
         for (int i = 0; i < multi->count; i++) {
-            collect_matched_enum_members(multi->patterns[i], names, count, cap);
+            collect_matched_enum_members(multi->patterns[i], members, count, cap);
         }
     }
 }
@@ -497,6 +530,14 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
     // 1. subject_type is already XR_KIND_ENUM
     // 2. subject is a variable whose declared_type resolves to an enum
     //    (parser creates XR_KIND_CLASS for "Color", need to check if it's actually an enum)
+    if (subject_type && !XR_TYPE_IS_ENUM(subject_type)) {
+        /* A generic enum reaches here monomorphized as an instance type, and
+         * the parser resolves a bare enum name to a class type. Both name the
+         * enum, so the symbol table decides. */
+        XrType *named = pattern_enum_type_by_name(ctx, pattern_named_type_name(subject_type));
+        if (named)
+            subject_type = named;
+    }
     if (!has_wildcard && subject_type && !XR_TYPE_IS_ENUM(subject_type) && match->expr &&
         match->expr->type == AST_VARIABLE) {
         const char *var_name = match->expr->as.variable.name;
@@ -507,21 +548,15 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
             if (dt) {
                 if (XR_TYPE_IS_ENUM(dt)) {
                     subject_type = dt;
-                } else if (XR_TYPE_IS_CLASS(dt) && dt->instance.class_name) {
-                    // Parser resolves enum names as XR_KIND_CLASS; check symbol table
-                    XaSymbol *maybe_enum =
-                        xa_scope_lookup(ctx->analyzer->current_scope, dt->instance.class_name);
-                    if (maybe_enum && maybe_enum->kind == XA_SYM_ENUM) {
-                        XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, maybe_enum);
-                        if (el && el->type && XR_TYPE_IS_ENUM(el->type)) {
-                            subject_type = el->type;
-                        }
-                    }
+                } else {
+                    XrType *named_dt = pattern_enum_type_by_name(ctx, pattern_named_type_name(dt));
+                    if (named_dt)
+                        subject_type = named_dt;
                 }
             }
         }
     }
-    if (subject_type && XR_TYPE_IS_ENUM(subject_type) && !has_wildcard) {
+    if (subject_type && XR_TYPE_IS_ENUM(subject_type)) {
         const char *enum_name = subject_type->enum_type.enum_name;
         if (enum_name) {
             XaSymbol *enum_sym = xa_scope_lookup(ctx->analyzer->current_scope, enum_name);
@@ -531,7 +566,7 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                 XaEnumInfo *enum_info = enum_links ? enum_links->enum_info : NULL;
                 if (enum_info && enum_info->variant_count > 0) {
                     // Collect matched members from all arms
-                    const char **matched = NULL;
+                    XaMatchedEnumMember *matched = NULL;
                     int matched_count = 0, matched_cap = 0;
 
                     for (int i = 0; i < match->arm_count; i++) {
@@ -542,15 +577,40 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                                                      &matched_count, &matched_cap);
                     }
 
+                    /* A name the enum does not declare is a typo, not an arm
+                     * that never fires. Expression position already rejects
+                     * `Color.Purple`; a pattern must answer the same way, and
+                     * independently of `_`, which otherwise hides it. */
+                    for (int j = 0; j < matched_count; j++) {
+                        bool declared = false;
+                        for (uint32_t i = 0; i < enum_info->variant_count; i++) {
+                            const char *variant = enum_info->variants[i].name;
+                            if (variant && strcmp(matched[j].name, variant) == 0) {
+                                declared = true;
+                                break;
+                            }
+                        }
+                        if (declared)
+                            continue;
+                        AstNode *site = matched[j].site ? matched[j].site : node;
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = site->line, .column = site->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg), "enum '%s' has no member '%s'", enum_name,
+                                 matched[j].name);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    }
+
                     // Check which enum members are missing
-                    for (uint32_t i = 0; i < enum_info->variant_count; i++) {
+                    for (uint32_t i = 0; !has_wildcard && i < enum_info->variant_count; i++) {
                         const char *member_name = enum_info->variants[i].name;
                         if (!member_name)
                             continue;
 
                         bool found = false;
                         for (int j = 0; j < matched_count; j++) {
-                            if (strcmp(matched[j], member_name) == 0) {
+                            if (strcmp(matched[j].name, member_name) == 0) {
                                 found = true;
                                 break;
                             }
