@@ -1040,9 +1040,9 @@ static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const vo
     return NULL;
 }
 
-static void emit_adt_enum_make_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed,
-                                    int member_idx, const XiValue *v, uint16_t payload_count,
-                                    const char *enum_name, const char *member_name) {
+static void emit_adt_enum_make_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed, int member_idx,
+                                    const XiValue *v, uint16_t payload_count, const char *enum_name,
+                                    const char *member_name) {
     fprintf(out, "%s(%u, %d, %u, ",
             payload_count > 0 ? "XRT_ENUM_AGGREGATE_MAKE" : "xrt_enum_aggregate_make",
             ed ? ed->layout_id : 0u, member_idx, (unsigned) payload_count);
@@ -1118,7 +1118,7 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_to_string(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_display_tagged(ctx, out, v->args[0]);
             fprintf(out, ")");
         }
         return;
@@ -1132,7 +1132,7 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
             fprintf(out, "); ");
         } else {
             fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_TAGGED);
+            emit_value_as_display_tagged(ctx, out, v->args[i]);
             fprintf(out, "); ");
         }
     }

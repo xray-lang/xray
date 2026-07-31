@@ -4335,6 +4335,13 @@ static bool cg_span_value_u8_info(XiCgenCtx *ctx, const XiValue *value, CgArrayE
     return true;
 }
 
+/* Whether a typed borrowed view can be built for this span (see
+ * emit_value_as_display_tagged, which probes before emitting). */
+static bool cg_span_value_has_elem_info(XiCgenCtx *ctx, const XiValue *value) {
+    CgArrayElemInfo info;
+    return cg_span_elem_info_from_value(ctx, value, &info) && info.elem_name && info.ctype;
+}
+
 static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     CgArrayElemInfo info;
     if (!cg_span_elem_info_from_value(ctx, value, &info) || !info.elem_name || !info.ctype)

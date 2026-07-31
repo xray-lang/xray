@@ -401,19 +401,17 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     typeof_v->args[0] = value;
     typeof_v->flags = xi_op_default_effects(XI_TYPENAME);
 
-    XiValue *as_v = xi_value_new(f, entry, XI_AS, &stub_int, 1);
+    /* XI_AS is the dynamic type-check operation; numeric conversion belongs to
+     * XI_CONVERT and the verifier now rejects an XI_AS without dynamic
+     * conversion evidence. Build the checked (non-nullable) form, whose safe
+     * bit in aux_int must stay clear to agree with the witness. */
+    XiValue *as_v = xi_value_new(f, entry, XI_AS, &stub_string, 1);
     assert(as_v != NULL);
     as_v->args[0] = value;
     as_v->flags = xi_op_default_effects(XI_AS);
     as_v->aux_int = ((int64_t) (uint32_t) 8 << 1);
-    as_v->aux = (void *) "int";
-    /* XI_AS carries dynamic-cast evidence only; a numeric XI_AS is rejected by
-     * verify_conversion_contract, and the low aux_int bit must agree with the
-     * kind (clear = checked, set = nullable).  Mirror what xi_lower emits. */
+    as_v->aux = (void *) "string";
     as_v->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
-    as_v->conversion.source_scalar_rep = XR_SCALAR_REP_NONE;
-    as_v->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
-    as_v->conversion.is_implicit = false;
 
     XiValue *slice_v = xi_value_new(f, entry, XI_SLICE, &stub_array, 3);
     assert(slice_v != NULL);

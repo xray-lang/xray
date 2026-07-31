@@ -2345,12 +2345,23 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
  * canonical type directly. Map / Json instead route through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
  * yield real keys and `for (k in obj)` yield string keys, matching
- * the analyzer's item-type inference and Python / Go conventions. */
+ * the analyzer's item-type inference and Python / Go conventions.
+ *
+ * A `Range` value qualifies too: it carries no iterator() method, but both
+ * backends answer len()/[i] on it lazily (VM: OP_LEN / OP_GETINDEX fast
+ * paths; AOT: the XR_TAG_RANGE branches in xrt_len_value / xrt_index_get),
+ * so the counted loop reads elements without materializing an array.
+ *
+ * The class_ref test keeps a user-declared `class Range` out of that path:
+ * prelude names are ordinary identifiers, and the analyzer only grants the
+ * builtin int-sequence domain to the prelude type (NULL class_ref). A user
+ * Range reaches for-in through iterator() like any other class. */
 static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     struct XrType *t = xi_lower_node_type(l, coll_node);
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
-    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SLICE || t->kind == XR_KIND_SET;
+    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SLICE || t->kind == XR_KIND_SET ||
+           (xr_type_is_named_class(t, "Range") && t->instance.class_ref == NULL);
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {

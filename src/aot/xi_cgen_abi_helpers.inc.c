@@ -189,6 +189,39 @@ static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     return plan && cg_value_rep_is_span_aggregate(plan->rep);
 }
 
+/* Defined in xi_cgen_array_helpers.inc.c, which is included later: boxes a span
+ * through a typed borrowed xrt_array_t view carrying its element type, and
+ * reports whether that view can be built at all. */
+static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value);
+static bool cg_span_value_has_elem_info(XiCgenCtx *ctx, const XiValue *value);
+static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep);
+
+/*
+ * Emit v as a TAGGED value that carries full value semantics for display and
+ * string conversion.
+ *
+ * A Slice's tagged form is xrt_span_to_value_ref: a bare data+length pair whose
+ * element type lives only in the compile-time plan. Every runtime consumer that
+ * has to interpret elements -- string(), string concatenation, the shared
+ * formatter -- would therefore see an opaque reference and fall back to a
+ * placeholder, while print() renders the elements correctly through a typed
+ * borrowed view. Route the value-semantic consumers through that same view so
+ * one shape feeds all of them. The Slice value ABI is untouched: this is a
+ * borrowed view built at the use site, not a change to how slices are passed.
+ */
+static void emit_value_as_display_tagged(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    /* An erased element type leaves no view to build; the ordinary tagged form
+     * is then the only thing we can emit. */
+    if (ctx && v && cg_value_plan_is_span_aggregate(ctx, v) &&
+        cg_span_value_has_elem_info(ctx, cg_unwrap_identity_value(v))) {
+        fprintf(out, "xr_mkptr(");
+        (void) emit_span_array_view_ptr_expr(ctx, out, cg_unwrap_identity_value(v));
+        fprintf(out, ", XR_TAG_ARRAY)");
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+}
+
 static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
     if (cg_value_rep_is_span_aggregate(rep)) {
         fprintf(out, "xrt_span_empty()");

@@ -182,6 +182,12 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         char tmp[256];
         return xrt_str_from_cstr(xr_to_cstr(val, tmp, sizeof(tmp)));
     }
+    /* Aggregates render through the shared formatter, which reproduces the VM's
+     * xr_value_to_string output. Restricted to the shapes xrt_format_value
+     * renders structurally; every other heap tag would fall through to its
+     * "<object@%p>" placeholder, which is worse than a stable "[object]". */
+    if (xrt_value_kind_is_formattable_aggregate(val))
+        return xrt_value_to_string(val);
     return xr_box_str("[object]");
 }
 

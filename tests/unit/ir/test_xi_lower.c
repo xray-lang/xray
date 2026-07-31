@@ -2628,7 +2628,10 @@ TEST(struct_field_store_narrows_scalar_rep) {
                              "fn run() -> byte {\n"
                              "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
-                             "    return p.octet\n"
+                             /* byte -> int is an explicit conversion since
+                              * contextual conversion semantics were enforced;
+                              * the narrowing under test is the field store. */
+                             "    return int(p.octet)\n"
                              "}\n"
                              "print(run())\n");
     assert(f != NULL);
