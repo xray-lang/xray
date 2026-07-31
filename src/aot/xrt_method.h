@@ -384,6 +384,14 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_SORT)
             return xrt_array_sort(recv, NULL);
+        /* Same iteration protocol Map / Set / string / Json already answer.
+         * Statically typed `for (x in arr)` never lands here (it lowers to
+         * len()/index), but an erased generic body and an explicit
+         * arr.iterator() both do. */
+        if (sym == XRT_SYM_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_VALUES);
+        if (sym == XRT_SYM_ENTRIES_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_PAIRS);
     }
     if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;

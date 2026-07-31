@@ -3585,6 +3585,16 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    /* Arrays reach an iterator only through the dynamic protocol — `for (x in
+     * arr)` on a statically known array lowers to len()/index instead. An
+     * erased generic body (`fn f<T: Iterable<E>>(xs: T)` instantiated with a
+     * container, which does not monomorphize) is that path, and so is an
+     * explicit arr.iterator(). Mirrors XR_ITERATOR_ARRAY in the VM
+     * (src/runtime/object/xiterator.c). */
+    if (XR_IS_ARRAY(it->coll)) {
+        xrt_array_t *a = (xrt_array_t *) it->coll.ptr;
+        return it->cursor < a->length;
+    }
     if (XR_IS_STR(it->coll))
         return it->cursor < xr_str_len(it->coll);
     return 0;
@@ -3630,6 +3640,18 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
     }
     if (xrt_is_json_object_value(it->coll))
         return xrt_json_iterator_next(it);
+    if (XR_IS_ARRAY(it->coll)) {
+        xrt_array_t *a = (xrt_array_t *) it->coll.ptr;
+        int64_t idx = it->cursor++;
+        XrValue elem = xr_typed_get(a->data, (int32_t) idx, a->elem_type);
+        if (it->kind == XRT_ITER_KEYS)
+            return XR_FROM_INT(idx);
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {XR_FROM_INT(idx), elem};
+            return xrt_tuple_make(2, kv);
+        }
+        return elem;
+    }
     if (XR_IS_STR(it->coll)) {
         int64_t char_index = it->index++;
         uint32_t cp = 0;
