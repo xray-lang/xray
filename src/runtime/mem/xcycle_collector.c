@@ -40,6 +40,7 @@
 
 #include "xcoro_heap.h"
 #include "xobj_header.h"
+#include "xobj_graph.h"
 #include "../class/xinstance.h"
 #include "../class/xenum.h"
 #include "../class/xclass.h"
@@ -72,135 +73,7 @@ static inline uint8_t get_color(const XrObjHeader *obj) {
     return (uint8_t) ((obj->extra & XR_OBJ_CYCLE_COLOR_MASK) >> XR_OBJ_CYCLE_COLOR_SHIFT);
 }
 
-/* Trial deletion may only touch coro-local RC objects. Shared objects use
- * atomic refcounts (raw ++/-- would race other workers), managed objects
- * are runtime-owned, and region objects ignore RC entirely. None of them
- * can be a member of a coro-local cycle, so skip the edge altogether
- * (consistently in EVERY phase, or the trial bookkeeping breaks). */
-static inline bool cycle_child_eligible(const XrObjHeader *obj) {
-    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_STORAGE_BUMP))
-        return false;
-    if (XR_OBJ_IS_SHARED(obj))
-        return false;
-    return true;
-}
-
 /* ========== Child Scanning ========== */
-
-/* Callback type for iterating GC-managed children of an object. */
-typedef void (*ChildVisitor)(XrObjHeader *child, void *ctx);
-
-/* Visit all GC pointer children of an object (type-specific traversal). */
-static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
-    XR_DCHECK(obj != NULL, "visit_children: NULL obj");
-    switch (obj->type) {
-        case XR_TINSTANCE: {
-            XrInstance *inst = (XrInstance *) obj;
-            XrClass *klass = inst->klass;
-            if (!klass)
-                break;
-            if (klass->builtin_kind == XR_BK_ADT_ENUM) {
-                XrEnumAggregateValue *agg = (XrEnumAggregateValue *) obj;
-                for (uint32_t i = 0; i < agg->payload_count; i++) {
-                    XrValue v = agg->payloads[i];
-                    if (XR_IS_PTR(v)) {
-                        XrObjHeader *child = XR_VALUE_GCPTR(v);
-                        if (child)
-                            visitor(child, ctx);
-                    }
-                }
-                break;
-            }
-            uint32_t fc = xr_class_instance_field_count(klass);
-            for (uint32_t i = 0; i < fc; i++) {
-                XrValue v = inst->fields[i];
-                if (XR_IS_PTR(v)) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(v);
-                    if (child)
-                        visitor(child, ctx);
-                }
-            }
-            break;
-        }
-        case XR_TARRAY: {
-            XrArray *arr = (XrArray *) obj;
-            if (arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
-                break;
-            XrValue *data = (XrValue *) arr->data;
-            for (int32_t i = 0; i < arr->length; i++) {
-                if (XR_IS_PTR(data[i])) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(data[i]);
-                    if (child)
-                        visitor(child, ctx);
-                }
-            }
-            break;
-        }
-        case XR_TMAP: {
-            XrMap *map = (XrMap *) obj;
-            if (xr_map_isdummy(map) || !map->entries)
-                break;
-            uint32_t count = map->nentries;
-            for (uint32_t i = 0; i < count; i++) {
-                XrMapEntry *node = &map->entries[i];
-                if (XR_MAP_ENTRY_EMPTY(node))
-                    continue;
-                if (XR_IS_PTR(node->key)) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(node->key);
-                    if (child)
-                        visitor(child, ctx);
-                }
-                if (XR_IS_PTR(node->value)) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(node->value);
-                    if (child)
-                        visitor(child, ctx);
-                }
-            }
-            break;
-        }
-        case XR_TSET: {
-            XrSet *set = (XrSet *) obj;
-            if (!set->entries)
-                break;
-            for (uint32_t i = 0; i < set->nentries; i++) {
-                XrSetEntry *e = &set->entries[i];
-                if (XR_SET_ENTRY_EMPTY(e))
-                    continue;
-                if (XR_IS_PTR(e->value)) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(e->value);
-                    if (child)
-                        visitor(child, ctx);
-                }
-            }
-            break;
-        }
-        case XR_TFUNCTION: {
-            XrClosure *closure = (XrClosure *) obj;
-            for (uint16_t i = 0; i < closure->upval_count; i++) {
-                XrValue v = closure->upvals[i];
-                if (XR_IS_PTR(v)) {
-                    XrObjHeader *child = XR_VALUE_GCPTR(v);
-                    if (child)
-                        visitor(child, ctx);
-                }
-            }
-            break;
-        }
-        case XR_TCELL: {
-            XrCell *cell = (XrCell *) obj;
-            XrValue v = cell->value;
-            if (XR_IS_PTR(v)) {
-                XrObjHeader *child = XR_VALUE_GCPTR(v);
-                if (child)
-                    visitor(child, ctx);
-            }
-            break;
-        }
-        default:
-            /* Leaf or runtime-managed type: no coro-local RC children. */
-            break;
-    }
-}
 
 /* ========== Cycle Roots Management ========== */
 
@@ -320,7 +193,7 @@ static bool cvec_push(CycleVec *v, XrObjHeader *o) {
 /* Pass A visitor: add an eligible, not-yet-seen child to the reachable set. */
 static void cycle_reach_visitor(XrObjHeader *child, void *ctx) {
     CycleVec *R = (CycleVec *) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
+    if (!child || (child->extra & XR_OBJ_DEAD) || !xr_obj_graph_child_eligible(child))
         return;
     if (get_color(child) != COLOR_GRAY) {
         set_color(child, COLOR_GRAY);
@@ -331,7 +204,7 @@ static void cycle_reach_visitor(XrObjHeader *child, void *ctx) {
 /* Pass B visitor: trial-decrement one internal edge. */
 static void mark_gray_dec_visitor(XrObjHeader *child, void *ctx) {
     (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
+    if (!child || (child->extra & XR_OBJ_DEAD) || !xr_obj_graph_child_eligible(child))
         return;
     child->refcount--;
 }
@@ -341,7 +214,7 @@ static void mark_gray_dec_visitor(XrObjHeader *child, void *ctx) {
  * member of R, so the push never exceeds capacity. */
 static void scan_black_inc_visitor(XrObjHeader *child, void *ctx) {
     CycleVec *work = (CycleVec *) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
+    if (!child || (child->extra & XR_OBJ_DEAD) || !xr_obj_graph_child_eligible(child))
         return;
     child->refcount++;
     if (get_color(child) != COLOR_BLACK) {
@@ -356,7 +229,7 @@ static void scan_black_flat(XrObjHeader *root, CycleVec *work) {
     work->items[work->count++] = root;
     while (work->count) {
         XrObjHeader *obj = work->items[--work->count];
-        visit_children(obj, scan_black_inc_visitor, work);
+        xr_obj_graph_visit_children(obj, scan_black_inc_visitor, work);
     }
 }
 
@@ -364,7 +237,7 @@ static void scan_black_flat(XrObjHeader *root, CycleVec *work) {
  * Edges to ineligible children were never decremented, so skip them. */
 static void restore_edge_visitor(XrObjHeader *child, void *ctx) {
     (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
+    if (!child || (child->extra & XR_OBJ_DEAD) || !xr_obj_graph_child_eligible(child))
         return;
     child->refcount++;
 }
@@ -398,7 +271,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     bool ok = true;
     for (uint32_t i = 0; i < n; i++) {
         XrObjHeader *o = heap->cycle_roots[i];
-        if (o && !(o->extra & XR_OBJ_DEAD) && cycle_child_eligible(o) &&
+        if (o && !(o->extra & XR_OBJ_DEAD) && xr_obj_graph_child_eligible(o) &&
             get_color(o) != COLOR_GRAY) {
             set_color(o, COLOR_GRAY);
             if (!cvec_push(&R, o)) {
@@ -408,7 +281,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
         }
     }
     for (uint32_t s = 0; ok && s < R.count; s++) {
-        visit_children(R.items[s], cycle_reach_visitor, &R);
+        xr_obj_graph_visit_children(R.items[s], cycle_reach_visitor, &R);
         if (R.oom) {
             ok = false;
             break;
@@ -431,7 +304,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     } else if (R.count > 0) {
         /* Pass B: trial-decrement every internal edge once. */
         for (uint32_t i = 0; i < R.count; i++)
-            visit_children(R.items[i], mark_gray_dec_visitor, NULL);
+            xr_obj_graph_visit_children(R.items[i], mark_gray_dec_visitor, NULL);
 
         /* Pass C: nodes with a surviving external reference are live. */
         for (uint32_t i = 0; i < R.count; i++) {
@@ -449,7 +322,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
          * xr_coro_heap_destroy_obj makes the cascade idempotent across edges. */
         for (uint32_t i = 0; i < R.count; i++) {
             if (get_color(R.items[i]) == COLOR_WHITE)
-                visit_children(R.items[i], restore_edge_visitor, NULL);
+                xr_obj_graph_visit_children(R.items[i], restore_edge_visitor, NULL);
         }
         for (uint32_t i = 0; i < R.count; i++) {
             XrObjHeader *obj = R.items[i];

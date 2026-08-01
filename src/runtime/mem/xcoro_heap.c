@@ -9,6 +9,7 @@
  */
 
 #include "xcoro_heap.h"
+#include "xcycle_detector.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../value/xvalue.h"
@@ -326,6 +327,17 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     if (!heap)
         return;
     XR_DCHECK(!heap->is_collecting, "coro_heap_destroy called while collecting");
+
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Before the bulk free, which is the only moment this leak is visible.
+     * The coroutine-heap boundary bounds a cycle's lifetime (spec 16.3) — and
+     * in doing so hides it, because everything is about to be freed anyway.
+     * Scanning here is what turns "bounded leak" into "reported leak". */
+    {
+        XrCycleReport report;
+        (void) xr_cycle_detector_scan(heap, &report);
+    }
+#endif
 
     heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
