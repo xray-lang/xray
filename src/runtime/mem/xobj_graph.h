@@ -45,8 +45,18 @@ static inline bool xr_obj_graph_child_eligible(const XrObjHeader *obj) {
     return true;
 }
 
-/* Callback type for iterating GC-managed children of an object. */
-typedef void (*XrObjGraphVisitor)(XrObjHeader *child, void *ctx);
+/* Which slot of the holder an edge came out of.
+ *
+ * For an instance this is the field index, which is what turns "there is a
+ * cycle through this class" into "annotate THIS field `weak`" — the whole
+ * point of reporting a candidate edge. For a container it is the element or
+ * entry index, which has no source-level declaration to annotate; the fix
+ * there is on the field that holds the container. */
+#define XR_OBJ_GRAPH_SLOT_NONE UINT32_MAX
+
+/* Callback type for iterating GC-managed children of an object.
+ * `slot` is the holder-relative index described above. */
+typedef void (*XrObjGraphVisitor)(XrObjHeader *child, uint32_t slot, void *ctx);
 
 /* Visit all GC pointer children of an object (type-specific traversal). */
 static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor,
@@ -65,7 +75,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                     if (XR_IS_PTR(v)) {
                         XrObjHeader *child = XR_VALUE_GCPTR(v);
                         if (child)
-                            visitor(child, ctx);
+                            visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                     }
                 }
                 break;
@@ -76,7 +86,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 if (XR_IS_PTR(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, i, ctx);
                 }
             }
             break;
@@ -90,7 +100,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 if (XR_IS_PTR(data[i])) {
                     XrObjHeader *child = XR_VALUE_GCPTR(data[i]);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
             }
             break;
@@ -107,12 +117,12 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 if (XR_IS_PTR(node->key)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(node->key);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
                 if (XR_IS_PTR(node->value)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(node->value);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
             }
             break;
@@ -128,7 +138,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 if (XR_IS_PTR(e->value)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(e->value);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
             }
             break;
@@ -140,7 +150,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 if (XR_IS_PTR(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
-                        visitor(child, ctx);
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
             }
             break;
@@ -151,7 +161,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
             if (XR_IS_PTR(v)) {
                 XrObjHeader *child = XR_VALUE_GCPTR(v);
                 if (child)
-                    visitor(child, ctx);
+                    visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
             }
             break;
         }

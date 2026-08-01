@@ -19,8 +19,10 @@
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 
+#include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ========== Whole-heap object enumeration ==========
@@ -237,7 +239,8 @@ typedef struct {
     bool *changed;
 } ReachCtx;
 
-static void detector_reach_visitor(XrObjHeader *child, void *ctx) {
+static void detector_reach_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
+    (void) slot;
     ReachCtx *rc = (ReachCtx *) ctx;
     if (!xr_obj_graph_child_eligible(child) || (child->extra & XR_OBJ_DEAD))
         return;
@@ -247,14 +250,16 @@ static void detector_reach_visitor(XrObjHeader *child, void *ctx) {
         *rc->changed = true;
 }
 
-static void detector_dec_visitor(XrObjHeader *child, void *ctx) {
+static void detector_dec_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
+    (void) slot;
     DetectorSet *set = (DetectorSet *) ctx;
     DetectorNode *n = detector_find(set, child);
     if (n)
         n->trial_rc--;
 }
 
-static void detector_inc_visitor(XrObjHeader *child, void *ctx) {
+static void detector_inc_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
+    (void) slot;
     DetectorSet *set = (DetectorSet *) ctx;
     DetectorNode *n = detector_find(set, child);
     if (n)
@@ -266,7 +271,8 @@ typedef struct {
     bool *progressed;
 } ScanBlackCtx;
 
-static void detector_scan_black_visitor(XrObjHeader *child, void *ctx) {
+static void detector_scan_black_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
+    (void) slot;
     ScanBlackCtx *sb = (ScanBlackCtx *) ctx;
     DetectorNode *n = detector_find(sb->set, child);
     if (!n)
@@ -329,30 +335,25 @@ static const char *detector_type_name(const XrObjHeader *obj) {
     }
 }
 
-/* Which of `from`'s fields / elements / captures points at `to`?
- *
- * This is what separates a report you can act on from one that only says "you
- * leaked". Listing the edge lets the reader see which one to break. */
+/* Does `from` reference `to` at all? Used while splitting a component, where
+ * only the existence of the edge matters — naming it is detector_collect_edges'
+ * job, after the component's membership is final. */
 typedef struct {
     const XrObjHeader *target;
     const char *label;
-    char buf[64];
+    uint32_t slot;
 } EdgeLabelCtx;
 
-static void detector_edge_label_visitor(XrObjHeader *child, void *ctx) {
+static void detector_edge_label_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
     EdgeLabelCtx *e = (EdgeLabelCtx *) ctx;
-    if (child == e->target && !e->label)
+    if (child == e->target && !e->label) {
         e->label = "";
+        e->slot = slot;
+    }
 }
 
-static const char *detector_edge_label(XrObjHeader *from, const XrObjHeader *to) {
-    /* Field / element identity needs per-type walking that xobj_graph.h does
-     * not expose. Report the holder's shape, which already narrows it to one
-     * declaration in the source. */
-    EdgeLabelCtx ctx = {.target = to, .label = NULL, .buf = {0}};
-    xr_obj_graph_visit_children(from, detector_edge_label_visitor, &ctx);
-    if (!ctx.label)
-        return NULL;
+/* What kind of reference the edge is, in the holder's own vocabulary. */
+static const char *detector_edge_kind(const XrObjHeader *from) {
     switch (from->type) {
         case XR_TINSTANCE:
             return "field";
@@ -371,11 +372,198 @@ static const char *detector_edge_label(XrObjHeader *from, const XrObjHeader *to)
     }
 }
 
+/* ========== Sidecar report (phase H) ==========
+ *
+ * The cycle happens in the process that ran the program; the fix happens in an
+ * editor attached to a different one. The stderr report is for a human reading
+ * a terminal, and an editor cannot act on it — so the same findings are also
+ * written out as class+field identities the LSP can resolve back to a field
+ * declaration and offer as a code action.
+ *
+ * Accumulated across every scan (each coroutine heap plus the root heap runs
+ * its own) and flushed once at exit, because a cycle spanning two heaps must
+ * not land in two files that overwrite each other. */
+static char *g_sidecar_buf;
+static size_t g_sidecar_len;
+static size_t g_sidecar_cap;
+static bool g_sidecar_hooked;
+static uint32_t g_sidecar_cycles;
+
+static void detector_sidecar_put(const char *fmt, ...) {
+    for (int attempt = 0; attempt < 2; attempt++) {
+        size_t room = g_sidecar_cap - g_sidecar_len;
+        va_list ap;
+        va_start(ap, fmt);
+        int n = vsnprintf(g_sidecar_buf ? g_sidecar_buf + g_sidecar_len : NULL, room, fmt, ap);
+        va_end(ap);
+        if (n < 0)
+            return;
+        if ((size_t) n < room) {
+            g_sidecar_len += (size_t) n;
+            return;
+        }
+        size_t want = g_sidecar_cap ? g_sidecar_cap : 4096;
+        while (want < g_sidecar_len + (size_t) n + 1)
+            want *= 2;
+        char *grown = (char *) xr_realloc(g_sidecar_buf, want);
+        if (!grown)
+            return; /* Out of memory writing a diagnostic: drop it, do not abort. */
+        g_sidecar_buf = grown;
+        g_sidecar_cap = want;
+    }
+}
+
+/* Class and field names are identifiers, so this only ever has to handle the
+ * degenerate cases — but a report that emits invalid JSON is worse than none. */
+static void detector_sidecar_put_json_string(const char *s) {
+    detector_sidecar_put("\"");
+    for (const char *p = s; p && *p; p++) {
+        unsigned char c = (unsigned char) *p;
+        if (c == '"' || c == '\\')
+            detector_sidecar_put("\\%c", c);
+        else if (c < 0x20)
+            detector_sidecar_put("\\u%04x", c);
+        else
+            detector_sidecar_put("%c", c);
+    }
+    detector_sidecar_put("\"");
+}
+
+static const char *detector_sidecar_path(void) {
+    const char *env = getenv("XRAY_CYCLE_REPORT");
+    return (env && *env) ? env : ".xray-cycles.json";
+}
+
+static void detector_sidecar_flush(void) {
+    if (!g_sidecar_buf || g_sidecar_cycles == 0)
+        return;
+    const char *path = detector_sidecar_path();
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "[cycle-detector] 无法写出边车报告 %s\n", path);
+        return;
+    }
+    fprintf(f, "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[%s]}\n", g_sidecar_buf);
+    fclose(f);
+    fprintf(stderr, "[cycle-detector] 边车报告已写出: %s\n", path);
+}
+
 typedef struct {
     DetectorSet *set;
     XrCycleReport *report;
     bool header_printed;
 } EmitCtx;
+
+/* ---------- Edges inside one component ----------
+ *
+ * `members` is the set of objects in a strongly connected component, NOT a
+ * walk around a cycle: consecutive entries need not reference each other, and
+ * a component with several interlocking cycles has no single path through it.
+ * Assuming otherwise silently drops real candidate edges and invents ones that
+ * do not exist — and 247 H.5 demands the candidate list be complete.
+ *
+ * So enumerate: for every member, every child that lands back inside the
+ * component is one edge. Components are small; the linear membership test is
+ * not worth an index. */
+typedef struct {
+    uint32_t from;
+    uint32_t to;
+    uint32_t slot;
+} CycleEdge;
+
+typedef struct {
+    DetectorNode **members;
+    uint32_t count;
+    uint32_t current;
+    CycleEdge *edges;
+    uint32_t edge_count;
+    uint32_t edge_cap;
+    bool overflow;
+} CycleEdgeCtx;
+
+static void cycle_edge_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
+    CycleEdgeCtx *c = (CycleEdgeCtx *) ctx;
+    uint32_t to = UINT32_MAX;
+    for (uint32_t i = 0; i < c->count; i++) {
+        if (c->members[i]->obj == child) {
+            to = i;
+            break;
+        }
+    }
+    if (to == UINT32_MAX)
+        return; /* leaves the component: not part of what keeps it alive */
+    if (c->edge_count == c->edge_cap) {
+        uint32_t cap = c->edge_cap ? c->edge_cap * 2 : 16;
+        CycleEdge *grown = (CycleEdge *) xr_realloc(c->edges, cap * sizeof(*grown));
+        if (!grown) {
+            c->overflow = true;
+            return;
+        }
+        c->edges = grown;
+        c->edge_cap = cap;
+    }
+    c->edges[c->edge_count++] = (CycleEdge) {.from = c->current, .to = to, .slot = slot};
+}
+
+static void detector_collect_edges(CycleEdgeCtx *c, DetectorNode **members, uint32_t count) {
+    memset(c, 0, sizeof(*c));
+    c->members = members;
+    c->count = count;
+    for (uint32_t i = 0; i < count; i++) {
+        c->current = i;
+        xr_obj_graph_visit_children(members[i]->obj, cycle_edge_visitor, c);
+    }
+}
+
+/* `weak` is a field modifier: it reaches an instance field and nothing else.
+ * An edge into a closure or a cell is a capture edge, which no annotation can
+ * break — the only fix is clearing the field that holds the closure. */
+static bool cycle_edge_is_capture(const CycleEdgeCtx *c, const CycleEdge *e) {
+    uint8_t t = c->members[e->to]->obj->type;
+    return t == XR_TFUNCTION || t == XR_TCELL;
+}
+
+static const char *cycle_edge_field(const CycleEdgeCtx *c, const CycleEdge *e) {
+    XrObjHeader *from = c->members[e->from]->obj;
+    if (from->type != XR_TINSTANCE || e->slot == XR_OBJ_GRAPH_SLOT_NONE)
+        return NULL;
+    return xr_cycle_detector_field_name(((const XrInstance *) from)->klass, e->slot);
+}
+
+/* Class name when the object is an instance of a registered class, else the
+ * runtime shape — either way something the reader can match to source. */
+static const char *cycle_obj_name(const XrObjHeader *o) {
+    if (o->type == XR_TINSTANCE) {
+        const char *n = xr_cycle_detector_class_name(((const XrInstance *) o)->klass);
+        if (n)
+            return n;
+    }
+    return detector_type_name(o);
+}
+
+/* Two objects of the same class holding the same field produce two runtime
+ * edges but only ONE thing to change in the source. Collapsing them keeps the
+ * candidate list a list of decisions rather than a list of instances — the LSP
+ * would otherwise offer the identical code action several times. */
+static bool cycle_edge_is_duplicate(const CycleEdgeCtx *c, uint32_t index) {
+    const CycleEdge *e = &c->edges[index];
+    const char *from = cycle_obj_name(c->members[e->from]->obj);
+    const char *to = cycle_obj_name(c->members[e->to]->obj);
+    const char *field = cycle_edge_field(c, e);
+    for (uint32_t i = 0; i < index; i++) {
+        const CycleEdge *prev = &c->edges[i];
+        const char *pfield = cycle_edge_field(c, prev);
+        if ((field == NULL) != (pfield == NULL))
+            continue;
+        if (field && pfield && strcmp(field, pfield) != 0)
+            continue;
+        if (strcmp(from, cycle_obj_name(c->members[prev->from]->obj)) != 0)
+            continue;
+        if (strcmp(to, cycle_obj_name(c->members[prev->to]->obj)) == 0)
+            return true;
+    }
+    return false;
+}
 
 static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t count) {
     XrCycleReport *r = emit->report;
@@ -387,15 +575,21 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     r->object_count += count;
     r->byte_count += bytes;
 
+    CycleEdgeCtx edges;
+    detector_collect_edges(&edges, members, count);
+
     fprintf(stderr, "\n引用环 (%u 个对象, %llu 字节)\n", count, (unsigned long long) bytes);
-    for (uint32_t i = 0; i < count; i++) {
-        XrObjHeader *from = members[i]->obj;
-        XrObjHeader *to = members[(i + 1) % count]->obj;
-        const char *edge = detector_edge_label(from, to);
-        fprintf(stderr, "  %-16s @ %p", detector_type_name(from), (void *) from);
-        if (edge && count > 1)
-            fprintf(stderr, "  ──%s──▶", edge);
-        fprintf(stderr, "\n");
+    for (uint32_t i = 0; i < count; i++)
+        fprintf(stderr, "  %-16s @ %p\n", cycle_obj_name(members[i]->obj),
+                (void *) members[i]->obj);
+    for (uint32_t i = 0; i < edges.edge_count; i++) {
+        const CycleEdge *e = &edges.edges[i];
+        if (cycle_edge_is_duplicate(&edges, i))
+            continue;
+        const char *field = cycle_edge_field(&edges, e);
+        fprintf(stderr, "    %s.%s ──▶ %s\n", cycle_obj_name(members[e->from]->obj),
+                field ? field : detector_edge_kind(members[e->from]->obj),
+                cycle_obj_name(members[e->to]->obj));
     }
 
     /* Machine-readable alongside, for the LSP code actions in phase H. */
@@ -405,23 +599,49 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
                 (void *) members[i]->obj);
     fprintf(stderr, "\n");
 
+    /* Same findings, machine-side: class + field identities the LSP resolves
+     * back to a declaration. Hooked lazily so a run with no cycle leaves no
+     * file behind. */
+    if (!g_sidecar_hooked) {
+        atexit(detector_sidecar_flush);
+        g_sidecar_hooked = true;
+    }
+    detector_sidecar_put("%s\n  {\"objects\":%u,\"bytes\":%llu,\"edges\":[",
+                         g_sidecar_cycles ? "," : "", count, (unsigned long long) bytes);
+    g_sidecar_cycles++;
+    uint32_t emitted = 0;
+    for (uint32_t i = 0; i < edges.edge_count; i++) {
+        const CycleEdge *e = &edges.edges[i];
+        if (cycle_edge_is_duplicate(&edges, i))
+            continue;
+        XrObjHeader *from = members[e->from]->obj;
+        const char *field = cycle_edge_field(&edges, e);
+        detector_sidecar_put("%s\n    {\"from\":", emitted++ ? "," : "");
+        detector_sidecar_put_json_string(cycle_obj_name(from));
+        detector_sidecar_put(",\"to\":");
+        detector_sidecar_put_json_string(cycle_obj_name(members[e->to]->obj));
+        detector_sidecar_put(",\"field\":");
+        if (field)
+            detector_sidecar_put_json_string(field);
+        else
+            detector_sidecar_put("null");
+        detector_sidecar_put(",\"kind\":");
+        detector_sidecar_put_json_string(detector_edge_kind(from));
+        detector_sidecar_put(",\"weak_annotatable\":%s}",
+                             (field && !cycle_edge_is_capture(&edges, e)) ? "true" : "false");
+    }
+    detector_sidecar_put("\n  ]}");
+
     fprintf(stderr, "  修复建议:\n");
 
-    /* Which edges can `weak` actually break?
-     *
-     * It is a FIELD modifier, so it reaches an instance's field and nothing
-     * else. An edge whose target is a closure or a cell is a capture edge —
-     * no annotation exists for it, and the only fix is to clear the field that
-     * holds the closure. A cycle can contain both kinds, so both halves of the
-     * advice are printed independently rather than as an either/or. */
+    /* A component can hold both kinds of edge, so both halves of the advice are
+     * printed independently rather than as an either/or. */
     bool has_capture_edge = false;
     bool has_annotatable_edge = false;
-    for (uint32_t i = 0; i < count; i++) {
-        XrObjHeader *from = members[i]->obj;
-        XrObjHeader *to = members[(i + 1) % count]->obj;
-        if (to->type == XR_TFUNCTION || to->type == XR_TCELL)
+    for (uint32_t i = 0; i < edges.edge_count; i++) {
+        if (cycle_edge_is_capture(&edges, &edges.edges[i]))
             has_capture_edge = true;
-        else if (from->type == XR_TINSTANCE)
+        else if (cycle_edge_field(&edges, &edges.edges[i]))
             has_annotatable_edge = true;
     }
 
@@ -430,29 +650,34 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
          * break is an ownership decision, and the language does not guess
          * (247 section 2.5 — picking wrong turns a leak into a premature null). */
         fprintf(stderr, "    · 将下列任一引用标注为 weak（选哪条是所有权决定）:\n");
-        for (uint32_t i = 0; i < count; i++) {
-            XrObjHeader *from = members[i]->obj;
-            XrObjHeader *to = members[(i + 1) % count]->obj;
-            if (from->type != XR_TINSTANCE)
+        for (uint32_t i = 0; i < edges.edge_count; i++) {
+            const CycleEdge *e = &edges.edges[i];
+            const char *field = cycle_edge_field(&edges, e);
+            if (!field || cycle_edge_is_capture(&edges, e) || cycle_edge_is_duplicate(&edges, i))
                 continue;
-            if (to->type == XR_TFUNCTION || to->type == XR_TCELL)
-                continue; /* capture edge: weak cannot reach it */
-            fprintf(stderr, "        %s ──▶ %s\n", detector_type_name(from),
-                    detector_type_name(to));
+            fprintf(stderr, "        weak %s.%s  (改成 weak 表示 %s 不拥有 %s)\n",
+                    cycle_obj_name(members[e->from]->obj), field,
+                    cycle_obj_name(members[e->from]->obj), cycle_obj_name(members[e->to]->obj));
         }
     }
     if (has_capture_edge) {
         fprintf(stderr, "    · 环上有闭包捕获边，weak 管不到它。"
                         "在作用域末尾用 defer 清空持有该闭包的字段:\n");
-        for (uint32_t i = 0; i < count; i++) {
-            XrObjHeader *from = members[i]->obj;
-            XrObjHeader *to = members[(i + 1) % count]->obj;
-            if (to->type != XR_TFUNCTION && to->type != XR_TCELL)
+        for (uint32_t i = 0; i < edges.edge_count; i++) {
+            const CycleEdge *e = &edges.edges[i];
+            if (!cycle_edge_is_capture(&edges, e) || cycle_edge_is_duplicate(&edges, i))
                 continue;
-            fprintf(stderr, "        defer <%s 持有该闭包的字段> = ...\n",
-                    detector_type_name(from));
+            const char *field = cycle_edge_field(&edges, e);
+            if (field)
+                fprintf(stderr, "        defer <持有者>.%s = null\n", field);
+            else
+                fprintf(stderr, "        defer <%s 持有该闭包的字段> = null\n",
+                        cycle_obj_name(members[e->from]->obj));
         }
     }
+    if (edges.overflow)
+        fprintf(stderr, "    (内存不足，候选边列表不完整)\n");
+    xr_free(edges.edges);
 }
 
 /* ========== Entry point ========== */
@@ -476,6 +701,8 @@ bool xr_cycle_detector_any_found(void) {
 typedef struct {
     const struct XrClass *cls;
     char *name;
+    char **field_names; /* parallel to the class's instance fields */
+    uint32_t field_count;
 } DetectorClassName;
 
 static DetectorClassName *g_class_names;
@@ -503,9 +730,47 @@ void xr_cycle_detector_register_class(const struct XrClass *cls, const char *nam
     if (!copy)
         return;
     memcpy(copy, name, len + 1);
-    g_class_names[g_class_name_count].cls = cls;
-    g_class_names[g_class_name_count].name = copy;
+    DetectorClassName *slot = &g_class_names[g_class_name_count];
+    slot->cls = cls;
+    slot->name = copy;
+    slot->field_names = NULL;
+    slot->field_count = 0;
+
+    /* Field names travel with the class name, and for the same reason: they are
+     * interned symbols whose storage does not outlive the scan. */
+    uint32_t fc = xr_class_instance_field_count(cls);
+    if (fc > 0 && cls->fields) {
+        slot->field_names = (char **) xr_calloc(fc, sizeof(char *));
+        if (slot->field_names) {
+            slot->field_count = fc;
+            for (uint32_t i = 0; i < fc; i++) {
+                const char *fn = cls->fields[i].name;
+                if (!fn || !*fn) {
+                    continue;
+                }
+                size_t flen = strlen(fn);
+                char *fcopy = (char *) xr_malloc(flen + 1);
+                if (!fcopy)
+                    continue;
+                memcpy(fcopy, fn, flen + 1);
+                slot->field_names[i] = fcopy;
+            }
+        }
+    }
     g_class_name_count++;
+}
+
+const char *xr_cycle_detector_field_name(const struct XrClass *cls, uint32_t index) {
+    if (!cls)
+        return NULL;
+    for (uint32_t i = 0; i < g_class_name_count; i++) {
+        if (g_class_names[i].cls != cls)
+            continue;
+        if (!g_class_names[i].field_names || index >= g_class_names[i].field_count)
+            return NULL;
+        return g_class_names[i].field_names[index];
+    }
+    return NULL;
 }
 
 const char *xr_cycle_detector_class_name(const struct XrClass *cls) {
@@ -614,7 +879,8 @@ bool xr_cycle_detector_scan(XrCoroHeap *heap, XrCycleReport *out) {
                     if (grouped[k] || set.nodes[k].color != DET_COLOR_WHITE)
                         continue;
                     /* Edge test: does cur point at nodes[k]? */
-                    EdgeLabelCtx probe = {.target = set.nodes[k].obj, .label = NULL, .buf = {0}};
+                    EdgeLabelCtx probe = {
+                        .target = set.nodes[k].obj, .label = NULL, .slot = XR_OBJ_GRAPH_SLOT_NONE};
                     xr_obj_graph_visit_children(cur->obj, detector_edge_label_visitor, &probe);
                     if (probe.label) {
                         members[count++] = &set.nodes[k];

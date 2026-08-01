@@ -112,12 +112,62 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# ---- 边车报告（阶段 H）----
+# LSP 跑在另一个进程里，读不到 stderr。边车文件是交接点：它必须给出
+# 类名 + 字段名，否则「给哪条边加 weak」这个代码操作无从落到声明上。
+SIDECAR="${TMPDIR:-/tmp}/xray-cycles-probe.json"
+rm -f "$SIDECAR"
+XRAY_CYCLE_REPORT="$SIDECAR" "$XRAY" run "${SCRIPT_DIR}/detector_shapes.xr" >/dev/null 2>&1
+if [ -f "$SIDECAR" ]; then
+    printf "  ${GREEN}✓${NC} sidecar report written\n"
+    PASS=$((PASS + 1))
+else
+    printf "  ${RED}✗${NC} sidecar report missing at %s\n" "$SIDECAR"
+    FAIL=$((FAIL + 1))
+fi
+
+sidecar_probe() {
+    python3 - "$SIDECAR" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+cycles = d["cycles"]
+edges = [e for c in cycles for e in c["edges"]]
+named = {(e["from"], e["field"]) for e in edges if e["field"]}
+print("cycles=%d" % len(cycles))
+print("named=%d" % len(named))
+# 每条环至少一条可标注边，否则代码操作无处可挂
+print("all_actionable=%d" % all(any(e["weak_annotatable"] for e in c["edges"]) for c in cycles))
+print("has_plain_peer=%d" % (("Plain", "peer") in named))
+print("has_jsonnode_blob=%d" % (("JsonNode", "blob") in named))
+# 同一 (类, 字段) 在一条环里只能出现一次：源码上那是同一个决定
+print("no_dupes=%d" % all(
+    len({(e["from"], e["field"], e["to"]) for e in c["edges"]}) == len(c["edges"]) for c in cycles))
+EOF
+}
+SIDE="$(sidecar_probe)"
+check "sidecar reports seven cycles" "cycles=7" "$(printf '%s' "$SIDE" | grep '^cycles=')"
+check "sidecar names class.field per edge" "has_plain_peer=1" "$(printf '%s' "$SIDE" | grep '^has_plain_peer=')"
+check "sidecar names a non-peer field too" "has_jsonnode_blob=1" "$(printf '%s' "$SIDE" | grep '^has_jsonnode_blob=')"
+check "every cycle carries an annotatable edge" "all_actionable=1" "$(printf '%s' "$SIDE" | grep '^all_actionable=')"
+check "candidate edges deduped per source site" "no_dupes=1" "$(printf '%s' "$SIDE" | grep '^no_dupes=')"
+rm -f "$SIDECAR"
+
 # ---- 无环程序：零报告、零退出码影响 ----
 OUT="$("$XRAY" run "${SCRIPT_DIR}/detector_acyclic.xr" 2>&1)"
 RC=$?
 check "acyclic program exits zero" "0" "$RC"
 n="$(printf '%s' "$OUT" | grep -c '#cycle ')"
 check "acyclic program reports no cycles" "0" "$n"
+
+rm -f "$SIDECAR"
+XRAY_CYCLE_REPORT="$SIDECAR" "$XRAY" run "${SCRIPT_DIR}/detector_acyclic.xr" >/dev/null 2>&1
+if [ -f "$SIDECAR" ]; then
+    printf "  ${RED}✗${NC} acyclic program left a sidecar report behind\n"
+    FAIL=$((FAIL + 1))
+else
+    printf "  ${GREEN}✓${NC} acyclic program writes no sidecar\n"
+    PASS=$((PASS + 1))
+fi
 
 echo ""
 if [ "$FAIL" -eq 0 ]; then
