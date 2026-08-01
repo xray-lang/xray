@@ -316,6 +316,42 @@ def split_top_level_csv(raw: str) -> list[str]:
     return parts
 
 
+def parse_function_signature_shape(signature: str) -> tuple[list[str], str]:
+    """Return top-level parameter fragments and return type from an Xray signature."""
+    if not signature.startswith("("):
+        raise ValueError(f"function signature must start with '(': {signature!r}")
+    depth = 0
+    close = -1
+    for i, ch in enumerate(signature):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                close = i
+                break
+    if close < 0:
+        raise ValueError(f"function signature has no matching ')': {signature!r}")
+    tail = signature[close + 1 :].strip()
+    if not tail.startswith(":"):
+        raise ValueError(f"function signature has no return type: {signature!r}")
+    return split_top_level_csv(signature[1:close]), tail[1:].strip()
+
+
+_NON_RC_RETURN_RE = re.compile(
+    r"^(?:\(\)|unit|bool|byte|char|u?int(?:8|16|32|64|128)?|float(?:16|32|64)?)(?:\?)?$"
+)
+
+
+def return_type_requires_ownership_contract(return_type: str) -> bool:
+    """Conservative manifest gate: false only for proven non-RC return shapes."""
+    value = return_type.strip()
+    if _NON_RC_RETURN_RE.fullmatch(value):
+        return False
+    bare = value[:-1].strip() if value.endswith("?") else value
+    return not (bare.startswith("Ptr<") or bare.startswith("MutPtr<") or bare.startswith("Slice<"))
+
+
 def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry, ...]:
     fields: list[StdlibHandleFieldEntry] = []
     for fragment in split_top_level_csv(raw):
@@ -459,18 +495,35 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported allocation contract for "
                     f"{current_module}.{current_name}: {allocation}"
                 )
+            signature = str(props["signature"])
+            try:
+                signature_params, signature_return = parse_function_signature_shape(signature)
+            except ValueError as exc:
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name}: {exc}") from exc
             return_ownership = str(props.get("return_ownership", ""))
-            if return_ownership not in {"", "fresh"}:
+            ownership_values = {"unknown", "fresh", "borrowed_static"}
+            borrowed_param = re.fullmatch(r"borrowed_param:([0-9]+)", return_ownership)
+            if return_ownership and return_ownership not in ownership_values and not borrowed_param:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported return ownership contract for "
                     f"{current_module}.{current_name}: {return_ownership}"
+                )
+            if borrowed_param and int(borrowed_param.group(1)) >= len(signature_params):
+                raise SystemExit(
+                    f"{path}:{line_no}: return ownership for {current_module}.{current_name} "
+                    f"references missing parameter {borrowed_param.group(1)}"
+                )
+            if return_type_requires_ownership_contract(signature_return) and not return_ownership:
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} returns reference-capable "
+                    f"type {signature_return!r} and requires explicit return_ownership"
                 )
 
             entries.append(
                 StdlibEntry(
                     module=current_module,
                     name=current_name,
-                    signature=str(props["signature"]),
+                    signature=signature,
                     doc=str(props["doc"]),
                     vm=str(props["vm"]),
                     vm_binding=vm_binding,

@@ -36,6 +36,10 @@ Task 245 adds provider code-shape capability probes and typed adapters without
 changing the selected target ABI: fallback may change the compiler provider,
 never pointer width, calling convention, object format, runtime artifact, or
 native target identity.
+Task 253 adds per-function return-ownership metadata to analysis and Xi. The
+metadata controls caller ARC placement only; it does not change the public
+value representation, calling convention, parameter list, or native return
+ABI.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -189,5 +193,5 @@ anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddb
 anchor-sha256: src/app/cli/xcmd_build.c 8d2886f7422136f82f4125199b8a3884bfb6ba6d69a07ca2d922b5ee0caf9c17
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 5a8d5cc424ad2dbaebdde0ced0268b23f88e74a6be651f36c36b2032f7e7bd97
-anchor-sha256: src/ir/xi.h d6ff765bc736c9adeb179ddb72b23e814ca1b06a4a8bc829ffcdc4f87d4b11d1
+anchor-sha256: src/ir/xi.h a48181a21a780a27c9c2aaf0e650d6e8a92408836baf3a8b9817042683034307
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

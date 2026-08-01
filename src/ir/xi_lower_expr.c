@@ -5071,6 +5071,98 @@ static void lower_call_emit_err_check(XiLower *l, XiValue *call_v, AstNode *node
     xi_lower_insert_err_check(l, node, lower_call_callee_may_throw(l, call, callee_type));
 }
 
+static XaSymbolLinks *lower_call_return_ownership_links(XiLower *l, CallExprNode *call) {
+    if (!l || !l->analyzer || !call || !call->callee)
+        return NULL;
+    XaSymbol *symbol = NULL;
+    if (call->callee->type == AST_VARIABLE) {
+        uint32_t symbol_id = call->callee->as.variable.symbol_id;
+        symbol = symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, symbol_id) : NULL;
+        if (!symbol && call->callee->as.variable.name)
+            symbol = xa_analyzer_lookup_deep(l->analyzer, call->callee->as.variable.name);
+    } else if (call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+        symbol = selection ? selection->target_symbol : NULL;
+    }
+    return symbol ? xa_analyzer_get_links(l->analyzer, symbol) : NULL;
+}
+
+static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *call) {
+    if (!l || !l->analyzer || !call || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    AstNode *object = call->callee->as.member_access.object;
+    if (!object || object->type != AST_VARIABLE)
+        return NULL;
+    VariableNode *var = &object->as.variable;
+    XaSymbol *symbol = var->symbol_id
+                           ? xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id)
+                           : NULL;
+    if (!symbol && var->name)
+        symbol = xa_analyzer_lookup_deep(l->analyzer, var->name);
+    if (!symbol || symbol->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, symbol);
+    return links ? links->module_name : NULL;
+}
+
+static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *call,
+                                                     XiValue *callee_value) {
+    XiReturnOwnership result = {.kind = XI_RETURN_OWNERSHIP_UNKNOWN,
+                                .param_index = -1,
+                                .complete = false};
+    XaSymbolLinks *links = lower_call_return_ownership_links(l, call);
+    if (links && links->return_ownership.complete) {
+        switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
+            case XA_RETURN_OWNERSHIP_OWNED:
+                result.kind = XI_RETURN_OWNERSHIP_OWNED;
+                break;
+            case XA_RETURN_OWNERSHIP_BORROWED_PARAM:
+                result.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+                break;
+            case XA_RETURN_OWNERSHIP_BORROWED_STATIC:
+                result.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
+                break;
+            case XA_RETURN_OWNERSHIP_UNKNOWN:
+            default:
+                break;
+        }
+        result.param_index = links->return_ownership.param_index;
+        result.complete = result.kind != XI_RETURN_OWNERSHIP_UNKNOWN;
+        if (result.complete)
+            return result;
+    }
+
+    const XiImportRef *import_ref = lower_import_ref_from_value(l, callee_value);
+    const char *module_path = import_ref ? import_ref->module_path : NULL;
+    if (!module_path)
+        module_path = lower_call_namespace_module_name(l, call);
+    if (!module_path)
+        return result;
+    const char *member_name = import_ref ? import_ref->member_name : NULL;
+    if (!member_name && call->callee->type == AST_MEMBER_ACCESS)
+        member_name = call->callee->as.member_access.name;
+    if (!member_name)
+        return result;
+    XaBuiltinReturnOwnership native_ownership = xa_builtin_get_module_func_return_ownership(
+        module_path, member_name);
+    if (native_ownership == XA_BUILTIN_RETURN_FRESH) {
+        result.kind = XI_RETURN_OWNERSHIP_OWNED;
+        result.complete = true;
+    } else if (native_ownership == XA_BUILTIN_RETURN_BORROWED_STATIC) {
+        result.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
+        result.complete = true;
+    } else {
+        int param_index = xa_builtin_return_ownership_param_index(native_ownership);
+        if (param_index >= 0) {
+            result.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+            result.param_index = (int16_t) param_index;
+            result.complete = true;
+        }
+    }
+    return result;
+}
+
 static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode *call,
                                          XiValue *callee_val, struct XrType *callee_type) {
     if (!callee_val)
@@ -5245,6 +5337,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     if (xi_lower_call_constructs_instance(l, call, result_type))
         v->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     v->call_plan = call_plan;
+    v->call_return_ownership = lower_call_return_ownership(l, call, callee_val);
     lower_instantiate_call_view_evidence(v, static_callee, callee_type, false);
 
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
@@ -6123,6 +6216,56 @@ static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
     return xi_top_binding_valid(top) ? top.type : NULL;
 }
 
+static uint8_t lower_value_allocation_storage_mode(const XiValue *value) {
+    if (!value)
+        return XR_OBJ_STORAGE_NORMAL;
+    switch (value->op) {
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+        case XI_CALL_METHOD:
+        case XI_CALL_BUILTIN:
+            return xi_value_allocation_storage_mode(value);
+        case XI_JSON_NEW:
+            return xi_json_storage_mode(value);
+        case XI_TUPLE_NEW:
+            return xi_tuple_storage_mode(value);
+        case XI_COPY:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
+            return value->nargs > 0 ? lower_value_allocation_storage_mode(value->args[0])
+                                    : XR_OBJ_STORAGE_NORMAL;
+        default:
+            return XR_OBJ_STORAGE_NORMAL;
+    }
+}
+
+static bool lower_method_stores_argument(const XrType *receiver_type, const char *method_name,
+                                         int slot) {
+    if (!receiver_type || !method_name || slot < 0)
+        return false;
+    if (XR_TYPE_IS_ARRAY(receiver_type))
+        return slot == 0 && (strcmp(method_name, "push") == 0 ||
+                             strcmp(method_name, "unshift") == 0 ||
+                             strcmp(method_name, "fill") == 0);
+    if (XR_TYPE_IS_MAP(receiver_type))
+        return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
+    if (receiver_type->kind == XR_KIND_SET)
+        return strcmp(method_name, "add") == 0 && slot == 0;
+    return false;
+}
+
+static void lower_align_fresh_store_arguments(XiValue *receiver, const char *method_name,
+                                              XiValue **arguments, int argument_count) {
+    uint8_t mode = lower_value_allocation_storage_mode(receiver);
+    if (mode == XR_OBJ_STORAGE_NORMAL || !arguments)
+        return;
+    for (int i = 0; i < argument_count; i++) {
+        if (lower_method_stores_argument(receiver->type, method_name, i))
+            xi_lower_mark_storage_allocation(arguments[i], mode);
+    }
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -6467,6 +6610,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
+        /* System-domain collections are destroyed without an execution-local
+         * heap. Materialize direct fresh children in the receiver's proven
+         * domain so the object graph has one coherent owner. */
+        lower_align_fresh_store_arguments(recv, ma->name, arg_vals, n);
         bool is_time_sleep = n == 1 && ma->name && strcmp(ma->name, "sleep") == 0 &&
                              lower_value_is_whole_module_import(l, recv, "time");
 
@@ -6813,6 +6960,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->aux = (void *) arena_strdup(l->func, ma->name);
         v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
         v->call_plan = call_plan;
+        /* Namespace calls (`runtime.info()`, including module aliases) lower
+         * through XI_CALL_METHOD rather than XI_CALL.  Attach the same sealed
+         * per-callee summary here so native reference returns actually reach
+         * ARC instead of silently falling back to UNKNOWN.  For ordinary
+         * instance methods the analyzer selection supplies the summary; an
+         * unresolved shape remains fail-closed. */
+        v->call_return_ownership = lower_call_return_ownership(l, call, recv);
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);

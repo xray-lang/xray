@@ -48,6 +48,49 @@ static inline const char *arena_strdup(XiFunc *f, const char *s) {
     return copy;
 }
 
+/* Apply a semantic storage-domain decision to a freshly materialized Xi
+ * value. This is shared by declaration/return planning and by heap-store
+ * lowering: a system-domain aggregate must not acquire an execution-local
+ * child whose owner heap is unavailable when that aggregate is destroyed. */
+static inline bool xi_lower_mark_storage_allocation(XiValue *v, uint8_t storage_mode) {
+    if (!v)
+        return false;
+    switch (v->op) {
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            xi_value_set_allocation_storage_mode(v, storage_mode);
+            return true;
+        case XI_JSON_NEW:
+            xi_json_set_storage_mode(v, storage_mode);
+            return true;
+        case XI_TUPLE_NEW:
+            xi_tuple_set_storage_mode(v, storage_mode);
+            return true;
+        case XI_CALL:
+        case XI_CALL_METHOD:
+            if (xi_value_is_constructor_call(v)) {
+                xi_value_set_allocation_storage_mode(v, storage_mode);
+                return true;
+            }
+            return false;
+        case XI_CHAN_NEW:
+            return true;
+        case XI_CALL_BUILTIN:
+            if (v->aux && (strcmp((const char *) v->aux, "array_with_capacity") == 0 ||
+                           strcmp((const char *) v->aux, "array_filled_new") == 0 ||
+                           strcmp((const char *) v->aux, "array_copy_new") == 0 ||
+                           strcmp((const char *) v->aux, "StringBuilder") == 0 ||
+                           strcmp((const char *) v->aux, "copy") == 0)) {
+                xi_value_set_allocation_storage_mode(v, storage_mode);
+                return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 /* ========== Braun SSA Primitives ========== */
 
 XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id, const char *name,

@@ -112,6 +112,25 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         func->return_storage_domain = links->return_storage_domain;
         func->return_storage_known = true;
     }
+    if (links && links->return_ownership.complete) {
+        switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
+            case XA_RETURN_OWNERSHIP_OWNED:
+                func->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+                break;
+            case XA_RETURN_OWNERSHIP_BORROWED_PARAM:
+                func->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+                break;
+            case XA_RETURN_OWNERSHIP_BORROWED_STATIC:
+                func->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
+                break;
+            case XA_RETURN_OWNERSHIP_UNKNOWN:
+            default:
+                break;
+        }
+        func->arc_return_ownership.param_index = links->return_ownership.param_index;
+        func->arc_return_ownership.complete =
+            func->arc_return_ownership.kind != XI_RETURN_OWNERSHIP_UNKNOWN;
+    }
     if (links) {
         func->view_return_source = (uint8_t) links->return_view.origin;
         func->view_return_param = links->return_view.param_index;

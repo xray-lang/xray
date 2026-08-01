@@ -7332,6 +7332,360 @@ static AstNode *xa_storage_boundary_identity_source(AstNode *expr) {
     return NULL;
 }
 
+static XaReturnOwnershipSummary xa_return_ownership_summary(uint8_t kind, int16_t param_index,
+                                                            bool complete) {
+    XaReturnOwnershipSummary result = {
+        .kind = kind, .param_index = param_index, .complete = complete};
+    return result;
+}
+
+static XaReturnOwnershipSummary xa_return_ownership_unknown(void) {
+    return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_UNKNOWN, -1, false);
+}
+
+/* Internal join identity for a null arm.  It is normalized before a summary
+ * is published: releasing null is a no-op, so `fresh-or-null` has the same
+ * caller ownership as `fresh`, while an all-null function is static. */
+#define XA_RETURN_OWNERSHIP_NULL_JOIN UINT8_MAX
+
+static XaReturnOwnershipSummary xa_return_ownership_null_join(void) {
+    return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_NULL_JOIN, -1, true);
+}
+
+static bool xa_return_ownership_equal(XaReturnOwnershipSummary a,
+                                      XaReturnOwnershipSummary b) {
+    return a.complete == b.complete && a.kind == b.kind && a.param_index == b.param_index;
+}
+
+static int16_t xa_return_ownership_param_index(const XaSymbolLinks *function_links,
+                                               const XaSymbol *parameter) {
+    if (!function_links || !parameter || parameter->kind != XA_SYM_PARAMETER ||
+        !parameter->name)
+        return -1;
+    for (int i = 0; i < function_links->param_count; i++) {
+        if (function_links->param_names && function_links->param_names[i] &&
+            strcmp(function_links->param_names[i], parameter->name) == 0)
+            return i <= 32767 ? (int16_t) i : -1;
+    }
+    return -1;
+}
+
+static XaSymbol *xa_return_ownership_expr_symbol(XaInferContext *ctx, AstNode *expr) {
+    expr = xa_storage_boundary_identity_source(expr);
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE)
+        return NULL;
+    if (expr->as.variable.symbol_id != 0)
+        return xa_scope_lookup_by_id(ctx->analyzer->global_scope, expr->as.variable.symbol_id);
+    return expr->as.variable.name ? xa_lookup_visible_symbol(ctx, expr->as.variable.name) : NULL;
+}
+
+static XaReturnOwnershipSummary
+xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
+                                 AstNode *expr, uint8_t depth);
+
+static XaReturnOwnershipSummary
+xa_return_ownership_merge_exprs(XaInferContext *ctx, XaSymbolLinks *function_links,
+                                AstNode *const *exprs, int count, uint8_t depth) {
+    XaReturnOwnershipSummary merged = xa_return_ownership_unknown();
+    if (!exprs || count <= 0)
+        return merged;
+    for (int i = 0; i < count; i++) {
+        XaReturnOwnershipSummary arm = xa_return_ownership_expr_summary(
+            ctx, function_links, exprs[i], (uint8_t) (depth + 1));
+        if (!arm.complete)
+            return xa_return_ownership_unknown();
+        if (arm.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
+            continue;
+        if (!merged.complete)
+            merged = arm;
+        else if (!xa_return_ownership_equal(merged, arm))
+            return xa_return_ownership_unknown();
+    }
+    return merged.complete ? merged : xa_return_ownership_null_join();
+}
+
+static XaReturnOwnershipSummary
+xa_return_ownership_call_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
+                                 AstNode *expr, uint8_t depth) {
+    if (!ctx || !expr || expr->type != AST_CALL_EXPR || depth > 32)
+        return xa_return_ownership_unknown();
+    CallExprNode *call = &expr->as.call_expr;
+    AstNode *raw_callee = xa_storage_boundary_identity_source(call->callee);
+    if (raw_callee && raw_callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &raw_callee->as.member_access;
+        AstNode *module_expr = xa_storage_boundary_identity_source(member->object);
+        XaSymbol *module_symbol = xa_return_ownership_expr_symbol(ctx, module_expr);
+        XaSymbolLinks *module_links =
+            module_symbol ? xa_analyzer_get_links(ctx->analyzer, module_symbol) : NULL;
+        const char *module_name = module_links ? module_links->module_name : NULL;
+        if (module_name && member->name) {
+            const char *native_signature =
+                xa_builtin_get_module_func_signature(module_name, member->name);
+            XaBuiltinReturnOwnership native =
+                xa_builtin_get_module_func_return_ownership(module_name, member->name);
+            if (native == XA_BUILTIN_RETURN_FRESH)
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+            if (native == XA_BUILTIN_RETURN_BORROWED_STATIC)
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1,
+                                                   true);
+            int param_index = xa_builtin_return_ownership_param_index(native);
+            if (param_index >= 0 && param_index < call->arg_count && call->arguments)
+                return xa_return_ownership_expr_summary(
+                    ctx, function_links, call->arguments[param_index],
+                    (uint8_t) (depth + 1));
+            /* A stdlib native reference return with an explicit UNKNOWN
+             * contract must not be reclassified from its allocation effect.
+             * UNKNOWN is the sealed fail-closed answer for mixed provenance. */
+            if (native_signature)
+                return xa_return_ownership_unknown();
+        }
+    }
+    if (xa_expr_creates_fresh_root(ctx, expr))
+        return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+    AstNode *callee = xa_direct_function_value_source(call->callee);
+    XaSymbol *callee_symbol = xa_function_value_source_symbol(ctx, callee);
+    XaSymbolLinks *callee_links =
+        callee_symbol ? xa_analyzer_get_links(ctx->analyzer, callee_symbol) : NULL;
+    if (!callee_links)
+        return xa_return_ownership_unknown();
+    if (!callee_links->return_ownership_scanned &&
+        !callee_links->return_ownership_scan_in_progress)
+        xa_ensure_function_return_ownership_prepass(ctx, callee_links);
+    XaReturnOwnershipSummary summary = callee_links->return_ownership;
+    if (!summary.complete)
+        return xa_return_ownership_unknown();
+    if (summary.kind != XA_RETURN_OWNERSHIP_BORROWED_PARAM)
+        return summary;
+    if (summary.param_index < 0 || summary.param_index >= call->arg_count || !call->arguments)
+        return xa_return_ownership_unknown();
+    return xa_return_ownership_expr_summary(ctx, function_links,
+                                            call->arguments[summary.param_index],
+                                            (uint8_t) (depth + 1));
+}
+
+static XaReturnOwnershipSummary
+xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
+                                 AstNode *expr, uint8_t depth) {
+    if (!ctx || !function_links || !expr || depth > 32)
+        return xa_return_ownership_unknown();
+    AstNode *block_value = NULL;
+    if ((expr->type == AST_BLOCK || expr->type == AST_PROGRAM) &&
+        (block_value = xa_lifecycle_lint_single_expr_block_value(expr)))
+        return xa_return_ownership_expr_summary(ctx, function_links, block_value,
+                                                (uint8_t) (depth + 1));
+
+    AstNode *direct = xa_storage_boundary_identity_source(expr);
+    if (!direct)
+        return xa_return_ownership_unknown();
+    if (direct->type == AST_MOVE_EXPR)
+        return xa_return_ownership_expr_summary(ctx, function_links, direct->as.move_expr.expr,
+                                                (uint8_t) (depth + 1));
+    if (direct->type == AST_LITERAL_NULL)
+        return xa_return_ownership_null_join();
+    if (direct->type == AST_LITERAL_STRING)
+        return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    if (direct->type == AST_VARIABLE) {
+        XaSymbol *symbol = xa_return_ownership_expr_symbol(ctx, direct);
+        if (!symbol)
+            return xa_return_ownership_unknown();
+        if (symbol->kind == XA_SYM_PARAMETER) {
+            if (symbol->passing_mode == XR_PARAM_MOVE)
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+            int16_t index = xa_return_ownership_param_index(function_links, symbol);
+            return index >= 0
+                       ? xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM, index,
+                                                     true)
+                       : xa_return_ownership_unknown();
+        }
+        if (symbol->borrowed_root_symbol_id != 0) {
+            XaSymbol *root = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                                  symbol->borrowed_root_symbol_id);
+            int16_t index = xa_return_ownership_param_index(function_links, root);
+            if (index >= 0)
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM, index,
+                                                   true);
+        }
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+        if (links && (links->storage_domain == XR_STORAGE_CONST_SHARED ||
+                      links->storage_domain == XR_STORAGE_SYNC_SHARED))
+            return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+        if (links && links->storage_domain == XR_STORAGE_TRANSFERABLE &&
+            links->root_alias == XA_ROOT_UNIQUE && links->value_capability != XA_CAP_UNKNOWN)
+            return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+        return xa_return_ownership_unknown();
+    }
+    if (xa_expr_creates_fresh_root(ctx, direct))
+        return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+    if (direct->type == AST_CALL_EXPR)
+        return xa_return_ownership_call_summary(ctx, function_links, direct,
+                                                (uint8_t) (depth + 1));
+    if (direct->type == AST_TERNARY) {
+        AstNode *arms[] = {direct->as.ternary.true_expr, direct->as.ternary.false_expr};
+        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2,
+                                               (uint8_t) (depth + 1));
+    }
+    if (direct->type == AST_NULLISH_COALESCE) {
+        AstNode *arms[] = {direct->as.binary.left, direct->as.binary.right};
+        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2,
+                                               (uint8_t) (depth + 1));
+    }
+    if (direct->type == AST_MATCH_EXPR) {
+        MatchExprNode *match = &direct->as.match_expr;
+        XaReturnOwnershipSummary merged = xa_return_ownership_unknown();
+        for (int i = 0; i < match->arm_count; i++) {
+            AstNode *arm_node = match->arms[i];
+            AstNode *arm_expr = arm_node && arm_node->type == AST_MATCH_ARM
+                                    ? arm_node->as.match_arm.body
+                                    : NULL;
+            if (arm_expr && (arm_expr->type == AST_BLOCK || arm_expr->type == AST_PROGRAM))
+                arm_expr = xa_lifecycle_lint_single_expr_block_value(arm_expr);
+            XaReturnOwnershipSummary arm_ownership = xa_return_ownership_expr_summary(
+                ctx, function_links, arm_expr, (uint8_t) (depth + 1));
+            if (!arm_ownership.complete)
+                return xa_return_ownership_unknown();
+            if (arm_ownership.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
+                continue;
+            if (!merged.complete)
+                merged = arm_ownership;
+            else if (!xa_return_ownership_equal(merged, arm_ownership))
+                return xa_return_ownership_unknown();
+        }
+        return merged.complete ? merged : xa_return_ownership_null_join();
+    }
+    return xa_return_ownership_unknown();
+}
+
+typedef struct XaReturnOwnershipPrepass {
+    XaInferContext *ctx;
+    XaSymbolLinks *links;
+    XaReturnOwnershipSummary result;
+    bool seen;
+    bool failed;
+} XaReturnOwnershipPrepass;
+
+static void xa_return_ownership_scan_stmt(XaReturnOwnershipPrepass *scan, AstNode *stmt);
+
+static void xa_return_ownership_scan_block(XaReturnOwnershipPrepass *scan, AstNode *block) {
+    if (!scan || !block)
+        return;
+    if (block->type == AST_BLOCK) {
+        for (int i = 0; i < block->as.block.count; i++)
+            xa_return_ownership_scan_stmt(scan, block->as.block.statements[i]);
+    } else if (block->type == AST_PROGRAM) {
+        for (int i = 0; i < block->as.program.count; i++)
+            xa_return_ownership_scan_stmt(scan, block->as.program.statements[i]);
+    } else {
+        xa_return_ownership_scan_stmt(scan, block);
+    }
+}
+
+static void xa_return_ownership_record(XaReturnOwnershipPrepass *scan, AstNode *expr) {
+    if (!scan || scan->failed)
+        return;
+    XaReturnOwnershipSummary current =
+        xa_return_ownership_expr_summary(scan->ctx, scan->links, expr, 0);
+    if (!current.complete) {
+        scan->failed = true;
+        return;
+    }
+    if (current.kind == XA_RETURN_OWNERSHIP_NULL_JOIN) {
+        if (!scan->seen) {
+            scan->result = current;
+            scan->seen = true;
+        }
+        return;
+    }
+    if (!scan->seen) {
+        scan->result = current;
+        scan->seen = true;
+    } else if (scan->result.kind == XA_RETURN_OWNERSHIP_NULL_JOIN) {
+        scan->result = current;
+    } else if (!xa_return_ownership_equal(scan->result, current)) {
+        scan->failed = true;
+    }
+}
+
+static void xa_return_ownership_scan_stmt(XaReturnOwnershipPrepass *scan, AstNode *stmt) {
+    if (!scan || !stmt || scan->failed)
+        return;
+    switch (stmt->type) {
+        case AST_RETURN_STMT:
+            if (stmt->as.return_stmt.value_count == 1)
+                xa_return_ownership_record(scan, stmt->as.return_stmt.values[0]);
+            return;
+        case AST_BLOCK:
+        case AST_PROGRAM:
+            xa_return_ownership_scan_block(scan, stmt);
+            return;
+        case AST_IF_STMT:
+            xa_return_ownership_scan_block(scan, stmt->as.if_stmt.then_branch);
+            xa_return_ownership_scan_block(scan, stmt->as.if_stmt.else_branch);
+            return;
+        case AST_WHILE_STMT:
+            xa_return_ownership_scan_block(scan, stmt->as.while_stmt.body);
+            return;
+        case AST_FOR_STMT:
+            xa_return_ownership_scan_stmt(scan, stmt->as.for_stmt.initializer);
+            xa_return_ownership_scan_block(scan, stmt->as.for_stmt.body);
+            return;
+        case AST_FOR_IN_STMT:
+            xa_return_ownership_scan_block(scan, stmt->as.for_in_stmt.body);
+            return;
+        case AST_TRY_CATCH:
+            xa_return_ownership_scan_block(scan, stmt->as.try_catch.try_body);
+            for (int i = 0; i < stmt->as.try_catch.catch_count; i++) {
+                XrCatchClause *clause = stmt->as.try_catch.catch_clauses[i];
+                if (clause)
+                    xa_return_ownership_scan_block(scan, clause->body);
+            }
+            return;
+        case AST_MATCH_EXPR:
+            for (int i = 0; i < stmt->as.match_expr.arm_count; i++)
+                xa_return_ownership_scan_stmt(scan, stmt->as.match_expr.arms[i]);
+            return;
+        case AST_MATCH_ARM:
+            xa_return_ownership_scan_block(scan, stmt->as.match_arm.body);
+            return;
+        default:
+            return;
+    }
+}
+
+void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLinks *links) {
+    if (!ctx || !links || links->return_ownership_scanned ||
+        links->return_ownership_scan_in_progress)
+        return;
+    links->return_ownership.param_index = -1;
+    XrType *return_type = xa_links_function_return_type(links);
+    if (!xa_type_has_movable_root(return_type)) {
+        links->return_ownership_scanned = true;
+        return;
+    }
+    AstNode *fn_node = links->function_decl_node;
+    AstNode *body = NULL;
+    if (fn_node && fn_node->type == AST_FUNCTION_DECL)
+        body = fn_node->as.function_decl.body;
+    else if (fn_node && fn_node->type == AST_METHOD_DECL)
+        body = fn_node->as.method_decl.body;
+    if (!body) {
+        links->return_ownership_scanned = true;
+        return;
+    }
+
+    links->return_ownership_scan_in_progress = true;
+    XaReturnOwnershipPrepass scan = {.ctx = ctx,
+                                     .links = links,
+                                     .result = xa_return_ownership_unknown()};
+    xa_return_ownership_scan_block(&scan, body);
+    links->return_ownership =
+        scan.seen && !scan.failed ? scan.result : xa_return_ownership_unknown();
+    if (links->return_ownership.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
+        links->return_ownership = xa_return_ownership_summary(
+            XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    links->return_ownership_scanned = true;
+    links->return_ownership_scan_in_progress = false;
+}
+
 static AstNode *xa_shared_boundary_source(AstNode *init, bool *is_move) {
     if (is_move)
         *is_move = false;
@@ -8896,22 +9250,11 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             AstNode *source = xa_shared_boundary_source(ret->values[0], &is_move);
             XaSymbol *root = source ? xa_lookup_shared_source_symbol(ctx, source) : NULL;
             XaSymbolLinks *root_links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
-            if (root && !is_move && root->kind == XA_SYM_PARAMETER &&
-                root->passing_mode != XR_PARAM_MOVE && xa_type_has_movable_root(return_type)) {
-                XrLocation loc = {.file = ctx->file_path,
-                                  .line = ret->values[0]->line ? ret->values[0]->line : node->line,
-                                  .column = ret->values[0]->column ? ret->values[0]->column
-                                                                   : node->column};
-                const char *mode = root->passing_mode == XR_PARAM_REF ? "ref" : "read";
-                const char *name = root->name ? root->name : "value";
-                char msg[224];
-                snprintf(msg, sizeof(msg),
-                         "cannot return %s parameter '%s' as an owned value; return copy(%s) or "
-                         "declare the parameter with move",
-                         mode, name, name);
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            }
+            /* A read parameter may cross the boundary as a +0 alias.  The
+             * per-callee return summary records BORROWED(param), so the
+             * caller retains it if it materializes an owned binding.  Ref
+             * parameters remain covered by xa_check_borrowed_return_escape:
+             * retaining an object does not extend a mutable loan. */
             if (root && !is_move &&
                 !(root->kind == XA_SYM_PARAMETER && root->passing_mode != XR_PARAM_MOVE) &&
                 xa_symbol_has_unique_root(root) && root_links &&

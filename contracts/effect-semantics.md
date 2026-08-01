@@ -94,6 +94,15 @@ semantics remain unchanged.
     expanding a callee's body must not carry either fact across the call edge.
     Making a re-raising boundary contribute nothing, or a non-re-raising one
     contribute, is a contract change.
+14. Return ownership is a typed-program sidecar fact, not an allocation-effect
+    heuristic. Reference-capable source functions publish `OWNED`,
+    `BORROWED_PARAM(n)`, `BORROWED_STATIC`, or fail-closed `UNKNOWN`; recursive
+    call graphs are solved to a fixed point. Cross-analyzer symbol copies
+    preserve the semantic kind and parameter identity rather than a database
+    address. Native reference returns must declare the same metadata in the
+    standard-library definition, including explicit `UNKNOWN` when no stronger
+    fact is valid. Xi consumes the published summary at each statically known
+    call and does not re-infer it from a callee name or allocation effects.
 
 ## Digest anchors
 
@@ -106,14 +115,14 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602d
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 10a5d0c5b9bc200356920fe63eb1ef8d0e9dafe350318b136adc2e3d8f014ad4
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h f86da4a78190ac288fde824353f0d0f0482be8a643661329c3e1fb115d55b29e
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 283e0f745a8a08e8d05e0b92cc283d606a940e97d8bffd94443db7c802f103d0
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c f39b0ce97955d9cacb83a46834c1fca41711bb0b3b2974c6f98153d94610fbc1
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 7da4b36db9a9d078ed23128381066cf5ace5fefcabbf9d3bcbb465fb452e0cc2
 anchor-sha256: src/runtime/value/xtype.h 1f0e1b8129b20d80d527cccc341bb22fffd34b1e1fd83eb252da7d23e2669317
-anchor-sha256: src/ir/xi.h d6ff765bc736c9adeb179ddb72b23e814ca1b06a4a8bc829ffcdc4f87d4b11d1
-anchor-sha256: src/ir/xi_lower.c 353819a2f766252019fec7b0e6f0b30ac210d77ad1609aa663b7f39b8d80f06c
+anchor-sha256: src/ir/xi.h a48181a21a780a27c9c2aaf0e650d6e8a92408836baf3a8b9817042683034307
+anchor-sha256: src/ir/xi_lower.c 1ac6abe0761429340431340aaced395dab81e83a7317c8c4034acfdd4b136191
 anchor-sha256: src/app/cli/xcmd_verify.c 932ea0eba80546c8eded92dfa6dc1aa50d72f5f1581bfe309596e417585e9216
 anchor-sha256: tests/cli/run_verify_contract_tests.sh 0e6de65b1956cb7151e90630d72bc41e10d5561147da0ee012882660eee7ac65
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 745126895220b9741d0cdf576154109aacf45003ccbc957802b41b51f8a17d0f
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 9fdc3b5ea79f27d6a6ee32510dad0d7e1e7e2b00bb0181637f2c99664bea015d
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
 anchor-sha256: tests/unit/ir/test_xi_lower.c 11a2064441f6aa9b964d9d01655c58dd95530e79f2c34188d353fdc36b0a87a1

@@ -1,0 +1,7 @@
+export fn makeOwnedArray(value: int) -> Array<int> {
+    return [value]
+}
+
+export fn borrowImportedArray(value: Array<int>) -> Array<int> {
+    return value
+}

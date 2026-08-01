@@ -937,6 +937,22 @@ typedef enum XiViewOrigin {
     XI_VIEW_ORIGIN_ALLOCATION = 8,
 } XiViewOrigin;
 
+/* Per-callee ownership of a returned RC reference.  UNKNOWN is deliberately
+ * the zero/default state: ARC must never release an alias when compilation
+ * cannot prove where the reference came from. */
+typedef enum XiReturnOwnershipKind {
+    XI_RETURN_OWNERSHIP_UNKNOWN = 0,
+    XI_RETURN_OWNERSHIP_OWNED,
+    XI_RETURN_OWNERSHIP_BORROWED_PARAM,
+    XI_RETURN_OWNERSHIP_BORROWED_STATIC,
+} XiReturnOwnershipKind;
+
+typedef struct XiReturnOwnership {
+    uint8_t kind;       /* XiReturnOwnershipKind */
+    int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
+    bool complete;      /* every reachable return has the same provenance */
+} XiReturnOwnership;
+
 /* Compiler-only proof attached to a Slice-producing Xi value.  Function
  * summaries publish a symbolic PARAM/RECEIVER/STATIC template; lowering
  * instantiates it at a call site by recording the actual Xi operand that is
@@ -1000,6 +1016,9 @@ typedef struct XiValue {
     XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
     XiCallPlan *call_plan;          /* verified read/ref/move call contract */
     XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
+    /* Instantiated result provenance for calls whose body is outside this Xi
+     * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
+    XiReturnOwnership call_return_ownership;
     struct XiValue **args;          /* operand values (SSA uses) */
     uint16_t nargs;                 /* number of args */
     int16_t uses;                   /* use count (for DCE; -1 = not computed) */
@@ -1095,6 +1114,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->conversion = src->conversion;
     dst->view_evidence = src->view_evidence;
+    dst->call_return_ownership = src->call_return_ownership;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
@@ -1562,11 +1582,10 @@ typedef struct XiFunc {
      * a callee that never releases it). Arena-allocated; NULL until computed. */
     struct XiBorrowSig *arc_borrow_sig;
 
-    /* ARC return-ownership: 1 if this function provably returns a FRESH (+1)
-     * owned reference on every return (a new allocation or a known fresh call),
-     * so a caller that discards the result must release it. Computed alongside
-     * arc_borrow_sig; meaningful only once arc_borrow_sig is non-NULL. */
-    uint8_t arc_returns_fresh;
+    /* ARC return-ownership summary, computed to a fixpoint on pre-ARC IR.
+     * UNKNOWN is fail-closed: callers retain as needed but do not emit an
+     * unconsumed drop that could free a borrowed alias. */
+    XiReturnOwnership arc_return_ownership;
 
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */

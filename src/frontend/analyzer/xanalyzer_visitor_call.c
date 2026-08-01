@@ -5830,6 +5830,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (fn_links)
+        xa_ensure_function_return_ownership_prepass(ctx, fn_links);
+
     const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
     if (mem_layout_member)
         return xa_mem_layout_return_type(ctx, node, call, mem_layout_member);
@@ -5993,6 +5996,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
+        if (fn_links)
+            xa_ensure_function_return_ownership_prepass(ctx, fn_links);
         // An instance method's links only become available here, after the
         // receiver has been inferred — run the type-argument checks the block
         // above could not reach, for both `obj.method<T>()` and the inferred

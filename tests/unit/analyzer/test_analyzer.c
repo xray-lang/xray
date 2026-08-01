@@ -1299,6 +1299,9 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
         xa_memory_effect_db_intern(source->memory_effect_db, &source_memory);
     xa_memory_effect_summary_clear(&source_memory);
     ASSERT(source_links->memory_effect_id != XA_MEMORY_EFFECT_NONE);
+    source_links->return_ownership = (XaReturnOwnershipSummary) {
+        .kind = XA_RETURN_OWNERSHIP_BORROWED_PARAM, .param_index = 3, .complete = true};
+    source_links->return_ownership_scanned = true;
     xa_symbol_links_set_deprecated(source_links, true, "use safeRead");
 
     /* Occupy the same target-local numeric id with an incompatible summary.
@@ -1328,6 +1331,10 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
     ASSERT(xa_effect_summary_has_semantic_effect(imported_effect, XA_SEM_EFFECT_IO));
     ASSERT(imported_memory != NULL);
     ASSERT(imported_memory->root_count == 0);
+    ASSERT(target_links->return_ownership_scanned);
+    ASSERT(target_links->return_ownership.complete);
+    ASSERT(target_links->return_ownership.kind == XA_RETURN_OWNERSHIP_BORROWED_PARAM);
+    ASSERT(target_links->return_ownership.param_index == 3);
     ASSERT(target_links->is_deprecated);
     ASSERT(target_links->deprecated_message != NULL);
     ASSERT(strcmp(target_links->deprecated_message, "use safeRead") == 0);

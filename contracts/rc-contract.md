@@ -8,6 +8,14 @@ For every RC-managed value, including registered identity aliases:
   compensating retain.
 - C2: reference-count changes are path-balanced for local death, return
   transfer, and move-out; double release is invalid.
+- C2a: every reference-capable function return publishes a complete ownership
+  summary. `OWNED` is a fresh +1 result and may be consumed or dropped by the
+  caller; `BORROWED_PARAM(n)` aliases parameter `n`; `BORROWED_STATIC` has
+  non-local lifetime. A recursive source SCC reaches one fixed point before
+  ARC uses any member summary. Native reference returns declare the same fact
+  explicitly. Missing, mixed, dynamic, or foreign evidence is `UNKNOWN`: ARC
+  may preserve such a result conservatively, but must never release it as an
+  owned result merely because its runtime representation is reference-counted.
 - C3: a borrowed view's owner remains live through every view use, including
   uses flowing through PHI edges. BOX, UNBOX, and CONVERT representation
   adapters preserve borrow provenance; an implicit error edge must never

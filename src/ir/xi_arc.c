@@ -483,6 +483,8 @@ static bool op_is_call(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
 }
 
+static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv);
+
 static bool arc_type_is_raw_pointer(const XrType *type) {
     return type && XR_TYPE_IS_POINTER(type);
 }
@@ -633,8 +635,9 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
  * Channel receive/try methods materialize a fresh wrapper per call
  * (Recv<T> / SendResult enum instance plus the payload copied into the
  * receiving coroutine's heap). Receive loops would otherwise leak one
- * wrapper per message. Extend this table as more native return-ownership
- * facts are encoded. */
+ * wrapper per message. This table contains only intrinsic semantic operations
+ * that have no native declaration/body; declared native and source functions
+ * publish their return-ownership metadata through the analyzer. */
 static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValue *v) {
     if (!v || !xr_type_is_builtin_named_class(v->type, "Buffer"))
         return false;
@@ -682,7 +685,7 @@ static bool arc_builtin_iterator_method_returns_fresh(const XiValue *v) {
     }
 }
 
-static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
+static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_GEN_CALL)
@@ -712,6 +715,18 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
     return strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
            strcmp(method, "recvOr") == 0 || strcmp(method, "recvTimeout") == 0 ||
            strcmp(method, "trySend") == 0 || strcmp(method, "sendTimeout") == 0;
+}
+
+static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
+    if (call_returns_intrinsic_fresh(f, v))
+        return true;
+    if (v && v->call_return_ownership.complete)
+        return v->call_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
+    if (!f || !v || v->op != XI_CALL || v->nargs < 1)
+        return false;
+    XiFunc *callee = arc_resolve_callee(f, v->args[0]);
+    return callee && callee->arc_return_ownership.complete &&
+           callee->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
 }
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
@@ -777,16 +792,15 @@ static bool tracks_rc(const XiValue *v) {
         return xi_own_type_is_rc(v->type); /* promoted: owned, so track it */
     if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
-    /* Call results: a callee may return either a fresh (+1) reference or an
-     * alias of one of its arguments (e.g. `arr.push(x)` returns `self`).
-     * Without per-callee return-ownership summaries we cannot tell them
-     * apart. We DO track them (so a result consumed by more than one use
+    /* Call results: precise per-callee summaries classify fresh (+1) results
+     * as owned and argument/static aliases as borrowed. An unresolved,
+     * foreign, or mixed result remains conservative CALL_RESULT. We still
+     * track it (so a result consumed by more than one use
      * gets a dup before each non-last use, preventing a use-after-free when
      * the first consumer moves/frees it), but process_value_ex uses the
      * CALL_RESULT mode which never inserts an unconsumed drop — dropping an
      * aliased borrow would be a use-after-free. Adding dups is always sound;
-     * the only cost is leaking a discarded fresh return until a per-callee
-     * return-ownership summary (Roc/Koka style) refines this. */
+     * the only cost is that an unresolved discarded fresh return may leak. */
     if (op_is_call(v->op))
         return xi_own_type_is_rc(v->type);
     /* A heap allocation is tracked on the strength of what it IS, never of what
@@ -837,6 +851,130 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
     if (xi_copy_is_identity_alias(cv) && cv->nargs >= 1)
         return arc_resolve_callee(caller, cv->args[0]);
     return NULL;
+}
+
+static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index,
+                                              bool complete) {
+    XiReturnOwnership result;
+    result.kind = kind;
+    result.param_index = param_index;
+    result.complete = complete;
+    return result;
+}
+
+static XiReturnOwnership arc_return_unknown(void) {
+    return arc_return_ownership(XI_RETURN_OWNERSHIP_UNKNOWN, -1, false);
+}
+
+#define XI_RETURN_OWNERSHIP_NULL_JOIN UINT8_MAX
+
+static XiReturnOwnership arc_return_null_join(void) {
+    return arc_return_ownership(XI_RETURN_OWNERSHIP_NULL_JOIN, -1, true);
+}
+
+static bool arc_return_ownership_equal(XiReturnOwnership a, XiReturnOwnership b) {
+    return a.kind == b.kind && a.param_index == b.param_index && a.complete == b.complete;
+}
+
+static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, uint8_t depth) {
+    if (!f || !value || depth > 32)
+        return arc_return_unknown();
+
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        if (f->params[p] == value && xi_func_param_passing_mode(f, p) == XR_PARAM_MOVE)
+            return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+        if (f->params[p] == value)
+            return arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_PARAM, (int16_t) p, true);
+    }
+
+    if ((xi_copy_is_identity_alias(value) || xi_op_is_identity_forward(value->op)) &&
+        value->nargs >= 1) {
+        return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
+    }
+
+    if ((value->op == XI_PHI || value->op == XI_SELECT) && value->nargs > 0) {
+        XiReturnOwnership merged = arc_return_unknown();
+        for (uint16_t i = 0; i < value->nargs; i++) {
+            XiReturnOwnership arm =
+                arc_return_value_ownership(f, value->args[i], (uint8_t) (depth + 1));
+            if (!arm.complete)
+                return arc_return_unknown();
+            if (arm.kind == XI_RETURN_OWNERSHIP_NULL_JOIN)
+                continue;
+            if (!merged.complete)
+                merged = arm;
+            else if (arm.kind != merged.kind || arm.param_index != merged.param_index)
+                return arc_return_unknown();
+        }
+        return merged.complete ? merged : arc_return_null_join();
+    }
+
+    if (value->op == XI_CONST && value->type && value->type->kind == XR_KIND_NULL)
+        return arc_return_null_join();
+    if (value->op == XI_CONST || value->op == XI_GET_SHARED || value->op == XI_IMPORT_REF)
+        return arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+
+    if (op_is_call(value->op)) {
+        if (call_returns_intrinsic_fresh(f, value))
+            return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+        if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
+            return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
+        if (value->call_return_ownership.complete) {
+            XiReturnOwnership summary = value->call_return_ownership;
+            if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
+                return summary;
+            uint16_t actual = (uint16_t) (summary.param_index + 1);
+            if (summary.param_index < 0 || actual >= value->nargs)
+                return arc_return_unknown();
+            return arc_return_value_ownership(f, value->args[actual],
+                                              (uint8_t) (depth + 1));
+        }
+        if (value->op != XI_CALL || value->nargs < 1)
+            return arc_return_unknown();
+        XiFunc *callee = arc_resolve_callee(f, value->args[0]);
+        if (!callee || !callee->arc_return_ownership.complete)
+            return arc_return_unknown();
+        XiReturnOwnership summary = callee->arc_return_ownership;
+        if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
+            return summary;
+        uint16_t actual = (uint16_t) (summary.param_index + 1);
+        if (summary.param_index < 0 || actual >= value->nargs)
+            return arc_return_unknown();
+        return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
+    }
+
+    if (xi_value_is_weak_field_load(value))
+        return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+    if (op_produces_borrow(value->op))
+        return arc_return_unknown();
+    if (op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+    return arc_return_unknown();
+}
+
+static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
+    if (!f || !xi_own_type_is_rc(f->return_type))
+        return arc_return_unknown();
+    XiReturnOwnership result = arc_return_unknown();
+    bool seen = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
+            continue;
+        XiReturnOwnership current = arc_return_value_ownership(f, blk->control, 0);
+        if (!current.complete)
+            return arc_return_unknown();
+        if (current.kind == XI_RETURN_OWNERSHIP_NULL_JOIN)
+            continue;
+        if (!seen) {
+            result = current;
+            seen = true;
+        } else if (result.kind != current.kind || result.param_index != current.param_index) {
+            return arc_return_unknown();
+        }
+    }
+    return seen ? result
+                : arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
 }
 
 /* Return fn's cached borrow signature, computing it (on the pre-ARC IR) on
@@ -1537,8 +1675,7 @@ static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
  *                 including through a borrow in a successor. We never insert
  *                 an unconsumed drop (dropping an aliased borrow would be a
  *                 use-after-free). This can leak a discarded fresh return,
- *                 but never releases an alias owned elsewhere. A future
- *                 per-callee return-ownership summary refines this. */
+ *                 but never releases an alias owned elsewhere. */
 typedef enum {
     OWN_OWNED = 0,
     OWN_BORROWED,
@@ -1813,6 +1950,38 @@ static void arc_precompute_sigs(XiFunc *f) {
                 }
             }
         }
+    }
+
+    /* Return summaries use the same reachable-function set and pre-ARC IR.
+     * Seed local RC-returning functions with the only optimistic result that
+     * cannot manufacture an alias (OWNED), then repeatedly evaluate the
+     * complete equations. A recursive factory remains OWNED only when every
+     * grounded return and dependency agrees. Mixed/foreign provenance drives
+     * the SCC to UNKNOWN; a non-converging equation set is reset fail-closed. */
+    for (uint32_t i = 0; i < vec.count; i++) {
+        XiFunc *fn = vec.items[i];
+        fn->arc_return_ownership =
+            xi_own_type_is_rc(fn->return_type)
+                ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
+                : arc_return_unknown();
+    }
+    changed = true;
+    uint32_t rounds = 0;
+    uint32_t max_rounds = vec.count > 0 ? vec.count * 4u + 1u : 1u;
+    while (changed && rounds++ < max_rounds) {
+        changed = false;
+        for (uint32_t i = 0; i < vec.count; i++) {
+            XiFunc *fn = vec.items[i];
+            XiReturnOwnership next = arc_infer_return_ownership(fn);
+            if (arc_return_ownership_equal(fn->arc_return_ownership, next))
+                continue;
+            fn->arc_return_ownership = next;
+            changed = true;
+        }
+    }
+    if (changed) {
+        for (uint32_t i = 0; i < vec.count; i++)
+            vec.items[i]->arc_return_ownership = arc_return_unknown();
     }
     xr_free(vec.items);
 }

@@ -213,6 +213,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
 
     f->return_type = return_type;
     f->view_return_param = -1;
+    f->arc_return_ownership.param_index = -1;
     f->stage = XI_STAGE_RAW;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
@@ -380,6 +381,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->aux_int = 0;
     v->aux = NULL;
     memset(&v->conversion, 0, sizeof(v->conversion));
+    v->call_return_ownership.param_index = -1;
     v->args = NULL;
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */

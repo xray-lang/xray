@@ -5901,6 +5901,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                     fn_links->return_storage_scanned = true;
                     fn_links->return_storage_scan_in_progress = false;
+                    xa_ensure_function_return_ownership_prepass(ctx, fn_links);
                 }
                 if (fn_links && fn_links->return_storage_mixed) {
                     XrLocation loc = {
