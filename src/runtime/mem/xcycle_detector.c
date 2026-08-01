@@ -382,27 +382,51 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     fprintf(stderr, "\n");
 
     fprintf(stderr, "  修复建议:\n");
-    bool all_closure_edges = true;
+
+    /* Which edges can `weak` actually break?
+     *
+     * It is a FIELD modifier, so it reaches an instance's field and nothing
+     * else. An edge whose target is a closure or a cell is a capture edge —
+     * no annotation exists for it, and the only fix is to clear the field that
+     * holds the closure. A cycle can contain both kinds, so both halves of the
+     * advice are printed independently rather than as an either/or. */
+    bool has_capture_edge = false;
+    bool has_annotatable_edge = false;
     for (uint32_t i = 0; i < count; i++) {
-        if (members[i]->obj->type != XR_TFUNCTION && members[i]->obj->type != XR_TCELL) {
-            all_closure_edges = false;
-            break;
-        }
+        XrObjHeader *from = members[i]->obj;
+        XrObjHeader *to = members[(i + 1) % count]->obj;
+        if (to->type == XR_TFUNCTION || to->type == XR_TCELL)
+            has_capture_edge = true;
+        else if (from->type == XR_TINSTANCE)
+            has_annotatable_edge = true;
     }
-    if (all_closure_edges) {
-        /* `weak` is a field modifier and cannot reach a capture edge. */
-        fprintf(stderr, "    · 在作用域末尾用 defer 清空持有该闭包的字段\n");
-    } else {
-        /* Every breakable edge is listed and none is recommended: which one to
-         * break is an ownership decision, and the language does not guess. */
+
+    if (has_annotatable_edge) {
+        /* Every candidate is listed and none is recommended: which edge to
+         * break is an ownership decision, and the language does not guess
+         * (247 section 2.5 — picking wrong turns a leak into a premature null). */
         fprintf(stderr, "    · 将下列任一引用标注为 weak（选哪条是所有权决定）:\n");
         for (uint32_t i = 0; i < count; i++) {
             XrObjHeader *from = members[i]->obj;
             XrObjHeader *to = members[(i + 1) % count]->obj;
             if (from->type != XR_TINSTANCE)
                 continue;
+            if (to->type == XR_TFUNCTION || to->type == XR_TCELL)
+                continue; /* capture edge: weak cannot reach it */
             fprintf(stderr, "        %s ──▶ %s\n", detector_type_name(from),
                     detector_type_name(to));
+        }
+    }
+    if (has_capture_edge) {
+        fprintf(stderr, "    · 环上有闭包捕获边，weak 管不到它。"
+                        "在作用域末尾用 defer 清空持有该闭包的字段:\n");
+        for (uint32_t i = 0; i < count; i++) {
+            XrObjHeader *from = members[i]->obj;
+            XrObjHeader *to = members[(i + 1) % count]->obj;
+            if (to->type != XR_TFUNCTION && to->type != XR_TCELL)
+                continue;
+            fprintf(stderr, "        defer <%s 持有该闭包的字段> = ...\n",
+                    detector_type_name(from));
         }
     }
 }
