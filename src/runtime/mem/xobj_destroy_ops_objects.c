@@ -10,11 +10,9 @@
 
 #include "xobj_destroy_ops.h"
 #include "xobj_ops.h"
-#include "xweak_handle.h"
 #include "../core/xr_runtime_core.h"
 
 void xr_runtime_core_enable_object_destroy_ops(struct XrRuntimeCore *core) {
-    xr_runtime_core_set_destroy_op(core, XR_TWEAK_HANDLE, xr_obj_destroy_weak_handle);
     xr_runtime_core_set_destroy_op(core, XR_TARRAY, xr_obj_destroy_array);
     xr_runtime_core_set_destroy_op(core, XR_TMAP, xr_obj_destroy_map);
     xr_runtime_core_set_destroy_op(core, XR_TSET, xr_obj_destroy_set);

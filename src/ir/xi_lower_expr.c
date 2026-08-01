@@ -228,6 +228,29 @@ static struct XrType *xi_lower_call_constructor_type(XiLower *l, const CallExprN
     return xi_lower_class_constructor_type(l, class_sym);
 }
 
+/* Is `obj.name` a field declared `weak`?
+ *
+ * Looked up through the receiver's class info rather than a type flag, because
+ * `weak` describes the STORAGE: two fields of the same type can differ. */
+static bool xi_lower_member_is_weak_field(XiLower *l, const XiValue *obj, const char *name) {
+    if (!l || !l->analyzer || !obj || !obj->type || !name)
+        return false;
+    const XrType *t = obj->type;
+    if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
+        return false;
+    XrClassInfo *info = t->instance.class_ref;
+    if (!info && t->instance.class_name)
+        info = xi_lower_lookup_class_info(l, t->instance.class_name);
+    for (XrClassInfo *c = info; c; c = c->base) {
+        for (int i = 0; i < c->field_count; i++) {
+            XaSymbol *f = c->fields[i];
+            if (f && f->name && strcmp(f->name, name) == 0)
+                return f->is_weak;
+        }
+    }
+    return false;
+}
+
 /* Does `T(args)` construct a user class instance?  The fact is about the
  * callee's symbol kind, not about the class declaring an explicit constructor:
  * a class without one gets a synthesized constructor during class lowering and
@@ -2383,6 +2406,11 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     v->aux = (void *) arena_strdup(l->func, ma->name);
     v->aux_int = xi_lower_method_symbol(l, ma->name);
     v->line = (uint32_t) node->line;
+    /* Reading a `weak` field promotes to a strong reference (W1), so unlike an
+     * ordinary field load its result is OWNED and ARC must drop it. Recorded
+     * as a fact here, where the field's declaration is still visible. */
+    if (xi_lower_member_is_weak_field(l, obj, ma->name))
+        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_LOAD;
     /* Ordinary enum value properties participate in the metadata reachability
      * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
      * enum phis can carry an anonymous enum-shaped type; tagging that as a
@@ -2534,6 +2562,10 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     v->aux_int = xi_lower_method_symbol(l, ms->member);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    /* A weak slot takes no ownership of what it points at, so this store must
+     * not consume its value (see the flag's definition). */
+    if (xi_lower_member_is_weak_field(l, obj, ms->member))
+        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_STORE;
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,

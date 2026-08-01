@@ -68,10 +68,6 @@ static inline XrSystemHeap *coro_heap_pool_from_heap(XrCoroHeap *heap) {
 
 // Per-type destroy capability lookups from the runtime core.
 
-static inline XrVMRuntime *coro_heap_isolate(XrCoroHeap *heap) {
-    return (heap && heap->owner) ? xr_coro_vm_owner(heap->owner) : NULL;
-}
-
 static inline XrRuntimeCore *coro_heap_core(XrCoroHeap *heap) {
     return (heap && heap->owner) ? heap->owner->core : NULL;
 }

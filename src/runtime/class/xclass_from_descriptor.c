@@ -290,6 +290,8 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
     // Propagate cycle candidate flag from compile-time type graph analysis
     if (desc->flags & XR_CLASS_CYCLE_CANDIDATE)
         cls->flags |= XR_CLASS_CYCLE_CANDIDATE;
+    if (desc->flags & XR_CLASS_HAS_WEAK_FIELDS)
+        cls->flags |= XR_CLASS_HAS_WEAK_FIELDS;
 
     // Not yet initialized by static constructor
     cls->flags &= ~XR_CLASS_INITIALIZED;

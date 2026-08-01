@@ -534,6 +534,19 @@ getprop_instance:;
     // XrJson shares XrInstance layout; direct cast works.
     XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
 
+    /* A weak slot stores an XrWeakHandle, not the target, so it cannot go
+     * through the ordinary field paths (nor be inline-cached as one — the
+     * cache records an index and reads the slot raw). Decided by one class-
+     * level bit, so a class with no weak field keeps every fast path. */
+    if (inst->klass && (inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {
+        int weak_idx = xr_class_lookup_field(inst->klass, prop_symbol);
+        if (weak_idx >= 0 && xr_class_is_field_weak(inst->klass, weak_idx)) {
+            /* W1: the read promotes to a strong reference, or yields null. */
+            R(a) = xr_weak_field_load(inst->fields[weak_idx]);
+            vmbreak;
+        }
+    }
+
     // Dynamic-layout fast path: hidden-class instance, lookup may miss
     // (returns null), no getter dispatch, no method fallback.
     if (inst->klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
@@ -693,6 +706,25 @@ vmcase(OP_SETPROP) {
 
     // XrJson shares XrInstance layout — direct cast works
     XrInstance *inst_s = (XrInstance *) XR_TO_PTR(obj);
+
+    /* Same reasoning as OP_GETPROP: a weak slot holds a handle. */
+    if (inst_s->klass && (inst_s->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {
+        int weak_idx = xr_class_lookup_field(inst_s->klass, prop_symbol);
+        if (weak_idx >= 0 && xr_class_is_field_weak(inst_s->klass, weak_idx)) {
+            XrCoroHeap *weak_heap = xr_current_coro_heap();
+            XrValue slot = xr_weak_field_store(weak_heap, value);
+            /* Release whatever handle the slot held before, so replacing a
+             * weak reference does not leak the old handle. */
+            XrValue prev = inst_s->fields[weak_idx];
+            inst_s->fields[weak_idx] = slot;
+            xr_rc_release_value(weak_heap, prev);
+            /* `value` is NOT released here: ARC does not move it in, because
+             * XI_LOWERING_FLAG_WEAK_FIELD_STORE marks this store non-consuming.
+             * The source keeps its own death point, which is what makes the
+             * target outlive the assignment. */
+            vmbreak;
+        }
+    }
 
     // Dynamic-layout fast path: hidden-class instance, missing field creates
     // a class transition. Shared objects cannot create new transitions.

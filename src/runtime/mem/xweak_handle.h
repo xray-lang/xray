@@ -53,6 +53,7 @@
 #include <stdint.h>
 
 #include "xobj_header.h"
+#include "../value/xvalue.h"
 
 struct XrCoroHeap;
 
@@ -89,7 +90,24 @@ void xr_weak_table_target_dying(struct XrCoroHeap *heap, XrObjHeader *target);
 /* Release the table itself at coroutine teardown. */
 void xr_weak_table_destroy(struct XrCoroHeap *heap);
 
-/* Handle destructor, registered like any other type's. */
-void xr_obj_destroy_weak_handle(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+/* No destructor is registered for a handle. The table owns a reference, so a
+ * handle cannot outlive its table entry and there is nothing to clean up when
+ * one dies — which also keeps it out of the finalize set entirely. */
+
+/* ========== Field-level API ==========
+ *
+ * A weak slot stores a handle, not the target, so neither side can use the
+ * ordinary field accessors. Both are driven from XR_CLASS_HAS_WEAK_FIELDS at
+ * the top of the property paths, so a class with no weak field pays one bit
+ * test and keeps its inline caches.
+ */
+
+/* Read a weak slot as the language sees it: the target with a raised refcount,
+ * or null (W1). `slot` is the raw stored value. */
+XrValue xr_weak_field_load(XrValue slot);
+
+/* Write a weak slot. Returns the value to store — a handle for the target, or
+ * null. The caller releases whatever the slot held before. */
+XrValue xr_weak_field_store(struct XrCoroHeap *heap, XrValue target);
 
 #endif /* XR_WEAK_HANDLE_H */

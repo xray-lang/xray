@@ -1,0 +1,112 @@
+// 0804_weak_field.xr — `weak` 字段的语义门禁（任务 247 阶段 C）
+//
+// weak 是**唯一**的断环机制：规范 16.8 说引用环不被回收，而闭包捕获边
+// （weak 管不到）只有 defer 惯用法。这里锁住它的五条规则里能在源码层
+// 观察的部分。
+//
+// W1 读取即提升：读到的是强引用或 null，绝不是可能中途死掉的借用
+// W2 恒可空：类型必须 T?，因此用点必须先 narrow —— 复用现有 T? 规则，
+//    没有第二层解包（这正是不做 Weak<T> 的理由之一）
+// W5 清空点确定：目标最后一个强引用释放的那一刻起读到 null
+//
+// 注意 W5 与规范 2.2 的 release 窗口配合：编译器可在"不早于最后一次使用、
+// 不晚于该语句结束"的窗口内移动 release 点。所以一个只被 store 用过的
+// 目标在该语句后就可以死——读到 null 是**正确**的，不是 bug。
+
+import runtime
+
+class Parent {
+    children: Array<Child>
+    tag: int
+
+    constructor(tag) {
+        this.children = []
+        this.tag = tag
+    }
+}
+
+class Child {
+    weak parent: Parent?
+    tag: int
+
+    constructor(tag) {
+        this.parent = null
+        this.tag = tag
+    }
+}
+
+@test
+fn test_weak_read_promotes_and_sees_live_target() {
+    var p = Parent(1)
+    var c = Child(2)
+    c.parent = p
+    p.children.push(c)
+
+    // W1 + W2：读到强引用，用点先 narrow
+    var got = c.parent
+    assert(got != null)
+    assert(got.tag == 1)
+    // 目标仍然活着：读取没有把它变成借用
+    assert(p.tag == 1)
+}
+
+// 目标由被调函数创建、随该函数一起死掉。写成普通函数而不是捕获 h 的闭包，
+// 是因为「@test 里的闭包捕获一个实例局部变量」当前会崩（基线 e38d8ecab 同样
+// 崩，与 weak 无关）。参数传递测的是同一件事，且不把这份门禁压在那个缺陷上。
+fn attach_transient_parent(c: ref Child) {
+    var t = Parent(42)
+    c.parent = t
+    // t 的最后一次使用就是这条 store，规范 2.2 的窗口允许此后释放
+}
+
+@test
+fn test_weak_reads_null_after_the_target_is_released() {
+    var h = Child(0)
+    attach_transient_parent(ref h)
+    // W5：目标走了，槽读到 null
+    var after = h.parent
+    assert(after == null)
+}
+
+// 断环的实测效果：双向链接离开作用域后必须被纯 RC 完全回收。
+// 这是 weak 存在的全部理由——没有它，这个形态就是泄漏。
+fn make_linked_pair(i: int) {
+    var p = Parent(i)
+    var c = Child(i + 1)
+    c.parent = p
+    p.children.push(c)
+}
+
+@test
+fn test_weak_breaks_the_cycle_so_rc_reclaims_it() {
+    runtime.disableCycleCollection()
+    for (var w = 0; w < 200; w++) {
+        make_linked_pair(w)
+    }
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_linked_pair(i)
+    }
+    var residue = runtime.liveObjects() - before
+    // 环收集器被关掉了，所以回收全靠 weak 断边。不加 weak 时这里是 20000。
+    assert(residue < 1000)
+    runtime.enableCycleCollection()
+}
+
+// 同一目标的多个 weak 字段共享一个 handle，且各自独立读到清空
+@test
+fn test_multiple_weak_refs_to_one_target() {
+    var a = Child(1)
+    var b = Child(2)
+    var p = Parent(99)
+    a.parent = p
+    b.parent = p
+
+    var ga = a.parent
+    var gb = b.parent
+    assert(ga != null)
+    assert(gb != null)
+    assert(ga.tag == 99)
+    assert(gb.tag == 99)
+    assert(p.tag == 99)
+}

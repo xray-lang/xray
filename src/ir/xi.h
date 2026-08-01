@@ -840,6 +840,20 @@ typedef enum {
  * `super(...)` call lowers to the same XI_CALL_METHOD with aux "constructor"
  * but returns the receiver at +0, and it is deliberately NOT marked. */
 #define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
+/* This field load reads a `weak` slot, so its result is OWNED rather than the
+ * borrowed reference an ordinary field load yields (spec 16.3 W1: reading a
+ * weak field promotes, because handing back a borrow would let the target die
+ * mid-expression). ARC reads this to drop the result at its death point.
+ *
+ * A lowering flag rather than a separate op: the difference is entirely in
+ * result ownership, and every other property of the load is unchanged. */
+#define XI_LOWERING_FLAG_WEAK_FIELD_LOAD (1u << 6)
+/* This field store writes a `weak` slot, which does NOT take ownership of the
+ * value — the slot holds a handle, and the target's lifetime is unaffected.
+ * So unlike an ordinary field store this is not a consuming use: ARC must keep
+ * the source alive to its own death point instead of moving it in. Moving it
+ * in would kill the target at the assignment, which is precisely backwards. */
+#define XI_LOWERING_FLAG_WEAK_FIELD_STORE (1u << 7)
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
@@ -1053,6 +1067,16 @@ static inline bool xi_value_is_read_place_param(const XiValue *value) {
  * allocate their result. */
 static inline bool xi_value_is_constructor_call(const XiValue *value) {
     return value && (value->lowering_flags & XI_LOWERING_FLAG_CONSTRUCTOR_CALL) != 0;
+}
+
+/* Does this load read a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_LOAD)? */
+static inline bool xi_value_is_weak_field_load(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_LOAD) != 0;
+}
+
+/* Does this store write a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_STORE)? */
+static inline bool xi_value_is_weak_field_store(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_STORE) != 0;
 }
 
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {

@@ -125,8 +125,22 @@ vmcase(OP_CLOSURE) {
              * closure — ARC dup'd it first if the source is used again, and
              * gives each capture site exactly one +1. Retaining here added a
              * second reference that nobody owned, and the closure's destructor
-             * releases only one: every captured heap value leaked. */
+             * releases only one: every captured heap value leaked.
+             *
+             * A cell is the exception, and not an arbitrary one: cells are
+             * created by the emitter (OP_CELL_NEW), never by lowering, so no
+             * XiValue ever denotes one and ARC cannot have dup'd it. The
+             * register keeps pointing at the cell after this instruction —
+             * that is the whole point of a mutable capture — so the closure's
+             * upvalue is a second owner and has to say so. Moving the single
+             * reference instead let the closure's death free a cell the
+             * enclosing frame was still reading through. */
             closure->upvals[j] = R(uv->index);
+            if (XR_IS_PTR(closure->upvals[j])) {
+                XrObjHeader *uv_hdr = XR_VALUE_GCPTR(closure->upvals[j]);
+                if (uv_hdr && XR_OBJ_GET_TYPE(uv_hdr) == XR_TCELL)
+                    xr_rc_retain_value(closure->upvals[j]);
+            }
         } else if (uv->source == UPVAL_SRC_UPVAL) {
             /* Borrowed from the enclosing closure, which still holds it. This
              * capture never went through a register, so ARC gave us nothing —

@@ -114,10 +114,19 @@ XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
         return NULL;
 
     /* One handle per target, so the target's death is a single store rather
-     * than a walk over every weak field that named it. */
+     * than a walk over every weak field that named it.
+     *
+     * The caller owns one reference to the result either way: a freshly
+     * allocated object already carries it, a reused one has to be dup'd. The
+     * table itself does NOT hold a reference — it is a lookup index, and a
+     * handle leaving it is exactly what xr_obj_destroy_weak_handle handles. */
     XrWeakHandle *existing = weak_table_find(&heap->weak_table, target);
-    if (existing)
+    if (existing) {
+        xr_obj_dup(&existing->hdr);
         return existing;
+    }
+    /* The table holds a strong reference of its own (see below), so a fresh
+     * handle starts with two owners: the table and the caller. */
 
     XrObjHeader *obj = xr_coro_heap_new_obj(heap, XR_TWEAK_HANDLE, sizeof(XrWeakHandle));
     if (!obj)
@@ -132,6 +141,13 @@ XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
         xr_coro_heap_destroy_obj(heap, obj);
         return NULL;
     }
+
+    /* The table OWNS a reference. That is what removes the entire "handle dies
+     * before its target" problem: with the table holding one, a handle cannot
+     * outlive its table entry, so the target's death never writes through a
+     * freed handle and no finalizer is needed to keep the two in step.
+     * The cost is one small object living until its target does. */
+    xr_obj_dup(&handle->hdr);
 
     /* The destroy path checks this bit before consulting the table, so an
      * object nobody weakly references pays one bit test. */
@@ -159,22 +175,47 @@ void xr_weak_table_target_dying(XrCoroHeap *heap, XrObjHeader *target) {
      * just read empty now. */
     handle->target = NULL;
     weak_table_remove(&heap->weak_table, target);
+    /* Hand back the table's reference. A field still naming this handle keeps
+     * it alive and simply reads null from here on; when the last one goes, so
+     * does the handle. Holding the reference until heap teardown instead would
+     * leak one handle per target that was ever weakly referenced — which is
+     * exactly the leak `weak` exists to remove. */
+    xr_rc_release(heap, &handle->hdr);
 }
 
 void xr_weak_table_destroy(XrCoroHeap *heap) {
     if (!heap || !heap->weak_table.slots)
         return;
+    /* Teardown frees every object in bulk, so the table's references are not
+     * released one by one — just the index itself. */
     xr_free(heap->weak_table.slots);
     memset(&heap->weak_table, 0, sizeof(heap->weak_table));
 }
 
-void xr_obj_destroy_weak_handle(XrObjHeader *obj, XrCoroHeap *owner_heap) {
-    XrWeakHandle *handle = (XrWeakHandle *) obj;
-    /* A handle outliving its target is the normal case (the field still refers
-     * to it). A handle dying FIRST — every weak field dropped while the target
-     * is alive — has to leave the table, or the target's later death would
-     * write through a freed handle. */
-    if (owner_heap && handle->target)
-        weak_table_remove(&owner_heap->weak_table, handle->target);
-    handle->target = NULL;
+/* ========== Field-level API ========== */
+
+XrValue xr_weak_field_load(XrValue slot) {
+    if (!XR_IS_PTR(slot))
+        return xr_null(); /* never written, or written null */
+    XrObjHeader *hdr = XR_VALUE_GCPTR(slot);
+    if (!hdr || XR_OBJ_GET_TYPE(hdr) != XR_TWEAK_HANDLE)
+        return xr_null();
+    XrObjHeader *target = xr_weak_handle_load((XrWeakHandle *) hdr);
+    if (!target)
+        return xr_null(); /* W5: the target is gone, so the slot reads null */
+    return XR_FROM_PTR(target);
+}
+
+XrValue xr_weak_field_store(XrCoroHeap *heap, XrValue target) {
+    if (!XR_IS_PTR(target))
+        return xr_null(); /* storing null (or a scalar, which W3 rejects) */
+    XrObjHeader *obj = XR_VALUE_GCPTR(target);
+    if (!obj)
+        return xr_null();
+    /* acquire hands back one owned reference; the slot takes it. The slot owns
+     * the HANDLE and never the target, which is the whole point. */
+    XrWeakHandle *handle = xr_weak_handle_acquire(heap, obj);
+    if (!handle)
+        return xr_null(); /* out of memory: a null slot beats a dangling one */
+    return XR_FROM_PTR(&handle->hdr);
 }
