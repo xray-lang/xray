@@ -456,6 +456,10 @@ endif()
 option(ENABLE_LLVM_BACKEND "Enable LLVM backend" OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
+# Task 247 phase D. Development-mode reference-cycle detector: reports cycles,
+# reclaims nothing. OFF by default and compiled out entirely — the production
+# binary contains none of its symbols, which a test asserts with `nm`.
+option(XR_ENABLE_CYCLE_DETECTOR "Build the development-mode reference-cycle detector" OFF)
 option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" ON)
 option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
@@ -496,6 +500,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # Multi-core and NaN Tagging are now the only implementation, no conditional compilation needed
+
+# Task 247 phase D: the cycle detector is a compile-time switch, not a runtime
+# flag. Off by default, so a production binary contains none of its code.
+if(XR_ENABLE_CYCLE_DETECTOR)
+    message(STATUS "Reference-cycle detector enabled (development build)")
+    add_compile_definitions(XR_ENABLE_CYCLE_DETECTOR=1)
+endif()
 
 # AddressSanitizer configuration
 if(ENABLE_ASAN)
@@ -3120,6 +3131,65 @@ if(BUILD_TESTS)
     set_tests_properties(regression_closure_capture_cell_reassign PROPERTIES
         LABELS "regression;rc;vm"
         TIMEOUT 30
+    )
+
+    # Task 249 — RC reclamation gates. probe0 asserts that a local class
+    # instance is reclaimed by plain RC (it was not: every `var x = Class(...)`
+    # leaked); probe4 asserts runtime.liveBytes() is live bytes rather than
+    # cumulative allocation. Both are resident gates, not diagnostics: without
+    # them a regression here is invisible until someone measures RSS by hand.
+    #
+    # The remaining probes in tests/probes/rc/ are diagnostic assets driven by
+    # run_probes.sh and are deliberately NOT registered — probe1 stays red
+    # until task 247 phase A fixes the Map-field marking gap it measures.
+    add_test(
+        NAME rc_probe_gate_baseline
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe0_gate_rc_baseline.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_gate_baseline PROPERTIES
+        LABELS "regression;rc;vm;task-249"
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME rc_probe_heap_accounting
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe4_heap_accounting_fidelity.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_heap_accounting PROPERTIES
+        LABELS "regression;rc;vm;task-249"
+        TIMEOUT 120
+    )
+
+    # Closure-capture ownership and the drops that follow a tail call. Both
+    # were real leaks with no test between them and a release: 2M captured
+    # closures cost 323.8 MB max RSS, and every drop ARC placed after a tail
+    # call never executed at all.
+    add_test(
+        NAME rc_probe_closure_capture
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe5_closure_capture_and_tail_call.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_closure_capture PROPERTIES
+        LABELS "regression;rc;vm;task-247"
+        TIMEOUT 120
+    )
+
+    # The cycle detector is a compile-time switch. In a default build its
+    # symbols must not exist at all — not as no-ops, not behind a runtime flag.
+    add_test(
+        NAME cycle_detector_absent_by_default
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cycle_detector_absent_by_default PROPERTIES
+        LABELS "regression;rc;vm;task-247"
+        TIMEOUT 60
     )
 
     # ========================================================================

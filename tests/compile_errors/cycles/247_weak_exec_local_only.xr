@@ -1,0 +1,9 @@
+// W4（规范 16.3）：清空钩子（W5）挂在拥有该对象的协程堆上。模块静态域的
+// 对象不属于任何协程堆，没有单一的死亡时刻可挂，槽会一直读到一个别处已经
+// 释放掉的目标。
+class Node {
+    weak peer: Node?
+    constructor() { this.peer = null }
+}
+
+var shared_node: Node = Node()

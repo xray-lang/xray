@@ -131,17 +131,17 @@ static void test_flag_independence(void) {
     o.refcount = 5;
     o.objsize = 128;
     XR_OBJ_SET_FLAG(&o, XR_OBJ_HAS_DTOR);
-    XR_OBJ_SET_FLAG(&o, XR_OBJ_WEAKABLE);
+    XR_OBJ_SET_FLAG(&o, XR_OBJ_MANAGED);
 
     ASSERT_TRUE(XR_OBJ_HAS_DESTRUCTOR(&o), "HAS_DTOR set");
-    ASSERT_TRUE(XR_OBJ_GET_FLAG(&o, XR_OBJ_WEAKABLE), "WEAKABLE set");
+    ASSERT_TRUE(XR_OBJ_GET_FLAG(&o, XR_OBJ_MANAGED), "MANAGED set");
     ASSERT_TRUE(!XR_OBJ_IS_REGION(&o), "REGION not set");
     ASSERT_EQ(o.refcount, 5, "refcount intact");
     ASSERT_EQ(o.objsize, 128, "objsize intact");
 
     XR_OBJ_CLEAR_FLAG(&o, XR_OBJ_HAS_DTOR);
     ASSERT_TRUE(!XR_OBJ_HAS_DESTRUCTOR(&o), "HAS_DTOR cleared");
-    ASSERT_TRUE(XR_OBJ_GET_FLAG(&o, XR_OBJ_WEAKABLE), "WEAKABLE still set");
+    ASSERT_TRUE(XR_OBJ_GET_FLAG(&o, XR_OBJ_MANAGED), "MANAGED still set");
 }
 
 int main(void) {

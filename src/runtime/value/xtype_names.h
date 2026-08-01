@@ -53,8 +53,6 @@
 #define TYPE_NAME_ARRAY "Array"
 #define TYPE_NAME_MAP "Map"
 #define TYPE_NAME_SET "Set"
-#define TYPE_NAME_WEAKMAP "WeakMap"
-#define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_SLICE "Slice"
 
 /* ========== Runtime Types ========== */
@@ -178,14 +176,18 @@ typedef enum {
     XR_TID_THREAD,          // 41
     XR_TID_BUFFER,          // 42
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 43
-    XR_TID_WEAKSET,  // 44
     // char and Record are runtime-visible scalar/struct names outside the
     // concurrency block.
     XR_TID_RUNE,
     XR_TID_RECORD,
     XR_TID_COUNT
 } XrTypeId;
+
+/* Pinned for xr_elem_type.h, which hand-copies this id to stay
+ * dependency-free. See the matching block in xr_type_names_core.h: RUNE lives
+ * only in this enum, so its assertion has to be here. A renumbering that moves
+ * it degrades every Slice<rune> to XR_ELEM_ANY at runtime and nowhere else. */
+_Static_assert(XR_TID_RUNE == 43, "xr_elem_type.h: update xr_tid_to_elem_type case for RUNE");
 
 // Range check macros
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)

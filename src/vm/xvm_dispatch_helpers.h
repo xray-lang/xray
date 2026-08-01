@@ -102,6 +102,21 @@ static inline XrCoroutine *vm_get_coro(XrVMContext *vm_ctx) {
     return w ? (XrCoroutine *) w->m->current_coro : NULL;
 }
 
+/* The heap a weak handle belongs to: the same EXEC_LOCAL heap the target was
+ * allocated on, which is what W4 restricts weak fields to.
+ *
+ * Deliberately the allocation context rather than xr_current_coro_heap() or
+ * the coroutine slot: both of those are empty while top-level script code
+ * runs, and a NULL heap made xr_weak_handle_acquire fail, so every weak store
+ * quietly wrote null and every read of a live target came back null. The
+ * allocation context is the one thing that is always set wherever an object
+ * can be created — it is where the instance itself came from. */
+static inline XrCoroHeap *vm_weak_heap(XrVMContext *vm_ctx) {
+    (void) vm_ctx;
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    return alloc ? alloc->local_heap : NULL;
+}
+
 /* ========== VM Suspend Continuation Helpers ========== */
 
 static inline void vm_suspend_replay_current(XrBcCallFrame *frame, XrInstruction *pc) {

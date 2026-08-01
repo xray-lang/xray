@@ -32,16 +32,16 @@
 /* ========== Unified Object Header (16 bytes) ========== */
 
 typedef struct XrObjHeader {
-    uint16_t type;            /* [0-1] object type tag */
-    uint16_t extra;           /* [2-3] flags word: storage/mmap + XR_OBJ_* */
+    uint16_t type;             /* [0-1] object type tag */
+    uint16_t extra;            /* [2-3] flags word: storage/mmap + XR_OBJ_* */
     _Atomic(int32_t) refcount; /* [4-7] 0-based sign-tagged RC. Atomic so the
-                               * thread-shared (rc<0) band and the thread-local
-                               * fast path share one well-defined object: the
-                               * hot path uses relaxed loads/stores (identical
-                               * codegen to a plain int on x86/arm64) and the
-                               * shared band uses stronger orders. */
-    uint32_t objsize;         /* [8-11] allocation size */
-    uint32_t _rsv;            /* [12-15] reserved (weak slot / cycle-report id) */
+                                * thread-shared (rc<0) band and the thread-local
+                                * fast path share one well-defined object: the
+                                * hot path uses relaxed loads/stores (identical
+                                * codegen to a plain int on x86/arm64) and the
+                                * shared band uses stronger orders. */
+    uint32_t objsize;          /* [8-11] allocation size */
+    uint32_t _rsv;             /* [12-15] reserved (weak slot / cycle-report id) */
 } XrObjHeader;
 
 _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
@@ -144,6 +144,9 @@ typedef enum {
     XR_TENUM_CTOR,          /* Internal payload variant constructor metadata */
     XR_TENUM_DESCRIPTOR,    /* Erased enum-domain descriptor {layout, kind, scalar}. */
     XR_TENUM_SCALAR_LAYOUT, /* Static unit-enum layout used by compact AOT scalar boxes. */
+    XR_TWEAK_HANDLE,        /* Shared indirection cell for `weak` fields; holds a
+                             * non-owning target pointer that is cleared when the
+                             * target's last strong reference goes (task 247 C). */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

@@ -1,0 +1,31 @@
+// detector_closure_cycle.xr — 闭包环必须被检出，并给出 defer 建议
+//
+// 这是 247 §2.4 裁决能成立的前提：不引入 `[weak self]`，因为最常见的形态
+// 编译期就报（A.6）；剩下的间接形态由检测器兜底，而 `weak` 是字段修饰符，
+// 管不到捕获边——所以对全闭包边构成的环，检测器只能建议 defer。
+//
+// 用的是 A.6 明确**不报**的一级间接形态（`o.holder.handler = ...`），
+// 直接形态在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
+
+import runtime
+
+class Holder {
+    handler: () -> int
+    constructor() { this.handler = fn() -> int { return 0 } }
+}
+
+class Owner {
+    holder: Holder
+    value: int
+    constructor() { this.holder = Holder(); this.value = 0 }
+    bump() -> int { this.value = this.value + 1; return this.value }
+}
+
+fn indirect_closure_cycle() {
+    var o = Owner()
+    o.holder.handler = fn() -> int { return o.bump() }
+}
+
+runtime.disableCycleCollection()
+indirect_closure_cycle()
+print("closure cycle built")

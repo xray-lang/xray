@@ -63,6 +63,7 @@
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"
+#include "../runtime/mem/xweak_handle.h"
 #include "xvm_ffi.h"
 
 #include <math.h>

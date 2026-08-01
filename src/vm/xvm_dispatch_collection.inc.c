@@ -273,7 +273,7 @@ vmcase(OP_NEWMAP) {
     ** A = destination register
     ** B = capacity hint
     ** C = (key_kind << 8) | (value_tid << 3) | flags
-    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned), bit2: weak
+    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned)
     **     value_tid: bits 3-7 (5 bits, XrTypeId 0-31)
     **     key_kind:  bits 8-9 (2 bits: 0=any, 1=string, 2=int)
     */
@@ -281,7 +281,6 @@ vmcase(OP_NEWMAP) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     int storage_mode = c & 0x03;
-    int is_weak = c & 0x04;
     uint8_t value_tid = (uint8_t) ((c >> 3) & 0x1F);
     int key_kind = (c >> 8) & 0x03;
     uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
@@ -306,8 +305,6 @@ vmcase(OP_NEWMAP) {
     }
 
     if (map) {
-        if (is_weak)
-            map->flags |= XR_MAP_FLAG_WEAK;
         map->key_tid = key_tid;
         map->value_tid = value_tid;
     }
@@ -322,7 +319,7 @@ vmcase(OP_NEWSET) {
     /* OP_NEWSET: create Set
     ** A = destination register
     ** B = (elem_tid << 3) | flags
-    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned), bit2: weak
+    **     flags bits0-1: storage mode (0=normal, 1=shared, 2=owned)
     **     elem_tid: bits 3-7 (XrTypeId, 0=any)
     ** C = init mode (0=empty, 1=from array in R[A+1])
     */
@@ -330,7 +327,6 @@ vmcase(OP_NEWSET) {
     int b_arg = GETARG_B(i);
     int init_mode = GETARG_C(i);
     int storage_mode = b_arg & 0x03;
-    int is_weak = b_arg & 0x04;
     uint8_t elem_tid = (uint8_t) ((b_arg >> 3) & 0x1F);
 
     XrSet *set;
@@ -378,8 +374,6 @@ vmcase(OP_NEWSET) {
     }
 
     if (set) {
-        if (is_weak)
-            set->flags |= XR_SET_FLAG_WEAK;
         set->elem_tid = elem_tid;
     }
 

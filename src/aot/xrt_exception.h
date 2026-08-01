@@ -292,10 +292,6 @@ static inline const char *xrt_type_name(int64_t tid) {
             return TYPE_NAME_RESULTGROUP;
         case XR_TID_THREAD:
             return TYPE_NAME_THREAD;
-        case XR_TID_WEAKMAP:
-            return TYPE_NAME_WEAKMAP;
-        case XR_TID_WEAKSET:
-            return TYPE_NAME_WEAKSET;
         default:
             return TYPE_NAME_UNKNOWN;
     }

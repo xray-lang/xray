@@ -38,6 +38,17 @@ add_xray_unit_test(test_arena util/test_arena.c)
 
 add_xray_unit_test(test_region mem/test_region.c)
 add_xray_unit_test(test_obj_header mem/test_obj_header.c)
+# Task 247 phase C: the runtime half of `weak`, tested before any language
+# surface exists for it (W1 read-promotes, W5 definite clearing point).
+add_xray_unit_test(test_weak_handle mem/test_weak_handle.c)
+# Task 247 phase D: the whole-heap traversal is validated against
+# heap->object_count before any cycle logic runs on top of it. The body is
+# compiled out unless XR_ENABLE_CYCLE_DETECTOR is on, so the test is a no-op
+# in a default build rather than a missing target.
+add_xray_unit_test(test_cycle_detector_traversal mem/test_cycle_detector_traversal.c)
+if(XR_ENABLE_CYCLE_DETECTOR)
+    target_compile_definitions(test_cycle_detector_traversal PRIVATE XR_ENABLE_CYCLE_DETECTOR=1)
+endif()
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

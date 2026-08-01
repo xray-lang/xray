@@ -87,6 +87,11 @@ typedef struct XrFieldDescriptor {
 #define XR_FIELD_PROTECTED (1 << 1)
 #define XR_FIELD_STATIC (1 << 2)
 #define XR_FIELD_FINAL (1 << 3)
+/* `weak parent: Node?` — the slot stores an XrWeakHandle, not the target, and
+ * a read promotes through it (W1). Reading or writing such a slot must go
+ * through the weak path; treating it as an ordinary field would hand back the
+ * handle object itself. */
+#define XR_FIELD_WEAK (1 << 4)
 
 /* ========== Method Flags ========== */
 
@@ -265,6 +270,12 @@ struct XrClass {
 #define XR_CLASS_DERIVE_EQ (1 << 15)        // @derive(Eq): structural instance equality
 #define XR_CLASS_DERIVE_HASH (1 << 16)      // @derive(Hash): structural instance hash
 #define XR_CLASS_DERIVE_CLONE (1 << 17)     // @derive(Clone): structural instance copy
+/* At least one instance field is `weak`. Reads and writes of this class's
+ * fields must go through the weak-aware path, because a weak slot stores an
+ * XrWeakHandle rather than the target. Tested once at the top of GETPROP /
+ * SETPROP so a class without weak fields — every class today — keeps its
+ * inline-cache fast paths untouched. */
+#define XR_CLASS_HAS_WEAK_FIELDS (1 << 18)
 
 static inline uint32_t xr_class_flags_from_derive(uint32_t derive_flags) {
     uint32_t flags = 0;
@@ -398,6 +409,16 @@ XR_FUNC XrClass *xr_value_get_class(XrVMRuntime *X, XrValue value);
 static inline bool xr_class_is_field_private(const XrClass *cls, int index) {
     if (index >= 0 && index < cls->field_count) {
         return (cls->fields[index].flags & XR_FIELD_PRIVATE) != 0;
+    }
+    return false;
+}
+
+/* Is instance field `index` declared weak (task 247 phase C)? Its slot holds
+ * an XrWeakHandle rather than the target, so reads and writes must take the
+ * weak path. Only reached for classes carrying XR_CLASS_HAS_WEAK_FIELDS. */
+static inline bool xr_class_is_field_weak(const XrClass *cls, int index) {
+    if (index >= 0 && index < cls->field_count) {
+        return (cls->fields[index].flags & XR_FIELD_WEAK) != 0;
     }
     return false;
 }

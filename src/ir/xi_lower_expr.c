@@ -228,6 +228,64 @@ static struct XrType *xi_lower_call_constructor_type(XiLower *l, const CallExprN
     return xi_lower_class_constructor_type(l, class_sym);
 }
 
+/* Is `obj.name` a field declared `weak`?
+ *
+ * Looked up through the receiver's class info rather than a type flag, because
+ * `weak` describes the STORAGE: two fields of the same type can differ. */
+static bool xi_lower_member_is_weak_field(XiLower *l, const XiValue *obj, const char *name) {
+    if (!l || !l->analyzer || !obj || !obj->type || !name)
+        return false;
+    const XrType *t = obj->type;
+    if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
+        return false;
+    XrClassInfo *info = t->instance.class_ref;
+    if (!info && t->instance.class_name)
+        info = xi_lower_lookup_class_info(l, t->instance.class_name);
+    for (XrClassInfo *c = info; c; c = c->base) {
+        for (int i = 0; i < c->field_count; i++) {
+            XaSymbol *f = c->fields[i];
+            if (f && f->name && strcmp(f->name, name) == 0)
+                return f->is_weak;
+        }
+    }
+    return false;
+}
+
+/* Does `T(args)` construct a user class instance?  The fact is about the
+ * callee's symbol kind, not about the class declaring an explicit constructor:
+ * a class without one gets a synthesized constructor during class lowering and
+ * the call still allocates a fresh instance (xr_instance_new).  Requiring an
+ * XrClassInfo excludes the builtin classes, which dispatch through a `call`
+ * static method that may hand back an existing object.
+ *
+ * ARC consumes the resulting XI_LOWERING_FLAG_CONSTRUCTOR_CALL to own and drop
+ * the result; a false positive would be a double release, so every uncertain
+ * shape answers false and keeps the alias-uncertain treatment. */
+static bool xi_lower_call_constructs_instance(XiLower *l, const CallExprNode *call,
+                                              const struct XrType *result_type) {
+    if (!l || !l->analyzer || !call || !call->callee || call->callee->type != AST_VARIABLE)
+        return false;
+    /* Constructing yields an instance of the constructed class. */
+    if (!result_type || result_type->kind != XR_KIND_INSTANCE)
+        return false;
+    const VariableNode *callee = &call->callee->as.variable;
+    XaSymbol *class_sym = NULL;
+    if (callee->symbol_id) {
+        /* A callee id resolving to something other than a class (a local that
+         * shadows the class name) is not a construction.  Deliberately no name
+         * fallback here: that would look straight past the shadowing. */
+        XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, callee->symbol_id);
+        if (sym && sym->kind == XA_SYM_CLASS)
+            class_sym = sym;
+    } else if (callee->name) {
+        class_sym = xi_lower_lookup_class_symbol(l, callee->name);
+    }
+    if (!class_sym)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, class_sym);
+    return links && links->class_info != NULL;
+}
+
 static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
                                          const char *member_name, struct XrType *type, int line) {
     if (!l || !module_name)
@@ -2217,6 +2275,45 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
     return true;
 }
 
+/* The general slot read, reached once every layout-specific shape above has
+ * declined: no struct layout, no json field table, no tuple ordinal. */
+static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
+                                       struct XrType *result_type,
+                                       XiSequenceEvidenceIds *sequence_ids) {
+    MemberAccessNode *ma = &node->as.member_access;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = obj;
+    v->aux = (void *) arena_strdup(l->func, ma->name);
+    v->aux_int = xi_lower_method_symbol(l, ma->name);
+    v->line = (uint32_t) node->line;
+    /* Reading a `weak` field promotes to a strong reference (W1), so unlike an
+     * ordinary field load its result is OWNED and ARC must drop it. Recorded
+     * as a fact here, where the field's declaration is still visible. */
+    if (xi_lower_member_is_weak_field(l, obj, ma->name))
+        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_LOAD;
+    /* Ordinary enum value properties participate in the metadata reachability
+     * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
+     * enum phis can carry an anonymous enum-shaped type; tagging that as a
+     * concrete enum domain would make the fail-closed descriptor verifier
+     * reject otherwise valid `.name`/`.ordinal` code.  Descriptor selections
+     * above always carry their concrete owner and remain strict. */
+    if (obj->type && obj->type->kind == XR_KIND_ENUM && obj->type->enum_type.enum_name &&
+        obj->type->enum_type.layout && ma->name) {
+        if (strcmp(ma->name, "name") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_NAME);
+        else if (strcmp(ma->name, "ordinal") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_ORDINAL);
+    }
+    xi_lower_apply_sequence_evidence_ids(v, sequence_ids);
+    xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
+    if (obj->type && XR_TYPE_IS_JSON(obj->type))
+        xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
+                                     XG_JSON_ACCESS_FIELD_GET);
+    return v;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiSequenceEvidenceIds sequence_ids;
@@ -2341,32 +2438,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         }
     }
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
-    if (!v)
-        return NULL;
-    v->args[0] = obj;
-    v->aux = (void *) arena_strdup(l->func, ma->name);
-    v->aux_int = xi_lower_method_symbol(l, ma->name);
-    v->line = (uint32_t) node->line;
-    /* Ordinary enum value properties participate in the metadata reachability
-     * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
-     * enum phis can carry an anonymous enum-shaped type; tagging that as a
-     * concrete enum domain would make the fail-closed descriptor verifier
-     * reject otherwise valid `.name`/`.ordinal` code.  Descriptor selections
-     * above always carry their concrete owner and remain strict. */
-    if (obj->type && obj->type->kind == XR_KIND_ENUM && obj->type->enum_type.enum_name &&
-        obj->type->enum_type.layout && ma->name) {
-        if (strcmp(ma->name, "name") == 0)
-            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_NAME);
-        else if (strcmp(ma->name, "ordinal") == 0)
-            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_ORDINAL);
-    }
-    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-    xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type))
-        xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
-                                     XG_JSON_ACCESS_FIELD_GET);
-    return v;
+    return lower_member_slot_load(l, node, obj, result_type, &sequence_ids);
 }
 
 static XiValue *lower_member_set_target(XiValue *obj) {
@@ -2499,6 +2571,10 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     v->aux_int = xi_lower_method_symbol(l, ms->member);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+    /* A weak slot takes no ownership of what it points at, so this store must
+     * not consume its value (see the flag's definition). */
+    if (xi_lower_member_is_weak_field(l, obj, ms->member))
+        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_STORE;
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,
@@ -5166,6 +5242,8 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     v->line = (uint32_t) node->line;
     if (is_self_call)
         v->aux_int = 1;
+    if (xi_lower_call_constructs_instance(l, call, result_type))
+        v->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     v->call_plan = call_plan;
     lower_instantiate_call_view_evidence(v, static_callee, callee_type, false);
 
@@ -8382,16 +8460,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "WeakMap") == 0 && arg_count == 0) {
-            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = cap;
-            v->aux_int = 0x04; /* weak flag in C field bit 2 */
-            v->line = (uint32_t) node->line;
-            return v;
-        }
         if (strcmp(cname, "Array") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
@@ -8455,16 +8523,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             } else {
                 v->aux_int = 0;
             }
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-        if (strcmp(cname, "WeakSet") == 0 && arg_count == 0) {
-            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = cap;
-            v->aux_int = 0x04; /* weak flag in B field bit 2 */
             v->line = (uint32_t) node->line;
             return v;
         }
@@ -8630,6 +8688,12 @@ generic_constructor:;
         call->args[i + 1] = arg_vals[i];
     call->aux = (void *) "constructor";
     call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    /* Same fresh-result fact as the class-binding call path: a user class
+     * allocates its instance here.  A builtin class reaches this path too and
+     * stays unmarked, since its `call` static method may return an existing
+     * object. */
+    if (has_user_class_info && result_type && result_type->kind == XR_KIND_INSTANCE)
+        call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;

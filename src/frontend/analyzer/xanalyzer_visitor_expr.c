@@ -3791,10 +3791,9 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         XrType *bt = NULL;
 
         int required_type_args = -1;
-        if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0)
+        if (strcmp(cn, "Map") == 0)
             required_type_args = 2;
-        else if (strcmp(cn, "Array") == 0 || strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0 ||
-                 strcmp(cn, "Channel") == 0)
+        else if (strcmp(cn, "Array") == 0 || strcmp(cn, "Set") == 0 || strcmp(cn, "Channel") == 0)
             required_type_args = 1;
         if (required_type_args >= 0 && ne->type_arg_count > 0 &&
             ne->type_arg_count != required_type_args) {
@@ -3817,14 +3816,12 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
         if (required_type_args >= 0 && tac == 0) {
             XrType *expected = ctx->expected_type;
-            if ((strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) && expected &&
-                XR_TYPE_IS_MAP(expected)) {
+            if ((strcmp(cn, "Map") == 0) && expected && XR_TYPE_IS_MAP(expected)) {
                 ta[0] = expected->map.key_type;
                 ta[1] = expected->map.value_type;
             } else if (strcmp(cn, "Array") == 0 && expected && XR_TYPE_IS_ARRAY(expected)) {
                 ta[0] = expected->container.element_type;
-            } else if ((strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) && expected &&
-                       expected->kind == XR_KIND_SET) {
+            } else if ((strcmp(cn, "Set") == 0) && expected && expected->kind == XR_KIND_SET) {
                 ta[0] = expected->container.element_type;
             } else if (strcmp(cn, "Channel") == 0 && expected &&
                        expected->kind == XR_KIND_CHANNEL) {
@@ -3834,8 +3831,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             if (!ta[0] && strcmp(cn, "Array") == 0 && ne->arg_count >= 2 && ne->arguments) {
                 ta[0] = xa_analyzer_get_node_type(ctx->analyzer, ne->arguments[1]);
             }
-            if (!ta[0] && (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) &&
-                ne->arg_count >= 1 && ne->arguments) {
+            if (!ta[0] && (strcmp(cn, "Set") == 0) && ne->arg_count >= 1 && ne->arguments) {
                 XrType *source = xa_analyzer_get_node_type(ctx->analyzer, ne->arguments[0]);
                 if (source && XR_TYPE_IS_ARRAY(source))
                     ta[0] = source->container.element_type;
@@ -3874,19 +3870,14 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         if (required_type_args >= 0 && poisoned_argument)
             return xr_type_new_error(X);
 
-        if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
+        if (strcmp(cn, "Map") == 0) {
             bt = xr_type_new_map(X, ta[0], ta[1]);
-            if (strcmp(cn, "WeakMap") == 0)
-                bt->is_weak = true;
         } else if (strcmp(cn, "Array") == 0) {
             bt = xr_type_new_array(X, ta[0]);
-        } else if (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) {
+        } else if (strcmp(cn, "Set") == 0) {
             bt = xr_type_new(X, XR_KIND_SET);
-            if (bt) {
+            if (bt)
                 bt->container.element_type = ta[0];
-                if (strcmp(cn, "WeakSet") == 0)
-                    bt->is_weak = true;
-            }
         } else if (strcmp(cn, "Channel") == 0) {
             bt = xr_type_new(X, XR_KIND_CHANNEL);
             if (bt)
@@ -3908,7 +3899,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         }
         if (bt) {
             if ((strcmp(cn, "Array") == 0 && ne->arg_count >= 2) ||
-                ((strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) && ne->arg_count >= 1)) {
+                ((strcmp(cn, "Set") == 0) && ne->arg_count >= 1)) {
                 int value_slot = strcmp(cn, "Array") == 0 ? 1 : 0;
                 AstNode *value_arg = ne->arguments ? ne->arguments[value_slot] : NULL;
                 XrType *value_type =

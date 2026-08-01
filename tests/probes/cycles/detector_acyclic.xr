@@ -1,0 +1,53 @@
+// detector_acyclic.xr — 无环程序必须零报告、零退出码影响
+//
+// 这一条和"能检出环"一样重要：一个见谁都报的检测器，第二天就会被关掉。
+// 覆盖的都是**类型图上有自环但对象图无环**的形态——L0 是类型级近似，
+// 它必须把这些标为候选（247 §A.5 第二条），而检测器必须不报。
+
+import runtime
+
+class TreeNode {
+    children: Array<TreeNode>
+    tag: int
+    constructor(tag) { this.children = []; this.tag = tag }
+}
+
+class ListNode {
+    next: ListNode?
+    tag: int
+    constructor(tag) { this.next = null; this.tag = tag }
+}
+
+// 树：类型图有自环，对象图是 DAG
+fn build_tree() {
+    var root = TreeNode(0)
+    for (var i = 1; i <= 5; i++) {
+        var child = TreeNode(i)
+        child.children.push(TreeNode(i * 10))
+        root.children.push(child)
+    }
+}
+
+// 单向链表：同上
+fn build_list() {
+    var head = ListNode(0)
+    var cur = head
+    for (var i = 1; i <= 10; i++) {
+        var n = ListNode(i)
+        cur.next = n
+        cur = n
+    }
+}
+
+// 闭包捕获但不成环
+fn closures_without_cycles() -> int {
+    var t = TreeNode(99)
+    var f = fn() -> int { return t.tag }
+    return f()
+}
+
+runtime.disableCycleCollection()
+build_tree()
+build_list()
+closures_without_cycles()
+print("acyclic built")

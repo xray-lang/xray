@@ -1197,8 +1197,29 @@ static void emit_callable_descriptor(XiCgenCtx *ctx, FILE *out, const char *pref
     fprintf(out, "}; ");
 }
 
+/* Whether an upval needs its own +1 depends on WHERE THE VALUE CAME FROM, not
+ * on where the closure was placed.
+ *
+ * xi.closure.new is `:own-use consume`, so a capture that arrived through the
+ * IR args was MOVED in — ARC dup'd the source first if it is used again, and
+ * gives each capture site exactly one +1. Retaining it again creates a second
+ * reference nobody owns, and the destructor releases only one.
+ *
+ * A capture read out of the ENCLOSING closure's upvals never passed through
+ * ARC at all: the outer closure still holds it, so this one has to take its
+ * own reference.
+ *
+ * The old rule was `retain everything unless this is a stack closure`, which
+ * was wrong in both directions — a heap closure leaked every arg-sourced
+ * capture, and a stack closure under-retained every upval-sourced one.
+ *
+ * owns_upvals is the separate question of whether ANYTHING will release them.
+ * An ordinary closure is destroyed and releases each upval. A synthesized
+ * parallel-body closure is not: it is a stack view that lives exactly as long
+ * as the par_for/par_map call it belongs to, is never destroyed, and therefore
+ * borrows everything and retains nothing. */
 static void emit_closure_upval_initializers(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
-                                            const XiValue *v, bool retain_upvals) {
+                                            const XiValue *v, bool owns_upvals) {
     (void) current;
     XiFunc *child = v && v->aux ? (XiFunc *) v->aux : NULL;
     uint16_t ncap = child ? child->ncaptures : 0;
@@ -1225,14 +1246,16 @@ static void emit_closure_upval_initializers(XiCgenCtx *ctx, FILE *out, const XiF
         } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
             fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
                     (unsigned) cap->index);
+            /* Borrowed from the enclosing closure: take our own reference,
+             * unless this closure never releases anything. */
+            if (owns_upvals)
+                fprintf(out, "xrt_retain(_c->upvals[%u]); ", ci);
         } else {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
                     cap->name ? cap->name : "?");
             fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
         }
-        if (retain_upvals)
-            fprintf(out, "xrt_retain(_c->upvals[%u]); ", ci);
     }
 }
 
@@ -1272,7 +1295,7 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
         emit_callable_descriptor(ctx, out, prefix, v->id, v, child, 0, 0, NULL);
         fprintf(out, "xrt_closure_t *_c = (xrt_closure_t*)%s(&_xr_callable_%u, %u).ptr; ", alloc_fn,
                 v->id, ncap);
-        emit_closure_upval_initializers(ctx, out, current, v, !stack_closure);
+        emit_closure_upval_initializers(ctx, out, current, v, true);
         fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
     } else {
         fprintf(out, "XR_NULL_VAL /* closure: unknown */");

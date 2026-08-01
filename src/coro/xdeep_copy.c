@@ -334,8 +334,6 @@ static void xr_deep_copy_init_empty_map(XrCopyContext *ctx, XrMap *new_map, uint
     new_map->entries = NULL;
     new_map->owner_heap = ctx->dst_heap;
     new_map->flags = XR_MAP_FLAG_DUMMY;
-    if (flags & XR_MAP_FLAG_WEAK)
-        new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = key_tid;
     new_map->value_tid = value_tid;
 }
@@ -393,9 +391,6 @@ static XrValue xr_deep_copy_aot_native_map_with_ctx(XrCopyContext *ctx, XrObjHea
     xr_copy_context_record(ctx, map, result);
     ctx->objects_copied++;
 
-    if (map->flags & XR_MAP_FLAG_WEAK)
-        return result;
-
     if (xr_aot_map_is_typed(map)) {
         if (map->len <= 0)
             return result;
@@ -449,16 +444,11 @@ static XrValue xr_deep_copy_aot_native_set_with_ctx(XrCopyContext *ctx, XrObjHea
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
     new_set->owner_heap = ctx->dst_heap;
-    if (set->flags & XR_SET_FLAG_WEAK)
-        new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
 
     XrValue result = XR_FROM_PTR(new_set);
     xr_copy_context_record(ctx, set, result);
     ctx->objects_copied++;
-    if (set->flags & XR_SET_FLAG_WEAK)
-        return result;
-
     if (xr_aot_set_is_typed(set)) {
         if (set->order && set->order_len > 0) {
             for (int64_t oi = 0; oi < set->order_len; oi++) {
@@ -568,17 +558,10 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_map->entries = NULL;
     new_map->owner_heap = ctx->dst_heap;
     new_map->flags = XR_MAP_FLAG_DUMMY;
-    if (map->flags & XR_MAP_FLAG_WEAK)
-        new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
 
     XrValue result = XR_FROM_PTR(new_map);
-    if (map->flags & XR_MAP_FLAG_WEAK) {
-        xr_copy_context_record(ctx, map, result);
-        ctx->objects_copied++;
-        return result;
-    }
     if (xr_map_isdummy(map) || map->count == 0) {
         xr_copy_context_record(ctx, map, result);
         ctx->objects_copied++;
@@ -715,15 +698,11 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
     new_set->owner_heap = ctx->dst_heap;
-    if (set->flags & XR_SET_FLAG_WEAK)
-        new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
 
     XrValue result = XR_FROM_PTR(new_set);
     xr_copy_context_record(ctx, set, result);
     ctx->objects_copied++;
-    if (set->flags & XR_SET_FLAG_WEAK)
-        return result;
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (!XR_SET_ENTRY_EMPTY(entry))

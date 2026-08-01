@@ -1176,18 +1176,10 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_slice(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
-    } else if (strcmp(name, "WeakSet") == 0 && nargs == 1) {
-        result = xr_type_new_set(X, args[0]);
-        if (result)
-            result->is_weak = true;
     } else if (strcmp(name, "Channel") == 0 && nargs == 1) {
         result = xr_type_new_channel(X, args[0]);
     } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
-    } else if (strcmp(name, "WeakMap") == 0 && nargs == 2) {
-        result = xr_type_new_map(X, args[0], args[1]);
-        if (result)
-            result->is_weak = true;
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
     } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {
@@ -1641,15 +1633,14 @@ static bool is_known_generic_head(const char *name) {
 
 static bool generic_head_is_container_like(const char *name) {
     return name && (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SLICE) == 0 ||
-                    strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 ||
-                    strcmp(name, "Channel") == 0);
+                    strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0);
 }
 
 static bool reject_error_type_args(XaAnalyzer *analyzer, XrType **args, int count,
                                    const char *head) {
     bool rejected = false;
     for (int i = 0; i < count; i++) {
-        bool is_map_head = head && (strcmp(head, "Map") == 0 || strcmp(head, "WeakMap") == 0);
+        bool is_map_head = head && (strcmp(head, "Map") == 0);
         const char *role = generic_head_is_container_like(head) ? "container element type"
                            : (is_map_head && i == 0)            ? "container key type"
                            : (is_map_head && i == 1)            ? "container value type"
@@ -1694,18 +1685,10 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
         result = xr_type_new_slice(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
-    } else if (strcmp(name, "WeakSet") == 0 && nargs == 1) {
-        result = xr_type_new_set(X, args[0]);
-        if (result)
-            result->is_weak = true;
     } else if (strcmp(name, "Channel") == 0 && nargs == 1) {
         result = xr_type_new_channel(X, args[0]);
     } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
-    } else if (strcmp(name, "WeakMap") == 0 && nargs == 2) {
-        result = xr_type_new_map(X, args[0], args[1]);
-        if (result)
-            result->is_weak = true;
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
     } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {

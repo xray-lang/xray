@@ -459,6 +459,11 @@ static bool op_produces_borrow(uint16_t op) {
 static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
     if (!value || depth > 16)
         return false;
+    /* A weak field load promotes (W1): its result is a fresh strong reference,
+     * not a borrow of something the object owns — the object owns only the
+     * handle. Treating it as a borrow would leak the promotion. */
+    if (xi_value_is_weak_field_load(value))
+        return false;
     if (op_produces_borrow(value->op))
         return true;
     switch (value->op) {
@@ -682,6 +687,12 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
         return false;
     if (v->op == XI_GEN_CALL)
         return true;
+    /* Constructing a class allocates its instance, so the result cannot alias
+     * an argument. Lowering proved this (XI_LOWERING_FLAG_CONSTRUCTOR_CALL);
+     * the callee's spelling would not, because `super(...)` lowers to the same
+     * method call named "constructor" while returning the receiver at +0. */
+    if (xi_value_is_constructor_call(v))
+        return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
         xr_type_is_builtin_named_class(v->type, "StringBuilder"))
@@ -710,6 +721,8 @@ static bool tracks_rc(const XiValue *v) {
         return false;
     if (v->op == XI_STACK_ALLOC)
         return v->aux_int == XI_CLOSURE_NEW && xi_own_type_is_rc(v->type);
+    if (xi_value_is_weak_field_load(v))
+        return xi_own_type_is_rc(v->type); /* promoted: owned, so track it */
     if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
     /* Call results: a callee may return either a fresh (+1) reference or an
@@ -724,8 +737,17 @@ static bool tracks_rc(const XiValue *v) {
      * return-ownership summary (Roc/Koka style) refines this. */
     if (op_is_call(v->op))
         return xi_own_type_is_rc(v->type);
-    if (v->escape == XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
-        return false; /* will be (or is) stack-allocated */
+    /* A heap allocation is tracked on the strength of what it IS, never of what
+     * a later pass might turn it into. The XI_STACK_ALLOC case above is the
+     * only "this one has frame lifetime" answer.
+     *
+     * Skipping NO_ESCAPE heap allocs here used to stand in for "stack alloc
+     * rewrite will get this one", but that pass runs only when backend
+     * lowering does — AOT. It is also what promotes an allocation it cannot
+     * stack-allocate to ESC_ARG (xi_stack_alloc_rewrite), which is what put
+     * those values back in scope for tracking. On the VM neither half runs, so
+     * a NO_ESCAPE allocation stayed on the heap with nothing to release it:
+     * every non-escaping closure leaked (2M closures => 143 MB max RSS). */
     return xi_own_type_is_rc(v->type);
 }
 
@@ -800,6 +822,18 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
 /* Collect consuming uses of `target` across the function, in program order.
  * The list grows dynamically; silently dropping a late consume would be a
  * memory-safety bug because ARC would miss a required retain. */
+static bool arc_capture_is_shared_cell(const XiValue *user, uint16_t arg_index) {
+    if (!user || !user->aux)
+        return false;
+    if (user->op != XI_CLOSURE_NEW &&
+        !(user->op == XI_STACK_ALLOC && user->aux_int == XI_CLOSURE_NEW))
+        return false;
+    const XiFunc *child = (const XiFunc *) user->aux;
+    if (arg_index >= child->ncaptures || !child->captures)
+        return false;
+    return child->captures[arg_index].needs_cell;
+}
+
 static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *sites) {
     XR_DCHECK(sites != NULL, "collect_consume_sites: NULL sites");
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -817,6 +851,22 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                     stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, user))
                     continue;
                 if (!xi_own_value_arg_is_consuming(user, a))
+                    continue;
+                /* A weak store takes no ownership: the slot holds a handle and
+                 * the target's lifetime is untouched. Moving the value in would
+                 * end its life at the assignment — the exact opposite of what
+                 * `weak` means. The source keeps its own death point. */
+                if (xi_value_is_weak_field_store(user))
+                    continue;
+                /* A mutable capture is shared, not moved. The emitter rewrites
+                 * the variable's register in place (OP_CELL_NEW), so after the
+                 * closure is built BOTH the enclosing frame and the closure
+                 * read through the same cell — a cell no XiValue denotes, since
+                 * lowering never creates one. Treating the capture as a consume
+                 * ended the variable's life at the closure, and the enclosing
+                 * frame kept reading a freed cell. The closure's own +1 comes
+                 * from OP_CLOSURE, which retains any cell it captures. */
+                if (arc_capture_is_shared_cell(user, a))
                     continue;
                 /* A call argument the callee only borrows is not consumed: the
                  * caller keeps ownership and drops it at its death point (the
@@ -1054,7 +1104,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
                            xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
-                     * like Map.get / WeakMap.get hands back a stored reference,
+                     * like Map.get hands back a stored reference,
                      * not a fresh +1 — keeps the receiver (arg 0) live until the
                      * result's last use; otherwise releasing the receiver frees
                      * storage the borrowed result still points into. Proven
@@ -1826,6 +1876,47 @@ static void arc_insert_rec(XiFunc *f) {
         xi_cfg_invalidate(f);
 }
 
+/* A tail call rewrites the current frame and jumps (OP_TAILCALL /
+ * OP_INVOKE_TAIL): nothing after it in the block ever executes. ARC puts a
+ * value's drop at its death point, and for anything still live across the call
+ * that lands AFTER it — so every one of those drops silently never runs, and
+ * the whole frame's worth of objects leaks.
+ *
+ * Lowering already clears XI_FLAG_TAIL when a defer is pending, for exactly
+ * this reason. Releases need the same treatment; ARC is the first pass that
+ * knows they exist, so the flag is withdrawn here.
+ *
+ * Losing the optimization is the right trade: reusing one stack frame is worth
+ * far less than not leaking every owned local at that call. A tail call with
+ * nothing to release keeps the flag, which covers the recursion-depth cases
+ * the optimization exists for. */
+static void arc_withdraw_tail_flag_before_releases(XiFunc *f) {
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            arc_withdraw_tail_flag_before_releases(f->children[i]);
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        /* Backwards, so "is there a release after this value" is one bit of
+         * state. A tail call is emitted as part of a return, so the release
+         * that outlives it is in the same block. */
+        bool release_follows = false;
+        for (int32_t vi = (int32_t) blk->nvalues - 1; vi >= 0; vi--) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_RELEASE) {
+                release_follows = true;
+                continue;
+            }
+            if ((v->flags & XI_FLAG_TAIL) && release_follows)
+                v->flags &= (uint8_t) ~XI_FLAG_TAIL;
+        }
+    }
+}
+
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
     /* Promote escaping borrow-copies to moves BEFORE computing borrow
@@ -1836,6 +1927,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * is mutated, then insert dup/drop bottom-up. */
     arc_precompute_sigs(f);
     arc_insert_rec(f);
+    arc_withdraw_tail_flag_before_releases(f);
 }
 
 /* Return the nearest producer associated with a unit ERR_CHECK.  ARC ops can

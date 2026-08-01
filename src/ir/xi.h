@@ -830,6 +830,30 @@ typedef enum {
  * consumes this fact to select OP_SLEEP; spelling alone is not sufficient
  * because user-defined objects may also have a method named `sleep`. */
 #define XI_LOWERING_FLAG_TIME_SLEEP (1u << 4)
+/* This call constructs a user class instance: the callee resolves to a class
+ * symbol carrying an XrClassInfo, so the result is a freshly allocated object
+ * and can never alias an argument.  ARC reads this fact to own the result and
+ * drop it at its death point (a call result is otherwise alias-uncertain and
+ * therefore never dropped, which leaked every `var x = ClassName(...)`).
+ *
+ * The fact must come from lowering, not from the callee's spelling: a
+ * `super(...)` call lowers to the same XI_CALL_METHOD with aux "constructor"
+ * but returns the receiver at +0, and it is deliberately NOT marked. */
+#define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
+/* This field load reads a `weak` slot, so its result is OWNED rather than the
+ * borrowed reference an ordinary field load yields (spec 16.3 W1: reading a
+ * weak field promotes, because handing back a borrow would let the target die
+ * mid-expression). ARC reads this to drop the result at its death point.
+ *
+ * A lowering flag rather than a separate op: the difference is entirely in
+ * result ownership, and every other property of the load is unchanged. */
+#define XI_LOWERING_FLAG_WEAK_FIELD_LOAD (1u << 6)
+/* This field store writes a `weak` slot, which does NOT take ownership of the
+ * value — the slot holds a handle, and the target's lifetime is unaffected.
+ * So unlike an ordinary field store this is not a consuming use: ARC must keep
+ * the source alive to its own death point instead of moving it in. Moving it
+ * in would kill the target at the assignment, which is precisely backwards. */
+#define XI_LOWERING_FLAG_WEAK_FIELD_STORE (1u << 7)
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
@@ -1036,6 +1060,23 @@ static inline uint8_t xi_value_allocation_storage_mode(const XiValue *value) {
 static inline bool xi_value_is_read_place_param(const XiValue *value) {
     return value && value->op == XI_PARAM && value->param_mode == XR_PARAM_READ &&
            (value->lowering_flags & XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0;
+}
+
+/* Does this call construct a class instance (see
+ * XI_LOWERING_FLAG_CONSTRUCTOR_CALL)?  True only for calls lowering proved to
+ * allocate their result. */
+static inline bool xi_value_is_constructor_call(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_CONSTRUCTOR_CALL) != 0;
+}
+
+/* Does this load read a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_LOAD)? */
+static inline bool xi_value_is_weak_field_load(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_LOAD) != 0;
+}
+
+/* Does this store write a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_STORE)? */
+static inline bool xi_value_is_weak_field_store(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_STORE) != 0;
 }
 
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {

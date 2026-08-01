@@ -54,8 +54,17 @@ static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
 };
 
 /* Map semantic XrTypeId to storage layout.
- * XrTypeId values are defined in xtype_ids.h; we use literal constants
- * here to keep this header dependency-free. */
+ *
+ * The ids are literal constants so this header stays dependency-free (there
+ * are two parallel XrTypeId enums — xr_type_names_core.h and xtype_names.h —
+ * and including either one here would collide with the other).
+ *
+ * The copy is pinned from the other side: xr_type_names_core.h carries a
+ * _Static_assert for every id named below. Without that, deleting two TIDs
+ * shifted XR_TID_RUNE from 45 to 43, the hand-copied `case 45` stopped
+ * matching, and every Slice<rune> silently became XR_ELEM_ANY — Slice.fill
+ * then rejected its own receiver as "not POD" at runtime, with nothing failing
+ * at build time. Renumbering is now a compile error. */
 static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
     switch (tid) {
         case 8:
@@ -80,7 +89,7 @@ static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
             return XR_ELEM_U64; /* XR_TID_U64 */
         case 10:
             return XR_ELEM_F32; /* XR_TID_F32 */
-        case 45:
+        case 43:
             return XR_ELEM_RUNE; /* XR_TID_RUNE */
         default:
             return XR_ELEM_ANY; /* string, object, etc. */

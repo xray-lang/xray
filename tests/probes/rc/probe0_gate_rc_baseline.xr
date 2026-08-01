@@ -1,0 +1,130 @@
+// probe0 — 纯 RC 回收基线门禁（任务 249 阶段 A 的常驻回归用例）
+//
+// 断言：无环的局部对象在最后一个强引用释放时被纯 RC 回收。
+//
+// REGRESSION: 249 缺陷 A —— `call_returns_fresh` 不认构造调用，于是
+//             `var x = ClassName(...)` 的结果被归为 OWN_CALL_RESULT，
+//             该模式按设计永不插入死亡点 drop，因此每一个局部 class
+//             实例都泄漏。这是 OOP 代码最主要的分配路径。
+// FAIL_AT:    修复前（含 v0.9.2 与 main @ 6a2902e0f）：200 万 churn 的
+//             max RSS 156.9MB（VM）/ 153.7MB（AOT），liveBytes 只增不减。
+// PASS_AT:    lowering 打 XI_LOWERING_FLAG_CONSTRUCTOR_CALL，ARC 据此
+//             拥有并在死亡点释放构造结果。
+//
+// 方法论（249 §1.1）：**必须双观察量**。单看 liveBytes 会判错——它对
+// 带侧缓冲的容器曾经虚报（缺陷 B）。本用例断言 liveBytes/liveObjects，
+// RSS 由 run_probes.sh 在进程外测量。
+
+import runtime
+
+class Node {
+    id: int
+
+    constructor(id) {
+        this.id = id
+    }
+}
+
+class Pair {
+    left: Node
+    right: Node
+
+    constructor(l, r) {
+        this.left = l
+        this.right = r
+    }
+}
+
+// churn 一批立即死亡的局部实例；回收正确时残留应当回到基线。
+fn churn_plain(n: int) {
+    for (var i = 0; i < n; i++) {
+        var a = Node(i)
+    }
+}
+
+// 构造结果被存入另一个对象的字段，随持有者一起死亡。
+fn churn_nested(n: int) {
+    for (var i = 0; i < n; i++) {
+        var p = Pair(Node(i), Node(i + 1))
+    }
+}
+
+// 构造结果经 return 转移出去，在调用方死亡。
+fn make(id: int) -> Node {
+    return Node(id)
+}
+
+fn churn_returned(n: int) {
+    for (var i = 0; i < n; i++) {
+        var a = make(i)
+    }
+}
+
+@test
+fn test_local_class_instances_are_reclaimed() {
+    churn_plain(1000) // 预热：让分配器达到稳态
+    var objects_before = runtime.liveObjects()
+    var bytes_before = runtime.liveBytes()
+
+    churn_plain(200000)
+
+    var objects_after = runtime.liveObjects()
+    var bytes_after = runtime.liveBytes()
+
+    // 20 万个立即死亡的实例，残留必须回到基线附近，而不是线性增长。
+    // 阈值取 1000（远小于 200000），既能捕获泄漏，又容忍分配器稳态波动。
+    assert(objects_after - objects_before < 1000)
+    assert(bytes_after - bytes_before < 100000)
+}
+
+@test
+fn test_constructor_result_stored_in_field_is_reclaimed() {
+    churn_nested(1000)
+    var objects_before = runtime.liveObjects()
+
+    churn_nested(100000)
+
+    var objects_after = runtime.liveObjects()
+    assert(objects_after - objects_before < 1000)
+}
+
+// 已知边界（属 249 §2.2 的 A-2，本任务不做）：构造结果经**普通函数**
+// return 转移后，调用点看到的是一个 alias 不确定的调用结果，仍按
+// OWN_CALL_RESULT 处理，不插死亡点 drop。
+//
+// `make` 函数体本身是正确的——构造结果 move-out，无多余 drop；缺的是
+// 调用方一侧的 per-callee 返回所有权摘要（Roc/Koka 风格），249 已裁决
+// 单独立项。这里断言的是**语义正确**（值可用、不早释放），回收观察量
+// 留待 A-2 落地后收紧。
+@test
+fn test_constructor_result_transferred_by_return_stays_usable() {
+    churn_returned(1000)
+
+    var a = make(7)
+    var b = make(8)
+    assert(a.id == 7)
+    assert(b.id == 8)
+
+    // 转移出来的对象仍可存活并被容器持有——证明 move-out 没有早释放。
+    var keep: Array<Node> = []
+    for (var i = 0; i < 100; i++) {
+        keep.push(make(i))
+    }
+    assert(len(keep) == 100)
+    assert(keep[42].id == 42)
+}
+
+// 对照组：保活的实例必须仍被计入，否则上面三条会因为"计数器坏了"而假绿。
+@test
+fn test_retained_instances_are_still_counted() {
+    var objects_before = runtime.liveObjects()
+
+    var keep: Array<Node> = []
+    for (var i = 0; i < 50000; i++) {
+        keep.push(Node(i))
+    }
+
+    var objects_after = runtime.liveObjects()
+    assert(objects_after - objects_before >= 50000)
+    assert(len(keep) == 50000)
+}

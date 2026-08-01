@@ -1,0 +1,72 @@
+// detector_shapes.xr — 环检测器的形态覆盖（任务 247 阶段 D §6.6）
+//
+// 用 XR_ENABLE_CYCLE_DETECTOR=ON 的构建跑，由 run_detector_probes.sh 驱动。
+// 断言在脚本里（比对检测器的机器可读输出），不在这里——检测器**不提供**
+// 任何 stdlib 入口（§0.3：不得制造第二个空钩子），所以 .xr 侧看不见它。
+//
+// 环收集器在阶段 E 移除前仍会抢先回收这些环，所以先关掉它：这里要测的是
+// 检测器能不能看见，不是收集器能不能收。
+
+import runtime
+
+// L0 的 Map 值边（G1）——修复前这类环根本不被标为候选
+class MapNode {
+    peers: Map<string, MapNode>
+    constructor() { this.peers = #{} }
+}
+
+// L0 的通配边（G2）：Json 字段可装任意对象
+class JsonNode {
+    blob: Json
+    peer: JsonNode?
+    constructor() { this.blob = {}; this.peer = null }
+}
+
+// 直接字段环
+class Plain {
+    peer: Plain?
+    tag: int
+    constructor(tag) { this.peer = null; this.tag = tag }
+}
+
+// union 成员中的类（G3：修复前只取首个命中成员）
+class UnionNode {
+    peer: int | string | UnionNode | null
+    constructor() { this.peer = null }
+}
+
+// 大对象参与：元素缓冲超过 XR_LARGE_OBJECT_THRESHOLD，走 large_set 而非块内
+class BigNode {
+    pad: Array<int>
+    peer: BigNode?
+    constructor() { this.pad = Array<int>(2000, 0); this.peer = null }
+}
+
+fn map_cycle() { var a = MapNode(); var b = MapNode(); a.peers["n"] = b; b.peers["n"] = a }
+fn json_cycle() { var a = JsonNode(); var b = JsonNode(); a.peer = b; b.peer = a }
+fn plain_cycle() { var a = Plain(1); var b = Plain(2); a.peer = b; b.peer = a }
+fn union_cycle() { var a = UnionNode(); var b = UnionNode(); a.peer = b; b.peer = a }
+fn big_cycle() { var a = BigNode(); var b = BigNode(); a.peer = b; b.peer = a }
+
+// 自环：一个对象指向自己
+fn self_cycle() { var a = Plain(3); a.peer = a }
+
+// 三元环：确认分组不把长度写死成 2
+fn triangle() {
+    var a = Plain(4)
+    var b = Plain(5)
+    var c = Plain(6)
+    a.peer = b
+    b.peer = c
+    c.peer = a
+}
+
+runtime.disableCycleCollection()
+map_cycle()
+json_cycle()
+plain_cycle()
+union_cycle()
+big_cycle()
+self_cycle()
+triangle()
+print("shapes built")

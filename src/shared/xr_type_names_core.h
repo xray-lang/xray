@@ -43,8 +43,6 @@
 #define TYPE_NAME_ARRAY "Array"
 #define TYPE_NAME_MAP "Map"
 #define TYPE_NAME_SET "Set"
-#define TYPE_NAME_WEAKMAP "WeakMap"
-#define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_SLICE "Slice"
 
 /* ========== Runtime Types ========== */
@@ -163,10 +161,33 @@ typedef enum {
     XR_TID_EVENTCOUNT,     /* 40 */
     XR_TID_THREAD,         /* 41 */
     XR_TID_BUFFER,         /* 42 */
-    XR_TID_WEAKMAP,        /* 43, analyzer-only */
-    XR_TID_WEAKSET,        /* 44, analyzer-only */
     XR_TID_COUNT
 } XrTypeId;
+
+/* xr_elem_type.h hand-copies these ids so it can stay dependency-free (there
+ * are two parallel XrTypeId enums, and it can include neither without
+ * colliding with the other). Pin them here so a renumbering breaks the BUILD
+ * rather than a Slice at runtime.
+ *
+ * This is not hypothetical: deleting XR_TID_WEAKMAP / XR_TID_WEAKSET shifted
+ * XR_TID_RUNE from 45 to 43, xr_tid_to_elem_type's `case 45` stopped matching,
+ * and every Slice<rune> quietly degraded to XR_ELEM_ANY — Slice.fill then
+ * rejected its own receiver as "not POD", and only a differential test caught
+ * it. Update xr_tid_to_elem_type together with any change here.
+ *
+ * XR_TID_RUNE is pinned in xtype_names.h instead: this enum stops at
+ * XR_TID_BUFFER, and the runtime-side enum is the one that declares it. */
+_Static_assert(XR_TID_BOOL == 1, "xr_elem_type.h: xr_tid_to_elem_type case for BOOL");
+_Static_assert(XR_TID_I8 == 2, "xr_elem_type.h: xr_tid_to_elem_type case for I8");
+_Static_assert(XR_TID_U8 == 3, "xr_elem_type.h: xr_tid_to_elem_type case for U8");
+_Static_assert(XR_TID_I16 == 4, "xr_elem_type.h: xr_tid_to_elem_type case for I16");
+_Static_assert(XR_TID_U16 == 5, "xr_elem_type.h: xr_tid_to_elem_type case for U16");
+_Static_assert(XR_TID_I32 == 6, "xr_elem_type.h: xr_tid_to_elem_type case for I32");
+_Static_assert(XR_TID_U32 == 7, "xr_elem_type.h: xr_tid_to_elem_type case for U32");
+_Static_assert(XR_TID_INT == 8, "xr_elem_type.h: xr_tid_to_elem_type case for INT");
+_Static_assert(XR_TID_U64 == 9, "xr_elem_type.h: xr_tid_to_elem_type case for U64");
+_Static_assert(XR_TID_F32 == 10, "xr_elem_type.h: xr_tid_to_elem_type case for F32");
+_Static_assert(XR_TID_FLOAT == 11, "xr_elem_type.h: xr_tid_to_elem_type case for FLOAT");
 
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
 #define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
@@ -259,10 +280,6 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_THREAD;
         case XR_TID_BUFFER:
             return TYPE_NAME_BUFFER;
-        case XR_TID_WEAKMAP:
-            return TYPE_NAME_WEAKMAP;
-        case XR_TID_WEAKSET:
-            return TYPE_NAME_WEAKSET;
         default:
             return TYPE_NAME_UNKNOWN;
     }

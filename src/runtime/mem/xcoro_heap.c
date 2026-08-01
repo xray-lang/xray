@@ -9,7 +9,8 @@
  */
 
 #include "xcoro_heap.h"
-#include "xweak_registry.h"
+#include "xcycle_detector.h"
+#include "xweak_handle.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../value/xvalue.h"
@@ -66,10 +67,6 @@ static inline XrSystemHeap *coro_heap_pool_from_heap(XrCoroHeap *heap) {
 /* ========== Helper Functions ========== */
 
 // Per-type destroy capability lookups from the runtime core.
-
-static inline XrVMRuntime *coro_heap_isolate(XrCoroHeap *heap) {
-    return (heap && heap->owner) ? xr_coro_vm_owner(heap->owner) : NULL;
-}
 
 static inline XrRuntimeCore *coro_heap_core(XrCoroHeap *heap) {
     return (heap && heap->owner) ? heap->owner->core : NULL;
@@ -328,6 +325,17 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
         return;
     XR_DCHECK(!heap->is_collecting, "coro_heap_destroy called while collecting");
 
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Before the bulk free, which is the only moment this leak is visible.
+     * The coroutine-heap boundary bounds a cycle's lifetime (spec 16.3) — and
+     * in doing so hides it, because everything is about to be freed anyway.
+     * Scanning here is what turns "bounded leak" into "reported leak". */
+    {
+        XrCycleReport report;
+        (void) xr_cycle_detector_scan(heap, &report);
+    }
+#endif
+
     heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
     xr_region_destroy(&heap->region);
@@ -335,6 +343,7 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
+    xr_weak_table_destroy(heap);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
@@ -384,6 +393,7 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
+    xr_weak_table_destroy(heap);
 
     coro_heap_init_runtime_state(heap);
     heap->owner = new_owner;
@@ -571,8 +581,6 @@ XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap) {
 /* Core destroy logic (shared by top-level and deferred-drain paths). */
 static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
-    if (heap && (obj->extra & XR_OBJ_WEAKABLE))
-        xr_weak_registry_target_dying(coro_heap_isolate(heap), obj, heap);
     obj->extra |= XR_OBJ_DEAD;
 
     /* Destroy is the single convergence point for every drop path (VM
@@ -582,6 +590,11 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
      * would be aliased by a later same-size-class freelist reuse, putting
      * the same live object in the roots array twice (double trial-decrement
      * → use-after-free). Cleared before the freelist push below. */
+    /* W5: a weak field reads null from exactly this instant. Gated on the
+     * flag, so an object nobody weakly references pays one bit test. */
+    if (heap && (obj->extra & XR_OBJ_HAS_WEAK))
+        xr_weak_table_target_dying(heap, obj);
+
     if (heap && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
         xr_cycle_remove_root(heap, obj);
 

@@ -1,0 +1,6 @@
+// W2（规范 16.3）：weak 槽在目标死的那一刻读到 null，所以声明必须可空。
+// 非可空的 weak 字段是类型系统别处抓不到的谎言。
+class Node {
+    weak peer: Node
+    constructor() {}
+}

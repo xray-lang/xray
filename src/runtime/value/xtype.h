@@ -282,7 +282,6 @@ struct XrType {
     bool is_const;            // Deep immutability (for coroutine safety)
     bool is_value_type;       // Struct value type (copy-on-assign)
     bool is_literal;          // Literal type: kind + literal union holds value
-    bool is_weak;             // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
     bool ptr_is_mut;          // POINTER only: MutPtr<T> (true) vs Ptr<T> (false, const)
 

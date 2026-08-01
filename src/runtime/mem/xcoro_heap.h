@@ -152,6 +152,16 @@ typedef struct XrCoroHeap {
     // reclamation O(live objects) and teardown O(n^2).
     XrHeapPtrSet finalize_set;
 
+    /* Task 247 phase C: target -> shared weak handle. Coroutine-local, so no
+     * locking; only objects flagged XR_OBJ_HAS_WEAK ever look here. Declared
+     * as an opaque struct so this header does not depend on xweak_handle.h. */
+    struct XrWeakTable {
+        struct XrWeakHandle **slots;
+        uint32_t cap;
+        uint32_t count;
+        uint32_t tombstones;
+    } weak_table;
+
     // Statistics (cold; surfaced by memory/collection introspection builtins)
     uint32_t cycle_collect_count;  // Number of cycle collector runs
     uint32_t object_count;         // Live heap object count (incremental counter)

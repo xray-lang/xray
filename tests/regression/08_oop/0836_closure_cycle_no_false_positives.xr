@@ -1,0 +1,79 @@
+// 0836_closure_cycle_no_false_positives.xr
+//
+// A.6 的可信度门禁（任务 247）：闭包环编译期检测**只报直接形态**，
+// 下面每一种写法都必须编译通过。
+//
+// 这条规则的判定用的是**变量名**而不是 SSA 身份（诊断落在 analyzer 是为了
+// 进 LSP，见 247 A.6.3），因此宽一点的规则会开始误伤同名遮蔽。A.6 的铁律
+// 是零误报：漏报有阶段 D 的运行期检测器兜底，一条会叫错的诊断没有。
+//
+// 对应的正例（必须被拒绝）在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
+
+class Button {
+    onClick: () -> int
+    clicks: int
+    constructor() { this.onClick = fn() -> int { return 0 }; this.clicks = 0 }
+    render() -> int { this.clicks = this.clicks + 1; return this.clicks }
+}
+class Holder { handler: () -> int
+    constructor() { this.handler = fn() -> int { return 0 } } }
+
+// 1. 闭包不捕获任何外层名
+fn no_capture() { var b = Button(); b.onClick = fn() -> int { return 0 } }
+
+// 2. 捕获的是无关变量
+fn unrelated_capture() { var b = Button(); var k = 5; b.onClick = fn() -> int { return k } }
+
+// 3. 捕获后不存入被捕获对象
+fn capture_without_store() { var b = Button(); var f = fn() -> int { return b.render() }; f() }
+
+// 4. 存入无关对象
+fn store_into_other() {
+    var b = Button()
+    var h = Holder()
+    h.handler = fn() -> int { return b.render() }
+}
+
+// 5. 同名遮蔽：闭包内部的 b 是自己的局部
+fn shadowed() {
+    var b = Button()
+    b.onClick = fn() -> int { var b = Button(); return b.render() }
+}
+
+// 6. 传参代替捕获（规范推荐的写法）：闭包只用参数，不捕获 b
+fn by_parameter() {
+    var b = Button()
+    b.onClick = fn() -> int { return 1 }
+    var read_via_param = fn(btn: Button) -> int { return btn.clicks }
+    read_via_param(b)
+}
+
+// 7. 嵌套闭包：内层捕获 k、外层捕获 b，归属不得串台
+fn nested_closures() {
+    var b = Button()
+    var k = 5
+    var outer = fn() -> int {
+        var inner = fn() -> int { return k }
+        return inner() + b.render()
+    }
+    // 外层闭包捕获了 b，但存入的是无关的局部变量 ⇒ 不成环
+    var slot = Holder()
+    slot.handler = fn() -> int { return k }
+    outer()
+}
+
+// 8. 存入同名字段但闭包捕获的是另一个同类对象
+fn two_objects() {
+    var a = Button()
+    var b = Button()
+    a.onClick = fn() -> int { return b.render() }
+}
+
+no_capture()
+unrelated_capture()
+capture_without_store()
+store_into_other()
+shadowed()
+by_parameter()
+nested_closures()
+two_objects()

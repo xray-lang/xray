@@ -13,7 +13,7 @@
  *
  * MEMORY LAYOUT (16 bytes):
  *   [0-1]   type     (2B) - object type tag -> destructor dispatch
- *   [2-3]   flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
+ *   [2-3]   flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR) + storage/mmap
  *   [4-7]   refcount (4B) - 0-based sign-tagged RC (see "Signed RC Encoding")
  *   [8-11]  objsize  (4B) - allocation size (region sweep / munmap)
  *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
@@ -80,12 +80,14 @@ typedef struct XrClass XrClass;
  *              freed in bulk when the coroutine ends.
  *   ATOMIC   - object is shared across coroutines: refcount is atomic.
  *   HAS_DTOR - object's type has a destructor to run at refcount==0.
- *   WEAKABLE - object may be the target of a weak reference.
  */
 #define XR_OBJ_REGION 0x0002 /* extra bit 1 */
 #define XR_OBJ_ATOMIC 0x0004 /* extra bit 2 */
 /* XR_OBJ_HAS_DTOR (bit 3) is defined in src/shared/xr_obj_header.h */
-#define XR_OBJ_WEAKABLE 0x0010 /* extra bit 4 */
+/* At least one weak field points at this object, so its destroy path must
+ * clear the shared handle (task 247 phase C, rule W5). The common object pays
+ * one bit test on the way out and nothing else. */
+#define XR_OBJ_HAS_WEAK 0x0010 /* extra bit 4 */
 #define XR_OBJ_DEAD                                                                                \
     0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
             * destructor at coroutine teardown to avoid                                            \

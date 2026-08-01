@@ -1,0 +1,215 @@
+// probe1 — L0 类型图漏标：Map / Set 字段不参与成环判定（任务 247 的 G1）
+//
+// 247 §1.3：extract_class_name_from_type 的 switch 只处理
+// CLASS / INSTANCE / UNION / ARRAY，其余 `default: return NULL`。因此
+//
+//     class Node { children: Map<string, Node> }
+//
+// 的 Map 值类型不产生类型图边，Node 不被标为环候选。
+//
+// 实测证据（2026-07-31，249 阶段 A/B 落地后首次可测）：10000 轮同构环，
+//
+//     Array 字段：残留        24 个对象   ← 标为候选，环收集器收得到
+//     Map   字段：残留   100,000 个对象   ← 漏标，收不到，全泄漏
+//
+// 这把 247 §1.3 的 G1 从静态源码结论升级为实测结论。
+//
+// 观察量前提（249）：本探针在 249 修复前跑不出有效结果——基线泄漏
+// （缺陷 A）淹没信号，liveBytes 虚报（缺陷 B）制造假信号。
+//
+// **断言的是"两种字段形态行为一致"，不是某个绝对残留量。** 这条性质
+// 跨越 247 的全部阶段都应当成立：
+//
+//   现在（G1 未修）      → 失败，正确地暴露漏标
+//   247 阶段 A 之后      → 通过（都被标为候选）
+//   247 阶段 E 之后      → 仍然通过（都泄漏，纯 RC 不回收环）
+//
+// 因此这条断言不需要随阶段改写。
+
+import runtime
+
+class ArrayNode {
+    children: Array<ArrayNode>
+    tag: int
+
+    constructor(tag) {
+        this.children = []
+        this.tag = tag
+    }
+}
+
+class MapNode {
+    children: Map<string, MapNode>
+    tag: int
+
+    constructor(tag) {
+        this.children = #{}
+        this.tag = tag
+    }
+}
+
+fn make_array_cycle(i: int) {
+    var a = ArrayNode(i)
+    var b = ArrayNode(i + 1)
+    a.children.push(b)
+    b.children.push(a)
+}
+
+fn make_map_cycle(i: int) {
+    var a = MapNode(i)
+    var b = MapNode(i + 1)
+    a.children["next"] = b
+    b.children["next"] = a
+}
+
+fn make_array_chain(i: int) {
+    var a = ArrayNode(i)
+    var b = ArrayNode(i + 1)
+    a.children.push(b)
+}
+
+fn make_map_chain(i: int) {
+    var a = MapNode(i)
+    var b = MapNode(i + 1)
+    a.children["next"] = b
+}
+
+// 基准：无环时两种字段形态都必须被纯 RC 完全回收。这一条同时证明观察量
+// 可信（249 阶段 A/B 已修），否则下面的比较没有意义。
+@test
+fn test_acyclic_chains_are_fully_reclaimed() {
+    for (var w = 0; w < 200; w++) {
+        make_array_chain(w)
+        make_map_chain(w)
+    }
+    var before = runtime.liveObjects()
+
+    for (var i = 0; i < 20000; i++) {
+        make_array_chain(i)
+        make_map_chain(i)
+    }
+
+    var after = runtime.liveObjects()
+    assert(after - before < 1000)
+}
+
+// G1 的门禁：同构的环，只因字段容器不同（Array vs Map）就得到数量级
+// 不同的处置，说明类型图漏了 Map 的边。
+@test
+fn test_map_field_cycles_are_treated_like_array_field_cycles() {
+    var array_before = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        make_array_cycle(i)
+    }
+    var array_residue = runtime.liveObjects() - array_before
+
+    var map_before = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        make_map_cycle(i)
+    }
+    var map_residue = runtime.liveObjects() - map_before
+
+    // 两组分配量同阶（每轮各 2 个节点 + 2 个容器），因此残留量也应同阶。
+    // 实测漏标时：24 vs 100000 —— 相差四个数量级。
+    var low = array_residue < map_residue ? array_residue : map_residue
+    var high = array_residue < map_residue ? map_residue : array_residue
+    assert(high <= low * 4 + 5000)
+}
+
+// G2 / G6 的端到端半边：Json 字段与 struct 穿透。
+//
+// 这两条在 analyzer 单元测试里查不到符号（测试基建的 lookup 限制，与 L0
+// 无关），所以在这里用运行期观察补齐：类型图标记正确时，这些环与普通字段
+// 环得到同样的处置。
+//
+// 阶段 E 移除环收集器后，三组都会变成"泄漏"，断言的"三组一致"仍然成立。
+
+class JsonNode {
+    blob: Json
+    peer: JsonNode?
+
+    constructor() {
+        this.blob = {}
+        this.peer = null
+    }
+}
+
+// G6（struct 穿透边）的可达性边界，2026-08-01 实测：
+//
+//   struct S { label: string }        ← 允许
+//   struct S { items: Array<int> }    ← 拒绝："cannot use a dynamic container type"
+//   struct S { parent: Node? }        ← 拒绝："only scalar values, raw pointers,
+//                                        fixed arrays and other structs are supported"
+//
+// 即 247 §A.4.2 举的漏标形态（`class Node { data: S }` + `struct S { parent: Node? }`）
+// 在当前语言表面下**构造不出来**——分析器先拒绝了 struct 的引用字段。
+// 类型图的 struct 穿透因此是**防御性**的：它是正确的裁决（struct 无 RC 身份，
+// 是环的传导路径而非成员），一旦 struct 字段限制放开就自动生效，但今天没有
+// 可达的漏标形态需要它救。
+//
+// 这里能测的是它的另一半：穿透**不得**造成误标。struct 只能装标量、string、
+// 定长数组和其它 struct，全都不可能成环，所以持有 struct 的类不该被标记。
+struct ScalarLink {
+    tag: int
+    label: string
+}
+
+class StructNode {
+    data: ScalarLink
+    tag: int
+
+    constructor(tag) {
+        this.data = ScalarLink(tag, "n")
+        this.tag = tag
+    }
+}
+
+fn make_json_field_cycle() {
+    var a = JsonNode()
+    var b = JsonNode()
+    a.peer = b
+    b.peer = a
+}
+
+// 持有 struct 的类，struct 里只有不可能成环的东西 ⇒ 必须完全被纯 RC 回收。
+fn make_struct_holder(i: int) {
+    var a = StructNode(i)
+    var b = StructNode(i + 1)
+}
+
+@test
+fn test_json_field_cycles_and_struct_holders() {
+    for (var w = 0; w < 200; w++) {
+        make_array_cycle(w)
+        make_json_field_cycle()
+        make_struct_holder(w)
+    }
+
+    var plain_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_array_cycle(i)
+    }
+    var plain_residue = runtime.liveObjects() - plain_before
+
+    var json_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_json_field_cycle()
+    }
+    var json_residue = runtime.liveObjects() - json_before
+
+    var struct_before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        make_struct_holder(i)
+    }
+    var struct_residue = runtime.liveObjects() - struct_before
+
+    print("probe1 plain_residue=" + string(plain_residue))
+    print("probe1 json_residue=" + string(json_residue))
+    print("probe1 struct_residue=" + string(struct_residue))
+
+    // Json 字段的环与普通字段环同阶（G2：Json 是通配边，持有者无条件标记）。
+    assert(json_residue <= plain_residue * 4 + 5000)
+    // struct 里装不下能成环的东西，因此穿透必须得出"无边"，持有者被纯 RC
+    // 完全回收。若穿透误发一条边，这里会因为被标为候选而残留。
+    assert(struct_residue < 1000)
+}

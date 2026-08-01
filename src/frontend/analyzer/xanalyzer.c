@@ -199,14 +199,6 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
                                           xr_type_new_set(analyzer->isolate, p_any), true);
     fn_set->function.min_params = 0;
     register_builtin_func(analyzer, "Set", fn_set);
-    XrType *fn_weakmap = xr_type_new_function(
-        analyzer->isolate, NULL, 0, xr_type_new_map(analyzer->isolate, p_any, p_any), true);
-    fn_weakmap->function.min_params = 0;
-    register_builtin_func(analyzer, "WeakMap", fn_weakmap);
-    XrType *fn_weakset = xr_type_new_function(analyzer->isolate, NULL, 0,
-                                              xr_type_new_set(analyzer->isolate, p_any), true);
-    fn_weakset->function.min_params = 0;
-    register_builtin_func(analyzer, "WeakSet", fn_weakset);
 
     // typeOf: fn(any) -> int (returns stable XrTypeId for fast Type.xxx comparison)
     XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);

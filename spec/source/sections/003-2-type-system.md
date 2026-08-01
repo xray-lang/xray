@@ -34,7 +34,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
-| 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
@@ -84,8 +83,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `StringBuilder` | prelude |
 | `Task<T>` | 解析器内建 |
 | `Thread<T>` | prelude |
-| `WeakMap<K, V>` | 解析器内建 |
-| `WeakSet<T>` | 解析器内建 |
 
 **内置 enum**
 
@@ -574,10 +571,6 @@ for (i in 3..=5) {
 #### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
-
-#### 2.4.11 `WeakMap` / `WeakSet`
-
-`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
 ### 2.5 可空类型
 
@@ -1157,7 +1150,6 @@ Xray is statically typed; every expression has a determined type at compile time
 | Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
-| Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
@@ -1207,8 +1199,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `StringBuilder` | prelude |
 | `Task<T>` | resolver built-in |
 | `Thread<T>` | prelude |
-| `WeakMap<K, V>` | resolver built-in |
-| `WeakSet<T>` | resolver built-in |
 
 **Built-in enums**
 
@@ -1697,10 +1687,6 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 #### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
 
 `Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
-
-#### 2.4.11 `WeakMap` / `WeakSet`
-
-Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
 ### 2.5 Nullable Types
 

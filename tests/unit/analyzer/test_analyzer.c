@@ -1013,6 +1013,36 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
+/* ========== L0 cycle-candidate marking (task 247 phase A) ========== */
+
+/* is_cycle_candidate is the ONLY truth about L0 marking. Runtime residue is a
+ * downstream proxy that stops working once task 247 phase E removes the cycle
+ * collector, so these assert the flag directly. */
+static bool analyzer_class_is_cycle_candidate(XaAnalyzer *analyzer, const char *class_name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, class_name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, class_name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, class_name);
+    if (!sym)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    return links && links->type && links->type->is_cycle_candidate;
+}
+
+static XaAnalyzer *analyzer_run_source(const char *file, const char *source) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    if (!a)
+        return NULL;
+    AstNode *program = xr_parse(g_session, source);
+    if (!program) {
+        xa_analyzer_free(a);
+        return NULL;
+    }
+    xa_analyzer_analyze(a, file, program);
+    return a;
+}
+
 static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     int count = 0;
     XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &count);
@@ -2483,6 +2513,141 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
 
     xa_analyzer_free(a);
     setup_pool();
+}
+
+/* Task 247 phase A: the six field shapes that reach a class. Every one of
+ * these was a MISSED mark before — an unmarked class never becomes a cycle
+ * candidate, so nothing downstream (collector today, detector after phase E)
+ * can see its cycles. */
+TEST(cycle_candidate_marks_every_field_shape) {
+    XaAnalyzer *a = analyzer_run_source("cycle_field_shapes.xr",
+                                        /* direct: was already marked */
+                                        "class DirectA { peer: DirectB? }\n"
+                                        "class DirectB { peer: DirectA? }\n"
+                                        /* Array element: was already marked */
+                                        "class ArrA { peers: Array<ArrB> }\n"
+                                        "class ArrB { peers: Array<ArrA> }\n"
+                                        /* Map value: G1, produced no edge */
+                                        "class MapA { peers: Map<string, MapB> }\n"
+                                        "class MapB { peers: Map<string, MapA> }\n"
+                                        /* Map key: G1, produced no edge */
+                                        "class KeyA { peers: Map<KeyB, int> }\n"
+                                        "class KeyB { peers: Map<KeyA, int> }\n"
+                                        /* Set element: G1, produced no edge */
+                                        "class SetA { peers: Set<SetB> }\n"
+                                        "class SetB { peers: Set<SetA> }\n"
+                                        /* union beyond the first member: G3 */
+                                        "class UniA { peer: int | string | UniB | null }\n"
+                                        "class UniB { peer: int | string | UniA | null }\n"
+                                        /* tuple member */
+                                        "class TupA { peer: (int, TupB)? }\n"
+                                        "class TupB { peer: (int, TupA)? }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "DirectA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "DirectB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ArrA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ArrB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "MapA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "MapB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "KeyA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "KeyB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "SetA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "SetB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "UniA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "UniB"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TupA"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TupB"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+/* Task 247 phase C: `weak` is the L0/L1 interface. A weak field does not keep
+ * its target alive, so it cannot close a cycle and must produce no edge —
+ * annotating one is exactly how a user takes their class out of the candidate
+ * set. The unannotated twin alongside is what makes this a real assertion. */
+TEST(cycle_candidate_weak_field_breaks_the_edge) {
+    XaAnalyzer *a = analyzer_run_source("cycle_weak_edge.xr",
+                                        "class Parent { children: Array<Child>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class Child { weak parent: Parent?\n"
+                                        "  constructor() { this.parent = null } }\n"
+                                        /* same shape, no weak: must stay a candidate */
+                                        "class StrongParent { children: Array<StrongChild>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class StrongChild { parent: StrongParent?\n"
+                                        "  constructor() { this.parent = null } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Parent"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Child"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongParent"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongChild"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+/* A self-referential class annotated weak likewise stops being a candidate. */
+TEST(cycle_candidate_weak_self_reference_breaks_the_edge) {
+    XaAnalyzer *a =
+        analyzer_run_source("cycle_weak_self.xr", "class WeakList { weak next: WeakList?\n"
+                                                  "  constructor() { this.next = null } }\n"
+                                                  "class StrongList { next: StrongList?\n"
+                                                  "  constructor() { this.next = null } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "WeakList"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongList"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(cycle_candidate_follows_inherited_fields) {
+    XaAnalyzer *a = analyzer_run_source("cycle_inherited_field.xr",
+                                        "class Base { peer: Derived?\n"
+                                        "  constructor() { this.peer = null } }\n"
+                                        "class Derived extends Base { n: int\n"
+                                        "  constructor() { super(); this.n = 0 } }\n"
+                                        "class LoneBase { n: int\n"
+                                        "  constructor() { this.n = 0 } }\n"
+                                        "class LoneDerived extends LoneBase { label: string\n"
+                                        "  constructor() { super(); this.label = \"\" } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "Base"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "Derived"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "LoneBase"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "LoneDerived"));
+
+    xa_analyzer_free(a);
+}
+
+/* A.5's second requirement, written down so nobody "optimizes" it away:
+ *
+ * `class Node { children: Array<Node> }` is a TREE, but the TYPE graph has a
+ * self-loop, and it must still be marked. L0 is a type-level approximation; it
+ * cannot tell a downward edge from an upward one, and any heuristic that tried
+ * would start missing real cycles. This is also what bounds the
+ * no_reference_cycles contract (247 section 9.3): a recursive type does not
+ * pass, and the diagnostic says "cannot prove", not "cycle detected". */
+TEST(cycle_candidate_marks_recursive_tree_types) {
+    XaAnalyzer *a = analyzer_run_source("cycle_recursive_tree.xr",
+                                        "class TreeNode { children: Array<TreeNode>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class ListNode { next: ListNode?\n"
+                                        "  constructor() { this.next = null } }\n"
+                                        "class Leaf { value: int\n"
+                                        "  constructor() { this.value = 0 } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(analyzer_class_is_cycle_candidate(a, "TreeNode"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "ListNode"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Leaf"));
+
+    xa_analyzer_free(a);
 }
 
 TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
@@ -5963,35 +6128,20 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
     setup_pool();
 }
 
-TEST(analyzer_weak_containers_use_identity_keys) {
+/* Task 247 phase B removed WeakMap / WeakSet. The names must now be unknown
+ * types, not silently-accepted ones — a deleted surface that still parses is
+ * worse than one that never existed. */
+TEST(analyzer_weak_containers_are_unknown_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var r = 1..4\n"
-                                           "var wm = WeakMap<Range, string>()\n"
-                                           "var ws = WeakSet<Range>()\n"
-                                           "var keep = r\n");
+    AstNode *program = xr_parse(g_session, "var wm = WeakMap<string, int>()\n"
+                                           "var ws = WeakSet<string>()\n");
     ASSERT(program != NULL);
-    xa_analyzer_analyze(a, "weak_identity_keys.xr", program);
-    ASSERT(!analyzer_diag_contains(a, "must satisfy Hashable"));
-    ASSERT(!analyzer_diag_contains(a, "undefined type 'WeakMap'"));
-    ASSERT(!analyzer_diag_contains(a, "undefined type 'WeakSet'"));
-    ASSERT(a->unresolved_inference_count == 0);
-
-    xa_analyzer_free(a);
-    setup_pool();
-
-    a = xa_analyzer_new(g_session);
-    ASSERT(a != NULL);
-    program = xr_parse(g_session, "var wm = WeakMap()\n"
-                                  "var ws = WeakSet()\n");
-    ASSERT(program != NULL);
-    xa_analyzer_analyze(a, "weak_bare_constructor_rejected.xr", program);
-    ASSERT(
-        analyzer_diag_contains(a, "cannot infer type arguments for generic constructor 'WeakMap'"));
-    ASSERT(
-        analyzer_diag_contains(a, "cannot infer type arguments for generic constructor 'WeakSet'"));
-    ASSERT(a->unresolved_inference_count == 2);
+    xa_analyzer_analyze(a, "weak_containers_removed.xr", program);
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count > 0);
 
     xa_analyzer_free(a);
     setup_pool();
@@ -6338,6 +6488,11 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
+    RUN_TEST(cycle_candidate_marks_every_field_shape);
+    RUN_TEST(cycle_candidate_weak_field_breaks_the_edge);
+    RUN_TEST(cycle_candidate_weak_self_reference_breaks_the_edge);
+    RUN_TEST(cycle_candidate_follows_inherited_fields);
+    RUN_TEST(cycle_candidate_marks_recursive_tree_types);
     RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
@@ -6397,7 +6552,7 @@ int main(void) {
     RUN_TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context);
     RUN_TEST(analyzer_non_callable_failure_uses_error_recovery);
     RUN_TEST(analyzer_container_recovery_rejects_poisoned_success_types);
-    RUN_TEST(analyzer_weak_containers_use_identity_keys);
+    RUN_TEST(analyzer_weak_containers_are_unknown_types);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);

@@ -119,6 +119,19 @@
  * suspension point left to park at, so reaching the scheduler drops the rest
  * of the cleanup instead of resuming it. */
 #define XR_ERR_ANALYZE_DEFER_SUSPEND 392
+/* A closure captured a variable and was then stored into a field of that same
+ * variable, so the object and the closure keep each other alive. Xray does not
+ * reclaim reference cycles (spec 16.8), and `weak` is a field modifier that
+ * cannot reach a capture edge, so this shape has no language mechanism to
+ * break it — only the `defer` idiom. Reported at compile time because the
+ * capture set and the assignment target are both dataflow facts here. */
+#define XR_ERR_ANALYZE_CLOSURE_CYCLE 393
+/* A `weak` field violated one of its rules (task 247 phase C, spec 16.3):
+ * W2 the declared type must be nullable — a weak slot reads null the instant
+ * its target dies, so a non-nullable one would be a lie; W4 only an
+ * EXEC_LOCAL-domain object may carry one, because clearing is driven by a
+ * coroutine-local destroy hook that a shared object never runs. */
+#define XR_ERR_ANALYZE_WEAK_FIELD 394
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

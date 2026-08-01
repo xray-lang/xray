@@ -1235,6 +1235,12 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
                 desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;
             if (f->is_final)
                 desc->instance_fields[idx].flags |= XR_FIELD_FINAL;
+            if (f->is_weak) {
+                desc->instance_fields[idx].flags |= XR_FIELD_WEAK;
+                /* Class-level summary so the hot field paths can decide with
+                 * one bit test whether they need the weak-aware route. */
+                desc->flags |= XR_CLASS_HAS_WEAK_FIELDS;
+            }
             idx++;
         }
     }

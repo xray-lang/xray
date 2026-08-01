@@ -71,18 +71,6 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         g_passed++;                                                                                \
     } while (0)
 
-#define ASSERT_WEAK_ACCEPTS(value, expected, msg)                                                  \
-    do {                                                                                           \
-        int _actual = xrt_weak_value_is_heap_object(value);                                        \
-        if ((_actual != 0) != (expected)) {                                                        \
-            fprintf(stderr, "FAIL: %s (got %d, expected %s)\n", msg, _actual,                      \
-                    (expected) ? "accepted" : "rejected");                                         \
-            g_failed++;                                                                            \
-            return;                                                                                \
-        }                                                                                          \
-        g_passed++;                                                                                \
-    } while (0)
-
 #define ASSERT_INT(value, expected, msg)                                                           \
     do {                                                                                           \
         XrValue _actual = (value);                                                                 \
@@ -174,22 +162,6 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
     ASSERT_BOOL(xrt_to_bool(set), true, "nonempty set is truthy");
 }
 
-static void test_xrt_weak_predicate_accepts_aot_object_tags(void) {
-    char dummy = 0;
-    XrAotEnumBox enum_box = {0};
-
-    ASSERT_WEAK_ACCEPTS(XR_NULL_VAL, false, "null is not a weak key object");
-    ASSERT_WEAK_ACCEPTS(XR_FROM_INT(1), false, "int is not a weak key object");
-    ASSERT_WEAK_ACCEPTS(XR_TRUE_VAL, false, "bool is not a weak key object");
-    ASSERT_WEAK_ACCEPTS(xrt_range_from_i64(1, 4, false), true, "Range is an object-like weak key");
-    ASSERT_WEAK_ACCEPTS(xr_mkptr(&enum_box, XR_TAG_ENUM), true,
-                        "Enum box is an object-like weak key");
-    ASSERT_WEAK_ACCEPTS(xr_mkptr(&dummy, XR_TAG_ITERATOR), true,
-                        "Iterator is an object-like weak key");
-    ASSERT_WEAK_ACCEPTS(xr_aggregate_ref(&dummy, 1), true,
-                        "native struct reference is an object-like weak key");
-}
-
 static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
     uint16_t tid = xrt_type_register_hot(0, NULL, 0, NULL, 16);
     const XrtTypeInfo *hot = xrt_type_info(tid);
@@ -234,7 +206,6 @@ static void test_xrt_thread_handle_methods(void) {
     thread.retval = XR_FROM_INT(42);
 
     XrValue handle = xrt_thread_box(&thread);
-    ASSERT_WEAK_ACCEPTS(handle, true, "Thread handle is an object-like weak key");
     ASSERT_BOOL(xrt_thread_done_value(handle), true, "Thread.done reads finished flag");
     ASSERT_INT(xrt_method_0(handle, XRT_SYM_JOIN), 42, "Thread.join returns cached retval");
     ASSERT_NULL(xrt_method_0(handle, XRT_SYM_DETACH), "Thread.detach is a null-returning method");
@@ -284,7 +255,6 @@ static void test_xrt_threadlocal_live_registry(void) {
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
-    test_xrt_weak_predicate_accepts_aot_object_tags();
     test_xrt_type_metadata_uses_hot_name_and_derive_tables();
     test_xrt_thread_handle_methods();
     test_xrt_threadlocal_live_registry();

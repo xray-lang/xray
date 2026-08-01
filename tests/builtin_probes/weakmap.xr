@@ -1,2 +1,0 @@
-var w = WeakMap<string, int>()
-print(len(w))

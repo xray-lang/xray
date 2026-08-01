@@ -115,8 +115,6 @@ XR_BUILTIN_TYPE("CoroLocal", 1)
 XR_BUILTIN_TYPE("MutPtr",    1)
 XR_BUILTIN_TYPE("Ptr",       1)
 XR_BUILTIN_TYPE("Task",      1)
-XR_BUILTIN_TYPE("WeakMap",   2)
-XR_BUILTIN_TYPE("WeakSet",   1)
 
 /* ========== Enum reflection views ==========
  * Static types of `E.variants` / `E.payloads` and their elements. Writable as

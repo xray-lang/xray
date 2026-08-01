@@ -32,17 +32,60 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
 
-### 16.2 内存分配
+### 16.2 语义所有权域
 
-| 区域 | 用途 |
+存储由**两个正交的轴**描述，任何一处混用都会得出错误结论：
+
+- **语义所有权域**（本节）：谁拥有这块存储、它活多久、跨执行边界时按什么规则迁移。这是**语义契约**。
+- **后端物化**（§16.2.1）：后端实际把它放在哪（内联、栈、静态数据、某个堆）。这是**实现选择**。
+
+> 真值源：`src/base/xstorage.h` 的 `XrSemanticStorageDomain`、`XrBackendMaterialization`、`XrTransferAction`。
+
+一个值恰好属于六个语义域之一：
+
+| 域 | 归属与生命周期 | 引用计数 | 典型来源 |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | 当前执行体（协程）独占；随该执行体的堆一起结束 | 非原子 | 普通局部对象、字面量构造的容器与实例 |
+| **`TRANSFERABLE`** | 唯一所有权，可跨执行边界**整体移交**；移交后源侧不再可用 | 非原子 | `move` 的目标、跨协程传递的唯一值 |
+| **`CONST_SHARED`** | 已发布的不可变根，多个执行体并发只读共享 | 原子 | 发布后的 `const` 根、`freeze` 的结果 |
+| **`SYNC_SHARED`** | 受审计的并发句柄，多个执行体并发访问，同步由句柄自身保证 | 原子 | channel、mutex 等并发原语持有的值 |
+| **`MODULE_STATIC`** | 归属模块，活到模块卸载；**默认不提供并发安全性** | 按模块 owner | 顶层 `const` / `var` |
+| **`FOREIGN`** | 由 Xray 之外的分配器拥有；运行时不管理其生命周期 | 无 | FFI 指针、外部缓冲 |
+
+**域决定并发可见性与回收责任，不决定物理位置。** 例如 `EXEC_LOCAL` 的值可能被内联进持有者、放在栈上、或分配在执行堆上——三种物化都不改变"它随该协程结束"这一契约。
+
+#### 16.2.1 后端物化
+
+后端在满足语义域契约的前提下，为每个值选择一种物化：
+
+| 物化 | 含义 |
 |--|--|
-| **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
-| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 seal + publish 的顶层 `const` |
-| **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **const/sync shared domain** | 已发布 const 根与受审计并发句柄，root-only 原子引用计数 |
-| **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
-| **栈** | `struct` 值、局部 immediate、函数帧 |
-| **Arena** | parser 临时分配、frame allocation |
+| `INLINE` | 内联在持有者的存储里，无独立地址身份 |
+| `STACK` | 函数帧上；随帧退出而失效，不可增长、不可释放 |
+| `STATIC_DATA` | 只读静态数据段（consteval 结果、字面量池） |
+| `EXEC_HEAP` | 当前执行体的堆（`XrCoroHeap`）；引用计数回收 |
+| `SYSTEM_HEAP` | 系统堆；跨执行体可见的对象走这里 |
+| `SROA` | 被标量替换后拆散到寄存器，聚合体本身不再具体存在 |
+| `EXTERNAL` | 外部分配器持有 |
+| `INVALID` | 未决定；出现在最终计划里即为内部错误 |
+
+> **改变物化不得授予更强的语义域或迁移能力。** 把一个 `EXEC_LOCAL` 的值物化到 `SYSTEM_HEAP` 不会让它变得可以跨执行体共享；反过来，把 `CONST_SHARED` 的值物化到栈上是非法的——它的域要求地址在共享期内稳定。物化是语义域的**下游**，永远不是理由。
+
+#### 16.2.2 跨执行边界的域迁移
+
+值跨越执行边界（闭包捕获进 `go`、送入 channel、作为 task 结果返回）时，由其**源域**与可变性决定一个迁移动作。这是编译期判定，不是运行时降级：
+
+| 动作 | 何时选用 | 语义 |
+|--|--|--|
+| `INLINE_COPY` | 标量、且非可变捕获 | 按值复制，两侧此后独立 |
+| `CONST_SHARE` | 源域为 `CONST_SHARED` | 共享同一不可变根，原子引用计数 |
+| `SYNC_SHARE` | 源域为 `SYNC_SHARED`，或捕获形态本身是并发句柄 | 共享同一句柄，同步由句柄保证 |
+| `MOVE_UNIQUE` | 源域为 `TRANSFERABLE` | 整体移交所有权，源侧此后不可用 |
+| `EXPLICIT_COPY` | **仅**源码写了 `copy(...)` | 物化一个独立的值再迁移 |
+| `MODULE_READ` | 源域为 `MODULE_STATIC` 且不可变 | 只读引用模块绑定 |
+| **`REJECT`** | **以上都不成立** | **编译错误** |
+
+`REJECT` 是这张表里最重要的一项：**跨执行边界没有隐式深拷贝兜底**。可变的模块绑定、可变或被重新赋值的普通捕获、没有 const/sync/move 证据的托管值，全部是编译错误而不是"悄悄拷一份"。需要独立副本时，源码必须显式写 `copy(...)`。
 
 ### 16.3 对象生命周期与回收
 
@@ -273,17 +316,60 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
 
-### 16.2 Memory Allocation
+### 16.2 Semantic Ownership Domains
 
-| Region | Use |
+Storage is described by **two orthogonal axes**. Conflating them yields wrong conclusions:
+
+- **Semantic ownership domain** (this section): who owns the storage, how long it lives, and what rule governs its migration across an execution boundary. This is a **semantic contract**.
+- **Backend materialization** (§16.2.1): where the backend actually puts it (inline, stack, static data, some heap). This is an **implementation choice**.
+
+> Source of truth: `XrSemanticStorageDomain`, `XrBackendMaterialization`, and `XrTransferAction` in `src/base/xstorage.h`.
+
+Every value belongs to exactly one of six semantic domains:
+
+| Domain | Ownership and lifetime | Reference counting | Typical origin |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | Owned exclusively by the current execution (coroutine); ends with that execution's heap | Non-atomic | Ordinary local objects; containers and instances built from literals |
+| **`TRANSFERABLE`** | Unique ownership that can be **handed over whole** across an execution boundary; unusable on the source side afterwards | Non-atomic | The target of a `move`; unique values passed between coroutines |
+| **`CONST_SHARED`** | A published immutable root, read concurrently by several executions | Atomic | A published `const` root; the result of `freeze` |
+| **`SYNC_SHARED`** | An audited concurrency handle accessed by several executions, where the handle itself provides the synchronization | Atomic | Values held by channels, mutexes, and other concurrency primitives |
+| **`MODULE_STATIC`** | Owned by the module, alive until it unloads; **not concurrency-safe by default** | Per module owner | Top-level `const` / `var` |
+| **`FOREIGN`** | Owned by an allocator outside Xray; the runtime does not manage its lifetime | None | FFI pointers, external buffers |
+
+**A domain fixes concurrency visibility and reclamation responsibility, not physical location.** An `EXEC_LOCAL` value may be inlined into its holder, placed on the stack, or allocated on the execution heap — none of the three changes the contract that it ends with that coroutine.
+
+#### 16.2.1 Backend Materialization
+
+Subject to the semantic domain's contract, the backend picks one materialization per value:
+
+| Materialization | Meaning |
 |--|--|
-| **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
-| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then sealed + published |
-| **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Const/synchronized shared domain** | published const roots and audited concurrency handles, with root-only atomic reference counting |
-| **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
-| **Stack** | `struct` values, local immediates, function frames |
-| **Arena** | parser temporary allocation, frame allocation |
+| `INLINE` | Inlined into the holder's storage, with no separate address identity |
+| `STACK` | On the function frame; dies with the frame, cannot grow, cannot be freed |
+| `STATIC_DATA` | Read-only static data (consteval results, literal pools) |
+| `EXEC_HEAP` | The current execution's heap (`XrCoroHeap`), reclaimed by reference counting |
+| `SYSTEM_HEAP` | The system heap; objects visible across executions live here |
+| `SROA` | Scalar-replaced into registers; the aggregate no longer exists concretely |
+| `EXTERNAL` | Held by an external allocator |
+| `INVALID` | Undecided; reaching a final plan is an internal error |
+
+> **Changing materialization must never grant a stronger semantic domain or transfer capability.** Materializing an `EXEC_LOCAL` value on the `SYSTEM_HEAP` does not make it shareable across executions; conversely, materializing a `CONST_SHARED` value on the stack is invalid, because its domain requires a stable address for as long as it is shared. Materialization is **downstream** of the semantic domain, never a justification.
+
+#### 16.2.2 Domain Migration Across Execution Boundaries
+
+When a value crosses an execution boundary (captured into `go`, sent through a channel, returned as a task result), its **source domain** and mutability select a transfer action. This is decided at compile time; it is not a runtime downgrade:
+
+| Action | Selected when | Semantics |
+|--|--|--|
+| `INLINE_COPY` | Scalar, and not a mutable capture | Copied by value; the two sides are independent afterwards |
+| `CONST_SHARE` | Source domain is `CONST_SHARED` | Shares the same immutable root under atomic reference counting |
+| `SYNC_SHARE` | Source domain is `SYNC_SHARED`, or the capture is itself a concurrency handle | Shares the same handle; the handle provides synchronization |
+| `MOVE_UNIQUE` | Source domain is `TRANSFERABLE` | Ownership is handed over whole; the source is unusable afterwards |
+| `EXPLICIT_COPY` | **Only** where the source wrote `copy(...)` | Materializes an independent value, then migrates it |
+| `MODULE_READ` | Source domain is `MODULE_STATIC` and immutable | Reads the module binding by reference |
+| **`REJECT`** | **None of the above holds** | **Compile error** |
+
+`REJECT` is the most important row: **there is no implicit deep-copy fallback across an execution boundary.** A mutable module binding, an ordinary capture that is mutable or reassigned, and a managed value with no const/sync/move evidence are all compile errors rather than a silent copy. Where an independent copy is wanted, the source must say `copy(...)`.
 
 ### 16.3 Object Lifetime and Reclamation
 

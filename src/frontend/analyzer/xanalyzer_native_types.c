@@ -357,8 +357,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},
     {"Task", XR_TID_COROUTINE, TYPE_NAME_TASK},
     {"Atomic", XR_TID_ATOMIC, TYPE_NAME_ATOMIC},
-    {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
-    {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
     {"WorkQueue", XR_TID_WORKQUEUE, TYPE_NAME_WORKQUEUE},
     {"ResultGroup", XR_TID_RESULTGROUP, TYPE_NAME_RESULTGROUP},
     {"CountdownLatch", XR_TID_COUNTDOWNLATCH, TYPE_NAME_COUNTDOWNLATCH},
@@ -574,8 +572,6 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_PANIC_INFO, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},
     {XR_TID_ATOMIC, XR_TATOMIC},
-    {XR_TID_WEAKMAP, XR_TMAP},
-    {XR_TID_WEAKSET, XR_TSET},
 };
 
 #define NUM_TID_OBJ_MAPPINGS (int) (sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))

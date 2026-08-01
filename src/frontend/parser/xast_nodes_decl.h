@@ -138,6 +138,11 @@ typedef struct FieldDeclNode {
     bool is_final;
     bool is_const;     // immutable field (assignable only in the constructor)
     bool is_flexible;  // extern-layout unsized tail: `name: flex T`
+    // `weak parent: Node?` — the slot does not keep its target alive. A
+    // STORAGE modifier, not a type: it says how this slot holds the value, so
+    // there is no Weak<T> in the type table and no second unwrap at the use
+    // site. The only mechanism that breaks a reference cycle (spec 16.8).
+    bool is_weak;
     AstNode *initializer;
 } FieldDeclNode;
 

@@ -188,7 +188,7 @@ static inline XrValue xr_aot_bridge_map_to_xrt(XrValue value) {
     xrt_map_t *dst = (xrt_map_t *) dst_value.ptr;
     dst->key_tid = src->key_tid;
     dst->value_tid = src->value_tid;
-    if ((src->flags & (XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_WEAK)) || src->count == 0 || !src->entries)
+    if ((src->flags & XR_MAP_FLAG_DUMMY) || src->count == 0 || !src->entries)
         return dst_value;
 
     for (uint32_t i = 0; i < src->nentries; i++) {
@@ -209,7 +209,7 @@ static inline XrValue xr_aot_bridge_set_to_xrt(XrValue value) {
     XrValue dst_value = xrt_set_new((int64_t) src->count);
     xrt_set_t *dst = (xrt_set_t *) dst_value.ptr;
     dst->elem_tid = src->elem_tid;
-    if ((src->flags & (XR_SET_FLAG_DUMMY | XR_SET_FLAG_WEAK)) || src->count == 0 || !src->entries)
+    if ((src->flags & XR_SET_FLAG_DUMMY) || src->count == 0 || !src->entries)
         return dst_value;
 
     for (uint32_t i = 0; i < src->nentries; i++) {

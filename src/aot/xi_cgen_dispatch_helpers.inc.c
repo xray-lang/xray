@@ -6523,11 +6523,10 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x04);
     uint8_t storage_mode = xi_value_allocation_storage_mode(v);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, "xrt_map_set_storage(");
-    if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap)) {
+    if (!emit_typed_map_new_expr(ctx, out, v, cap)) {
         /* Untyped storage (one side is not a scalar) with a scalar declared key
          * or value type: record the scalar elems so keys()/values() return lanes
          * matching the consumer's static Array<K> / Array<V> layout. */
@@ -6544,8 +6543,6 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         } else {
             fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
         }
-    } else if (flags) {
-        fprintf(out, "xrt_map_new_flags(%" PRId64 ", XR_MAP_FLAG_WEAK)", cap);
     }
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
@@ -6565,14 +6562,11 @@ static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x04);
     uint8_t storage_mode = xi_value_allocation_storage_mode(v);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, "xrt_set_set_storage(");
-    if (!flags && !emit_typed_set_new_expr(ctx, out, v, cap))
+    if (!emit_typed_set_new_expr(ctx, out, v, cap))
         fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
-    else if (flags)
-        fprintf(out, "xrt_set_new_flags(%" PRId64 ", XR_SET_FLAG_WEAK)", cap);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
 }
@@ -15806,7 +15800,7 @@ static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "\n        xrt_closure_init(_xr_par_closure_%u, &_xr_callable_%u, %u);\n",
             par_for->id, par_for->id, ncap);
     fprintf(out, "        { xrt_closure_t *_c = _xr_par_closure_%u; ", par_for->id);
-    emit_closure_upval_initializers(ctx, out, f, closure, false);
+    emit_closure_upval_initializers(ctx, out, f, closure, /*owns_upvals=*/false);
     fprintf(out, "}\n");
 }
 
@@ -15840,7 +15834,7 @@ static void xicgen_emit_par_map_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
             par_map->id, par_map->id, total);
     fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", par_map->id);
-    emit_closure_upval_initializers(ctx, out, f, closure, false);
+    emit_closure_upval_initializers(ctx, out, f, closure, /*owns_upvals=*/false);
     fprintf(out, "_c->upvals[%u] = %s; _c->upvals[%u] = XR_FROM_INT(%s); }\n",
             data ? (unsigned) data->result_capture_index : (unsigned) ncap,
             result_value_name ? result_value_name : "XR_NULL_VAL",
@@ -16721,7 +16715,7 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
                     v->id, v->id, ncap);
             fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", v->id);
-            emit_closure_upval_initializers(ctx, out, f, v->args[3], false);
+            emit_closure_upval_initializers(ctx, out, f, v->args[3], /*owns_upvals=*/false);
             fprintf(out, "}\n");
         }
 

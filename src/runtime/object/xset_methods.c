@@ -5,9 +5,8 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xset_methods.c - Set / WeakSet builtin method bodies + dispatch table.
+ * xset_methods.c - Set builtin method bodies + dispatch table.
  *
- * Methods that are unsupported on a weak set return XR_NOTFOUND so
  * the dispatcher's shared "method not found" path produces the
  * standard diagnostic.
  */
@@ -35,10 +34,6 @@ static inline XrSet *set_self(XrValue self) {
     return XR_TO_SET(self);
 }
 
-static inline bool set_is_weak(const XrSet *s) {
-    return (s->flags & XR_SET_FLAG_WEAK) != 0;
-}
-
 static XrValue xr_set_method_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
@@ -55,14 +50,6 @@ static XrValue xr_set_method_delete(XrVMRuntime *iso, XrValue self, XrValue *arg
 
 static XrValue xr_set_method_add(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
-    /* WeakSet contract: value must be a heap object. */
-    if (set_is_weak(s) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INVALID_ARG_TYPE,
-                                         "WeakSet value must be a heap object, got %s",
-                                         xr_typeid_name(xr_value_typeid(args[0])));
-        xr_vm_unwind_with_trace(iso, exc);
-        return xr_null();
-    }
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_set_add(s, args[0]));
@@ -73,8 +60,6 @@ static XrValue xr_set_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND; /* not exposed on WeakSet */
     xr_set_clear(s);
     return xr_null();
 }
@@ -94,8 +79,6 @@ static XrValue set_fresh_copy_value(XrSet *s) {
 static XrValue xr_set_method_union(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return set_fresh_copy_value(s);
     XrSet *result = xr_set_union(NULL, s, XR_TO_SET(args[0]));
@@ -105,8 +88,6 @@ static XrValue xr_set_method_union(XrVMRuntime *iso, XrValue self, XrValue *args
 static XrValue xr_set_method_intersection(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0])) {
         return xr_value_from_set(xr_set_new(NULL));
     }
@@ -117,8 +98,6 @@ static XrValue xr_set_method_intersection(XrVMRuntime *iso, XrValue self, XrValu
 static XrValue xr_set_method_difference(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return set_fresh_copy_value(s);
     XrSet *result = xr_set_difference(NULL, s, XR_TO_SET(args[0]));
@@ -129,8 +108,6 @@ static XrValue xr_set_method_symmetric_difference(XrVMRuntime *iso, XrValue self
                                                   int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return set_fresh_copy_value(s);
     XrSet *result = xr_set_symmetric_difference(NULL, s, XR_TO_SET(args[0]));
@@ -140,8 +117,6 @@ static XrValue xr_set_method_symmetric_difference(XrVMRuntime *iso, XrValue self
 static XrValue xr_set_method_is_subset(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return xr_bool(0);
     return xr_bool(xr_set_is_subset(s, XR_TO_SET(args[0])));
@@ -150,8 +125,6 @@ static XrValue xr_set_method_is_subset(XrVMRuntime *iso, XrValue self, XrValue *
 static XrValue xr_set_method_is_superset(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0]))
         return xr_bool(0);
     return xr_bool(xr_set_is_superset(s, XR_TO_SET(args[0])));
@@ -162,8 +135,6 @@ static XrValue xr_set_method_to_array(XrVMRuntime *iso, XrValue self, XrValue *a
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     XrArray *arr = xr_set_values(NULL, s);
     return xr_value_from_array(arr);
 }
@@ -175,8 +146,6 @@ static XrValue xr_set_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *ar
     if (!cb)
         return xr_null();
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     if (xr_set_isdummy(s))
         return xr_null();
 
@@ -196,8 +165,6 @@ static XrValue xr_set_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *a
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s))
-        return XR_NOTFOUND;
     XrIterator *iter = xr_iterator_new_from_set(NULL, s);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }

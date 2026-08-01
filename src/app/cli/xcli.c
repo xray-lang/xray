@@ -15,6 +15,7 @@
 
 #include "xcli_dispatch.h"
 #include "../../runtime/xr_process_shutdown.h"
+#include "../../runtime/mem/xcycle_detector.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,5 +97,14 @@ int main(int argc, char **argv) {
 #endif
 #endif
     xr_cli_register_all_handlers();
-    return xr_cli_main(argc, argv);
+    int rc = xr_cli_main(argc, argv);
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Fail closed: a detected cycle is a non-zero exit even when the program
+     * itself succeeded. A detector that finds leaks and still reports success
+     * is a detector nobody acts on. Reported per coroutine as its heap is torn
+     * down; the flag is accumulated so the run fails once, at the end. */
+    if (rc == 0 && xr_cycle_detector_any_found())
+        rc = 1;
+#endif
+    return rc;
 }

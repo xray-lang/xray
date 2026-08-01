@@ -91,9 +91,6 @@ class Range {
     }
 }
 
-// WeakMap and WeakSet
-let weakMap = WeakMap()
-let weakSet = WeakSet()
 
 // Typed arrays
 let i8 = Int8Array(10)

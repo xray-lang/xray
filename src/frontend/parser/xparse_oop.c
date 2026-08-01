@@ -656,6 +656,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     (void) is_setter;
     bool is_const = false;
     bool is_flexible = false;
+    bool is_weak = false;
 
     if (current_is_removed_public_modifier(parser)) {
         return reject_removed_member_modifier(
@@ -719,6 +720,14 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     // `const` marks an immutable field (assignable only in the constructor).
     if (xr_parser_match(parser, TK_CONST)) {
         is_const = true;
+    }
+
+    /* `weak parent: Node?` — contextual like `flex`, so it does not reserve
+     * the identifier globally and existing code using `weak` as a name keeps
+     * working. Only a field can carry it (W3: no [weak self], no contagion). */
+    if (xr_parser_check_name(parser, "weak")) {
+        is_weak = true;
+        xr_parser_advance(parser);
     }
 
     if (xr_parser_match(parser, TK_OPERATOR)) {
@@ -833,6 +842,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             field->as.field_decl.is_final = false;
             field->as.field_decl.is_protected = is_protected;
             field->as.field_decl.is_const = is_const;
+            field->as.field_decl.is_weak = is_weak;
             field->column = name_column;
             // End span: to end of initializer if present, else just the name.
             if (initializer && initializer->end_line > 0) {

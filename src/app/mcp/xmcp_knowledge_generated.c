@@ -6429,7 +6429,6 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Other collection-like types\n"
             "- `Array<byte>` is a typed byte buffer backed by contiguous memory\n"
             "- `Channel<T>` is the coroutine communication container\n"
-            "- `WeakMap` / `WeakSet` hold weak references to heap objects\n"
             "",
     },
     {
