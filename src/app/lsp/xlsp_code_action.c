@@ -353,7 +353,13 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                 }
             }
 
-            if (msg && strncmp(msg, XLSP_CYCLE_DIAG_PREFIX, strlen(XLSP_CYCLE_DIAG_PREFIX)) == 0) {
+            /* Two sources, one fix: a cycle the detector saw at runtime and a
+             * contract the type graph cannot prove both come down to putting
+             * `weak` on one field. The message tail is shared so the same
+             * action serves both. */
+            if (msg && (strncmp(msg, XLSP_CYCLE_DIAG_PREFIX, strlen(XLSP_CYCLE_DIAG_PREFIX)) == 0 ||
+                        strncmp(msg, XLSP_CONTRACT_CYCLE_DIAG_PREFIX,
+                                strlen(XLSP_CONTRACT_CYCLE_DIAG_PREFIX)) == 0)) {
                 char field[128], owner[128], target[128];
                 if (parse_cycle_diagnostic(msg, field, sizeof(field), owner, sizeof(owner), target,
                                            sizeof(target)))

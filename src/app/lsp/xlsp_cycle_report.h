@@ -34,8 +34,14 @@ XR_FUNC void xlsp_cycle_report_diagnostics(XrLspDocument *doc, XrJsonValue *diag
 /* Free the loaded report. Called at server shutdown. */
 XR_FUNC void xlsp_cycle_report_clear(XrLspServer *server);
 
-/* Marker the diagnostic message opens with, so the code-action handler can
- * recognise its own diagnostics without re-reading the report. */
+/* Contracts that demand acyclicity, read from the workspace's verify contract
+ * files. Refreshed alongside the sidecar report; the two are independent
+ * sources for the same fix, so they share a code action. */
+XR_FUNC void xlsp_contract_cycles_diagnostics(XrLspDocument *doc, XrJsonValue *diagnostics);
+
+/* Markers the diagnostic messages open with, so the code-action handler can
+ * recognise its own diagnostics without re-reading either source. */
 #define XLSP_CYCLE_DIAG_PREFIX "reference cycle observed at runtime: "
+#define XLSP_CONTRACT_CYCLE_DIAG_PREFIX "contract `no_reference_cycles` cannot be proven: "
 
 #endif  // XLSP_CYCLE_REPORT_H

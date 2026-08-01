@@ -1408,6 +1408,88 @@ TEST(code_action_closure_cycle_offers_defer) {
     xlsp_server_free(server);
 }
 
+// A verify contract file, dropped in the workspace root the way a project
+// keeps one next to its build.
+static bool write_contract(XrLspServer *server, const char *toml) {
+    const char *tmp = getenv("TMPDIR");
+    snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
+             tmp ? tmp : "/tmp");
+    if (mkdir(g_cycle_workspace, 0700) != 0 && errno != EEXIST)
+        return false;
+
+    server->workspace_folder_count = 1;
+    xr_free(server->workspace_folders[0].path);
+    server->workspace_folders[0].path = xr_strdup(g_cycle_workspace);
+
+    char path[640];
+    snprintf(path, sizeof(path), "%s/contracts.toml", g_cycle_workspace);
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return false;
+    fputs(toml, f);
+    fclose(f);
+    return true;
+}
+
+static void remove_contract(void) {
+    char path[640];
+    snprintf(path, sizeof(path), "%s/contracts.toml", g_cycle_workspace);
+    remove(path);
+}
+
+TEST(contract_cycle_diagnoses_candidates_only_under_contract) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_contract(server, "version = 1\n\n"
+                                  "[[function]]\n"
+                                  "symbol = \"Guarded\"\n"
+                                  "scope = \"semantic\"\n"
+                                  "requires = [\"no_reference_cycles\"]\n"));
+
+    // Guarded is recursive AND under contract -> every edge that can close the
+    // cycle is a candidate. Unguarded is just as recursive but nobody asked for
+    // a proof, and a recursive type is legal (247 section 9.3) -- reporting it
+    // would be a false positive on ordinary code.
+    const char *uri = "file:///contract_cycle.xr";
+    const char *content = "class Guarded {\n"
+                          "    next: Guarded?\n"
+                          "    label: string\n"
+                          "}\n"
+                          "class Unguarded {\n"
+                          "    next: Unguarded?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_contract_cycles_diagnostics(doc, diagnostics);
+
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    XrJsonValue *diag = xjson_array_get(diagnostics, 0);
+    const char *msg = xjson_get_string(diag, "message");
+    ASSERT(msg != NULL);
+    ASSERT(strstr(msg, "`Guarded.next`"));
+    // The claim has to stay "cannot be proven", not "a cycle was detected":
+    // those are different statements and only the first one is true here.
+    ASSERT(strstr(msg, "cannot be proven"));
+    // An error, not a warning: the user wrote the contract and the build fails.
+    ASSERT_EQ(xjson_get_int(diag, "severity"), 1);
+    XrJsonValue *start = xjson_get_object(xjson_get_object(diag, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+
+    // Same code action as the runtime-report path: one shared fix, two sources.
+    XrJsonValue *params = make_code_action_params(uri, 1, 4, 8, msg);
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(find_action_with_title(actions, "Mark `next` weak") != NULL);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xjson_free(diagnostics);
+    remove_contract();
+    xlsp_server_free(server);
+}
+
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     (void) argc;
@@ -1466,6 +1548,7 @@ int main(int argc, char **argv) {
     RUN_TEST(cycle_report_skips_already_weak_field);
     RUN_TEST(code_action_cycle_offers_weak_without_default_or_batch);
     RUN_TEST(code_action_closure_cycle_offers_defer);
+    RUN_TEST(contract_cycle_diagnoses_candidates_only_under_contract);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 

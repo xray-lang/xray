@@ -76,4 +76,22 @@ grep -q 'L0 type graph' "$WORK/cyc_bad.err"
 "$XRAY" verify --contract cycles-weak-broken.toml >"$WORK/cyc_weak.out" 2>"$WORK/cyc_weak.err"
 grep -q 'verified symbol-id=' "$WORK/cyc_weak.out"
 
+# Phase H, end to end and for real: apply the edit the LSP code action makes —
+# insert `weak ` ahead of the field name on the class that FAILED — and the
+# same contract must go from failing to passing. Two hand-written classes
+# would only prove that `weak` works somewhere; this proves the specific edit
+# the tooling offers is the one that fixes the specific failure.
+# Work on a copy: a run that dies partway must not leave the fixture edited.
+cp -R "$FIXTURE" "$WORK/h-fixture"
+sed -i.bak 's/^    next: CyclicNode?$/    weak next: CyclicNode?/' "$WORK/h-fixture/main.xr"
+grep -q 'weak next: CyclicNode?' "$WORK/h-fixture/main.xr"
+cd "$WORK/h-fixture"
+if ! "$XRAY" verify --contract cycles-negative.toml >"$WORK/cyc_fixed.out" 2>"$WORK/cyc_fixed.err"; then
+    echo "applying weak did not make no_reference_cycles provable" >&2
+    cat "$WORK/cyc_fixed.err" >&2
+    exit 1
+fi
+cd "$FIXTURE"
+grep -q 'verified symbol-id=' "$WORK/cyc_fixed.out"
+
 echo "PASS: versioned verify contract succeeds and fails closed"

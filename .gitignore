@@ -123,3 +123,5 @@ tests/network/ws_tests/autobahn/reports/
 # scratch cache next to the source `.xr`. They are build artifacts and
 # must never be committed.
 *.xrc
+
+.xray-cycles.json

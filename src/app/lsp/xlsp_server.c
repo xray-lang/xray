@@ -1048,6 +1048,7 @@ void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
      * writes them out, the editor reads them back (task 247 phase H). */
     xlsp_cycle_report_refresh(server);
     xlsp_cycle_report_diagnostics(doc, diagnostics);
+    xlsp_contract_cycles_diagnostics(doc, diagnostics);
 
     XrJsonValue *params = xjson_new_object();
     xjson_object_set(params, "uri", xjson_new_string(doc->uri));

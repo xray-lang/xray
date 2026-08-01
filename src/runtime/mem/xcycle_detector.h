@@ -85,6 +85,13 @@ void xr_cycle_detector_register_class(const struct XrClass *cls, const char *nam
 /* The snapshotted name for a class, or NULL if it was never registered. */
 const char *xr_cycle_detector_class_name(const struct XrClass *cls);
 
+/* The snapshotted name of field `index` on a registered class, or NULL.
+ *
+ * This is what turns "there is a cycle through MapNode" into "annotate
+ * MapNode.peers weak" — a report that names the edge is actionable, one that
+ * only names the type is not. */
+const char *xr_cycle_detector_field_name(const struct XrClass *cls, uint32_t index);
+
 #else /* !XR_ENABLE_CYCLE_DETECTOR */
 
 /* No stub bodies, no no-op API: the symbols do not exist in a default build,
