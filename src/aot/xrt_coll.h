@@ -4877,15 +4877,33 @@ static inline XrValue xrt_getprop_key(XrValue obj, XrValue key) {
     return XR_NULL_VAL;
 }
 
+/* Name-keyed property store. Handles the two shapes that actually carry named
+ * properties at run time: a Map, and a JSON/record object.
+ *
+ * Fails closed on anything else. A store that cannot be performed has no
+ * defensible "skip it" reading — the value the program assigned simply would
+ * not be there — so returning `val` as if the write had happened turned a
+ * codegen gap into a wrong answer with no crash and no diagnostic. That is how
+ * `defer { this.n = ... }` silently did nothing in AOT builds for a
+ * native-layout class instance: CGen fell out of its native field path, landed
+ * here, and this function discarded the write.
+ *
+ * A null receiver reports the ordinary null-property error rather than the
+ * shape error, so `x.f = v` on a null `x` reads the way the language spec
+ * describes it. */
 static inline XrValue xrt_setprop_key(XrValue obj, XrValue key, XrValue val) {
     if (!XR_IS_STR(key))
-        return val;
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE,
+                        "property name must be a string in a name-keyed store");
     if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
         return val;
     }
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
         return xrt_json_set_name(obj, xr_str_data(key), val);
+    if (XR_IS_NULL(obj))
+        xrt_throw_error(XR_ERR_NULL_PROPERTY, "property store on a null value");
+    xrt_throw_error(XR_ERR_TYPE_NO_OPERATOR, "value has no name-keyed properties to store into");
     return val;
 }
 
