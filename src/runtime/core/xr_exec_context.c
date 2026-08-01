@@ -45,11 +45,18 @@ void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t
      * An EXEC_LOCAL context arriving here is a different matter: the domain
      * says "dies with its execution" while the allocator says "lives until
      * teardown", and nothing else reports that contradiction. Task 250 gives
-     * the VM's root execution a real heap, so the VM no longer lands here —
-     * but a standalone AOT runtime still does, because it installs an
-     * execution context only around cancellation cleanup. Assert in debug so
-     * the remaining cases stay visible, and keep the fallback so they keep
-     * working until AOT carries an exec heap of its own. */
+     * the VM's root execution a real heap, so the VM no longer lands here.
+     *
+     * Neither does standalone AOT, despite what this comment claimed until
+     * task 252 measured it: AOT does not route through this allocator at all.
+     * It has its own object model (native structs, stack-allocated when they
+     * do not escape, xrt_arc_alloc otherwise) and never sees a storage domain.
+     * Its gap is a different one — no execution-scoped bulk release, so 247's
+     * L2 bound does not hold there — and that is 252, not this fallback.
+     *
+     * The assert therefore guards a path with no known caller. Keep both: an
+     * EXEC_LOCAL allocation reaching a heap that outlives the execution is a
+     * contradiction worth failing on, whoever introduces it next. */
     XR_DCHECK(ctx->domain != XR_STORAGE_EXEC_LOCAL,
               "EXEC_LOCAL allocation context has no exec heap; object will be immortal");
     return xr_fixed_heap_alloc(&ctx->core->fixed_heap, size, type);
