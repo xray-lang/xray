@@ -2275,6 +2275,45 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
     return true;
 }
 
+/* The general slot read, reached once every layout-specific shape above has
+ * declined: no struct layout, no json field table, no tuple ordinal. */
+static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
+                                       struct XrType *result_type,
+                                       XiSequenceEvidenceIds *sequence_ids) {
+    MemberAccessNode *ma = &node->as.member_access;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = obj;
+    v->aux = (void *) arena_strdup(l->func, ma->name);
+    v->aux_int = xi_lower_method_symbol(l, ma->name);
+    v->line = (uint32_t) node->line;
+    /* Reading a `weak` field promotes to a strong reference (W1), so unlike an
+     * ordinary field load its result is OWNED and ARC must drop it. Recorded
+     * as a fact here, where the field's declaration is still visible. */
+    if (xi_lower_member_is_weak_field(l, obj, ma->name))
+        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_LOAD;
+    /* Ordinary enum value properties participate in the metadata reachability
+     * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
+     * enum phis can carry an anonymous enum-shaped type; tagging that as a
+     * concrete enum domain would make the fail-closed descriptor verifier
+     * reject otherwise valid `.name`/`.ordinal` code.  Descriptor selections
+     * above always carry their concrete owner and remain strict. */
+    if (obj->type && obj->type->kind == XR_KIND_ENUM && obj->type->enum_type.enum_name &&
+        obj->type->enum_type.layout && ma->name) {
+        if (strcmp(ma->name, "name") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_NAME);
+        else if (strcmp(ma->name, "ordinal") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_ORDINAL);
+    }
+    xi_lower_apply_sequence_evidence_ids(v, sequence_ids);
+    xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
+    if (obj->type && XR_TYPE_IS_JSON(obj->type))
+        xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
+                                     XG_JSON_ACCESS_FIELD_GET);
+    return v;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiSequenceEvidenceIds sequence_ids;
@@ -2399,37 +2438,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         }
     }
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
-    if (!v)
-        return NULL;
-    v->args[0] = obj;
-    v->aux = (void *) arena_strdup(l->func, ma->name);
-    v->aux_int = xi_lower_method_symbol(l, ma->name);
-    v->line = (uint32_t) node->line;
-    /* Reading a `weak` field promotes to a strong reference (W1), so unlike an
-     * ordinary field load its result is OWNED and ARC must drop it. Recorded
-     * as a fact here, where the field's declaration is still visible. */
-    if (xi_lower_member_is_weak_field(l, obj, ma->name))
-        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_LOAD;
-    /* Ordinary enum value properties participate in the metadata reachability
-     * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
-     * enum phis can carry an anonymous enum-shaped type; tagging that as a
-     * concrete enum domain would make the fail-closed descriptor verifier
-     * reject otherwise valid `.name`/`.ordinal` code.  Descriptor selections
-     * above always carry their concrete owner and remain strict. */
-    if (obj->type && obj->type->kind == XR_KIND_ENUM && obj->type->enum_type.enum_name &&
-        obj->type->enum_type.layout && ma->name) {
-        if (strcmp(ma->name, "name") == 0)
-            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_NAME);
-        else if (strcmp(ma->name, "ordinal") == 0)
-            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_ORDINAL);
-    }
-    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-    xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type))
-        xi_lower_bind_json_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
-                                     XG_JSON_ACCESS_FIELD_GET);
-    return v;
+    return lower_member_slot_load(l, node, obj, result_type, &sequence_ids);
 }
 
 static XiValue *lower_member_set_target(XiValue *obj) {

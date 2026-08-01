@@ -1,0 +1,6 @@
+// W3（规范 16.3）：标量没有引用计数、没有死亡时刻，weak 加在上面会静默
+// 地什么都不是——比拒绝它更糟。
+class Counter {
+    weak n: int?
+    constructor() { this.n = null }
+}

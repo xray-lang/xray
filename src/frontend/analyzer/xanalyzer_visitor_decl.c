@@ -330,6 +330,52 @@ static bool xa_type_can_be_weak(const XrType *type) {
     }
 }
 
+/* Does an instance of this type carry a `weak` field, its bases included? */
+static bool xa_type_declares_weak_field(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
+        return false;
+    for (XrClassInfo *c = type->instance.class_ref; c; c = c->base) {
+        for (int i = 0; i < c->field_count; i++) {
+            XaSymbol *f = c->fields[i];
+            if (f && f->is_weak)
+                return true;
+        }
+    }
+    return false;
+}
+
+/* W4 (spec 16.3): `weak` is only meaningful in the EXEC_LOCAL domain.
+ *
+ * Clearing a weak slot (W5) runs off the owning coroutine's heap when the
+ * target's last strong reference goes. An object in a shared or module-static
+ * domain outlives — or is reachable outside — that heap, so there is no single
+ * death point to hang the clearing on: the slot would keep reading a target
+ * that some other execution context already released. Rejecting it at the
+ * declaration is the only place the user can still choose a different design.
+ *
+ * TRANSFERABLE is deliberately absent: a transferred object moves between
+ * coroutines one owner at a time, so a death point still exists. */
+static void xa_check_weak_storage_domain(XaInferContext *ctx, const XrType *type, uint8_t domain,
+                                         const XrLocation *loc) {
+    if (domain != XR_STORAGE_CONST_SHARED && domain != XR_STORAGE_SYNC_SHARED &&
+        domain != XR_STORAGE_MODULE_STATIC)
+        return;
+    if (!xa_type_declares_weak_field(type))
+        return;
+    const char *domain_label = domain == XR_STORAGE_MODULE_STATIC  ? "module-static"
+                               : domain == XR_STORAGE_CONST_SHARED ? "const-shared"
+                                                                   : "sync-shared";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "a type with a weak field cannot live in %s storage: nothing there would clear the "
+             "slot when its target dies",
+             domain_label);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
+                               loc);
+}
+
 static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
     if (!field)
         return false;
@@ -4227,6 +4273,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     if (links->declared_type) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_validate_hashable_key_type(ctx, links->declared_type, NULL, "type annotation", &loc);
+        xa_check_weak_storage_domain(ctx, links->declared_type, links->storage_domain, &loc);
     }
 
     /* Qualify the declaration through the canonical type constructor. Never
