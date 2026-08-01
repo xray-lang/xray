@@ -166,6 +166,8 @@ vmcase(OP_GETFIELD) {
         vmbreak;
     }
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
+    if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
+        vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
         if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
@@ -185,6 +187,8 @@ vmcase(OP_SETFIELD) {
     XrValue inst_val = R(a);
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
     XrValue val = R(c);
+    if (xr_weak_instance_field_store(vm_weak_heap(vm_ctx), inst_obj, field_idx, val))
+        vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
         if (!xr_vm_instance_struct_set_field(isolate, inst_obj, field_idx, val)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid value for struct field write");
@@ -233,6 +237,8 @@ vmcase(OP_GETFIELD_IC) {
 
     // Fast path: monomorphic IC hit
     if (cache && xr_ic_field_lookup_mono(cache, cls, field_name_idx, &field_idx)) {
+        if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
+            vmbreak;
         if (cls->struct_layout) {
             if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
@@ -245,6 +251,8 @@ vmcase(OP_GETFIELD_IC) {
 
     // Fast path: polymorphic IC hit
     if (cache && xr_ic_field_lookup_poly(cache, cls, field_name_idx, &field_idx)) {
+        if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
+            vmbreak;
         if (cls->struct_layout) {
             if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
@@ -267,6 +275,10 @@ vmcase(OP_GETFIELD_IC) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field '%s' not found", field_name->data);
     }
 
+    /* A weak slot is never inline-cached: the cache records an index and the
+     * fast paths read that slot raw, which would hand back the handle. */
+    if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
+        vmbreak;
     if (cls->struct_layout) {
         if (!xr_vm_instance_struct_get_field(isolate, inst_obj, field_idx, &R(a))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
@@ -540,11 +552,8 @@ getprop_instance:;
      * level bit, so a class with no weak field keeps every fast path. */
     if (inst->klass && (inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {
         int weak_idx = xr_class_lookup_field(inst->klass, prop_symbol);
-        if (weak_idx >= 0 && xr_class_is_field_weak(inst->klass, weak_idx)) {
-            /* W1: the read promotes to a strong reference, or yields null. */
-            R(a) = xr_weak_field_load(inst->fields[weak_idx]);
+        if (weak_idx >= 0 && xr_weak_instance_field_load(inst, weak_idx, &R(a)))
             vmbreak;
-        }
     }
 
     // Dynamic-layout fast path: hidden-class instance, lookup may miss
@@ -710,20 +719,9 @@ vmcase(OP_SETPROP) {
     /* Same reasoning as OP_GETPROP: a weak slot holds a handle. */
     if (inst_s->klass && (inst_s->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {
         int weak_idx = xr_class_lookup_field(inst_s->klass, prop_symbol);
-        if (weak_idx >= 0 && xr_class_is_field_weak(inst_s->klass, weak_idx)) {
-            XrCoroHeap *weak_heap = xr_current_coro_heap();
-            XrValue slot = xr_weak_field_store(weak_heap, value);
-            /* Release whatever handle the slot held before, so replacing a
-             * weak reference does not leak the old handle. */
-            XrValue prev = inst_s->fields[weak_idx];
-            inst_s->fields[weak_idx] = slot;
-            xr_rc_release_value(weak_heap, prev);
-            /* `value` is NOT released here: ARC does not move it in, because
-             * XI_LOWERING_FLAG_WEAK_FIELD_STORE marks this store non-consuming.
-             * The source keeps its own death point, which is what makes the
-             * target outlive the assignment. */
+        if (weak_idx >= 0 &&
+            xr_weak_instance_field_store(vm_weak_heap(vm_ctx), inst_s, weak_idx, value))
             vmbreak;
-        }
     }
 
     // Dynamic-layout fast path: hidden-class instance, missing field creates

@@ -53,7 +53,10 @@
 #include <stdint.h>
 
 #include "xobj_header.h"
+#include "../class/xinstance.h"
 #include "../value/xvalue.h"
+#include "xalloc_unified.h"
+#include "xcoro_heap.h"
 
 struct XrCoroHeap;
 
@@ -109,5 +112,51 @@ XrValue xr_weak_field_load(XrValue slot);
 /* Write a weak slot. Returns the value to store — a handle for the target, or
  * null. The caller releases whatever the slot held before. */
 XrValue xr_weak_field_store(struct XrCoroHeap *heap, XrValue target);
+
+/* ========== By-index entry points ==========
+ *
+ * The name-keyed property opcodes are not the only way into a field: once the
+ * receiver's class is known the compiler emits index-based reads and writes
+ * (and inline-cached ones), which would otherwise read the handle raw. Every
+ * one of those paths has an instance and an index in hand, so they share these
+ * two.
+ *
+ * Both answer false for a class with no weak field after a single bit test,
+ * which is what keeps the ordinary paths and their inline caches intact. */
+
+/* Reads a weak slot into *out and returns true; false if index is not weak. */
+static inline bool xr_weak_instance_field_load(XrInstance *inst, int index, XrValue *out) {
+    if (!inst || !inst->klass || !(inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS))
+        return false;
+    if (!xr_class_is_field_weak(inst->klass, index))
+        return false;
+    *out = xr_weak_field_load(inst->fields[index]); /* W1: promotes, or null */
+    return true;
+}
+
+/* Writes a weak slot and returns true; false if index is not weak.
+ *
+ * `val` is deliberately not released: ARC never moves it in, because
+ * XI_LOWERING_FLAG_WEAK_FIELD_STORE marks the store non-consuming. The source
+ * keeps its own death point — that is what lets the target outlive the
+ * assignment. The handle previously in the slot IS released, so re-pointing a
+ * weak field does not leak it.
+ *
+ * The heap comes from the caller, not from xr_current_coro_heap(): that one
+ * reads the worker's TLS, which is empty while top-level script code runs. A
+ * NULL heap made the handle allocation fail, the slot took null, and every
+ * read of a perfectly live target came back null. */
+static inline bool xr_weak_instance_field_store(struct XrCoroHeap *heap, XrInstance *inst,
+                                                int index, XrValue val) {
+    if (!inst || !inst->klass || !(inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS))
+        return false;
+    if (!xr_class_is_field_weak(inst->klass, index))
+        return false;
+    XrValue slot = xr_weak_field_store(heap, val);
+    XrValue prev = inst->fields[index];
+    inst->fields[index] = slot;
+    xr_rc_release_value(heap, prev);
+    return true;
+}
 
 #endif /* XR_WEAK_HANDLE_H */
