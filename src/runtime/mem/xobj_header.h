@@ -186,6 +186,31 @@ static inline bool xr_rc_is_sticky(int32_t rc) {
     return rc <= XR_RC_STICKY_BAND;
 }
 
+/* May this object be handed to another execution context and read there?
+ *
+ * Two shapes qualify, for different reasons:
+ *   - shared: an atomic refcount, so a second owner is representable;
+ *   - immortal: runtime-managed with a sticky refcount, so it is never
+ *     released and no owner has to be tracked at all.
+ *
+ * A plain EXEC_LOCAL object qualifies as NEITHER — it belongs to one
+ * coroutine heap and dies with it. That is exactly the case a caller must
+ * reject rather than paper over.
+ *
+ * Named rather than open-coded because "MANAGED and sticky" is a physical
+ * tell, not the question being asked. Task 250 gives the VM's root execution
+ * a real EXEC_LOCAL heap, so objects created at top level stop being immortal
+ * — call sites that spelled out the bit test would silently change meaning,
+ * while this one keeps asking the same question and starts answering "no". */
+static inline bool xr_obj_is_publishable_across_executions(const XrObjHeader *o) {
+    if (!o)
+        return false;
+    if (XR_OBJ_IS_SHARED(o))
+        return true;
+    int32_t rc = atomic_load_explicit(&((XrObjHeader *) o)->refcount, memory_order_relaxed);
+    return (o->extra & XR_OBJ_MANAGED) != 0 && xr_rc_is_sticky(rc);
+}
+
 /* Cold path for dup on a non-thread-local object (rc < 0). */
 static inline void xr_obj_dup_slow(XrObjHeader *o) {
     if (o->extra & XR_OBJ_STORAGE_BUMP)

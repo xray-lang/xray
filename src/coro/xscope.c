@@ -155,9 +155,7 @@ static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScop
     if (XR_IS_NULL(scope->first_error)) {
         if (XR_IS_PTR(err)) {
             XrObjHeader *obj = XR_VALUE_GCPTR(err);
-            int32_t rc = obj ? atomic_load_explicit(&obj->refcount, memory_order_relaxed) : 0;
-            bool module_static = obj && (obj->extra & XR_OBJ_MANAGED) != 0 && xr_rc_is_sticky(rc);
-            XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || module_static),
+            XR_CHECK(xr_obj_is_publishable_across_executions(obj),
                      "linked scope error requires compiler-planned shared publication");
             if (XR_OBJ_IS_SHARED(obj))
                 xr_shared_retain(obj);
