@@ -186,7 +186,7 @@ Xray 采用多层内存管理：
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
 - 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
-- cycle collector 由显式 `runtime.collectCycles()` 或候选根数量达到自适应阈值触发。
+- 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
 - cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
 
 <!-- /xr-spec:cn -->
@@ -374,7 +374,7 @@ Xray uses a layered memory management strategy:
 **Memory observation points**:
 - The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
 - The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
-- The cycle collector runs on explicit `runtime.collectCycles()` or automatically when the potential-root count reaches an adaptive threshold.
+- Reference cycles are not reclaimed at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk release of the coroutine heap (L2).
 - The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
 
 <!-- /xr-spec:en -->

@@ -380,10 +380,6 @@ XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct_in(XrAllocationContext *allo
     xr_obj_header_init_type(&value->hdr, XR_TINSTANCE);
     xr_enum_aggregate_init_inplace(value, enum_type, member_index, payloads,
                                    (uint32_t) expected_payload);
-    if (expected_payload > 0) {
-        XR_OBJ_SET_FLAG(&value->hdr, XR_OBJ_CYCLE_CANDIDATE);
-        value->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
-    }
     if (payloads && payloads != local_payloads)
         xr_free(payloads);
 

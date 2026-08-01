@@ -306,13 +306,9 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "writeFileBytes", "(path: Path, data: Array<byte>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "", "xrt_io_write_file_bytes", "pv", "value", "", "", "", "system", "method", 2, true},
     {"io", "writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", "io_writeStderr", "normal", "", "xrt_io_write_stderr", "s", "value", "", "", "", "system", "method", 1, true},
     {"io", "writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", "io_writeStdout", "normal", "", "xrt_io_write_stdout", "s", "value", "", "", "", "system", "method", 1, true},
-    {"runtime", "collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", "runtime_collect_cycles", "normal", "", "xr_aot_runtime_collect_cycles", "", "value", "", "", "", "runtime", "", 0, false},
-    {"runtime", "disableCycleCollection", "(): ()", "Pause the automatic cycle collector", "runtime_disable_cycle_collection", "normal", "", "xr_aot_runtime_disable_cycle_collection", "", "value", "", "", "", "runtime", "", 0, false},
-    {"runtime", "enableCycleCollection", "(): ()", "Resume the automatic cycle collector", "runtime_enable_cycle_collection", "normal", "", "xr_aot_runtime_enable_cycle_collection", "", "value", "", "", "", "runtime", "", 0, false},
-    {"runtime", "isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", "runtime_is_cycle_collection_enabled", "normal", "", "xr_aot_runtime_is_cycle_collection_enabled", "", "value", "", "", "", "runtime", "", 0, false},
     {"runtime", "liveBytes", "(): int", "Get live memory usage in bytes", "runtime_live_bytes", "normal", "", "xr_aot_runtime_live_bytes", "", "value", "", "", "", "runtime", "", 0, false},
     {"runtime", "liveObjects", "(): int", "Get live object count", "runtime_live_objects", "normal", "", "xr_aot_runtime_live_objects", "", "value", "", "", "", "runtime", "", 0, false},
-    {"runtime", "info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap and cycle collector", "runtime_info", "normal", "", "xr_aot_runtime_info", "", "value", "", "", "", "runtime", "", 0, false},
+    {"runtime", "info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap", "runtime_info", "normal", "", "xr_aot_runtime_info", "", "value", "", "", "", "runtime", "", 0, false},
     {"mem", "fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", "mem_fence", "normal", "", "xrt_mem_fence", "v", "value", "", "", "", "core", "method", 1, true},
     {"mem", "prefetch", "(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", "mem_prefetch", "normal", "", "xrt_mem_prefetch", "vv", "value", "", "", "", "core", "method", 2, true},
     {"mem", "cacheFlush", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", "mem_cache_flush", "normal", "", "xrt_mem_cache_flush", "vv", "value", "", "", "", "core", "method", 2, true},
@@ -427,8 +423,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_runtime_Runtime
     {"runtime", "RuntimeInfo", "liveBytes", "int", true},
     {"runtime", "RuntimeInfo", "liveKB", "float", true},
     {"runtime", "RuntimeInfo", "liveObjects", "int", true},
-    {"runtime", "RuntimeInfo", "cycleCollectionEnabled", "bool", true},
-    {"runtime", "RuntimeInfo", "cycleCollections", "int", true},
     {"runtime", "RuntimeInfo", "finalizerCount", "int", true},
     {"runtime", "RuntimeInfo", "blocks", "int", true},
     {"runtime", "RuntimeInfo", "freeBlocks", "int", true},
@@ -523,7 +517,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOpt
 };
 
 static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
-    {"runtime", "RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", xr_stdlib_record_fields_runtime_RuntimeInfo, 9, true},
+    {"runtime", "RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", xr_stdlib_record_fields_runtime_RuntimeInfo, 7, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_record_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_record_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_record_fields_Coro_CoroDeadlock, 2, true},

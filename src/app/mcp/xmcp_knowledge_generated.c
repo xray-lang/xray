@@ -3555,21 +3555,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo",
-        .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, cycleCollectionEnabled: bool, cycleCollections: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
+        .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
         .summary = "Typed snapshot of the current coroutine heap and cycle collector",
     },
     {
         .name = "RuntimeInfo.blocks",
-        .signature = "const int",
-        .summary = "Record field",
-    },
-    {
-        .name = "RuntimeInfo.cycleCollectionEnabled",
-        .signature = "const bool",
-        .summary = "Record field",
-    },
-    {
-        .name = "RuntimeInfo.cycleCollections",
         .signature = "const int",
         .summary = "Record field",
     },
@@ -3604,29 +3594,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
         .summary = "Record field",
     },
     {
-        .name = "collectCycles",
-        .signature = "(): int",
-        .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
-    },
-    {
-        .name = "disableCycleCollection",
-        .signature = "(): ()",
-        .summary = "Pause the automatic cycle collector",
-    },
-    {
-        .name = "enableCycleCollection",
-        .signature = "(): ()",
-        .summary = "Resume the automatic cycle collector",
-    },
-    {
         .name = "info",
         .signature = "(): RuntimeInfo",
-        .summary = "Get a typed snapshot of the current coroutine heap and cycle collector",
-    },
-    {
-        .name = "isCycleCollectionEnabled",
-        .signature = "(): bool",
-        .summary = "Check if automatic cycle collection is enabled",
+        .summary = "Get a typed snapshot of the current coroutine heap",
     },
     {
         .name = "liveBytes",
@@ -8896,7 +8866,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# runtime module\n"
             "\n"
-            "Runtime diagnostics and current coroutine heap introspection. Use `runtime.collectCycles()` to request cycle collection, and `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory.\n"
+            "Runtime diagnostics and current coroutine heap introspection. Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes, and reference cycles are not collected at runtime (spec 16.8).\n"
             "\n"
             "Usage: `import runtime` then call `runtime.function()`.\n"
             "\n"
@@ -8904,21 +8874,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, cycleCollectionEnabled: bool, cycleCollections: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current coroutine heap and cycle collector |\n"
+            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current coroutine heap and cycle collector |\n"
             "| `runtime.RuntimeInfo.blocks` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.cycleCollectionEnabled` | `const bool` | Record field |\n"
-            "| `runtime.RuntimeInfo.cycleCollections` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.fullBlocks` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.liveBytes` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.liveKB` | `const float` | Record field |\n"
             "| `runtime.RuntimeInfo.liveObjects` | `const int` | Record field |\n"
-            "| `runtime.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
-            "| `runtime.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
-            "| `runtime.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
-            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current coroutine heap and cycle collector |\n"
-            "| `runtime.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
+            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current coroutine heap |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
             "",

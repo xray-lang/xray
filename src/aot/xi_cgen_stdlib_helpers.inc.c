@@ -229,8 +229,7 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
         fprintf(out,
                 "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
                 "(%s){ .%s = _ri.live_bytes, .%s = _ri.live_kb, "
-                ".%s = _ri.live_objects, .%s = _ri.cycle_collection_enabled, "
-                ".%s = _ri.cycle_collections, .%s = _ri.finalizer_count, "
+                ".%s = _ri.live_objects, .%s = _ri.finalizer_count, "
                 ".%s = _ri.blocks, .%s = _ri.free_blocks, .%s = _ri.full_blocks }; })",
                 aot_ctx, plan->rep.c_type, fields[0], fields[1], fields[2], fields[3], fields[4],
                 fields[5], fields[6], fields[7], fields[8]);
@@ -248,16 +247,14 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
             "\"liveObjects\", \"cycleCollectionEnabled\", \"cycleCollections\", "
             "\"finalizerCount\", \"blocks\", \"freeBlocks\", \"fullBlocks\"}; "
             "XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
-            "XrValue _riv = xrt_record_new_named(9, _rif); "
+            "XrValue _riv = xrt_record_new_named(7, _rif); "
             "xrt_json_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
             "xrt_json_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
             "xrt_json_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
-            "xrt_json_set_field(_riv, 3, XR_FROM_BOOL(_ri.cycle_collection_enabled)); "
-            "xrt_json_set_field(_riv, 4, XR_FROM_INT(_ri.cycle_collections)); "
-            "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.finalizer_count)); "
-            "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.blocks)); "
-            "xrt_json_set_field(_riv, 7, XR_FROM_INT(_ri.free_blocks)); "
-            "xrt_json_set_field(_riv, 8, XR_FROM_INT(_ri.full_blocks)); "
+            "xrt_json_set_field(_riv, 3, XR_FROM_INT(_ri.finalizer_count)); "
+            "xrt_json_set_field(_riv, 4, XR_FROM_INT(_ri.blocks)); "
+            "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
+            "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
             "_riv; })",
             aot_ctx);
 }

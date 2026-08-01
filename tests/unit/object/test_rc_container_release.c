@@ -216,7 +216,17 @@ TEST(cell_destroy_and_replace_release_values) {
     teardown();
 }
 
-TEST(closure_cell_cycle_is_collected) {
+TEST(closure_cell_cycle_is_not_reclaimed_and_not_freed_early) {
+    /* A closure holding a cell that holds the closure is a reference cycle.
+     * Task 247 removed the trial-deletion collector: cycles are no longer
+     * reclaimed at runtime. What must still hold is that dropping the outside
+     * references leaves both objects ALIVE — reaching RC 0 on each side while
+     * the other still points at it must not free either one, or the cycle
+     * would become a use-after-free rather than a bounded leak.
+     *
+     * The leak is bounded by the coroutine heap (spec 16.8 L2): teardown frees
+     * both. Detecting the cycle is the development-mode detector's job, and it
+     * reports rather than reclaims. */
     setup();
     XrProto *proto = make_proto_with_upvalues(1);
     ASSERT_NOT_NULL(proto);
@@ -239,15 +249,10 @@ TEST(closure_cell_cycle_is_collected) {
 
     xr_rc_release_value(heap, closure_value);
     xr_rc_release_value(heap, cell_value);
+
+    /* Both sides still hold each other, so neither may be destroyed. */
     ASSERT_FALSE(is_dead(&closure->hdr));
     ASSERT_FALSE(is_dead(&cell->hdr));
-    ASSERT_EQ_INT(closure->hdr.refcount, 0);
-    ASSERT_EQ_INT(cell->hdr.refcount, 0);
-    ASSERT_TRUE(heap->cycle_root_count >= 2);
-
-    xr_coro_heap_collect_cycles(heap);
-    ASSERT_TRUE(is_dead(&closure->hdr));
-    ASSERT_TRUE(is_dead(&cell->hdr));
 
     xr_vm_proto_free(proto);
     teardown();
@@ -309,7 +314,7 @@ int main(void) {
     RUN_TEST(dynamic_instance_destroy_releases_overflow_fields);
     RUN_TEST(closure_destroy_releases_upvals);
     RUN_TEST(cell_destroy_and_replace_release_values);
-    RUN_TEST(closure_cell_cycle_is_collected);
+    RUN_TEST(closure_cell_cycle_is_not_reclaimed_and_not_freed_early);
     RUN_TEST(whole_block_reclaim_returns_empty_blocks);
     TEST_REPORT();
     return TEST_EXIT();

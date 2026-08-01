@@ -593,8 +593,6 @@ static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
     {"liveBytes", "int"},
     {"liveKB", "float"},
     {"liveObjects", "int"},
-    {"cycleCollectionEnabled", "bool"},
-    {"cycleCollections", "int"},
     {"finalizerCount", "int"},
     {"blocks", "int"},
     {"freeBlocks", "int"},
@@ -602,21 +600,17 @@ static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
 };
 
 static const XaBuiltinRecord g_gen_runtime_records[] = {
-    {"RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", g_gen_runtime_runtimeinfo_record_fields, 9, true},
+    {"RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", g_gen_runtime_runtimeinfo_record_fields, 7, true},
 };
 #define GEN_RUNTIME_RECORD_COUNT 1
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
-    {"collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"disableCycleCollection", "(): ()", "Pause the automatic cycle collector", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"enableCycleCollection", "(): ()", "Resume the automatic cycle collector", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"liveObjects", "(): int", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap and cycle collector", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_RUNTIME_FUNCTION_COUNT 7
+#define GEN_RUNTIME_FUNCTION_COUNT 3
 
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {

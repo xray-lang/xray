@@ -308,10 +308,6 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closur
     XR_DCHECK(X != NULL, "coro_reset_for_call: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
 
-    if (coro->heap) {
-        coro->heap->cycle_collection_disabled = 0;
-    }
-
     vm_backend_reset_execution_state(coro, X);
 
     bool bound = vm_backend_bind_closure_entry(coro, X, closure, NULL, 0, false);

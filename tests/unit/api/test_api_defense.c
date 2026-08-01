@@ -135,20 +135,9 @@ TEST(api_isolate_get_stats_null) {
         return;
     }
     size_t bytes = 999;
-    int cycle_count = 999;
-    xray_vm_get_stats(NULL, &bytes, &cycle_count);
+    xray_vm_get_stats(NULL, &bytes);
     // After NULL guard returns early, values should be unchanged
     ASSERT_EQ_UINT(bytes, 999);
-    ASSERT_EQ_INT(cycle_count, 999);
-}
-
-TEST(api_isolate_collect_garbage_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    xray_vm_collect_cycles(NULL);
-    ASSERT_TRUE(1);
 }
 
 TEST(api_isolate_set_trace_null) {
@@ -202,11 +191,9 @@ TEST(api_isolate_stats_valid) {
     ASSERT_NOT_NULL(iso);
 
     size_t bytes = 0;
-    int cycle_count = -1;
-    xray_vm_get_stats(iso, &bytes, &cycle_count);
+    xray_vm_get_stats(iso, &bytes);
     // After creation, some memory should be allocated
     ASSERT_GE(bytes, 0);
-    ASSERT_GE(cycle_count, 0);
 
     xray_vm_delete(iso);
 }
@@ -226,7 +213,6 @@ RUN_TEST(api_isolate_get_backend_null);
 RUN_TEST(api_isolate_set_userdata_null);
 RUN_TEST(api_isolate_get_userdata_null);
 RUN_TEST(api_isolate_get_stats_null);
-RUN_TEST(api_isolate_collect_garbage_null);
 RUN_TEST(api_isolate_set_trace_null);
 RUN_TEST(api_isolate_set_dump_bytecode_null);
 

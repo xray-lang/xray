@@ -84,12 +84,7 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexMatchClass, "make_match_object: regexMatchClass not registered");
 
-    /* Temporarily disable GC: multiple allocations below (Instance,
-     * String, Array) are not rooted from the VM stack. */
     XrCoroutine *coro = xr_current_coro(isolate);
-    XrCoroHeap *heap = coro ? coro->heap : NULL;
-    if (heap)
-        heap->cycle_collection_disabled++;
 
     XrInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
     XR_DCHECK(inst != NULL, "make_match_object: instance alloc failed");
@@ -122,8 +117,6 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
     }
     xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_GROUPS, xr_value_from_array(groups));
 
-    if (heap)
-        heap->cycle_collection_disabled--;
     return XR_FROM_PTR(inst);
 }
 

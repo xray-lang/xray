@@ -660,28 +660,27 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     ASSERT_NOT_NULL(runtime);
     XrAotContext ctx = aot_test_context_for_runtime(runtime);
 
-    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+    /* The control plane resolves its heap from the root descriptor. Outside a
+     * begin/end pair there is no heap, so introspection reads zero; inside one
+     * it reports the descriptor's heap. This used to be probed through the
+     * cycle-collection toggles, which task 247 removed along with the
+     * collector — live_bytes/live_objects say the same thing about heap
+     * binding without asserting anything about reclamation policy. */
+    ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
     ASSERT_TRUE(xr_aot_root_descriptor_begin(runtime));
-    ASSERT_TRUE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
 
-    xr_aot_runtime_disable_cycle_collection(&ctx);
-    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
-    XrAotRuntimeInfo disabled = xr_aot_runtime_info(&ctx);
-    ASSERT_FALSE(disabled.cycle_collection_enabled);
-    ASSERT_GE(disabled.live_bytes, 0);
-    ASSERT_GE(disabled.live_objects, 0);
+    XrAotRuntimeInfo active = xr_aot_runtime_info(&ctx);
+    ASSERT_GE(active.live_bytes, 0);
+    ASSERT_GE(active.live_objects, 0);
+    ASSERT_GE(active.finalizer_count, 0);
 
-    xr_aot_runtime_enable_cycle_collection(&ctx);
-    ASSERT_TRUE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
-    ASSERT_GE(xr_aot_runtime_collect_cycles(&ctx), disabled.cycle_collections);
     ASSERT_TRUE(xr_aot_root_descriptor_end(runtime));
-    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+    ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);
 
     XrAotContext detached;
     memset(&detached, 0, sizeof(detached));
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&detached), 0);
     ASSERT_EQ_INT(xr_aot_runtime_live_objects(&detached), 0);
-    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&detached));
 
     xr_aot_runtime_delete(runtime);
 }

@@ -12,7 +12,6 @@
  *   event is the Bacon-Rajan cycle collector. This module exposes the
  *   runtime control plane (task 154 moved it out of `mem`, which now only
  *   carries raw-memory capabilities):
- *   - runtime.collectCycles()            - run cycle collection + reclaim
  *   - runtime.disableCycleCollection()   - pause automatic cycle collection
  *   - runtime.enableCycleCollection()    - resume automatic cycle collection
  *   - runtime.isCycleCollectionEnabled() - automatic collector state
@@ -59,16 +58,6 @@ static XrCoroHeap *get_heap(XrVMRuntime *isolate) {
 // Run the cycle collector + whole-block reclaim on the current coroutine.
 // Returns the cumulative cycle-collection count. Runs even when the
 // automatic collector is disabled (explicit user request).
-static XrValue runtime_collect_cycles(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) argc;
-    (void) args;
-    XrCoroHeap *heap = get_heap(isolate);
-    if (heap) {
-        xr_coro_heap_collect_cycles(heap);
-        return xr_int((int64_t) heap->cycle_collect_count);
-    }
-    return xr_int(0);
-}
 
 /* ========== runtime.liveBytes() ========== */
 
@@ -85,36 +74,12 @@ static XrValue runtime_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc)
 // Pause the automatic cycle collector (increment cycle_collection_disabled, saturate at 255).
 // Under RC the only thing that can be paused is the cycle-collector
 // auto-trigger; xr_cycle_add_root honours cycle_collection_disabled.
-static XrValue runtime_disable_cycle_collection(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) argc;
-    (void) args;
-    XrCoroHeap *heap = get_heap(isolate);
-    if (heap && heap->cycle_collection_disabled < 255) {
-        heap->cycle_collection_disabled++;
-    }
-    return xr_null();
-}
 
 // Resume the automatic cycle collector (decrement cycle_collection_disabled)
-static XrValue runtime_enable_cycle_collection(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) argc;
-    (void) args;
-    XrCoroHeap *heap = get_heap(isolate);
-    if (heap && heap->cycle_collection_disabled > 0) {
-        heap->cycle_collection_disabled--;
-    }
-    return xr_null();
-}
 
 /* ========== runtime.isCycleCollectionEnabled() ========== */
 
 // Whether the automatic cycle collector is enabled
-static XrValue runtime_is_cycle_collection_enabled(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) argc;
-    (void) args;
-    XrCoroHeap *heap = get_heap(isolate);
-    return xr_bool(heap && heap->cycle_collection_disabled == 0);
-}
 
 /* ========== runtime.liveObjects() ========== */
 
@@ -149,10 +114,6 @@ static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
                        xr_float(heap ? (double) heap->totalbytes / 1024.0 : 0.0));
     xr_json_set_by_key(isolate, record, "liveObjects",
                        xr_int(heap ? (int64_t) heap->object_count : 0));
-    xr_json_set_by_key(isolate, record, "cycleCollectionEnabled",
-                       xr_bool(heap && heap->cycle_collection_disabled == 0));
-    xr_json_set_by_key(isolate, record, "cycleCollections",
-                       xr_int(heap ? heap->cycle_collect_count : 0));
     xr_json_set_by_key(isolate, record, "finalizerCount",
                        xr_int(heap ? (int64_t) heap->finalizer_count : 0));
     xr_json_set_by_key(isolate, record, "blocks", xr_int((int64_t) stats.total_blocks));

@@ -69,7 +69,6 @@ void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type) {
          * hot-path drop routes to the immortal no-op cold path. */
         obj->refcount = XR_RC_STICKY;
         obj->objsize = (uint32_t) size;
-        obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
         node->obj = obj;
         node->next = heap->objects;
         heap->objects = node;

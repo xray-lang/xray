@@ -102,14 +102,8 @@ static void coro_heap_init_runtime_state(XrCoroHeap *heap) {
     heap->totalbytes = 0;
     heap->large_bytes = 0;
     heap->is_collecting = 0;
-    heap->cycle_collection_disabled = 0;
-    heap->cycle_collecting = 0;
     heap->is_tearing_down = 0;
-    heap->cycle_collect_threshold = XR_CYCLE_COLLECT_THRESHOLD_INIT;
-    heap->cycle_collect_count = 0;
     heap->object_count = 0;
-    heap->cycle_collect_time_ns = 0;
-    heap->last_cycle_collect_time_ns = 0;
     heap->finalizer_count = 0;
 }
 
@@ -339,7 +333,6 @@ void xr_coro_heap_teardown_inplace(XrCoroHeap *heap) {
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
-    xr_cycle_roots_destroy(heap);
     xr_weak_table_destroy(heap);
 }
 
@@ -408,7 +401,6 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
-    xr_cycle_roots_destroy(heap);
     xr_weak_table_destroy(heap);
 
     coro_heap_init_runtime_state(heap);
@@ -603,20 +595,10 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
     obj->extra |= XR_OBJ_DEAD;
 
-    /* Destroy is the single convergence point for every drop path (VM
-     * OP_DROP, container/field release, and the cycle
-     * collector), so unlink a cycle-tracked object from cycle_roots here
-     * while its memory is still valid. A stale pointer left in cycle_roots
-     * would be aliased by a later same-size-class freelist reuse, putting
-     * the same live object in the roots array twice (double trial-decrement
-     * → use-after-free). Cleared before the freelist push below. */
     /* W5: a weak field reads null from exactly this instant. Gated on the
      * flag, so an object nobody weakly references pays one bit test. */
     if (heap && (obj->extra & XR_OBJ_HAS_WEAK))
         xr_weak_table_target_dying(heap, obj);
-
-    if (heap && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
-        xr_cycle_remove_root(heap, obj);
 
     /* Run the type destructor (closes files/sockets, frees side buffers,
      * drops child references — which may push more onto deferred_drops). */
@@ -786,10 +768,6 @@ XrObjHeader *xr_coro_heap_new_obj(XrCoroHeap *heap, uint8_t type, size_t size) {
     obj->type = type;
     obj->objsize = (uint32_t) total;
     obj->extra = 0;  // Always clear extra (Region memory may be uninitialized)
-    /* Not in cycle_roots yet. MUST be the sentinel, never 0: a freelist-reused
-     * block that still read _rsv==0 would be treated as "already at roots index
-     * 0", so add_root would refuse it and remove_root would corrupt roots[0]. */
-    obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     /* RC: a freshly allocated object has exactly one owning reference (its
      * definition site). The count is 0-based and sign-tagged, so the unique
      * value is XR_RC_INIT (0). Region memory is reused/uninitialized, so this
@@ -818,7 +796,6 @@ void xr_coro_heap_print_stats(XrCoroHeap *heap) {
 
     printf("=== XrCoroHeap (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) heap->totalbytes);
-    printf("Cycle collections: %u\n", heap->cycle_collect_count);
 
     XrRegionStats istats;
     xr_region_get_stats(&heap->region, &istats);

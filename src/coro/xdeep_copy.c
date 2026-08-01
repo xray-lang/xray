@@ -612,9 +612,8 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_closure->proto = closure->proto;
     new_closure->upval_count = closure->upval_count;
     if (ctx->dst_heap)
-        XR_OBJ_SET_FLAG(&new_closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
-    for (uint16_t i = 0; i < new_closure->upval_count; i++)
-        new_closure->upvals[i] = XR_NULL_VAL;
+        for (uint16_t i = 0; i < new_closure->upval_count; i++)
+            new_closure->upvals[i] = XR_NULL_VAL;
 
     XrValue result = XR_FROM_PTR(new_closure);
     xr_copy_context_record(ctx, closure, result);
@@ -647,8 +646,7 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     if (!new_cell)
         return XR_NULL_VAL;
     if (ctx->dst_heap)
-        XR_OBJ_SET_FLAG(&new_cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
-    new_cell->value = XR_NULL_VAL;
+        new_cell->value = XR_NULL_VAL;
 
     XrValue result = XR_FROM_PTR(new_cell);
     xr_copy_context_record(ctx, cell, result);
@@ -729,10 +727,6 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         xr_obj_header_init_type(&dst->hdr, XR_TINSTANCE);
         xr_enum_aggregate_init_inplace(dst, src->enum_type, src->member_index, NULL,
                                        src->payload_count);
-        if (src->payload_count > 0) {
-            XR_OBJ_SET_FLAG(&dst->hdr, XR_OBJ_CYCLE_CANDIDATE);
-            dst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
-        }
         XrValue result = XR_FROM_PTR(dst);
         xr_copy_context_record(ctx, src, result);
         ctx->objects_copied++;

@@ -314,22 +314,11 @@ void *xray_vm_get_userdata(XrVMRuntime *isolate) {
 
 /* ========== Statistics and Debugging ========== */
 
-void xray_vm_get_stats(XrVMRuntime *isolate, size_t *bytes_allocated, int *cycle_count) {
+void xray_vm_get_stats(XrVMRuntime *isolate, size_t *bytes_allocated) {
     xray_api_check(isolate != NULL, "xray_vm_get_stats: NULL isolate");
     if (bytes_allocated)
         *bytes_allocated =
             isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
-    if (cycle_count) {
-        XrCoroHeap *heap = xr_isolate_get_heap(isolate);
-        *cycle_count = heap ? (int) heap->cycle_collect_count : 0;
-    }
-}
-
-void xray_vm_collect_cycles(XrVMRuntime *isolate) {
-    xray_api_check(isolate != NULL, "xray_vm_collect_cycles: NULL isolate");
-    XrCoroHeap *heap = xr_isolate_get_heap(isolate);
-    if (heap)
-        xr_coro_heap_collect_cycles(heap);
 }
 
 void xray_vm_set_trace(XrVMRuntime *isolate, bool enable) {

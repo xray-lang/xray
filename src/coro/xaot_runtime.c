@@ -44,31 +44,6 @@ static XrCoroHeap *aot_runtime_control_heap(const XrAotContext *ctx) {
     return NULL;
 }
 
-int64_t xr_aot_runtime_collect_cycles(const XrAotContext *ctx) {
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    if (!heap)
-        return 0;
-    xr_coro_heap_collect_cycles(heap);
-    return (int64_t) heap->cycle_collect_count;
-}
-
-void xr_aot_runtime_disable_cycle_collection(const XrAotContext *ctx) {
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    if (heap && heap->cycle_collection_disabled < UINT8_MAX)
-        heap->cycle_collection_disabled++;
-}
-
-void xr_aot_runtime_enable_cycle_collection(const XrAotContext *ctx) {
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    if (heap && heap->cycle_collection_disabled > 0)
-        heap->cycle_collection_disabled--;
-}
-
-bool xr_aot_runtime_is_cycle_collection_enabled(const XrAotContext *ctx) {
-    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
-    return heap && heap->cycle_collection_disabled == 0;
-}
-
 int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx) {
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     return heap ? heap->totalbytes : 0;
@@ -89,8 +64,6 @@ XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
     info.live_bytes = heap->totalbytes;
     info.live_kb = (double) heap->totalbytes / 1024.0;
     info.live_objects = (int64_t) heap->object_count;
-    info.cycle_collection_enabled = heap->cycle_collection_disabled == 0;
-    info.cycle_collections = (int64_t) heap->cycle_collect_count;
     info.finalizer_count = (int64_t) heap->finalizer_count;
     info.blocks = (int64_t) stats.total_blocks;
     info.free_blocks = (int64_t) stats.free_blocks;

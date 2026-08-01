@@ -126,10 +126,7 @@ typedef struct XrCoroHeap {
     // === Allocation accounting ===
     int64_t totalbytes;     // Total allocated bytes (runtime.liveBytes / runtime.info stats)
     uint8_t is_collecting;  // Re-entry guard (teardown / reset)
-    uint8_t cycle_collection_disabled;  // mem.disableCycleCollection/enableCycleCollection counter:
-                                        // gates the automatic cycle collector (xr_cycle_add_root
-                                        // auto-trigger)
-    uint8_t cycle_collecting;           // Re-entry guard for the auto-triggered cycle collector
+                            // auto-trigger)
     // Set for the whole destroy/reset sequence. While it is set, drop-to-zero
     // reclaims nothing individually: the finalize walk iterates a snapshot of
     // finalize_set and reads each entry's header to skip already-destroyed
@@ -169,10 +166,7 @@ typedef struct XrCoroHeap {
     } weak_table;
 
     // Statistics (cold; surfaced by memory/collection introspection builtins)
-    uint32_t cycle_collect_count;  // Number of cycle collector runs
-    uint32_t object_count;         // Live heap object count (incremental counter)
-    uint64_t cycle_collect_time_ns;
-    uint64_t last_cycle_collect_time_ns;
+    uint32_t object_count;     // Live heap object count (incremental counter)
     uint32_t finalizer_count;  // Total finalizers called
 
     // === RC per-object freelist (RC reclaims small objects) ===
@@ -199,13 +193,6 @@ typedef struct XrCoroHeap {
     uint32_t deferred_drop_cap;    // allocated entries (NULL/0 until first defer)
 
     // === Cycle collector (Bacon-Rajan trial deletion) ===
-    // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
-    // whose RC was decremented but did not reach zero. The collector runs on
-    // runtime.collectCycles() and frees dead cycles that pure RC cannot reclaim.
-    XrObjHeader **cycle_roots;         // growable array of potential roots (NULL until first add)
-    uint32_t cycle_root_count;         // number of entries in cycle_roots
-    uint32_t cycle_root_cap;           // capacity of cycle_roots array
-    uint32_t cycle_collect_threshold;  // auto-trigger fullgc when root count reaches this
 } XrCoroHeap;
 
 /* ========== Coroutine Heap Lifecycle API ========== */
@@ -262,56 +249,30 @@ XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *heap);
 #define xr_coro_heap_new_typed(heap, type, Type)                                                   \
     ((Type *) ((XrObjHeader *) xr_coro_heap_new_obj((heap), (type), sizeof(Type)) + 1))
 
-// Cycle collection: runs the Bacon-Rajan trial deletion collector on
-// accumulated cycle_roots, then clears the roots list. Called by runtime.collectCycles().
-XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap);
-
 /* Whole-block reclaim: return fully-dead Region blocks to the heap's free pool
  * so a later allocation of ANY size class can reuse them. Bounds peak
  * retention of long-lived coroutines under shifting size-class loads, where a
  * per-size-class RC freelist alone never lets size B reuse size A's memory.
- * Not on the alloc/free hot path — called from xr_coro_heap_collect_cycles. */
+ *
+ * Not on the alloc/free hot path. Its only trigger used to be the cycle
+ * collector, which task 247 removed; it currently has no caller and wants one
+ * (a size-class-pressure heuristic, or coroutine yield). Kept because the
+ * reclaim itself is orthogonal to cycles and still worth having. */
 XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap);
-
-/* === Cycle collector API === */
-
-/* Add a cycle-candidate object to the cycle_roots set after its RC was
- * decremented but stayed > 0. Uses _rsv as root_idx for O(1) removal.
- * No-op if the object is already in the set or is not a cycle candidate. */
-XR_FUNC void xr_cycle_add_root(XrCoroHeap *heap, XrObjHeader *obj);
-
-/* Remove an object from cycle_roots (e.g. when it reaches RC==0 via normal
- * drop before a collect cycle runs). O(1) via swap-with-last. */
-XR_FUNC void xr_cycle_remove_root(XrCoroHeap *heap, XrObjHeader *obj);
-
-/* Free the cycle_roots array. Called at coroutine teardown. */
-XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *heap);
-
-/* Cycle-collector auto-trigger thresholds (root-count based, Nim ORC style).
- * The collector runs automatically once cycle_roots grows past the current
- * threshold; the threshold then adapts to the collection's productivity:
- * a productive collect lowers it (collect more eagerly), an unproductive one
- * raises it (avoid churn). Bounded below by _MIN so it never thrashes. */
-#define XR_CYCLE_COLLECT_THRESHOLD_INIT 128u
-#define XR_CYCLE_COLLECT_THRESHOLD_MIN 16u
 
 /* ========== Unified Compile-Time RC Primitives ==========
  *
  * The single authoritative dup/drop entry points. EVERY reference-counting
  * site routes through these: the VM OP_DUP/OP_DROP dispatch and the
  * container/field element retain/release in the object runtime. Keeping one
- * implementation means the DEAD guard and the cycle-root bookkeeping cannot
- * drift apart between paths (the historical bug: OP_DROP bypassed cycle-root
- * tracking that only the container
- * path performed, so local-variable cycles leaked and stale freelist
- * entries could alias back into cycle_roots).
+ * implementation means the DEAD guard cannot drift apart between paths.
  *
- * Cycle-root contract (see xcycle_collector.c):
- *   - release that reaches RC==0 destroys the object; rc_destroy_one()
- *     unlinks it from cycle_roots, so no stale pointer survives into the
- *     freelist.
- *   - release that leaves RC>0 on a cycle-candidate registers the object
- *     as a potential cycle root for trial deletion.
+ * Reclamation has exactly one rule: the object dies when its last strong
+ * reference goes. A release that leaves RC > 0 does nothing further — there is
+ * no collector to notify, no candidate set to join. Reference cycles are not
+ * reclaimed at runtime; they are prevented statically (L0), broken explicitly
+ * with `weak` (L1), and bounded by the coroutine heap (L2). See spec 16.8 and
+ * task 247.
  */
 
 static inline void xr_rc_retain(XrObjHeader *o) {
@@ -323,11 +284,8 @@ static inline void xr_rc_retain(XrObjHeader *o) {
 static inline void xr_rc_release(XrCoroHeap *heap, XrObjHeader *o) {
     if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_STORAGE_BUMP)))
         return;
-    if (xr_obj_drop_is_last(o)) {
+    if (xr_obj_drop_is_last(o))
         xr_coro_heap_destroy_obj(heap, o);
-    } else if (o->extra & XR_OBJ_CYCLE_CANDIDATE) {
-        xr_cycle_add_root(heap, o);
-    }
 }
 
 static inline void xr_rc_retain_value(XrValue value) {

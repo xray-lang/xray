@@ -4275,7 +4275,7 @@ Xray uses a layered memory management strategy:
 **Memory observation points**:
 - The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
 - The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
-- The cycle collector runs on explicit `runtime.collectCycles()` or automatically when the potential-root count reaches an adaptive threshold.
+- Reference cycles are not reclaimed at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk release of the coroutine heap (L2).
 - The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
 
 ---
@@ -6363,7 +6363,7 @@ The built-ins `int(s)` / `float(s)` / `string(n)` remain available for ordinary 
 | Module | Key APIs |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
-| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
 | `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
 | `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `sleepMs()`, `threadYield()`, `pinToCpu()`, and `onSignal()` |
@@ -6478,7 +6478,7 @@ When a value crosses an execution boundary (captured into `go`, sent through a c
 ### 16.3 Object Lifetime and Reclamation
 
 - Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
-- **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
+- **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and bulk release of the coroutine heap bounds whatever remains (L2). The development-mode detector reports cycles; it never collects them.
 - **Collector boundary**: the cycle collector skips the const/synchronized shared domain, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
 - **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 

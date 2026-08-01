@@ -125,7 +125,6 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             memset(&str->hdr, 0, sizeof(XrObjHeader));
             str->hdr.type = XR_TSTRING;
             str->hdr.objsize = (uint32_t) total_size;
-            str->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
 
             str->length = (uint32_t) len;
             str->rune_length = (uint32_t) xr_utf8_strlen(chars, len);

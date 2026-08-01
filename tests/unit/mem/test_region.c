@@ -256,7 +256,6 @@ static void perf_allocation_throughput(void) {
     TEST("perf: allocation throughput");
 
     XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
-    heap->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     uint64_t start = time_ns();
@@ -269,7 +268,6 @@ static void perf_allocation_throughput(void) {
     double ms = elapsed / 1e6;
     double mps = COUNT / (ms / 1000.0) / 1e6;
 
-    heap->cycle_collection_disabled--;
     printf("%.1fM/s (%.1fms) ", mps, ms);
     xr_coro_heap_destroy(heap);
     PASS();
@@ -279,13 +277,11 @@ static void perf_bulk_destroy(void) {
     TEST("perf: bulk destroy (coroutine exit)");
 
     XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
-    heap->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     for (int i = 0; i < COUNT; i++) {
         xr_coro_heap_new_obj(heap, XR_TSTRING, 64);
     }
-    heap->cycle_collection_disabled--;
 
     XrRegionStats stats;
     xr_region_get_stats(&heap->region, &stats);

@@ -292,10 +292,6 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_RUNTIME
 static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "collectCycles", runtime_collect_cycles);
-    XRS_EXPORT(module, isolate, "disableCycleCollection", runtime_disable_cycle_collection);
-    XRS_EXPORT(module, isolate, "enableCycleCollection", runtime_enable_cycle_collection);
-    XRS_EXPORT(module, isolate, "isCycleCollectionEnabled", runtime_is_cycle_collection_enabled);
     XRS_EXPORT(module, isolate, "liveBytes", runtime_live_bytes);
     XRS_EXPORT(module, isolate, "liveObjects", runtime_live_objects);
     XRS_EXPORT(module, isolate, "info", runtime_info);

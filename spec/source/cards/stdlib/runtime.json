@@ -1,5 +1,5 @@
 {
   "module": "runtime",
   "summary": "Runtime and heap introspection",
-  "lead": "Runtime diagnostics and current coroutine heap introspection. Use `runtime.collectCycles()` to request cycle collection, and `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory."
+  "lead": "Runtime diagnostics and current coroutine heap introspection. Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes, and reference cycles are not collected at runtime (spec 16.8)."
 }

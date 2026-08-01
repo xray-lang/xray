@@ -170,8 +170,6 @@ typedef struct XrAotRuntimeInfo {
     int64_t live_bytes;
     double live_kb;
     int64_t live_objects;
-    bool cycle_collection_enabled;
-    int64_t cycle_collections;
     int64_t finalizer_count;
     int64_t blocks;
     int64_t free_blocks;
@@ -286,7 +284,6 @@ XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
 XR_FUNC int64_t xr_aot_runtime_collect_cycles(const XrAotContext *ctx);
 XR_FUNC void xr_aot_runtime_disable_cycle_collection(const XrAotContext *ctx);
 XR_FUNC void xr_aot_runtime_enable_cycle_collection(const XrAotContext *ctx);
-XR_FUNC bool xr_aot_runtime_is_cycle_collection_enabled(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx);
 XR_FUNC XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx);

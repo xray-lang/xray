@@ -34,7 +34,6 @@ XrClosure *xr_closure_new(XrVMRuntime *isolate, XrProto *proto, struct XrCorouti
 
     xr_obj_header_init_type(&closure->hdr, XR_TFUNCTION);
     if (coro) {
-        XR_OBJ_SET_FLAG(&closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     closure->proto = proto;
     closure->upval_count = (uint16_t) nuv;

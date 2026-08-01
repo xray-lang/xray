@@ -32,11 +32,11 @@ vmcase(OP_DUP) {
 
 vmcase(OP_DROP) {
     /* drop(R[A]): release an owning reference via the unified RC release
-     * primitive. On the last reference the object is destroyed (and unlinked
-     * from cycle_roots); when RC stays > 0 a cycle-candidate is registered as
-     * a potential cycle root. Region/managed objects are a no-op. This is the
-     * SAME primitive the container runtime uses, so cycle bookkeeping no
-     * longer diverges between the compiler-inserted drop and the C runtime. */
+     * primitive. On the last reference the object is destroyed. A release that
+     * leaves RC > 0 does nothing further — cycles are not reclaimed at runtime
+     * (task 247). Region/managed objects are a no-op. This is the SAME
+     * primitive the container runtime uses, so the compiler-inserted drop and
+     * the C runtime cannot drift apart. */
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {

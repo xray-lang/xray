@@ -2618,57 +2618,9 @@ module io {
 
 module runtime {
   record RuntimeInfo {
-    fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const cycleCollectionEnabled: bool, const cycleCollections: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
+    fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
     sealed: true
     doc: "Typed snapshot of the current coroutine heap and cycle collector"
-  }
-
-  fn collectCycles {
-    signature: "(): int"
-    doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
-    vm: "runtime_collect_cycles"
-    aot: "xr_aot_runtime_collect_cycles"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn disableCycleCollection {
-    signature: "(): ()"
-    doc: "Pause the automatic cycle collector"
-    vm: "runtime_disable_cycle_collection"
-    aot: "xr_aot_runtime_disable_cycle_collection"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn enableCycleCollection {
-    signature: "(): ()"
-    doc: "Resume the automatic cycle collector"
-    vm: "runtime_enable_cycle_collection"
-    aot: "xr_aot_runtime_enable_cycle_collection"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn isCycleCollectionEnabled {
-    signature: "(): bool"
-    doc: "Check if automatic cycle collection is enabled"
-    vm: "runtime_is_cycle_collection_enabled"
-    aot: "xr_aot_runtime_is_cycle_collection_enabled"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
   }
 
   fn liveBytes {
@@ -2697,7 +2649,7 @@ module runtime {
 
   fn info {
     signature: "(): RuntimeInfo"
-    doc: "Get a typed snapshot of the current coroutine heap and cycle collector"
+    doc: "Get a typed snapshot of the current coroutine heap"
     vm: "runtime_info"
     aot: "xr_aot_runtime_info"
     argc: 0

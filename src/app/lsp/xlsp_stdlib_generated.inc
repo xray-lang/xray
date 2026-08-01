@@ -474,16 +474,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
-    {"collectCycles", XLSP_SYM_FUNCTION, "fn(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", NULL, 0},
-    {"disableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Pause the automatic cycle collector", NULL, 0},
-    {"enableCycleCollection", XLSP_SYM_FUNCTION, "fn(): ()", "Resume the automatic cycle collector", NULL, 0},
-    {"isCycleCollectionEnabled", XLSP_SYM_FUNCTION, "fn(): bool", "Check if automatic cycle collection is enabled", NULL, 0},
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap and cycle collector", NULL, 0},
-    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: int, liveKB: float, liveObjects: int, cycleCollectionEnabled: bool, cycleCollections: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }", "Typed snapshot of the current coroutine heap and cycle collector", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap", NULL, 0},
+    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }", "Typed snapshot of the current coroutine heap and cycle collector", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 8
+#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 4
 
 // simd module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {

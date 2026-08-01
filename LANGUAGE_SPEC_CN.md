@@ -4277,7 +4277,7 @@ Xray 采用多层内存管理：
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
 - 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
-- cycle collector 由显式 `runtime.collectCycles()` 或候选根数量达到自适应阈值触发。
+- 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
 - cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
 
 ---
@@ -6349,7 +6349,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | 模块 | 关键 API |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
-| `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
+| `runtime` | `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
 | `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
@@ -6464,7 +6464,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 ### 16.3 对象生命周期与回收
 
 - 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
-- **循环引用回收**：编译器标记可能形成环的类型；Bacon–Rajan trial-deletion collector 处理相应的 coroutine-local 强引用环。显式入口是 `runtime.collectCycles()`，候选根数量达到自适应阈值时也会自动触发。
+- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；协程堆批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
 - **collector 边界**：cycle collector 跳过 const/sync shared domain、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 

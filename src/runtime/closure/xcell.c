@@ -30,7 +30,6 @@ XrCell *xr_cell_new(XrVMRuntime *isolate, struct XrCoroutine *coro) {
 
     xr_obj_header_init_type(&cell->hdr, XR_TCELL);
     if (coro) {
-        XR_OBJ_SET_FLAG(&cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     cell->value = xr_null();
     return cell;

@@ -35,11 +35,6 @@
 #define XR_HEAP_ALIGN_SIZE 8
 #define XR_HEAP_ALIGN(size) (((size) + XR_HEAP_ALIGN_SIZE - 1) & ~(XR_HEAP_ALIGN_SIZE - 1))
 
-// Get current time (nanoseconds) for collection statistics.
-static inline uint64_t xr_cycle_time_ns(void) {
-    return xr_time_monotonic_ns();
-}
-
 // Forward declarations
 struct XrClass;
 typedef struct XrClass XrClass;
@@ -100,21 +95,14 @@ typedef struct XrClass XrClass;
             * no-ops so a compiler-inserted drop can never free an object                          \
             * the executor still holds. */
 
-#define XR_OBJ_CYCLE_CANDIDATE                                                                     \
-    0x0080 /* extra bit 7: type may participate in reference cycles.                               \
-            * Set at allocation for instances whose class forms a cycle in                         \
-            * the compile-time reference graph. On RC decrement to > 0 the                         \
-            * object is added to per-coroutine cycle_roots for trial deletion. */
-
-/* extra bits 8-9: trial-deletion color used by the cycle collector
- * (xcycle_collector.c). Living here instead of _rsv so the collector never
- * disturbs the _rsv root-index/sentinel invariant. Owner-thread only:
- * the collector runs on the coroutine's own worker. */
-#define XR_OBJ_CYCLE_COLOR_MASK 0x0300
-#define XR_OBJ_CYCLE_COLOR_SHIFT 8
-
-/* Sentinel value for XrObjHeader._rsv meaning "not in cycle_roots". */
-#define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
+/* extra bit 7 and bits 8-9 are FREE.
+ *
+ * They held XR_OBJ_CYCLE_CANDIDATE and the trial-deletion color while the
+ * Bacon-Rajan collector existed. Task 247 removed it: cycles are prevented
+ * statically, broken with `weak`, and bounded by the coroutine heap, so no
+ * per-object cycle state is carried on the hot path any more. The development
+ * detector works off the class-level XR_CLASS_CYCLE_CANDIDATE plus its own
+ * side table, which is exactly why these bits could go. */
 
 #define XR_OBJ_TRANSIT                                                                             \
     0x0400 /* extra bit 10: channel-transit copy. The object graph is a                            \

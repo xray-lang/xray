@@ -1,7 +1,20 @@
-// Regression: a closure declared inside a loop and capturing its own binding
-// must not keep a chain of previous-iteration closures alive.
-
-import runtime
+// 0803 — 自捕获闭包：形成环，不被回收，但也不被提前释放
+//
+// 这个用例原先断言「每轮迭代的自捕获闭包都被回收，残留为 0」，靠的是
+// Bacon–Rajan trial-deletion 收集器。任务 247 移除了它：引用环不由运行时
+// 回收，改为三层处理 —— 静态证明（L0）、`weak` 显式断环（L1）、协程堆批量
+// 释放封顶（L2）。
+//
+// 所以这里改为锁住移除之后仍然必须成立的事实：
+//   1. 环里的对象不会被提前释放（那会是 use-after-free，比泄漏严重得多）
+//   2. 程序照常运行、照常退出，泄漏由协程堆边界封顶
+//
+// 泄漏量本身不在这里断言：liveObjects/liveBytes 只看协程堆，而这类残留的
+// 量级要用进程外 max RSS 才测得准（见任务 250 §1.3）。
+//
+// 观察：`var f = fn() { ... f() ... }` 是闭包自捕获环的直接形态，247 阶段
+// A.6 本应在编译期硬拒。此处能编译通过，说明 `if (false)` 这层包装让它绕开
+// 了检测 —— 值得在 A.6 的覆盖面里单独跟进。
 
 fn churn_self_capture(count: int) {
     var i = 0
@@ -12,19 +25,15 @@ fn churn_self_capture(count: int) {
             }
             return 1
         }
+        // 环里的闭包必须仍然可用：提前释放会在这里崩掉
+        assert(f() == 1)
         i += 1
     }
 }
 
 @test
-fn test_self_capture_closure_reclaimed_each_iteration() {
-    runtime.collectCycles()
-    var base_objects = runtime.liveObjects()
-    var base_bytes = runtime.liveBytes()
-
+fn test_self_capture_closure_is_not_freed_early() {
     churn_self_capture(10000)
-
-    runtime.collectCycles()
-    assert_eq(runtime.liveObjects() - base_objects, 0)
-    assert_eq(runtime.liveBytes() - base_bytes, 0)
+    // 跑完即为通过：没有崩溃、没有提前释放。
+    assert(true)
 }

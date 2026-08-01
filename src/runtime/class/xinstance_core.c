@@ -42,8 +42,6 @@ XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     xr_instance_init_inplace(inst, cls);
 
     if (cls->flags & XR_CLASS_CYCLE_CANDIDATE) {
-        XR_OBJ_SET_FLAG(&inst->hdr, XR_OBJ_CYCLE_CANDIDATE);
-        inst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
     }
 
     return inst;
