@@ -58,7 +58,7 @@ static void test_free_aligned(void *ptr) {
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
 #define XRT_FREE_ALIGNED(p) test_free_aligned(p)
 
-// Emit the runtime impl (bump globals + allocator) into this TU using the custom
+// Emit the runtime impl (execution-arena globals + allocator) into this TU using the custom
 // XRT_* allocators above. Without it the static helpers in xrt_arc.h reference
 // undefined externs whenever the compiler keeps an unused static (GCC at -O0/-O2
 // on Linux); clang on macOS elided them, so the gap only showed under GCC.
@@ -154,9 +154,7 @@ static int ptr_is_aligned(const void *ptr) {
 static void free_test_array(xrt_array_t *a) {
     if (!a)
         return;
-    if (xrt_array_data_is_heap(a))
-        XRT_FREE_ALIGNED(a->data);
-    XRT_FREE(a);
+    xrt_array_destroy(a);
 }
 
 static void test_release_slice_abi_is_data_and_length(void) {

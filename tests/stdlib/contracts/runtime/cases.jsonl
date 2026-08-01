@@ -1,2 +1,2 @@
-{"case":"cycle-collector-toggle","equivalence":["value","effect"],"oracle":"observable enabled/disabled/enabled state transition on the current VM coroutine heap"}
+{"case":"cycle-collector-toggle","equivalence":["value","effect"],"oracle":"observable enabled/disabled/enabled state transition on the current VM execution-local domain"}
 {"case":"heap-counters","equivalence":["value","error","complexity"],"oracle":"runtime counters remain non-negative and control calls complete in constant time apart from explicit collection"}

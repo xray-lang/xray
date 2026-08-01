@@ -38,7 +38,13 @@
 #include <string.h>
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
+static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
+static void xrt_execution_finalize_array(XrObjHeader *hdr);
+static void xrt_execution_finalize_map(XrObjHeader *hdr);
+static void xrt_execution_finalize_boolmap(XrObjHeader *hdr);
+static void xrt_execution_finalize_set(XrObjHeader *hdr);
+static void xrt_execution_finalize_json(XrObjHeader *hdr);
 
 /* =========================================================================
  * Array runtime
@@ -92,31 +98,20 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
     return (size_t) cap * (size_t) elem_size;
 }
 
-/* Heap containers start with a bump-style header because the same init helpers
- * are shared by stack and heap constructors. Under the default deterministic
- * policy, heap containers become normal RC objects; under XRAY_AOT_ARENA=1 they
- * keep bump lifetime and release at process exit. */
-static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
-    h->extra |= XR_OBJ_AOT_NATIVE;
-    if (xrt_bump_enabled)
-        return;
-    h->extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
-    atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
-}
-
 static inline void xrt_coll_set_storage_header(XrObjHeader *h, uint8_t storage_mode) {
     if (!h)
         return;
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        xrt_execution_unbind(h);
     XR_OBJ_SET_STORAGE(h, storage_mode);
     if (storage_mode == XR_OBJ_STORAGE_SHARED)
         atomic_store_explicit(&h->refcount, -1, memory_order_relaxed);
-    else if (!(h->extra & XR_OBJ_STORAGE_BUMP))
+    else if (!(h->extra & XR_OBJ_IMMORTAL))
         atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
 }
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
-    xrt_bump_header_init(&a->hdr, XR_TARRAY);
     a->length = 0;
     a->capacity = cap;
     a->source = NULL;
@@ -232,13 +227,14 @@ static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, in
         abort();
     }
     size_t total = sizeof(xrt_array_t) + data_bytes + pad;
-    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(total);
+    xrt_array_t *a = (xrt_array_t *)
+        xrt_execution_alloc_embedded(total, xrt_execution_finalize_array);
     if (XR_UNLIKELY(!a)) {
         fprintf(stderr, "%s: out of memory\n", where);
         abort();
     }
+    xrt_heap_header_init(&a->hdr, XR_TARRAY);
     xrt_array_init_header(a, cap, etype, elem_size);
-    xrt_coll_make_deterministic(&a->hdr);
     if (data_bytes) {
         a->data =
             (void *) (((uintptr_t) ((char *) a + sizeof(xrt_array_t)) + (XRT_DATA_ALIGN - 1)) &
@@ -375,9 +371,7 @@ static inline xrt_array_t *xrt_array_set_storage_ptr(xrt_array_t *array, uint8_t
 }
 
 static inline XrValue xrt_array_set_storage(XrValue value, uint8_t storage_mode) {
-    if (XR_IS_ARRAY(value) && value.ptr)
-        xrt_coll_set_storage_header(&((xrt_array_t *) value.ptr)->hdr, storage_mode);
-    return value;
+    return xrt_value_set_storage_graph(value, storage_mode);
 }
 
 static inline XrValue xrt_array_with_capacity_typed(int64_t cap, uint8_t etype) {
@@ -822,13 +816,14 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
      * the slice survives a later source grow (may move src->data). */
     xrt_array_ensure_storage(src);
 
-    xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
+    xrt_array_t *slice = (xrt_array_t *)
+        xrt_execution_alloc_embedded(sizeof(xrt_array_t), xrt_execution_finalize_array);
     if (XR_UNLIKELY(!slice)) {
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
         abort();
     }
+    xrt_heap_header_init(&slice->hdr, XR_TARRAY);
     xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
-    xrt_coll_make_deterministic(&slice->hdr);
     slice->data = (count > 0 && src->data)
                       ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
                       : src->data;
@@ -856,6 +851,7 @@ static inline void xrt_array_stack_slice_view_init(xrt_array_t *slice, XrValue a
         abort();
     }
     if (!XR_IS_ARRAY(arr) || !arr.ptr) {
+        xrt_stack_header_init(&slice->hdr, XR_TARRAY);
         xrt_array_init_header(slice, 0, XR_ELEM_ANY, (uint8_t) sizeof(XrValue));
         slice->data = NULL;
         slice->data_storage = XR_ARRAY_DATA_BORROWED;
@@ -869,6 +865,7 @@ static inline void xrt_array_stack_slice_view_init(xrt_array_t *slice, XrValue a
         count = 0;
 
     xrt_array_ensure_storage(src);
+    xrt_stack_header_init(&slice->hdr, XR_TARRAY);
     xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
     slice->data = (count > 0 && src->data)
                       ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
@@ -893,6 +890,7 @@ static inline void xrt_array_stack_borrow_slice_view_init(xrt_array_t *slice, Xr
         abort();
     }
     if (!XR_IS_ARRAY(arr) || !arr.ptr) {
+        xrt_stack_header_init(&slice->hdr, XR_TARRAY);
         xrt_array_init_header(slice, 0, XR_ELEM_ANY, (uint8_t) sizeof(XrValue));
         slice->data = NULL;
         slice->data_storage = XR_ARRAY_DATA_BORROWED;
@@ -907,6 +905,7 @@ static inline void xrt_array_stack_borrow_slice_view_init(xrt_array_t *slice, Xr
     if (count < 0)
         count = 0;
 
+    xrt_stack_header_init(&slice->hdr, XR_TARRAY);
     xrt_array_init_header(slice, count, src->elem_type, src->elem_size);
     slice->data = (count > 0 && src->data)
                       ? (void *) ((uint8_t *) src->data + (size_t) start * (size_t) src->elem_size)
@@ -934,6 +933,7 @@ static inline void xrt_array_stack_borrow_span_view_init(xrt_array_t *view, xr_s
         abort();
     }
     int64_t len = span.length < 0 ? 0 : span.length;
+    xrt_stack_header_init(&view->hdr, XR_TARRAY);
     xrt_array_init_header(view, len, elem_type, (uint8_t) elem_size);
     view->data = span.data;
     view->length = len;
@@ -968,11 +968,12 @@ static inline XrValue xrt_tuple_new(int64_t len) {
     if (len < 0)
         len = 0;
     xrt_tuple_t *t =
-        (xrt_tuple_t *) XRT_MALLOC(sizeof(xrt_tuple_t) + (size_t) len * sizeof(XrValue));
+        (xrt_tuple_t *) xrt_arc_alloc(sizeof(xrt_tuple_t) + (size_t) len * sizeof(XrValue));
     if (XR_UNLIKELY(!t)) {
         fprintf(stderr, "xrt_tuple_new: out of memory\n");
         abort();
     }
+    xrt_arc_mark_builtin(t, XRT_ARC_KIND_TUPLE);
     t->len = len;
     for (int64_t i = 0; i < len; i++)
         t->items[i] = XR_NULL_VAL;
@@ -983,7 +984,7 @@ static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
     XrValue tuple = xrt_tuple_new(len);
     xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
     for (int64_t i = 0; i < t->len; i++)
-        t->items[i] = items ? items[i] : XR_NULL_VAL;
+        t->items[i] = items ? xrt_value_to_owned(items[i]) : XR_NULL_VAL;
     return tuple;
 }
 
@@ -1043,7 +1044,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
             _cap = 4;                                                                              \
         xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                                        \
             sizeof(xrt_array_t) + (size_t) _cap * sizeof(XrValue) + (XRT_DATA_ALIGN - 1));         \
-        xrt_bump_header_init(&_a->hdr, XR_TARRAY);                                                 \
+        xrt_stack_header_init(&_a->hdr, XR_TARRAY);                                                \
         _a->length = 0;                                                                            \
         _a->capacity = _cap;                                                                       \
         _a->source = NULL;                                                                         \
@@ -1111,7 +1112,7 @@ typedef struct {
 } xrt_strbuf_t;
 
 static inline XrValue xrt_strbuf_new(void) {
-    xrt_strbuf_t *sb = (xrt_strbuf_t *) xrt_arc_alloc_heap(sizeof(xrt_strbuf_t));
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) xrt_arc_alloc(sizeof(xrt_strbuf_t));
     xrt_arc_mark_builtin(sb, XRT_ARC_KIND_STRBUF);
     sb->cap = 64;
     sb->len = 0;
@@ -1715,7 +1716,6 @@ static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t ma
 }
 
 static inline void xrt_map_init_header(xrt_map_t *m) {
-    xrt_bump_header_init(&m->hdr, XR_TMAP);
     m->count = 0;
     m->nentries = 0;
     m->entries_cap = 0;
@@ -1947,22 +1947,21 @@ static inline void xrt_map_alloc_slots(xrt_map_t *m, int64_t slots) {
 }
 
 static inline XrValue xrt_map_new(int64_t cap) {
-    xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
+    xrt_map_t *m = (xrt_map_t *)
+        xrt_execution_alloc_embedded(sizeof(xrt_map_t), xrt_execution_finalize_map);
     if (XR_UNLIKELY(!m)) {
         fprintf(stderr, "xrt_map_new: out of memory\n");
         abort();
     }
+    xrt_heap_header_init(&m->hdr, XR_TMAP);
     xrt_map_init_header(m);
-    xrt_coll_make_deterministic(&m->hdr);
     if (cap > 0)
         xrt_map_resize_tagged(m, (uint32_t) cap);
     return xr_mkptr(m, XR_TAG_MAP);
 }
 
 static inline XrValue xrt_map_set_storage(XrValue value, uint8_t storage_mode) {
-    if (XR_IS_MAP(value) && value.ptr)
-        xrt_coll_set_storage_header(&((xrt_map_t *) value.ptr)->hdr, storage_mode);
-    return value;
+    return xrt_value_set_storage_graph(value, storage_mode);
 }
 
 static inline XrValue xrt_map_set_class_name(XrValue map_value, const char *class_name) {
@@ -2002,6 +2001,7 @@ static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, i
                                                   XrMapEntry *entries, uint32_t indices_size,
                                                   uint32_t entries_cap, uint8_t key_type,
                                                   uint8_t value_type) {
+    xrt_static_header_init(&m->hdr, XR_TMAP);
     xrt_map_init_header(m);
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < indices_size; i++)
@@ -2039,6 +2039,7 @@ static inline XrValue xrt_map_static_storage_freeze(xrt_map_t *m) {
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
         XrMapEntry *_entries =                                                                     \
             (XrMapEntry *) __builtin_alloca(sizeof(XrMapEntry) * (size_t) _ecap);                  \
+        xrt_stack_header_init(&_m->hdr, XR_TMAP);                                                  \
         xrt_map_init_header(_m);                                                                   \
         memset(_ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) _slots + XR_SWISS_GROUP);                \
         for (uint32_t _i = 0; _i < _slots; _i++)                                                   \
@@ -2627,7 +2628,6 @@ typedef struct xrt_set_t {
 } xrt_set_t;
 
 static inline void xrt_set_init_header(xrt_set_t *s, uint8_t elem_type) {
-    xrt_bump_header_init(&s->hdr, XR_TSET);
     s->count = 0;
     s->nentries = 0;
     s->entries_cap = 0;
@@ -2788,13 +2788,14 @@ static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
 static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
     if (elem_type >= XR_ELEM_COUNT)
         elem_type = XR_ELEM_ANY;
-    xrt_set_t *s = (xrt_set_t *) XRT_MALLOC(sizeof(xrt_set_t));
+    xrt_set_t *s = (xrt_set_t *)
+        xrt_execution_alloc_embedded(sizeof(xrt_set_t), xrt_execution_finalize_set);
     if (XR_UNLIKELY(!s)) {
         fprintf(stderr, "xrt_set_new: out of memory\n");
         abort();
     }
+    xrt_heap_header_init(&s->hdr, XR_TSET);
     xrt_set_init_header(s, elem_type);
-    xrt_coll_make_deterministic(&s->hdr);
     if (elem_type == XR_ELEM_ANY) {
         if (cap > 0)
             xrt_set_resize_tagged(s, (uint32_t) cap);
@@ -2805,9 +2806,7 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
 }
 
 static inline XrValue xrt_set_set_storage(XrValue value, uint8_t storage_mode) {
-    if (XR_IS_SET(value) && value.ptr)
-        xrt_coll_set_storage_header(&((xrt_set_t *) value.ptr)->hdr, storage_mode);
-    return value;
+    return xrt_value_set_storage_graph(value, storage_mode);
 }
 
 static inline int xrt_set_is_typed(const xrt_set_t *s);
@@ -2832,7 +2831,7 @@ static inline void xrt_array_destroy(xrt_array_t *a) {
          * frozen ANY element refs at refcount 0. */
         if (a->storage)
             xrt_array_storage_release(a);
-        XRT_FREE(a);
+        xrt_execution_free_allocation(&a->hdr);
         return;
     }
     if (a->storage) {
@@ -2842,7 +2841,7 @@ static inline void xrt_array_destroy(xrt_array_t *a) {
         if (s->elem_is_any)
             s->elem_count = a->length;
         xrt_array_storage_release(a);
-        XRT_FREE(a);
+        xrt_execution_free_allocation(&a->hdr);
         return;
     }
     if (a->elem_type == XR_ELEM_ANY && a->data && a->length > 0) {
@@ -2852,7 +2851,7 @@ static inline void xrt_array_destroy(xrt_array_t *a) {
     }
     if (a->data_storage == XR_ARRAY_DATA_HEAP && a->data)
         XRT_FREE_ALIGNED(a->data);
-    XRT_FREE(a);
+    xrt_execution_free_allocation(&a->hdr);
 }
 
 static inline void xrt_map_destroy(xrt_map_t *m) {
@@ -2872,7 +2871,7 @@ static inline void xrt_map_destroy(xrt_map_t *m) {
     XRT_FREE(m->keys);
     XRT_FREE(m->values);
     XRT_FREE(m->order);
-    XRT_FREE(m);
+    xrt_execution_free_allocation(&m->hdr);
 }
 
 static inline void xrt_set_destroy(xrt_set_t *s) {
@@ -2890,7 +2889,7 @@ static inline void xrt_set_destroy(xrt_set_t *s) {
     XRT_FREE(s->entries);
     XRT_FREE(s->items);
     XRT_FREE(s->order);
-    XRT_FREE(s);
+    xrt_execution_free_allocation(&s->hdr);
 }
 
 static inline XrValue xrt_set_new(int64_t cap) {
@@ -2900,6 +2899,7 @@ static inline XrValue xrt_set_new(int64_t cap) {
 static inline XrValue xrt_set_static_storage_init(xrt_set_t *s, uint8_t *ctrl, int32_t *indices,
                                                   XrSetEntry *entries, uint32_t indices_size,
                                                   uint32_t entries_cap) {
+    xrt_static_header_init(&s->hdr, XR_TSET);
     xrt_set_init_header(s, XR_ELEM_ANY);
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < indices_size; i++)
@@ -2935,6 +2935,7 @@ static inline XrValue xrt_set_static_storage_freeze(xrt_set_t *s) {
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
         XrSetEntry *_entries =                                                                     \
             (XrSetEntry *) __builtin_alloca(sizeof(XrSetEntry) * (size_t) _ecap);                  \
+        xrt_stack_header_init(&_s->hdr, XR_TSET);                                                  \
         xrt_set_init_header(_s, XR_ELEM_ANY);                                                      \
         memset(_ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) _slots + XR_SWISS_GROUP);                \
         for (uint32_t _i = 0; _i < _slots; _i++)                                                   \
@@ -3408,7 +3409,7 @@ XR_FUNC void xrt_gen_iter_destroy(xrt_iterator_t *it);
 #endif
 
 static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
-    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc_heap(sizeof(xrt_iterator_t));
+    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc(sizeof(xrt_iterator_t));
     xrt_arc_mark_builtin(it, XRT_ARC_KIND_ITERATOR);
     it->coll = coll;
     it->cursor = 0;
@@ -3716,14 +3717,14 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 
 static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_kind) {
-    xrt_json_t *j =
-        (xrt_json_t *) XRT_MALLOC(sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue));
+    size_t object_bytes = sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue);
+    xrt_json_t *j = (xrt_json_t *)
+        xrt_execution_alloc_embedded(object_bytes, xrt_execution_finalize_json);
     if (XR_UNLIKELY(!j)) {
         fprintf(stderr, "xrt_object_new: out of memory\n");
         abort();
     }
-    xrt_bump_header_init(&j->hdr, XR_TINSTANCE);
-    xrt_coll_make_deterministic(&j->hdr);
+    xrt_heap_header_init(&j->hdr, XR_TINSTANCE);
     j->hdr.extra |= XR_OBJ_HAS_DTOR;
     j->hdr._rsv = XRT_ARC_KIND_JSON;
     j->field_count = field_count;
@@ -3738,21 +3739,11 @@ static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_ki
 }
 
 static inline XrValue xrt_json_set_storage(XrValue value, uint8_t storage_mode) {
-    if (xrt_is_json_object_value(value))
-        xrt_coll_set_storage_header(&((xrt_json_t *) value.ptr)->hdr, storage_mode);
-    return value;
+    return xrt_value_set_storage_graph(value, storage_mode);
 }
 
 static inline XrValue xrt_value_set_storage(XrValue value, uint8_t storage_mode) {
-    if (XR_IS_ARRAY(value))
-        return xrt_array_set_storage(value, storage_mode);
-    if (XR_IS_MAP(value))
-        return xrt_map_set_storage(value, storage_mode);
-    if (XR_IS_SET(value))
-        return xrt_set_set_storage(value, storage_mode);
-    if (xrt_is_json_object_value(value))
-        return xrt_json_set_storage(value, storage_mode);
-    return value;
+    return xrt_value_set_storage_graph(value, storage_mode);
 }
 
 static inline XrValue xrt_object_new_named_kind(int64_t field_count, const char *const *field_names,
@@ -4999,9 +4990,31 @@ static inline void xrt_json_destroy(xrt_json_t *j) {
     j->dynamic_fields = NULL;
 }
 
+static void xrt_execution_finalize_array(XrObjHeader *hdr) {
+    xrt_array_destroy((xrt_array_t *) hdr);
+}
+
+static void xrt_execution_finalize_map(XrObjHeader *hdr) {
+    xrt_map_destroy((xrt_map_t *) hdr);
+}
+
+static void xrt_execution_finalize_boolmap(XrObjHeader *hdr) {
+    xrt_boolmap_destroy((xrt_boolmap_t *) hdr);
+}
+
+static void xrt_execution_finalize_set(XrObjHeader *hdr) {
+    xrt_set_destroy((xrt_set_t *) hdr);
+}
+
+static void xrt_execution_finalize_json(XrObjHeader *hdr) {
+    xrt_json_destroy((xrt_json_t *) hdr);
+    xrt_execution_free_allocation(hdr);
+}
+
 static inline void xrt_coll_retain(XrValue v) {
     XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+    if (!h ||
+        (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return;
     if (XR_OBJ_IS_SHARED(h))
         atomic_fetch_sub_explicit(&h->refcount, 1, memory_order_relaxed);
@@ -5011,7 +5024,8 @@ static inline void xrt_coll_retain(XrValue v) {
 
 static inline void xrt_coll_release(XrValue v) {
     XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+    if (!h ||
+        (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return;
     if (XR_OBJ_IS_SHARED(h)) {
         int32_t old = atomic_fetch_add_explicit(&h->refcount, 1, memory_order_acq_rel);
@@ -5023,7 +5037,7 @@ static inline void xrt_coll_release(XrValue v) {
     if (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
         xrt_json_destroy((xrt_json_t *) v.ptr);
-        XRT_FREE(v.ptr);
+        xrt_execution_free_allocation(h);
         return;
     }
     switch (h->type) {
@@ -5186,6 +5200,12 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_ITERATOR:
             xrt_iterator_destroy_builtin(obj);
             break;
+        case XRT_ARC_KIND_TUPLE: {
+            xrt_tuple_t *tuple = (xrt_tuple_t *) obj;
+            for (int64_t i = 0; i < tuple->len; i++)
+                xrt_release(tuple->items[i]);
+            break;
+        }
 #ifdef XRT_ENABLE_REGEX
         case XRT_ARC_KIND_REGEX:
             xrt_regex_destroy_builtin(obj);
@@ -5225,6 +5245,114 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         default:
             break;
     }
+}
+
+/* Publish an entire owned graph, not just its root. Clearing AOT_EXECUTION on
+ * the root before visiting children is the cycle-safe visited mark: a back-edge
+ * observes the requested storage mode and stops. This is what lets a value
+ * survive its producer coroutine without turning the producer's whole arena
+ * into process-lifetime storage. */
+static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode) {
+    bool embedded = XR_IS_ARRAY(value) || XR_IS_MAP(value) || XR_IS_SET(value) ||
+                    xrt_is_json_object_value(value);
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL ||
+        (!embedded && !xrt_arc_value_has_header(value)))
+        return value;
+
+    XrObjHeader *hdr = NULL;
+    if (embedded)
+        hdr = (XrObjHeader *) value.ptr;
+    else
+        hdr = xrt_arc_value_header(value);
+    if (!hdr || (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK)))
+        return value;
+    if (!(hdr->extra & XR_OBJ_AOT_EXECUTION) && XR_OBJ_GET_STORAGE(hdr) == storage_mode)
+        return value;
+
+    xrt_coll_set_storage_header(hdr, storage_mode);
+
+    if (XR_IS_ARRAY(value)) {
+        xrt_array_t *array = (xrt_array_t *) value.ptr;
+        if (array->source)
+            (void) xrt_value_set_storage_graph(xr_mkptr(array->source, XR_TAG_ARRAY), storage_mode);
+        if (array->elem_type == XR_ELEM_ANY && array->data) {
+            XrValue *items = (XrValue *) array->data;
+            for (int64_t i = 0; i < array->length; i++)
+                (void) xrt_value_set_storage_graph(items[i], storage_mode);
+        }
+        return value;
+    }
+    if (XR_IS_MAP(value)) {
+        xrt_map_t *map = (xrt_map_t *) value.ptr;
+        if (xrt_map_is_boolmap(map))
+            return value;
+        if (!xrt_map_is_typed(map) && map->entries) {
+            for (uint32_t i = 0; i < map->nentries; i++) {
+                if (map->entries[i].key_tt == XR_MAP_ENTRY_NIL_KEY)
+                    continue;
+                (void) xrt_value_set_storage_graph(map->entries[i].key, storage_mode);
+                (void) xrt_value_set_storage_graph(map->entries[i].value, storage_mode);
+            }
+        }
+        return value;
+    }
+    if (XR_IS_SET(value)) {
+        xrt_set_t *set = (xrt_set_t *) value.ptr;
+        if (!xrt_set_is_typed(set) && set->entries) {
+            for (uint32_t i = 0; i < set->nentries; i++) {
+                if (set->entries[i].val_tt != XR_SET_ENTRY_NIL)
+                    (void) xrt_value_set_storage_graph(set->entries[i].value, storage_mode);
+            }
+        }
+        return value;
+    }
+    if (xrt_is_json_object_value(value)) {
+        xrt_json_t *object = (xrt_json_t *) value.ptr;
+        for (int64_t i = 0; i < object->field_count; i++)
+            (void) xrt_value_set_storage_graph(object->fields[i], storage_mode);
+        if (object->dynamic_fields)
+            (void) xrt_value_set_storage_graph(
+                xr_mkptr(object->dynamic_fields, XR_TAG_MAP), storage_mode);
+        return value;
+    }
+    if (XR_IS_ARRAY_REF(value) && XR_ARRAY_REF_ELEM_TYPE(value) == XR_NATIVE_VALUE) {
+        XrValue *items = (XrValue *) value.ptr;
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(value);
+        for (uint32_t i = 0; i < count; i++)
+            (void) xrt_value_set_storage_graph(items[i], storage_mode);
+        return value;
+    }
+
+    switch (value.tag) {
+        case XR_TAG_TUPLE: {
+            xrt_tuple_t *tuple = (xrt_tuple_t *) value.ptr;
+            for (int64_t i = 0; i < tuple->len; i++)
+                (void) xrt_value_set_storage_graph(tuple->items[i], storage_mode);
+            break;
+        }
+        case XR_TAG_CELL:
+            (void) xrt_value_set_storage_graph(((xrt_cell_t *) value.ptr)->value, storage_mode);
+            break;
+        case XR_TAG_CLOSURE: {
+            xrt_closure_t *closure = (xrt_closure_t *) value.ptr;
+            for (int i = 0; i < closure->nupvals; i++)
+                (void) xrt_value_set_storage_graph(closure->upvals[i], storage_mode);
+            break;
+        }
+        case XR_TAG_ITERATOR:
+            (void) xrt_value_set_storage_graph(((xrt_iterator_t *) value.ptr)->coll, storage_mode);
+            break;
+        case XR_TAG_PTR:
+            if (value.heap_type == XR_TINSTANCE && hdr->type < xrt_type_count) {
+                XrtStoragePromoter promote = xrt_type_table[hdr->type].promote_storage;
+                if (promote)
+                    promote(value.ptr, storage_mode);
+            }
+            break;
+        default:
+            break;
+    }
+    return value;
 }
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {

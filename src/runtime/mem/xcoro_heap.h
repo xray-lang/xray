@@ -274,13 +274,13 @@ XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap);
  */
 
 static inline void xr_rc_retain(XrObjHeader *o) {
-    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_STORAGE_BUMP)))
+    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_IMMORTAL)))
         return;
     xr_obj_dup(o);
 }
 
 static inline void xr_rc_release(XrCoroHeap *heap, XrObjHeader *o) {
-    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_STORAGE_BUMP)))
+    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_IMMORTAL)))
         return;
     if (xr_obj_drop_is_last(o))
         xr_coro_heap_destroy_obj(heap, o);

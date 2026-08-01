@@ -2685,7 +2685,7 @@ module runtime {
   record RuntimeInfo {
     fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
     sealed: true
-    doc: "Typed snapshot of the current coroutine heap and cycle collector"
+    doc: "Typed snapshot of the current execution-local reclamation domain"
   }
 
   fn liveBytes {
@@ -2714,7 +2714,7 @@ module runtime {
 
   fn info {
     signature: "(): RuntimeInfo"
-    doc: "Get a typed snapshot of the current coroutine heap"
+    doc: "Get a typed snapshot of the current execution-local reclamation domain"
     vm: "runtime_info"
     aot: "xr_aot_runtime_info"
     argc: 0

@@ -17,7 +17,7 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "cycle-collector control and heap introspection moved from mem to the dedicated runtime module",
   "the cycle-collector control plane (collectCycles, enable/disable/isCycleCollectionEnabled, info.cycleCollections) is gone with the collector itself (task 247); the four entry points were deleted rather than stubbed, so calling one is a compile error and not a silent no-op",
-  "standalone AOT reads the provider-owned current coroutine heap and materializes the same typed RuntimeInfo fields",
+  "standalone AOT reads the provider-owned current execution arena and materializes the same typed RuntimeInfo fields",
 ]
 known_legacy_bugs = []
 equivalence = ["value", "error", "effect", "complexity"]
@@ -28,14 +28,14 @@ benchmark_suite = "stdlib/runtime"
 [[legacy_behavior]]
 id = "cycle-collector-toggle"
 classification = "removed"
-new_behavior = "no successor: task 247 deleted the cycle collector, so there is no automatic pass to toggle. Reclamation is reference counting alone and its point is exact; a cycle is prevented at the type graph, broken with a `weak` field, or bounded by the coroutine heap it lives on"
+new_behavior = "no successor: task 247 deleted the cycle collector, so there is no automatic pass to toggle. Reclamation is reference counting alone and its point is exact; a cycle is prevented at the type graph, broken with a `weak` field, or bounded by its execution-local reclamation domain"
 
 [[legacy_behavior]]
 id = "heap-counters"
 classification = "required"
-new_behavior = "liveBytes, liveObjects, and info expose non-negative counters from the current coroutine heap"
+new_behavior = "liveBytes, liveObjects, and info expose non-negative counters from the current execution-local reclamation domain"
 
 [[legacy_behavior]]
 id = "standalone-aot-introspection"
 classification = "removed"
-new_behavior = "standalone AOT exposes the current provider coroutine heap rather than rejecting the runtime control plane"
+new_behavior = "standalone AOT exposes the current provider execution arena rather than rejecting the runtime control plane"

@@ -64,7 +64,7 @@ static bool detector_walk_block(XrRegionBlock *block, const char *end, XrHeapObj
         XrObjHeader *obj = (XrObjHeader *) p;
         uint32_t size = obj->objsize;
 
-        /* A zero step would spin forever. XR_OBJ_STORAGE_BUMP objects carry
+        /* A zero step would spin forever. XR_OBJ_IMMORTAL objects carry
          * objsize 0 and cannot reach a VM region block, so this is a corrupted
          * or misaligned walk rather than a shape to skip. Fail loudly. */
         if (size == 0) {

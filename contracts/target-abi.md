@@ -149,6 +149,15 @@ emission, and native linking:
   directly to that pointer; an already-native `CFn` forwards unchanged. The
   boundary must not allocate an Xray closure or recover a function address from
   a closure-tagged `XrValue`, and unsupported conversions fail closed.
+- T11: hosted AOT gives every physical coroutine one execution arena. Generic
+  and embedded-header heap allocations retain their normal RC behavior while
+  the arena owns the complete residual graph at coroutine teardown. A value
+  published to TRANSFERABLE, CONST_SHARED, or SYNC_SHARED storage must detach
+  its entire owned graph, including native-class reference fields, before the
+  source arena can be destroyed. Native class type registration therefore
+  carries a generated storage-promoter callback beside its destructor; missing
+  graph evidence is a hard contract failure, never root-only promotion. The
+  generated entry owns the root arena and shuts it down on every exit path.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -181,14 +190,14 @@ download a provider.
 anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
 anchor-sha256: src/aot/xaot_prepare.c fbf0bf75c63b4836a25290a932179b01589fb4e20b7a2796f0dc707782626741
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 6bca7d61399352dc8de2ed3d0ad08e52f009c613ef86fa8dc38e154310c03ded
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ff640ccb84e2ac2be0eea9b672680b530eeb805b400276dbe9985b413eeb2568
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 83b91301f4602f53e17358f06e1afb5caac3fa78ffd4ae4bca0c362f42961c72
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c d975516f2f9a22f4ab0dddd340ed41709583f2406ef767fe4c1b25858329fca4
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c f0b7c83250c70ec40d1dbab531a78072935e2c9d15bfdc89a086ff0d18c841a5
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 99ca3436c5f8cb44b4d8c37b77895e5fc8e2947a265481ddc7c35d305f2f9617
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c e9702fe8aa4f1f987e4554f3a34f5919e339806f20e39b22aa34483d227ebc77
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 951c5a579b9dc2af79daf371d2ef7504ea0be613652c2e8f1e80b6e4834ae1a0
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
 anchor-sha256: src/aot/xi_cgen.c 69512e03d216f5f9b28f5b2e5f64466d281bae97a8970e5c6b923c6d3885ea26
-anchor-sha256: src/aot/xrt_coll.h 565a22dc681fe35c914d9212e3d0f063b2d1d5dfd0a03ca672c78b4885bb7163
-anchor-sha256: src/aot/xrt_core_freestanding.h 26338b0fef1566ac056df914ce3a67bde274a383ca8d554e1e962f39ee3e038a
+anchor-sha256: src/aot/xrt_coll.h 09b7ff7b54f0d072af23b8b5453bc8b9ad431ddfd2181c3d95fafb5412cbf0e9
+anchor-sha256: src/aot/xrt_core_freestanding.h 60b6e6631209dcb72806d62e0715635f4f4acbf03704d88a1c9f3f02f44b0b07
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 8d2886f7422136f82f4125199b8a3884bfb6ba6d69a07ca2d922b5ee0caf9c17
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6

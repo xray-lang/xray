@@ -600,7 +600,7 @@ static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
 };
 
 static const XaBuiltinRecord g_gen_runtime_records[] = {
-    {"RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", g_gen_runtime_runtimeinfo_record_fields, 7, true},
+    {"RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", g_gen_runtime_runtimeinfo_record_fields, 7, true},
 };
 #define GEN_RUNTIME_RECORD_COUNT 1
 
@@ -608,7 +608,7 @@ static const XaBuiltinRecord g_gen_runtime_records[] = {
 static const XaBuiltinMember g_gen_runtime_functions[] = {
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"liveObjects", "(): int", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 3
 

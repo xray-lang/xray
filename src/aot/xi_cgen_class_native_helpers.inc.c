@@ -621,6 +621,12 @@ static void emit_class_native_dtor_name(FILE *out, const char *prefix, const XiC
     fprintf(out, "_dtor");
 }
 
+static void emit_class_native_storage_promoter_name(FILE *out, const char *prefix,
+                                                     const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_promote_storage");
+}
+
 static void emit_class_native_clone_name(FILE *out, const char *prefix, const XiClassData *cd) {
     emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
     fprintf(out, "_derived_clone");
@@ -954,6 +960,12 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
     fprintf(out, ", NULL, 0, ");
     if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         emit_class_native_dtor_name(out, prefix, cd);
+    } else {
+        fprintf(out, "NULL");
+    }
+    fprintf(out, ", ");
+    if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
+        emit_class_native_storage_promoter_name(out, prefix, cd);
     } else {
         fprintf(out, "NULL");
     }
@@ -6018,6 +6030,26 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;
     }
+    fprintf(out, "static void ");
+    emit_class_native_storage_promoter_name(out, prefix, cd);
+    fprintf(out, "(void *obj, uint8_t storage_mode) {\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *self = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)obj;\n");
+    fprintf(out, "    if (!self) return;\n");
+    for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+        const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, fi);
+        if (!cg_class_native_field_is_ref(field))
+            continue;
+        if (!cg_class_native_field_plan_has_release_drop(ctx, cd, fi, field))
+            continue;
+        fprintf(out, "    (void)xrt_value_set_storage(");
+        emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, fi, "self");
+        fprintf(out, ", storage_mode);\n");
+    }
+    fprintf(out, "}\n");
     fprintf(out, "static void ");
     emit_class_native_dtor_name(out, prefix, cd);
     fprintf(out, "(void *obj) {\n");

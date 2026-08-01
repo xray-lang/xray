@@ -3556,7 +3556,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo",
         .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
-        .summary = "Typed snapshot of the current coroutine heap and cycle collector",
+        .summary = "Typed snapshot of the current execution-local reclamation domain",
     },
     {
         .name = "RuntimeInfo.blocks",
@@ -3596,7 +3596,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "info",
         .signature = "(): RuntimeInfo",
-        .summary = "Get a typed snapshot of the current coroutine heap",
+        .summary = "Get a typed snapshot of the current execution-local reclamation domain",
     },
     {
         .name = "liveBytes",
@@ -8866,7 +8866,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# runtime module\n"
             "\n"
-            "Runtime diagnostics and current coroutine heap introspection. Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes, and reference cycles are not collected at runtime (spec 16.8).\n"
+            "Runtime diagnostics and current execution-local reclamation-domain introspection (VM coroutine heap or AOT execution arena). Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes; cycles are not collected and are bounded by the physical coroutine domain (spec 16.8).\n"
             "\n"
             "Usage: `import runtime` then call `runtime.function()`.\n"
             "\n"
@@ -8874,7 +8874,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current coroutine heap and cycle collector |\n"
+            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.RuntimeInfo.blocks` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Record field |\n"
@@ -8882,7 +8882,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `runtime.RuntimeInfo.liveBytes` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.liveKB` | `const float` | Record field |\n"
             "| `runtime.RuntimeInfo.liveObjects` | `const int` | Record field |\n"
-            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current coroutine heap |\n"
+            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
             "",

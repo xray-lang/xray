@@ -3150,6 +3150,23 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Task 252 — compare a small and large number of cycle-leaking physical
+    # coroutines by process max RSS.  A hosted provider runs the same source as
+    # AOT; provider-less hosts still keep the AOT arena implementation covered
+    # by test_xrt_execution_arena.
+    add_test(
+        NAME regression_aot_execution_arena_l2
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_execution_arena_l2.py
+                --xray $<TARGET_FILE:xray>
+                --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe7_aot_execution_arena_l2.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_aot_execution_arena_l2 PROPERTIES
+        LABELS "regression;rc;vm;aot;task-252"
+        TIMEOUT 120
+    )
+
     # Task 249/253 — direct and cross-callee construction-result ownership.
     add_test(
         NAME regression_construction_result_ownership

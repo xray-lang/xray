@@ -683,7 +683,7 @@ static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
         fprintf(out, "};\n");
         fprintf(out,
                 "static const XrAotEnumScalarLayout _xenum_scalar_layout_%u = "
-                "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, ",
+                "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, ",
                 (unsigned) index);
         emit_c_string_literal(out, plan->enum_data->name ? plan->enum_data->name : "");
         fprintf(out, ", _xenum_scalar_names_%u", (unsigned) index);

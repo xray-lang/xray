@@ -233,11 +233,11 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
     if (value.heap_type == XR_TSTRING)
         return xr_aot_bridge_string_to_xrt(value);
     /* Only VM-layout arrays need representation conversion. AOT arrays carry the
-     * same byte layout (a shared XrObjHeader at offset 0) and are bump-tagged, so
+     * same byte layout (a shared XrObjHeader at offset 0) and are AOT-native, so
      * they pass through; the per-coroutine isolation deep-copy is handled
      * separately by xrt_value_clone_for_coro. */
     if (value.heap_type == XR_TARRAY && value.ptr &&
-        !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_STORAGE_BUMP))
+        !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_IMMORTAL))
         return xr_aot_bridge_array_to_xrt(value);
     if (value.ptr && !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_AOT_NATIVE)) {
         if (value.heap_type == XR_TMAP)

@@ -31,11 +31,12 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
     if (key_type == XR_ELEM_ANY || value_type == XR_ELEM_ANY || key_type >= XR_ELEM_COUNT ||
         value_type >= XR_ELEM_COUNT)
         xrt_map_typed_abort("xrt_map_new_typed", "unsupported typed map layout");
-    xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
+    xrt_map_t *m = (xrt_map_t *)
+        xrt_execution_alloc_embedded(sizeof(xrt_map_t), xrt_execution_finalize_map);
     if (!m)
         xrt_map_typed_abort("xrt_map_new_typed", "out of memory");
+    xrt_heap_header_init(&m->hdr, XR_TMAP);
     xrt_map_init_header(m);
-    xrt_coll_make_deterministic(&m->hdr);
     m->key_type = key_type;
     m->value_type = value_type;
     m->key_size = XR_ELEM_SIZES[key_type];

@@ -238,7 +238,7 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
         fprintf(out, "        xrt_report_uncaught_error(xrt_pending_error, false);\n");
     if (entry_needs_runtime)
         fprintf(out, "        xr_aot_runtime_delete(rt);\n");
-    fprintf(out, "        xrt_bump_destroy();\n");
+    fprintf(out, "        xrt_arc_shutdown();\n");
     fprintf(out, "        return 1;\n");
     fprintf(out, "    }\n");
 }
@@ -247,7 +247,7 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
  * runtime headers are stb-style: defining XRT_IMPL emits the single definition
  * of every runtime global; without it they are extern declarations.  Exactly
  * one object per program must define XRT_IMPL (the entry unit), or globals such
- * as xrt_bump_enabled collide at link time. */
+ * as the execution-arena globals collide at link time. */
 /* Deliberately not short-circuited on the freestanding profile.  This decides
  * whether the translation unit declares XrAotContext xrt_global_ctx and includes
  * the bridge header, and emit_xrt_runtime_init writes xrt_global_ctx whenever the
@@ -619,6 +619,13 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
         "    .retain = xrt_runtime_value_retain,\n"
         "    .release = xrt_runtime_value_release,\n"
+        "    .execution_arena_new = xrt_execution_arena_new,\n"
+        "    .execution_arena_enter = xrt_execution_arena_enter,\n"
+        "    .execution_arena_restore = xrt_execution_arena_restore,\n"
+        "    .execution_arena_destroy = xrt_execution_arena_destroy,\n"
+        "    .execution_arena_live_bytes = xrt_execution_arena_live_bytes,\n"
+        "    .execution_arena_live_objects = xrt_execution_arena_live_objects,\n"
+        "    .execution_arena_finalizer_count = xrt_execution_arena_finalizer_count,\n"
         "    .report_uncaught_error = xrt_runtime_report_uncaught_error,\n"
         "};\n\n");
 }
@@ -650,7 +657,7 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     emit_optional_c_string_literal(out, source_path);
     fprintf(out, ";\n");
     fprintf(out, "    XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);\n");
-    fprintf(out, "    if (!rt) { xrt_bump_destroy(); return 1; }\n");
+    fprintf(out, "    if (!rt) { xrt_arc_shutdown(); return 1; }\n");
     if ((runtime_caps & XR_AOT_CAP_TRANSFER) != 0)
         fprintf(out, "    xr_aot_runtime_enable_transfer(rt);\n");
     emit_xrt_runtime_builtin_sync(out, plan, "rt");
@@ -751,7 +758,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     }
     if (entry_has_descriptor)
         fprintf(out, "    if (!xr_aot_root_descriptor_begin(rt)) { xr_aot_runtime_delete(rt); "
-                     "xrt_bump_destroy(); return 1; }\n");
+                     "xrt_arc_shutdown(); return 1; }\n");
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
@@ -785,11 +792,11 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     }
     if (entry_has_descriptor)
         fprintf(out, "    if (!xr_aot_root_descriptor_end(rt)) { xr_aot_runtime_delete(rt); "
-                     "xrt_bump_destroy(); return 1; }\n");
+                     "xrt_arc_shutdown(); return 1; }\n");
     if (entry_needs_runtime) {
         fprintf(out, "    xr_aot_runtime_delete(rt);\n");
     }
-    fprintf(out, "    xrt_bump_destroy();\n");
+    fprintf(out, "    xrt_arc_shutdown();\n");
     fprintf(out, "    return 0;\n");
     fprintf(out, "}\n");
 }
@@ -914,7 +921,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         }
         if (entry_has_descriptor)
             fprintf(body, "    if (!xr_aot_root_descriptor_begin(rt)) { xr_aot_runtime_delete(rt); "
-                          "xrt_bump_destroy(); return 1; }\n");
+                          "xrt_arc_shutdown(); return 1; }\n");
         if (entry_is_coro) {
             fprintf(body, "    void *_entry_frame = ");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_frame_new");
@@ -937,11 +944,11 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         }
         if (entry_has_descriptor)
             fprintf(body, "    if (!xr_aot_root_descriptor_end(rt)) { xr_aot_runtime_delete(rt); "
-                          "xrt_bump_destroy(); return 1; }\n");
+                          "xrt_arc_shutdown(); return 1; }\n");
         if (entry_needs_runtime) {
             fprintf(body, "    xr_aot_runtime_delete(rt);\n");
         }
-        fprintf(body, "    xrt_bump_destroy();\n");
+        fprintf(body, "    xrt_arc_shutdown();\n");
         fprintf(body, "    return 0;\n");
         fprintf(body, "}\n");
     } else if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90) {

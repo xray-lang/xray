@@ -140,8 +140,8 @@ static void reset_call_counts(void) {
 }
 
 static void test_direct_helpers_gate_on_exact_native_type(void) {
-    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
-    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
+    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
+    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
     XrValue token_a = make_token(token_type, 7);
     XrValue token_b = make_token(token_type, 7);
     XrValue other = make_token(other_type, 7);
@@ -168,7 +168,7 @@ static void test_direct_helpers_gate_on_exact_native_type(void) {
 }
 
 static void test_direct_helpers_gate_on_map_backed_class_name(void) {
-    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
+    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
     XrValue key_a = make_map_key("Key", 17);
     XrValue key_b = make_map_key("Key", 17);
     XrValue other = make_map_key("Other", 17);
@@ -190,8 +190,8 @@ static void test_direct_helpers_gate_on_map_backed_class_name(void) {
 }
 
 static void test_map_user_hash_eq_wrong_type_falls_back_without_user_calls(void) {
-    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
-    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
+    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
+    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
     XrValue token = make_token(token_type, 11);
     XrValue other = make_token(other_type, 11);
     XrValue map_value = xrt_map_new(0);
@@ -233,7 +233,7 @@ static void test_map_user_hash_eq_wrong_type_falls_back_without_user_calls(void)
 }
 
 static void test_map_user_hash_eq_map_backed_class_name(void) {
-    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
+    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
     XrValue key = make_map_key("Key", 19);
     XrValue equal_key = make_map_key("Key", 19);
     XrValue other_class = make_map_key("Other", 19);
@@ -272,8 +272,8 @@ static void test_map_user_hash_eq_map_backed_class_name(void) {
 }
 
 static void test_set_user_hash_eq_wrong_type_falls_back_without_user_calls(void) {
-    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
-    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, sizeof(TestToken));
+    uint16_t token_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
+    uint16_t other_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL, sizeof(TestToken));
     XrValue token = make_token(token_type, 13);
     XrValue other = make_token(other_type, 13);
     XrValue set_value = xrt_set_new(0);

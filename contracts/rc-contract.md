@@ -26,13 +26,18 @@ For every RC-managed value, including registered identity aliases:
   live definitions.
 - C6: reclamation is reference counting alone — an object dies when its last
   strong reference is released, and nothing collects reference cycles at
-  runtime. What a cycle costs is bounded rather than reclaimed: every coroutine
-  owns its heap and that heap is released whole when the coroutine ends, so an
+  runtime. What a cycle costs is bounded rather than reclaimed: every physical
+  coroutine owns one execution-local reclamation domain, and that domain
+  disposes its complete residual object graph when the coroutine ends. The VM
+  realizes the domain as a per-coroutine Region heap; hosted AOT realizes it as
+  an execution arena that keeps ordinary RC for acyclic objects and owns only
+  the residual graph at teardown. Publishing a shared or transferred root must
+  detach its complete owned graph before the source domain can end. Thus an
   unreclaimed cycle leaks no further than the lifetime of the coroutine that
-  built it. Only the MODULE_STATIC, CONST_SHARED, and SYNC_SHARED ownership
-  domains, plus the main execution's own lifetime, can leak for the life of the
-  process. Cycles are prevented statically (L0 type graph), broken explicitly
-  with a `weak` field (L1), and capped by this boundary (L2); the development
+  built it. Only MODULE_STATIC, CONST_SHARED, and SYNC_SHARED domains, plus the
+  main execution's own root domain, can live for the process lifetime. Cycles
+  are prevented statically (L0 type graph), broken explicitly with a `weak`
+  field (L1), and capped by this backend-neutral boundary (L2); the development
   detector reports them and never reclaims. See LANGUAGE_SPEC 16.3.
 
 The independent verifier must not reuse ARC closure/alias implementation logic.

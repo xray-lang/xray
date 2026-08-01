@@ -163,7 +163,7 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
 }
 
 static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
-    uint16_t tid = xrt_type_register_hot(0, NULL, 0, NULL, 16);
+    uint16_t tid = xrt_type_register_hot(0, NULL, 0, NULL, NULL, 16);
     const XrtTypeInfo *hot = xrt_type_info(tid);
     const XrtTypeNameInfo *name = xrt_type_name_info(tid);
     const XrtTypeDeriveInfo *derive = xrt_type_derive_info(tid);

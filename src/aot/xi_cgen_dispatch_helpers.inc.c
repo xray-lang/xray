@@ -126,7 +126,7 @@ static void xicgen_emit_bigint_literal_value(XiCgenCtx *ctx, FILE *out, const Xi
             "uint32_t limbs[%uu]; } _xr_bigint_lit_%u = {",
             (unsigned) lit.len, (unsigned) v->id);
     fprintf(out,
-            "{XR_TINSTANCE, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0u, 0u}, NULL, "
+            "{XR_TINSTANCE, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0u, 0u}, NULL, "
             "(int8_t)%d, {0}, %uu, %uu, 0u, {",
             lit.sign < 0 ? -1 : 1, (unsigned) lit.len, (unsigned) lit.len);
     for (uint32_t i = 0; i < lit.len; i++) {

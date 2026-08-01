@@ -23,7 +23,7 @@
  * AOT deliberately has no equivalent. After task 247 phase E both backends are
  * plain RC with trivially equivalent semantics (enforced by the differential
  * suite), so a cycle found on the VM is a cycle on AOT. AOT also never
- * maintains objsize (xrt_bump_header_init zeroes it), which whole-heap
+ * maintains objsize (xrt_static_header_init zeroes it), which whole-heap
  * traversal depends on.
  */
 
