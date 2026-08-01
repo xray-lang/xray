@@ -716,33 +716,53 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
  * alloc, not a scalar, produces an owning reference (not a borrow). */
-/* Does a child closure capture this value's variable by mutable cell?
+/* A later definition of a variable that a child closure captures by cell.
  *
- * A cell owns what it holds: xr_obj_destroy_cell releases cell->value. The
- * emitter wraps the variable's defining register with OP_CELL_NEW and maps the
- * defining value onto that register, so an ARC drop placed on the definition
- * releases the CELL, and the cell's destructor then releases the value the
- * closure is still reading through.
+ * The variable has exactly ONE cell, created by OP_CELL_NEW at its first
+ * definition; every later assignment is an OP_CELL_SET that only swaps the
+ * contents. The emitter maps each defining value onto the cell's register, so
+ * ARC — which places one drop per definition — would release the cell once per
+ * assignment while only one reference was ever created. Two assignments and the
+ * cell dies underneath the closure still reading it.
  *
- * Lowering never denotes a cell, so this is the only place the transfer is
- * visible: ownership moves to the cell at the definition, and ARC must keep
- * its hands off from there on.
+ * The first definition keeps its drop: that one really does own the cell. Only
+ * the later ones are skipped, and what they store is moved into the cell by
+ * OP_CELL_SET, which takes the value and releases the previous one.
  *
- * Matched on var_id rather than on the XiValue itself because a capture's
- * recorded value may point at a PHI that optimization has since eliminated. */
-static bool arc_value_owned_by_capture_cell(const XiFunc *f, const XiValue *v) {
+ * Matched on var_id because a capture's recorded value may point at a PHI that
+ * optimization has since eliminated. */
+static bool arc_is_later_def_of_captured_cell(const XiFunc *f, const XiValue *v) {
     if (!f || !v || v->var_id == XI_NO_VAR_ID)
         return false;
-    for (uint16_t c = 0; c < f->nchildren; c++) {
+    bool captured_by_cell = false;
+    for (uint16_t c = 0; c < f->nchildren && !captured_by_cell; c++) {
         const XiFunc *child = f->children[c];
         if (!child || !child->captures)
             continue;
         for (uint16_t i = 0; i < child->ncaptures; i++) {
             const XiCapture *cap = &child->captures[i];
-            if (!cap->needs_cell || cap->source != XI_CAPTURE_SRC_REG)
+            if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG && cap->value &&
+                cap->value->var_id == v->var_id) {
+                captured_by_cell = true;
+                break;
+            }
+        }
+    }
+    if (!captured_by_cell)
+        return false;
+    /* Is some earlier value in RPO already a definition of this variable? */
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *other = blk->values[i];
+            if (!other)
                 continue;
-            if (cap->value && cap->value->var_id == v->var_id)
-                return true;
+            if (other == v)
+                return false; /* reached v first: this is the defining one */
+            if (other->var_id == v->var_id && xi_own_type_is_rc(other->type))
+                return true; /* an earlier definition already owns the cell */
         }
     }
     return false;
@@ -1871,8 +1891,8 @@ static void arc_insert_rec(XiFunc *f) {
             if (v && v->op != XI_PARAM &&
                 stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
-            if (v && v->op != XI_PARAM && arc_value_owned_by_capture_cell(f, v))
-                continue; /* ownership moved to the capture cell */
+            if (v && v->op != XI_PARAM && arc_is_later_def_of_captured_cell(f, v))
+                continue; /* the cell is owned by this variable's first definition */
             if (v && v->op != XI_PARAM && tracks_rc(v) && !xi_value_vec_push(&targets, v)) {
                 xr_free(targets.items);
                 XR_CHECK(false, "xi_arc: out of memory collecting ARC targets");
@@ -2050,8 +2070,8 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
                 goto oom;
             if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
-            if (arc_value_owned_by_capture_cell(f, v))
-                continue; /* ownership moved to the capture cell */
+            if (arc_is_later_def_of_captured_cell(f, v))
+                continue; /* the cell is owned by this variable's first definition */
             if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
                 goto oom;
         }
