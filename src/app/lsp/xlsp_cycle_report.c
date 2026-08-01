@@ -17,8 +17,7 @@
 #include "../../frontend/analyzer/xanalyzer_symbol.h"
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/parser/xtype_ref.h"
-
-#include <dirent.h>
+#include "../../os/os_dir.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -358,17 +357,19 @@ static bool workspace_demands_acyclicity(XrLspServer *server, const char *name) 
     if (!root || !*root)
         return false;
 
-    DIR *dir = opendir(root);
+    XrDirIter *dir = xr_dir_open(root);
     if (!dir)
         return false;
     bool found = false;
-    struct dirent *ent;
-    while (!found && (ent = readdir(dir)) != NULL) {
-        const char *dot = strrchr(ent->d_name, '.');
+    XrDirEntry ent;
+    while (!found && xr_dir_next(dir, &ent)) {
+        if (ent.is_dir)
+            continue;
+        const char *dot = strrchr(ent.name, '.');
         if (!dot || strcmp(dot, ".toml") != 0)
             continue;
         char path[1024];
-        snprintf(path, sizeof(path), "%s/%s", root, ent->d_name);
+        snprintf(path, sizeof(path), "%s/%s", root, ent.name);
         size_t len = 0;
         char *text = read_whole_file(path, &len);
         if (!text)
@@ -388,7 +389,7 @@ static bool workspace_demands_acyclicity(XrLspServer *server, const char *name) 
         }
         xtoml_free(toml);
     }
-    closedir(dir);
+    xr_dir_close(dir);
     return found;
 }
 

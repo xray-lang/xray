@@ -1201,7 +1201,7 @@ static bool write_sidecar(XrLspServer *server, const char *json) {
     const char *tmp = getenv("TMPDIR");
     snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
              tmp ? tmp : "/tmp");
-    if (mkdir(g_cycle_workspace, 0700) != 0 && errno != EEXIST)
+    if (xr_test_mkdir(g_cycle_workspace) != 0 && errno != EEXIST)
         return false;
 
     server->workspace_folder_count = 1;
@@ -1414,7 +1414,7 @@ static bool write_contract(XrLspServer *server, const char *toml) {
     const char *tmp = getenv("TMPDIR");
     snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
              tmp ? tmp : "/tmp");
-    if (mkdir(g_cycle_workspace, 0700) != 0 && errno != EEXIST)
+    if (xr_test_mkdir(g_cycle_workspace) != 0 && errno != EEXIST)
         return false;
 
     server->workspace_folder_count = 1;
