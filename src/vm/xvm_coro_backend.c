@@ -1557,6 +1557,21 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *
         mctx->current_coro = next;
     next_ctx->current_coro = next;
     next_ctx->module_base_frame = 0;
+
+    /* Hand the execution context over with the coroutine.
+     *
+     * The protocol path enters `coro->exec_ctx` around run() and restores it on
+     * the way out, so anything asking xr_alloc_context_current() sees the
+     * coroutine it is actually running. A direct switch stays inside the same
+     * run() call — it swaps vm_ctx and jumps back to the dispatch loop — so
+     * without this the TLS context still names the coroutine we just blocked,
+     * and every allocation and release performed by `next` is charged to
+     * someone else's heap. A weak store was the first thing to notice.
+     *
+     * Deliberately no restore here: the blocked coroutine is not coming back
+     * through this frame. The enclosing enter/restore pair around run() puts
+     * the caller's context back when the interpreter finally returns. */
+    (void) xr_exec_context_enter(&next->exec_ctx);
     p->direct_switch_budget--;
     p->stats.vm_direct_switch_count++;
     p->stats.executed_count++;
