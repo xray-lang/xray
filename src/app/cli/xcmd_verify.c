@@ -333,8 +333,37 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
 #define VERIFY_INFERRED_SEMANTIC_EFFECTS                                                           \
     (XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SCHED_SUSPEND | XA_SEM_EFFECT_GEN_SUSPEND)
 
+/* Does this symbol's own type close a cycle in the L0 reference graph?
+ *
+ * `is_cycle_candidate` is set by xa_mark_cycle_candidates on every class the
+ * DFS found on a cycle. A `weak` field breaks the edge there, so annotating one
+ * is exactly how a user takes their class out of the candidate set — and thus
+ * how they make this contract pass. */
+static bool verify_no_reference_cycles(XaAnalyzer *analyzer, XaSymbol *symbol, char *reason,
+                                       size_t reason_size) {
+    (void) analyzer;
+    XrType *type = symbol ? symbol->links.type : NULL;
+    if (!type)
+        type = symbol ? symbol->links.declared_type : NULL;
+    if (type && type->is_cycle_candidate) {
+        snprintf(reason, reason_size,
+                 "cannot prove acyclicity: '%s' is on a cycle in the compile-time type graph "
+                 "(a recursive type reads the same as a cycle at this level). Break the edge "
+                 "with a `weak` field, or drop the contract here and use the test-mode detector",
+                 symbol->name ? symbol->name : "?");
+        return false;
+    }
+    return true;
+}
+
 static bool verify_requirement_effect(const char *requirement, XaAnalyzer *analyzer,
                                       XaSymbol *symbol, char *reason, size_t reason_size) {
+    /* Answered from the L0 type graph, before the effect lookup: this contract
+     * is normally written over a CLASS, and a class carries no effect summary.
+     * Requiring one would fail it for the wrong reason. */
+    if (strcmp(requirement, "no_reference_cycles") == 0)
+        return verify_no_reference_cycles(analyzer, symbol, reason, reason_size);
+
     const XaEffectSummary *effect = xa_effect_db_get(analyzer->effect_db, symbol->links.effect_id);
     if (!effect) {
         snprintf(reason, reason_size, "effect summary is missing");
@@ -1182,8 +1211,12 @@ XR_FUNC int cmd_verify(const XrCliInvocation *inv) {
             if (!requirement || requirement->type != XR_TOML_STRING ||
                 !verify_requirement_effect(requirement ? requirement->as.string : "",
                                            state.analyzer, symbol, reason, sizeof(reason))) {
-                xr_cli_error("verify", "contract '%s' failed: %s; witness: %s -> effect summary",
-                             symbol_name, reason, symbol_name);
+                xr_cli_error("verify", "contract '%s' failed: %s; witness: %s -> %s", symbol_name,
+                             reason, symbol_name,
+                             (requirement && requirement->as.string &&
+                              strcmp(requirement->as.string, "no_reference_cycles") == 0)
+                                 ? "L0 type graph"
+                                 : "effect summary");
                 failures++;
             }
         }

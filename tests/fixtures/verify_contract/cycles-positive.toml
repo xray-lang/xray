@@ -1,0 +1,8 @@
+version = 1
+
+# Task 247 phase G. A class with no cycle in the L0 type graph: pure reference
+# counting reclaims every object it builds, so the contract is provable.
+[[function]]
+symbol = "AcyclicLeaf"
+scope = "semantic"
+requires = ["no_reference_cycles"]

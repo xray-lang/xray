@@ -1,0 +1,9 @@
+version = 1
+
+# `next: CyclicNode?` closes a self-edge, so the contract must fail — and the
+# diagnostic must say the compiler cannot prove acyclicity, not that it found
+# a cycle. See task 247 §9.3.
+[[function]]
+symbol = "CyclicNode"
+scope = "semantic"
+requires = ["no_reference_cycles"]

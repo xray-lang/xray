@@ -40,3 +40,28 @@ export fn driveCounter(n: int) -> int {
 
 print(pure(41))
 print(callPrivateWide(41 as u64))
+
+// Task 247 phase G: a class whose type graph has no cycle. Pure RC reclaims
+// everything it builds, so `no_reference_cycles` is provable here.
+export class AcyclicLeaf {
+    v: int
+    constructor(v) { this.v = v }
+}
+
+// The same contract must NOT be granted here: `next` closes a self-edge in the
+// L0 type graph. Every instance may well be a list that never loops, but the
+// compiler cannot tell that apart at the type level.
+export class CyclicNode {
+    next: CyclicNode?
+    v: int
+    constructor(v) { this.next = null; this.v = v }
+}
+
+// Annotating the back-edge `weak` takes this class out of the L0 candidate set,
+// so the same contract that fails on CyclicNode is provable here. This is the
+// end-to-end link between phase C (`weak`) and phase G (the contract).
+export class WeakBrokenNode {
+    weak parent: WeakBrokenNode?
+    v: int
+    constructor(v) { this.parent = null; this.v = v }
+}

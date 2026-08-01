@@ -1,0 +1,75 @@
+// anchor: cycle-leak-bounded-by-coroutine-heap
+// Task 247 phase F.2 — the L2 boundary, stated as a runtime-observable fact.
+//
+// A reference cycle is not reclaimed: task 247 removed the trial-deletion
+// collector, so nothing at runtime breaks one. What the coroutine heap
+// guarantees instead is a BOUND — the heap is released as a whole when the
+// coroutine ends, so an unreclaimed cycle leaks no further than that
+// coroutine's lifetime.
+//
+// This is the property that makes forgetting a `weak` cost a bounded leak
+// rather than a permanent one, and it is unusual among pure reference-counted
+// languages (an Rc<RefCell<…>> cycle in Rust, or a strong cycle in Swift,
+// leaks until the process exits).
+//
+// Asserted behaviourally rather than by reading a heap counter: the objects in
+// the cycle must stay alive and correct for as long as the coroutine runs, and
+// the program must complete normally afterwards. Both backends must agree.
+
+class Node {
+    peer: Node?
+    tag: int
+    constructor(tag) { this.peer = null; this.tag = tag }
+}
+
+// Builds a two-object cycle and returns a checksum computed by walking it.
+// Nothing here breaks the cycle, so both nodes survive until the coroutine's
+// heap goes away.
+fn build_cycle_and_walk(seed: int) -> int {
+    var a = Node(seed)
+    var b = Node(seed + 1)
+    a.peer = b
+    b.peer = a
+
+    var sum = 0
+    var cur = a
+    var steps = 0
+    while (steps < 6) {
+        sum += cur.tag
+        var next = cur.peer
+        if (next == null) { return -1 }
+        cur = next
+        steps += 1
+    }
+    return sum
+}
+
+fn worker(rounds: int) -> int {
+    var total = 0
+    var i = 0
+    while (i < rounds) {
+        // Each round leaves a cycle behind. None of them is reclaimed while
+        // this coroutine runs; all of them go when its heap is released.
+        total += build_cycle_and_walk(i)
+        i += 1
+    }
+    return total
+}
+
+fn main() {
+    // seed..seed+1 walked 6 times: 3*seed + 3*(seed+1) = 6*seed + 3
+    // rounds 0..99  =>  6*(0+..+99) + 3*100 = 6*4950 + 300 = 30000
+    var t = go worker(100)
+    var got = await t
+    print(got)
+
+    // The coroutine has ended, so its heap — cycles included — is gone.
+    // Running the same workload again must produce the identical result:
+    // a bounded leak does not accumulate across coroutine lifetimes.
+    var t2 = go worker(100)
+    var got2 = await t2
+    print(got2)
+
+    print(got == got2)
+}
+main()

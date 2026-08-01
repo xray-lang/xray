@@ -1,0 +1,8 @@
+version = 1
+
+# Phase C + G end to end: a `weak` back-edge breaks the L0 cycle, so the
+# contract that fails on CyclicNode is provable on this class.
+[[function]]
+symbol = "WeakBrokenNode"
+scope = "semantic"
+requires = ["no_reference_cycles"]

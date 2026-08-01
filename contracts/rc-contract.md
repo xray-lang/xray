@@ -16,6 +16,16 @@ For every RC-managed value, including registered identity aliases:
   join cannot assign one predecessor's owner to all paths.
 - C5: ownership metadata is explicit and consistent, and SSA users reference
   live definitions.
+- C6: reclamation is reference counting alone — an object dies when its last
+  strong reference is released, and nothing collects reference cycles at
+  runtime. What a cycle costs is bounded rather than reclaimed: every coroutine
+  owns its heap and that heap is released whole when the coroutine ends, so an
+  unreclaimed cycle leaks no further than the lifetime of the coroutine that
+  built it. Only the MODULE_STATIC, CONST_SHARED, and SYNC_SHARED ownership
+  domains, plus the main execution's own lifetime, can leak for the life of the
+  process. Cycles are prevented statically (L0 type graph), broken explicitly
+  with a `weak` field (L1), and capped by this boundary (L2); the development
+  detector reports them and never reclaims. See LANGUAGE_SPEC 16.3.
 
 The independent verifier must not reuse ARC closure/alias implementation logic.
 It runs after ARC insertion in every build and reports violations as ICEs with

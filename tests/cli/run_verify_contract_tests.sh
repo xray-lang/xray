@@ -56,4 +56,24 @@ fi
 grep -q "contract 'counter' failed" "$WORK/generator.err"
 grep -q 'forbidden semantic effect' "$WORK/generator.err"
 
+# Task 247 phase G — no_reference_cycles, proven from the L0 type graph.
+"$XRAY" verify --contract cycles-positive.toml >"$WORK/cyc_ok.out" 2>"$WORK/cyc_ok.err"
+grep -q 'verified symbol-id=' "$WORK/cyc_ok.out"
+
+# A recursive type must fail, and the wording must say the compiler cannot
+# PROVE acyclicity — not that it detected a cycle. Those are different claims
+# and only the first one is true (task 247 §9.3).
+if "$XRAY" verify --contract cycles-negative.toml >"$WORK/cyc_bad.out" 2>"$WORK/cyc_bad.err"; then
+    echo "recursive type unexpectedly proved no_reference_cycles" >&2
+    exit 1
+fi
+grep -q "contract 'CyclicNode' failed" "$WORK/cyc_bad.err"
+grep -q 'cannot prove acyclicity' "$WORK/cyc_bad.err"
+grep -q 'L0 type graph' "$WORK/cyc_bad.err"
+
+# Phase C + G end to end: a `weak` back-edge takes the class out of the
+# candidate set, so the same contract becomes provable.
+"$XRAY" verify --contract cycles-weak-broken.toml >"$WORK/cyc_weak.out" 2>"$WORK/cyc_weak.err"
+grep -q 'verified symbol-id=' "$WORK/cyc_weak.out"
+
 echo "PASS: versioned verify contract succeeds and fails closed"
