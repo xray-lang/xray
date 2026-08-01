@@ -17,6 +17,7 @@
 #include "../../base/xlog.h"
 #include "xclass_builder.h"
 #include "xclass.h"
+#include "../mem/xcycle_detector.h"
 #include "../xisolate_api.h"
 #include "xclass_system.h"
 #include "../../base/xmalloc.h"
@@ -288,8 +289,17 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
     }
 
     // Propagate cycle candidate flag from compile-time type graph analysis
-    if (desc->flags & XR_CLASS_CYCLE_CANDIDATE)
+    if (desc->flags & XR_CLASS_CYCLE_CANDIDATE) {
         cls->flags |= XR_CLASS_CYCLE_CANDIDATE;
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+        /* Snapshot the name while it is still valid. By the time a coroutine's
+         * heap is scanned at teardown, the interned string may be gone and the
+         * report would print raw bytes for the type of every object on the
+         * cycle. Only candidates are registered, so an acyclic program pays
+         * nothing. */
+        xr_cycle_detector_register_class(cls, desc->class_name);
+#endif
+    }
     if (desc->flags & XR_CLASS_HAS_WEAK_FIELDS)
         cls->flags |= XR_CLASS_HAS_WEAK_FIELDS;
 

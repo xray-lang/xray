@@ -74,14 +74,14 @@ check_shape() {  # $1=描述  $2=grep 模式  $3=期望的最少条数
 }
 
 # G1 Map 值边：环里有 map，且是 4 个对象（两个实例 + 两个 map）
-check_shape "Map-value-edge cycle detected" '#cycle objects=4 .*map@' 1
+check_shape "Map-value-edge cycle detected" '#cycle objects=4 .*MapNode@.*map@' 1
 # G2 Json 通配边
-check_shape "Json-wildcard-edge cycle detected" '#cycle .*Json@' 1
+check_shape "Json-wildcard-edge cycle detected" '#cycle .*JsonNode@' 1
 # 大对象边：环里有 array
-check_shape "large-object cycle detected" '#cycle objects=4 .*array@' 1
-# 纯实例边（Plain / UnionNode 这类）：2 个对象且不含任何容器
-check_shape "plain instance-to-instance cycles detected" \
-    '#cycle objects=2 bytes=[0-9]* members=instance@[0-9a-fx]*,instance@' 2
+check_shape "large-object cycle detected" '#cycle objects=4 .*BigNode@.*array@' 1
+# 纯实例边：类名由检测器在类构建时快照，所以这里可以按名字断言
+check_shape "Plain instance-to-instance cycle detected" '#cycle .*Plain@' 1
+check_shape "UnionNode cycle detected" '#cycle .*UnionNode@' 1
 
 # 自环（1 个对象）与三元环（3 个）：分组不得把环长写死成 2
 self_n="$(printf '%s' "$OUT" | grep -c '#cycle objects=1 ')"

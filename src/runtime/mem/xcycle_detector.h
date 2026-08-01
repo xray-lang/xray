@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 struct XrCoroHeap;
+struct XrClass;
 
 #ifdef XR_ENABLE_CYCLE_DETECTOR
 
@@ -68,6 +69,21 @@ bool xr_cycle_detector_count_live(struct XrCoroHeap *heap, uint32_t *out_count);
 void xr_cycle_detector_accumulate(const XrCycleReport *report);
 bool xr_cycle_detector_any_found(void);
 void xr_cycle_detector_reset(void);
+
+/* Snapshot a cycle-candidate class's name at construction time.
+ *
+ * A class name is an interned symbol whose storage can outlive neither the
+ * heap it was allocated on nor the symbol table — both of which may be gone by
+ * the time a coroutine's heap is torn down and scanned. Reading cls->name then
+ * yields whatever bytes are left there. Registering here, where the descriptor
+ * still holds a valid name, is what lets a report name the types on a cycle.
+ *
+ * Only candidate classes are registered, so a program with no cyclic types
+ * pays nothing. */
+void xr_cycle_detector_register_class(const struct XrClass *cls, const char *name);
+
+/* The snapshotted name for a class, or NULL if it was never registered. */
+const char *xr_cycle_detector_class_name(const struct XrClass *cls);
 
 #else /* !XR_ENABLE_CYCLE_DETECTOR */
 

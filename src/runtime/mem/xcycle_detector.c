@@ -285,7 +285,15 @@ static const char *detector_type_name(const XrObjHeader *obj) {
     switch (obj->type) {
         case XR_TINSTANCE: {
             const XrClass *cls = ((const XrInstance *) obj)->klass;
-            if (!cls || !cls->name)
+            if (!cls)
+                return "instance";
+            /* The snapshot taken at class construction, when the name was
+             * still valid. Falls through to the live pointer only for classes
+             * that were never registered. */
+            const char *snap = xr_cycle_detector_class_name(cls);
+            if (snap)
+                return snap;
+            if (!cls->name)
                 return "instance";
             /* A class name is an interned symbol, and the symbol table can be
              * gone by the time a coroutine's heap is torn down — printing the
@@ -458,6 +466,56 @@ void xr_cycle_detector_accumulate(const XrCycleReport *report) {
 
 bool xr_cycle_detector_any_found(void) {
     return g_detector_found_any;
+}
+
+/* ========== Class-name snapshots ========== */
+
+/* A small append-only table, owned by the detector and never freed: it must
+ * outlive every heap it describes, and a development build's process exit is
+ * the only correct point to drop it. */
+typedef struct {
+    const struct XrClass *cls;
+    char *name;
+} DetectorClassName;
+
+static DetectorClassName *g_class_names;
+static uint32_t g_class_name_count;
+static uint32_t g_class_name_cap;
+
+void xr_cycle_detector_register_class(const struct XrClass *cls, const char *name) {
+    if (!cls || !name || !*name)
+        return;
+    for (uint32_t i = 0; i < g_class_name_count; i++) {
+        if (g_class_names[i].cls == cls)
+            return;
+    }
+    if (g_class_name_count == g_class_name_cap) {
+        uint32_t cap = g_class_name_cap ? g_class_name_cap * 2 : 16;
+        DetectorClassName *grown =
+            (DetectorClassName *) xr_realloc(g_class_names, cap * sizeof(*grown));
+        if (!grown)
+            return; /* best effort: a missing name degrades to "instance" */
+        g_class_names = grown;
+        g_class_name_cap = cap;
+    }
+    size_t len = strlen(name);
+    char *copy = (char *) xr_malloc(len + 1);
+    if (!copy)
+        return;
+    memcpy(copy, name, len + 1);
+    g_class_names[g_class_name_count].cls = cls;
+    g_class_names[g_class_name_count].name = copy;
+    g_class_name_count++;
+}
+
+const char *xr_cycle_detector_class_name(const struct XrClass *cls) {
+    if (!cls)
+        return NULL;
+    for (uint32_t i = 0; i < g_class_name_count; i++) {
+        if (g_class_names[i].cls == cls)
+            return g_class_names[i].name;
+    }
+    return NULL;
 }
 
 void xr_cycle_detector_reset(void) {
