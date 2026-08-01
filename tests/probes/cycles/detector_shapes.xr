@@ -4,10 +4,8 @@
 // 断言在脚本里（比对检测器的机器可读输出），不在这里——检测器**不提供**
 // 任何 stdlib 入口（§0.3：不得制造第二个空钩子），所以 .xr 侧看不见它。
 //
-// 环收集器在阶段 E 移除前仍会抢先回收这些环，所以先关掉它：这里要测的是
-// 检测器能不能看见，不是收集器能不能收。
-
-import runtime
+// 阶段 E 移除 ORC 之后，运行时不再回收任何环，所以这里不需要（也无法）关掉
+// 收集器：环一定还在，检测器该看见的就是它们。
 
 // L0 的 Map 值边（G1）——修复前这类环根本不被标为候选
 class MapNode {
@@ -61,7 +59,6 @@ fn triangle() {
     c.peer = a
 }
 
-runtime.disableCycleCollection()
 map_cycle()
 json_cycle()
 plain_cycle()

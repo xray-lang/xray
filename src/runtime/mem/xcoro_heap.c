@@ -327,6 +327,24 @@ static void coro_heap_unregister_large_object(XrCoroHeap *heap, XrObjHeader *obj
 void xr_coro_heap_teardown_inplace(XrCoroHeap *heap) {
     if (!heap)
         return;
+
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Before the bulk free, which is the only moment this leak is visible.
+     * The coroutine-heap boundary bounds a cycle's lifetime (spec 16.3) — and
+     * in doing so hides it, because everything is about to be freed anyway.
+     * Scanning here is what turns "bounded leak" into "reported leak".
+     *
+     * Placed on the in-place teardown rather than on xr_coro_heap_destroy
+     * because that is the one point BOTH paths share: a pooled coroutine heap
+     * reaches it through destroy, and the runtime core's embedded root heap
+     * (task 250) reaches it directly. Scanning only in destroy left the entire
+     * main execution invisible to the detector. */
+    if (!heap->is_tearing_down) {
+        XrCycleReport report;
+        (void) xr_cycle_detector_scan(heap, &report);
+    }
+#endif
+
     heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
     xr_region_destroy(&heap->region);
@@ -340,17 +358,6 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     if (!heap)
         return;
     XR_DCHECK(!heap->is_collecting, "coro_heap_destroy called while collecting");
-
-#ifdef XR_ENABLE_CYCLE_DETECTOR
-    /* Before the bulk free, which is the only moment this leak is visible.
-     * The coroutine-heap boundary bounds a cycle's lifetime (spec 16.3) — and
-     * in doing so hides it, because everything is about to be freed anyway.
-     * Scanning here is what turns "bounded leak" into "reported leak". */
-    {
-        XrCycleReport report;
-        (void) xr_cycle_detector_scan(heap, &report);
-    }
-#endif
 
     xr_coro_heap_teardown_inplace(heap);
 

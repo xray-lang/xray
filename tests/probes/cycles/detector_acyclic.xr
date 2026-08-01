@@ -4,8 +4,6 @@
 // 覆盖的都是**类型图上有自环但对象图无环**的形态——L0 是类型级近似，
 // 它必须把这些标为候选（247 §A.5 第二条），而检测器必须不报。
 
-import runtime
-
 class TreeNode {
     children: Array<TreeNode>
     tag: int
@@ -46,7 +44,6 @@ fn closures_without_cycles() -> int {
     return f()
 }
 
-runtime.disableCycleCollection()
 build_tree()
 build_list()
 closures_without_cycles()

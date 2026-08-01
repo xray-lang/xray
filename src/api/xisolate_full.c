@@ -33,6 +33,7 @@
 #include "../module/xmodule.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
+#include "../runtime/mem/xcycle_detector.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../vm/xvm_internal.h"
 #include "../coro/xscope_transfer.h"
@@ -191,6 +192,23 @@ static void isolate_cleanup_full(XrVMRuntime *isolate) {
         xr_registry_free(isolate);
         isolate->core_rt->type_registry = NULL;
     }
+
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    /* Scan the root execution's heap while class names are still readable.
+     *
+     * The heap itself is torn down later, inside xr_runtime_core_delete — but
+     * the symbol table that owns every interned class name goes away right
+     * below, so a scan from there would print freed memory for the type of
+     * each object on a cycle. This is the last point where a cycle in the main
+     * execution can be reported with names attached. */
+    {
+        XrCycleReport root_report;
+        (void) xr_cycle_detector_scan(&isolate->core_rt->root_heap, &root_report);
+        /* Claim the scan so the teardown path does not report the same cycles
+         * a second time. */
+        isolate->core_rt->root_heap.is_tearing_down = 1;
+    }
+#endif
 
     if (isolate->core_rt->symbol_table) {
         xr_symbol_table_destroy((XrSymbolTable *) isolate->core_rt->symbol_table);

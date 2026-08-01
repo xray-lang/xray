@@ -7,8 +7,6 @@
 // 用的是 A.6 明确**不报**的一级间接形态（`o.holder.handler = ...`），
 // 直接形态在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
 
-import runtime
-
 class Holder {
     handler: () -> int
     constructor() { this.handler = fn() -> int { return 0 } }
@@ -26,6 +24,5 @@ fn indirect_closure_cycle() {
     o.holder.handler = fn() -> int { return o.bump() }
 }
 
-runtime.disableCycleCollection()
 indirect_closure_cycle()
 print("closure cycle built")
