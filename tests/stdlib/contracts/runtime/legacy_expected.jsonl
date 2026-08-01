@@ -1,2 +1,2 @@
-{"case":"cycle-collector-toggle","classification":"required","effects":{"states":[true,false,true]},"error":null,"legacy_commit":"5ba146f59ba3f2518e457ea9ac2dd0f7b246d5ee","outcome":"value","value":true}
+{"case":"cycle-collector-toggle","classification":"removed","effects":{"states":[true,false,true]},"error":null,"legacy_commit":"5ba146f59ba3f2518e457ea9ac2dd0f7b246d5ee","outcome":"value","value":true}
 {"case":"heap-counters","classification":"required","effects":{},"error":null,"legacy_commit":"5ba146f59ba3f2518e457ea9ac2dd0f7b246d5ee","outcome":"value","value":true}

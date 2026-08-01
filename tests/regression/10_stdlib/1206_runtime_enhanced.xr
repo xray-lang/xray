@@ -40,35 +40,7 @@
 // bugs during the May 2026 burn-in.
 
 import runtime
-
-// @test runtime.disableCycleCollection/enableCycleCollection pairing toggles the automatic cycle collector
-@test
-fn test_mem_disable_enable() {
-    assert_eq(runtime.isCycleCollectionEnabled(), true)
-    runtime.disableCycleCollection()
-    assert_eq(runtime.isCycleCollectionEnabled(), false)
-    runtime.enableCycleCollection()
-    assert_eq(runtime.isCycleCollectionEnabled(), true)
-}
-
-// @test runtime.disableCycleCollection pauses the automatic cycle collector
-@test
-fn test_mem_disable_prevents_gc() {
-    runtime.disableCycleCollection()
-    var before_count = runtime.info().cycleCollections
-    // Allocate a bunch of objects
-    var arr: Array<Json> = []
-    for (var i = 0; i < 500; i++) {
-        arr.push({"idx": i, "data": "item_" + string(i)})
-    }
-    // Automatic cycle collection must not have run while disabled
-    var after_count = runtime.info().cycleCollections
-    assert_eq(before_count, after_count)
-    assert(len(arr) == 500)
-    runtime.enableCycleCollection()
-}
-
-// @test runtime.info contains the RC-native keys
+// @test runtime.info exposes the full RC introspection key set
 @test
 fn test_mem_info_keys() {
     var info = runtime.info()
@@ -76,9 +48,6 @@ fn test_mem_info_keys() {
     assert(info.liveBytes >= 0)
     assert(info.liveKB >= 0.0)
     assert(info.liveObjects >= 0)
-    // Automatic cycle collector state
-    assert(info.cycleCollections >= 0)
-    assert_eq(typeName(info.cycleCollectionEnabled), "bool")
     assert(info.finalizerCount >= 0)
     // Region block stats
     assert(info.blocks >= 0)
@@ -86,20 +55,10 @@ fn test_mem_info_keys() {
     assert(info.fullBlocks >= 0)
 }
 
-// @test runtime.collectCycles returns a monotonic cycle count
-@test
-fn test_mem_collect_returns_count() {
-    // Under RC the cycle counter never decreases. A cycle-free program may
-    // report the same count across collects — assert monotonicity, not growth.
-    var count1 = runtime.collectCycles()
-    var count2 = runtime.collectCycles()
-    assert(count2 >= count1)
-}
 
 // @test runtime.liveBytes decreases after collect with dead objects
 @test
 fn test_mem_live_bytes_decreases_after_collect() {
-    runtime.collectCycles()
     var baseline = runtime.liveBytes()
     // Create objects in a scope that makes them collectable
     fn make_garbage() {
@@ -111,7 +70,6 @@ fn test_mem_live_bytes_decreases_after_collect() {
     make_garbage()
     var after_alloc = runtime.liveBytes()
     assert(after_alloc >= baseline)
-    runtime.collectCycles()
     var after_collect = runtime.liveBytes()
     // Memory should not grow after collecting the garbage
     assert(after_collect <= after_alloc)

@@ -1,22 +1,11 @@
 import runtime
 
-var reset = 0
-while (reset < 255) {
-    runtime.enableCycleCollection()
-    reset = reset + 1
-}
-assert(runtime.isCycleCollectionEnabled())
-runtime.disableCycleCollection()
-assert(!runtime.isCycleCollectionEnabled())
-runtime.enableCycleCollection()
-assert(runtime.isCycleCollectionEnabled())
-print("{\"case\":\"cycle-collector-toggle\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"states\":[true,false,true]}}")
+// cycle-collector-toggle 没有后继：收集器本身没了（任务 247），所以这里也没有
+// 可观察的对照项。契约里该 case 已登记 classification = "removed"。
 
 assert(runtime.liveBytes() >= 0)
 assert(runtime.liveObjects() >= 0)
-assert(runtime.collectCycles() >= 0)
 var info = runtime.info()
 assert(info.liveBytes >= 0)
 assert(info.liveObjects >= 0)
-assert(info.cycleCollections >= 0)
 print("{\"case\":\"heap-counters\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

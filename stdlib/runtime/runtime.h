@@ -11,7 +11,7 @@
  *   Control plane for the Xray runtime itself: cycle-collector control and
  *   per-coroutine memory statistics (task 154 moved these out of `mem`,
  *   which now only carries raw-memory capabilities). Xray reclamation is
- *   per-coroutine reference counting + Bacon-Rajan cycle collection — not a
+ *   per-coroutine reference counting alone (no cycle collection) — not a
  *   tracing GC — hence `runtime.*`, not `gc.*`.
  */
 

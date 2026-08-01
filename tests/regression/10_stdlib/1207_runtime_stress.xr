@@ -6,7 +6,7 @@
 import runtime
 
 // --- Test 1: String pool survival under memory pressure ---
-// Bug #4 pattern: interned strings must survive runtime.collectCycles()
+// Bug #4 pattern: interned strings must survive heavy allocation churn
 // Exercises: global string pool ACCESSED flag + markobject path
 @test
 fn test_string_pool_survival() {
@@ -17,7 +17,6 @@ fn test_string_pool_survival() {
 
     // Multiple cycle-collection rounds to trigger string pool sweep
     for (var cycle = 0; cycle < 5; cycle++) {
-        runtime.collectCycles()
         // Create garbage between cycles
         for (var j = 0; j < 100; j++) {
             var tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
@@ -41,14 +40,12 @@ fn test_nested_string_key_survival() {
         data.push(m)
     }
 
-    runtime.collectCycles()
 
     // Create churn to stress hole scanning
     for (var j = 0; j < 500; j++) {
         var tmp = [j, j + 1, j + 2]
     }
 
-    runtime.collectCycles()
 
     for (var i = 0; i < 200; i++) {
         assert_eq(data[i]["val"], i * 3)
@@ -69,14 +66,12 @@ fn test_closure_upvalue_gc() {
         })
     }
 
-    runtime.collectCycles()
 
     // Create garbage to push GC
     for (var j = 0; j < 300; j++) {
         var tmp: Json = {"garbage": j}
     }
 
-    runtime.collectCycles()
 
     for (var i = 0; i < 100; i++) {
         assert_eq(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
@@ -94,7 +89,6 @@ fn test_rapid_alloc_collect() {
         for (var i = 0; i < 50; i++) {
             batch.push({"c": cycle, "i": i, "s": "v" + string(cycle) + "_" + string(i)})
         }
-        runtime.collectCycles()
         // Keep last batch alive
         if (cycle >= 15) {
             survivors.push(batch)
@@ -127,14 +121,12 @@ fn test_mixed_container_gc() {
         data.push({"arr": item_arr, "map_key": "k" + string(i)})
     }
 
-    runtime.collectCycles()
 
     // Create garbage
     for (var j = 0; j < 500; j++) {
         var tmp = [j, j]
     }
 
-    runtime.collectCycles()
 
     // Verify all containers intact
     for (var i = 0; i < 100; i++) {
@@ -156,7 +148,6 @@ fn test_generational_cross_reference() {
         long_lived.push({"id": i, "children": []})
     }
 
-    runtime.collectCycles()
 
     // Now add young objects as children of old objects
     for (var round = 0; round < 10; round++) {
@@ -169,7 +160,6 @@ fn test_generational_cross_reference() {
             var tmp: Json = {"temp": j}
         }
 
-        runtime.collectCycles()
     }
 
     // Verify all children survived
@@ -193,7 +183,6 @@ fn test_string_concat_churn() {
         results.push(s)
 
         if (i % 20 == 0) {
-            runtime.collectCycles()
         }
     }
 
@@ -228,14 +217,12 @@ fn test_instance_field_gc() {
         nodes.push(n)
     }
 
-    runtime.collectCycles()
 
     // Garbage storm
     for (var j = 0; j < 500; j++) {
         var tmp = Node(j + 1000, "garbage")
     }
 
-    runtime.collectCycles()
 
     // Verify
     for (var i = 0; i < 100; i++) {

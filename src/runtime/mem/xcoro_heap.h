@@ -191,8 +191,6 @@ typedef struct XrCoroHeap {
     XrObjHeader **deferred_drops;  // LIFO stack of objects awaiting destroy
     uint32_t deferred_drop_count;  // entries in use
     uint32_t deferred_drop_cap;    // allocated entries (NULL/0 until first defer)
-
-    // === Cycle collector (Bacon-Rajan trial deletion) ===
 } XrCoroHeap;
 
 /* ========== Coroutine Heap Lifecycle API ========== */

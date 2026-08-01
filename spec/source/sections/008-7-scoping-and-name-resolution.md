@@ -179,15 +179,15 @@ Xray 采用多层内存管理：
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
 | const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
+| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 | 最后强引用释放时立即回收；引用环不被回收，随 coroutine 结束与剩余 Region 块、大对象一起批量释放（§16.8） |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
-- 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
+- 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
 - 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
-- cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
+- 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
 
 <!-- /xr-spec:cn -->
 
@@ -367,14 +367,14 @@ Xray uses a layered memory management strategy:
 | Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
 | Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
-| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
+| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting | immediately when the last strong reference is released; a reference cycle is not reclaimed and is freed in bulk along with the remaining Region blocks and large objects when the coroutine ends (§16.8) |
 | Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
 **Memory observation points**:
 - The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
-- The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
+- The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
 - Reference cycles are not reclaimed at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk release of the coroutine heap (L2).
-- The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
+- No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
 
 <!-- /xr-spec:en -->

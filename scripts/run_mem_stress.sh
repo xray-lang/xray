@@ -47,7 +47,7 @@ fi
 
 # memory-heavy regression files (interpreter is the canonical baseline).
 mem_tests=(
-    "${PROJECT_ROOT}/tests/regression/10_stdlib/1205_runtime_cycle_pressure.xr"
+    "${PROJECT_ROOT}/tests/regression/10_stdlib/1205_runtime_alloc_pressure.xr"
     "${PROJECT_ROOT}/tests/regression/10_stdlib/1206_runtime_enhanced.xr"
     "${PROJECT_ROOT}/tests/regression/10_stdlib/1207_runtime_stress.xr"
 )

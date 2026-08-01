@@ -4270,15 +4270,15 @@ Xray 采用多层内存管理：
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
 | const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
+| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 | 最后强引用释放时立即回收；引用环不被回收，随 coroutine 结束与剩余 Region 块、大对象一起批量释放（§16.8） |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
-- 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
+- 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
 - 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
-- cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
+- 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
 
 ---
 
@@ -7323,7 +7323,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `parallel` | 结构化 CPU 并行 |
 | `path` | 路径操作 |
 | `regex` | 正则 |
-| `runtime` | 运行时信息与 cycle collection |
+| `runtime` | 运行时信息与堆内省 |
 | `strconv` | 字符串数值解析 |
 | `sync` | 协程同步原语 |
 | `sys` | OS 线程与底层同步接口 |
@@ -7364,7 +7364,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数 + Bacon–Rajan cycle collector；已发布 const 根与同步句柄使用 verified shared domain |
+| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数，无环收集器；环由静态证明/`weak`/协程堆封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
 | 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 
@@ -7419,8 +7419,8 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
 | **defer** | 延迟执行：函数退出前执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
-| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC，而以引用计数为主，并用 Bacon–Rajan cycle collector 回收 coroutine-local 强引用环 |
-| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置；当前 cycle collector 不由函数调用或后向跳转 safepoint 驱动 |
+| **GC** | Garbage Collection 的泛称；Xray 没有任何形式的 GC —— 既没有 tracing GC，也没有环收集器。回收只由引用计数完成，因此回收点是精确的；引用环不被回收，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 coroutine 堆为上界随协程结束整块释放（§16.8） |
+| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
 | **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |

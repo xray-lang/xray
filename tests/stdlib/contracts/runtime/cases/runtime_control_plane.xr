@@ -1,23 +1,12 @@
 // VM/AOT control-plane contract: each backend observes its current coroutine heap.
+//
+// The cycle-collector toggles this case used to exercise are gone with the
+// collector (task 247). What remains is the part that still has meaning on
+// both backends: the heap counters.
 import runtime
-
-// The embedding host may enter with a nested disable count. Saturating enable
-// calls establish a deterministic baseline before observing the transition.
-var reset = 0
-while (reset < 255) {
-    runtime.enableCycleCollection()
-    reset = reset + 1
-}
-print(runtime.isCycleCollectionEnabled())
-runtime.disableCycleCollection()
-print(runtime.isCycleCollectionEnabled())
-runtime.enableCycleCollection()
-print(runtime.isCycleCollectionEnabled())
 
 print(runtime.liveBytes() >= 0)
 print(runtime.liveObjects() >= 0)
-print(runtime.collectCycles() >= 0)
 var info = runtime.info()
 print(info.liveBytes >= 0)
 print(info.liveObjects >= 0)
-print(info.cycleCollections >= 0)

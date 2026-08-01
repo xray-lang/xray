@@ -1,7 +1,9 @@
 // 001_gc_module_removed.xr
 // Expected: Compile error - the old gc module was removed.
-// Use `import runtime` and runtime.collectCycles()/runtime.liveBytes()
-// instead (task 154: runtime introspection lives in `runtime`, not `mem`).
+// Use `import runtime` and runtime.liveBytes()/runtime.liveObjects() instead
+// (task 154: runtime introspection lives in `runtime`, not `mem`). There is no
+// collect entry point at all any more — reclamation is reference counting and
+// its point is exact (task 247).
 
 import gc
 

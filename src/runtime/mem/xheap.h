@@ -9,10 +9,12 @@
  *
  * KEY CONCEPT:
  *   - Per-coroutine Region bump heap (XrCoroHeap) is the primary heap for
- *     runtime objects. Reclamation is compile-time reference counting: a
- *     per-size-class freelist reuses dropped blocks, whole-block reclaim
- *     returns emptied blocks, and a Bacon-Rajan cycle collector handles
- *     cycles. There is no tracing/mark-sweep. See xcoro_heap.h.
+ *     runtime objects. Reclamation is compile-time reference counting and
+ *     nothing else: a per-size-class freelist reuses dropped blocks and
+ *     whole-block reclaim returns emptied blocks. No tracing, no mark-sweep,
+ *     and since task 247 no cycle collector either — a reference cycle is not
+ *     reclaimed here, it is freed in bulk when the coroutine ends. See
+ *     xcoro_heap.h.
  *   - Isolate-level fixed heap (XrFixedHeap) is a malloc-backed linked list used
  *     for bootstrap, fallback, and a small set of fixed-lifetime objects
  *     (e.g. enum metadata, bound methods). Destroy hooks are invoked once

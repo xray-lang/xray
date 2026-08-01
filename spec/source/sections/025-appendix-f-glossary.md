@@ -22,8 +22,8 @@ order: 025
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
 | **defer** | 延迟执行：函数退出前执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
-| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC，而以引用计数为主，并用 Bacon–Rajan cycle collector 回收 coroutine-local 强引用环 |
-| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置；当前 cycle collector 不由函数调用或后向跳转 safepoint 驱动 |
+| **GC** | Garbage Collection 的泛称；Xray 没有任何形式的 GC —— 既没有 tracing GC，也没有环收集器。回收只由引用计数完成，因此回收点是精确的；引用环不被回收，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 coroutine 堆为上界随协程结束整块释放（§16.8） |
+| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
 | **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
@@ -68,8 +68,8 @@ order: 025
 | **coroutine** | User-space, suspendable/resumable execution flow |
 | **defer** | Deferred execution: runs before function exit (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
-| **GC** | Generic term for garbage collection; Xray has no tracing GC and primarily uses reference counting plus a Bacon–Rajan cycle collector for coroutine-local strong-reference cycles |
-| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state; the current cycle collector is not driven by function-call or back-edge safepoints |
+| **GC** | Generic term for garbage collection; Xray has none of it — no tracing GC and no cycle collector either. Reclamation is reference counting alone, which is what makes its point exact; a reference cycle is not reclaimed but ruled out statically on the type graph, broken with a `weak` field, or bounded by the coroutine heap it lives on and freed when that coroutine ends (§16.8) |
+| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |
 | **goroutine** | Equivalent of xray coroutine; launched via `go {...}` |
 | **hoisting** | Implicit declaration of a name before its first use |
 | **IC** | Inline Cache: optimization of property/method dispatch |

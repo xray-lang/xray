@@ -1,28 +1,11 @@
 import {
-    collectCycles,
-    disableCycleCollection,
-    enableCycleCollection,
     info,
-    isCycleCollectionEnabled,
     liveBytes,
     liveObjects,
 } from "runtime"
 
-var reset = 0
-while (reset < 255) {
-    enableCycleCollection()
-    reset = reset + 1
-}
-print(isCycleCollectionEnabled())
-disableCycleCollection()
-print(isCycleCollectionEnabled())
-enableCycleCollection()
-print(isCycleCollectionEnabled())
-
 print(liveBytes() >= 0)
 print(liveObjects() >= 0)
-print(collectCycles() >= 0)
 var snapshot = info()
 print(snapshot.liveBytes >= 0)
 print(snapshot.liveObjects >= 0)
-print(snapshot.cycleCollections >= 0)

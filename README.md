@@ -163,7 +163,7 @@ In a `select`, `value from ch` receives, `value to ch` sends, `after millisecond
 
 ### Memory management
 
-Xray does not use a concurrent tracing garbage collector. Ordinary execution-local reference values use compiler-inserted, per-coroutine reference counting; published const roots and audited synchronization/runtime handles use their verified shared storage plan. Eligible coroutine-local reference cycles are reclaimed by a Bacon–Rajan trial-deletion cycle collector, which can run automatically or through `runtime.collectCycles()`. Resource cleanup is expressed explicitly with `defer`.
+Xray does not use a garbage collector of any kind — not a concurrent tracing one, and not a cycle collector either. Ordinary execution-local reference values use compiler-inserted, per-coroutine reference counting; published const roots and audited synchronization/runtime handles use their verified shared storage plan. Reference counting is the whole mechanism, which is what makes the reclamation point exact: an object is destroyed at the instruction that drops its last reference, with no deferred pass to wait for. The cost of that exactness is that a reference cycle is not reclaimed. Cycles are handled where they are created rather than swept up afterwards: the compiler proves most object graphs acyclic, a `weak` field breaks the ones it cannot, and whatever remains is bounded by the coroutine heap it lives on and freed when that coroutine ends. A development build carries a detector that reports any cycle left over, naming the field to annotate. Resource cleanup is expressed explicitly with `defer`.
 
 ## Standard library
 

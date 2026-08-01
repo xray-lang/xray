@@ -4268,15 +4268,15 @@ Xray uses a layered memory management strategy:
 | Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
 | Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
-| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
+| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting | immediately when the last strong reference is released; a reference cycle is not reclaimed and is freed in bulk along with the remaining Region blocks and large objects when the coroutine ends (§16.8) |
 | Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
 **Memory observation points**:
 - The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
-- The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
+- The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
 - Reference cycles are not reclaimed at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk release of the coroutine heap (L2).
-- The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
+- No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
 
 ---
 
@@ -7338,7 +7338,7 @@ The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in
 | `parallel` | structured CPU parallelism |
 | `path` | path manipulation |
 | `regex` | regular expressions |
-| `runtime` | runtime information and cycle collection |
+| `runtime` | runtime information and heap introspection |
 | `strconv` | numeric string parsing |
 | `sync` | coroutine synchronization primitives |
 | `sys` | OS-thread and low-level synchronization surface |
@@ -7379,7 +7379,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
 | `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting + Bacon–Rajan cycle collector; published const roots and synchronized handles use a verified shared domain |
+| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting, no cycle collector; cycles are handled by static proof, `weak`, and the coroutine-heap bound. Published const roots and synchronized handles use a verified shared domain |
 | Classes / inheritance | none (struct + interface only) | classes with inheritance |
 | Generics | since 1.18 | yes; monomorphized by concrete type or backend representation |
 
@@ -7434,8 +7434,8 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **coroutine** | User-space, suspendable/resumable execution flow |
 | **defer** | Deferred execution: runs before function exit (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
-| **GC** | Generic term for garbage collection; Xray has no tracing GC and primarily uses reference counting plus a Bacon–Rajan cycle collector for coroutine-local strong-reference cycles |
-| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state; the current cycle collector is not driven by function-call or back-edge safepoints |
+| **GC** | Generic term for garbage collection; Xray has none of it — no tracing GC and no cycle collector either. Reclamation is reference counting alone, which is what makes its point exact; a reference cycle is not reclaimed but ruled out statically on the type graph, broken with a `weak` field, or bounded by the coroutine heap it lives on and freed when that coroutine ends (§16.8) |
+| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |
 | **goroutine** | Equivalent of xray coroutine; launched via `go {...}` |
 | **hoisting** | Implicit declaration of a name before its first use |
 | **IC** | Inline Cache: optimization of property/method dispatch |

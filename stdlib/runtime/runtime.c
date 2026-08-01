@@ -8,13 +8,12 @@
  * runtime.c - Xray runtime introspection/control module
  *
  * KEY CONCEPT:
- *   Reclamation is per-coroutine reference counting; the only collection
- *   event is the Bacon-Rajan cycle collector. This module exposes the
- *   runtime control plane (task 154 moved it out of `mem`, which now only
- *   carries raw-memory capabilities):
- *   - runtime.disableCycleCollection()   - pause automatic cycle collection
- *   - runtime.enableCycleCollection()    - resume automatic cycle collection
- *   - runtime.isCycleCollectionEnabled() - automatic collector state
+ *   Reclamation is per-coroutine reference counting and nothing else — there
+ *   is no collection event to observe or control, which is why this module
+ *   has no collect/enable/disable entry point (task 247 deleted them along
+ *   with the collector rather than leaving no-op stubs). This module exposes
+ *   the runtime introspection surface (task 154 moved it out of `mem`, which
+ *   now only carries raw-memory capabilities):
  *   - runtime.liveBytes()                - live memory bytes
  *   - runtime.liveObjects()              - live object count
  *   - runtime.info()                     - typed RuntimeInfo snapshot
@@ -52,12 +51,6 @@ static XrCoroHeap *get_heap(XrVMRuntime *isolate) {
     }
     return NULL;
 }
-
-/* ========== runtime.collectCycles() ========== */
-
-// Run the cycle collector + whole-block reclaim on the current coroutine.
-// Returns the cumulative cycle-collection count. Runs even when the
-// automatic collector is disabled (explicit user request).
 
 /* ========== runtime.liveBytes() ========== */
 

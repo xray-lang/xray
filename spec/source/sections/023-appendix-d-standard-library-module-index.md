@@ -29,7 +29,7 @@ order: 023
 | `parallel` | 结构化 CPU 并行 |
 | `path` | 路径操作 |
 | `regex` | 正则 |
-| `runtime` | 运行时信息与 cycle collection |
+| `runtime` | 运行时信息与堆内省 |
 | `strconv` | 字符串数值解析 |
 | `sync` | 协程同步原语 |
 | `sys` | OS 线程与底层同步接口 |
@@ -68,7 +68,7 @@ The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in
 | `parallel` | structured CPU parallelism |
 | `path` | path manipulation |
 | `regex` | regular expressions |
-| `runtime` | runtime information and cycle collection |
+| `runtime` | runtime information and heap introspection |
 | `strconv` | numeric string parsing |
 | `sync` | coroutine synchronization primitives |
 | `sys` | OS-thread and low-level synchronization surface |

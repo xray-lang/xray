@@ -1,6 +1,9 @@
-// Test RC/cycle-collection block reclamation under allocation pressure.
-// Verifies that explicit cycle collection and whole-block reclaim preserve
-// live objects and their children.
+// Test block reclamation under allocation pressure.
+//
+// Reclamation is reference counting alone (task 247): there is no round to
+// trigger and no collector to pause, so what these cases assert is stronger
+// than before — a live object and its children stay intact across heavy churn
+// with no "we only just collected" excuse available.
 
 import runtime
 
@@ -8,7 +11,6 @@ import runtime
 // Parent objects keep their children live throughout the reclaim pass.
 @test
 fn test_nested_object_survival() {
-    runtime.disableCycleCollection()
     var containers: Array<Json> = []
     for (var i = 0; i < 200; i++) {
         var inner_map: Json = {"key": "value_" + string(i), "idx": i}
@@ -18,8 +20,6 @@ fn test_nested_object_survival() {
             "name": "container_" + string(i)})
     }
 
-    // Force cycle collection and whole-block reclaim to run.
-    runtime.collectCycles()
 
     // Verify all nested data is intact
     for (var i = 0; i < 200; i++) {
@@ -30,25 +30,22 @@ fn test_nested_object_survival() {
     }
 }
 
-// --- Test 2: Allocate during cycle-collection round ---
-// Create objects, run collection/reclaim, then create more objects.
-// The new objects must not overwrite old live objects.
+// --- Test 2: Interleaved allocation phases ---
+// Create objects, then create more. The new objects must not land on top of
+// old live ones.
 @test
-fn test_alloc_interleaved_with_gc() {
-    runtime.disableCycleCollection()
+fn test_alloc_interleaved_phases() {
     var phase1: Array<Json> = []
     for (var i = 0; i < 100; i++) {
         phase1.push({"id": i, "data": "phase1_" + string(i)})
     }
 
-    runtime.collectCycles()
 
     var phase2: Array<Json> = []
     for (var i = 0; i < 100; i++) {
         phase2.push({"id": i + 100, "data": "phase2_" + string(i)})
     }
 
-    runtime.collectCycles()
 
     // Verify both phases intact
     for (var i = 0; i < 100; i++) {
@@ -58,11 +55,9 @@ fn test_alloc_interleaved_with_gc() {
 }
 
 // --- Test 3: Deep reference chains ---
-// Build a linked-list-like structure. Collection/reclaim must preserve the
-// entire live chain.
+// Build a linked-list-like structure. The entire live chain must survive.
 @test
 fn test_deep_reference_chain() {
-    runtime.disableCycleCollection()
     var head: Json = {"value": 0, "next": null}
     var current: Json = head
     for (var i = 1; i < 50; i++) {
@@ -71,7 +66,6 @@ fn test_deep_reference_chain() {
         current = node
     }
 
-    runtime.collectCycles()
 
     // Walk the chain and verify
     current = head
@@ -86,10 +80,9 @@ fn test_deep_reference_chain() {
 
 // --- Test 4: High churn with live roots ---
 // Rapidly create and discard temp objects while keeping a live set.
-// Exercises hole scanning after GC reclaims dead temp objects.
+// Exercises hole scanning after the dead temporaries are reclaimed.
 @test
 fn test_high_churn_with_live_roots() {
-    runtime.disableCycleCollection()
     var live: Array<string> = []
     for (var i = 0; i < 50; i++) {
         live.push("persistent_" + string(i))
@@ -103,7 +96,6 @@ fn test_high_churn_with_live_roots() {
         // temp goes out of scope
     }
 
-    runtime.collectCycles()
 
     // Live roots must survive all the churn
     for (var i = 0; i < 50; i++) {
@@ -111,21 +103,18 @@ fn test_high_churn_with_live_roots() {
     }
 }
 
-// --- Test 5: Multiple cycle-collection rounds ---
-// Run several full cycle-collection rounds with allocation in between.
+// --- Test 5: Repeated allocate-and-discard rounds ---
 @test
-fn test_multiple_gc_cycles() {
-    runtime.disableCycleCollection()
+fn test_repeated_alloc_rounds() {
     for (var cycle = 0; cycle < 10; cycle++) {
         var data: Array<Json> = []
         for (var i = 0; i < 100; i++) {
             data.push({"cycle": cycle, "idx": i})
         }
-        runtime.collectCycles()
         // Verify last batch
         assert_eq(data[99]["cycle"], cycle)
         assert_eq(data[99]["idx"], 99)
     }
 }
 
-print("All incremental memory pressure tests passed")
+print("All allocation pressure tests passed")

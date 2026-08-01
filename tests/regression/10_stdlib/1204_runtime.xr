@@ -1,13 +1,6 @@
-// Test runtime module - RC memory introspection and cycle collection control
+// Test runtime module - RC memory introspection
 
 import runtime
-
-// @test runtime.isCycleCollectionEnabled returns bool
-@test
-fn test_mem_is_cycle_collection_enabled() {
-    var running = runtime.isCycleCollectionEnabled()
-    assert_eq(typeName(running), "bool")
-}
 
 // @test runtime.liveBytes returns non-negative
 @test
@@ -23,24 +16,9 @@ fn test_mem_live_objects() {
     assert(objs >= 0)
 }
 
-// @test runtime.collectCycles does not crash
-@test
-fn test_mem_collect_cycles() {
-    runtime.collectCycles()
-    assert(true)
-}
-
-// @test runtime.info().cycleCollections returns non-negative
-@test
-fn test_mem_cycle_collections() {
-    var c = runtime.info().cycleCollections
-    assert(c >= 0)
-}
-
 // @test allocation increases memory
 @test
 fn test_alloc_increases_memory() {
-    runtime.collectCycles()
     var before = runtime.liveBytes()
     var arr: Array<string> = []
     for (var i = 0; i < 100; i++) {
