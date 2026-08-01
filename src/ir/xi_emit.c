@@ -773,8 +773,17 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
      * after being cell-wrapped by a hoisted function's capture.
      *
      * Special case: if the cell hasn't been created yet (first definition),
-     * emit the value normally then wrap with OP_CELL_NEW instead of CELL_SET. */
-    XiEmitReg real_dst = dst;
+     * emit the value normally then wrap with OP_CELL_NEW instead of CELL_SET.
+     *
+     * The cell always lives in cell_side_reg[var_id] — never in this
+     * definition's own register.  A fresh-dst op (CALL, ...) deliberately
+     * allocates a brand-new register instead of coalescing onto var_reg, so
+     * for `var h = null; fn c() { ...h... }; h = Child(0)` the CALL defining
+     * h lands in a different register from the cell created for the capture.
+     * Routing the write through the definition's register would make
+     * OP_CELL_SET store into a non-cell register; it silently no-ops when
+     * R[A] is null, so the assignment is dropped and both the closure and
+     * every later read of h observe null. */
     bool need_cell_set = false;
     bool need_cell_new = false;
     if (!handles_cell_dst && xi_emit_var_has_side_cell(ctx, v->var_id)) {
@@ -804,14 +813,22 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     }
 
     if (need_cell_new && ctx->status == XI_EMIT_OK) {
-        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, dst, 0, 0));
+        /* Create the cell in the variable's pinned cell register so that
+         * closure captures and blocks emitted earlier in RPO — both of which
+         * address the cell through cell_side_reg — see the same cell. */
+        XiEmitReg cell_reg = ctx->cell_side_reg[v->var_id];
+        if (cell_reg != dst)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, cell_reg, dst, 0));
+        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, cell_reg, 0, 0));
+        ctx->reg_map[v->id] = cell_reg;
         ctx->cell_wrapped[v->id] = true;
         ctx->cell_created[v->var_id] = true;
     }
 
     if (need_cell_set && ctx->status == XI_EMIT_OK) {
-        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, real_dst, dst, 0));
-        ctx->reg_map[v->id] = real_dst;
+        XiEmitReg cell_reg = ctx->cell_side_reg[v->var_id];
+        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell_reg, dst, 0));
+        ctx->reg_map[v->id] = cell_reg;
         free_reg(ctx, dst);
     }
 

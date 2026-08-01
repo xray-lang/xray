@@ -3111,6 +3111,17 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    add_test(
+        NAME regression_closure_capture_cell_reassign
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_mem/0805_closure_capture_cell_reassign.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_closure_capture_cell_reassign PROPERTIES
+        LABELS "regression;rc;vm"
+        TIMEOUT 30
+    )
+
     # ========================================================================
     # Task 220 — Verification asset governance gates (appended registrations)
     # Design: xray-docs/tasks/220-semantic-contract-freeze-and-verification-

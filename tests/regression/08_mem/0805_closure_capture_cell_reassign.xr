@@ -1,0 +1,141 @@
+// Regression: a mutable capture's cell lives in the variable's pinned cell
+// register, but the emitter routed OP_CELL_SET through the *defining value's*
+// own register. A fresh-dst op (CALL, ...) deliberately allocates a new
+// register rather than coalescing onto var_reg, so `var h = Child(0)` after a
+// hoisted closure captured h stored into a register that held no cell.
+// OP_CELL_SET silently no-ops when R[A] is null, so the assignment was dropped
+// and every later read — inside the closure and out — observed null. Where the
+// stale register happened to hold a non-cell pointer instead, the store went
+// through a bogus XrCell* and corrupted the heap (SIGSEGV / SIGABRT).
+//
+// Only captures whose definition lands in a different register from the cell
+// showed it, which is why an int capture assigned from a literal stayed green.
+
+class Parent {
+    children: Array<Child>
+    tag: int
+    constructor(tag) { this.children = []; this.tag = tag }
+}
+
+class Child {
+    tag: int
+    constructor(tag) { this.tag = tag }
+}
+
+// The reported repro: a hoisted closure captures an instance-typed local that
+// is defined by a call *after* the capture. Crashed the process before the fix.
+@test
+fn test_hoisted_closure_capture_survives_instance_def() {
+    var h = Child(0)
+    fn attach() {
+        var t = Parent(42)
+        t.children.push(h)
+    }
+    attach()
+    assert_eq(h.tag, 0)
+}
+
+// Two captured instances: each must reach its own cell, not one shared or
+// stale register.
+@test
+fn test_multiple_instance_captures_stay_distinct() {
+    var a = Child(1)
+    var b = Child(2)
+    fn pack() {
+        var t = Parent(0)
+        t.children.push(a)
+        t.children.push(b)
+    }
+    pack()
+    assert_eq(a.tag, 1)
+    assert_eq(b.tag, 2)
+}
+
+// Reassigning the captured variable from a call after the closure exists must
+// be visible through the closure, repeatedly.
+@test
+fn test_reassign_after_capture_visible_in_closure() {
+    var h = Child(0)
+    fn read() -> int {
+        return h.tag
+    }
+    h = Child(3)
+    assert_eq(read(), 3)
+    h = Child(4)
+    assert_eq(read(), 4)
+    assert_eq(h.tag, 4)
+}
+
+// The mirror direction: a write performed inside the closure must be visible
+// to the enclosing frame.
+@test
+fn test_closure_write_visible_to_enclosing_frame() {
+    var h = Child(1)
+    fn swap() {
+        h = Child(2)
+    }
+    assert_eq(h.tag, 1)
+    swap()
+    assert_eq(h.tag, 2)
+}
+
+// Repeated writes through the cell across a loop must not lose or alias the
+// captured instance.
+@test
+fn test_repeated_closure_writes_through_cell() {
+    var h = Child(0)
+    fn step(n: int) {
+        h = Child(n)
+    }
+    var i = 1
+    while (i <= 5) {
+        step(i)
+        assert_eq(h.tag, i)
+        i += 1
+    }
+    assert_eq(h.tag, 5)
+}
+
+// The captured instance stays alive and correct once the closure has stored it
+// into a container that outlives the call.
+@test
+fn test_captured_instance_retained_by_container() {
+    var h = Child(11)
+    var p = Parent(1)
+    fn attach() {
+        p.children.push(h)
+    }
+    attach()
+    assert_eq(len(p.children), 1)
+    assert_eq(p.children[0].tag, 11)
+    assert_eq(h.tag, 11)
+}
+
+// Mirror direction, through the cell-creation path rather than the store path:
+// the capture's reaching definition is the *second* assignment, so the cell was
+// created at the first definition's register while the closure captured the
+// second's. The closure then dereferenced a register holding a raw instance as
+// if it were an XrCell.
+@test
+fn test_cell_created_at_capture_register() {
+    var h = Child(1)
+    h = Child(2)
+    fn f() {
+        h = Child(3)
+    }
+    assert_eq(h.tag, 2)
+    f()
+    assert_eq(h.tag, 3)
+}
+
+// Non-RC captures shared the same emitter path; keep them covered so a future
+// change cannot fix the instance case by special-casing RC types.
+@test
+fn test_int_capture_roundtrip() {
+    var n = 0
+    fn setn() {
+        n = 7
+    }
+    setn()
+    assert_eq(n, 7)
+}
