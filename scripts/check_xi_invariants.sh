@@ -42,9 +42,19 @@ warn() {
     printf "  [WARN] %s\n" "$1"
 }
 
+# Always print the offending locations. This is called right after fail(), and a
+# gate that says "violations found" without saying where sends the reader back to
+# re-derive the grep by hand. --verbose only raises the cap.
 show_matches() {
-    if [ "${VERBOSE}" -eq 1 ] && [ -n "$1" ]; then
-        printf "%s\n" "$1" | head -20
+    if [ -n "$1" ]; then
+        if [ "${VERBOSE}" -eq 1 ]; then
+            printf "%s\n" "$1" | sed 's/^/    /'
+        else
+            printf "%s\n" "$1" | head -20 | sed 's/^/    /'
+            if [ "$(printf "%s\n" "$1" | wc -l)" -gt 20 ]; then
+                printf "    ... (--verbose for the rest)\n"
+            fi
+        fi
     fi
 }
 

@@ -63,7 +63,20 @@ static void class_field_default_from_ast(XiLower *l, AstNode *init, XiFieldDefau
                 out->kind = XI_FIELD_DEFAULT_STRING;
             break;
         default:
-            break;
+            /* Not a simple literal: the initializer is lowered as IR by the
+             * constructor prologue, and `out` stays XI_FIELD_DEFAULT_NONE from
+             * the memset above.
+             *
+             * This switch and is_simple_literal() enumerate the same shapes, and
+             * that agreement is load-bearing: the caller only emits the prologue
+             * for shapes is_simple_literal() rejects. A shape it accepts but this
+             * switch does not record would lose its initializer in both paths —
+             * silently. Assert the two cannot drift apart.
+             */
+            XR_DCHECK(!is_simple_literal(init),
+                      "class_field_default_from_ast: is_simple_literal() accepts a "
+                      "shape this switch does not record");
+            return;
     }
 }
 
