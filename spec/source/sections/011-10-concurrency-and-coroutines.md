@@ -114,7 +114,10 @@ var firstOk = await anySuccess [t1, t2, t3]
 - 用户统一写 `await task`，不写 `await (move task)`。若 `T` 是 unique mutable result，编译器把该 await 证明为 Task 的单次 terminal take；第二次 await 或随后再次使用该 single-owner task 是编译错误。若 `T` 是 const、同步共享或 inline-copy 结果，则按对应能力观察，不要求用户记另一套 await 语法。
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
 - 异常传播：
-  - `await t` 重抛 t 抛出的异常。
+  - `await t` 按 t 抛出时所属的通道重抛它的失败。协程内的 `throw <enum>` 以值错误重抛，因此 await 所在栈帧的 `catch (e)` 能抓住它；没有 catch 时按值向上传播，与普通 throw 一致。协程内的 panic 仍以 panic 重抛并继续展开。
+  - 因此 `await t` 继承被等待协程体的错误集：含此类 `await` 的函数，其可失败性与该协程体一致。若 await 处无法确定 task 绑定的协程（从集合中取出、由参数传入等），则 fail-closed 按 may-throw 处理。
+  - `linked scope` 出口同理：它在所属栈帧中按子协程的通道重抛第一个失败的子协程。
+  - 把结果作为值报告的形式——`awaitResult()`、`awaitTimeout(ms)`——从不重抛，因此也不进入所在函数的错误集。
   - `await t` 成功时返回 `T`；如果 `T` 是 `T?`，返回的 `null` 是任务真实结果，不代表取消或失败。
   - `await all` 中任一任务抛异常即整体抛异常（其余任务会被取消）。
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
@@ -589,7 +592,10 @@ var firstOk = await anySuccess [t1, t2, t3]
 - Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - PanicInfo propagation:
-  - `await t` rethrows the exception thrown by `t`.
+  - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
+  - `await t` therefore inherits the error set of the awaited coroutine's body, and a function containing such an `await` is fallible exactly when that body is. A task whose coroutine cannot be named at the await — read out of a collection, received as a parameter — is fail-closed: may-throw.
+  - The same holds at a `linked scope`'s exit, which re-raises its first failed child in the enclosing frame on that child's channel.
+  - The forms that report an outcome as a value — `awaitResult()`, `awaitTimeout(ms)` — never re-raise, and so never enter the enclosing function's error set.
   - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.

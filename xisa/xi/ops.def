@@ -1476,6 +1476,12 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+;; `stored-value` means "arg 0 is the container, arg 1+ is the value", which is
+;; the shape of xi.store.field. This op is arity 1 — the upvalue index lives in
+;; aux, so the value IS arg 0 — and under `stored-value` arg 0 read as the
+;; container and was never treated as consumed. ARC then released a value the
+;; cell had just taken ownership of, so `h = Child(2)` inside a closure left the
+;; enclosing frame reading freed memory.
 (define-xi-op xi.store.upval
   :class memory-write
   :arity 1
@@ -1483,7 +1489,7 @@
   :result-ownership none
   :tbaa-group upval
   :escape-use heap
-  :own-use stored-value
+  :own-use consume
   :effects (side-effect memory-write)
   :requires ()
   :observable ()

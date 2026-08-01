@@ -4299,7 +4299,6 @@ Xray 的错误处理分为两个严格分离的通道：
 
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
-- **通道穿过任何执行边界都不改变**：错误跨越协程边界后仍属于它被抛出时的通道。协程内的 `throw <enum>` 在重抛它的 `await` 处、以及重抛它的 `linked scope` 出口处，都仍是值错误——同一个 `catch (e)`，在一个栈帧内抓得住，跨两个栈帧也抓得住。见 §10.3。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
 - **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
@@ -5208,15 +5207,15 @@ var firstOk = await anySuccess [t1, t2, t3]
 - `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
 - 用户统一写 `await task`，不写 `await (move task)`。若 `T` 是 unique mutable result，编译器把该 await 证明为 Task 的单次 terminal take；第二次 await 或随后再次使用该 single-owner task 是编译错误。若 `T` 是 const、同步共享或 inline-copy 结果，则按对应能力观察，不要求用户记另一套 await 语法。
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
-- 失败传播——通道在边界上保真（§8.0）：
+- 异常传播：
   - `await t` 按 t 抛出时所属的通道重抛它的失败。协程内的 `throw <enum>` 以值错误重抛，因此 await 所在栈帧的 `catch (e)` 能抓住它；没有 catch 时按值向上传播，与普通 throw 一致。协程内的 panic 仍以 panic 重抛并继续展开。
   - 因此 `await t` 继承被等待协程体的错误集：含此类 `await` 的函数，其可失败性与该协程体一致。若 await 处无法确定 task 绑定的协程（从集合中取出、由参数传入等），则 fail-closed 按 may-throw 处理。
   - `linked scope` 出口同理：它在所属栈帧中按子协程的通道重抛第一个失败的子协程。
+  - 把结果作为值报告的形式——`awaitResult()`、`awaitTimeout(ms)`——从不重抛，因此也不进入所在函数的错误集。
   - `await t` 成功时返回 `T`；如果 `T` 是 `T?`，返回的 `null` 是任务真实结果，不代表取消或失败。
   - `await all` 中任一任务抛异常即整体抛异常（其余任务会被取消）。
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
-  - 把结果作为值报告的形式——`awaitResult()`、`awaitTimeout(ms)`——从不重抛，因此也不进入所在函数的错误集。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
 - `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / Json 结果类型。
 

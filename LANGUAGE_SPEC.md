@@ -4297,7 +4297,6 @@ Design principles:
 
 - **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
-- **A channel survives every execution boundary**: an error crossing a coroutine boundary keeps the channel it was raised on. A `throw <enum>` inside a coroutine is a value error at the `await` that re-raises it, and at the exit of a `linked scope` that re-raises it — so a `catch (e)` that would have caught it in one frame still catches it across two. See §10.3.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
 - **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
@@ -5222,15 +5221,15 @@ var firstOk = await anySuccess [t1, t2, t3]
 - `await` only applies to `Task<T>`; other types are a compile error.
 - Users always write `await task`, never `await (move task)`. If `T` is a unique mutable result, the compiler proves this await as the Task's one terminal take; a second await or later use of that single-owner task is a compile error. Const, synchronized-shared, and inline-copy results are observed according to their capability without a second await syntax.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
-- Failure propagation — the channel is preserved across the boundary (§8.0):
+- PanicInfo propagation:
   - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
   - `await t` therefore inherits the error set of the awaited coroutine's body, and a function containing such an `await` is fallible exactly when that body is. A task whose coroutine cannot be named at the await — read out of a collection, received as a parameter — is fail-closed: may-throw.
   - The same holds at a `linked scope`'s exit, which re-raises its first failed child in the enclosing frame on that child's channel.
+  - The forms that report an outcome as a value — `awaitResult()`, `awaitTimeout(ms)` — never re-raise, and so never enter the enclosing function's error set.
   - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
-  - The forms that report an outcome as a value — `awaitResult()`, `awaitTimeout(ms)` — never re-raise, and so never enter the enclosing function's error set.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
 - The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / Json result type.
 
