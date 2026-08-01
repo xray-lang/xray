@@ -452,9 +452,9 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             if (coro->task) {
                 if (coro->task->link_mode == XR_LINK_LINKED && coro->task->parent) {
                     // linked go: propagate error to parent task
-                    xr_task_fail_with_propagation(coro->task, coro->error);
+                    xr_task_fail_with_propagation(coro->task, coro->error, coro->error_is_value);
                 } else {
-                    xr_task_fail(coro->task, coro->error);
+                    xr_task_fail(coro->task, coro->error, coro->error_is_value);
                 }
             }
             xr_scheduler_host_notify_coro(runtime, coro, "error");

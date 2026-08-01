@@ -82,6 +82,18 @@ semantics remain unchanged.
     compiler memory-motion legality and does not enter `XaEffectSummary` or
     `XaMemoryEffectSummary`. A verification contract may reject an unhonored
     request but cannot turn it into a semantic fact or optimization license.
+13. A coroutine boundary that re-raises a child's failure is an error-set edge,
+    not just a control-flow one. `await t` unions the error set of the awaited
+    coroutine's body into the awaiting function, and each `go` inside a
+    `linked scope` unions its body's errors into the function containing the
+    scope, because that is where the scope re-raises them. A body that cannot
+    be named at the boundary is fail-closed to may-throw. The forms that report
+    an outcome as a value -- `awaitResult()`, `awaitTimeout()`, `await all`,
+    `await any`, `await anySuccess` -- do not re-raise and contribute nothing.
+    A detached `go` outside a linked scope likewise contributes nothing, and
+    expanding a callee's body must not carry either fact across the call edge.
+    Making a re-raising boundary contribute nothing, or a non-re-raising one
+    contribute, is a contract change.
 
 ## Digest anchors
 
@@ -89,7 +101,7 @@ anchor-sha256: src/frontend/analyzer/xa_effect_db.h e849adc15c07e973d7e5c9267afd
 anchor-sha256: src/frontend/analyzer/xa_effect_db.c 00d83ddcc7aa11858fc3dc193208eeb67bf806915bce61835aa3b973bb97227d
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c f6130beefd5cee32af7cea485f834c0056b3bd94e9465320540d85d0642fa83c
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 1ba000df19e8141436b3291b95a0287fdfda564113131ee6d02adcc361f44fe9
 anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602dd1e0d01751be3e88acbcc197edcc49ad99557f57d93f
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367

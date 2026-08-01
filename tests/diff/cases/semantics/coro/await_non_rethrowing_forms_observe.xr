@@ -1,0 +1,51 @@
+// anchor: coro-await-non-rethrowing-forms
+// The boundary that re-raises is plain `await t`. The forms that report an
+// outcome as a value -- awaitResult(), awaitTimeout(ms), `await all`,
+// `await any` -- must keep observing failure instead of raising it, and must
+// stay out of the enclosing function's error set (task 248 §2.3). A function
+// built only from those forms is still no-throw, so it needs no catch at all.
+enum E { Boom }
+
+fn failing() -> int {
+    throw E.Boom
+}
+
+fn ok(n: int) -> int {
+    return n + 1
+}
+
+// awaitResult(): failure arrives as TaskResult.Failed, not as a raise.
+fn observe_result() -> string {
+    var t = go failing()
+    match (t.awaitResult()) {
+        TaskResult.Success(v) -> { return "success" }
+        TaskResult.Failed(e) -> { return "failed" }
+        _ -> { return "other" }
+    }
+}
+
+// awaitTimeout(): same, through the timeout surface.
+fn observe_timeout() -> string {
+    var t = go failing()
+    match (t.awaitTimeout(5000)) {
+        TaskResult.Success(v) -> { return "success" }
+        TaskResult.Failed(e) -> { return "failed" }
+        _ -> { return "other" }
+    }
+}
+
+// Aggregates collect outcomes; no raise reaches this frame.
+fn aggregate() -> int {
+    var a = go ok(1)
+    var b = go ok(2)
+    var results = await all [a, b]
+    var total = 0
+    for (var i = 0; i < len(results); i++) {
+        total = total + results[i]
+    }
+    return total
+}
+
+print(observe_result())
+print(observe_timeout())
+print(aggregate())

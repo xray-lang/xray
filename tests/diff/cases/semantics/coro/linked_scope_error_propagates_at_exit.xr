@@ -1,0 +1,56 @@
+// anchor: coro-linked-scope-error-timing
+// A `linked scope` re-raises its first failed child at the block's exit, in the
+// enclosing frame -- so the statements after the block must not run, and the
+// caller's `catch (e)` must see it (task 248). Both backends let execution
+// continue past the block: errorset did not count `linked scope` as fallible,
+// so no caller emitted the check that would have caught the error, and the
+// program printed a stale return value before the error surfaced at top level.
+enum E { Boom }
+
+fn failing() -> int {
+    throw E.Boom
+}
+
+fn ok() -> int {
+    return 7
+}
+
+// Failure inside the block: nothing after the block runs.
+fn scope_fails() -> int {
+    linked scope {
+        go failing()
+    }
+    print("unreachable: after failing scope")
+    return 0
+}
+
+// The same shape catching in its own frame.
+fn scope_caught_here() {
+    try {
+        linked scope {
+            go failing()
+        }
+        print("unreachable: after caught scope")
+    } catch (e) {
+        print("caught in scope frame: " + e.toString())
+    }
+}
+
+// A linked scope whose children all succeed runs to completion.
+fn scope_succeeds() -> int {
+    linked scope {
+        go ok()
+        go ok()
+    }
+    return 5
+}
+
+scope_caught_here()
+
+try {
+    print(scope_fails())
+} catch (e) {
+    print("caught from caller: " + e.toString())
+}
+
+print(scope_succeeds())

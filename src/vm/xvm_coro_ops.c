@@ -874,10 +874,32 @@ static inline XrValue vm_task_consume_result(XrVMRuntime *isolate, XrTask *task,
     return discard_result ? xr_null() : res;
 }
 
-static XrDispatchAction vm_task_raise_await_terminal(XrVMRuntime *isolate, XrTask *task,
+/* Re-raise an awaited task's terminal failure in the awaiting frame, on the
+ * channel the child raised it on.  A `throw <enum>` inside the coroutine is a
+ * value error there and stays a value error here — the awaiting frame's
+ * OP_ERR_CHECK routes it to `catch (e)` or propagates it by value, exactly as
+ * if the awaiting frame had thrown it itself.  Panics keep unwinding.
+ * `result_slot` is the await's destination register; it is cleared on the
+ * value path so the failed await leaves no stale value behind. */
+static XrDispatchAction vm_task_raise_await_terminal(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                                     XrTask *task, XrValue *result_slot,
                                                      XrBcCallFrame *frame, XrInstruction *pc) {
     uint8_t tstate =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    if (tstate == XR_TASK_FAILED && task && !XR_IS_NULL(task->error) &&
+        xr_task_error_is_value(task)) {
+        XrValue err =
+            xr_task_observe_error(xr_isolate_get_runtime_core(isolate), task, vm_get_coro(vm_ctx));
+        if (!XR_IS_NULL(err)) {
+            if (result_slot)
+                *result_slot = xr_null();
+            vm_ctx->pending_error = err;
+            if (frame)
+                frame->pc = pc;
+            return XR_DISP_NEXT;
+        }
+    }
+
     XrValue exc;
     if (tstate == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
         exc = task->error;
@@ -1016,7 +1038,7 @@ XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrI
                 if (consume_task && a != b)
                     base[b] = xr_null();
                 vm_task_finish_completed_executor(task, consume_task);
-                return vm_task_raise_await_terminal(isolate, task, frame, pc);
+                return vm_task_raise_await_terminal(isolate, vm_ctx, task, &base[a], frame, pc);
             }
             if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unexpected timeout");
@@ -1041,7 +1063,7 @@ XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrI
             if (consume_task && a != b)
                 base[b] = xr_null();
             vm_task_finish_completed_executor(task, consume_task);
-            return vm_task_raise_await_terminal(isolate, task, frame, pc);
+            return vm_task_raise_await_terminal(isolate, vm_ctx, task, &base[a], frame, pc);
         }
 
         // Slow path: task still active, need to suspend
@@ -1074,7 +1096,7 @@ XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrI
                 if (consume_task && a != b)
                     base[b] = xr_null();
                 vm_task_finish_completed_executor(task, consume_task);
-                return vm_task_raise_await_terminal(isolate, task, frame, pc);
+                return vm_task_raise_await_terminal(isolate, vm_ctx, task, &base[a], frame, pc);
             }
             if (await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
                 await_result.kind == XR_CORO_BLOCK_NO_CORO) {
@@ -1112,7 +1134,7 @@ XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrI
             if (consume_task && a != b)
                 base[b] = xr_null();
             vm_task_finish_completed_executor(task, consume_task);
-            return vm_task_raise_await_terminal(isolate, task, frame, pc);
+            return vm_task_raise_await_terminal(isolate, vm_ctx, task, &base[a], frame, pc);
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, discard_result);
         if (xr_task_result_was_already_taken(task, base[a]))

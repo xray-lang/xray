@@ -112,6 +112,12 @@ typedef enum {
 #define XR_TASK_FLG_DEFERRED_REGISTRY (1 << 3)  // registry link delayed until batch submit
 #define XR_TASK_FLG_RESULT_COPY_SHARED                                                             \
     (1 << 4)  // compiler-planned shared copy for pointer-backed Copy result
+/* The failure in `error` arrived on the value-return channel (user
+ * `throw <enum>`), not the panic channel.  An error crossing an execution
+ * boundary keeps the channel it was raised on: an awaiter re-raises a value
+ * error as a value error, so the same `catch (e)` that would have caught it
+ * inside one coroutine still catches it across two. */
+#define XR_TASK_FLG_ERROR_IS_VALUE (1 << 5)
 
 /* ========== Completion Listener ========== */
 
@@ -231,6 +237,12 @@ static inline struct XrCoroutine *xr_task_claim_executor(XrTask *task) {
     return atomic_exchange_explicit(&task->coro, (struct XrCoroutine *) NULL, memory_order_acq_rel);
 }
 
+/* Which channel this task's terminal error was raised on.  Only meaningful
+ * once the task is FAILED; an awaiter re-raises on the channel reported here. */
+static inline bool xr_task_error_is_value(const XrTask *task) {
+    return task && (task->flags & XR_TASK_FLG_ERROR_IS_VALUE) != 0;
+}
+
 static inline bool xr_task_value_is_transfer_payload(XrValue value) {
     return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(value)) &&
            !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
@@ -261,7 +273,7 @@ XR_FUNC void xr_task_isolate_destroy_deferred(struct XrVMRuntime *isolate);
 // Simple state setters (called from xworker.c on executor completion)
 XR_FUNC XrValue xr_task_validate_publish_value(struct XrTask *task, XrValue value);
 XR_FUNC void xr_task_complete(struct XrTask *task, XrValue result);
-XR_FUNC void xr_task_fail(struct XrTask *task, XrValue error);
+XR_FUNC void xr_task_fail(struct XrTask *task, XrValue error, bool error_is_value);
 XR_FUNC void xr_task_cancel(struct XrTask *task);
 
 /* ========== Structured Concurrency API ========== */
@@ -285,7 +297,7 @@ XR_FUNC void xr_task_child_completed(struct XrTask *parent, struct XrTask *child
 XR_FUNC void xr_task_cancel_tree(struct XrTask *task);
 
 // Fail with upward propagation: cancel the parent and every linked peer
-XR_FUNC void xr_task_fail_with_propagation(struct XrTask *task, XrValue error);
+XR_FUNC void xr_task_fail_with_propagation(struct XrTask *task, XrValue error, bool error_is_value);
 
 // Fire all completion listeners
 XR_FUNC void xr_task_fire_completion(struct XrTask *task);

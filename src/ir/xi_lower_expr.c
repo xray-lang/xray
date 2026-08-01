@@ -8806,6 +8806,20 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     if (into)
         v->flags |= XI_FLAG_WRITES_MEM;
     v->line = (uint32_t) node->line;
+
+    /* A plain `await t` re-raises a failed child's error in this frame, on the
+     * channel the child raised it on (task 248).  A value error therefore lands
+     * in pending_error at OP_AWAIT and needs the same check a fallible call
+     * gets, to reach `catch (e)` or propagate by value.  The aggregate and
+     * timeout forms return their outcome as a value and never re-raise.
+     *
+     * The check is unconditional rather than errorset-driven: proving the
+     * awaited body no-throw would mean re-deriving, here, which coroutine `t`
+     * is bound to.  The analyzer already did that -- a function awaiting only
+     * no-throw bodies stays no-throw, so this check simply never fires there,
+     * and the optimizer drops it once inlining makes that visible. */
+    if (!aw->is_any && !aw->is_all && !aw->is_any_success && !aw->timeout && !aw->into)
+        xi_lower_insert_err_check(l, node, true);
     return v;
 }
 
