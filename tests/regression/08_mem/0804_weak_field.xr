@@ -79,7 +79,9 @@ fn make_linked_pair(i: int) {
 
 @test
 fn test_weak_breaks_the_cycle_so_rc_reclaims_it() {
-    runtime.disableCycleCollection()
+    // 原先这里要先 disableCycleCollection()，才能证明「回收全靠 weak 断边而
+    // 不是靠收集器兜底」。247 阶段 E 移除了 ORC，那个前提现在无条件成立：
+    // 纯 RC 是唯一的回收机制，所以这里量到的回收只可能来自 weak 断边。
     for (var w = 0; w < 200; w++) {
         make_linked_pair(w)
     }
@@ -88,9 +90,8 @@ fn test_weak_breaks_the_cycle_so_rc_reclaims_it() {
         make_linked_pair(i)
     }
     var residue = runtime.liveObjects() - before
-    // 环收集器被关掉了，所以回收全靠 weak 断边。不加 weak 时这里是 20000。
+    // 不加 weak 时这里是 20000：双向链接谁也放不掉谁。
     assert(residue < 1000)
-    runtime.enableCycleCollection()
 }
 
 // 同一目标的多个 weak 字段共享一个 handle，且各自独立读到清空

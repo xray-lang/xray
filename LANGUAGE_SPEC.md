@@ -6576,10 +6576,11 @@ Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the tr
 
 ### 16.8 Object Reclamation & Finalizer Timing Contract
 
-xray **currently exposes no user-visible deterministic destructor (destructor / finalizer / `Drop`)**. The **timing** of object reclamation is NOT part of the observable semantic contract; it is implementation-defined and differs across execution backends:
+**The reclamation point is exact, with no exceptions**: an object is reclaimed the moment its last strong reference is released. VM and AOT give the same answer here.
 
-- Reclamation may occur at "the moment the last reference disappears", "some GC point", or "process exit"; VM and AOT reclamation timing is **not guaranteed to agree**.
-- Programs **must not depend on**: (a) an object being reclaimed at any particular moment; (b) whether any destructor / finalizer runs, in what order, or on which thread.
+- The promise can be universal because reference counting is the only reclamation mechanism. There is no cycle collector, no tracing GC, and no indeterminate "some GC point" at runtime (task 247).
+- The one shape that is not reclaimed is a **reference cycle**, and that too is determinate: cycles are not collected at runtime, and what they cost is capped by the coroutine-heap boundary (L2 in §16.3). Cycles are prevented by the compile-time type graph (L0) and broken explicitly with `weak` (L1); the development detector reports them and never reclaims.
+- What is still **not** offered is a user-visible deterministic destructor (destructor / finalizer / `Drop`) surface: a program must not depend on whether a type has a finalization hook, in what order such hooks run, or on which thread. What is exact is the **moment of reclamation**, not the ability to attach code to it.
 
 The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
 

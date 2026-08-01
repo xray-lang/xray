@@ -89,10 +89,8 @@ static bool cg_aot_stdlib_has_direct_member(const char *module, const char *memb
     if (!module || !member)
         return false;
     if (strcmp(module, "runtime") == 0 &&
-        (strcmp(member, "collectCycles") == 0 || strcmp(member, "disableCycleCollection") == 0 ||
-         strcmp(member, "enableCycleCollection") == 0 ||
-         strcmp(member, "isCycleCollectionEnabled") == 0 || strcmp(member, "liveBytes") == 0 ||
-         strcmp(member, "liveObjects") == 0 || strcmp(member, "info") == 0))
+        (strcmp(member, "liveBytes") == 0 || strcmp(member, "liveObjects") == 0 ||
+         strcmp(member, "info") == 0))
         return true;
     if (strcmp(module, "test_yield") == 0 &&
         (strcmp(member, "simple") == 0 || strcmp(member, "add") == 0 ||
@@ -274,22 +272,8 @@ static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc
         cg_emit_runtime_info_value(ctx, out, f, v, aot_ctx);
         return true;
     }
-    if (strcmp(method, "disableCycleCollection") == 0 ||
-        strcmp(method, "enableCycleCollection") == 0) {
-        const char *helper = strcmp(method, "disableCycleCollection") == 0
-                                 ? "xr_aot_runtime_disable_cycle_collection"
-                                 : "xr_aot_runtime_enable_cycle_collection";
-        const char *suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "({ %s(%s); XR_NULL_VAL; })", helper, aot_ctx);
-        emit_conversion_suffix(out, suffix);
-        return true;
-    }
-
     const char *helper = NULL;
-    if (strcmp(method, "collectCycles") == 0)
-        helper = "xr_aot_runtime_collect_cycles";
-    else if (strcmp(method, "liveBytes") == 0)
+    if (strcmp(method, "liveBytes") == 0)
         helper = "xr_aot_runtime_live_bytes";
     else if (strcmp(method, "liveObjects") == 0)
         helper = "xr_aot_runtime_live_objects";
@@ -300,14 +284,6 @@ static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc
         emit_conversion_suffix(out, suffix);
         return true;
     }
-    if (strcmp(method, "isCycleCollectionEnabled") == 0) {
-        const char *suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "(int64_t)xr_aot_runtime_is_cycle_collection_enabled(%s)", aot_ctx);
-        emit_conversion_suffix(out, suffix);
-        return true;
-    }
-
     ctx->error = true;
     fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT runtime control call 'runtime.%s'\n", method);
     emit_codegen_abort_expr(out);
