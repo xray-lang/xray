@@ -3854,6 +3854,20 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    /* A shared slot always stores a boxed XrValue. When this read is planned as
+     * a native struct aggregate — which happens once a callee takes the value by
+     * value-ABI place — the C type on the left is the aggregate, so the payload
+     * has to be dereferenced instead of assigning the box. The rep-based
+     * conversion below cannot express this: a struct aggregate's rep is
+     * XAOT_REP_TAGGED, so it sees no conversion to make. */
+    const XaotValuePlan *shared_plan = cg_value_plan(ctx, v);
+    if (shared_plan && cg_value_rep_is_struct_aggregate(shared_plan->rep) &&
+        shared_plan->rep.c_type) {
+        fprintf(out, "(*(%s *)%s[%d].ptr)", shared_plan->rep.c_type, ctx->shared_name,
+                (int) v->aux_int);
+        return;
+    }
+
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     const char *suffix =
         emit_conversion_prefix_ctx(ctx, out, v ? v->type : NULL, XR_REP_TAGGED, target_rep);

@@ -298,6 +298,49 @@ static const XrAggregateLayout *struct_layout_for_value_uses(const XiFunc *func,
     return NULL;
 }
 
+/*
+ * Layout of a place parameter, recovered from the field ops that read it.
+ *
+ * A borrowed struct parameter (a method's `this`, or any read-place aggregate)
+ * is passed as a place, so its fields are read one hop removed:
+ *
+ *     v0 = PARAM #0
+ *     v1 = PLACE_LOAD v0
+ *     v2 = AGG_GET v1 .left
+ *
+ * struct_layout_for_value_uses() matches an AGG_GET's operand against the value
+ * itself, so it never connects v2 back to v0. Without this hop the parameter
+ * falls back to a boxed XrValue ABI: a pointer indirection on every field
+ * access, and the whole-aggregate load -- which should exist only under
+ * XRAY_AOT_DEBUG_LOCALS -- becomes unconditional.
+ *
+ * Restricted to parameters on purpose: following PLACE_LOAD for values in
+ * general would also claim module-level XrValue globals as native aggregates.
+ */
+static const XrAggregateLayout *struct_layout_for_place_param_uses(const XiFunc *func,
+                                                                   const XiValue *value) {
+    value = unwrap_identity_value(value);
+    if (!func || !value || value->op != XI_PARAM)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values ? blk->values[vi] : NULL;
+            if (!v || !v->aux || v->nargs < 1)
+                continue;
+            if (v->op != XI_AGG_GET && v->op != XI_AGG_SET)
+                continue;
+            const XiValue *operand = unwrap_identity_value(v->args[0]);
+            if (operand && operand->op == XI_PLACE_LOAD && operand->nargs == 1 &&
+                operand->args[0] && unwrap_identity_value(operand->args[0]) == value)
+                return (const XrAggregateLayout *) v->aux;
+        }
+    }
+    return NULL;
+}
+
 static const XrAggregateLayout *struct_layout_for_return_value(const XiFunc *func) {
     if (!func)
         return NULL;
@@ -326,7 +369,10 @@ static const XrAggregateLayout *struct_layout_for_slot(const XaotBundle *bundle,
         return NULL;
     if (is_return)
         return struct_layout_for_return_value(func);
-    return struct_layout_for_value_uses(func, value);
+    sl = struct_layout_for_value_uses(func, value);
+    if (!sl)
+        sl = struct_layout_for_place_param_uses(func, value);
+    return sl;
 }
 
 static bool struct_layout_can_use_value_abi_depth(const XrAggregateLayout *sl, int depth) {

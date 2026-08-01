@@ -9,6 +9,12 @@ ABIs are unchanged.
 Portable SIMD values crossing hosted module shared slots recover their fixed
 aggregate layout from the tagged reference; scalar, native, and cross-endian
 lowering retain one lane-order contract.
+Value-struct aggregates do the same: a shared slot always stores a boxed
+XrValue, so a read planned as a native struct aggregate dereferences the payload
+rather than assigning the box. A borrowed struct place parameter — a method
+receiver included — keeps the native value ABI (`xrt_struct_abi_* `), recovering
+its layout through the PLACE_LOAD its field ops read, and its whole-aggregate
+temporary exists only under XRAY_AOT_DEBUG_LOCALS.
 The same generated translation unit may now be compiled as GNU/Clang C++11,
 but remains a C ABI artifact: exported definitions use C linkage, atomic fields
 retain their scalar C layout and memory ordering through compiler builtins, and
@@ -168,7 +174,7 @@ anchor-sha256: src/aot/xaot_prepare.c fbf0bf75c63b4836a25290a932179b01589fb4e20b
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 6bca7d61399352dc8de2ed3d0ad08e52f009c613ef86fa8dc38e154310c03ded
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ff640ccb84e2ac2be0eea9b672680b530eeb805b400276dbe9985b413eeb2568
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 94b424e5b14ecca11b46632fa7b71a1fabb650d2e51a52b378ca0f5bdca1412e
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ca67893134409a384cad02ee2afc52595389b348ba89723bf743c63e07aa96c6
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c d975516f2f9a22f4ab0dddd340ed41709583f2406ef767fe4c1b25858329fca4
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
 anchor-sha256: src/aot/xi_cgen.c 69512e03d216f5f9b28f5b2e5f64466d281bae97a8970e5c6b923c6d3885ea26
