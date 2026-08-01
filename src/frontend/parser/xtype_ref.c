@@ -421,6 +421,17 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             break;
 
         case XR_TREF_OBJECT:
+            /* A record type introduced by `type Name = { ... }` carries the alias
+             * name (stamped on by the type-alias parser), and every use of that
+             * alias shares this very ref. Render the name: it is what the source
+             * wrote, so the formatter round-trips `o: PageOpts` instead of
+             * expanding it to `o: { limit: int?, cursor: string? }` — an
+             * expansion the re-parsed AST no longer matches. Anonymous record
+             * types have no name and still render structurally. */
+            if (t->name) {
+                tref_append(buf, pos, cap, t->name);
+                break;
+            }
             tref_append(buf, pos, cap, "{ ");
             for (int i = 0; i < t->nchildren; i++) {
                 if (i > 0)
@@ -479,4 +490,27 @@ XR_FUNC int xr_tref_to_string_buf(const XrTypeRef *t, char *buf, int cap) {
     tref_to_str_impl(t, buf, &pos, cap);
     buf[pos] = '\0';
     return pos;
+}
+
+XR_FUNC int xr_tref_to_string_buf_structural(const XrTypeRef *t, char *buf, int cap) {
+    XR_DCHECK(buf != NULL, "xr_tref_to_string_buf_structural: NULL buffer");
+    XR_DCHECK(cap > 0, "xr_tref_to_string_buf_structural: zero capacity");
+    if (!t) {
+        buf[0] = '?';
+        buf[1] = '\0';
+        return 1;
+    }
+    /* Only the outermost record expands: this is for the one place that must
+     * print a record's structure rather than its name — the right-hand side of
+     * `type Name = { ... }`, where the name would otherwise render as the
+     * self-referential `type Name = Name`. Nested refs keep their names. */
+    if (t->kind == XR_TREF_OBJECT && t->name) {
+        XrTypeRef anonymous = *t;
+        anonymous.name = NULL;
+        int pos = 0;
+        tref_to_str_impl(&anonymous, buf, &pos, cap);
+        buf[pos] = '\0';
+        return pos;
+    }
+    return xr_tref_to_string_buf(t, buf, cap);
 }

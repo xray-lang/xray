@@ -84,6 +84,10 @@ XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
 // ---------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref);
+
+/* Emits a named record type as its field structure. Only for the right-hand
+ * side of a `type` alias, where the name would render as `type N = N`. */
+XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *tref);
 XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref);
 XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count);
 XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count);

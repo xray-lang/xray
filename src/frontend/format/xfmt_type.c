@@ -110,6 +110,18 @@ void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
     }
 }
 
+void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *tref) {
+    if (!tref)
+        return;
+    char buf[256];
+    int n = xr_tref_to_string_buf_structural(tref, buf, (int) sizeof(buf));
+    if (n > 0) {
+        xfmt_write_str(ctx, buf);
+    } else {
+        xfmt_write_str(ctx, "<error>");
+    }
+}
+
 void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
     if (!tref)
         return;
