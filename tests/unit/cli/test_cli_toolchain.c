@@ -120,11 +120,14 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(
         xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
     ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, "ws2_32", &sink, err, sizeof(err)));
+        xtc_command_emit_system_library(selection.provider, &selection.target, "ws2_32", &sink,
+                                        err, sizeof(err)));
     ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, "bcrypt", &sink, err, sizeof(err)));
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "api-ms-win-core-synch-l1-2-0",
-                                                &sink, err, sizeof(err)));
+        xtc_command_emit_system_library(selection.provider, &selection.target, "bcrypt", &sink,
+                                        err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
+                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
+                                                sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "/O2"));
     ASSERT_TRUE(command_capture_has(&capture, "/utf-8"));
     ASSERT_TRUE(command_capture_has(&capture, "/fp:strict"));
@@ -443,13 +446,12 @@ TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
     compile.optimization = XR_OPTIMIZATION_RELEASE;
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "-D_CRT_SECURE_NO_WARNINGS"));
-    /* This selection is the Zig provider targeting the MSVC ABI, and Zig ships
-     * the API-set import library under its canonical name, so the manifest's
-     * logical name passes through verbatim.  Only the MSVC provider rewrites it
-     * to synchronization.lib. */
-    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, "api-ms-win-core-synch-l1-2-0",
-                                                &sink, err, sizeof(err)));
-    ASSERT_TRUE(command_capture_has(&capture, "-lapi-ms-win-core-synch-l1-2-0"));
+    /* The MSVC ABI consumes Windows SDK import libraries, where the canonical
+     * API-set is exposed by synchronization.lib. */
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
+                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
+                                                sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
 }
 
 TEST(msvc_version_parser_accepts_banner_text) {

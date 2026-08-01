@@ -92,8 +92,16 @@ static const char xtc_probe_preserve_call_c[] =
     "static XTC_PRESERVE_CALL int plus_one(int value) { return value + 1; }\n"
     "int main(void) { return plus_one(0) != 1; }\n";
 static const char xtc_probe_value_opaque_c[] = "#include <stdint.h>\n"
+                                               "#if defined(_MSC_VER)\n"
+                                               "#include <intrin.h>\n"
+                                               "#pragma intrinsic(_ReadWriteBarrier)\n"
+                                               "#endif\n"
                                                "static int64_t opaque(int64_t value) {\n"
-                                               "#if defined(__GNUC__) || defined(__clang__)\n"
+                                               "#if defined(_MSC_VER)\n"
+                                               "  volatile int64_t hidden = value;\n"
+                                               "  _ReadWriteBarrier();\n"
+                                               "  return hidden;\n"
+                                               "#elif defined(__GNUC__) || defined(__clang__)\n"
                                                "  __asm__ __volatile__(\"\" : \"+r\"(value));\n"
                                                "#else\n"
                                                "#error provider_has_no_register_opacity_construct\n"
@@ -447,8 +455,9 @@ static bool xtc_probe_link_runtime(const XrToolchainSelection *selection,
         if (!xtc_probe_command_add(&command, runtime->artifacts[i].path, detail, detail_size))
             return false;
     for (size_t i = 0; i < runtime->system_library_count; i++) {
-        if (!xtc_command_emit_system_library(selection->provider, runtime->system_libraries[i],
-                                             &sink, detail, detail_size))
+        if (!xtc_command_emit_system_library(selection->provider, &selection->target,
+                                             runtime->system_libraries[i], &sink, detail,
+                                             detail_size))
             return false;
     }
     if (!xtc_probe_add_build_sanitizer_link_flags(selection, &command, detail, detail_size))

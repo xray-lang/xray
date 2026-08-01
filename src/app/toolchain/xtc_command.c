@@ -429,7 +429,8 @@ XR_FUNC bool xtc_command_emit_define(XrToolchainProviderId provider, const char 
     return joined(sink, provider == XR_TOOLCHAIN_PROVIDER_MSVC ? "/D" : "-D", value, err, err_size);
 }
 
-XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, const char *name,
+XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider,
+                                             const XrToolchainTarget *target, const char *name,
                                              XrToolchainArgSink *sink, char *err, size_t err_size) {
     if (provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
         static const struct {
@@ -447,9 +448,14 @@ XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, con
         return command_error(err, err_size,
                              "MSVC system-library logical name has no explicit .lib mapping");
     }
-    /* Zig ships the Windows API-set import libraries under their canonical
-     * names; the legacy `synchronization` alias does not exist there, so the
-     * canonical name passes through unchanged. */
+    /* Zig's MSVC ABI consumes the installed Windows SDK import libraries,
+     * where the canonical synchronization API-set is exposed by
+     * synchronization.lib. Its GNU ABI instead uses Zig's canonical API-set
+     * definitions, so keep the mapping target-specific. */
+    if (provider == XR_TOOLCHAIN_PROVIDER_ZIG && target &&
+        target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC && name &&
+        strcmp(name, "api-ms-win-core-synch-l1-2-0") == 0)
+        return joined(sink, "-l", "synchronization", err, err_size);
     return joined(sink, "-l", name, err, err_size);
 }
 

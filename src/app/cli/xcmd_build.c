@@ -1265,14 +1265,14 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
         return false;
     if (needs_runtime || needs_aot_core) {
         for (i = 0; i < plan->system_library_count; i++) {
-            if (!xtc_command_emit_system_library(plan->provider, plan->system_libraries[i], &sink,
-                                                 err, err_size))
+            if (!xtc_command_emit_system_library(plan->provider, target,
+                                                 plan->system_libraries[i], &sink, err, err_size))
                 return false;
         }
     }
     for (i = 0; i < manifest->n_system_libs; i++) {
-        if (!xtc_command_emit_system_library(plan->provider, manifest->system_libs[i], &sink, err,
-                                             err_size))
+        if (!xtc_command_emit_system_library(plan->provider, target, manifest->system_libs[i],
+                                             &sink, err, err_size))
             return false;
     }
     if (!xtc_command_emit_link(plan, target, &link_spec, &sink, err, err_size))

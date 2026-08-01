@@ -18,7 +18,11 @@
 #endif
 
 static inline int64_t xrt_codegen_opaque_i64(int64_t value) {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+    volatile int64_t opaque = value;
+    _ReadWriteBarrier();
+    return opaque;
+#elif defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : "+r"(value));
 #else
 #error "selected provider cannot realize codegen.opaque(int)"
@@ -27,7 +31,11 @@ static inline int64_t xrt_codegen_opaque_i64(int64_t value) {
 }
 
 static inline uint64_t xrt_codegen_opaque_u64(uint64_t value) {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+    volatile uint64_t opaque = value;
+    _ReadWriteBarrier();
+    return opaque;
+#elif defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : "+r"(value));
 #else
 #error "selected provider cannot realize codegen.opaque(uint)"
@@ -36,7 +44,11 @@ static inline uint64_t xrt_codegen_opaque_u64(uint64_t value) {
 }
 
 static inline void *xrt_codegen_opaque_ptr(void *value) {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+    void *volatile opaque = value;
+    _ReadWriteBarrier();
+    return opaque;
+#elif defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : "+r"(value));
 #else
 #error "selected provider cannot realize codegen.opaque(Ptr)"
@@ -45,7 +57,11 @@ static inline void *xrt_codegen_opaque_ptr(void *value) {
 }
 
 static inline const void *xrt_codegen_opaque_const_ptr(const void *value) {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+    const void *volatile opaque = value;
+    _ReadWriteBarrier();
+    return opaque;
+#elif defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : "+r"(value));
 #else
 #error "selected provider cannot realize codegen.opaque(const Ptr)"

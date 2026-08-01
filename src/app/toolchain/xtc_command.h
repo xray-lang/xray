@@ -138,7 +138,8 @@ XR_FUNC bool xtc_command_emit_include(XrToolchainProviderId provider, const char
                                       XrToolchainArgSink *sink, char *err, size_t err_size);
 XR_FUNC bool xtc_command_emit_define(XrToolchainProviderId provider, const char *value,
                                      XrToolchainArgSink *sink, char *err, size_t err_size);
-XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider, const char *name,
+XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider,
+                                             const XrToolchainTarget *target, const char *name,
                                              XrToolchainArgSink *sink, char *err, size_t err_size);
 XR_FUNC bool xtc_command_emit_sysroot(XrToolchainProviderId provider, const char *path,
                                       XrToolchainArgSink *sink, char *err, size_t err_size);
