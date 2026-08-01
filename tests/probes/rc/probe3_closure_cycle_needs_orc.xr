@@ -113,15 +113,14 @@ fn make_closure_without_cycle() -> int {
     return f()
 }
 
-// 已知边界（249 之外，见本文件顶部说明）：被闭包**捕获**的堆值每次泄漏
-// 一个引用——ops.def 说 xi.closure.new `:own-use consume`（ARC 因此不给源
-// 变量插死亡点 drop），而两条后端的堆闭包运行时都对 upval 再 retain 一次，
-// 那个 +1 无人认领。VM 与 AOT 行为一致，因此差分测试看不见。
+// 捕获闭包的基线泄漏已修（2026-08-01）：ops.def 说 xi.closure.new
+// `:own-use consume`，ARC 因此把源变量的 +1 move 进闭包，运行时不得再
+// retain 一次。修复前 200 万个捕获闭包残留 400 万对象 / RSS 323.8 MB，
+// 修复后 0 / 11.4 MB。
 //
-// 所以这里断言的是**相对量**：不成环的闭包残留必须显著低于成环的。这条
-// 性质不依赖基线泄漏的绝对大小，在上述边界修复前后都成立。
+// 因此这里可以断言绝对量了：不成环的闭包必须被纯 RC 完全回收。
 @test
-fn test_closure_without_cycle_beats_cycle() {
+fn test_closure_without_cycle_is_fully_reclaimed() {
     for (var w = 0; w < 200; w++) {
         make_closure_without_cycle()
         make_direct_closure_cycle()
@@ -141,6 +140,10 @@ fn test_closure_without_cycle_beats_cycle() {
 
     print("probe3 nocycle_residue=" + string(nocycle_residue))
     print("probe3 cycle_residue=" + string(cycle_residue))
+
+    // 不成环的闭包（连同它捕获的对象）必须完全回收，与环收集器无关。
+    // 这一条在阶段 E 移除环收集器之后仍然必须通过。
+    assert(nocycle_residue < 1000)
 }
 
 @test

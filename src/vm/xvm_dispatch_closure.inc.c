@@ -120,9 +120,17 @@ vmcase(OP_CLOSURE) {
     for (int j = 0; j < nuv; j++) {
         UpvalInfo *uv = &DYNARRAY_GET(&proto->upvalues, j, UpvalInfo);
         if (uv->source == UPVAL_SRC_REG) {
+            /* ARC already handed this one over. xi.closure.new is `:own-use
+             * consume`, so the reference in the register is MOVED into the
+             * closure — ARC dup'd it first if the source is used again, and
+             * gives each capture site exactly one +1. Retaining here added a
+             * second reference that nobody owned, and the closure's destructor
+             * releases only one: every captured heap value leaked. */
             closure->upvals[j] = R(uv->index);
-            xr_rc_retain_value(closure->upvals[j]);
         } else if (uv->source == UPVAL_SRC_UPVAL) {
+            /* Borrowed from the enclosing closure, which still holds it. This
+             * capture never went through a register, so ARC gave us nothing —
+             * the +1 has to come from here. */
             int idx = uv->index;
             closure->upvals[j] = (idx < cl->upval_count) ? cl->upvals[idx] : xr_null();
             xr_rc_retain_value(closure->upvals[j]);

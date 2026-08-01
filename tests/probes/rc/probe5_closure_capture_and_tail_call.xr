@@ -1,0 +1,152 @@
+// probe5 — 闭包捕获的所有权，与尾调用之后的 drop
+//
+// 两个互相独立、都由 247 阶段 D 的准备工作查出的真泄漏。合并在一份文件里，
+// 因为它们只有放在一起才测得准：尾调用那条要靠"调用一个捕获闭包"才触发。
+//
+// ── 缺陷 1：被闭包捕获的堆值每次泄漏一个引用 ────────────────────────
+//
+// ops.def 说 `xi.closure.new :own-use consume`，所以 ARC 把源变量的 +1
+// **move** 进闭包——需要时先 dup（`cap_then_use` 的字节码里能看到
+// `DUP R[1]`），每个捕获点恰好一个 +1。而两条后端的运行时又对 upval 各
+// retain 了一次，那个多出来的引用无人认领，闭包析构只释放一个。
+//
+// 关键是 retain 与否取决于**值从哪来**，不是闭包放在哪：
+//   · 来自寄存器 / IR args → ARC 已交付 +1，不得 retain
+//   · 来自外层闭包的 upvals → 从没经过 ARC，必须自己 +1
+// 旧规则（AOT: `retain 一切，除非是栈闭包`）两个方向都错。
+//
+// FAIL_AT: 200 万个捕获闭包 → 400 万残留对象 / max RSS 323.8 MB
+// PASS_AT: 0 残留 / 11.4 MB
+//
+// ── 缺陷 2：尾调用之后的 drop 永不执行 ──────────────────────────────
+//
+// OP_TAILCALL 改写当前帧并 `goto startfunc`，它后面的字节码一条都不跑。
+// ARC 把值的 drop 放在死亡点，对跨越该调用仍存活的值来说那个位置正好在
+// 调用**之后**——于是整帧的 owned 局部全部泄漏。
+//
+// lowering 早就为 `defer` 做过同样的事（有 defer 时清除 XI_FLAG_TAIL），
+// 理由一模一样。ARC 是第一个知道 release 存在的 pass，所以标志在那里撤销。
+//
+// FAIL_AT: `return f()` 形态每轮泄漏 3 个对象；不调用 f 则 0
+// PASS_AT: 两者都是 0
+
+import runtime
+
+class Node {
+    n: int
+
+    constructor(n) {
+        this.n = n
+    }
+
+    bump() -> int {
+        this.n = this.n + 1
+        return this.n
+    }
+}
+
+// 捕获但不调用
+fn capture_only(i: int) {
+    var p = Node(i)
+    var f = fn() -> int { return p.n }
+}
+
+// 捕获并调用——这一条同时踩中两个缺陷
+fn capture_and_call(i: int) -> int {
+    var p = Node(i)
+    var f = fn() -> int { return p.bump() }
+    return f()
+}
+
+// 捕获后源变量继续使用：ARC 必须先 dup，运行时不得再 retain
+fn capture_then_use(i: int) -> int {
+    var p = Node(i)
+    var f = fn() -> int { return p.n }
+    return p.n + f()
+}
+
+// 同一变量被两个闭包捕获：ARC 只 dup 一次（初始 +1 + dup = 2，各一个）
+fn capture_twice(i: int) -> int {
+    var p = Node(i)
+    var f = fn() -> int { return p.n }
+    var g = fn() -> int { return p.n + 1 }
+    return f() + g()
+}
+
+// 嵌套：内层从外层的 upvals 借 p。这一条是**必须** retain 的那半边——
+// 外层仍持有 p，内层不能白拿。少了它就是提前释放，不是泄漏。
+fn nested_capture(i: int) -> int {
+    var p = Node(i)
+    var outer = fn() -> int {
+        var inner = fn() -> int { return p.n }
+        return inner()
+    }
+    return outer()
+}
+
+fn churn(name: string, which: int, n: int) {
+    for (var w = 0; w < 200; w++) {
+        if (which == 1) { capture_only(w) }
+        else if (which == 2) { capture_and_call(w) }
+        else if (which == 3) { capture_then_use(w) }
+        else if (which == 4) { capture_twice(w) }
+        else { nested_capture(w) }
+    }
+    var before = runtime.liveObjects()
+    for (var i = 0; i < n; i++) {
+        if (which == 1) { capture_only(i) }
+        else if (which == 2) { capture_and_call(i) }
+        else if (which == 3) { capture_then_use(i) }
+        else if (which == 4) { capture_twice(i) }
+        else { nested_capture(i) }
+    }
+    var residue = runtime.liveObjects() - before
+    print("probe5 " + name + "=" + string(residue))
+    assert(residue < 1000)
+}
+
+@test
+fn test_captured_values_are_reclaimed() {
+    churn("capture_only", 1, 20000)
+}
+
+@test
+fn test_captured_values_survive_the_call_and_are_reclaimed() {
+    churn("capture_and_call", 2, 20000)
+}
+
+@test
+fn test_capture_then_use_is_reclaimed() {
+    churn("capture_then_use", 3, 20000)
+}
+
+@test
+fn test_capture_twice_is_reclaimed() {
+    churn("capture_twice", 4, 20000)
+}
+
+@test
+fn test_nested_capture_is_reclaimed() {
+    churn("nested_capture", 5, 20000)
+}
+
+// 对照组：少 retain 一次的失败模式是**提前释放**，不是泄漏，而提前释放
+// 在这些 churn 用例里表现为"残留更低"——正好通过。所以必须另有一条断言
+// 捕获的值在闭包调用期间仍然活着、内容正确。
+@test
+fn test_captured_value_stays_alive_and_correct() {
+    var p = Node(10)
+    var f = fn() -> int { return p.bump() }
+    assert(f() == 11)
+    assert(f() == 12)
+    assert(p.n == 12)
+
+    // 嵌套：内层借外层的 upval，两层都要能读到同一个对象
+    var q = Node(100)
+    var outer = fn() -> int {
+        var inner = fn() -> int { return q.bump() }
+        return inner() + inner()
+    }
+    assert(outer() == 203)
+    assert(q.n == 102)
+}

@@ -15786,7 +15786,7 @@ static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "\n        xrt_closure_init(_xr_par_closure_%u, &_xr_callable_%u, %u);\n",
             par_for->id, par_for->id, ncap);
     fprintf(out, "        { xrt_closure_t *_c = _xr_par_closure_%u; ", par_for->id);
-    emit_closure_upval_initializers(ctx, out, f, closure, false);
+    emit_closure_upval_initializers(ctx, out, f, closure, /*owns_upvals=*/false);
     fprintf(out, "}\n");
 }
 
@@ -15820,7 +15820,7 @@ static void xicgen_emit_par_map_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
             par_map->id, par_map->id, total);
     fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", par_map->id);
-    emit_closure_upval_initializers(ctx, out, f, closure, false);
+    emit_closure_upval_initializers(ctx, out, f, closure, /*owns_upvals=*/false);
     fprintf(out, "_c->upvals[%u] = %s; _c->upvals[%u] = XR_FROM_INT(%s); }\n",
             data ? (unsigned) data->result_capture_index : (unsigned) ncap,
             result_value_name ? result_value_name : "XR_NULL_VAL",
@@ -16701,7 +16701,7 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
                     v->id, v->id, ncap);
             fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", v->id);
-            emit_closure_upval_initializers(ctx, out, f, v->args[3], false);
+            emit_closure_upval_initializers(ctx, out, f, v->args[3], /*owns_upvals=*/false);
             fprintf(out, "}\n");
         }
 

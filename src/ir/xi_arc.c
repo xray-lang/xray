@@ -1841,6 +1841,47 @@ static void arc_insert_rec(XiFunc *f) {
         xi_cfg_invalidate(f);
 }
 
+/* A tail call rewrites the current frame and jumps (OP_TAILCALL /
+ * OP_INVOKE_TAIL): nothing after it in the block ever executes. ARC puts a
+ * value's drop at its death point, and for anything still live across the call
+ * that lands AFTER it — so every one of those drops silently never runs, and
+ * the whole frame's worth of objects leaks.
+ *
+ * Lowering already clears XI_FLAG_TAIL when a defer is pending, for exactly
+ * this reason. Releases need the same treatment; ARC is the first pass that
+ * knows they exist, so the flag is withdrawn here.
+ *
+ * Losing the optimization is the right trade: reusing one stack frame is worth
+ * far less than not leaking every owned local at that call. A tail call with
+ * nothing to release keeps the flag, which covers the recursion-depth cases
+ * the optimization exists for. */
+static void arc_withdraw_tail_flag_before_releases(XiFunc *f) {
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            arc_withdraw_tail_flag_before_releases(f->children[i]);
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        /* Backwards, so "is there a release after this value" is one bit of
+         * state. A tail call is emitted as part of a return, so the release
+         * that outlives it is in the same block. */
+        bool release_follows = false;
+        for (int32_t vi = (int32_t) blk->nvalues - 1; vi >= 0; vi--) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_RELEASE) {
+                release_follows = true;
+                continue;
+            }
+            if ((v->flags & XI_FLAG_TAIL) && release_follows)
+                v->flags &= (uint8_t) ~XI_FLAG_TAIL;
+        }
+    }
+}
+
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
     /* Promote escaping borrow-copies to moves BEFORE computing borrow
@@ -1851,6 +1892,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * is mutated, then insert dup/drop bottom-up. */
     arc_precompute_sigs(f);
     arc_insert_rec(f);
+    arc_withdraw_tail_flag_before_releases(f);
 }
 
 /* Return the nearest producer associated with a unit ERR_CHECK.  ARC ops can

@@ -9,7 +9,7 @@
 // map that only ever grew); and nothing in the repo used them.
 //
 // A deleted surface that still parses is worse than one that never existed,
-// so this asserts the names are unknown types rather than quietly accepted.
+// so this asserts both names are rejected rather than quietly accepted.
 
 var wm = WeakMap<string, int>()
 var ws = WeakSet<string>()

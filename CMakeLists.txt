@@ -3051,6 +3051,21 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Closure-capture ownership and the drops that follow a tail call. Both
+    # were real leaks with no test between them and a release: 2M captured
+    # closures cost 323.8 MB max RSS, and every drop ARC placed after a tail
+    # call never executed at all.
+    add_test(
+        NAME rc_probe_closure_capture
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe5_closure_capture_and_tail_call.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(rc_probe_closure_capture PROPERTIES
+        LABELS "regression;rc;vm;task-247"
+        TIMEOUT 120
+    )
+
     # ========================================================================
     # Task 220 — Verification asset governance gates (appended registrations)
     # Design: xray-docs/tasks/220-semantic-contract-freeze-and-verification-
