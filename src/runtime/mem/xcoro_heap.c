@@ -10,6 +10,7 @@
 
 #include "xcoro_heap.h"
 #include "xcycle_detector.h"
+#include "xweak_handle.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../value/xvalue.h"
@@ -346,6 +347,7 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
+    xr_weak_table_destroy(heap);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
@@ -395,6 +397,7 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     xr_coro_heap_recycler_destroy(heap);
     deferred_drops_destroy(heap);
     xr_cycle_roots_destroy(heap);
+    xr_weak_table_destroy(heap);
 
     coro_heap_init_runtime_state(heap);
     heap->owner = new_owner;
@@ -591,6 +594,11 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
      * would be aliased by a later same-size-class freelist reuse, putting
      * the same live object in the roots array twice (double trial-decrement
      * → use-after-free). Cleared before the freelist push below. */
+    /* W5: a weak field reads null from exactly this instant. Gated on the
+     * flag, so an object nobody weakly references pays one bit test. */
+    if (heap && (obj->extra & XR_OBJ_HAS_WEAK))
+        xr_weak_table_target_dying(heap, obj);
+
     if (heap && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
         xr_cycle_remove_root(heap, obj);
 

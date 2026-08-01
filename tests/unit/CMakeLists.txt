@@ -38,6 +38,9 @@ add_xray_unit_test(test_arena util/test_arena.c)
 
 add_xray_unit_test(test_region mem/test_region.c)
 add_xray_unit_test(test_obj_header mem/test_obj_header.c)
+# Task 247 phase C: the runtime half of `weak`, tested before any language
+# surface exists for it (W1 read-promotes, W5 definite clearing point).
+add_xray_unit_test(test_weak_handle mem/test_weak_handle.c)
 # Task 247 phase D: the whole-heap traversal is validated against
 # heap->object_count before any cycle logic runs on top of it. The body is
 # compiled out unless XR_ENABLE_CYCLE_DETECTOR is on, so the test is a no-op

@@ -84,7 +84,10 @@ typedef struct XrClass XrClass;
 #define XR_OBJ_REGION 0x0002 /* extra bit 1 */
 #define XR_OBJ_ATOMIC 0x0004 /* extra bit 2 */
 /* XR_OBJ_HAS_DTOR (bit 3) is defined in src/shared/xr_obj_header.h */
-/* extra bit 4 is free; task 247 phase C claims it for XR_OBJ_HAS_WEAK. */
+/* At least one weak field points at this object, so its destroy path must
+ * clear the shared handle (task 247 phase C, rule W5). The common object pays
+ * one bit test on the way out and nothing else. */
+#define XR_OBJ_HAS_WEAK 0x0010 /* extra bit 4 */
 #define XR_OBJ_DEAD                                                                                \
     0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
             * destructor at coroutine teardown to avoid                                            \
