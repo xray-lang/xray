@@ -463,18 +463,38 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
         // Save fields set by pool_get, memset the rest, then restore.
         const XrCoroBackendVTable *saved_backend = coro->backend;
         void *saved_backend_state = coro->backend_state;
-        struct XrCoroHeap *saved_heap = coro->heap;
         uint16_t saved_pool_bits =
             coro->gc_flags &
             (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
         XrCoroExt *saved_ext = coro->ext;
+
+        /* A heap does not survive into the next life of this shell.
+         *
+         * The shell pool is not partitioned by isolate, so a recycled
+         * coroutine can come back attached to a different runtime core — and
+         * the previous core may already be freed. Carrying the old heap across
+         * that boundary leaves it describing a runtime that no longer exists:
+         * its type-destructor table, its L2 block cache, and its interning pool
+         * all belong to the dead core. Reaching any of them through the
+         * coroutine happened to still work only because the heap named its
+         * owner indirectly; that indirection was hiding the dangle, not
+         * preventing it.
+         *
+         * The thorough recycle path (xr_coro_recycle_local) does not come
+         * through here — it calls xr_coro_heap_reset, which finalizes the old
+         * contents and rebinds the heap to its new owner. So this is the only
+         * place a heap could cross a lifetime unreset, and it is the "fresh
+         * allocation" path where there is normally no heap to begin with. */
+        if (coro->heap) {
+            xr_coro_heap_destroy(coro->heap);
+            coro->heap = NULL;
+        }
 
         memset((char *) coro + offsetof(XrCoroutine, flags), 0,
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
 
         coro->backend = saved_backend;
         coro->backend_state = saved_backend_state;
-        coro->heap = saved_heap;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
         // Reset ext fields that must not persist across lifetimes
