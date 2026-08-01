@@ -1030,12 +1030,42 @@ set(CORE_ALL_SOURCES
     ${STDLIB_SRC}
 )
 
-add_library(xray_stdlib_bootstrap_core OBJECT ${CORE_ALL_SOURCES})
+# The stdlib is embedded in two stages: `bootstrap` (a stub bytecode table, used
+# to build the generator) and `final` (the real table the generator produced).
+# The ONLY thing that differs between the two stages is which
+# stdlib_embedded_bytecodes.inc is on the include path, and exactly one
+# translation unit includes it — src/module/stdlib_embedded.c.
+#
+# So compile that one file per stage, and everything else exactly once. Building
+# the full source list twice (identical preprocessor input, byte-identical flags
+# apart from that one -I) meant ~618 redundant translation units per clean build.
+set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
+list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/stdlib_embedded.c")
+list(LENGTH CORE_ALL_SOURCES _core_all_count)
+list(LENGTH CORE_COMMON_SOURCES _core_common_count)
+math(EXPR _core_removed "${_core_all_count} - ${_core_common_count}")
+if(NOT _core_removed EQUAL 1)
+    message(FATAL_ERROR
+        "CORE_COMMON_SOURCES must differ from CORE_ALL_SOURCES by exactly "
+        "src/module/stdlib_embedded.c (removed ${_core_removed}). The two-stage "
+        "stdlib embedding assumes that file is the sole stage-dependent unit.")
+endif()
+
+# Compiled once, shared by both stages.
+add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
+add_dependencies(xray_core_objs
+    gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
+    gen-native-type-defs)
+
+# Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
+# table.
+add_library(xray_stdlib_bootstrap_core OBJECT src/module/stdlib_embedded.c)
 add_dependencies(xray_stdlib_bootstrap_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-stdlib-embedded-sources)
 
-add_library(xray_core STATIC ${CORE_ALL_SOURCES})
+# Stage 2: the generated table. This is the core library everything else links.
+add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs)
@@ -1150,7 +1180,19 @@ add_compile_definitions(
 )
 
 
-# Core library include paths (detailed configuration)
+# Core library include paths (detailed configuration).
+# xray_core_objs holds the sources shared by both stdlib-embedding stages, so it
+# needs every setting the two stage libraries share — everything below except the
+# stage-specific bytecode directory, which only stdlib_embedded.c consumes.
+target_include_directories(xray_core_objs PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(xray_core_objs PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
 target_include_directories(xray_stdlib_bootstrap_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -1193,20 +1235,24 @@ target_include_directories(xray_vm_runtime PRIVATE
 if(WIN32)
     # Math library is part of the MSVC runtime; ws2_32 for sockets,
     # synchronization for WaitOnAddress/WakeByAddressSingle
+    target_link_libraries(xray_core_objs PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_vm_runtime PUBLIC ws2_32 synchronization)
 else()
+    target_link_libraries(xray_core_objs PUBLIC m pthread)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC m pthread)
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
     target_link_libraries(xray_vm_runtime PUBLIC m pthread)
 endif()
 if(ZLIB_FOUND)
+    target_link_libraries(xray_core_objs PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
     target_link_libraries(xray_vm_runtime PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(xray_core_objs PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_stdlib_bootstrap_core PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
     target_compile_definitions(xray_vm_runtime PRIVATE XR_HAS_ZLIB=1)
@@ -1229,15 +1275,18 @@ if(NOT LIBFFI_FOUND)
 endif()
 if(LIBFFI_FOUND)
     message(STATUS "libffi: found (VM FFI enabled)")
+    target_include_directories(xray_core_objs PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_include_directories(xray_vm_runtime PRIVATE ${LIBFFI_INCLUDE_DIRS})
+    target_link_libraries(xray_core_objs PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_vm_runtime PUBLIC ${LIBFFI_LIBRARIES})
     # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
     # must know xray_core embeds the libffi-based extern invoker, so a runtime
     # program links -lffi too.
+    target_compile_definitions(xray_core_objs PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_vm_runtime PUBLIC XRAY_HAVE_LIBFFI=1)
@@ -1245,6 +1294,7 @@ else()
     message(STATUS "libffi: not found (extern calls limited to the AOT backend)")
 endif()
 if(NOT WIN32)
+    target_link_libraries(xray_core_objs PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_core PUBLIC ${CMAKE_DL_LIBS})
     target_link_libraries(xray_vm_runtime PUBLIC ${CMAKE_DL_LIBS})
@@ -1273,17 +1323,21 @@ endif()
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
     message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
+    target_include_directories(xray_core_objs PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_stdlib_bootstrap_core PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
     target_include_directories(xray_vm_runtime PRIVATE ${OPENSSL_INCLUDE_DIR})
     # Always link libcrypto (needed by ws module for SHA1)
+    target_link_libraries(xray_core_objs PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
     target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
+        target_link_libraries(xray_core_objs PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_stdlib_bootstrap_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
         target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::SSL)
+        target_compile_definitions(xray_core_objs PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
         target_compile_definitions(xray_vm_runtime PUBLIC XR_ENABLE_TLS=1)
@@ -1295,7 +1349,9 @@ endif()
 add_executable(xray_stdlib_bcgen
     src/app/tools/xstdlib_bcgen.c
 )
-target_link_libraries(xray_stdlib_bcgen PRIVATE xray_stdlib_bootstrap_core)
+# Both halves of stage 1: the shared core objects plus the bootstrap-stage
+# stdlib_embedded.c (linking an OBJECT library contributes its objects).
+target_link_libraries(xray_stdlib_bcgen PRIVATE xray_core_objs xray_stdlib_bootstrap_core)
 target_include_directories(xray_stdlib_bcgen PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
