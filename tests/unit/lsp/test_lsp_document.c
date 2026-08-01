@@ -15,6 +15,10 @@
 #include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/app/lsp/xlsp_builtins.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
+#include "../../../src/app/lsp/xlsp_cycle_report.h"
+#include "../../../src/base/xmalloc.h"
+#include <errno.h>
+#include <sys/stat.h>
 #include "../../../src/app/lsp/xlsp_completion.h"
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_imports.h"
@@ -1185,6 +1189,225 @@ TEST(code_action_go_capture_has_no_keyword_rewrite) {
 // Main
 // ============================================================================
 
+// ============================================================================
+// Reference-cycle code actions (task 247 phase H)
+// ============================================================================
+
+// Point the server's workspace at a temp dir and drop a sidecar report in it,
+// the same way a development-build run of the program would.
+static char g_cycle_workspace[512];
+
+static bool write_sidecar(XrLspServer *server, const char *json) {
+    const char *tmp = getenv("TMPDIR");
+    snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
+             tmp ? tmp : "/tmp");
+    if (mkdir(g_cycle_workspace, 0700) != 0 && errno != EEXIST)
+        return false;
+
+    server->workspace_folder_count = 1;
+    xr_free(server->workspace_folders[0].path);
+    server->workspace_folders[0].path = xr_strdup(g_cycle_workspace);
+
+    char path[640];
+    snprintf(path, sizeof(path), "%s/.xray-cycles.json", g_cycle_workspace);
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return false;
+    fputs(json, f);
+    fclose(f);
+    return true;
+}
+
+static void remove_sidecar(void) {
+    char path[640];
+    snprintf(path, sizeof(path), "%s/.xray-cycles.json", g_cycle_workspace);
+    remove(path);
+}
+
+static const char *CYCLE_SIDECAR =
+    "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[{\"objects\":2,\"bytes\":112,"
+    "\"edges\":[{\"from\":\"Node\",\"to\":\"Node\",\"field\":\"peer\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Node\",\"to\":\"Node\",\"field\":\"owner\",\"kind\":\"field\","
+    "\"weak_annotatable\":true}]}]}\n";
+
+TEST(cycle_report_diagnoses_every_candidate_field) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, CYCLE_SIDECAR));
+
+    const char *uri = "file:///cycle.xr";
+    const char *content = "class Node {\n"
+                          "    peer: Node?\n"
+                          "    owner: Node?\n"
+                          "    tag: int\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+
+    // The publish path parses before it diagnoses; do the same here so the
+    // walk has an AST to find the field declarations in.
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    // Both reported edges get a diagnostic; the field that is not on a cycle
+    // gets none. Completeness is the point (247 H.5) -- a missing candidate is
+    // an edge the user cannot choose.
+    ASSERT_EQ(xjson_array_len(diagnostics), 2);
+    bool saw_peer = false, saw_owner = false, saw_tag = false;
+    for (int i = 0; i < xjson_array_len(diagnostics); i++) {
+        const char *msg = xjson_get_string(xjson_array_get(diagnostics, i), "message");
+        ASSERT(msg != NULL);
+        if (strstr(msg, "`Node.peer`"))
+            saw_peer = true;
+        if (strstr(msg, "`Node.owner`"))
+            saw_owner = true;
+        if (strstr(msg, "`Node.tag`"))
+            saw_tag = true;
+    }
+    ASSERT(saw_peer);
+    ASSERT(saw_owner);
+    ASSERT(!saw_tag);
+
+    // Diagnostics land on the field's own declaration line, which is where the
+    // `weak` insertion has to go.
+    XrJsonValue *first = xjson_array_get(diagnostics, 0);
+    XrJsonValue *start = xjson_get_object(xjson_get_object(first, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
+TEST(cycle_report_skips_already_weak_field) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, CYCLE_SIDECAR));
+
+    const char *uri = "file:///cycle_fixed.xr";
+    const char *content = "class Node {\n"
+                          "    weak peer: Node?\n"
+                          "    owner: Node?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+
+    // The publish path parses before it diagnoses; do the same here so the
+    // walk has an AST to find the field declarations in.
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    // The report predates the fix: an annotated field is no longer a candidate.
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    ASSERT(strstr(xjson_get_string(xjson_array_get(diagnostics, 0), "message"), "`Node.owner`"));
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
+TEST(code_action_cycle_offers_weak_without_default_or_batch) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///cycle_action.xr";
+    const char *content = "class Node {\n"
+                          "    peer: Node?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 4, 8,
+        XLSP_CYCLE_DIAG_PREFIX
+        "`Node.peer` is on a cycle that kept 2 object(s) / 112 bytes alive past teardown.\n"
+        "Marking this field `weak` breaks the cycle, and asserts that Node does NOT own the Node "
+        "it points at -- the field reads as null once the target is gone.");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+
+    XrJsonValue *action = find_action_with_title(actions, "Mark `peer` weak");
+    ASSERT(action != NULL);
+
+    // The title states the ownership claim, so the choice can be made before
+    // clicking (247 H.3).
+    ASSERT(strstr(xjson_get_string(action, "title"), "does not own"));
+
+    // The edit inserts the modifier ahead of the field name.
+    XrJsonValue *edits =
+        xjson_get_array(xjson_get_object(xjson_get_object(action, "edit"), "changes"), uri);
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "weak ");
+    XrJsonValue *er = xjson_get_object(text_edit, "range");
+    ASSERT_EQ(xjson_get_int(xjson_get_object(er, "start"), "character"), 4);
+    // An insertion, not a replacement: nothing existing is overwritten.
+    ASSERT_EQ(xjson_get_int(xjson_get_object(er, "end"), "character"), 4);
+
+    // 247 H.3, asserted rather than described: no action may be preferred, and
+    // none may claim to fix more than the one edge it names. Choosing the wrong
+    // edge does not leak -- it nulls a field that was still being read.
+    for (int i = 0; i < xjson_array_len(actions); i++) {
+        XrJsonValue *a = xjson_array_get(actions, i);
+        ASSERT(xjson_get(a, "isPreferred") == NULL);
+        const char *title = xjson_get_string(a, "title");
+        ASSERT(title == NULL || (!strstr(title, "all") && !strstr(title, "All")));
+    }
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+TEST(code_action_closure_cycle_offers_defer) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///closure_cycle.xr";
+    const char *content = "fn wire(b: Button) {\n"
+                          "    b.onClick = fn() { print(b.label) }\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 4, 13,
+        "closure cycle: this closure captures 'b' and is stored into 'b.onClick'\n"
+        "Xray does not reclaim reference cycles, and `weak` is a field modifier that cannot break "
+        "a capture edge.\n"
+        "hint: clear the field when the scope ends -- defer b.onClick = null -- or pass 'b' as a "
+        "parameter instead of capturing it");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+
+    XrJsonValue *action = find_action_with_title(actions, "defer b.onClick = null");
+    ASSERT(action != NULL);
+
+    XrJsonValue *edits =
+        xjson_get_array(xjson_get_object(xjson_get_object(action, "edit"), "changes"), uri);
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    // Indentation is carried over from the assignment, so the result reads as
+    // hand-written code rather than something to clean up after.
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "    defer b.onClick = null\n");
+    XrJsonValue *start = xjson_get_object(xjson_get_object(text_edit, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 2);
+    ASSERT_EQ(xjson_get_int(start, "character"), 0);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     (void) argc;
@@ -1237,6 +1460,12 @@ int main(int argc, char **argv) {
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_payload_enum_iteration_to_variants);
     RUN_TEST(code_action_go_capture_has_no_keyword_rewrite);
+
+    printf("\nReference-cycle code actions (task 247 phase H):\n");
+    RUN_TEST(cycle_report_diagnoses_every_candidate_field);
+    RUN_TEST(cycle_report_skips_already_weak_field);
+    RUN_TEST(code_action_cycle_offers_weak_without_default_or_batch);
+    RUN_TEST(code_action_closure_cycle_offers_defer);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 

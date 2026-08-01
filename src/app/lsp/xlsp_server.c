@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_server.h"
+#include "xlsp_cycle_report.h"
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
@@ -1042,6 +1043,11 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 // Publish diagnostics for a document
 void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
+
+    /* Findings from a run of the program, not from this parse: the detector
+     * writes them out, the editor reads them back (task 247 phase H). */
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
 
     XrJsonValue *params = xjson_new_object();
     xjson_object_set(params, "uri", xjson_new_string(doc->uri));

@@ -292,6 +292,10 @@ struct XrLspServer {
     // including test harnesses — don't collide on "xlsp-progress-N".
     int progress_token_counter;
 
+    /* Runtime cycle findings read back from the detector's sidecar file
+     * (task 247 phase H). NULL when no report exists. */
+    struct XlspCycleReport *cycle_report;
+
     // Long-session memory bound for the workspace analyzer's type pool.
     // Holds the pool size (bytes) measured right after the last clean
     // (re)build/index once the server settled to idle. 0 means "not yet

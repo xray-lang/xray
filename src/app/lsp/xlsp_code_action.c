@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_code_action.h"
+#include "xlsp_cycle_report.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -94,6 +95,163 @@ static void push_enum_variants_action(XrJsonValue *actions, const char *uri, con
     xjson_object_set(changes, uri, edits);
     xjson_object_set(edit, "changes", changes);
     xjson_object_set(action, "edit", edit);
+    xjson_array_push(actions, action);
+}
+
+/* ---------- Reference cycles (task 247 phase H) ----------
+ *
+ * Two rules from 247 section 2.5 shape what is offered here, and both are
+ * absences rather than features:
+ *
+ *   - no "fix all". Breaking a cycle at the wrong edge does not leak, it
+ *     nulls a field that was still being read. A batch operation would apply
+ *     that mistake everywhere at once.
+ *   - no default. Every candidate edge gets its own action, none is marked
+ *     preferred, and each title says what the choice asserts about ownership.
+ *
+ * The language does not guess which reference is the owning one. The tooling
+ * makes the edit cheap once a human has decided. */
+static void push_weak_field_action(XrJsonValue *actions, const char *uri, XrJsonValue *diag,
+                                   const char *field, const char *owner, const char *target) {
+    XrJsonValue *diag_range = xjson_get_object(diag, "range");
+    XrJsonValue *diag_start = diag_range ? xjson_get_object(diag_range, "start") : NULL;
+    if (!diag_start)
+        return;
+    int line = (int) xjson_get_int(diag_start, "line");
+    int character = (int) xjson_get_int(diag_start, "character");
+
+    char title[256];
+    snprintf(title, sizeof(title), "Mark `%s` weak — %s does not own the %s it points at", field,
+             owner, target);
+
+    XrJsonValue *action = xjson_new_object();
+    xjson_object_set(action, "title", xjson_new_string(title));
+    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
+    /* Deliberately no "isPreferred": that flag is what an editor uses to pick
+     * one on the user's behalf, which is the decision the language refuses to
+     * make. */
+    XrJsonValue *diag_list = xjson_new_array();
+    xjson_array_push(diag_list, xjson_clone(diag));
+    xjson_object_set(action, "diagnostics", diag_list);
+
+    XrJsonValue *edit = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();
+    XrJsonValue *text_edit = xjson_new_object();
+    xjson_object_set(text_edit, "newText", xjson_new_string("weak "));
+    /* An insertion at the field name: `weak` is a storage modifier and sits
+     * where the declaration starts, ahead of the name. */
+    xjson_object_set(text_edit, "range", xjson_make_range(line, character, line, character));
+    xjson_array_push(edits, text_edit);
+    xjson_object_set(changes, uri, edits);
+    xjson_object_set(edit, "changes", changes);
+    xjson_object_set(action, "edit", edit);
+
+    xjson_array_push(actions, action);
+}
+
+/* Pull `Class.field` and the target class out of the diagnostic the cycle
+ * report produced. Reading them back beats threading a side channel through
+ * the LSP: the diagnostic is the only thing the client is required to hand
+ * back with a codeAction request. */
+static bool parse_cycle_diagnostic(const char *msg, char *field, size_t field_size, char *owner,
+                                   size_t owner_size, char *target, size_t target_size) {
+    const char *open = strchr(msg, '`');
+    if (!open)
+        return false;
+    const char *dot = strchr(open + 1, '.');
+    const char *close = dot ? strchr(dot + 1, '`') : NULL;
+    if (!dot || !close)
+        return false;
+    size_t olen = (size_t) (dot - open - 1);
+    size_t flen = (size_t) (close - dot - 1);
+    if (olen == 0 || olen >= owner_size || flen == 0 || flen >= field_size)
+        return false;
+    memcpy(owner, open + 1, olen);
+    owner[olen] = '\0';
+    memcpy(field, dot + 1, flen);
+    field[flen] = '\0';
+
+    /* "...does NOT own the <Target> it points at" */
+    const char *marker = strstr(close, "does NOT own the ");
+    if (!marker)
+        return false;
+    marker += strlen("does NOT own the ");
+    const char *end = strstr(marker, " it points at");
+    if (!end || (size_t) (end - marker) >= target_size)
+        return false;
+    memcpy(target, marker, (size_t) (end - marker));
+    target[end - marker] = '\0';
+    return true;
+}
+
+/* A capture edge (A.6). `weak` is a field modifier and cannot reach one, so
+ * the only fix is clearing the field — which is what the analyzer's own hint
+ * already spells out. Lift it into an edit rather than making the reader
+ * retype it. */
+static void push_defer_clear_action(XrJsonValue *actions, const char *uri, const char *content,
+                                    XrJsonValue *diag) {
+    const char *msg = xjson_get_string(diag, "message");
+    const char *hint = msg ? strstr(msg, "defer ") : NULL;
+    const char *tail = hint ? strstr(hint, " = null") : NULL;
+    if (!hint || !tail)
+        return;
+    size_t expr_len = (size_t) (tail - (hint + 6));
+    if (expr_len == 0 || expr_len >= 128)
+        return;
+    char expr[128];
+    memcpy(expr, hint + 6, expr_len);
+    expr[expr_len] = '\0';
+
+    XrJsonValue *diag_range = xjson_get_object(diag, "range");
+    XrJsonValue *diag_start = diag_range ? xjson_get_object(diag_range, "start") : NULL;
+    if (!diag_start)
+        return;
+    int line = (int) xjson_get_int(diag_start, "line");
+
+    /* Match the indentation of the assignment that created the cycle: the
+     * defer belongs to the same scope, and an edit that reads as hand-written
+     * is one the user does not have to clean up after. */
+    char indent[64] = {0};
+    const char *p = content;
+    for (int l = 0; l < line && p; l++) {
+        const char *nl = strchr(p, '\n');
+        p = nl ? nl + 1 : NULL;
+    }
+    size_t ind = 0;
+    while (p && (p[ind] == ' ' || p[ind] == '\t') && ind + 1 < sizeof(indent)) {
+        indent[ind] = p[ind];
+        ind++;
+    }
+    indent[ind] = '\0';
+
+    char new_text[256];
+    snprintf(new_text, sizeof(new_text), "%sdefer %s = null\n", indent, expr);
+
+    char title[192];
+    snprintf(title, sizeof(title), "Clear the field when the scope ends: defer %s = null", expr);
+
+    XrJsonValue *action = xjson_new_object();
+    xjson_object_set(action, "title", xjson_new_string(title));
+    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
+    XrJsonValue *diag_list = xjson_new_array();
+    xjson_array_push(diag_list, xjson_clone(diag));
+    xjson_object_set(action, "diagnostics", diag_list);
+
+    XrJsonValue *edit = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();
+    XrJsonValue *text_edit = xjson_new_object();
+    xjson_object_set(text_edit, "newText", xjson_new_string(new_text));
+    /* Right after the assignment: a defer runs at scope exit wherever it is
+     * registered, and next to the line that created the cycle is where it
+     * explains itself. */
+    xjson_object_set(text_edit, "range", xjson_make_range(line + 1, 0, line + 1, 0));
+    xjson_array_push(edits, text_edit);
+    xjson_object_set(changes, uri, edits);
+    xjson_object_set(edit, "changes", changes);
+    xjson_object_set(action, "edit", edit);
+
     xjson_array_push(actions, action);
 }
 
@@ -194,6 +352,16 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     }
                 }
             }
+
+            if (msg && strncmp(msg, XLSP_CYCLE_DIAG_PREFIX, strlen(XLSP_CYCLE_DIAG_PREFIX)) == 0) {
+                char field[128], owner[128], target[128];
+                if (parse_cycle_diagnostic(msg, field, sizeof(field), owner, sizeof(owner), target,
+                                           sizeof(target)))
+                    push_weak_field_action(actions, uri, diag, field, owner, target);
+            }
+
+            if (msg && strncmp(msg, "closure cycle:", 14) == 0)
+                push_defer_clear_action(actions, uri, doc->content, diag);
 
             if (msg && strstr(msg, "is not directly iterable") && strstr(msg, ".variants`")) {
                 char enum_name[128];
