@@ -43,6 +43,16 @@
 #     XR_BUILD_DIR   build directory (default: build)
 #     XR_JOBS        parallelism (default: cores - 2)
 #     XR_NO_BUILD=1  skip the incremental build step
+#     XR_SHARDS=N    run only 1/N of the two big corpora (backend diff, AOT
+#                    filetests). OFF by default and deliberately so: t2 exists
+#                    precisely to catch a backend divergence, and a tier that
+#                    silently samples is a tier that silently stops catching
+#                    them. Use it when you knowingly want a faster t2 and accept
+#                    that 1-1/N of those cases did not run — the shard is stable
+#                    (same cases every time for a given N) and every run prints
+#                    what it skipped. t3 ignores it; a release tier runs
+#                    everything.
+#     XR_SHARD_INDEX which shard to run with XR_SHARDS (default: 0)
 
 set -uo pipefail
 
@@ -113,6 +123,23 @@ case "${TIER}" in
     t0|t1|t2|t3) ;;
     *) echo "Unknown tier '${TIER}'"; usage 1 ;;
 esac
+
+# Corpus sharding config, validated before any build work happens.
+SHARDS="${XR_SHARDS:-1}"
+SHARD_INDEX="${XR_SHARD_INDEX:-0}"
+case "${SHARDS}${SHARD_INDEX}" in
+    *[!0-9]*) echo "${RED}Error${NC}: XR_SHARDS / XR_SHARD_INDEX must be numeric"; exit 1 ;;
+esac
+if [ "${SHARDS}" -lt 1 ]; then
+    echo "${RED}Error${NC}: XR_SHARDS must be >= 1"; exit 1
+fi
+if [ "${SHARD_INDEX}" -ge "${SHARDS}" ]; then
+    echo "${RED}Error${NC}: XR_SHARD_INDEX must be in [0,${SHARDS})"; exit 1
+fi
+if [ "${SHARDS}" -gt 1 ] && [ "${TIER}" = "t3" ]; then
+    echo "${RED}Error${NC}: XR_SHARDS is not allowed for t3 — a release tier runs every case."
+    exit 1
+fi
 
 if [ ! -d "${BUILD_DIR}" ]; then
     echo "${RED}Error${NC}: build directory '${BUILD_DIR}' does not exist."
@@ -219,7 +246,25 @@ if [ "${XR_NO_BUILD:-0}" != "1" ]; then
     fi
 fi
 
-(cd "${BUILD_DIR}" && ctest "${CTEST_ARGS[@]}" "$@")
+# ---------------------------------------------------------------------------
+# Optional corpus sharding (XR_SHARDS). Both big corpora already implement a
+# stable 0-based shard of their case list, so this only forwards the request —
+# there is no sampling logic here to drift from theirs.
+#
+# Off by default. t3 refuses it outright: a release tier that skipped 3/4 of the
+# differential corpus would be reporting a pass it did not earn.
+# ---------------------------------------------------------------------------
+SHARD_ENV=()
+if [ "${SHARDS}" -gt 1 ]; then
+    SHARD_ENV=(
+        XRAY_DIFF_SHARD_TOTAL="${SHARDS}" XRAY_DIFF_SHARD_INDEX="${SHARD_INDEX}"
+        XRAY_AOT_SHARD_TOTAL="${SHARDS}"  XRAY_AOT_SHARD_INDEX="${SHARD_INDEX}"
+    )
+    echo "${YELLOW}==>${NC} sharding: backend-diff and AOT corpora run shard ${SHARD_INDEX}/${SHARDS} only"
+    NOT_COVERED="${NOT_COVERED:+${NOT_COVERED}, }$(( 100 - 100 / SHARDS ))% of the backend-diff and AOT filetest cases (XR_SHARDS=${SHARDS})"
+fi
+
+(cd "${BUILD_DIR}" && env "${SHARD_ENV[@]+${SHARD_ENV[@]}}" ctest "${CTEST_ARGS[@]}" "$@")
 RC=$?
 
 # ---------------------------------------------------------------------------
