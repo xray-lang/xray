@@ -59,11 +59,23 @@ fn triangle() {
     c.peer = a
 }
 
-map_cycle()
-json_cycle()
-plain_cycle()
-union_cycle()
-big_cycle()
-self_cycle()
-triangle()
+// 在协程里构造，而不是顶层。
+//
+// 顶层的容器字面量（`#{}` / `[]`）会落到 fixed_heap 上并被打上 XR_OBJ_MANAGED，
+// 而图遍历的 child_eligible 会跳过 MANAGED 对象 —— 于是环里凡是经过一个容器
+// 的边都断在那里，Map 值边的形态整个看不见。协程堆上的容器没有这个标记。
+//
+// 这也更贴近检测器要服务的场景：它扫的就是协程堆，L2 边界也是按协程算的。
+fn build_all() {
+    map_cycle()
+    json_cycle()
+    plain_cycle()
+    union_cycle()
+    big_cycle()
+    self_cycle()
+    triangle()
+}
+
+var t = go build_all()
+await t
 print("shapes built")

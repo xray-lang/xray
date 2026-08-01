@@ -285,7 +285,23 @@ static const char *detector_type_name(const XrObjHeader *obj) {
     switch (obj->type) {
         case XR_TINSTANCE: {
             const XrClass *cls = ((const XrInstance *) obj)->klass;
-            return (cls && cls->name) ? cls->name : "instance";
+            if (!cls || !cls->name)
+                return "instance";
+            /* A class name is an interned symbol, and the symbol table can be
+             * gone by the time a coroutine's heap is torn down — printing the
+             * pointer then emits whatever bytes are left there. Report the
+             * shape instead of garbage: a name that is not plausibly a name is
+             * not worth guessing at. The cycle itself, its size, and the edge
+             * kinds are all still accurate. */
+            const char *n = cls->name;
+            for (int i = 0; i < 64; i++) {
+                unsigned char c = (unsigned char) n[i];
+                if (c == 0)
+                    return i > 0 ? n : "instance";
+                if (c < 0x20 || c > 0x7e)
+                    return "instance";
+            }
+            return "instance";
         }
         case XR_TCELL:
             return "cell";

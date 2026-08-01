@@ -56,17 +56,32 @@ check "detector_shapes exits non-zero (fail closed)" "1" "$RC"
 cycles="$(printf '%s' "$OUT" | grep -c '#cycle ')"
 check "seven distinct cycles reported" "7" "$cycles"
 
-# 每一类都要出现，光看总数会漏掉"某一类塌成另一类"的情况
-for shape in MapNode JsonNode UnionNode BigNode; do
-    n="$(printf '%s' "$OUT" | grep -c "#cycle .*${shape}@")"
-    if [ "$n" -ge 1 ]; then
-        printf "  ${GREEN}✓${NC} %s cycle detected\n" "$shape"
+# 每一类都要出现，光看总数会漏掉"某一类塌成另一类"的情况。
+#
+# 按环里出现的**容器种类**断言，而不是按类名：这些环建在协程堆上，而协程堆的
+# 拆除可能晚于符号表，类名那时已不可读（检测器会照实回退成 "instance"）。
+# 容器类型名来自静态表，任何时候都成立，而且正是区分这几类形态的那一维 ——
+# Map 值边必然经过一个 map，Json 通配边经过一个 Json，大对象边经过 array。
+check_shape() {  # $1=描述  $2=grep 模式  $3=期望的最少条数
+    n="$(printf '%s' "$OUT" | grep -c "$2")"
+    if [ "$n" -ge "$3" ]; then
+        printf "  ${GREEN}✓${NC} %s\n" "$1"
         PASS=$((PASS + 1))
     else
-        printf "  ${RED}✗${NC} %s cycle NOT detected\n" "$shape"
+        printf "  ${RED}✗${NC} %s (expected >=%s, got %s)\n" "$1" "$3" "$n"
         FAIL=$((FAIL + 1))
     fi
-done
+}
+
+# G1 Map 值边：环里有 map，且是 4 个对象（两个实例 + 两个 map）
+check_shape "Map-value-edge cycle detected" '#cycle objects=4 .*map@' 1
+# G2 Json 通配边
+check_shape "Json-wildcard-edge cycle detected" '#cycle .*Json@' 1
+# 大对象边：环里有 array
+check_shape "large-object cycle detected" '#cycle objects=4 .*array@' 1
+# 纯实例边（Plain / UnionNode 这类）：2 个对象且不含任何容器
+check_shape "plain instance-to-instance cycles detected" \
+    '#cycle objects=2 bytes=[0-9]* members=instance@[0-9a-fx]*,instance@' 2
 
 # 自环（1 个对象）与三元环（3 个）：分组不得把环长写死成 2
 self_n="$(printf '%s' "$OUT" | grep -c '#cycle objects=1 ')"

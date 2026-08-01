@@ -66,3 +66,8 @@ export class WeakBrokenNode {
     constructor(v) { this.parent = null; this.v = v }
 }
 
+
+export class MapEdgeNode {
+    peers: Map<string, MapEdgeNode>
+    constructor() { this.peers = #{} }
+}
