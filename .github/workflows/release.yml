@@ -65,6 +65,14 @@ jobs:
       with:
         version: 0.16.0
 
+    # Ninja is the project's one generator (AGENTS.md); Windows needs cl.exe on
+    # PATH for it.
+    - name: Set up MSVC environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Configure (Unix)
       if: runner.os != 'Windows'
       run: |
@@ -76,7 +84,7 @@ jobs:
             "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-fatal_warnings"
           )
         fi
-        cmake -B build \
+        cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
           -DXRAY_BUNDLE_ZIG=OFF \
@@ -86,11 +94,13 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release `
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
           -DXRAY_BUNDLE_ZIG=OFF
 
+    # Ninja is single-config: build type comes from configure, binaries land in
+    # build/ on every platform.
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build build
 
     - name: Build GNU AOT runtime (Windows)
       if: runner.os == 'Windows'
@@ -147,15 +157,16 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        cmake --install build --config Release --prefix dist
+        cmake --install build --prefix dist
         python scripts\stage_windows_gnu_runtime.py `
           --root dist `
           --target x86_64-windows-gnu `
           --aot-core build-zig-sdk\libxray_aot_core.a `
           --rt-coro build-zig-sdk\libxray_rt_coro.a
         if ($LASTEXITCODE -ne 0) { throw 'Windows GNU runtime staging failed' }
-        $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $buildExe) {
+        # Ninja is single-config: exactly one location, no per-config subdirectory.
+        $buildExe = 'build\xray.exe'
+        if (-not (Test-Path $buildExe)) {
           throw 'xray.exe was not produced by the release build'
         }
         Copy-Item (Join-Path (Split-Path $buildExe) '*.dll') dist\bin\ -ErrorAction SilentlyContinue

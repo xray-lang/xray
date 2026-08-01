@@ -8,12 +8,12 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Default Debug",
-      "description": "Plain Debug build with no sanitizers; default local dev preset.",
+      "displayName": "Default (Release, fast iteration)",
+      "description": "Canonical local dev/test build: Ninja + Release in build/. Release is chosen deliberately — this is a compute-heavy compiler, so optimized test runs dominate the edit/build/test loop far more than the slightly longer compile. Use the sanitizer presets (Debug + assertions) for correctness passes.",
       "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },

@@ -108,7 +108,7 @@ jobs:
 
       - name: Configure
         run: >-
-          cmake -B build
+          cmake -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DENABLE_ASAN=ON
 
@@ -155,7 +155,7 @@ jobs:
 
       - name: Configure (MSan)
         run: >-
-          cmake -B build
+          cmake -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DENABLE_MSAN=ON
           -DCMAKE_C_COMPILER=clang
@@ -190,19 +190,26 @@ jobs:
           echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
           echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
 
+      # Ninja on every platform (AGENTS.md); on Windows that needs cl.exe on PATH.
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure (Release)
         run: >-
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE"
           -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
 
+      # Ninja is single-config: no --config, and the binary lands in build/.
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build
 
       - name: Run Win11 coroutine 4 cases 5x
         shell: bash
         env:
-          XRAY_BIN: ./build/Release/xray.exe
+          XRAY_BIN: ./build/xray.exe
         # repro_win11_coro_burn.sh pins the same four cases that
         # exposed STATUS_HEAP_CORRUPTION in May 2026 (1115 cancel,
         # 1109 await_any, 1127 priority, 1128 yield) and writes

@@ -31,12 +31,10 @@ if [ "$N" -lt 1 ]; then
     exit 2
 fi
 
+# Ninja is the project's one generator and is single-config, so a build tree has
+# exactly one binary location — no per-configuration subdirectory to search.
 if [ -z "${XRAY_BIN:-}" ]; then
-    if [ -x "${PROJECT_ROOT}/build/Release/xray.exe" ]; then
-        XRAY_BIN="${PROJECT_ROOT}/build/Release/xray.exe"
-    elif [ -x "${PROJECT_ROOT}/build/Debug/xray.exe" ]; then
-        XRAY_BIN="${PROJECT_ROOT}/build/Debug/xray.exe"
-    elif [ -x "${PROJECT_ROOT}/build/xray.exe" ]; then
+    if [ -x "${PROJECT_ROOT}/build/xray.exe" ]; then
         XRAY_BIN="${PROJECT_ROOT}/build/xray.exe"
     elif [ -x "${PROJECT_ROOT}/build-release/xray" ]; then
         XRAY_BIN="${PROJECT_ROOT}/build-release/xray"

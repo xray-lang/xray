@@ -94,16 +94,18 @@ if [[ "${XR_ASAN_SKIP_BUILD:-0}" != "1" ]]; then
     if [[ -f "${ASAN_CACHE}" ]]; then
         echo "== [asan_focused] reusing existing configuration in ${ASAN_BUILD}"
     else
-        if command -v ninja >/dev/null 2>&1; then
-            GENERATOR="Ninja"
-        else
-            GENERATOR="Unix Makefiles"
+        # Ninja is the project's one build generator (see AGENTS.md). No Makefiles
+        # fallback — fail with a clear install hint rather than silently building
+        # something the rest of the toolchain does not expect.
+        if ! command -v ninja >/dev/null 2>&1; then
+            echo "!! [asan_focused] ninja not found — install it (brew install ninja / apt-get install ninja-build)" >&2
+            exit 1
         fi
-        echo "== [asan_focused] configuring ${ASAN_BUILD} (${GENERATOR})"
+        echo "== [asan_focused] configuring ${ASAN_BUILD} (Ninja)"
         # Same cache variables as the asan-jit-debug preset in CMakePresets.json,
         # which stays the hand-run entry point. Keep the two in step; a preset
         # cannot take a caller-supplied binaryDir, so this lane cannot use it.
-        cmake -S "${ROOT}" -B "${ROOT}/${ASAN_BUILD}" -G "${GENERATOR}" \
+        cmake -S "${ROOT}" -B "${ROOT}/${ASAN_BUILD}" -G "Ninja" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DENABLE_ASAN=ON -DENABLE_UBSAN=ON \

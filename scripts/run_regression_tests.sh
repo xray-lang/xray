@@ -46,21 +46,14 @@ else
     BUILD_DIR="${PROJECT_ROOT}/build"
 fi
 
-# Locate the actual binary. Layouts encountered in CI:
-#   Linux / macOS / mingw     : ${BUILD_DIR}/xray
-#   MSVC multi-config Debug   : ${BUILD_DIR}/Debug/xray.exe
-#   MSVC multi-config Release : ${BUILD_DIR}/Release/xray.exe
-# XRAY_PATH env wins if the caller already knows the path (e.g. CI).
+# Locate the actual binary. Ninja is the project's one generator and is
+# single-config, so every platform has exactly one location: ${BUILD_DIR}/xray
+# (plus the .exe suffix on Windows). XRAY_PATH env wins if the caller already
+# knows the path (e.g. CI).
 if [ -n "${XRAY_PATH:-}" ] && [ -f "${XRAY_PATH}" ]; then
     XRAY_BIN="${XRAY_PATH}"
-elif [ -f "${BUILD_DIR}/xray" ]; then
-    XRAY_BIN="${BUILD_DIR}/xray"
 elif [ -f "${BUILD_DIR}/xray.exe" ]; then
     XRAY_BIN="${BUILD_DIR}/xray.exe"
-elif [ -f "${BUILD_DIR}/Debug/xray.exe" ]; then
-    XRAY_BIN="${BUILD_DIR}/Debug/xray.exe"
-elif [ -f "${BUILD_DIR}/Release/xray.exe" ]; then
-    XRAY_BIN="${BUILD_DIR}/Release/xray.exe"
 else
     XRAY_BIN="${BUILD_DIR}/xray"
 fi

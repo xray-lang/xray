@@ -134,16 +134,27 @@ jobs:
         echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
         echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
 
+    # Ninja is the project's one build generator on every platform (AGENTS.md).
+    # On Windows that means cl.exe must be on PATH, which this action provides;
+    # Ninja is preinstalled on all GitHub runner images.
+    - name: Set up MSVC environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Configure (Unix)
       if: runner.os != 'Windows'
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     - name: Configure (Windows)
       if: runner.os == 'Windows'
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE" -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE" -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
 
+    # Ninja is single-config: the build type comes from configure, and binaries
+    # land directly in build/ on every platform (no Release/ subdirectory).
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build build
 
     - name: Verify binary
       if: runner.os != 'Windows'
@@ -151,7 +162,7 @@ jobs:
 
     - name: Verify binary (Windows)
       if: runner.os == 'Windows'
-      run: .\build\Release\xray.exe --version
+      run: .\build\xray.exe --version
 
     - name: Release Smoke (Unix)
       if: runner.os != 'Windows'
@@ -213,7 +224,7 @@ jobs:
         ccache --max-size=2G
 
     - name: Configure (Debug)
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
     - name: Build
       run: cmake --build build --parallel 4
@@ -240,7 +251,7 @@ jobs:
 
     - name: Generate compile_commands.json
       run: |
-        cmake -B build \
+        cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
           -DCMAKE_C_COMPILER=clang \
@@ -301,7 +312,7 @@ jobs:
 
     - name: Configure with ${{ matrix.sanitizer.name }}
       run: |
-        cmake -B build \
+        cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
@@ -384,7 +395,7 @@ jobs:
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: Configure
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
       run: cmake --build build -j$(nproc)
@@ -414,7 +425,7 @@ jobs:
 
     - name: Configure with coverage
       run: |
-        cmake -B build \
+        cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_COVERAGE=ON
 

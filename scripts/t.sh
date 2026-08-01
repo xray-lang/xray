@@ -116,7 +116,7 @@ esac
 
 if [ ! -d "${BUILD_DIR}" ]; then
     echo "${RED}Error${NC}: build directory '${BUILD_DIR}' does not exist."
-    echo "Configure one first, e.g.:  cmake -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Debug"
+    echo "Configure one first:  cmake --preset default   (Ninja + Release in build/)"
     exit 1
 fi
 
