@@ -1,0 +1,59 @@
+// detector_weak_broken.xr — 加上 `weak` 之后，环真的没了（任务 247 阶段 H 验收）
+//
+// 这是 LSP 代码操作那条链路的运行期终点。合同那一侧已经证明了「加 weak 后
+// `no_reference_cycles` 从失败转通过」（tests/cli/run_verify_contract_tests.sh），
+// 但那是编译期的类型图判定。检测器看的是运行期的真实对象图，两者是独立的
+// 观察量 —— 编译期证明不了不代表运行期真的泄漏，反过来也一样。
+//
+// 这里的三个形态与 detector_shapes.xr 一一对应，唯一的差别就是候选边上多了
+// 一个 `weak`，也就是代码操作插入的那五个字符。脚本断言检测器一个环都不报。
+
+// 对应 detector_shapes.xr 的 Plain：直接字段环
+class WeakPlain {
+    weak peer: WeakPlain?
+    tag: int
+    constructor(tag) { this.peer = null; this.tag = tag }
+}
+
+// 对应 MapNode：环经过一个容器。`weak` 标在持有容器的那条边上
+// （union 字段不在此列——`weak` 只能标引用类型，union 标了是 E0394）
+class WeakMap {
+    weak peers: Map<string, WeakMap>?
+    constructor() { this.peers = #{} }
+}
+
+// 对应 BigNode：大对象参与，缓冲走 large_set
+class WeakBig {
+    pad: Array<int>
+    weak peer: WeakBig?
+    constructor() { this.pad = Array<int>(2000, 0); this.peer = null }
+}
+
+fn plain_pair() { var a = WeakPlain(1); var b = WeakPlain(2); a.peer = b; b.peer = a }
+fn map_pair() { var a = WeakMap(); var b = WeakMap(); a.peers!["n"] = b; b.peers!["n"] = a }
+fn big_pair() { var a = WeakBig(); var b = WeakBig(); a.peer = b; b.peer = a }
+
+// 自环与三元环也要跟着断掉：weak 断的是边，不是「成对」这个形状
+fn self_ref() { var a = WeakPlain(3); a.peer = a }
+
+fn triangle() {
+    var a = WeakPlain(4)
+    var b = WeakPlain(5)
+    var c = WeakPlain(6)
+    a.peer = b
+    b.peer = c
+    c.peer = a
+}
+
+// 与 detector_shapes.xr 同样在协程里构造，两份探针才可比。
+fn build_all() {
+    plain_pair()
+    map_pair()
+    big_pair()
+    self_ref()
+    triangle()
+}
+
+var t = go build_all()
+await t
+print("weak-broken built")

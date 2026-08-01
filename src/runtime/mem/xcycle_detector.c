@@ -517,7 +517,13 @@ static void detector_collect_edges(CycleEdgeCtx *c, DetectorNode **members, uint
 
 /* `weak` is a field modifier: it reaches an instance field and nothing else.
  * An edge into a closure or a cell is a capture edge, which no annotation can
- * break — the only fix is clearing the field that holds the closure. */
+ * break — the only fix is clearing the field that holds the closure.
+ *
+ * Necessary, not sufficient. Whether the modifier actually COMPILES on a given
+ * field depends on its declared type (nullable reference, per E0394/W2), and
+ * that is invisible here: a runtime edge out of `T?` and out of
+ * `int | T | null` are the same pointer. The LSP has the source and makes the
+ * final call; this flag only rules out what the object graph alone can. */
 static bool cycle_edge_is_capture(const CycleEdgeCtx *c, const CycleEdge *e) {
     uint8_t t = c->members[e->to]->obj->type;
     return t == XR_TFUNCTION || t == XR_TCELL;

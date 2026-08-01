@@ -184,6 +184,59 @@ void xlsp_cycle_report_refresh(XrLspServer *server) {
 
 /* ---------- Diagnostics ---------- */
 
+/* Can `weak` legally go on this field?
+ *
+ * The detector cannot answer this. It sees a runtime object graph, where an
+ * edge out of a `T?` field and an edge out of an `int | T | null` field look
+ * identical — but only the first can carry the modifier. Offering a code
+ * action for the second produces an edit that does not compile, which is worse
+ * than offering nothing.
+ *
+ * Mirrors the analyzer's own rule (xanalyzer_visitor_decl.c, E0394): not
+ * static, nullable (W2), and a reference type.
+ */
+static bool field_can_be_weak(XaAnalyzer *analyzer, AstNode *field) {
+    if (field->as.field_decl.is_static)
+        return false;
+    XrTypeRef *ref = field->as.field_decl.field_type;
+    /* W2: a weak slot reads null the moment its target dies, so a
+     * non-nullable declaration would be a lie. A union that merely happens to
+     * include `null` is still not a reference type. */
+    if (!ref || ref->kind != XR_TREF_OPTIONAL || !ref->children || ref->nchildren == 0)
+        return false;
+    XrTypeRef *inner = ref->children[0];
+    if (!inner || (inner->kind != XR_TREF_NAMED && inner->kind != XR_TREF_GENERIC) || !inner->name)
+        return false;
+
+    /* Prefer the analyzer's answer: a `struct` is a NAMED reference in the AST
+     * but a value type in the type table, and only the latter knows. When the
+     * name does not resolve — a type from a file the workspace has not indexed
+     * — fall back to the syntactic reading rather than dropping a candidate
+     * the user does have. */
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, inner->name);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, inner->name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+    XrType *type = links ? (links->type ? links->type : links->declared_type) : NULL;
+    if (!type)
+        return true;
+    if (type->is_value_type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_STRING:
+        case XR_KIND_FUNCTION:
+        case XR_KIND_JSON:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static const XlspCycleEdge *report_lookup(const struct XlspCycleReport *r, const char *cls,
                                           const char *field) {
     for (int i = 0; i < r->count; i++) {
@@ -223,8 +276,8 @@ static void emit_field_diagnostic(XrJsonValue *diagnostics, AstNode *field_node,
     xjson_array_push(diagnostics, diag);
 }
 
-static void walk_for_classes(AstNode *node, const struct XlspCycleReport *report,
-                             XrJsonValue *diagnostics) {
+static void walk_for_classes(AstNode *node, XaAnalyzer *analyzer,
+                             const struct XlspCycleReport *report, XrJsonValue *diagnostics) {
     if (!node)
         return;
     switch (node->type) {
@@ -242,18 +295,18 @@ static void walk_for_classes(AstNode *node, const struct XlspCycleReport *report
                 if (f->as.field_decl.is_weak)
                     continue;
                 const XlspCycleEdge *edge = report_lookup(report, cls, f->as.field_decl.name);
-                if (edge && edge->weak_annotatable)
+                if (edge && edge->weak_annotatable && field_can_be_weak(analyzer, f))
                     emit_field_diagnostic(diagnostics, f, cls, edge);
             }
             break;
         }
         case AST_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++)
-                walk_for_classes(node->as.program.statements[i], report, diagnostics);
+                walk_for_classes(node->as.program.statements[i], analyzer, report, diagnostics);
             break;
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++)
-                walk_for_classes(node->as.block.statements[i], report, diagnostics);
+                walk_for_classes(node->as.block.statements[i], analyzer, report, diagnostics);
             break;
         default:
             break;
@@ -266,7 +319,7 @@ void xlsp_cycle_report_diagnostics(XrLspDocument *doc, XrJsonValue *diagnostics)
     const struct XlspCycleReport *report = doc->server->cycle_report;
     if (!report || report->count == 0 || !doc->ast)
         return;
-    walk_for_classes(doc->ast, report, diagnostics);
+    walk_for_classes(doc->ast, doc->server->workspace_analyzer, report, diagnostics);
 }
 
 /* ---------- The other source: a contract that demands acyclicity ----------
@@ -434,6 +487,8 @@ static void walk_for_contract_classes(AstNode *node, XrLspServer *server, XaAnal
                 /* An edge participates only if its target is itself on a cycle
                  * — a field of an acyclic type cannot be the one to break. */
                 if (strcmp(target, cls) != 0 && !class_is_cycle_candidate(analyzer, target))
+                    continue;
+                if (!field_can_be_weak(analyzer, f))
                     continue;
                 emit_contract_diagnostic(diagnostics, f, cls, target);
             }

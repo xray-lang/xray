@@ -112,6 +112,15 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# ---- 加上 weak 之后，环真的没了（阶段 H）----
+# 合同那一侧已经证明「加 weak 后 no_reference_cycles 从失败转通过」，但那是
+# 编译期的类型图判定。这里是独立的第二个观察量：运行期的真实对象图。
+OUT="$("$XRAY" run "${SCRIPT_DIR}/detector_weak_broken.xr" 2>&1)"
+RC=$?
+check "weak-broken shapes exit zero" "0" "$RC"
+n="$(printf '%s' "$OUT" | grep -c '#cycle ')"
+check "weak-broken shapes report no cycles" "0" "$n"
+
 # ---- 边车报告（阶段 H）----
 # LSP 跑在另一个进程里，读不到 stderr。边车文件是交接点：它必须给出
 # 类名 + 字段名，否则「给哪条边加 weak」这个代码操作无从落到声明上。

@@ -1490,6 +1490,46 @@ TEST(contract_cycle_diagnoses_candidates_only_under_contract) {
     xlsp_server_free(server);
 }
 
+static const char *UNWEAKABLE_SIDECAR =
+    "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[{\"objects\":2,\"bytes\":96,"
+    "\"edges\":[{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"loose\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"pinned\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"ok\",\"kind\":\"field\","
+    "\"weak_annotatable\":true}]}]}\n";
+
+TEST(cycle_report_offers_weak_only_where_it_compiles) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, UNWEAKABLE_SIDECAR));
+
+    // The detector sees a runtime object graph, where all three of these edges
+    // look the same. Only `ok` can actually carry the modifier: `weak` needs a
+    // nullable reference type (E0394 / W2). An action on the other two would
+    // produce an edit that does not compile, which is worse than no action.
+    const char *uri = "file:///unweakable.xr";
+    const char *content = "class Mixed {\n"
+                          "    loose: int | string | Mixed | null\n"
+                          "    pinned: Mixed\n"
+                          "    ok: Mixed?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    ASSERT(strstr(xjson_get_string(xjson_array_get(diagnostics, 0), "message"), "`Mixed.ok`"));
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     (void) argc;
@@ -1549,6 +1589,7 @@ int main(int argc, char **argv) {
     RUN_TEST(code_action_cycle_offers_weak_without_default_or_batch);
     RUN_TEST(code_action_closure_cycle_offers_defer);
     RUN_TEST(contract_cycle_diagnoses_candidates_only_under_contract);
+    RUN_TEST(cycle_report_offers_weak_only_where_it_compiles);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
