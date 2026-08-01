@@ -30,8 +30,24 @@ option(XRAY_USE_COMPILER_CACHE "Route C/C++ compiles through ccache/sccache when
 if(XRAY_USE_COMPILER_CACHE AND NOT CMAKE_C_COMPILER_LAUNCHER)
     find_program(XRAY_COMPILER_CACHE NAMES ccache sccache)
     if(XRAY_COMPILER_CACHE)
-        set(CMAKE_C_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
-        set(CMAKE_CXX_COMPILER_LAUNCHER "${XRAY_COMPILER_CACHE}")
+        if(XRAY_COMPILER_CACHE MATCHES "ccache")
+            # ccache's fast "direct" mode misses whenever an include's mtime/ctime
+            # churns without a content change — routine here, with generated
+            # headers and git checkouts — and falls back to the much slower
+            # preprocessor mode (measured: only 29% direct hits). Trust the
+            # content hash over the timestamp, and ignore the __TIME__ macro
+            # family (unused in this tree), so edits land as direct hits. Wrapped
+            # through `cmake -E env` so it is set at compile time and stays
+            # portable; sccache ignores CCACHE_* and is left unwrapped.
+            set(_xray_cache_launcher
+                "${CMAKE_COMMAND}" -E env
+                "CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,time_macros"
+                "${XRAY_COMPILER_CACHE}")
+        else()
+            set(_xray_cache_launcher "${XRAY_COMPILER_CACHE}")
+        endif()
+        set(CMAKE_C_COMPILER_LAUNCHER "${_xray_cache_launcher}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${_xray_cache_launcher}")
         message(STATUS "Compiler cache: ${XRAY_COMPILER_CACHE}")
     else()
         message(STATUS "Compiler cache: not found (install ccache to speed up rebuilds)")
@@ -380,11 +396,19 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     # the VM and an AOT binary built by the host compiler.
     add_compile_options(-ffp-contract=off)
 
-    # Debug mode options
+    # Optimization + debug info, per build type.
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options(-O0 -g3)
-    else()
+    elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        # The explicit "optimized, with symbols" build — keep -g here.
         add_compile_options(-O2 -g)
+    else()
+        # Release / MinSizeRel: optimize, no -g. Debug info on every object slows
+        # both compile and link, bloats libxray_core.a to ~35MB (which is what
+        # makes the per-test static link expensive), and cuts ccache's hit rate.
+        # To debug a release-only crash, rebuild with the RelWithDebInfo preset
+        # rather than paying -g on every ordinary build.
+        add_compile_options(-O2)
     endif()
 
     # Enable linker dead-code elimination (for xray build output size).
