@@ -75,17 +75,14 @@ static inline XrCoroHeap *set_accounting_heap(XrSet *set) {
     return set ? set->owner_heap : NULL;
 }
 
-static XrVMRuntime *set_owning_isolate(XrCoroHeap *heap) {
-    if (heap && heap->owner)
-        return xr_coro_vm_owner(heap->owner);
-    return NULL;
-}
-
 static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
     if (!XR_IS_STRING(value))
         return value;
-    XrVMRuntime *iso = set_owning_isolate(heap);
-    XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
+    /* The heap names its runtime core directly (task 250). Interning only ever
+     * needed the core; routing through the VM owner meant a core without one —
+     * a standalone AOT runtime, or a unit test that builds a bare core — gave
+     * up on canonicalization and silently kept duplicate string keys. */
+    XrRuntimeCore *core = heap ? heap->core : NULL;
     if (!core)
         return value;
     XrString *src = XR_TO_STRING(value);

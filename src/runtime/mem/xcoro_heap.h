@@ -144,7 +144,13 @@ typedef struct XrCoroHeap {
     int64_t large_bytes;     // Total bytes registered in large_set
 
     // Ownership
-    struct XrCoroutine *owner;
+    /* The runtime core this heap belongs to. NOT a coroutine: a heap is a
+     * region bump allocator plus an RC freelist plus three registries, and
+     * none of that needs task identity. Only two things were ever read off
+     * the old owner pointer — core, and core->sys_heap — so the heap now
+     * names the core directly and a heap can exist without a coroutine.
+     * That is what lets the VM's root execution own one (task 250). */
+    struct XrRuntimeCore *core;
 
     // Objects that need teardown finalization if they outlive local RC.
     // O(1) remove here is load-bearing: every drop-to-zero of an object
@@ -204,7 +210,7 @@ typedef struct XrCoroHeap {
 
 /* ========== Coroutine Heap Lifecycle API ========== */
 
-XR_FUNC XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro);
+XR_FUNC XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core);
 XR_FUNC void xr_coro_heap_destroy(XrCoroHeap *heap);
 XR_FUNC void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner);
 

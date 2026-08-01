@@ -278,7 +278,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrVMRuntime *X) {
     }
 
     if (!coro->heap) {
-        coro->heap = xr_coro_heap_create(coro);
+        coro->heap = xr_coro_heap_create(coro->core);
         if (!coro->heap) {
             xr_coro_free(coro);
             xr_coro_discard_uninitialized(coro);

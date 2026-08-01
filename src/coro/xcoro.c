@@ -570,7 +570,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
      * explicit-coro allocation; constructors must never fall through to fixed
      * storage merely because the heap happened to be lazily unmaterialized. */
     if (need_storage && !coro->heap) {
-        coro->heap = xr_coro_heap_create(coro);
+        coro->heap = xr_coro_heap_create(core);
         if (!coro->heap)
             return false;
     }

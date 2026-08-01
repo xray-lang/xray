@@ -56,12 +56,9 @@
 // Resolve the system heap that owns the L2 pool for a given coroutine
 // or coroutine heap. Returns NULL only when the bootstrap path has not
 // yet wired the runtime core, in which case callers fall back to malloc/free.
-static inline XrSystemHeap *coro_heap_pool_from_coro(struct XrCoroutine *coro) {
-    return (coro && coro->core) ? coro->core->sys_heap : NULL;
-}
 
 static inline XrSystemHeap *coro_heap_pool_from_heap(XrCoroHeap *heap) {
-    return (heap && heap->owner) ? coro_heap_pool_from_coro(heap->owner) : NULL;
+    return (heap && heap->core) ? heap->core->sys_heap : NULL;
 }
 
 /* ========== Helper Functions ========== */
@@ -69,7 +66,7 @@ static inline XrSystemHeap *coro_heap_pool_from_heap(XrCoroHeap *heap) {
 // Per-type destroy capability lookups from the runtime core.
 
 static inline XrRuntimeCore *coro_heap_core(XrCoroHeap *heap) {
-    return (heap && heap->owner) ? heap->owner->core : NULL;
+    return heap ? heap->core : NULL;
 }
 
 static inline bool coro_heap_value_to_header(XrValue value, XrObjHeader **out) {
@@ -118,8 +115,10 @@ static void coro_heap_init_runtime_state(XrCoroHeap *heap) {
 
 /* ========== Coroutine Heap Lifecycle ========== */
 
-XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "coro_heap_create: NULL coroutine");
+XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core) {
+    XR_DCHECK(core != NULL, "coro_heap_create: NULL runtime core");
+    if (getenv("XR_DIAG_HC"))
+        fprintf(stderr, "[hc] create core=%p\n", (void *) core);
     XrCoroHeap *heap = NULL;
 
     // Fast path: L1 per-Worker free list (no lock)
@@ -131,7 +130,7 @@ XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro) {
     } else {
         // L2 per-isolate pool (mutex). Bootstrap before sys_heap exists
         // is rare and falls straight through to malloc.
-        XrSystemHeap *system_heap = coro_heap_pool_from_coro(coro);
+        XrSystemHeap *system_heap = core ? core->sys_heap : NULL;
         heap = system_heap ? xr_sysheap_coro_heap_pool_pop(system_heap) : NULL;
         if (!heap) {
             heap = (XrCoroHeap *) xr_malloc(sizeof(XrCoroHeap));
@@ -145,11 +144,11 @@ XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro) {
     // Initialize Region heap
     xr_region_init(&heap->region);
     // Wire the runtime-core L2 block cache (NULL during bootstrap → OS alloc).
-    heap->region.sys_heap = coro_heap_pool_from_coro(coro);
+    heap->region.sys_heap = core ? core->sys_heap : NULL;
 
     coro_heap_init_runtime_state(heap);
 
-    heap->owner = coro;
+    heap->core = core;
 
     return heap;
 }
@@ -396,10 +395,14 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     xr_weak_table_destroy(heap);
 
     coro_heap_init_runtime_state(heap);
-    heap->owner = new_owner;
-    // Re-wire the per-isolate L2 block cache (region reset cleared it).
-    XrVMRuntime *vm_owner = xr_coro_vm_owner(new_owner);
-    heap->region.sys_heap = vm_owner ? xr_isolate_get_sys_heap(vm_owner) : NULL;
+    heap->core = new_owner->core;
+    /* Re-wire the per-isolate L2 block cache (region reset cleared it).
+     *
+     * Read straight off the core. Going through the VM owner returned NULL in
+     * a standalone AOT runtime, which has no VM owner, so a recycled heap
+     * there lost its block cache and fell back to OS allocation for the rest
+     * of its life. */
+    heap->region.sys_heap = heap->core ? heap->core->sys_heap : NULL;
 }
 
 /* ========== Allocation Helpers ========== */
@@ -720,7 +723,7 @@ XrObjHeader *xr_coro_heap_new_obj(XrCoroHeap *heap, uint8_t type, size_t size) {
         return NULL;
     XR_DCHECK(type < XR_OBJ_TYPE_MAX, "invalid object type");
     XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for object header");
-    XR_DCHECK(heap->owner != NULL, "coroutine heap has no owner coroutine");
+    XR_DCHECK(heap->core != NULL, "coroutine heap has no runtime core");
 
     size_t total = XR_HEAP_ALIGN(size);
     XrObjHeader *obj;

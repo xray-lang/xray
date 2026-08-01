@@ -89,7 +89,7 @@ static void check_after_allocating(XrCoroHeap *heap, int n, size_t size, const c
 }
 
 static void test_traversal_matches_object_count(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     uint32_t counted = 0;
@@ -121,7 +121,7 @@ static void test_traversal_matches_object_count(void) {
  * did not, the walk would desync at the first dead object — the exact reason
  * task 247 section 6.2.2 lists that as its load-bearing seventh premise. */
 static void test_traversal_steps_over_dead_objects(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     XrObjHeader *objs[200];

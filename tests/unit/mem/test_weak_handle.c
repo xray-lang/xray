@@ -62,7 +62,7 @@ static void setup(void) {
 /* One handle per target: a target's death has to be a single store, not a walk
  * over every field that named it. */
 static void test_handle_is_shared_per_target(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     XrObjHeader *a = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);
@@ -88,7 +88,7 @@ static void test_handle_is_shared_per_target(void) {
 /* W1: a read hands back a strong reference, never a borrowed pointer that
  * could die mid-expression. */
 static void test_load_promotes_to_strong(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     XrObjHeader *target = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);
@@ -108,7 +108,7 @@ static void test_load_promotes_to_strong(void) {
 
 /* W5: the clearing point is the target's destruction, and it is immediate. */
 static void test_target_death_clears_the_handle(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     XrObjHeader *target = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);
@@ -128,7 +128,7 @@ static void test_target_death_clears_the_handle(void) {
 /* Several targets dying in turn: each clears only its own handle. A table bug
  * that cleared the wrong entry would show up as a live object reading null. */
 static void test_many_targets_clear_independently(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     enum {
@@ -170,7 +170,7 @@ static void test_many_targets_clear_independently(void) {
 /* A handle dying first must leave the table. Otherwise the target's later
  * death would look up a freed handle and write through it. */
 static void test_handle_dying_first_leaves_the_table(void) {
-    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");
 
     XrObjHeader *target = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);

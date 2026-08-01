@@ -24,7 +24,7 @@ XrCoroHeap *xr_coro_ensure_heap(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_ensure_gc: NULL coro");
     if (coro->heap)
         return coro->heap;
-    coro->heap = xr_coro_heap_create(coro);
+    coro->heap = xr_coro_heap_create(coro->core);
     coro->alloc_ctx.local_heap = coro->heap;
     return coro->heap;
 }
