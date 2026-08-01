@@ -20,16 +20,12 @@
 #
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
-0380_optional_chain.xr
 0661_json_object_field_boundary.xr
 0731_string_byte_rune_surface.xr
-0830_getter_setter.xr
 0835_this_in_closure.xr
-0851_interface_generic_property.xr
 0895_struct_basic.xr
 0900_struct_operators.xr
 0903_struct_equality.xr
-0911_struct_getter_setter.xr
 0914_hashable_contract.xr
 0915_shared_for_go.xr
 0954_panic_info_inheritance.xr
@@ -40,13 +36,10 @@
 1162_overlapping_await_any_waiters.xr
 1172_enum_descriptor_erased_transfer.xr
 1172_module_readonly_capture.xr
-1207_runtime_stress.xr
 1306_toml_basic.xr
 1307_toml_advanced.xr
 1370_tuple_generic_args.xr
 1411_url_parse.xr
-1420_datetime_basic.xr
-1422_datetime_calc.xr
 1438_ws_self_connect.xr
 1454_read_param_return_alias.xr
 1455_read_param_field_projection_return_alias.xr
