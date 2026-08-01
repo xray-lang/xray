@@ -117,6 +117,23 @@ static inline XrCoroHeap *vm_weak_heap(XrVMContext *vm_ctx) {
     return alloc ? alloc->local_heap : NULL;
 }
 
+/* The exec-local heap that owns what this VM frame allocates.
+ *
+ * With a coroutine it is that coroutine's heap. An elided root has no
+ * coroutine but does have an exec heap on its allocation context (task 250);
+ * passing NULL there marked objects dead without running destructors or
+ * reclaiming memory, so every drop in top-level code was discarded.
+ *
+ * Kept local to the VM on purpose. xr_current_coro_heap() must NOT take the
+ * same fallback: standalone AOT installs an execution context only around
+ * cancellation cleanup, so during ordinary coroutine execution the context
+ * still names the root — and a coroutine object would be released to the root
+ * heap instead of its own. */
+static inline XrCoroHeap *vm_exec_local_heap(void) {
+    XrAllocationContext *alloc = xr_alloc_context_current();
+    return alloc ? alloc->local_heap : NULL;
+}
+
 /* ========== VM Suspend Continuation Helpers ========== */
 
 static inline void vm_suspend_replay_current(XrBcCallFrame *frame, XrInstruction *pc) {

@@ -47,7 +47,12 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
     if (!xr_sysheap_init(core->sys_heap, NULL))
         goto fail;
 
+    /* The root execution gets a real exec heap, so EXEC_LOCAL means the same
+     * thing here as it does inside a coroutine (task 250). */
+    xr_coro_heap_init_inplace(&core->root_heap, core);
+
     xr_alloc_context_init(&core->root_alloc, core, XR_STORAGE_EXEC_LOCAL);
+    core->root_alloc.local_heap = &core->root_heap;
     xr_alloc_context_init(&core->module_alloc, core, XR_STORAGE_MODULE_STATIC);
     xr_alloc_context_init(&core->shared_alloc, core, XR_STORAGE_SYNC_SHARED);
     xr_exec_context_init(&core->root_exec, core, &core->root_alloc);
@@ -161,6 +166,10 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
     xr_runtime_core_free_tmp_strbuf(core);
 
     xr_runtime_core_destroy_coro_storage(core);
+    /* Root heap first: its finalizers may still reach module-static objects,
+     * which the fixed heap is about to tear down. */
+    core->root_alloc.local_heap = NULL;
+    xr_coro_heap_teardown_inplace(&core->root_heap);
     xr_runtime_core_cleanup_fixed_heap(core);
 
     if (core->global_string_pool) {

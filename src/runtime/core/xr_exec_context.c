@@ -32,10 +32,26 @@ void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t
         return ctx->shared_heap ? xr_sysheap_alloc_transfer(ctx->shared_heap, size, type) : NULL;
     if (ctx->domain == XR_STORAGE_SYNC_SHARED || ctx->domain == XR_STORAGE_CONST_SHARED)
         return ctx->shared_heap ? xr_sysheap_alloc_shared(ctx->shared_heap, size, type) : NULL;
-    if (ctx->domain != XR_STORAGE_EXEC_LOCAL && ctx->domain != XR_STORAGE_MODULE_STATIC)
-        return NULL;
+    /* Execution-local storage always has an exec heap — the root execution
+     * included, since task 250 embeds one in the runtime core. Falling through
+     * to the fixed heap here is what used to pin every top-level object
+     * immortal: the domain said "dies with its execution", the allocator said
+     * "lives until teardown", and nothing reported the contradiction. */
     if (ctx->local_heap)
         return xr_coro_heap_new_obj(ctx->local_heap, type, size);
+    /* Module-static objects legitimately outlive every execution, so the fixed
+     * heap is their home rather than a fallback.
+     *
+     * An EXEC_LOCAL context arriving here is a different matter: the domain
+     * says "dies with its execution" while the allocator says "lives until
+     * teardown", and nothing else reports that contradiction. Task 250 gives
+     * the VM's root execution a real heap, so the VM no longer lands here —
+     * but a standalone AOT runtime still does, because it installs an
+     * execution context only around cancellation cleanup. Assert in debug so
+     * the remaining cases stay visible, and keep the fallback so they keep
+     * working until AOT carries an exec heap of its own. */
+    XR_DCHECK(ctx->domain != XR_STORAGE_EXEC_LOCAL,
+              "EXEC_LOCAL allocation context has no exec heap; object will be immortal");
     return xr_fixed_heap_alloc(&ctx->core->fixed_heap, size, type);
 }
 

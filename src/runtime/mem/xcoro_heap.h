@@ -211,6 +211,11 @@ typedef struct XrCoroHeap {
 /* ========== Coroutine Heap Lifecycle API ========== */
 
 XR_FUNC XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core);
+
+/* In-place lifecycle, for a heap the caller owns (e.g. embedded in
+ * XrRuntimeCore). These never touch the struct pool. */
+XR_FUNC void xr_coro_heap_init_inplace(XrCoroHeap *heap, struct XrRuntimeCore *core);
+XR_FUNC void xr_coro_heap_teardown_inplace(XrCoroHeap *heap);
 XR_FUNC void xr_coro_heap_destroy(XrCoroHeap *heap);
 XR_FUNC void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner);
 

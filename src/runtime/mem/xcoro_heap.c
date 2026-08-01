@@ -117,8 +117,6 @@ static void coro_heap_init_runtime_state(XrCoroHeap *heap) {
 
 XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core) {
     XR_DCHECK(core != NULL, "coro_heap_create: NULL runtime core");
-    if (getenv("XR_DIAG_HC"))
-        fprintf(stderr, "[hc] create core=%p\n", (void *) core);
     XrCoroHeap *heap = NULL;
 
     // Fast path: L1 per-Worker free list (no lock)
@@ -139,18 +137,25 @@ XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core) {
     if (!heap)
         return NULL;
 
-    memset(heap, 0, sizeof(XrCoroHeap));
+    xr_coro_heap_init_inplace(heap, core);
+    return heap;
+}
 
-    // Initialize Region heap
+/* Bring a heap struct the caller already owns into service.
+ *
+ * Split out of xr_coro_heap_create so a heap can live somewhere other than the
+ * struct pool — specifically, embedded in XrRuntimeCore as the root execution's
+ * heap (task 250). An embedded heap must never be recycled into the L1/L2 pool,
+ * so it pairs with xr_coro_heap_teardown_inplace rather than with
+ * xr_coro_heap_destroy. */
+void xr_coro_heap_init_inplace(XrCoroHeap *heap, struct XrRuntimeCore *core) {
+    XR_DCHECK(heap != NULL, "coro_heap_init_inplace: NULL heap");
+    memset(heap, 0, sizeof(XrCoroHeap));
     xr_region_init(&heap->region);
     // Wire the runtime-core L2 block cache (NULL during bootstrap → OS alloc).
     heap->region.sys_heap = core ? core->sys_heap : NULL;
-
     coro_heap_init_runtime_state(heap);
-
     heap->core = core;
-
-    return heap;
 }
 
 /* ========== Heap Pointer Set (open addressing, tombstones) ========== */
@@ -319,6 +324,25 @@ static void coro_heap_unregister_large_object(XrCoroHeap *heap, XrObjHeader *obj
 
 /* ========== Lifecycle ========== */
 
+/* Release everything a heap owns, leaving the struct itself alone.
+ *
+ * Finalizers run first and may drop further references, so the region must
+ * outlive them — the order below is load-bearing. Callers that own the struct
+ * (the embedded root heap) stop here; xr_coro_heap_destroy continues on to
+ * recycle the struct into the pool. */
+void xr_coro_heap_teardown_inplace(XrCoroHeap *heap) {
+    if (!heap)
+        return;
+    heap->is_tearing_down = 1;
+    coro_heap_finalize_registered_objects(heap);
+    xr_region_destroy(&heap->region);
+    coro_heap_free_large_objects(heap);
+    xr_coro_heap_recycler_destroy(heap);
+    deferred_drops_destroy(heap);
+    xr_cycle_roots_destroy(heap);
+    xr_weak_table_destroy(heap);
+}
+
 void xr_coro_heap_destroy(XrCoroHeap *heap) {
     if (!heap)
         return;
@@ -335,14 +359,7 @@ void xr_coro_heap_destroy(XrCoroHeap *heap) {
     }
 #endif
 
-    heap->is_tearing_down = 1;
-    coro_heap_finalize_registered_objects(heap);
-    xr_region_destroy(&heap->region);
-    coro_heap_free_large_objects(heap);
-    xr_coro_heap_recycler_destroy(heap);
-    deferred_drops_destroy(heap);
-    xr_cycle_roots_destroy(heap);
-    xr_weak_table_destroy(heap);
+    xr_coro_heap_teardown_inplace(heap);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();

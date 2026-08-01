@@ -40,8 +40,12 @@ vmcase(OP_DROP) {
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {
+        /* An elided root has no coroutine, but it does have an exec-local heap
+         * (task 250). Passing NULL there marked the object dead without running
+         * its destructor or reclaiming its memory, so every drop the compiler
+         * placed in top-level code was silently discarded. */
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
-        xr_rc_release(_co ? _co->heap : NULL, (XrObjHeader *) XR_VALUE_GCPTR(v));
+        xr_rc_release(_co ? _co->heap : vm_exec_local_heap(), (XrObjHeader *) XR_VALUE_GCPTR(v));
     }
     vmbreak;
 }

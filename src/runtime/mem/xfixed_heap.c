@@ -13,7 +13,6 @@
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include <stdio.h>
 #include <string.h>
 
 void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate) {

@@ -15,6 +15,7 @@
 #include "../../base/xforward_decl.h"
 #include "../../base/xglobal_indices.h"
 #include "../../base/xmutex.h"
+#include "../mem/xcoro_heap.h"
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
 #include "../value/xvalue.h"
@@ -47,6 +48,15 @@ typedef struct XrRuntimeCore {
     struct XrGlobalStringPool *global_string_pool;
     struct XrStrBuf *tmp_strbuf;
     struct XrVMRuntime *vm_owner;
+
+    /* The root execution's EXEC_LOCAL heap.
+     *
+     * Embedded rather than pooled: it lives exactly as long as the core, and it
+     * must never be recycled into the coroutine-heap struct pool. Its presence
+     * is what makes XR_STORAGE_EXEC_LOCAL mean the same thing at top level as
+     * it does inside a coroutine — before this, root allocations fell through
+     * to the fixed heap and were pinned immortal (task 250). */
+    XrCoroHeap root_heap;
 
     /* Storage lifetime and task identity are deliberately orthogonal.  These
      * contexts exist even when no scheduler or coroutine object is present. */
