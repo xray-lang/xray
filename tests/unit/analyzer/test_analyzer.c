@@ -2563,6 +2563,48 @@ TEST(cycle_candidate_marks_every_field_shape) {
     setup_pool();
 }
 
+/* Task 247 phase C: `weak` is the L0/L1 interface. A weak field does not keep
+ * its target alive, so it cannot close a cycle and must produce no edge —
+ * annotating one is exactly how a user takes their class out of the candidate
+ * set. The unannotated twin alongside is what makes this a real assertion. */
+TEST(cycle_candidate_weak_field_breaks_the_edge) {
+    XaAnalyzer *a = analyzer_run_source("cycle_weak_edge.xr",
+                                        "class Parent { children: Array<Child>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class Child { weak parent: Parent?\n"
+                                        "  constructor() { this.parent = null } }\n"
+                                        /* same shape, no weak: must stay a candidate */
+                                        "class StrongParent { children: Array<StrongChild>\n"
+                                        "  constructor() { this.children = [] } }\n"
+                                        "class StrongChild { parent: StrongParent?\n"
+                                        "  constructor() { this.parent = null } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Parent"));
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "Child"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongParent"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongChild"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+/* A self-referential class annotated weak likewise stops being a candidate. */
+TEST(cycle_candidate_weak_self_reference_breaks_the_edge) {
+    XaAnalyzer *a =
+        analyzer_run_source("cycle_weak_self.xr", "class WeakList { weak next: WeakList?\n"
+                                                  "  constructor() { this.next = null } }\n"
+                                                  "class StrongList { next: StrongList?\n"
+                                                  "  constructor() { this.next = null } }\n");
+    ASSERT(a != NULL);
+
+    ASSERT(!analyzer_class_is_cycle_candidate(a, "WeakList"));
+    ASSERT(analyzer_class_is_cycle_candidate(a, "StrongList"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(cycle_candidate_follows_inherited_fields) {
     XaAnalyzer *a = analyzer_run_source("cycle_inherited_field.xr",
                                         "class Base { peer: Derived?\n"
@@ -6447,6 +6489,8 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(cycle_candidate_marks_every_field_shape);
+    RUN_TEST(cycle_candidate_weak_field_breaks_the_edge);
+    RUN_TEST(cycle_candidate_weak_self_reference_breaks_the_edge);
     RUN_TEST(cycle_candidate_follows_inherited_fields);
     RUN_TEST(cycle_candidate_marks_recursive_tree_types);
     RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);

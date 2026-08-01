@@ -87,6 +87,11 @@ typedef struct XrFieldDescriptor {
 #define XR_FIELD_PROTECTED (1 << 1)
 #define XR_FIELD_STATIC (1 << 2)
 #define XR_FIELD_FINAL (1 << 3)
+/* `weak parent: Node?` — the slot stores an XrWeakHandle, not the target, and
+ * a read promotes through it (W1). Reading or writing such a slot must go
+ * through the weak path; treating it as an ordinary field would hand back the
+ * handle object itself. */
+#define XR_FIELD_WEAK (1 << 4)
 
 /* ========== Method Flags ========== */
 

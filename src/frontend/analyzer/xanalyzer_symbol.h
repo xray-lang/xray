@@ -301,7 +301,13 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;              // const declaration / immutable field
+    bool is_const;  // const declaration / immutable field
+    /* `weak parent: Node?` — the slot does not keep its target alive. Lives on
+     * the symbol, not the type: `weak` describes the STORAGE, so two fields of
+     * the same type can differ. The L0 cycle graph reads it to suppress the
+     * edge, which is how annotating a field takes its class out of the
+     * candidate set (task 247 phase C). */
+    bool is_weak;
     bool is_rebindable;         // binding name may be assigned again
     bool is_readonly_binding;   // binding exposes deep-readonly semantics
     bool is_exported;           // export modifier

@@ -126,6 +126,12 @@
  * break it — only the `defer` idiom. Reported at compile time because the
  * capture set and the assignment target are both dataflow facts here. */
 #define XR_ERR_ANALYZE_CLOSURE_CYCLE 393
+/* A `weak` field violated one of its rules (task 247 phase C, spec 16.3):
+ * W2 the declared type must be nullable — a weak slot reads null the instant
+ * its target dies, so a non-nullable one would be a lie; W4 only an
+ * EXEC_LOCAL-domain object may carry one, because clearing is driven by a
+ * coroutine-local destroy hook that a shared object never runs. */
+#define XR_ERR_ANALYZE_WEAK_FIELD 394
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

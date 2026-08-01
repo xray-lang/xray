@@ -1099,6 +1099,7 @@ AstNode *xr_ast_field_decl(XrCompilerSession *session, const char *name, XrTypeR
     node->as.field_decl.is_private = is_private;
     node->as.field_decl.is_static = is_static;
     node->as.field_decl.is_flexible = false;
+    node->as.field_decl.is_weak = false;
     node->as.field_decl.initializer = initializer;
     return node;
 }

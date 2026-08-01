@@ -305,6 +305,31 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayo
     return true;
 }
 
+/* Can a slot of this type be `weak`?
+ *
+ * Only something with a reference-counted identity: `weak` works by holding a
+ * handle instead of the value and clearing it when the target's last strong
+ * reference goes. A scalar has no refcount and no death, so `weak` on one would
+ * silently mean nothing — which is worse than rejecting it. A struct is a value
+ * type inlined into its holder and likewise has no identity to weaken. */
+static bool xa_type_can_be_weak(const XrType *type) {
+    if (!type || type->is_value_type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_STRING:
+        case XR_KIND_FUNCTION:
+        case XR_KIND_JSON:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
     if (!field)
         return false;
@@ -3458,6 +3483,7 @@ skip_interfaces:
             field_sym->is_private = fd->is_private;
             field_sym->is_protected = fd->is_protected;
             field_sym->is_const = fd->is_const;
+            field_sym->is_weak = fd->is_weak;
             field_sym->has_declared_default = (fd->initializer != NULL);
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
@@ -3484,6 +3510,38 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
             }
+            /* `weak` rules W2 and W3 (spec 16.3). W4 (EXEC_LOCAL only) is
+             * checked where the object's storage domain is decided, not here —
+             * a field declaration does not know it yet. */
+            if (fd->is_weak) {
+                const char *why = NULL;
+                XrType *wt = field_links->type;
+                if (fd->is_static) {
+                    /* A static field belongs to the module, not to any
+                     * coroutine-local instance, so nothing would ever run the
+                     * clearing hook that makes W5 true. */
+                    why = "a static field cannot be weak: nothing would clear it";
+                } else if (!wt || wt->kind == XR_KIND_UNKNOWN) {
+                    why = "a weak field needs an explicit nullable type";
+                } else if (!wt->is_nullable) {
+                    /* W2. A weak slot reads null the instant its target dies;
+                     * a non-nullable declaration would be a lie the type system
+                     * could not catch anywhere else. */
+                    why = "a weak field must be nullable — write `weak name: T?`";
+                } else if (!xa_type_can_be_weak(wt)) {
+                    /* Nothing to be weak about: a scalar has no refcount, so
+                     * `weak` on it would silently mean nothing. */
+                    why = "only a reference type can be weak";
+                }
+                if (why) {
+                    XrLocation loc = {.file = ctx->file_path, .line = field->line};
+                    char msg[256];
+                    snprintf(msg, sizeof(msg), "%s (field '%s')", why, fd->name ? fd->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_WEAK_FIELD, msg, &loc);
+                }
+            }
+
             if (xa_type_contains_span_view(field_links->type)) {
                 XrLocation loc = {.file = ctx->file_path, .line = field->line};
                 char msg[256];
@@ -4890,6 +4948,12 @@ static bool cycle_dfs(XaAnalyzer *analyzer, XaSymbol **class_syms, uint8_t *stat
                 continue;
             XaSymbolLinks *fl = xa_analyzer_get_links(analyzer, field_sym);
             if (!fl || !fl->type)
+                continue;
+            /* This is the L0/L1 interface: a `weak` field does not keep its
+             * target alive, so it cannot close a cycle and must not produce an
+             * edge. Annotating one is exactly how a user takes their class out
+             * of the candidate set. */
+            if (field_sym->is_weak)
                 continue;
             cycle_collect_type_edges(analyzer, fl->type, &set, 0);
         }

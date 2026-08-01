@@ -1235,6 +1235,8 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
                 desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;
             if (f->is_final)
                 desc->instance_fields[idx].flags |= XR_FIELD_FINAL;
+            if (f->is_weak)
+                desc->instance_fields[idx].flags |= XR_FIELD_WEAK;
             idx++;
         }
     }
