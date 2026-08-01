@@ -126,24 +126,11 @@ echo "========================================================================"
 START="$(date +%s)"
 
 # ---------------------------------------------------------------------------
-# Build. Every tier needs a current binary; without this a tier can "pass"
-# against a stale one, which is worse than not running at all.
-# ---------------------------------------------------------------------------
-if [ "${XR_NO_BUILD:-0}" != "1" ]; then
-    echo "${BLUE}==>${NC} building"
-    build_targets=(xray)
-    [ "${TIER}" = "t0" ] || build_targets=()   # t1+ needs the test binaries too
-    if ! cmake --build "${BUILD_DIR}" -j"${JOBS}" ${build_targets[@]+"${build_targets[@]/#/--target }"} \
-            >"${BUILD_DIR}/.t-build.log" 2>&1; then
-        echo "${RED}BUILD FAILED${NC}"
-        grep -E "error:" "${BUILD_DIR}/.t-build.log" | head -20
-        exit 1
-    fi
-fi
-
-# ---------------------------------------------------------------------------
 # Tier composition. Expressed as ctest -R / -E so the tiers stay describable in
 # one line each and cannot drift from what ctest actually selects.
+#
+# Computed BEFORE the build, because the build only makes the binaries the
+# selection actually needs.
 # ---------------------------------------------------------------------------
 case "${TIER}" in
     t0)
@@ -177,9 +164,60 @@ CTEST_ARGS=(--output-on-failure -j"${JOBS}")
 [ -n "${INCLUDE}" ] && CTEST_ARGS+=(-R "${INCLUDE}")
 [ -n "${EXCLUDE}" ] && CTEST_ARGS+=(-E "${EXCLUDE}")
 
-SELECTED="$(cd "${BUILD_DIR}" && ctest -N "${CTEST_ARGS[@]}" "$@" 2>/dev/null | grep -c 'Test *#')"
+SELECTED_NAMES="$(cd "${BUILD_DIR}" && ctest -N "${CTEST_ARGS[@]}" "$@" 2>/dev/null \
+    | sed -n 's/^ *Test *#[0-9]*: *\([^ ]*\).*/\1/p')"
+SELECTED="$(printf '%s\n' "${SELECTED_NAMES}" | grep -c .)"
 TOTAL_TESTS="$(cd "${BUILD_DIR}" && ctest -N 2>/dev/null | grep -c 'Test *#')"
 echo "${BLUE}==>${NC} ctest: ${SELECTED}/${TOTAL_TESTS} tests"
+
+# ---------------------------------------------------------------------------
+# Build exactly what this run needs.
+#
+# Every tier needs current binaries; running a tier against a stale one is worse
+# than not running it at all. t0 used to build only `xray` while still executing
+# ~180 unit-test binaries, so an edit to a core source could be "verified" by
+# test executables built before it.
+#
+# Building everything fixes that but links ~195 executables on every iteration.
+# Instead, resolve the selected test names to build targets and build only those
+# (plus `xray`, which the script-driven tests invoke). Correct like a full build,
+# and on a focused run — `t.sh t0 -R parser` — it links a handful instead of 195.
+#
+# A selected test with no target of the same name is a script/gate test; it needs
+# no build beyond `xray`, so the intersection below simply skips it.
+# ---------------------------------------------------------------------------
+if [ "${XR_NO_BUILD:-0}" != "1" ]; then
+    build_targets=(xray)
+    if [ -n "${SELECTED_NAMES}" ]; then
+        # Buildable target names, one per line (Ninja exposes each as a phony).
+        known_targets="$(ninja -C "${BUILD_DIR}" -t targets all 2>/dev/null \
+            | sed -n 's/^\([A-Za-z0-9_][A-Za-z0-9_.-]*\): phony.*/\1/p' | sort -u)"
+        if [ -n "${known_targets}" ]; then
+            while IFS= read -r _t; do
+                [ -n "${_t}" ] || continue
+                build_targets+=("${_t}")
+            done < <(printf '%s\n' "${SELECTED_NAMES}" | sort -u \
+                     | comm -12 - <(printf '%s\n' "${known_targets}"))
+        else
+            # No target list available: fall back to a full build rather than
+            # silently under-building and testing stale binaries.
+            build_targets=()
+        fi
+    fi
+
+    if [ "${#build_targets[@]}" -gt 0 ]; then
+        echo "${BLUE}==>${NC} building ${#build_targets[@]} target(s)"
+    else
+        echo "${BLUE}==>${NC} building (all targets)"
+    fi
+    if ! cmake --build "${BUILD_DIR}" -j"${JOBS}" \
+            ${build_targets[@]+"${build_targets[@]/#/--target }"} \
+            >"${BUILD_DIR}/.t-build.log" 2>&1; then
+        echo "${RED}BUILD FAILED${NC}"
+        grep -E "error:" "${BUILD_DIR}/.t-build.log" | head -20
+        exit 1
+    fi
+fi
 
 (cd "${BUILD_DIR}" && ctest "${CTEST_ARGS[@]}" "$@")
 RC=$?
