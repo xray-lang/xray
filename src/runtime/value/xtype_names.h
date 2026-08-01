@@ -183,6 +183,12 @@ typedef enum {
     XR_TID_COUNT
 } XrTypeId;
 
+/* Pinned for xr_elem_type.h, which hand-copies this id to stay
+ * dependency-free. See the matching block in xr_type_names_core.h: RUNE lives
+ * only in this enum, so its assertion has to be here. A renumbering that moves
+ * it degrades every Slice<rune> to XR_ELEM_ANY at runtime and nowhere else. */
+_Static_assert(XR_TID_RUNE == 43, "xr_elem_type.h: update xr_tid_to_elem_type case for RUNE");
+
 // Range check macros
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
 #define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
