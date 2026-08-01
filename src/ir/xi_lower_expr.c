@@ -9778,11 +9778,27 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
     if (var_id >= 0)
         return xi_lower_braun_read(l, var_id, l->cur_block);
 
-    /* Not local — capture from enclosing method via upvalue */
+    /* Not local — capture from enclosing method via upvalue.
+     *
+     * The capture chain can hand back an instance type that has lost its
+     * declaration identity (class_ref == NULL) while keeping the class name.
+     * That is not a cosmetic loss: the AOT backend deliberately refuses to
+     * resolve a named instance without class_ref to a module's native class
+     * (a builtin `2..6` must never adopt a user `class Range` layout), so a
+     * `this` captured into a closure — every `defer { this.x = ... }` — fell
+     * back to name-keyed property access, which handles only maps and JSON and
+     * silently discards writes to a native-layout instance.
+     *
+     * The analyzer's type for this very `this` node carries the identity, so
+     * prefer it whenever the captured type lacks one. */
     struct XrType *upval_type = NULL;
     int upval_idx = xi_lower_resolve_upvalue(l, 0, "this", &upval_type);
     if (upval_idx >= 0) {
         if (!upval_type)
+            upval_type = this_type;
+        else if (this_type && upval_type->kind == XR_KIND_INSTANCE &&
+                 !upval_type->instance.class_ref && this_type->kind == XR_KIND_INSTANCE &&
+                 this_type->instance.class_ref)
             upval_type = this_type;
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, upval_type, 0);
         if (v)
