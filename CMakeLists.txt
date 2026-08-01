@@ -3122,6 +3122,23 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 250 — the VM's root execution shares one memory model with a
+    # coroutine: weak fields resolve, and top-level allocation is not immortal.
+    # Asserted semantically on purpose; the memory magnitudes are guarded by the
+    # out-of-process RSS probes, because liveObjects/liveBytes report 0 under
+    # this defect and `import runtime` would materialize main_coro and bypass
+    # the root heap entirely (see task 250 §1.3).
+    add_test(
+        NAME regression_root_exec_heap_parity
+        COMMAND $<TARGET_FILE:xray> run
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_mem/0807_root_exec_heap_parity.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_root_exec_heap_parity PROPERTIES
+        LABELS "regression;rc;vm;task-250"
+        TIMEOUT 60
+    )
+
     # Task 249 phase A — the two construction-result ownership paths that do
     # hold. The other two (moved out by return, stored into a container) are a
     # known ARC gap tracked by tests/probes/rc/probe6_return_ownership_gap.xr

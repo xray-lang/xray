@@ -1,0 +1,57 @@
+// 0807 — 主执行流与协程共用同一个内存模型（任务 250）
+//
+// 在此之前，VM 的 root 执行没有 EXEC_LOCAL 堆：分配落到 fixed_heap 并被钉成
+// 永生（XR_RC_STICKY），于是顶层代码完全不回收，`weak` 也静默失效——写入时
+// 拿不到堆，槽里存 null，读回自然也是 null，哪怕目标活得好好的。
+//
+// 这份门禁锁住修复后的两条事实。注意它**不能**用 runtime.liveObjects() /
+// liveBytes() 来断言：在该缺陷下两者一致地报 0，只有进程外 max RSS 说真话
+// （见任务 250 §1.3）；而且 `import runtime` 本身会把 entry plan 抬到
+// DESCRIPTOR 并物化 main_coro，探针就绕开了 root 堆，门禁形同虚设。
+//
+// 所以这里只断言语义，内存量级由 CI 之外的 RSS 探针守（tests/probes/rc/）。
+
+class Target {
+    tag: int
+    constructor(tag) { this.tag = tag }
+}
+
+class Holder {
+    weak t: Target?
+    constructor() { this.t = null }
+}
+
+// W1：顶层写入 weak 槽后读回，必须看到活着的目标——而不是 null。
+// 目标在读回之后仍被使用，所以规范 2.2 的释放窗口不允许它先死。
+var h = Holder()
+var tgt = Target(7)
+h.t = tgt
+var got = h.t
+var live = tgt.tag
+assert(got != null)
+assert(got.tag == live)
+assert(live == 7)
+
+// 顶层调用的普通函数同属主执行流：分配上下文是 per-execution 的，不是
+// per-frame 的，所以这里的 weak 也必须成立。
+fn in_called_function() -> int {
+    var hh = Holder()
+    var tt = Target(11)
+    hh.t = tt
+    var g = hh.t
+    var l = tt.tag
+    if (g == null) { return -1 }
+    if (g.tag != l) { return -2 }
+    return l
+}
+assert(in_called_function() == 11)
+
+// 顶层的容器字面量同样是执行局部的，不该是永生的。这里只验证它们可用；
+// 回收由 RSS 探针守。
+var arr: Array<int> = [1, 2, 3]
+var m = Map<int, int>()
+m.set(1, 2)
+assert(len(arr) == 3)
+assert(m.get(1) == 2)
+
+print("ok")

@@ -109,6 +109,12 @@ static XrArray *vm_root_array_new(XrVMRuntime *isolate, int capacity, uint8_t el
                                      (XrArrayElemType) elem_type);
 }
 
+/* NOTE: these still come from the fixed heap, i.e. they are immortal, while the
+ * array literal beside them is execution-local. Routing them through
+ * root_alloc for consistency took test_vm_exception from ~10% to ~40% flaky,
+ * so something on the exception path still expects a root map/set to outlive
+ * the execution that built it. Left as-is deliberately; the inconsistency is
+ * real but needs its own investigation rather than a drive-by change. */
 static XrMap *vm_root_map_new(XrVMRuntime *isolate, uint32_t capacity) {
     XrMap *map =
         (XrMap *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), sizeof(XrMap), XR_TMAP);
