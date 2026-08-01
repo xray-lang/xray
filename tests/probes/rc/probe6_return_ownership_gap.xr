@@ -1,0 +1,65 @@
+// probe6 — 跨函数返回的构造结果不被释放（任务 249 阶段 A 的未覆盖缺口）
+//
+// 249 阶段 A 让 `Class(...)` 的结果成为 owned 并插入 drop，直接形态
+// `var x = Node(1)` 已修好。但所有权一旦跨出函数边界就丢失：
+//
+//     fn make(v: int) -> Node { return Node(v) }
+//     var n = make(i)          // ← 每轮泄漏一个 Node
+//
+// 根因写在 src/ir/xi_arc.c 的 tracks_rc 注释里：调用结果可能是 fresh(+1)，
+// 也可能是某个实参的别名（`arr.push(x)` 返回 self）。没有 per-callee 的返回
+// 所有权摘要就无法区分，于是 ARC 走 CALL_RESULT 模式——只加 dup、从不加
+// unconsumed drop，因为对别名下 drop 就是 use-after-free。
+//
+// 实测（2026-08-01，main 1259d9a3d）：
+//   return 转移：20000 轮残留 20000
+//   存入容器：  20000 轮残留 20000
+//   200 万 churn max RSS 156.0 MB —— 与阶段 A 修复前的 156.7 MB 同量级
+//
+// 这是**诊断资产，不是门禁**，故意不注册进 ctest：它会一直红，直到
+// per-callee 返回所有权摘要（Roc/Koka 风格）落地。
+
+import runtime
+
+enum UnwindErr {
+    Boom
+}
+
+class Node {
+    v: int
+    constructor(v) { this.v = v }
+}
+
+class Holder {
+    n: Node?
+    constructor() { this.n = null }
+}
+
+// ① 被 return 转移：所有权跨函数边界移交，调用方负责释放
+fn make(v: int) -> Node {
+    return Node(v)
+}
+
+@test
+fn test_construction_result_moved_out_by_return() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 20000; i++) {
+        var n = make(i)
+        assert_eq(n.v, i)
+    }
+    // 每一轮的 Node 都在轮末死亡：转移不能变成双份所有权，也不能没人释放
+    assert(runtime.liveObjects() - before < 100)
+}
+
+// ③ 被存入容器：同上，但经由 Array 的元素所有权
+@test
+fn test_construction_result_stored_into_container() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 20000; i++) {
+        var a: Array<Node> = []
+        a.push(Node(i))
+        assert_eq(a[0].v, i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+

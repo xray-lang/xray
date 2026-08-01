@@ -3122,6 +3122,22 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 249 phase A — the two construction-result ownership paths that do
+    # hold. The other two (moved out by return, stored into a container) are a
+    # known ARC gap tracked by tests/probes/rc/probe6_return_ownership_gap.xr
+    # and deliberately NOT registered until per-callee return-ownership
+    # summaries land.
+    add_test(
+        NAME regression_construction_result_ownership
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_mem/0806_construction_result_ownership.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_construction_result_ownership PROPERTIES
+        LABELS "regression;rc;vm;task-249"
+        TIMEOUT 60
+    )
+
     add_test(
         NAME regression_closure_capture_cell_reassign
         COMMAND $<TARGET_FILE:xray> test

@@ -1,0 +1,63 @@
+// 0806 — 构造调用结果的所有权路径（任务 249 阶段 A 负例，可通过的两类）
+//
+// 另两类（被 return 转移、被存入容器）当前仍泄漏，见
+// tests/probes/rc/probe6_return_ownership_gap.xr —— 那是 ARC 缺 per-callee
+// 返回所有权摘要的已知缺口，不是本文件要守的东西。
+//
+// 249 之前，`Class(...)` 的结果不被 ARC 拥有，于是永不释放——每个
+// `var x = Node(1)` 都漏。修复让它成为 owned 并插入 drop，这三类路径因此
+// 从「靠不插 drop 回避」变成「真正走 release 放置」，任何一处放错都是双重
+// 释放而不是泄漏。ASan 下跑这条用例即为门禁。
+
+import runtime
+
+enum UnwindErr {
+    Boom
+}
+
+class Node {
+    v: int
+    constructor(v) { this.v = v }
+}
+
+class Holder {
+    n: Node?
+    constructor() { this.n = null }
+}
+
+// ② 被存入字段：所有权移交给容器，drop 落点必须让位
+@test
+fn test_construction_result_stored_into_field() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 20000; i++) {
+        var h = Holder()
+        h.n = Node(i)
+        var got = h.n
+        assert(got != null)
+        assert_eq(got.v, i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+// ④ 在错误边上死亡：构造成功但随即被 throw 跳过正常出口，
+//    释放必须发生在展开路径上，且只发生一次
+fn boom(v: int) {
+    var n = Node(v)
+    if (n.v >= 0) {
+        throw UnwindErr.Boom
+    }
+}
+
+@test
+fn test_construction_result_dies_on_error_edge() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 20000; i++) {
+        try {
+            boom(i)
+            assert(false)
+        } catch (e) {
+            // 展开路径必须释放 n，且不得重复释放（ASan 会抓）
+        }
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
