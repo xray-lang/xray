@@ -4,35 +4,39 @@
 #
 # WHY TIERS, AND WHY THIS PARTICULAR CUT
 #
-# A full ctest run is ~30-40 minutes, but the cost is not spread across the 321
-# tests — it is concentrated in a handful that shell out to a C compiler. From a
-# measured full run:
+# A full `ctest -j16` run is ~8 minutes, and the cost is not spread across the
+# 326 tests — a handful of lanes decide the wall time because each one declares
+# most of the machine (PROCESSORS 4..16, or RUN_SERIAL) and so cannot overlap
+# with the others. Measured, 18 cores:
 #
-#     aot_standalone_suite            342s
-#     asan_focused                    331s   (rebuilds the whole compiler + ASan)
-#     test_string_native_error_abi     93s
-#     test_crypto_native_error_abi     63s
-#     test_param_contract_aot          60s
-#     test_compress_native_error_abi   32s
-#     ---------------------------------------
-#     the other ~170 unit tests       ~10s   combined
+#     backend_diff                    141s
+#     asan_focused                    139s   (RUN_SERIAL; builds an ASan compiler)
+#     aot_filetests                   105s
+#     aot_standalone_suite             70s
+#     ------------------------------------
+#     ~250 in-process tests            <1s   each; ~20s for all of them together
 #
-# `ctest -R "^test_"` takes 6m36s at 4% CPU: almost all of it is waiting on
-# spawned clang processes, not computing. So the useful axis is not "how many
-# tests" but "does this test invoke an external toolchain". That is the cut
-# below, and it is why t0 can be seconds while still running every in-process
-# test there is.
+# The load-bearing property is NOT "how many tests" and not even "does this test
+# spawn a C compiler" — it is "does this test occupy the whole machine". While
+# one of those lanes runs, everything scheduled beside it is starved, and ctest
+# charges that starvation to the innocent test: test_arena reports 0.02s on its
+# own and 9.85s inside a full run. That is the cut below.
 #
 # Each tier is a superset of the one before it. Nothing is sampled or truncated
-# inside a tier — a tier either runs a suite completely or does not claim it —
-# and every run prints what it did not cover, so a green t0 is never mistaken
-# for a green suite.
+# inside a tier by default — a tier either runs a suite completely or does not
+# claim it — and every run prints what it did not cover, so a green t0 is never
+# mistaken for a green suite. XR_SHARDS can trade corpus coverage for speed, but
+# it is opt-in, it says so on every run, and t3 refuses it.
 #
-# USAGE
-#     scripts/t.sh t0      after an edit            target < 30s
-#     scripts/t.sh t1      before a commit          target < 3min
-#     scripts/t.sh t2      before a push            target < 12min
-#     scripts/t.sh t3      periodic / release       everything
+# The build step builds exactly the targets the selected tests need — a full
+# build's correctness without a full build's ~195 links.
+#
+# USAGE                                          measured, warm tree, 18 cores
+#     scripts/t.sh t0      after an edit         ~23s  (build + 255 tests)
+#     scripts/t.sh t0 -R <re>  one test          ~3s   (builds only that test)
+#     scripts/t.sh t1      before a commit       ~1min
+#     scripts/t.sh t2      before a push         ~4min
+#     scripts/t.sh t3      periodic / release    everything, ~8min
 #     scripts/t.sh auto    pick a tier from the working-tree diff
 #
 # Extra arguments are forwarded to ctest, e.g.
@@ -72,9 +76,11 @@ JOBS="${XR_JOBS:-$(( CORES > 3 ? CORES - 2 : 1 ))}"
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'
 BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; NC=$'\033[0m'
 
-# Tests that spawn an external C toolchain. Excluded below t3 — not because
-# they matter less, but because each one costs more than every in-process test
-# combined. Keep this list ordered by the measured cost in the header.
+# Tests that drive an external C toolchain and, in doing so, saturate the
+# machine. Excluded below t3 — not because they matter less, but because each
+# one costs more than every in-process test combined AND starves whatever ctest
+# schedules alongside it (see the header). Keep this list ordered by the
+# measured cost in the header.
 SLOW_EXTERNAL='aot_standalone_suite|asan_focused|lsan_strict|aot_ubsan|test_string_native_error_abi|test_crypto_native_error_abi|test_param_contract_aot|test_compress_native_error_abi'
 
 # QEMU-backed cross targets: slow, and unavailable on most developer machines.
