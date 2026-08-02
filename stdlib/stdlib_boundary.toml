@@ -247,7 +247,7 @@ layer = "L0"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/runtime/runtime.c"
-public_native = ["RuntimeInfo", "info", "liveBytes", "liveObjects"]
+public_native = ["RuntimeInfo", "info", "liveBytes", "liveObjects", "sharedBytes", "staticBytes"]
 perf_suite = "stdlib/runtime"
 
 [[module]]
