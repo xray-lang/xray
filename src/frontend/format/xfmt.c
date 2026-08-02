@@ -195,6 +195,7 @@ void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X) {
     ctx->line_start = 1;
     ctx->column = 0;
     ctx->block_literal_closed = false;
+    ctx->force_fn_expr = false;
     ctx->config = config ? config : &xfmt_default_config;
     ctx->X = X;
 }

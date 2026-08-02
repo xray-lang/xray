@@ -6,6 +6,9 @@ separated semantic effects from native code-shape controls; the fail-closed
 semantics remain unchanged.
 Task 254 makes mutable-capture cell and weak-field memory effects explicit Xi
 operations; it does not add a source-level effect or permit backend inference.
+Task 251 makes source-parameter write provenance complete for scalar `ref`
+parameters and permits an advisory unused-`ref` hint only from that canonical,
+complete effect product.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -105,6 +108,17 @@ operations; it does not add a source-level effect or permit backend inference.
     standard-library definition, including explicit `UNKNOWN` when no stronger
     fact is valid. Xi consumes the published summary at each statically known
     call and does not re-infer it from a callee name or allocation effects.
+15. Parameter mutation is one canonical effect fact for scalar parameters,
+    aggregate/view roots, and transitive calls. Direct assignment, compound
+    assignment, increment/decrement, member/index writes, and a known mutating
+    callee set the write fact. An explicit `ref` argument to an unresolved
+    dynamic callable makes that parameter effect incomplete and therefore
+    cannot prove read-only behavior. An unused-`ref` diagnostic is advisory
+    only: it may be emitted for a source-explicit anonymous-function `ref`
+    parameter only when the effect is complete and non-mutating, and is
+    suppressed when an expected callable contract requires `ref` or the mode
+    came from inference. The diagnostic never changes the function type,
+    effect product, exit status, or runtime semantics.
 
 ## Digest anchors
 
@@ -117,14 +131,14 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602d
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h cf6aa1afe180267f776fe18cfca5119fa77182099f3c0fd265e35955a43e7a2c
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 2dec08ccea1a588672b1e546f0219efb2d1a2f8e6d002f5fb71fa774f3922a60
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h ea162b828bb6c8e3f563bd11945d1d5873258c5a832eb8f3e05a51a48830efaa
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 2240e7ab541f0da201dfe82a3fac9f8005444a446e175815e88979b419820ee1
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 9a00415e02c13138871e893473eaefc1ccd1df00a8cc844774f58162f0a96761
 anchor-sha256: src/runtime/value/xtype.h 1f0e1b8129b20d80d527cccc341bb22fffd34b1e1fd83eb252da7d23e2669317
 anchor-sha256: src/ir/xi.h 286b998d786bed1678de12e25b19e08e03a95299f82499bebe483dc465cfff2d
 anchor-sha256: src/ir/xi_lower.c 4518cf90540ed7a869ef07629d7305e9e6df31f4b44ad47359efcd339952ca4e
 anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29
 anchor-sha256: tests/cli/run_verify_contract_tests.sh 0e6de65b1956cb7151e90630d72bc41e10d5561147da0ee012882660eee7ac65
-anchor-sha256: tests/unit/analyzer/test_analyzer.c d9f889d7a9a3cda5de068ecfcf01a6ad043a41bb8f363d684da9836a7cdc7112
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 86efb5f000793d5c0beb8e0a45979a42d328a1bd3c9e07165810e776de40aa5e
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
 anchor-sha256: tests/unit/ir/test_xi_lower.c 11a2064441f6aa9b964d9d01655c58dd95530e79f2c34188d353fdc36b0a87a1

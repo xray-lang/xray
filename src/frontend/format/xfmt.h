@@ -59,6 +59,7 @@ typedef struct XrFmtContext {
     int line_start;             // At line start flag
     int column;                 // Current column (for line length tracking)
     bool block_literal_closed;  // Next non-space token must start on a new line
+    bool force_fn_expr;         // Context requires `fn` to avoid grammar ambiguity
     XrFmtConfig *config;        // Configuration
     XrVMRuntime *X;             // Isolate for type printing
 } XrFmtContext;

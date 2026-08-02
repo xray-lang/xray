@@ -1,0 +1,1 @@
+var f = (...xs: int) -> xs

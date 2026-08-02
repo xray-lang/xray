@@ -1,0 +1,1 @@
+var f = (x) -> bool { return x > 0 }

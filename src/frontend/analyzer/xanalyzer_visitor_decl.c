@@ -535,6 +535,24 @@ static int xa_summary_param_slot(XaParamEscapeSummary *summary, const char *name
     return -1;
 }
 
+static int xa_summary_declared_param_slot(XaParamEscapeSummary *summary, const char *name) {
+    if (!summary || !name)
+        return -1;
+    /* A nested function parameter or local declaration with the same name
+     * masks the outer formal. Alias entries are ordered by lexical walk, so
+     * the newest matching entry decides before consulting declared formals. */
+    for (int i = summary->alias_count - 1; i >= 0; i--) {
+        if (summary->aliases[i] && strcmp(summary->aliases[i], name) == 0)
+            return -1;
+    }
+    for (int i = 0; i < summary->param_count; i++) {
+        if (summary->param_names && summary->param_names[i] &&
+            strcmp(summary->param_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
 static void xa_summary_set_alias(XaParamEscapeSummary *summary, const char *name, int slot) {
     if (!summary || !name)
         return;
@@ -668,6 +686,43 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
                 }
                 return -1;
             }
+            default:
+                return -1;
+        }
+    }
+    return -1;
+}
+
+/* Mutation provenance is meaningful for scalar ref parameters as well as
+ * borrowed heap/view values. Keep this separate from the escape-root helper:
+ * escape tracking deliberately ignores non-borrowing scalars, while a write
+ * through `ref int` must still be part of the canonical parameter effect. */
+static int xa_summary_mutation_root_param_slot(XaParamEscapeSummary *summary, AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE:
+                return xa_summary_param_slot(summary, expr->as.variable.name);
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_OPTIONAL_CHAIN:
+                expr = expr->as.optional_chain.object;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
             default:
                 return -1;
         }
@@ -896,7 +951,7 @@ static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
 static void xa_summary_mark_mutation(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !summary->effects || !expr)
         return;
-    int slot = xa_summary_expr_root_param_slot(summary, expr);
+    int slot = xa_summary_mutation_root_param_slot(summary, expr);
     if (slot >= 0 && slot < summary->param_count) {
         summary->effects[slot].access |= XA_PARAM_ACCESS_WRITE;
         summary->effects[slot].mutation_paths |= XA_MUTATION_PATH_WILDCARD;
@@ -1078,6 +1133,20 @@ static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *su
         xa_summary_view_return_contract(summary, call->callee, NULL, &return_source, &return_param);
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        XrCallArgAccess access =
+            call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_PLAIN;
+        if (access == XR_CALL_ARG_REF) {
+            /* The callable type authorizes a write, but a dynamic value has no
+             * body summary. Record the possible mutation and keep the effect
+             * incomplete so advisory diagnostics fail closed. */
+            int root_slot = xa_summary_mutation_root_param_slot(summary, arg);
+            if (root_slot >= 0 && root_slot < summary->param_count) {
+                summary->effects[root_slot].complete = false;
+                summary->effects[root_slot].incomplete_reason |= XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+            }
+            xa_summary_mark_mutation(summary, arg);
+            continue;
+        }
         XrType *arg_type = xa_summary_expr_type(summary, arg);
         if (!xa_type_needs_borrow_escape_guard(arg_type) &&
             !(arg_type && XR_TYPE_IS_POINTER(arg_type)))
@@ -1379,8 +1448,13 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         }
         case AST_ASSIGNMENT: {
             AssignmentNode *assign = &node->as.assignment;
+            int target_slot = xa_summary_declared_param_slot(summary, assign->name);
+            if (target_slot >= 0 && target_slot < summary->param_count) {
+                summary->effects[target_slot].access |= XA_PARAM_ACCESS_WRITE;
+                summary->effects[target_slot].mutation_paths |= XA_MUTATION_PATH_WILDCARD;
+            }
             int slot = xa_summary_expr_root_param_slot(summary, assign->value);
-            if (xa_summary_name_is_local(summary, assign->name))
+            if (target_slot < 0 && xa_summary_name_is_local(summary, assign->name))
                 xa_summary_set_alias(summary, assign->name, slot);
             else
                 xa_summary_mark_expr(summary, assign->value);
@@ -1409,11 +1483,33 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
             xa_summary_mark_expr(summary, node->as.index_set.value);
             xa_summary_walk(summary, node->as.index_set.value);
             break;
-        case AST_COMPOUND_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT: {
+            int slot = xa_summary_declared_param_slot(summary, node->as.compound_assignment.name);
+            if (!node->as.compound_assignment.object && slot >= 0 && slot < summary->param_count) {
+                summary->effects[slot].access |= XA_PARAM_ACCESS_WRITE;
+                summary->effects[slot].mutation_paths |= XA_MUTATION_PATH_WILDCARD;
+            }
             xa_summary_mark_mutation(summary, node->as.compound_assignment.object);
             xa_summary_walk(summary, node->as.compound_assignment.object);
             xa_summary_walk(summary, node->as.compound_assignment.value);
             break;
+        }
+        case AST_INC: {
+            int slot = xa_summary_declared_param_slot(summary, node->as.inc.name);
+            if (slot >= 0 && slot < summary->param_count) {
+                summary->effects[slot].access |= XA_PARAM_ACCESS_WRITE;
+                summary->effects[slot].mutation_paths |= XA_MUTATION_PATH_WILDCARD;
+            }
+            break;
+        }
+        case AST_DEC: {
+            int slot = xa_summary_declared_param_slot(summary, node->as.dec.name);
+            if (slot >= 0 && slot < summary->param_count) {
+                summary->effects[slot].access |= XA_PARAM_ACCESS_WRITE;
+                summary->effects[slot].mutation_paths |= XA_MUTATION_PATH_WILDCARD;
+            }
+            break;
+        }
         case AST_CALL_EXPR:
             xa_summary_walk_call(summary, node);
             break;
@@ -1584,6 +1680,53 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     links->param_effects = effects;
     links->param_effect_count = param_count;
     return changed;
+}
+
+bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
+                                    XrParamNode **params, int param_count, AstNode *body,
+                                    int param_slot, bool *out_complete) {
+    if (out_complete)
+        *out_complete = false;
+    if (!ctx || !function_type || !XR_TYPE_IS_FUNCTION(function_type) || !body || !params ||
+        param_count <= 0 || function_type->function.param_count != param_count ||
+        !function_type->function.params || param_slot < 0 || param_slot >= param_count)
+        return false;
+
+    const char *stack_names[16];
+    XrType *stack_types[16];
+    const char **names = param_count <= 16
+                             ? stack_names
+                             : xr_malloc(sizeof(const char *) * (size_t) param_count);
+    XrType **types = param_count <= 16
+                         ? stack_types
+                         : xr_malloc(sizeof(XrType *) * (size_t) param_count);
+    if (!names || !types) {
+        if (names && names != stack_names)
+            xr_free((void *) names);
+        if (types && types != stack_types)
+            xr_free(types);
+        return false;
+    }
+    for (int i = 0; i < param_count; i++) {
+        names[i] = params[i] ? params[i]->name : NULL;
+        types[i] = function_type->function.params[i].type;
+    }
+
+    XaSymbolLinks temporary = {.type = function_type};
+    xa_symbol_links_set_param_escape_summary(ctx, &temporary, types, names, param_count,
+                                             function_type->function.return_type, body, NULL);
+    const XaParamEffectSummary *effect = xa_symbol_param_effect(&temporary, param_slot);
+    bool mutates = xa_param_effect_mutates(effect);
+    if (out_complete)
+        *out_complete = effect && effect->complete;
+
+    if (temporary.param_effects)
+        xr_free(temporary.param_effects);
+    if (names != stack_names)
+        xr_free((void *) names);
+    if (types != stack_types)
+        xr_free(types);
+    return mutates;
 }
 
 void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx, XaSymbolLinks *links) {

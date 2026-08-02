@@ -132,7 +132,7 @@ void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
 }
 
-static void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
+void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
     if (!param)
         return;
     if (param->is_rest)

@@ -89,6 +89,7 @@ XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref);
  * side of a `type` alias, where the name would render as `type N = N`. */
 XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *tref);
 XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref);
+XR_FUNC void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param);
 XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count);
 XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count);
 XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern);

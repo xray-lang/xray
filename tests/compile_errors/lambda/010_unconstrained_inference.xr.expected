@@ -1,0 +1,5 @@
+Parameter 'value' of anonymous function cannot be inferred
+annotate this lambda parameter
+annotate the binding
+rely on the call-site signature
+use `fn(x: T) -> R { ... }`

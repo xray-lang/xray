@@ -1,0 +1,2 @@
+arrow lambda has no return-type position
+use `fn(x: T) -> R { ... }`

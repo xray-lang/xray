@@ -5765,6 +5765,94 @@ TEST(analyzer_empty_map_uses_unsolved_infer_var) {
     setup_pool();
 }
 
+TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "struct Point { x: int; y: int }\n"
+                         "var f: (int) -> Point = value -> Point{result: value}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "lambda_struct_literal_hint.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "type 'Point' has no field 'result'"));
+    ASSERT(analyzer_diag_contains(
+        a, "if you meant a return-type annotation: arrow lambdas have none"));
+    ASSERT(analyzer_diag_contains(a, "use `fn(...) -> Point { ... }`"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_unconstrained_expression_lambda_reports_e0365_with_all_routes) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var f = value -> value\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "lambda_inference_routes.xr", program);
+
+    int count = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(a, &count);
+    bool found_e0365 = false;
+    for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next) {
+        if (diag->code == XR_ERR_ANALYZE_MISSING_TYPE) {
+            found_e0365 = true;
+            break;
+        }
+    }
+    ASSERT(found_e0365);
+    ASSERT(analyzer_diag_contains(a, "annotate this lambda parameter"));
+    ASSERT(analyzer_diag_contains(a, "annotate the binding"));
+    ASSERT(analyzer_diag_contains(a, "rely on the call-site signature"));
+    ASSERT(analyzer_diag_contains(a, "use `fn(x: T) -> R { ... }`"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source =
+        "fn mutate(value: ref int) { value *= 2 }\n"
+        "var readOnly = (x: ref int) -> x * 2\n"
+        "var direct = (x: ref int) -> { x = x * 2 }\n"
+        "var compound = (x: ref int) -> { x *= 2 }\n"
+        "var increment = (x: ref int) -> { x++ }\n"
+        "var delegated = (x: ref int) -> { mutate(ref x) }\n"
+        "var indexed = (xs: ref Array<int>) -> { xs[0] = 1 }\n"
+        "var receiver = (xs: ref Array<int>) -> { xs.push(1) }\n"
+        "var required: (ref int) -> int = (x: ref int) -> x * 2\n"
+        "var inferred: (ref int) -> int = x -> x * 2\n"
+        "var uncertain = (x: ref int, callback: (ref int) -> ()) -> {\n"
+        "    callback(ref x)\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "lambda_ref_hint.xr", program);
+
+    int diagnostic_count = 0;
+    int hint_count = 0;
+    int error_count = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next) {
+        if (diag->severity == XR_DIAG_SEV_ERROR)
+            error_count++;
+        if (diag->severity == XR_DIAG_SEV_HINT && diag->message &&
+            strstr(diag->message, "ref parameter 'x' is never mutated"))
+            hint_count++;
+    }
+    ASSERT(error_count == 0);
+    ASSERT(hint_count == 1);
+    ASSERT(analyzer_diag_contains(a, "use a read parameter"));
+    ASSERT(!analyzer_diag_contains(a, "ref parameter 'xs' is never mutated"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_builtin_generic_arity) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -6549,6 +6637,9 @@ int main(void) {
     RUN_TEST(analyzer_empty_array_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_set_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_map_uses_unsolved_infer_var);
+    RUN_TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint);
+    RUN_TEST(analyzer_unconstrained_expression_lambda_reports_e0365_with_all_routes);
+    RUN_TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed);
     RUN_TEST(analyzer_rejects_builtin_generic_arity);
     RUN_TEST(analyzer_rejects_generator_yield_value_mismatch);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);

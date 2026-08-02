@@ -513,12 +513,6 @@ TEST(parser_parameter_modes_share_annotation_parser) {
     assert_ast_param_modes(init->as.function_expr.params, init->as.function_expr.param_count, modes,
                            mode_count);
 
-    AstNode *arrow_stmt = parse_first("var g = (a: int, b: int, c: ref int, d: move int) -> a");
-    AstNode *arrow = arrow_stmt->as.var_decl.initializer;
-    ASSERT_EQ_INT(arrow->type, AST_FUNCTION_EXPR);
-    assert_ast_param_modes(arrow->as.function_expr.params, arrow->as.function_expr.param_count,
-                           modes, mode_count);
-
     AstNode *method_stmt =
         parse_first("class Box {\n  touch(a: int, b: int, c: ref int, d: move int) {}\n}");
     AstNode *method = method_stmt->as.class_decl.methods[0];
@@ -1138,6 +1132,29 @@ TEST(parser_arrow_fn_not_tuple) {
     teardown();
 }
 
+TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
+    setup();
+    AstNode *stmt =
+        parse_first("var f = (a: int, b, c: ref int, d: move Buffer,) -> a + b");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
+    ASSERT_EQ_INT(init->as.function_expr.param_count, 4);
+    ASSERT_NOT_NULL(init->as.function_expr.params[0]->type);
+    ASSERT_NULL(init->as.function_expr.params[1]->type);
+    ASSERT_NOT_NULL(init->as.function_expr.params[2]->type);
+    ASSERT_NOT_NULL(init->as.function_expr.params[3]->type);
+    ASSERT_EQ_INT(init->as.function_expr.params[0]->passing_mode, XR_PARAM_READ);
+    ASSERT_EQ_INT(init->as.function_expr.params[1]->passing_mode, XR_PARAM_READ);
+    ASSERT_EQ_INT(init->as.function_expr.params[2]->passing_mode, XR_PARAM_REF);
+    ASSERT_EQ_INT(init->as.function_expr.params[3]->passing_mode, XR_PARAM_MOVE);
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    ASSERT_NULL(xr_parse(session, "var f = (ref x) -> x"));
+    ASSERT_NULL(xr_parse(session, "var f = (x: int = 1) -> x"));
+    ASSERT_NULL(xr_parse(session, "var f = (...xs: int) -> xs"));
+    teardown();
+}
+
 TEST(parser_bare_lambda_in_expression_position) {
     setup();
     AstNode *stmt = parse_first("var f: (int) -> int = x -> x * 2");
@@ -1366,6 +1383,7 @@ int main(void) {
     RUN_TEST(parser_tuple_type_over_16_elements);
     RUN_TEST(parser_grouping_still_works);
     RUN_TEST(parser_arrow_fn_not_tuple);
+    RUN_TEST(parser_arrow_parameters_support_independent_annotations_and_modes);
     RUN_TEST(parser_bare_lambda_in_expression_position);
     RUN_TEST(parser_tuple_field_access);
     RUN_TEST(parser_tuple_field_access_chained);

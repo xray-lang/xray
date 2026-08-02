@@ -616,6 +616,28 @@ TEST(arrow_return_type_emitted) {
     teardown();
 }
 
+TEST(annotated_and_mode_lambda_remain_arrow) {
+    setup();
+    const char *src = "var typed = (x: int) -> x + 1\n"
+                      "var mutate = (x: ref int) -> { x = x + 1 }\n"
+                      "var consume = (job: move Job) -> job\n"
+                      "var task = go launch((x: int) -> x)\n"
+                      "var explicit = fn(x: int) -> int { return x + 1 }\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "(x: int) -> x + 1"));
+    ASSERT_TRUE(contains(fmt1, "(x: ref int) ->"));
+    ASSERT_TRUE(contains(fmt1, "(job: move Job) -> job"));
+    ASSERT_TRUE(contains(fmt1, "go launch((x: int) -> x)"));
+    ASSERT_TRUE(contains(fmt1, "fn(x: int) -> int"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(attribute_visibility_modifier_order_roundtrip) {
     setup();
     const char *src = "@deprecated(\"use hash64\")\n"
@@ -1259,6 +1281,7 @@ RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
+RUN_TEST(annotated_and_mode_lambda_remain_arrow);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
 RUN_TEST(method_deprecated_attribute_roundtrip);
 RUN_TEST(inline_control_attributes_roundtrip);
