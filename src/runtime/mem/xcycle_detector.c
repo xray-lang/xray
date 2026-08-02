@@ -16,14 +16,101 @@
 #include "xobj_header.h"
 #include "xregion.h"
 #include "../class/xclass.h"
+#include "../xshared.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
+#include "../../coro/xchannel.h"
+#include "../../coro/xtask.h"
+#include "../../os/os_thread.h"
 
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* ========== Domain mode (task 259 §3) ==========
+ *
+ * One pipeline serves two graphs. The per-heap scan walks the coro-local band;
+ * the shared scan walks the atomic band, where the extra edge kinds live
+ * (channel buffers, task payloads). Scans run only at quiescent points, one at
+ * a time, so a file-static mode flag is race-free by construction. */
+static bool g_scan_shared_domain = false;
+
+/* The shared-domain graph spans BOTH system-heap bands. A value sent into a
+ * channel is materialised as a TRANSFER object; the canonical shared cycle
+ * (closure captures a channel, gets sent into that channel) is therefore
+ * shared -> transfer -> shared. Transfer objects alone cannot form a cycle —
+ * unique ownership admits no second owner — so every system-heap cycle passes
+ * through at least one atomic-band object, and seeding from the shared
+ * registry is complete. */
+static bool detector_shared_child_eligible(const XrObjHeader *obj) {
+    if (obj->extra & (XR_OBJ_MANAGED | XR_OBJ_STORAGE_BUMP))
+        return false;
+    if (XR_OBJ_IS_SHARED(obj))
+        return true;
+    return XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_TRANSFER;
+}
+
+static bool detector_child_eligible(const XrObjHeader *obj) {
+    return g_scan_shared_domain ? detector_shared_child_eligible(obj)
+                                : xr_obj_graph_child_eligible(obj);
+}
+
+/* The logical reference count on the trial-deletion basis (0-based: an object
+ * with N live references reads N-1). Coro-local and transfer objects store
+ * exactly that; the shared band stores a live count of N as -N. Dispatch is
+ * per object, not per scan: a shared-domain component mixes both bands. */
+static int32_t detector_trial_basis_rc(XrObjHeader *obj) {
+    if (g_scan_shared_domain && XR_OBJ_IS_SHARED(obj))
+        return (int32_t) xr_shared_get_refc(obj) - 1;
+    return atomic_load_explicit(&obj->refcount, memory_order_relaxed);
+}
+
+/* Graph traversal, extended in shared mode with the edges that only exist in
+ * that domain. Only edges that correspond to a counted reference may appear
+ * here: a buffered channel value was retained by send, a task holds its
+ * result/error. Task-tree links (parent/child/sibling) are runtime-managed
+ * bookkeeping, not counted references — traversing them would trial-decrement
+ * a count that was never incremented and could fabricate a cycle. Leaving an
+ * uncounted edge out can only under-report, never invent. */
+static void detector_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor, void *ctx) {
+    xr_obj_graph_visit_children(obj, visitor, ctx);
+    if (!g_scan_shared_domain)
+        return;
+    switch (obj->type) {
+        case XR_TCHANNEL: {
+            XrChannel *ch = (XrChannel *) obj;
+            if (!ch->buffer || ch->buf_size == 0)
+                break;
+            for (uint32_t i = 0; i < ch->buf_count; i++) {
+                XrValue v = ch->buffer[(ch->recv_idx + i) % ch->buf_size];
+                if (XR_IS_PTR(v)) {
+                    XrObjHeader *child = XR_VALUE_GCPTR(v);
+                    if (child)
+                        visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
+                }
+            }
+            break;
+        }
+        case XR_TTASK: {
+            XrTask *task = (XrTask *) obj;
+            if (XR_IS_PTR(task->result)) {
+                XrObjHeader *child = XR_VALUE_GCPTR(task->result);
+                if (child)
+                    visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
+            }
+            if (XR_IS_PTR(task->error)) {
+                XrObjHeader *child = XR_VALUE_GCPTR(task->error);
+                if (child)
+                    visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
 
 /* ========== Whole-heap object enumeration ==========
  *
@@ -148,7 +235,7 @@ bool xr_cycle_detector_count_live(XrCoroHeap *heap, uint32_t *out_count) {
  * what lets phase E delete XR_OBJ_CYCLE_CANDIDATE and the store that sets it
  * on every allocation. */
 static bool detector_object_is_candidate(const XrObjHeader *obj) {
-    if (!xr_obj_graph_child_eligible(obj))
+    if (!detector_child_eligible(obj))
         return false;
     switch (obj->type) {
         case XR_TINSTANCE: {
@@ -224,10 +311,10 @@ static DetectorNode *detector_intern(DetectorSet *set, XrObjHeader *obj) {
     }
     DetectorNode *n = &set->nodes[set->count];
     n->obj = obj;
-    /* 0-based sign-tagged RC: a coro-local object stores N references as N-1.
-     * xr_obj_graph_child_eligible already excluded the shared band, so a plain
-     * relaxed load is the count this pass works with. */
-    n->trial_rc = atomic_load_explicit(&obj->refcount, memory_order_relaxed);
+    /* 0-based trial basis: a coro-local object stores N references as N-1 and
+     * is read directly; the shared band stores -N and is normalised by
+     * detector_trial_basis_rc. Which band applies follows the scan mode. */
+    n->trial_rc = detector_trial_basis_rc(obj);
     n->color = DET_COLOR_GRAY;
     n->index = set->count;
     set->count++;
@@ -242,7 +329,7 @@ typedef struct {
 static void detector_reach_visitor(XrObjHeader *child, uint32_t slot, void *ctx) {
     (void) slot;
     ReachCtx *rc = (ReachCtx *) ctx;
-    if (!xr_obj_graph_child_eligible(child) || (child->extra & XR_OBJ_DEAD))
+    if (!detector_child_eligible(child) || (child->extra & XR_OBJ_DEAD))
         return;
     if (detector_find(rc->set, child))
         return;
@@ -327,6 +414,10 @@ static const char *detector_type_name(const XrObjHeader *obj) {
             return "map";
         case XR_TSET:
             return "set";
+        case XR_TCHANNEL:
+            return "channel";
+        case XR_TTASK:
+            return "task";
         default:
             /* The three shapes above plus instance/cell/closure are everything
              * that can hold a followable edge (xobj_graph.h), so nothing that
@@ -367,6 +458,10 @@ static const char *detector_edge_kind(const XrObjHeader *from) {
             return "map entry";
         case XR_TSET:
             return "set element";
+        case XR_TCHANNEL:
+            return "buffered value";
+        case XR_TTASK:
+            return "task payload";
         default:
             return "reference";
     }
@@ -511,7 +606,7 @@ static void detector_collect_edges(CycleEdgeCtx *c, DetectorNode **members, uint
     c->count = count;
     for (uint32_t i = 0; i < count; i++) {
         c->current = i;
-        xr_obj_graph_visit_children(members[i]->obj, cycle_edge_visitor, c);
+        detector_visit_children(members[i]->obj, cycle_edge_visitor, c);
     }
 }
 
@@ -584,7 +679,8 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     CycleEdgeCtx edges;
     detector_collect_edges(&edges, members, count);
 
-    fprintf(stderr, "\n引用环 (%u 个对象, %llu 字节)\n", count, (unsigned long long) bytes);
+    fprintf(stderr, "\n%s引用环 (%u 个对象, %llu 字节)\n", g_scan_shared_domain ? "共享域" : "",
+            count, (unsigned long long) bytes);
     for (uint32_t i = 0; i < count; i++)
         fprintf(stderr, "  %-16s @ %p\n", cycle_obj_name(members[i]->obj),
                 (void *) members[i]->obj);
@@ -634,11 +730,27 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
         detector_sidecar_put(",\"kind\":");
         detector_sidecar_put_json_string(detector_edge_kind(from));
         detector_sidecar_put(",\"weak_annotatable\":%s}",
-                             (field && !cycle_edge_is_capture(&edges, e)) ? "true" : "false");
+                             (field && !cycle_edge_is_capture(&edges, e) && !g_scan_shared_domain)
+                                 ? "true"
+                                 : "false");
     }
     detector_sidecar_put("\n  ]}");
 
     fprintf(stderr, "  修复建议:\n");
+
+    /* W4 forbids `weak` on a shared-domain object, so the coro-local advice
+     * would be a lie here. What actually breaks a shared cycle is changing the
+     * structure or clearing the reference explicitly before release. */
+    if (g_scan_shared_domain) {
+        fprintf(stderr, "    · 共享域对象禁用 weak（W4）。可行的修复：\n");
+        fprintf(stderr, "        - 重构结构：把回指字段改成 id/索引，由外部表解析\n");
+        fprintf(stderr, "        - 显式断开：send 完成后把持有通道的字段置 null，"
+                        "或 close 后 drain 缓冲\n");
+        if (edges.overflow)
+            fprintf(stderr, "    (内存不足，候选边列表不完整)\n");
+        xr_free(edges.edges);
+        return;
+    }
 
     /* A component can hold both kinds of edge, so both halves of the advice are
      * printed independently rather than as an either/or. */
@@ -803,6 +915,109 @@ static void detector_seed_visitor(XrObjHeader *obj, void *ctx) {
         (void) detector_intern(s->set, obj);
 }
 
+/* Passes B..D over an already-seeded set: trial-decrement, scan-black, group
+ * the white remainder into cycles, report, restore. Shared between the
+ * per-heap scan and the shared-domain scan; `g_scan_shared_domain` selects the
+ * band, the traversal, and the advice text. Consumes set->nodes. */
+static bool detector_run_passes(DetectorSet *set, XrCycleReport *report) {
+    bool changed = true;
+    while (changed && !set->oom) {
+        changed = false;
+        uint32_t n = set->count;
+        for (uint32_t i = 0; i < n; i++) {
+            ReachCtx rc = {.set = set, .changed = &changed};
+            detector_visit_children(set->nodes[i].obj, detector_reach_visitor, &rc);
+        }
+    }
+    if (set->oom) {
+        fprintf(stderr, "[cycle-detector] out of memory building the reachable set; "
+                        "results incomplete\n");
+        report->traversal_failed = true;
+        xr_free(set->nodes);
+        return false;
+    }
+
+    /* Pass B: trial-decrement internal edges. */
+    for (uint32_t i = 0; i < set->count; i++)
+        detector_visit_children(set->nodes[i].obj, detector_dec_visitor, set);
+
+    /* Pass C: anything with a surviving external reference is live, and so is
+     * everything it reaches. */
+    for (uint32_t i = 0; i < set->count; i++) {
+        if (set->nodes[i].color == DET_COLOR_GRAY && set->nodes[i].trial_rc >= 0)
+            set->nodes[i].color = DET_COLOR_BLACK;
+    }
+    bool progressed = true;
+    while (progressed) {
+        progressed = false;
+        for (uint32_t i = 0; i < set->count; i++) {
+            if (set->nodes[i].color != DET_COLOR_BLACK)
+                continue;
+            ScanBlackCtx sb = {.set = set, .progressed = &progressed};
+            detector_visit_children(set->nodes[i].obj, detector_scan_black_visitor, &sb);
+        }
+    }
+
+    /* Whatever is still GRAY is unreachable from outside: a dead cycle. */
+    for (uint32_t i = 0; i < set->count; i++) {
+        if (set->nodes[i].color == DET_COLOR_GRAY)
+            set->nodes[i].color = DET_COLOR_WHITE;
+    }
+
+    /* Pass D: report, grouping the white set into individual cycles. */
+    EmitCtx emit = {.set = set, .report = report, .header_printed = false};
+    bool *grouped = (bool *) xr_calloc(set->count ? set->count : 1, sizeof(bool));
+    DetectorNode **members =
+        (DetectorNode **) xr_malloc((set->count ? set->count : 1) * sizeof(DetectorNode *));
+    if (grouped && members) {
+        for (uint32_t i = 0; i < set->count; i++) {
+            if (set->nodes[i].color != DET_COLOR_WHITE || grouped[i])
+                continue;
+            /* Collect this cycle's members: everything white reachable from
+             * here. A conservative grouping — two cycles sharing an object are
+             * reported as one — which reads better than splitting them. */
+            uint32_t count = 0;
+            uint32_t queue_head = 0;
+            members[count++] = &set->nodes[i];
+            grouped[i] = true;
+            while (queue_head < count) {
+                DetectorNode *cur = members[queue_head++];
+                for (uint32_t k = 0; k < set->count; k++) {
+                    if (grouped[k] || set->nodes[k].color != DET_COLOR_WHITE)
+                        continue;
+                    /* Edge test: does cur point at nodes[k]? */
+                    EdgeLabelCtx probe = {
+                        .target = set->nodes[k].obj, .label = NULL, .slot = XR_OBJ_GRAPH_SLOT_NONE};
+                    detector_visit_children(cur->obj, detector_edge_label_visitor, &probe);
+                    if (probe.label) {
+                        members[count++] = &set->nodes[k];
+                        grouped[k] = true;
+                    }
+                }
+            }
+            detector_emit_cycle(&emit, members, count);
+        }
+    }
+    xr_free(grouped);
+    xr_free(members);
+
+    /* Restore EVERY trial decrement, so the heap is byte-identical to before
+     * the scan. Without this the detector would be a destructive operation
+     * masquerading as an observation. */
+    for (uint32_t i = 0; i < set->count; i++)
+        detector_visit_children(set->nodes[i].obj, detector_inc_visitor, set);
+
+    xr_free(set->nodes);
+
+    if (report->cycle_count > 0) {
+        fprintf(stderr, "\n[cycle-detector] %s%u 个引用环, %u 个对象, %llu 字节未回收\n",
+                g_scan_shared_domain ? "共享域 " : "", report->cycle_count, report->object_count,
+                (unsigned long long) report->byte_count);
+    }
+    xr_cycle_detector_accumulate(report);
+    return report->cycle_count > 0;
+}
+
 bool xr_cycle_detector_scan(XrCoroHeap *heap, XrCycleReport *out) {
     XrCycleReport local = {0};
     XrCycleReport *report = out ? out : &local;
@@ -819,101 +1034,90 @@ bool xr_cycle_detector_scan(XrCoroHeap *heap, XrCycleReport *out) {
         xr_free(set.nodes);
         return false;
     }
-    bool changed = true;
-    while (changed && !set.oom) {
-        changed = false;
-        uint32_t n = set.count;
-        for (uint32_t i = 0; i < n; i++) {
-            ReachCtx rc = {.set = &set, .changed = &changed};
-            xr_obj_graph_visit_children(set.nodes[i].obj, detector_reach_visitor, &rc);
+    return detector_run_passes(&set, report);
+}
+
+/* ========== Shared-domain registry and scan (task 259 §3) ==========
+ *
+ * The system heap has no walkable block structure, so the allocator registers
+ * every live shared object here. Registration is mutex-protected: shared
+ * objects are released from whichever worker drops the last reference. The
+ * scan itself runs at main-execution exit, when workers are quiescent. */
+
+static struct {
+    XrObjHeader **slots;
+    uint32_t count;
+    uint32_t cap;
+    xr_mutex_t mu;
+    bool mu_init;
+} g_shared_registry;
+
+static void shared_registry_lock(void) {
+    if (!g_shared_registry.mu_init) {
+        /* First registration happens on the main thread during isolate
+         * bring-up, before any worker allocates shared objects. */
+        xr_mutex_init(&g_shared_registry.mu);
+        g_shared_registry.mu_init = true;
+    }
+    xr_mutex_lock(&g_shared_registry.mu);
+}
+
+void xr_cycle_detector_shared_register(XrObjHeader *obj) {
+    if (!obj)
+        return;
+    shared_registry_lock();
+    if (g_shared_registry.count == g_shared_registry.cap) {
+        uint32_t cap = g_shared_registry.cap ? g_shared_registry.cap * 2 : 64;
+        XrObjHeader **grown =
+            (XrObjHeader **) xr_realloc(g_shared_registry.slots, cap * sizeof(*grown));
+        if (!grown) {
+            /* Best effort: an unregistered object degrades coverage, never
+             * correctness — a cycle through it goes unreported. */
+            xr_mutex_unlock(&g_shared_registry.mu);
+            return;
+        }
+        g_shared_registry.slots = grown;
+        g_shared_registry.cap = cap;
+    }
+    g_shared_registry.slots[g_shared_registry.count++] = obj;
+    xr_mutex_unlock(&g_shared_registry.mu);
+}
+
+void xr_cycle_detector_shared_unregister(XrObjHeader *obj) {
+    if (!obj || !g_shared_registry.mu_init)
+        return;
+    shared_registry_lock();
+    for (uint32_t i = 0; i < g_shared_registry.count; i++) {
+        if (g_shared_registry.slots[i] == obj) {
+            g_shared_registry.slots[i] = g_shared_registry.slots[--g_shared_registry.count];
+            break;
         }
     }
-    if (set.oom) {
-        fprintf(stderr, "[cycle-detector] out of memory building the reachable set; "
-                        "results incomplete\n");
-        report->traversal_failed = true;
-        xr_free(set.nodes);
-        return false;
+    xr_mutex_unlock(&g_shared_registry.mu);
+}
+
+bool xr_cycle_detector_scan_shared(XrCycleReport *out) {
+    XrCycleReport local = {0};
+    XrCycleReport *report = out ? out : &local;
+    memset(report, 0, sizeof(*report));
+
+    DetectorSet set = {0};
+    g_scan_shared_domain = true;
+
+    /* Pass A: every live registered shared object is a seed. The registry is
+     * complete for the band (every alloc_shared registers), so the reach pass
+     * inside detector_run_passes only re-confirms membership. */
+    shared_registry_lock();
+    for (uint32_t i = 0; i < g_shared_registry.count && !set.oom; i++) {
+        XrObjHeader *obj = g_shared_registry.slots[i];
+        if (obj && !(obj->extra & XR_OBJ_DEAD))
+            (void) detector_intern(&set, obj);
     }
+    xr_mutex_unlock(&g_shared_registry.mu);
 
-    /* Pass B: trial-decrement internal edges. */
-    for (uint32_t i = 0; i < set.count; i++)
-        xr_obj_graph_visit_children(set.nodes[i].obj, detector_dec_visitor, &set);
-
-    /* Pass C: anything with a surviving external reference is live, and so is
-     * everything it reaches. */
-    for (uint32_t i = 0; i < set.count; i++) {
-        if (set.nodes[i].color == DET_COLOR_GRAY && set.nodes[i].trial_rc >= 0)
-            set.nodes[i].color = DET_COLOR_BLACK;
-    }
-    bool progressed = true;
-    while (progressed) {
-        progressed = false;
-        for (uint32_t i = 0; i < set.count; i++) {
-            if (set.nodes[i].color != DET_COLOR_BLACK)
-                continue;
-            ScanBlackCtx sb = {.set = &set, .progressed = &progressed};
-            xr_obj_graph_visit_children(set.nodes[i].obj, detector_scan_black_visitor, &sb);
-        }
-    }
-
-    /* Whatever is still GRAY is unreachable from outside: a dead cycle. */
-    for (uint32_t i = 0; i < set.count; i++) {
-        if (set.nodes[i].color == DET_COLOR_GRAY)
-            set.nodes[i].color = DET_COLOR_WHITE;
-    }
-
-    /* Pass D: report, grouping the white set into individual cycles. */
-    EmitCtx emit = {.set = &set, .report = report, .header_printed = false};
-    bool *grouped = (bool *) xr_calloc(set.count ? set.count : 1, sizeof(bool));
-    DetectorNode **members =
-        (DetectorNode **) xr_malloc((set.count ? set.count : 1) * sizeof(DetectorNode *));
-    if (grouped && members) {
-        for (uint32_t i = 0; i < set.count; i++) {
-            if (set.nodes[i].color != DET_COLOR_WHITE || grouped[i])
-                continue;
-            /* Collect this cycle's members: everything white reachable from
-             * here. A conservative grouping — two cycles sharing an object are
-             * reported as one — which reads better than splitting them. */
-            uint32_t count = 0;
-            uint32_t queue_head = 0;
-            members[count++] = &set.nodes[i];
-            grouped[i] = true;
-            while (queue_head < count) {
-                DetectorNode *cur = members[queue_head++];
-                for (uint32_t k = 0; k < set.count; k++) {
-                    if (grouped[k] || set.nodes[k].color != DET_COLOR_WHITE)
-                        continue;
-                    /* Edge test: does cur point at nodes[k]? */
-                    EdgeLabelCtx probe = {
-                        .target = set.nodes[k].obj, .label = NULL, .slot = XR_OBJ_GRAPH_SLOT_NONE};
-                    xr_obj_graph_visit_children(cur->obj, detector_edge_label_visitor, &probe);
-                    if (probe.label) {
-                        members[count++] = &set.nodes[k];
-                        grouped[k] = true;
-                    }
-                }
-            }
-            detector_emit_cycle(&emit, members, count);
-        }
-    }
-    xr_free(grouped);
-    xr_free(members);
-
-    /* Restore EVERY trial decrement, so the heap is byte-identical to before
-     * the scan. Without this the detector would be a destructive operation
-     * masquerading as an observation. */
-    for (uint32_t i = 0; i < set.count; i++)
-        xr_obj_graph_visit_children(set.nodes[i].obj, detector_inc_visitor, &set);
-
-    xr_free(set.nodes);
-
-    if (report->cycle_count > 0) {
-        fprintf(stderr, "\n[cycle-detector] %u 个引用环, %u 个对象, %llu 字节未回收\n",
-                report->cycle_count, report->object_count, (unsigned long long) report->byte_count);
-    }
-    xr_cycle_detector_accumulate(report);
-    return report->cycle_count > 0;
+    bool found = detector_run_passes(&set, report);
+    g_scan_shared_domain = false;
+    return found;
 }
 
 #endif /* XR_ENABLE_CYCLE_DETECTOR */

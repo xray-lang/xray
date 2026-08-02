@@ -608,9 +608,11 @@ static const XaBuiltinRecord g_gen_runtime_records[] = {
 static const XaBuiltinMember g_gen_runtime_functions[] = {
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"liveObjects", "(): int", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"sharedBytes", "(): int", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"staticBytes", "(): int", "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_RUNTIME_FUNCTION_COUNT 3
+#define GEN_RUNTIME_FUNCTION_COUNT 5
 
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {

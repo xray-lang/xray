@@ -1,0 +1,47 @@
+// shared_domain_clean.xr — 共享域扫描的无误报探针（任务 259 §3）
+//
+// 一段共享对象吞吐量不小的合法程序：通道创建、跨协程收发、close、drain。
+// 退出前的共享域扫描必须零报告——外部引用（协程、绑定、缓冲消费）都在，
+// scan-black 必须把它们全部染活。
+//
+// 共享环的正向覆盖不在这里：当前带纪律把源级构造路径全部挡死
+// （闭包捕获自身通道 / 类实例持通道字段跨界，均 fail-closed），
+// 正向用例在 tests/unit/mem/test_cycle_detector_shared.c 以分配器层构造。
+
+import runtime
+
+var before = runtime.sharedBytes()
+
+fn producer(ch: Channel<int>, n: int) {
+    var i = 0
+    while (i < n) {
+        ch.send(i)
+        i = i + 1
+    }
+    ch.close()
+}
+
+fn consume(ch: Channel<int>) -> int {
+    var total = 0
+    for (v in ch) {
+        total = total + v
+    }
+    return total
+}
+
+var ch = Channel<int>(8)
+var t = go producer(ch, 100)
+var total = consume(ch)
+await t
+print(total)
+
+// 数据通道用完即弃；再开一轮验证重复创建/关闭不留存量。
+var ch2 = Channel<int>(4)
+var t2 = go producer(ch2, 10)
+print(consume(ch2))
+await t2
+
+var after = runtime.sharedBytes()
+// 存量观测：两轮通道生命周期结束后不应有单调残留（channel 本体在句柄
+// 不可达后回收；这里只断言没有"越用越多"的泄漏形态）。
+print(after <= before + 1024)

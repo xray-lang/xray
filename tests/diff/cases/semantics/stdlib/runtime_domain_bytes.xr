@@ -1,0 +1,22 @@
+// Task 259 §3: per-domain metering surface. Byte values differ across
+// backends (different arenas), so each backend asserts its own behavioural
+// properties and the diff compares the verdict lines only.
+import runtime
+
+var before = runtime.sharedBytes()
+var ch = Channel<int>(16)
+var during = runtime.sharedBytes()
+// A live shared object raises the shared-domain reading.
+print(during > before)
+
+ch.close()
+
+// The static arena reading is a non-negative monotone (VM materialises
+// classes/modules into it; AOT lays them out statically and may read 0).
+var st = runtime.staticBytes()
+print(st >= 0)
+
+// Both readings are int-typed and callable in a loop without accumulating.
+var a = runtime.sharedBytes()
+var b = runtime.sharedBytes()
+print(b >= 0 && a >= 0)

@@ -90,6 +90,7 @@ static bool cg_aot_stdlib_has_direct_member(const char *module, const char *memb
         return false;
     if (strcmp(module, "runtime") == 0 &&
         (strcmp(member, "liveBytes") == 0 || strcmp(member, "liveObjects") == 0 ||
+         strcmp(member, "sharedBytes") == 0 || strcmp(member, "staticBytes") == 0 ||
          strcmp(member, "info") == 0))
         return true;
     if (strcmp(module, "test_yield") == 0 &&
@@ -277,6 +278,10 @@ static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc
         helper = "xr_aot_runtime_live_bytes";
     else if (strcmp(method, "liveObjects") == 0)
         helper = "xr_aot_runtime_live_objects";
+    else if (strcmp(method, "sharedBytes") == 0)
+        helper = "xr_aot_runtime_shared_bytes";
+    else if (strcmp(method, "staticBytes") == 0)
+        helper = "xr_aot_runtime_static_bytes";
     if (helper) {
         const char *suffix =
             emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));

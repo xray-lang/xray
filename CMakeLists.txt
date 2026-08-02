@@ -3214,16 +3214,20 @@ if(BUILD_TESTS)
 
     # The cycle detector is a compile-time switch. In a default build its
     # symbols must not exist at all — not as no-ops, not behind a runtime flag.
-    add_test(
-        NAME cycle_detector_absent_by_default
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(cycle_detector_absent_by_default PROPERTIES
-        LABELS "regression;rc;vm;task-247"
-        TIMEOUT 60
-    )
+    # (A detector build legitimately carries them, so the assertion only
+    # registers where it can hold.)
+    if(NOT XR_ENABLE_CYCLE_DETECTOR)
+        add_test(
+            NAME cycle_detector_absent_by_default
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(cycle_detector_absent_by_default PROPERTIES
+            LABELS "regression;rc;vm;task-247"
+            TIMEOUT 60
+        )
+    endif()
 
     # ========================================================================
     # Task 220 — Verification asset governance gates (appended registrations)

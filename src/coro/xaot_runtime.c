@@ -21,6 +21,7 @@
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/mem/xalloc_unified.h"
 #include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../runtime/object/xstring.h"
 #include "xblock.h"
@@ -52,6 +53,18 @@ int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx) {
 int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     return heap ? (int64_t) heap->object_count : 0;
+}
+
+/* Process-global by design (see xsystem_heap.h): the counters are the same
+ * ones the VM natives read, so the two backends report identical semantics. */
+int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
+    (void) ctx;
+    return (int64_t) xr_sysheap_shared_live_bytes_total();
+}
+
+int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx) {
+    (void) ctx;
+    return (int64_t) xr_sysheap_static_alloc_bytes_total();
 }
 
 XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
