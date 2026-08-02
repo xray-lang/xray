@@ -783,8 +783,8 @@ static bool xi_lower_value_list_push(XiLower *l, XiLowerValueList *list, XiValue
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
  * every intermediate level up to the defining SRC_REG capture needs
- * needs_cell=true so the emitter generates OP_CELL_NEW at the origin
- * and OP_CELL_GET/OP_CELL_SET at each forwarding level. */
+ * needs_cell=true so xi_pass_close materializes XI_CELL_NEW at the origin
+ * and XI_CELL_GET/XI_CELL_SET at each forwarding level. */
 static void propagate_needs_cell(XiLower *l, int upval_idx) {
     if (upval_idx < 0 || upval_idx >= (int) l->func->ncaptures)
         return;
@@ -798,7 +798,7 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
         propagate_needs_cell(l->parent, (int) cap->index);
     } else if (cap->source == XI_CAPTURE_SRC_REG && l->parent && cap->name) {
         /* Mark the defining scope's variable so definitions survive DCE
-         * and the emitter redirects writes through CELL_SET. */
+         * until xi_pass_close inserts CELL_SET. */
         int parent_var = xi_lower_var_find(l->parent, 0, cap->name);
         if (parent_var >= 0 && parent_var < l->parent->var_count)
             l->parent->vars[parent_var].captured_by_child = true;
@@ -806,7 +806,7 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
 
     /* Propagate downward: child closures that already captured this
      * upvalue via SRC_UPVAL may have inherited needs_cell=false at
-     * creation time.  Update them so the emitter generates CELL_GET. */
+     * creation time. Update them so xi_pass_close inserts CELL_GET. */
     for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
         XiFunc *child = l->func->children[ci_fn];
         if (!child)
@@ -1334,7 +1334,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         /* If a child closure already captured this variable, retroactively
          * enable cell indirection so the closure sees the updated value.
          * Also mark captured_by_child so the new SSA value survives DCE
-         * (the emitter redirects it through CELL_SET at emit time). */
+         * (xi_pass_close redirects it through XI_CELL_SET). */
         lower_assignment_mark_child_capture(l, var_id, name, val);
 
         /* If this is a program-level variable, also update backing store */
@@ -1377,8 +1377,8 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         }
         val = xi_lower_apply_primitive_type_view(l, node, val, upval_type);
         /* Mark the capture as needing cell indirection because the child
-         * mutates the captured variable.  The emit stage uses this to
-         * emit CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */
+         * mutates the captured variable. xi_pass_close uses this to materialize
+         * CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */
         XR_DCHECK(upval_idx < (int) l->func->ncaptures, "upval_idx out of range for needs_cell");
         propagate_needs_cell(l, upval_idx);
 
@@ -2291,8 +2291,10 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
     /* Reading a `weak` field promotes to a strong reference (W1), so unlike an
      * ordinary field load its result is OWNED and ARC must drop it. Recorded
      * as a fact here, where the field's declaration is still visible. */
-    if (xi_lower_member_is_weak_field(l, obj, ma->name))
-        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_LOAD;
+    if (xi_lower_member_is_weak_field(l, obj, ma->name)) {
+        v->op = XI_WEAK_LOAD_FIELD;
+        v->flags = xi_op_default_effects(v->op);
+    }
     /* Ordinary enum value properties participate in the metadata reachability
      * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
      * enum phis can carry an anonymous enum-shaped type; tagging that as a
@@ -2573,8 +2575,10 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
     /* A weak slot takes no ownership of what it points at, so this store must
      * not consume its value (see the flag's definition). */
-    if (xi_lower_member_is_weak_field(l, obj, ms->member))
-        v->lowering_flags |= XI_LOWERING_FLAG_WEAK_FIELD_STORE;
+    if (xi_lower_member_is_weak_field(l, obj, ms->member)) {
+        v->op = XI_WEAK_STORE_FIELD;
+        v->flags = xi_op_default_effects(v->op);
+    }
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,
@@ -7379,8 +7383,8 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_create(l, fdecl->symbol_id, fdecl->name, fn_type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
-        /* Hoisted closures must survive DCE: they are stored into cells
-         * at emit time for mutable upvalue capture by sibling functions. */
+        /* Hoisted closures must survive DCE until xi_pass_close stores them
+         * into explicit cells for mutable capture by sibling functions. */
         if (var_id >= 0 && var_id < l->var_count && l->vars[var_id].hoisted)
             v->flags |= XI_FLAG_SIDE_EFFECT;
 

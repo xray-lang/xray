@@ -160,11 +160,7 @@ static uint32_t xi_emit_var_state_count(const XiFunc *f) {
 }
 
 static void xi_emit_free_var_state(EmitCtx *ctx) {
-    xr_free(ctx->cell_side_reg);
-    xr_free(ctx->cell_created);
     xr_free(ctx->var_reg);
-    ctx->cell_side_reg = NULL;
-    ctx->cell_created = NULL;
     ctx->var_reg = NULL;
     ctx->var_state_count = 0;
 }
@@ -174,16 +170,12 @@ static bool xi_emit_init_var_state(EmitCtx *ctx, XiFunc *f) {
     if (ctx->var_state_count == 0)
         return true;
 
-    ctx->cell_side_reg =
-        (XiEmitReg *) xr_malloc((size_t) ctx->var_state_count * sizeof(*ctx->cell_side_reg));
-    ctx->cell_created = (bool *) xr_calloc(ctx->var_state_count, sizeof(*ctx->cell_created));
     ctx->var_reg = (XiEmitReg *) xr_malloc((size_t) ctx->var_state_count * sizeof(*ctx->var_reg));
-    if (!ctx->cell_side_reg || !ctx->cell_created || !ctx->var_reg) {
+    if (!ctx->var_reg) {
         xi_emit_free_var_state(ctx);
         return false;
     }
     for (uint32_t i = 0; i < ctx->var_state_count; i++) {
-        ctx->cell_side_reg[i] = NO_REG;
         ctx->var_reg[i] = NO_REG;
     }
     return true;
@@ -238,32 +230,6 @@ XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v) {
             ctx->var_reg[v->var_id] = ctx->reg_map[v->id];
     }
     return ctx->reg_map[v->id];
-}
-
-/* Like reg_of, but if the value's var_id maps to a cell-wrapped register,
- * emit OP_CELL_GET to a temporary and return that.  Use this for reads
- * where the raw register might hold a cell instead of the actual value
- * (e.g. calling a hoisted function, reading a mutable captured variable). */
-XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
-    XiEmitReg r = reg_of(ctx, v);
-    if (ctx->status != XI_EMIT_OK)
-        return r;
-    if (xi_var_id_is_valid(v->var_id) && !xi_emit_var_id_in_state(ctx, v->var_id)) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return r;
-    }
-    if (xi_emit_var_has_side_cell(ctx, v->var_id)) {
-        if (ctx->next_reg >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return r;
-        }
-        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, r, 0));
-        return tmp;
-    }
-    return r;
 }
 
 /* Like reg_of but never uses the free list — always allocates from next_reg.
@@ -721,88 +687,9 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         return;
 
     bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op);
-    bool raw_cell_args = xi_emit_vm_uses_raw_cell_args(v->op);
-    bool handles_cell_dst = xi_emit_vm_handles_cell_dst(v->op);
     XiEmitReg dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
-
-/* Cell unwrapping: when an arg was wrapped in a cell for mutable closure
- * capture, reading its register returns the XrCell object, not the value.
- * Emit CELL_GET to a temp register for each such arg and temporarily
- * redirect reg_map so the handler sees the unwrapped value.
- * Some handlers consume cell objects directly and opt out through the
- * generated VM lowering metadata. */
-#define CELL_UNWRAP_MAX 8
-    uint32_t saved_ids[CELL_UNWRAP_MAX];
-    XiEmitReg saved_regs[CELL_UNWRAP_MAX];
-    XiEmitReg temp_regs[CELL_UNWRAP_MAX];
-    int nsaved = 0;
-
-    for (uint16_t ai = 0; ai < v->nargs && nsaved < CELL_UNWRAP_MAX; ai++) {
-        XiValue *arg = v->args[ai];
-        if (!arg || arg->id >= ctx->reg_map_size)
-            continue;
-        if (raw_cell_args)
-            continue;
-        if (!ctx->cell_wrapped[arg->id] && !xi_emit_var_has_side_cell(ctx, arg->var_id))
-            continue;
-        XiEmitReg cell_reg = reg_of(ctx, arg);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        if (ctx->next_reg >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, cell_reg, 0));
-        saved_ids[nsaved] = arg->id;
-        saved_regs[nsaved] = ctx->reg_map[arg->id];
-        temp_regs[nsaved] = tmp;
-        ctx->reg_map[arg->id] = tmp;
-        nsaved++;
-    }
-#undef CELL_UNWRAP_MAX
-
-    /* If the destination register is cell-wrapped and the handler does not
-     * handle cell writes itself, redirect the handler to write into a temp
-     * register and then CELL_SET into the real cell register.
-     * This prevents overwriting cell pointers when a variable is re-assigned
-     * after being cell-wrapped by a hoisted function's capture.
-     *
-     * Special case: if the cell hasn't been created yet (first definition),
-     * emit the value normally then wrap with OP_CELL_NEW instead of CELL_SET.
-     *
-     * The cell always lives in cell_side_reg[var_id] — never in this
-     * definition's own register.  A fresh-dst op (CALL, ...) deliberately
-     * allocates a brand-new register instead of coalescing onto var_reg, so
-     * for `var h = null; fn c() { ...h... }; h = Child(0)` the CALL defining
-     * h lands in a different register from the cell created for the capture.
-     * Routing the write through the definition's register would make
-     * OP_CELL_SET store into a non-cell register; it silently no-ops when
-     * R[A] is null, so the assignment is dropped and both the closure and
-     * every later read of h observe null. */
-    bool need_cell_set = false;
-    bool need_cell_new = false;
-    if (!handles_cell_dst && xi_emit_var_has_side_cell(ctx, v->var_id)) {
-        if (!ctx->cell_created[v->var_id]) {
-            /* First definition: emit value to dst, then wrap with CELL_NEW */
-            need_cell_new = true;
-        } else {
-            if (ctx->next_reg >= MAX_REGS) {
-                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-                return;
-            }
-            XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-            if (ctx->next_reg > ctx->max_reg)
-                ctx->max_reg = ctx->next_reg;
-            ctx->reg_map[v->id] = tmp;
-            dst = tmp;
-            need_cell_set = true;
-        }
-    }
 
     XR_DCHECK(v->op >= 0 && v->op < XI_OP_COUNT, "emit_value: op out of range");
     XiEmitHandler handler = xi_emit_handlers[v->op];
@@ -812,31 +699,10 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
     }
 
-    if (need_cell_new && ctx->status == XI_EMIT_OK) {
-        /* Create the cell in the variable's pinned cell register so that
-         * closure captures and blocks emitted earlier in RPO — both of which
-         * address the cell through cell_side_reg — see the same cell. */
-        XiEmitReg cell_reg = ctx->cell_side_reg[v->var_id];
-        if (cell_reg != dst)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, cell_reg, dst, 0));
-        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, cell_reg, 0, 0));
-        ctx->reg_map[v->id] = cell_reg;
-        ctx->cell_wrapped[v->id] = true;
-        ctx->cell_created[v->var_id] = true;
-    }
-
-    if (need_cell_set && ctx->status == XI_EMIT_OK) {
-        XiEmitReg cell_reg = ctx->cell_side_reg[v->var_id];
-        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell_reg, dst, 0));
-        ctx->reg_map[v->id] = cell_reg;
-        free_reg(ctx, dst);
-    }
-
     /* Fresh-dst handlers reserve a VM register window around the result.
      * Copy the value back to a coalesced variable register so exception
      * edges and merge-point phi moves see the expected register. */
-    if (fresh_dst && ctx->status == XI_EMIT_OK && xi_emit_var_id_in_state(ctx, v->var_id) &&
-        !need_cell_set && !need_cell_new) {
+    if (fresh_dst && ctx->status == XI_EMIT_OK && xi_emit_var_id_in_state(ctx, v->var_id)) {
         XiEmitReg vr = ctx->var_reg[v->var_id];
         XiEmitReg fresh_reg = ctx->reg_map[v->id];
         if (vr != NO_REG && vr != fresh_reg) {
@@ -844,11 +710,6 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         }
     }
 
-    /* Restore original reg_map and free temp registers */
-    for (int ri = 0; ri < nsaved; ri++) {
-        ctx->reg_map[saved_ids[ri]] = saved_regs[ri];
-        free_reg(ctx, temp_regs[ri]);
-    }
 }
 
 /* ========== Public API ========== */
@@ -982,19 +843,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     }
     compute_last_use(&ctx);
 
-    /* Allocate cell-wrapped tracker for dedup of OP_CELL_NEW */
-    ctx.cell_wrapped = (bool *) xr_calloc(ctx.reg_map_size, sizeof(bool));
-    if (!ctx.cell_wrapped) {
-        xr_free(ctx.last_use);
-        xr_free(ctx.block_pc);
-        xr_free(ctx.reg_map);
-        xr_vm_proto_free(ctx.proto);
-        xr_free(rpo_order);
-        return XI_EMIT_ERR_INTERNAL;
-    }
-
     if (!xi_emit_init_var_state(&ctx, f)) {
-        xr_free(ctx.cell_wrapped);
         xr_free(ctx.last_use);
         xr_free(ctx.block_pc);
         xr_free(ctx.reg_map);
@@ -1006,37 +855,6 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK)
         goto cleanup;
-
-    /* Pre-populate cell_side_reg for mutable captures so that blocks emitted
-     * before the closure (e.g. loop condition blocks) correctly cell-deref.
-     * Without this, a loop var captured by a closure in the body won't be
-     * cell-dereferenced in the condition block which is emitted first in RPO. */
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            XiValue *v = blk->values[vi];
-            if (v->op != XI_CLOSURE_NEW)
-                continue;
-            XiFunc *child = (XiFunc *) v->aux;
-            if (!child)
-                continue;
-            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
-                XiCapture *cap = &child->captures[ci];
-                if (!cap->needs_cell || cap->source != XI_CAPTURE_SRC_REG)
-                    continue;
-                if (!cap->value || cap->value->id >= ctx.reg_map_size)
-                    continue;
-                if (!xi_emit_var_id_in_state(&ctx, cap->value->var_id))
-                    continue;
-                XiEmitReg reg = ctx.reg_map[cap->value->id];
-                if (reg == NO_REG)
-                    continue;
-                ctx.cell_side_reg[cap->value->var_id] = reg;
-            }
-        }
-    }
 
     /* Emit blocks in RPO order */
     for (uint32_t r = 1; r <= rpo_count; r++) {
@@ -1119,7 +937,6 @@ cleanup:;
         xr_vm_proto_free(ctx.proto);
     }
     xi_emit_free_var_state(&ctx);
-    xr_free(ctx.cell_wrapped);
     xr_free(ctx.last_use);
     xr_free(ctx.reg_map);
     xr_free(ctx.block_pc);

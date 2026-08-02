@@ -3129,7 +3129,7 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(regression_rc_closure_self_capture PROPERTIES
-        LABELS "regression;rc;vm"
+        LABELS "regression;rc;vm;task-254"
         TIMEOUT 30
     )
 
@@ -3208,8 +3208,21 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(regression_closure_capture_cell_reassign PROPERTIES
-        LABELS "regression;rc;vm"
+        LABELS "regression;rc;vm;task-254"
         TIMEOUT 30
+    )
+
+    add_test(
+        NAME regression_mutable_capture_cell_rss
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_mutable_capture_cell_rss.py
+                --xray $<TARGET_FILE:xray>
+                --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe8_mutable_capture_cell_rss.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_mutable_capture_cell_rss PROPERTIES
+        LABELS "regression;rc;vm;aot;task-254"
+        TIMEOUT 300
     )
 
     # Task 249 — RC reclamation gates. probe0 asserts that a local class

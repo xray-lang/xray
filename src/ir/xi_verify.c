@@ -1729,10 +1729,46 @@ static void verify_canonical(VerifyCtx *ctx, const XiFunc *f) {
      * new high-level ops that require canonical lowering are introduced. */
 }
 
-/* CLOSED: upvalue captures fully materialized.
- * XI_CLOSURE_NEW must have exactly ncaptures args matching the child
- * function's capture metadata. XI_LOAD_UPVAL / XI_STORE_UPVAL indices
- * must be within bounds. */
+static bool closed_is_cell_reference(const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_CELL_NEW)
+        return true;
+    return v->op == XI_LOAD_UPVAL && v->aux_int >= 0 && v->aux_int < f->ncaptures &&
+           f->captures[v->aux_int].needs_cell;
+}
+
+static bool closed_cell_load_has_only_explicit_uses(const XiFunc *f, const XiValue *target) {
+    bool saw_use = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *user = blk->values[i];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                saw_use = true;
+                if ((user->op == XI_CELL_GET || user->op == XI_CELL_SET) && a == 0)
+                    continue;
+                if (user->op == XI_CLOSURE_NEW && user->aux) {
+                    const XiFunc *child = (const XiFunc *) user->aux;
+                    if (a < child->ncaptures && child->captures[a].needs_cell)
+                        continue;
+                }
+                return false;
+            }
+        }
+    }
+    return saw_use;
+}
+
+/* CLOSED: upvalue captures and mutable-capture cells are fully materialized.
+ * XI_CLOSURE_NEW has exactly ncaptures args. Mutable captures point at explicit
+ * XI_CELL_NEW/XI_LOAD_UPVAL values, and STORE_UPVAL/cell-read markers are gone. */
 static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1749,6 +1785,12 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
             if (!v)
                 continue;
 
+            if (xi_copy_is_cell_read(v)) {
+                verr(ctx, "func '%s': v%u retains a mutable-capture cell-read marker after close",
+                     f->name, v->id);
+                return;
+            }
+
             if (v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
                 int idx = v->aux_int;
                 if (idx < 0 || idx >= (int) f->ncaptures) {
@@ -1757,6 +1799,55 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
                          "but function has %u captures",
                          f->name, v->id, xi_op_name(v->op), blk->id, idx, f->ncaptures);
                     return;
+                }
+                if (f->captures[idx].needs_cell && v->op == XI_STORE_UPVAL) {
+                    verr(ctx,
+                         "func '%s': v%u stores a mutable capture through STORE_UPVAL after close",
+                         f->name, v->id);
+                    return;
+                }
+                if (f->stage == XI_STAGE_CLOSED && f->captures[idx].needs_cell &&
+                    v->op == XI_LOAD_UPVAL && !closed_cell_load_has_only_explicit_uses(f, v)) {
+                    verr(ctx,
+                         "func '%s': v%u loads a mutable capture cell but has a non-cell use",
+                         f->name, v->id);
+                    return;
+                }
+            }
+
+            if (f->stage == XI_STAGE_CLOSED &&
+                (v->op == XI_CELL_GET || v->op == XI_CELL_SET) &&
+                (v->nargs == 0 || !closed_is_cell_reference(f, v->args[0]))) {
+                verr(ctx, "func '%s': v%u %s does not reference an explicit cell value", f->name,
+                     v->id, xi_op_name(v->op));
+                return;
+            }
+
+            if (v->op == XI_CLOSURE_NEW) {
+                XiFunc *child = (XiFunc *) v->aux;
+                if (!child || v->nargs != child->ncaptures) {
+                    verr(ctx,
+                         "func '%s': v%u closure capture count %u does not match child count %u",
+                         f->name, v->id, v->nargs, child ? child->ncaptures : 0);
+                    return;
+                }
+                for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                    const XiCapture *cap = &child->captures[ci];
+                    if (!cap->needs_cell)
+                        continue;
+                    if (cap->source != XI_CAPTURE_SRC_REG || !v->args[ci]) {
+                        verr(ctx,
+                             "func '%s': v%u mutable capture %u is not an explicit register cell",
+                             f->name, v->id, ci);
+                        return;
+                    }
+                    if (f->stage == XI_STAGE_CLOSED &&
+                        (!closed_is_cell_reference(f, v->args[ci]) || cap->value != v->args[ci])) {
+                        verr(ctx,
+                             "func '%s': v%u mutable capture %u does not point at its cell XiValue",
+                             f->name, v->id, ci);
+                        return;
+                    }
                 }
             }
         }

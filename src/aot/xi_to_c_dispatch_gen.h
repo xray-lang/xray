@@ -64,6 +64,9 @@
     X(SET_SHARED, "xi.set.shared", xicgen_set_shared) \
     X(IMPORT_REF, "xi.import.ref", xicgen_import_ref) \
     X(CLOSURE_NEW, "xi.closure.new", xicgen_closure_new) \
+    X(CELL_NEW, "xi.cell.new", xicgen_cell_new) \
+    X(CELL_GET, "xi.cell.get", xicgen_cell_get) \
+    X(CELL_SET, "xi.cell.set", xicgen_cell_set) \
     X(LOAD_UPVAL, "xi.load.upval", xicgen_load_upval) \
     X(STORE_UPVAL, "xi.store.upval", xicgen_store_upval) \
     X(ASSERT, "xi.assert", xicgen_assert) \
@@ -118,6 +121,8 @@
     X(ENUM_DESCRIPTOR_UNBOX, "xi.enum.descriptor.unbox", xicgen_enum_descriptor_unbox) \
     X(LOAD_FIELD, "xi.load.field", xicgen_load_field) \
     X(STORE_FIELD, "xi.store.field", xicgen_store_field) \
+    X(WEAK_LOAD_FIELD, "xi.weak.load.field", xicgen_load_field) \
+    X(WEAK_STORE_FIELD, "xi.weak.store.field", xicgen_store_field) \
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
     X(ENUM_VARIANT_AT, "xi.enum.variant.at", xicgen_enum_variant_at) \

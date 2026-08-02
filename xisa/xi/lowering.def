@@ -326,8 +326,26 @@
 (lower xi.closure.new
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_closure_new :raw-cell-args yes :handles-cell-dst yes)
+  :vm-bytecode (driver xi_emit_closure_new)
   :aot-c (driver xicgen_closure_new))
+
+(lower xi.cell.new
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_cell_new)
+  :aot-c (driver xicgen_cell_new))
+
+(lower xi.cell.get
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_cell_get)
+  :aot-c (driver xicgen_cell_get))
+
+(lower xi.cell.set
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_cell_set)
+  :aot-c (driver xicgen_cell_set))
 
 (lower xi.load.upval
   :match ()
@@ -520,7 +538,7 @@
 (lower xi.release
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_release :raw-cell-args yes)
+  :vm-bytecode (driver xi_emit_release)
   :aot-c (driver xicgen_release))
 
 (lower xi.stack.alloc
@@ -709,6 +727,18 @@
   :aot-c (driver xicgen_load_field))
 
 (lower xi.store.field
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_store_field)
+  :aot-c (driver xicgen_store_field))
+
+(lower xi.weak.load.field
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_load_field)
+  :aot-c (driver xicgen_load_field))
+
+(lower xi.weak.store.field
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_store_field)

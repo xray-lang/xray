@@ -63,6 +63,9 @@
     X(SET_SHARED, xi_emit_set_shared) \
     X(IMPORT_REF, xi_emit_import_ref) \
     X(CLOSURE_NEW, xi_emit_closure_new) \
+    X(CELL_NEW, xi_emit_cell_new) \
+    X(CELL_GET, xi_emit_cell_get) \
+    X(CELL_SET, xi_emit_cell_set) \
     X(LOAD_UPVAL, xi_emit_load_upval) \
     X(STORE_UPVAL, xi_emit_store_upval) \
     X(ASSERT, xi_emit_assert) \
@@ -127,6 +130,8 @@
     X(ENUM_DESCRIPTOR_UNBOX, xi_emit_enum_descriptor_unbox) \
     X(LOAD_FIELD, xi_emit_load_field) \
     X(STORE_FIELD, xi_emit_store_field) \
+    X(WEAK_LOAD_FIELD, xi_emit_load_field) \
+    X(WEAK_STORE_FIELD, xi_emit_store_field) \
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
     X(ENUM_VARIANT_AT, xi_emit_enum_variant_at) \
@@ -280,25 +285,6 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
         case XI_CHAN_RECV: return true;
         case XI_CHAN_TRY_RECV: return true;
         case XI_SELECT_BLOCK: return true;
-        case XI_OP_COUNT: return false;
-        default: return false;
-    }
-    return false;
-}
-
-static inline bool xi_emit_vm_uses_raw_cell_args(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_CLOSURE_NEW: return true;
-        case XI_RELEASE: return true;
-        case XI_OP_COUNT: return false;
-        default: return false;
-    }
-    return false;
-}
-
-static inline bool xi_emit_vm_handles_cell_dst(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_CLOSURE_NEW: return true;
         case XI_OP_COUNT: return false;
         default: return false;
     }

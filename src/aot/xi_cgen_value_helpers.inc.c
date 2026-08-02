@@ -8,10 +8,6 @@
  * xi_cgen_value_helpers.inc.c - AOT scalar value emission helpers
  */
 
-static void emit_cell_ref(FILE *out, XiVarId var_id) {
-    fprintf(out, "cell_%u", (unsigned) var_id);
-}
-
 static void emit_c_float_literal(FILE *out, double value) {
     if (isnan(value)) {
         fprintf(out, "NAN");
@@ -80,23 +76,8 @@ static bool xicgen_defer_mark(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     return true;
 }
 
-static void emit_cell_get_for_rep(FILE *out, const XiValue *v, const char *cell_expr) {
-    XrRep rep = cg_rep(v);
-    if (rep == XR_REP_TAGGED) {
-        fprintf(out, "xrt_cell_get(%s)", cell_expr);
-    } else if (rep == XR_REP_PTR) {
-        fprintf(out, "xrt_cell_get(%s).ptr", cell_expr);
-    } else if (rep == XR_REP_RAWPTR) {
-        fprintf(out, "(void *)(uintptr_t)XR_TO_INT(xrt_cell_get(%s))", cell_expr);
-    } else if (rep == XR_REP_F64) {
-        fprintf(out, "xrt_cell_get(%s).f", cell_expr);
-    } else {
-        fprintf(out, "xrt_cell_get(%s).i", cell_expr);
-    }
-}
-
 /* Read a non-cell upvalue stored as a tagged XrValue and unbox it to the
- * declared storage rep of the consuming local (mirrors emit_cell_get_for_rep).
+ * declared storage rep of the consuming local.
  * Callers pass the storage rep (cg_value_decl_storage_rep), not cg_rep: a native
  * class instance has cg_rep == TAGGED but a PTR storage local, so without this a
  * captured instance is read as a raw XrValue into a `void *` slot — a C type
@@ -113,15 +94,6 @@ static void emit_upval_get_for_rep(FILE *out, XrRep rep, const char *up_expr) {
     } else {
         fprintf(out, "%s.i", up_expr);
     }
-}
-
-static bool cg_value_has_cell(const XiCgenCtx *ctx, const XiValue *v) {
-    return ctx && v && xi_var_id_is_valid(v->var_id) && v->var_id < ctx->cell_var_count &&
-           ctx->cell_vars[v->var_id];
-}
-
-static bool cg_value_is_cell_origin(const XiCgenCtx *ctx, const XiValue *v) {
-    return cg_value_has_cell(ctx, v) && ctx->cell_origins[v->var_id] == v;
 }
 
 static bool cg_value_has_structural_use(const XiFunc *f, const XiValue *target) {
@@ -153,7 +125,8 @@ static bool cg_value_has_structural_use(const XiFunc *f, const XiValue *target) 
 }
 
 static bool cg_value_is_dead_aot_marker(const XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || cg_value_has_cell(ctx, v) || cg_value_has_structural_use(f, v))
+    (void) ctx;
+    if (!v || cg_value_has_structural_use(f, v))
         return false;
     if (v->flags &
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
@@ -168,135 +141,6 @@ static bool cg_value_is_dead_aot_marker(const XiCgenCtx *ctx, const XiFunc *f, c
             return true;
         default:
             return false;
-    }
-}
-
-static void cg_note_var_id(const XiValue *v, uint32_t *max_var_id, bool *has_var_id) {
-    if (!v || !xi_var_id_is_valid(v->var_id))
-        return;
-    if (!*has_var_id || v->var_id > *max_var_id)
-        *max_var_id = v->var_id;
-    *has_var_id = true;
-}
-
-static bool cg_value_is_closure_alloc(const XiValue *v) {
-    return v &&
-           (v->op == XI_CLOSURE_NEW || (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) &&
-           v->aux;
-}
-
-static uint32_t cg_cell_var_count_for_func(const XiFunc *f) {
-    uint32_t max_var_id = 0;
-    bool has_var_id = false;
-    if (!f)
-        return 0;
-
-    for (uint16_t i = 0; i < f->nparams; i++)
-        cg_note_var_id(f->params[i], &max_var_id, &has_var_id);
-
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control)
-            cg_note_var_id(blk->control, &max_var_id, &has_var_id);
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
-            cg_note_var_id(&phi->value, &max_var_id, &has_var_id);
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            cg_note_var_id(v, &max_var_id, &has_var_id);
-            if (!cg_value_is_closure_alloc(v))
-                continue;
-            const XiFunc *child = (const XiFunc *) v->aux;
-            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
-                const XiCapture *cap = &child->captures[ci];
-                cg_note_var_id(cap->value, &max_var_id, &has_var_id);
-                if (ci < v->nargs)
-                    cg_note_var_id(v->args[ci], &max_var_id, &has_var_id);
-            }
-        }
-    }
-
-    return has_var_id ? max_var_id + 1u : 0u;
-}
-
-static bool cg_reset_cell_var_tables(XiCgenCtx *ctx, const XiFunc *f) {
-    uint32_t need = cg_cell_var_count_for_func(f);
-    if (need == 0) {
-        ctx->cell_var_count = 0;
-        return true;
-    }
-    if (need > ctx->cell_var_count) {
-        bool *new_vars = (bool *) xr_realloc(ctx->cell_vars, (size_t) need * sizeof(*new_vars));
-        bool *new_release_vars =
-            (bool *) xr_realloc(ctx->cell_release_vars, (size_t) need * sizeof(*new_release_vars));
-        bool *new_heap_capture_vars = (bool *) xr_realloc(
-            ctx->cell_heap_capture_vars, (size_t) need * sizeof(*new_heap_capture_vars));
-        const XiValue **new_origins =
-            (const XiValue **) xr_realloc(ctx->cell_origins, (size_t) need * sizeof(*new_origins));
-        if (!new_vars || !new_release_vars || !new_heap_capture_vars || !new_origins) {
-            ctx->cell_vars = new_vars ? new_vars : ctx->cell_vars;
-            ctx->cell_release_vars = new_release_vars ? new_release_vars : ctx->cell_release_vars;
-            ctx->cell_heap_capture_vars =
-                new_heap_capture_vars ? new_heap_capture_vars : ctx->cell_heap_capture_vars;
-            ctx->cell_origins = new_origins ? new_origins : ctx->cell_origins;
-            ctx->cell_var_count = 0;
-            ctx->error = true;
-            return false;
-        }
-        ctx->cell_vars = new_vars;
-        ctx->cell_release_vars = new_release_vars;
-        ctx->cell_heap_capture_vars = new_heap_capture_vars;
-        ctx->cell_origins = new_origins;
-        ctx->cell_var_count = need;
-    }
-    memset(ctx->cell_vars, 0, (size_t) ctx->cell_var_count * sizeof(*ctx->cell_vars));
-    memset(ctx->cell_release_vars, 0,
-           (size_t) ctx->cell_var_count * sizeof(*ctx->cell_release_vars));
-    memset(ctx->cell_heap_capture_vars, 0,
-           (size_t) ctx->cell_var_count * sizeof(*ctx->cell_heap_capture_vars));
-    memset(ctx->cell_origins, 0, (size_t) ctx->cell_var_count * sizeof(*ctx->cell_origins));
-    return true;
-}
-
-static void cg_prepare_cell_vars(XiCgenCtx *ctx, const XiFunc *f) {
-    if (!cg_reset_cell_var_tables(ctx, f))
-        return;
-    if (!f)
-        return;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!cg_value_is_closure_alloc(v))
-                continue;
-            const XiFunc *child = (const XiFunc *) v->aux;
-            if (!child)
-                continue;
-            bool stack_closure = v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW;
-            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
-                const XiCapture *cap = &child->captures[ci];
-                if (!cap->needs_cell || cap->source != XI_CAPTURE_SRC_REG)
-                    continue;
-                const XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-                if (!cap_val || !xi_var_id_is_valid(cap_val->var_id) ||
-                    cap_val->var_id >= ctx->cell_var_count)
-                    continue;
-                XiVarId var_id = cap_val->var_id;
-                ctx->cell_vars[var_id] = true;
-                if (stack_closure) {
-                    if (!ctx->cell_heap_capture_vars[var_id])
-                        ctx->cell_release_vars[var_id] = true;
-                } else {
-                    ctx->cell_heap_capture_vars[var_id] = true;
-                    ctx->cell_release_vars[var_id] = false;
-                }
-                if (!ctx->cell_origins[var_id])
-                    ctx->cell_origins[var_id] = cap_val;
-            }
-        }
     }
 }
 
@@ -1225,17 +1069,16 @@ static void emit_closure_upval_initializers(XiCgenCtx *ctx, FILE *out, const XiF
     uint16_t ncap = child ? child->ncaptures : 0;
     for (uint16_t ci = 0; ci < ncap; ci++) {
         XiCapture *cap = &child->captures[ci];
-        if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
-            const XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-            fprintf(out, "_c->upvals[%u] = ", ci);
-            if (cap_val && cg_value_has_cell(ctx, cap_val))
-                emit_cell_ref(out, cap_val->var_id);
-            else if (cap_val)
-                emit_vref(out, cap_val);
-            else
-                fprintf(out, "XR_NULL_VAL");
-            fprintf(out, "; ");
-        } else if (ci < v->nargs && v->args[ci]) {
+        if (cap->needs_cell &&
+            (cap->source != XI_CAPTURE_SRC_REG || ci >= v->nargs || !v->args[ci])) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: mutable closure capture '%s' has no explicit cell XiValue\n",
+                    cap->name ? cap->name : "?");
+            fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
+            continue;
+        }
+        if (ci < v->nargs && v->args[ci]) {
             /* Upvals are stored as tagged XrValues; convert the capture from
              * its declared storage rep to TAGGED (e.g. box an all-scalar
              * native class instance via xrt_box_obj) so the assignment is

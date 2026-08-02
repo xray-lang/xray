@@ -3787,8 +3787,7 @@ static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
      * initializer, so the two must reach the same representation or the
      * declaration and the constructor disagree.  The analysis below reads only
      * the function body, which is identical in both passes. */
-    if (!ctx || !f || !target || target != value || cg_value_has_cell(ctx, target) ||
-        !cg_array_is_native_local_alloc(target))
+    if (!ctx || !f || !target || target != value || !cg_array_is_native_local_alloc(target))
         return false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {

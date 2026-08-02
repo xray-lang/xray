@@ -136,11 +136,9 @@ static inline bool xr_weak_instance_field_load(XrInstance *inst, int index, XrVa
 
 /* Writes a weak slot and returns true; false if index is not weak.
  *
- * `val` is deliberately not released: ARC never moves it in, because
- * XI_LOWERING_FLAG_WEAK_FIELD_STORE marks the store non-consuming. The source
- * keeps its own death point — that is what lets the target outlive the
- * assignment. The handle previously in the slot IS released, so re-pointing a
- * weak field does not leak it.
+ * `val` is deliberately not released: XI_WEAK_STORE_FIELD is non-consuming,
+ * so ARC keeps the source's own death point. The handle previously in the slot
+ * IS released, so re-pointing a weak field does not leak it.
  *
  * The heap comes from the caller, not from xr_current_coro_heap(): that one
  * reads the worker's TLS, which is empty while top-level script code runs. A

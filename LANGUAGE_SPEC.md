@@ -4166,6 +4166,10 @@ print(c())      // 2
 
 - The closure and the original variable **share state**.
 - After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
+- Every read/write capture has exactly one shared cell. Outer assignments and
+  every capturing closure access that same cell; the cell and each newly stored
+  value follow ordinary strong-reference transfers and releases, with no hidden
+  keepalive rule.
 
 #### Closure optimization
 

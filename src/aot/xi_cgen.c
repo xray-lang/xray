@@ -700,11 +700,6 @@ struct XiCgenCtx {
     char **emitted_func_names;
     int nemitted_funcs;
     int emitted_funcs_cap;
-    bool *cell_vars;
-    bool *cell_release_vars;
-    bool *cell_heap_capture_vars;
-    const XiValue **cell_origins;
-    uint32_t cell_var_count;
     /* Per-function phi coalescing: value-id-indexed map from a phi's SSA id to
      * the SSA id of the C variable it shares (identity = its own). Built by
      * cg_build_phi_coalesce for the normal (non-coro) emission path; phi_repr_active
@@ -5075,18 +5070,6 @@ static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "    xrt_defer_leave(&_xrt_ds);\n");
 }
 
-static void emit_cell_var_releases(XiCgenCtx *ctx, FILE *out) {
-    if (!ctx || !ctx->cell_release_vars)
-        return;
-    for (uint32_t var_id = 0; var_id < ctx->cell_var_count; var_id++) {
-        if (!ctx->cell_release_vars[var_id])
-            continue;
-        fprintf(out, "    xrt_release(");
-        emit_cell_ref(out, (XiVarId) var_id);
-        fprintf(out, ");\n");
-    }
-}
-
 static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     if (cg_func_return_abi_is_aggregate(ctx, f)) {
         emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
@@ -5165,7 +5148,6 @@ static void emit_fallthrough_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
-    emit_cell_var_releases(ctx, out);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "    return;\n");
     } else {
@@ -5684,8 +5666,7 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
 static bool cg_struct_place_load_only_feeds_direct_fields(XiCgenCtx *ctx, const XiFunc *f,
                                                           const XiValue *target) {
     if (!ctx || !f || !target || target->op != XI_PLACE_LOAD || target->nargs != 1 ||
-        !target->args[0] || !cg_value_plan_is_struct_aggregate(ctx, target) ||
-        cg_value_has_cell(ctx, target))
+        !target->args[0] || !cg_value_plan_is_struct_aggregate(ctx, target))
         return false;
     if (target->flags &
         (XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT))
@@ -5736,8 +5717,7 @@ static bool cg_struct_place_load_only_feeds_direct_fields(XiCgenCtx *ctx, const 
 static bool cg_struct_ptr_load_only_feeds_raw_deref_address(XiCgenCtx *ctx, const XiFunc *f,
                                                             const XiValue *target) {
     if (!ctx || !f || !target || target->op != XI_PTR_LOAD || target->nargs < 1 ||
-        !target->args[0] || !cg_value_plan_is_struct_aggregate(ctx, target) ||
-        cg_value_has_cell(ctx, target))
+        !target->args[0] || !cg_value_plan_is_struct_aggregate(ctx, target))
         return false;
     if (target->flags &
         (XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT))
@@ -5834,7 +5814,7 @@ static bool cg_value_only_feeds_slice_from_ptr_owner(const XiFunc *f, const XiVa
 static bool cg_struct_scalar_field_load_has_no_release_value_use(XiCgenCtx *ctx, const XiFunc *f,
                                                                  const XiValue *target) {
     if (!ctx || !f || !target || target->op != XI_AGG_GET || target->nargs < 1 ||
-        !target->args[0] || !target->aux || cg_value_has_cell(ctx, target))
+        !target->args[0] || !target->aux)
         return false;
     const XrAggregateLayout *layout = (const XrAggregateLayout *) target->aux;
     const XrAggregateFieldLayout *field = cg_struct_field(layout, target->aux_int);
@@ -6545,7 +6525,7 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
 
 static bool cg_native_box_value_is_elided_in_aot(XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
-    if (!ctx || !f || cg_value_has_cell(ctx, v))
+    if (!ctx || !f)
         return false;
     if (cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
@@ -6853,7 +6833,7 @@ static bool cg_forwarded_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc
 }
 
 static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!ctx || !f || !v || v->op != XI_CONST || !v->type || cg_value_has_cell(ctx, v))
+    if (!ctx || !f || !v || v->op != XI_CONST || !v->type)
         return false;
     if (v->type->kind != XR_KIND_INT && v->type->kind != XR_KIND_BOOL &&
         v->type->kind != XR_KIND_RUNE && v->type->kind != XR_KIND_FLOAT &&
@@ -6884,8 +6864,7 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                 if (phi->value.args[a] != v)
                     continue;
                 seen_use = true;
-                if (cg_value_has_cell(ctx, &phi->value) ||
-                    cg_value_plan_is_aggregate(ctx, &phi->value) ||
+                if (cg_value_plan_is_aggregate(ctx, &phi->value) ||
                     cg_value_plan_is_vector(ctx, &phi->value))
                     return false;
             }
@@ -6934,7 +6913,7 @@ static bool cg_module_namespace_field_ignores_receiver(XiCgenCtx *ctx, const XiF
 }
 
 static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!ctx || !f || !v || v->op != XI_IMPORT_REF || !v->aux || cg_value_has_cell(ctx, v))
+    if (!ctx || !f || !v || v->op != XI_IMPORT_REF || !v->aux)
         return false;
     bool seen_use = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -6976,7 +6955,7 @@ static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, 
  * the slot value entirely.  Source-bound values are emitted only behind the
  * debug-local guard so their source synchronization remains exact. */
 static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!ctx || !f || !v || v->op != XI_GET_SHARED || v->aux_int < 0 || cg_value_has_cell(ctx, v))
+    if (!ctx || !f || !v || v->op != XI_GET_SHARED || v->aux_int < 0)
         return false;
     const XiModule *owner_mod = cg_module_for_func(ctx, f);
     if (!owner_mod || v->aux_int >= owner_mod->nslots)
@@ -7059,7 +7038,7 @@ static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
 
 static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiValue *v) {
-    if (!ctx || !f || !v || cg_value_has_cell(ctx, v))
+    if (!ctx || !f || !v)
         return false;
     if (cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
@@ -7136,7 +7115,7 @@ static uint32_t cg_coalesced_c_value_id(const XiFunc *f, const XiValue *v) {
 static bool cg_fixed_array_wrapper_has_no_release_use(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *v) {
     if (!ctx || !f || !v || (v->op != XI_FIXED_ARRAY_NEW && v->op != XI_FIXED_BYTES_CONST) ||
-        cg_func_needs_aot_coro_ctx(ctx, f) || cg_value_has_cell(ctx, v))
+        cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
 
     uint32_t root_id = cg_coalesced_c_value_id(f, v);
@@ -7198,7 +7177,7 @@ static bool cg_span_phi_snapshot_has_no_release_use(XiCgenCtx *ctx, const XiFunc
     if (!ctx || !f || !target || target->nargs != 1 || !target->args[0] ||
         target->args[0]->op != XI_PHI || !cg_value_plan_is_span_aggregate(ctx, target) ||
         !cg_value_plan_is_span_aggregate(ctx, target->args[0]) ||
-        cg_func_needs_aot_coro_ctx(ctx, f) || cg_value_has_cell(ctx, target))
+        cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
     if (target->op != XI_COPY && target->op != XI_SOURCE_MOVE && target->op != XI_OWNER_FORWARD &&
         target->op != XI_BOX && target->op != XI_UNBOX)
@@ -7439,7 +7418,7 @@ static bool cg_static_enum_namespace_value_is_elided(XiCgenCtx *ctx, const XiFun
 static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *v) {
     if (!ctx || !f || !v || cg_value_has_actual_ir_use(f, v) || cg_is_void_like(v) ||
-        cg_value_has_cell(ctx, v) || cg_debug_value_has_source_storage(ctx, f, v))
+        cg_debug_value_has_source_storage(ctx, f, v))
         return false;
     return v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
            v->op == XI_CALL_BUILTIN;
@@ -7500,7 +7479,7 @@ static bool cg_vec_shuffle_use_tree_is_fused(XiCgenCtx *ctx, const XiFunc *f, co
 
 static bool cg_vec_shuffle_only_feeds_fused_widen_mul(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *v) {
-    if (!ctx || !f || !v || v->op != XI_VEC_SHUFFLE || cg_value_has_cell(ctx, v) ||
+    if (!ctx || !f || !v || v->op != XI_VEC_SHUFFLE ||
         cg_debug_value_has_source_storage(ctx, f, v))
         return false;
     bool saw_fused = false;
@@ -7527,7 +7506,7 @@ static bool cg_u64_mul_wide_value_is_eligible(XiCgenCtx *ctx, const XiFunc *f, c
         !v->args[0] || !v->args[1] || !v->type || v->type->kind != XR_KIND_INT ||
         v->type->is_nullable || v->type->scalar_rep != XR_NATIVE_U64 || cg_rep(v) != XR_REP_I64 ||
         cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64 ||
-        cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 || cg_value_has_cell(ctx, v) ||
+        cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
         strcmp(local_ctype_str_ctx(ctx, f, v), "uint64_t") != 0)
         return false;
     if (f->phi_coalesce && v->id < f->phi_coalesce_count && f->phi_coalesce[v->id] != v->id)
@@ -7986,9 +7965,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_typed_array_map_inline_stmt(ctx, out, f, prefix, v) ||
         emit_typed_array_filter_inline_stmt(ctx, out, f, prefix, v))
         return;
-    bool cell_origin = cg_value_is_cell_origin(ctx, v);
-    bool cell_update = cg_value_has_cell(ctx, v) && !cell_origin;
-
     if (ctx->pre_decl_all && !debug_only_value) {
         /* Variable already declared at function top — emit assignment */
         fprintf(out, "    ");
@@ -8006,19 +7982,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     emit_typed_array_data_cache_decl(ctx, out, v);
     emit_value_generated_line_reset(ctx, out, v);
     emit_debug_source_var_sync(ctx, out, f, v);
-    if (cell_origin) {
-        fprintf(out, "    ");
-        emit_cell_ref(out, v->var_id);
-        fprintf(out, " = xrt_cell_new(");
-        emit_boxed_value_ref(out, v);
-        fprintf(out, ");\n");
-    } else if (cell_update) {
-        fprintf(out, "    xrt_cell_set(");
-        emit_cell_ref(out, v->var_id);
-        fprintf(out, ", ");
-        emit_boxed_value_ref(out, v);
-        fprintf(out, ");\n");
-    }
     if (debug_only_value)
         fprintf(out, "#endif\n");
 }
@@ -8052,14 +8015,9 @@ static bool cg_phi_copy_should_emit(XiCgenCtx *ctx, const XiFunc *f, const XiPhi
 
 static void emit_phi_incoming_as_rep(XiCgenCtx *ctx, FILE *out, const XiPhi *phi, uint16_t pred_idx,
                                      bool pred_ran_defer) {
+    (void) pred_ran_defer;
     const XiValue *incoming =
         (phi && pred_idx < phi->value.nargs) ? phi->value.args[pred_idx] : NULL;
-    if (pred_ran_defer && cg_value_has_cell(ctx, &phi->value)) {
-        char cell_expr[64];
-        snprintf(cell_expr, sizeof(cell_expr), "cell_%u", (unsigned) phi->value.var_id);
-        emit_cell_get_for_rep(out, &phi->value, cell_expr);
-        return;
-    }
     if (cg_value_plan_is_aggregate(ctx, &phi->value)) {
         if (cg_value_plan_is_aggregate(ctx, incoming)) {
             emit_vref(out, incoming);
@@ -8519,16 +8477,6 @@ static bool cg_value_terminates_c_path(const XiValue *v) {
  * semantics are preserved. Requires no defer / exception / cell-var cleanup, since
  * nothing may run between the call and the return under musttail, and the caller's
  * scalar return rep must match the call so the call is returned without conversion. */
-static bool cg_func_has_cell_releases(const XiCgenCtx *ctx) {
-    if (!ctx || !ctx->cell_release_vars)
-        return false;
-    for (uint32_t i = 0; i < ctx->cell_var_count; i++) {
-        if (ctx->cell_release_vars[i])
-            return true;
-    }
-    return false;
-}
-
 static bool cg_block_owns_final_call(const XiBlock *blk, const XiValue *call) {
     if (!blk || !call || call->block != blk)
         return false;
@@ -8604,7 +8552,7 @@ static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, co
         !cg_cfn_musttail_abi_compatible(ctx, f, callee->type, call))
         return NULL;
     /* Nothing may run between the tail call and the return under musttail. */
-    if (cg_has_exception_handling(f) || cg_func_has_defer_stmt(f) || cg_func_has_cell_releases(ctx))
+    if (cg_has_exception_handling(f) || cg_func_has_defer_stmt(f))
         return NULL;
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
     if (ret_rep == XR_REP_VOID || cg_func_return_abi_is_aggregate(ctx, f))
@@ -8671,7 +8619,6 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                 break;
             if (emit_class_native_return_stmt(ctx, out, f, blk))
                 break;
-            emit_cell_var_releases(ctx, out);
             if (blk->control) {
                 XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
                 if (ret_rep == XR_REP_VOID) {
@@ -9017,7 +8964,7 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
                                                      const XiValue *alias, const XiValue *source) {
     if (!ctx || !f || !alias || !source || alias->nargs != 1 || alias->args[0] != source)
         return false;
-    if (source->op == XI_PHI || cg_value_has_cell(ctx, alias) || cg_value_has_cell(ctx, source))
+    if (source->op == XI_PHI)
         return false;
     if (alias->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
                         XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT))
@@ -9174,14 +9121,6 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
 static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     bool pre_decl_all = ctx->pre_decl_all;
     bool needs_defensive_init = cg_has_exception_handling(f);
-
-    for (uint32_t var_id = 0; var_id < ctx->cell_var_count; var_id++) {
-        if (!ctx->cell_vars[var_id])
-            continue;
-        fprintf(out, "    XrValue ");
-        emit_cell_ref(out, (XiVarId) var_id);
-        fprintf(out, " = XR_NULL_VAL;\n");
-    }
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -11590,7 +11529,6 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
      * choices made by emit_value_stmt. */
     ctx->pre_decl_all =
         ctx->c_dialect == XI_CGEN_C_DIALECT_C90 || f->nblocks > 1 || cg_has_exception_handling(f);
-    cg_prepare_cell_vars(ctx, f);
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
     emit_declarations(ctx, out, f);

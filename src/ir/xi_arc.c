@@ -462,8 +462,6 @@ static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
     /* A weak field load promotes (W1): its result is a fresh strong reference,
      * not a borrow of something the object owns — the object owns only the
      * handle. Treating it as a borrow would leak the promotion. */
-    if (xi_value_is_weak_field_load(value))
-        return false;
     if (op_produces_borrow(value->op))
         return true;
     switch (value->op) {
@@ -731,65 +729,11 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
  * alloc, not a scalar, produces an owning reference (not a borrow). */
-/* A later definition of a variable that a child closure captures by cell.
- *
- * The variable has exactly ONE cell, created by OP_CELL_NEW at its first
- * definition; every later assignment is an OP_CELL_SET that only swaps the
- * contents. The emitter maps each defining value onto the cell's register, so
- * ARC — which places one drop per definition — would release the cell once per
- * assignment while only one reference was ever created. Two assignments and the
- * cell dies underneath the closure still reading it.
- *
- * The first definition keeps its drop: that one really does own the cell. Only
- * the later ones are skipped, and what they store is moved into the cell by
- * OP_CELL_SET, which takes the value and releases the previous one.
- *
- * Matched on var_id because a capture's recorded value may point at a PHI that
- * optimization has since eliminated. */
-static bool arc_is_later_def_of_captured_cell(const XiFunc *f, const XiValue *v) {
-    if (!f || !v || v->var_id == XI_NO_VAR_ID)
-        return false;
-    bool captured_by_cell = false;
-    for (uint16_t c = 0; c < f->nchildren && !captured_by_cell; c++) {
-        const XiFunc *child = f->children[c];
-        if (!child || !child->captures)
-            continue;
-        for (uint16_t i = 0; i < child->ncaptures; i++) {
-            const XiCapture *cap = &child->captures[i];
-            if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG && cap->value &&
-                cap->value->var_id == v->var_id) {
-                captured_by_cell = true;
-                break;
-            }
-        }
-    }
-    if (!captured_by_cell)
-        return false;
-    /* Is some earlier value in RPO already a definition of this variable? */
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        const XiBlock *blk = f->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            const XiValue *other = blk->values[i];
-            if (!other)
-                continue;
-            if (other == v)
-                return false; /* reached v first: this is the defining one */
-            if (other->var_id == v->var_id && xi_own_type_is_rc(other->type))
-                return true; /* an earlier definition already owns the cell */
-        }
-    }
-    return false;
-}
-
 static bool tracks_rc(const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_STACK_ALLOC)
         return v->aux_int == XI_CLOSURE_NEW && xi_own_type_is_rc(v->type);
-    if (xi_value_is_weak_field_load(v))
-        return xi_own_type_is_rc(v->type); /* promoted: owned, so track it */
     if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
     /* Call results: precise per-callee summaries classify fresh (+1) results
@@ -943,8 +887,6 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
     }
 
-    if (xi_value_is_weak_field_load(value))
-        return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
     if (op_produces_borrow(value->op))
         return arc_return_unknown();
     if (op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED)
@@ -1012,18 +954,6 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
 /* Collect consuming uses of `target` across the function, in program order.
  * The list grows dynamically; silently dropping a late consume would be a
  * memory-safety bug because ARC would miss a required retain. */
-static bool arc_capture_is_shared_cell(const XiValue *user, uint16_t arg_index) {
-    if (!user || !user->aux)
-        return false;
-    if (user->op != XI_CLOSURE_NEW &&
-        !(user->op == XI_STACK_ALLOC && user->aux_int == XI_CLOSURE_NEW))
-        return false;
-    const XiFunc *child = (const XiFunc *) user->aux;
-    if (arg_index >= child->ncaptures || !child->captures)
-        return false;
-    return child->captures[arg_index].needs_cell;
-}
-
 static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *sites) {
     XR_DCHECK(sites != NULL, "collect_consume_sites: NULL sites");
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -1041,22 +971,6 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                     stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, user))
                     continue;
                 if (!xi_own_value_arg_is_consuming(user, a))
-                    continue;
-                /* A weak store takes no ownership: the slot holds a handle and
-                 * the target's lifetime is untouched. Moving the value in would
-                 * end its life at the assignment — the exact opposite of what
-                 * `weak` means. The source keeps its own death point. */
-                if (xi_value_is_weak_field_store(user))
-                    continue;
-                /* A mutable capture is shared, not moved. The emitter rewrites
-                 * the variable's register in place (OP_CELL_NEW), so after the
-                 * closure is built BOTH the enclosing frame and the closure
-                 * read through the same cell — a cell no XiValue denotes, since
-                 * lowering never creates one. Treating the capture as a consume
-                 * ended the variable's life at the closure, and the enclosing
-                 * frame kept reading a freed cell. The closure's own +1 comes
-                 * from OP_CLOSURE, which retains any cell it captures. */
-                if (arc_capture_is_shared_cell(user, a))
                     continue;
                 /* A call argument the callee only borrows is not consumed: the
                  * caller keeps ownership and drops it at its death point (the
@@ -2060,8 +1974,6 @@ static void arc_insert_rec(XiFunc *f) {
             if (v && v->op != XI_PARAM &&
                 stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
-            if (v && v->op != XI_PARAM && arc_is_later_def_of_captured_cell(f, v))
-                continue; /* the cell is owned by this variable's first definition */
             if (v && v->op != XI_PARAM && tracks_rc(v) && !xi_value_vec_push(&targets, v)) {
                 xr_free(targets.items);
                 XR_CHECK(false, "xi_arc: out of memory collecting ARC targets");
@@ -2239,8 +2151,6 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
                 goto oom;
             if (v->op == XI_PARAM || stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v))
                 continue;
-            if (arc_is_later_def_of_captured_cell(f, v))
-                continue; /* the cell is owned by this variable's first definition */
             if (tracks_rc(v) && !xi_value_vec_push(&targets, v))
                 goto oom;
         }

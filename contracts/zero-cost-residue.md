@@ -6,6 +6,9 @@ source controls never assert zero cost, effects, allocation, safety, ownership,
 linkage, or ABI. A request may alter one native shape dimension, while typed
 verification assets determine whether the requested stage was actually
 reached. Residue categories and allowance semantics are unchanged.
+Task 254 removes backend-only mutable-capture cell maps and emits the explicit
+Xi cell graph directly; this changes neither the residue categories nor their
+measurement point.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -65,6 +68,6 @@ that cite the affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c 69512e03d216f5f9b28f5b2e5f64466d281bae97a8970e5c6b923c6d3885ea26
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c dad9f53f56cf97455681e906ce3316bbc1ca52bc485211f7ee7dc98da5574d3c
+anchor-sha256: src/aot/xi_cgen.c ccfbf24176c4567842a9ba2c2d9031cac0e1827ee17a93b816de88d58e52bc13
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 0a1cff4b2732570397990c6d9b85320dd679aece9c0c0c0082af996363fea70d
 anchor-sha256: src/app/cli/xcmd_verify.c 932ea0eba80546c8eded92dfa6dc1aa50d72f5f1581bfe309596e417585e9216

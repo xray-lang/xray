@@ -5,7 +5,11 @@ Status: frozen by task 220.
 For every RC-managed value, including registered identity aliases:
 
 - C1: a release must not precede a later use on the same path without a
-  compensating retain.
+  compensating retain. A mutable closure capture is represented by one
+  first-class cell value: `cell.new` owns that RC object, `cell.get` borrows
+  from it, `cell.set` stores a new owned payload, and every closure capture of
+  it is an ordinary consume/retain path. Emitters and ARC may not synthesize a
+  hidden cell, cell destination, or cell-specific release exception.
 - C2: reference-count changes are path-balanced for local death, return
   transfer, and move-out; double release is invalid.
 - C2a: every reference-capable function return publishes a complete ownership

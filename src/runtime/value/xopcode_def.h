@@ -240,7 +240,7 @@
     _(SLICE, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B][R[C]:R[C+1]] (slice)")                             \
     _(CLOSURE, FMT_PROTO, KOP_PROTO, "R[A] = closure(XrProto[Bx])")                                \
     _(UPVAL_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = cl->upvals[B]")                                 \
-    _(CELL_NEW, FMT_A, KOP_A_INOUT, "R[A] = new_cell(R[A])")                                       \
+    _(CELL_NEW, FMT_ABC, KOP_AB_UNARY, "R[A] = new_cell(R[B])")                                    \
     _(CELL_GET, FMT_ABC, KOP_AB_UNARY, "R[A] = cell_deref(R[B])")                                  \
     _(CELL_SET, FMT_ABC, KOP_ABC_INPLACE, "cell_store(R[A], R[B])")                                \
     _(CLASS_CREATE_FROM_DESCRIPTOR, FMT_ABx, KOP_ABx_K, "R[A] = Class.from_descriptor(K[Bx])")     \

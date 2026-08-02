@@ -472,6 +472,30 @@ XiValue *xi_value_insert_after(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_
     return v;
 }
 
+XiValue *xi_value_insert_before(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_t op,
+                                struct XrType *type, uint16_t nargs) {
+    XiValue *v = value_alloc(f, blk, op, type, nargs);
+    if (!v)
+        return NULL;
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
+        return NULL;
+
+    uint32_t pos = blk->nvalues;
+    if (anchor) {
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] == anchor) {
+                pos = i;
+                break;
+            }
+        }
+    }
+    for (uint32_t i = blk->nvalues; i > pos; i--)
+        blk->values[i] = blk->values[i - 1];
+    blk->values[pos] = v;
+    blk->nvalues++;
+    return v;
+}
+
 /* ========== Constant Constructors ========== */
 
 XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type) {

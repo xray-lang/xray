@@ -36,6 +36,7 @@ static XrType stub_array = {.kind = XR_KIND_ARRAY, .id = 4, .frozen = true};
 static XrType stub_map = {.kind = XR_KIND_MAP, .id = 5, .frozen = true};
 static XrType stub_set = {.kind = XR_KIND_SET, .id = 6, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
+static XrType stub_function = {.kind = XR_KIND_FUNCTION, .id = 8, .frozen = true};
 
 static XiLoweredProgram *advance_to_lowered(XiFunc *f) {
     char error[512] = {0};
@@ -700,6 +701,128 @@ static void test_optimizer_invariant_failure_is_data(void) {
     printf("  PASS\n");
 }
 
+static void attach_only_child(XiFunc *parent, XiFunc *child) {
+    parent->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(parent->children != NULL);
+    parent->children[0] = child;
+    parent->nchildren = 1;
+    parent->children_cap = 1;
+    child->parent_func = parent;
+}
+
+static void test_close_materializes_first_class_capture_cells(void) {
+    printf("--- test_close_materializes_first_class_capture_cells ---\n");
+
+    XiFunc *root = xi_func_new("cell_root", &stub_function);
+    XiFunc *middle = xi_func_new("cell_middle", &stub_int);
+    XiFunc *leaf = xi_func_new("cell_leaf", &stub_int);
+    assert(root && middle && leaf);
+    attach_only_child(root, middle);
+    attach_only_child(middle, leaf);
+
+    XiBlock *root_entry = xi_block_new(root);
+    XiValue *first = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *second = xi_const_int(root, root_entry, 2, &stub_int);
+    first->var_id = 0;
+    second->var_id = 0;
+
+    middle->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = true,
+        .is_mutable = true,
+        .type = &stub_int,
+        .value = first,
+        .name = "value",
+    };
+    middle->ncaptures = 1;
+    XiValue *middle_closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 1);
+    middle_closure->aux = middle;
+    middle_closure->args[0] = first;
+    XiValue *local_read = xi_value_new(root, root_entry, XI_COPY, &stub_int, 1);
+    local_read->args[0] = second;
+    local_read->aux_int = XI_COPY_KIND_CELL_READ;
+    local_read->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM;
+    xi_block_set_return(root_entry, middle_closure);
+
+    XiBlock *middle_entry = xi_block_new(middle);
+    XiValue *middle_load = xi_value_new(middle, middle_entry, XI_LOAD_UPVAL, &stub_int, 0);
+    middle_load->aux_int = 0;
+    XiValue *replacement = xi_const_int(middle, middle_entry, 3, &stub_int);
+    XiValue *middle_store = xi_value_new(middle, middle_entry, XI_STORE_UPVAL, &stub_void, 1);
+    middle_store->aux_int = 0;
+    middle_store->args[0] = replacement;
+
+    leaf->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_UPVAL,
+        .index = 0,
+        .needs_cell = true,
+        .is_mutable = true,
+        .type = &stub_int,
+        .name = "value",
+    };
+    leaf->ncaptures = 1;
+    XiValue *leaf_closure = xi_value_new(middle, middle_entry, XI_CLOSURE_NEW, &stub_function, 1);
+    leaf_closure->aux = leaf;
+    leaf_closure->args[0] = NULL;
+    xi_block_set_return(middle_entry, middle_load);
+
+    XiBlock *leaf_entry = xi_block_new(leaf);
+    XiValue *leaf_load = xi_value_new(leaf, leaf_entry, XI_LOAD_UPVAL, &stub_int, 0);
+    leaf_load->aux_int = 0;
+    xi_block_set_return(leaf_entry, leaf_load);
+
+    char error[512] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(root, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(root);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    if (!closed)
+        fprintf(stderr, "cell close failed: %s\n", error);
+    assert(closed != NULL);
+
+    XiValue *cell = middle_closure->args[0];
+    assert(cell && cell->op == XI_CELL_NEW);
+    assert(middle->captures[0].value == cell);
+    assert(local_read->op == XI_CELL_GET && local_read->args[0] == cell);
+    unsigned cell_news = 0;
+    unsigned cell_sets = 0;
+    for (uint32_t i = 0; i < root_entry->nvalues; i++) {
+        cell_news += root_entry->values[i]->op == XI_CELL_NEW;
+        cell_sets += root_entry->values[i]->op == XI_CELL_SET;
+    }
+    assert(cell_news == 1);
+    assert(cell_sets == 2);
+
+    assert(middle_load->op == XI_CELL_GET);
+    assert(middle_store->op == XI_CELL_SET);
+    assert(leaf->captures[0].source == XI_CAPTURE_SRC_REG);
+    assert(leaf_closure->args[0] != NULL);
+    assert(leaf_closure->args[0]->op == XI_LOAD_UPVAL);
+    assert(leaf->captures[0].value == leaf_closure->args[0]);
+    assert(leaf_load->op == XI_CELL_GET);
+    assert(xi_verify_stage(root, XI_STAGE_CLOSED, error, sizeof(error)));
+    assert(xi_verify_stage(middle, XI_STAGE_CLOSED, error, sizeof(error)));
+    assert(xi_verify_stage(leaf, XI_STAGE_CLOSED, error, sizeof(error)));
+
+    xi_arc_insert(root);
+    unsigned cell_retains = 0;
+    unsigned cell_releases = 0;
+    for (uint32_t i = 0; i < root_entry->nvalues; i++) {
+        XiValue *value = root_entry->values[i];
+        if (value->nargs == 1 && value->args[0] == cell) {
+            cell_retains += value->op == XI_RETAIN;
+            cell_releases += value->op == XI_RELEASE;
+        }
+    }
+    assert(cell_retains == 1);
+    assert(cell_releases == 1);
+
+    xi_func_free(xi_closed_program_release(closed));
+    printf("  PASS\n");
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -723,6 +846,7 @@ int main(void) {
     test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();
+    test_close_materializes_first_class_capture_cells();
 
     printf("\n=== All stage contract tests passed ===\n");
     return 0;

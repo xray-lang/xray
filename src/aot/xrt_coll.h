@@ -5143,7 +5143,6 @@ static inline XrValue xrt_cell_new(XrValue value) {
     }
     xrt_arc_mark_builtin(cell, XRT_ARC_KIND_CELL);
     cell->value = value;
-    xrt_retain(value);
     return xr_mkptr(cell, XR_TAG_CELL);
 }
 
@@ -5158,7 +5157,6 @@ static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
         return;
     xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
     XrValue old = cell->value;
-    xrt_retain(value);
     cell->value = value;
     xrt_release(old);
 }
@@ -5489,15 +5487,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (!src)
                 return val;
             XrValue cloned = xrt_value_clone_for_coro(src->value);
-            XrValue result = xrt_cell_new(cloned);
-            /* xrt_cell_new retains its input.  Drop the temporary ownership
-             * only for clone kinds that return a fresh ARC value. */
-            if (cloned.tag == XR_TAG_STR_ARC || cloned.tag == XR_TAG_ARRAY ||
-                cloned.tag == XR_TAG_MAP || cloned.tag == XR_TAG_SET ||
-                cloned.tag == XR_TAG_STRBUF || cloned.tag == XR_TAG_AGG_REF ||
-                cloned.tag == XR_TAG_CELL)
-                xrt_release(cloned);
-            return result;
+            return xrt_cell_new(cloned);
         }
         case XR_TAG_REGEX:
         case XR_TAG_NET_CONN:

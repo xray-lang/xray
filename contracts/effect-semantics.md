@@ -4,6 +4,8 @@ Status: re-frozen after suspension was split into two independent product
 dimensions. Task 242 gave numeric conversions typed evidence and Task 245
 separated semantic effects from native code-shape controls; the fail-closed
 semantics remain unchanged.
+Task 254 makes mutable-capture cell and weak-field memory effects explicit Xi
+operations; it does not add a source-level effect or permit backend inference.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -119,7 +121,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h f86da4a78190ac
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 283e0f745a8a08e8d05e0b92cc283d606a940e97d8bffd94443db7c802f103d0
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 7da4b36db9a9d078ed23128381066cf5ace5fefcabbf9d3bcbb465fb452e0cc2
 anchor-sha256: src/runtime/value/xtype.h 1f0e1b8129b20d80d527cccc341bb22fffd34b1e1fd83eb252da7d23e2669317
-anchor-sha256: src/ir/xi.h a48181a21a780a27c9c2aaf0e650d6e8a92408836baf3a8b9817042683034307
+anchor-sha256: src/ir/xi.h 20734874b718c17ea93d7350d74b77690ca4f1f16fabfc15deb4bb2c6910fbb8
 anchor-sha256: src/ir/xi_lower.c 1ac6abe0761429340431340aaced395dab81e83a7317c8c4034acfdd4b136191
 anchor-sha256: src/app/cli/xcmd_verify.c 932ea0eba80546c8eded92dfa6dc1aa50d72f5f1581bfe309596e417585e9216
 anchor-sha256: tests/cli/run_verify_contract_tests.sh 0e6de65b1956cb7151e90630d72bc41e10d5561147da0ee012882660eee7ac65

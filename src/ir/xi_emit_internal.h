@@ -164,11 +164,6 @@ typedef struct {
     uint32_t ntry_patch;
     uint32_t try_patch_cap;
 
-    /* Track which value IDs have been wrapped in a cell (OP_CELL_NEW).
-     * Prevents double-wrapping when multiple closures capture the same
-     * mutable variable. */
-    bool *cell_wrapped; /* [next_value_id] */
-
     /* Comparison-branch fusion: if the block control is a comparison with
      * no other consumers, skip emitting OP_CMP_* and instead emit the
      * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
@@ -176,17 +171,6 @@ typedef struct {
 
     /* Per-var_id state capacity, sized to max(var_id)+1 for this function. */
     uint32_t var_state_count;
-
-    /* Side cell register map: maps var_id → cell register for hoisted
-     * function captures.  The cell is allocated in a separate register
-     * so the original register remains usable for direct parent calls.
-     * NO_REG (0xffff) means no cell allocated for this variable. */
-    XiEmitReg *cell_side_reg; /* [var_state_count], var_id → cell register */
-
-    /* Tracks whether OP_CELL_NEW has been emitted for a given var_id.
-     * First write to a cell_side_reg variable emits CELL_NEW; subsequent
-     * writes emit CELL_SET. */
-    bool *cell_created; /* [var_state_count], var_id → true if CELL_NEW emitted */
 
     /* Variable-based register coalescing: all SSA definitions of the same
      * source variable share one VM register.  This is required for correct
@@ -198,10 +182,6 @@ typedef struct {
 
 static inline bool xi_emit_var_id_in_state(const EmitCtx *ctx, XiVarId var_id) {
     return ctx && xi_var_id_is_valid(var_id) && var_id < ctx->var_state_count;
-}
-
-static inline bool xi_emit_var_has_side_cell(const EmitCtx *ctx, XiVarId var_id) {
-    return xi_emit_var_id_in_state(ctx, var_id) && ctx->cell_side_reg[var_id] != NO_REG;
 }
 
 /* ========== Shared Utility Functions ========== */
@@ -217,7 +197,6 @@ XR_FUNC bool xi_emit_alloc_struct_area_bytes_wide(EmitCtx *ctx, uint32_t bytes_n
                                                   uint32_t *slot_out);
 XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg);
 XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v);
-XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v);
 XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v);
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
@@ -376,6 +355,9 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_get_shared(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

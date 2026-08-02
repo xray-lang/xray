@@ -7180,6 +7180,10 @@ TEST(cgen_closure_cell_var_id_above_255) {
     closure->args[0] = captured;
     xi_block_set_return(entry, closure);
 
+    xi_pass_close(ir);
+    assert(closure->args[0] != captured && closure->args[0]->op == XI_CELL_NEW &&
+           "close pass must materialize a first-class cell XiValue");
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
@@ -7234,6 +7238,9 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     call->args[0] = closure;
     xi_block_set_return(entry, call);
 
+    xi_pass_close(ir);
+    assert(closure->args[0] != captured && closure->args[0]->op == XI_CELL_NEW &&
+           "stack closure must capture the explicit cell XiValue");
     xi_escape_analyze(ir);
     xi_stack_alloc_rewrite(ir);
     assert(closure->op == XI_STACK_ALLOC && "direct closure should stack allocate");

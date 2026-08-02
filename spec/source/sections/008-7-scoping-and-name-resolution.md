@@ -77,6 +77,8 @@ print(c())      // 2
 
 - 闭包与原变量**共享**。
 - 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
+- 每个被读写捕获的变量只有一个共享 cell。外层赋值与所有闭包读写都访问同一 cell；
+  cell 及其中的新值按普通强引用计数转移和释放，不存在额外的隐藏保活规则。
 
 #### 闭包优化
 
@@ -265,6 +267,10 @@ print(c())      // 2
 
 - The closure and the original variable **share state**.
 - After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
+- Every read/write capture has exactly one shared cell. Outer assignments and
+  every capturing closure access that same cell; the cell and each newly stored
+  value follow ordinary strong-reference transfers and releases, with no hidden
+  keepalive rule.
 
 #### Closure optimization
 

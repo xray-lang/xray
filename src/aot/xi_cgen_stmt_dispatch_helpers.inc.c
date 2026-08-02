@@ -164,7 +164,6 @@ static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     xicgen_emit_set_pending_error(ctx, out, v->args[0]);
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
-    emit_cell_var_releases(ctx, out);
     emit_default_return_stmt_for_abi(ctx, out, f);
     return true;
 }
@@ -241,7 +240,6 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
     xicgen_emit_err_check_arc_cleanups(ctx, out, f, v, prefix);
-    emit_cell_var_releases(ctx, out);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "        return;\n");
     } else {
