@@ -1572,21 +1572,6 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
     emit_typed_array_data_cache_decl(ctx, out, v);
     emit_value_generated_line_reset(ctx, out, v);
     emit_debug_source_var_sync(ctx, out, f, v);
-    bool cell_origin = cg_value_is_cell_origin(ctx, v);
-    bool cell_update = cg_value_has_cell(ctx, v) && !cell_origin;
-    if (cell_origin) {
-        fprintf(out, "    ");
-        emit_cell_ref(out, v->var_id);
-        fprintf(out, " = xrt_cell_new(");
-        emit_boxed_value_ref(out, v);
-        fprintf(out, ");\n");
-    } else if (cell_update) {
-        fprintf(out, "    xrt_cell_set(");
-        emit_cell_ref(out, v->var_id);
-        fprintf(out, ", ");
-        emit_boxed_value_ref(out, v);
-        fprintf(out, ");\n");
-    }
     return true;
 }
 

@@ -16,9 +16,9 @@ print(gate.write((v) -> v + 1))
 
 // Cross-coroutine mutation through a namespace-imported Mutex.
 const latch = CountdownLatch(1)
-go {
+go fn() {
     counter.replace((v) -> v + 42)
     latch.done()
-}
+}()
 latch.wait()
 print(counter.lock((v) -> v))

@@ -60,13 +60,13 @@ static inline int xrt_boolmap_index(int64_t key) {
 
 static inline XrValue xrt_boolmap_new_typed(int64_t cap, uint8_t value_type) {
     (void) cap;
-    xrt_boolmap_t *b = (xrt_boolmap_t *) XRT_MALLOC(sizeof(xrt_boolmap_t));
+    xrt_boolmap_t *b = (xrt_boolmap_t *)
+        xrt_execution_alloc_embedded(sizeof(xrt_boolmap_t), xrt_execution_finalize_boolmap);
     if (XR_UNLIKELY(!b)) {
         fprintf(stderr, "xrt_boolmap_new: out of memory\n");
         abort();
     }
-    xrt_bump_header_init(&b->hdr, XR_TBOOLMAP);
-    xrt_coll_make_deterministic(&b->hdr);
+    xrt_heap_header_init(&b->hdr, XR_TBOOLMAP);
     b->value_type = value_type;
     b->present = 0;
     b->order[0] = 0;
@@ -239,7 +239,7 @@ static inline XrValue xrt_boolmap_clone(const xrt_boolmap_t *src) {
 static inline void xrt_boolmap_destroy(xrt_boolmap_t *b) {
     if (!b)
         return;
-    XRT_FREE(b);
+    xrt_execution_free_allocation(&b->hdr);
 }
 
 #endif /* XRT_BOOLMAP_INC */

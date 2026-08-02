@@ -36,15 +36,15 @@ print(rw.write((s) -> s + "c"))   // abc
 const fair = RwLock<int>(0)
 const fairDone = CountdownLatch(2)
 
-go {
+go fn() {
     fair.replace((v) -> v + 1)
     fairDone.done()
-}
+}()
 
-go {
+go fn() {
     fair.replace((v) -> v + 10)
     fairDone.done()
-}
+}()
 
 fairDone.wait()
 print(fair.read((v) -> v))        // 11
@@ -65,10 +65,10 @@ print(barrier.wait())             // true
 const shared_m = Mutex<int>(0)
 const done = CountdownLatch(1)
 
-go {
+go fn() {
     shared_m.replace((v) -> v + 100)
     done.done()
-}
+}()
 
 done.wait()
 print(shared_m.lock((v) -> v))    // 100
@@ -78,14 +78,14 @@ const cv = Condvar()
 const box = Atomic<int>(-1)
 const consumed = CountdownLatch(1)
 
-go {
+go fn() {
     cv.lock()
     while (box.load() < 0) { cv.wait() }
     var v = box.load()
     cv.unlock()
     print(v)                      // 42
     consumed.done()
-}
+}()
 
 cv.lock()
 box.store(42)

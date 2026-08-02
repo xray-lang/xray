@@ -1,0 +1,6 @@
+fn main_logic() {
+    var x = 1
+    defer x + 1
+}
+
+main_logic()

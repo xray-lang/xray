@@ -43,8 +43,13 @@ language-level happens-before edge (`:sync`).
    a semantic Xi shape bit. Backends must not depend on packing every lane
    index into `aux_int`; explicit arbitrary shuffle lists fail closed when the
    canonical representation cannot carry their width.
+12. Mutable capture identity is represented by canonical `xi.cell.new`,
+    `xi.cell.get`, and `xi.cell.set` values before ownership analysis. Weak
+    field promotion/storage likewise uses `xi.weak.load.field` and
+    `xi.weak.store.field`. No backend target attribute, lowering flag, hidden
+    register table, or ARC exception may reconstruct either meaning.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def c6ed4ebdf26a291fffcceae52bd2ab3a0d3daf816f88e98e2a896987aa9e0732
-anchor-sha256: xisa/xi/lowering.def e57b4b7cf84e3dadf3e03f39c68279c87b298820cf1cfa5e4b687826d2bc98b0
+anchor-sha256: xisa/xi/ops.def edac98373bbcbca5c894aabf853c96b12abc977c5ef12d172c853f389d06c132
+anchor-sha256: xisa/xi/lowering.def 06ea58a029c63ad9fe48a8d0b8c5944788bfaff3d9e47b68ccbf83f2ee9a3279

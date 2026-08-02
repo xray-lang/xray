@@ -494,10 +494,9 @@ static AstNode *ea_thread_spawn_body_arg(CallExprNode *call) {
 
 /*
  * Walk a function body that executes on a NEW coroutine, with go-closure
- * capture tracking enabled. Covers both spawn forms:
- *   go fn() { body }()   (inline closure callee)
- *   go { body }          (bare block, parsed as GO_EXPR -> FUNCTION_EXPR)
- * Both must enforce the explicit-sharing model: capturing locals across the
+ * capture tracking enabled. The sole inline form is a lambda call:
+ *   go fn() { body }()
+ * It enforces the explicit-sharing model: capturing locals across the
  * coroutine boundary is a compile error unless shared / Channel.
  */
 static void ea_walk_go_closure(EaContext *ctx, FunctionDeclNode *fn) {
@@ -596,7 +595,7 @@ static void ea_check_closure_cycle(EaContext *ctx, AstNode *node) {
              "closure cycle: this closure captures '%s' and is stored into '%s.%s'\n"
              "Xray does not reclaim reference cycles, and `weak` is a field modifier "
              "that cannot break a capture edge.\n"
-             "hint: clear the field when the scope ends — defer %s.%s = null — "
+             "hint: clear the field when the scope ends — defer { %s.%s = null } — "
              "or pass '%s' as a parameter instead of capturing it",
              root, root, field ? field : "?", root, field ? field : "?", root);
     XrLocation loc = {

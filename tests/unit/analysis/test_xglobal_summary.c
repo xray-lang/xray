@@ -7983,12 +7983,12 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_names_go_block_body_anonymous) {
+TEST(global_evidence_producer_names_go_lambda_body_anonymous) {
     setup_parser_session();
     const char *source = "var ready = false\n"
-                         "go {\n"
+                         "go fn() {\n"
                          "    ready = true\n"
-                         "}\n";
+                         "}()\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -18391,7 +18391,7 @@ RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_seeds_xi_ids_during_lowering);
 RUN_TEST(global_evidence_producer_resolves_super_constructor_callsite);
 RUN_TEST(global_evidence_producer_resolves_module_init_constructor_callsite);
-RUN_TEST(global_evidence_producer_names_go_block_body_anonymous);
+RUN_TEST(global_evidence_producer_names_go_lambda_body_anonymous);
 RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);

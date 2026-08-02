@@ -14,7 +14,7 @@
  *
  * WHY THIS DESIGN:
  *   - Parent-child + CompletionNode provides the foundation for
- *     linked go / monitored go / scope blocks
+ *     linked go / scope blocks
  *   - 6-state machine tracks Completing/Cancelling for children wait
  *   - Direct state setters serve executor completion paths; try_complete
  *     and finalize serve structured paths that wait for children

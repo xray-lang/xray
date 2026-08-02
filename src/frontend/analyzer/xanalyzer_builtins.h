@@ -31,7 +31,32 @@ typedef enum XaBuiltinReturnOwnership {
      * object). ARC and the independent RC verifier each read this fact to keep
      * the receiver's reference alive through the aliased result (contract C1). */
     XA_BUILTIN_RETURN_RECEIVER,
+    XA_BUILTIN_RETURN_BORROWED_STATIC,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_0,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_1,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_2,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_3,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_4,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_5,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_6,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_7,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_8,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_9,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_10,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_11,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_12,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_13,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_14,
+    XA_BUILTIN_RETURN_BORROWED_PARAM_15,
 } XaBuiltinReturnOwnership;
+
+static inline int
+xa_builtin_return_ownership_param_index(XaBuiltinReturnOwnership ownership) {
+    if (ownership < XA_BUILTIN_RETURN_BORROWED_PARAM_0 ||
+        ownership > XA_BUILTIN_RETURN_BORROWED_PARAM_15)
+        return -1;
+    return (int) ownership - (int) XA_BUILTIN_RETURN_BORROWED_PARAM_0;
+}
 
 // Built-in member info
 typedef struct XaBuiltinMember {

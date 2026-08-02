@@ -864,12 +864,19 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Populate upvalue descriptors on child proto from captures */
     for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
         XiCapture *cap = &child_func->captures[ci];
+        if (cap->needs_cell && cap->source != XI_CAPTURE_SRC_REG) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
         uint16_t uv_index = 0;
         if (cap->source == XI_CAPTURE_SRC_REG) {
             /* Use CLOSURE_NEW's arg (kept current by optimization passes)
              * instead of cap->value which may point to an eliminated PHI. */
             XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-            XR_DCHECK(cap_val != NULL, "SRC_REG capture must have parent SSA value");
+            if (!cap_val) {
+                emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                return;
+            }
             uv_index = reg_of(ctx, cap_val);
             if (ctx->status != XI_EMIT_OK)
                 return;
@@ -878,30 +885,6 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         }
         xr_vm_proto_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source,
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
-    }
-
-    /* Cell wrapping for mutable captures (emit once per value).
-     * Skip if cell was already created at the variable's first definition
-     * (cell_created[var_id] is set by the early CELL_NEW path in emit_value). */
-    for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
-        XiCapture *cap = &child_func->captures[ci];
-        if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
-            XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-            XiEmitReg reg = reg_of(ctx, cap_val);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            bool already = ctx->cell_wrapped[cap_val->id];
-            if (!already && xi_emit_var_id_in_state(ctx, cap_val->var_id))
-                already = ctx->cell_created[cap_val->var_id];
-            if (!already) {
-                emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
-                ctx->cell_wrapped[cap_val->id] = true;
-                if (xi_emit_var_id_in_state(ctx, cap_val->var_id)) {
-                    ctx->cell_side_reg[cap_val->var_id] = reg;
-                    ctx->cell_created[cap_val->var_id] = true;
-                }
-            }
-        }
     }
 
     /* Only verified representation-selected IR may cross the AOT attachment
@@ -919,45 +902,52 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
-    if (xi_emit_var_has_side_cell(ctx, v->var_id)) {
-        /* The destination register is cell-wrapped (hoisted function).
-         * Emit closure to a temp register, then store into the cell. */
-        if (ctx->next_reg >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        emit_inst(ctx, CREATE_ABx(OP_CLOSURE, tmp, proto_idx));
-        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, dst, tmp, 0));
-    } else {
-        emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
+    emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
+}
+
+XR_FUNC void xi_emit_cell_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
     }
+    XiEmitReg initial = reg_of(ctx, v->args[0]);
+    if (ctx->status == XI_EMIT_OK)
+        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, dst, initial, 0));
+}
+
+XR_FUNC void xi_emit_cell_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg cell = reg_of(ctx, v->args[0]);
+    if (ctx->status == XI_EMIT_OK)
+        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, dst, cell, 0));
+}
+
+XR_FUNC void xi_emit_cell_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs != 2 || !v->args[0] || !v->args[1]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg cell = reg_of(ctx, v->args[0]);
+    XiEmitReg value = reg_of(ctx, v->args[1]);
+    if (ctx->status == XI_EMIT_OK)
+        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell, value, 0));
 }
 
 /* Upvalue load */
 XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int upval_idx = (int) v->aux_int;
     emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, dst, (uint16_t) upval_idx, 0));
-    if (upval_idx < (int) ctx->func->ncaptures && ctx->func->captures[upval_idx].needs_cell) {
-        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, dst, dst, 0));
-    }
 }
 
 /* Upvalue store */
 XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XiEmitReg val = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    int upval_idx = (int) v->aux_int;
-    XiEmitReg cell_reg = dst;
-    emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, cell_reg, (uint16_t) upval_idx, 0));
-    emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell_reg, val, 0));
+    (void) v;
+    (void) dst;
+    emit_error(ctx, XI_EMIT_ERR_INTERNAL);
 }
 
 /* Shared (module-level) variable access */

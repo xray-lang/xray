@@ -49,6 +49,21 @@ typedef enum XaSymbolKind {
     XA_SYM_TYPE_ALIAS,  // Type alias (type Point = {x: int, y: int})
 } XaSymbolKind;
 
+/* Serializable per-callee return provenance.  The zero value is the
+ * fail-closed default used for indirect/foreign/incomplete callees. */
+typedef enum XaReturnOwnershipKind {
+    XA_RETURN_OWNERSHIP_UNKNOWN = 0,
+    XA_RETURN_OWNERSHIP_OWNED,
+    XA_RETURN_OWNERSHIP_BORROWED_PARAM,
+    XA_RETURN_OWNERSHIP_BORROWED_STATIC,
+} XaReturnOwnershipKind;
+
+typedef struct XaReturnOwnershipSummary {
+    uint8_t kind;        /* XaReturnOwnershipKind */
+    int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
+    bool complete;
+} XaReturnOwnershipSummary;
+
 /* Canonical per-parameter semantic product.  These axes intentionally coexist:
  * a parameter may be read, retained as an execution-local alias, returned from
  * one branch, and mutated through a path on another branch. */
@@ -205,6 +220,9 @@ struct XaSymbolLinks {
     bool return_storage_mixed;
     bool return_storage_scanned;
     bool return_storage_scan_in_progress;
+    XaReturnOwnershipSummary return_ownership;
+    bool return_ownership_scanned;
+    bool return_ownership_scan_in_progress;
     XaViewReturnContract return_view;
     XaParamEffectSummary *return_fn_param_effects;
     int return_fn_param_effect_count;

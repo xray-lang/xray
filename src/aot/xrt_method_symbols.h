@@ -11,7 +11,7 @@
  *
  * This header carries ONLY the XRT_SYM_* numeric IDs.  No AOT runtime
  * headers are pulled in, so translation units inside xray_core can
- * include it without dragging in static-inline bump-alloc helpers.
+ * include it without dragging in static-inline execution-allocation helpers.
  *
  * IDs must match SYMBOL_* in src/runtime/symbol/xsymbol_table.h.
  * xrt_symbol_check.c auto-generates _Static_assert guards from the

@@ -18,10 +18,12 @@
  */
 
 #include "xi.h"
+#include "xi_effect.h"
 #include "xi_module.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../runtime/value/xtype.h"
 
 #include <string.h>
 
@@ -180,6 +182,233 @@ static void collect_closure_metas(XiModule *mod, XiFunc *f) {
     }
 }
 
+/* ========== First-Class Mutable Capture Cells ========== */
+
+typedef struct XiLocalCellBinding {
+    XiVarId var_id;
+    XiValue *seed;
+    XiValue *cell;
+} XiLocalCellBinding;
+
+static XiLocalCellBinding *find_local_cell_binding(XiLocalCellBinding *bindings, uint32_t count,
+                                                   const XiValue *value) {
+    if (!bindings || !value)
+        return NULL;
+    for (uint32_t i = 0; i < count; i++) {
+        if (xi_var_id_is_valid(value->var_id) && bindings[i].var_id == value->var_id)
+            return &bindings[i];
+        if (!xi_var_id_is_valid(value->var_id) && bindings[i].seed == value)
+            return &bindings[i];
+    }
+    return NULL;
+}
+
+static bool value_is_existing_cell_ref(const XiFunc *f, const XiValue *value) {
+    return value &&
+           (value->op == XI_CELL_NEW ||
+            (value->op == XI_LOAD_UPVAL && value->aux_int >= 0 && value->aux_int < f->ncaptures &&
+             f->captures[value->aux_int].needs_cell));
+}
+
+static XiLocalCellBinding *collect_local_cell_bindings(XiFunc *f, uint32_t *out_count) {
+    uint32_t capacity = 0;
+    for (uint16_t fi = 0; fi < f->nchildren; fi++) {
+        const XiFunc *child = f->children[fi];
+        if (!child)
+            continue;
+        for (uint16_t ci = 0; ci < child->ncaptures; ci++)
+            capacity += child->captures[ci].source == XI_CAPTURE_SRC_REG &&
+                        child->captures[ci].needs_cell && child->captures[ci].value;
+    }
+    *out_count = 0;
+    if (capacity == 0)
+        return NULL;
+    XiLocalCellBinding *bindings = (XiLocalCellBinding *) xi_func_arena_alloc(
+        f, capacity * (uint32_t) sizeof(XiLocalCellBinding));
+    XR_CHECK(bindings != NULL, "xi_pass_close: out of memory allocating capture cell bindings");
+
+    for (uint16_t fi = 0; fi < f->nchildren; fi++) {
+        XiFunc *child = f->children[fi];
+        if (!child)
+            continue;
+        for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+            XiCapture *cap = &child->captures[ci];
+            if (cap->source != XI_CAPTURE_SRC_REG || !cap->needs_cell || !cap->value ||
+                find_local_cell_binding(bindings, *out_count, cap->value))
+                continue;
+            XiLocalCellBinding *binding = &bindings[(*out_count)++];
+            binding->var_id = cap->value->var_id;
+            binding->seed = cap->value;
+            binding->cell = value_is_existing_cell_ref(f, cap->value) ? cap->value : NULL;
+        }
+    }
+    return bindings;
+}
+
+static void materialize_local_cells(XiFunc *f, XiLocalCellBinding *bindings,
+                                    uint32_t binding_count) {
+    if (!bindings || binding_count == 0 || !f->entry)
+        return;
+    bool needs_new_cell = false;
+    for (uint32_t i = 0; i < binding_count; i++)
+        needs_new_cell |= bindings[i].cell == NULL;
+    if (!needs_new_cell)
+        return;
+
+    XiValue *first = f->entry->nvalues > 0 ? f->entry->values[0] : NULL;
+    struct XrType *null_type = xr_type_new_null(NULL);
+    struct XrType *cell_type = xr_type_new_unknown(NULL);
+    struct XrType *unit_type = xr_type_new_unit(NULL);
+    XR_CHECK(null_type && cell_type && unit_type,
+             "xi_pass_close: out of memory allocating cell IR types");
+    XiValue *null_value = first ? xi_value_insert_before(f, f->entry, first, XI_CONST, null_type, 0)
+                                : xi_value_new(f, f->entry, XI_CONST, null_type, 0);
+    XR_CHECK(null_value != NULL, "xi_pass_close: out of memory allocating cell initializer");
+    XiValue *anchor = null_value;
+
+    for (uint32_t i = 0; i < binding_count; i++) {
+        if (bindings[i].cell)
+            continue;
+        XiValue *cell = xi_value_insert_after(f, f->entry, anchor, XI_CELL_NEW, cell_type, 1);
+        XR_CHECK(cell != NULL, "xi_pass_close: out of memory materializing capture cell");
+        cell->args[0] = null_value;
+        bindings[i].cell = cell;
+        anchor = cell;
+    }
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->op == XI_CELL_NEW || v->op == XI_CELL_GET || v->op == XI_CELL_SET)
+                continue;
+            XiLocalCellBinding *binding =
+                find_local_cell_binding(bindings, binding_count, v);
+            if (!binding || !binding->cell || binding->cell == v)
+                continue;
+            XiValue *set = xi_value_insert_after(f, blk, v, XI_CELL_SET, unit_type, 2);
+            XR_CHECK(set != NULL, "xi_pass_close: out of memory materializing cell write");
+            set->args[0] = binding->cell;
+            set->args[1] = v;
+            set->line = v->line;
+            vi++;
+        }
+    }
+}
+
+static void rewrite_cell_uses(XiFunc *f, XiLocalCellBinding *bindings, uint32_t binding_count) {
+    struct XrType *cell_type = xr_type_new_unknown(NULL);
+    XR_CHECK(cell_type != NULL, "xi_pass_close: out of memory allocating cell reference type");
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+
+            XiLocalCellBinding *read_binding =
+                xi_copy_is_cell_read(v) && v->nargs == 1
+                    ? find_local_cell_binding(bindings, binding_count, v->args[0])
+                    : NULL;
+            if (read_binding && read_binding->cell) {
+                v->op = XI_CELL_GET;
+                v->args[0] = read_binding->cell;
+                v->aux_int = 0;
+                v->flags = xi_op_default_effects(v->op);
+                continue;
+            }
+
+            if (v->op == XI_CLOSURE_NEW && v->aux) {
+                XiFunc *child = (XiFunc *) v->aux;
+                XR_CHECK(v->nargs == child->ncaptures,
+                         "xi_pass_close: closure capture argument count mismatch");
+                uint16_t inserted = 0;
+                for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                    XiCapture *cap = &child->captures[ci];
+                    if (!cap->needs_cell)
+                        continue;
+                    if (cap->source == XI_CAPTURE_SRC_REG) {
+                        XiLocalCellBinding *binding =
+                            find_local_cell_binding(bindings, binding_count, cap->value);
+                        XR_CHECK(binding && binding->cell,
+                                 "xi_pass_close: mutable local capture has no cell value");
+                        v->args[ci] = binding->cell;
+                        cap->value = v->args[ci];
+                        continue;
+                    }
+
+                    XR_CHECK(cap->source == XI_CAPTURE_SRC_UPVAL && cap->index < f->ncaptures &&
+                                 f->captures[cap->index].needs_cell,
+                             "xi_pass_close: mutable transitive capture has no cell upvalue");
+                    XiValue *raw =
+                        xi_value_insert_before(f, blk, v, XI_LOAD_UPVAL, cell_type, 0);
+                    XR_CHECK(raw != NULL,
+                             "xi_pass_close: out of memory forwarding transitive capture cell");
+                    raw->aux_int = cap->index;
+                    raw->line = v->line;
+                    v->args[ci] = raw;
+                    cap->source = XI_CAPTURE_SRC_REG;
+                    cap->index = 0;
+                    cap->value = raw;
+                    inserted++;
+                }
+                vi += inserted;
+                continue;
+            }
+
+            if (v->op == XI_LOAD_UPVAL && v->aux_int >= 0 && v->aux_int < f->ncaptures &&
+                f->captures[v->aux_int].needs_cell) {
+                XiValue *raw = xi_value_insert_before(f, blk, v, XI_LOAD_UPVAL, cell_type, 0);
+                XR_CHECK(raw != NULL, "xi_pass_close: out of memory materializing cell read");
+                raw->aux_int = v->aux_int;
+                raw->line = v->line;
+                v->op = XI_CELL_GET;
+                v->nargs = 1;
+                v->args = (XiValue **) xi_func_arena_alloc(f, sizeof(XiValue *));
+                XR_CHECK(v->args != NULL, "xi_pass_close: out of memory allocating cell read args");
+                v->args[0] = raw;
+                v->aux_int = 0;
+                v->flags = xi_op_default_effects(v->op);
+                vi++;
+                continue;
+            }
+
+            if (v->op == XI_STORE_UPVAL && v->aux_int >= 0 && v->aux_int < f->ncaptures &&
+                f->captures[v->aux_int].needs_cell && v->nargs == 1) {
+                XiValue *stored = v->args[0];
+                XiValue *raw = xi_value_insert_before(f, blk, v, XI_LOAD_UPVAL, cell_type, 0);
+                XR_CHECK(raw != NULL, "xi_pass_close: out of memory materializing cell write");
+                raw->aux_int = v->aux_int;
+                raw->line = v->line;
+                v->op = XI_CELL_SET;
+                v->nargs = 2;
+                v->args = (XiValue **) xi_func_arena_alloc(f, 2u * sizeof(XiValue *));
+                XR_CHECK(v->args != NULL, "xi_pass_close: out of memory allocating cell write args");
+                v->args[0] = raw;
+                v->args[1] = stored;
+                v->aux_int = 0;
+                v->flags = xi_op_default_effects(v->op);
+                vi++;
+            }
+        }
+    }
+}
+
+static void materialize_cells_recursive(XiFunc *f) {
+    uint32_t binding_count = 0;
+    XiLocalCellBinding *bindings = collect_local_cell_bindings(f, &binding_count);
+    materialize_local_cells(f, bindings, binding_count);
+    rewrite_cell_uses(f, bindings, binding_count);
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            materialize_cells_recursive(f->children[i]);
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC void xi_pass_close(XiFunc *f) {
@@ -187,6 +416,7 @@ XR_FUNC void xi_pass_close(XiFunc *f) {
 
     /* Walk the entire function tree bottom-up */
     close_func_recursive(f, NULL);
+    materialize_cells_recursive(f);
 
     /* If this function has a module, do module-level work */
     XiModule *mod = f->module;

@@ -1,8 +1,8 @@
 fn launch(data: ref Array<int>) {
-    var task = go {
+    var task = go fn() {
         data.push(4)
         return len(data)
-    }
+    }()
     print(await task)
 }
 

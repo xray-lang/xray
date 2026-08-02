@@ -1,0 +1,24 @@
+// Task 253 process-level churn asset.  The 2M factory calls reproduce the
+// pre-fix monotonic growth while keeping the live working set constant after
+// per-callee OWNED summaries reach ARC.
+import runtime
+
+class Node {
+    value: int
+    constructor(value) { this.value = value }
+}
+
+fn makeNode(value: int) -> Node {
+    return Node(value)
+}
+
+var before = runtime.liveObjects()
+var checksum = 0
+var i = 0
+while (i < 2000000) {
+    var node = makeNode(i)
+    checksum = checksum + node.value
+    i = i + 1
+}
+assert(checksum == 1999999000000)
+assert(runtime.liveObjects() - before < 100)

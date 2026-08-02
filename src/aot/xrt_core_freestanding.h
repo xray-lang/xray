@@ -570,6 +570,7 @@ typedef struct XrAotContext {
  * monotonic identity assignment is required here and no allocator is pulled
  * into an otherwise no-heap binary. */
 typedef void (*XrtDestructor)(void *obj);
+typedef void (*XrtStoragePromoter)(void *obj, uint8_t storage_mode);
 typedef XrValue (*XrtMethodFn)(void);
 
 #ifdef XRT_IMPL
@@ -580,11 +581,13 @@ extern XRT_INTERNAL uint16_t xrt_freestanding_type_count;
 
 static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vtable,
                                              int vtable_size, XrtDestructor dtor,
+                                             XrtStoragePromoter promote_storage,
                                              uint32_t inst_size) {
     (void) parent_id;
     (void) vtable;
     (void) vtable_size;
     (void) dtor;
+    (void) promote_storage;
     (void) inst_size;
     if (XR_UNLIKELY(xrt_freestanding_type_count == UINT16_MAX)) {
         XR_ASSUME(0);
@@ -1837,7 +1840,7 @@ static inline XrValue xrt_neg(XrValue a) {
 static inline void xrt_arc_init(void) {
 }
 
-static inline void xrt_bump_destroy(void) {
+static inline void xrt_arc_shutdown(void) {
 }
 
 static inline int64_t xrt_mem_int_arg(XrValue v) {

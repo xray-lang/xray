@@ -200,6 +200,7 @@ XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
     sym->links.binding_mutability = sym->is_rebindable ? XA_BINDING_REBINDABLE : XA_BINDING_STABLE;
     sym->links.value_capability = XA_CAP_UNKNOWN;
     sym->links.storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+    sym->links.return_ownership.param_index = -1;
 
     return sym;
 }
@@ -959,6 +960,9 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->return_storage_mixed = src->return_storage_mixed;
     dst->return_storage_scanned = src->return_storage_scanned;
     dst->return_storage_scan_in_progress = false;
+    dst->return_ownership = src->return_ownership;
+    dst->return_ownership_scanned = src->return_ownership_scanned;
+    dst->return_ownership_scan_in_progress = false;
     dst->return_view = src->return_view;
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;

@@ -77,6 +77,8 @@ print(c())      // 2
 
 - 闭包与原变量**共享**。
 - 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
+- 每个被读写捕获的变量只有一个共享 cell。外层赋值与所有闭包读写都访问同一 cell；
+  cell 及其中的新值按普通强引用计数转移和释放，不存在额外的隐藏保活规则。
 
 #### 闭包优化
 
@@ -132,7 +134,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
+go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
 ```
 
 #### 正确姿势
@@ -179,14 +181,14 @@ Xray 采用多层内存管理：
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
 | const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 | 最后强引用释放时立即回收；引用环不被回收，随 coroutine 结束与剩余 Region 块、大对象一起批量释放（§16.8） |
+| execution-local 回收域（一般局部对象） | 编译器插入的引用计数 + VM coroutine heap / AOT execution arena | 最后强引用释放时立即回收；引用环不被收集，随 physical coroutine 结束与域内残余图一起批量处置（§16.8） |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
 - 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
-- 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
+- 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
 - 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
 
 <!-- /xr-spec:cn -->
@@ -265,6 +267,10 @@ print(c())      // 2
 
 - The closure and the original variable **share state**.
 - After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
+- Every read/write capture has exactly one shared cell. Outer assignments and
+  every capturing closure access that same cell; the cell and each newly stored
+  value follow ordinary strong-reference transfers and releases, with no hidden
+  keepalive rule.
 
 #### Closure optimization
 
@@ -320,7 +326,7 @@ Consequently, a local `const` containing only inline values may cross directly. 
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ compile error: cannot capture mutable local
+go fn() { local += 1 }()                 // ❌ compile error: cannot capture mutable local
 ```
 
 #### Recommended patterns
@@ -367,14 +373,14 @@ Xray uses a layered memory management strategy:
 | Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
 | Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
-| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting | immediately when the last strong reference is released; a reference cycle is not reclaimed and is freed in bulk along with the remaining Region blocks and large objects when the coroutine ends (§16.8) |
+| Execution-local reclamation domain (ordinary local objects) | compiler-inserted reference counting plus a VM coroutine heap or AOT execution arena | immediately when the last strong reference is released; a reference cycle is not collected and the residual graph is disposed in bulk when the physical coroutine ends (§16.8) |
 | Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
 **Memory observation points**:
 - The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
 - The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
-- Reference cycles are not reclaimed at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk release of the coroutine heap (L2).
+- Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
 - No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
 
 <!-- /xr-spec:en -->

@@ -1,0 +1,27 @@
+// Task 254: a mutable capture cell is an ordinary first-class RC value.
+// The process-level harness runs 2,000,000 iterations and rejects linear RSS
+// growth; the live-object assertion catches the same leak inside the VM heap.
+
+import runtime
+
+fn mutate_through_capture(i: int) -> int {
+    var value = i
+    fn read() -> int {
+        return value
+    }
+    value = i + 1
+    return read()
+}
+
+var rounds = len(process.args) > 0 ? (int(process.args[0]) ?? 2000000) : 2000000
+var before = runtime.liveObjects()
+var checksum = 0
+var i = 0
+while (i < rounds) {
+    checksum += mutate_through_capture(i)
+    i += 1
+}
+
+assert(checksum == rounds * (rounds + 1) / 2)
+assert(runtime.liveObjects() - before < 1024)
+print("cell_churn_ok " + string(rounds))

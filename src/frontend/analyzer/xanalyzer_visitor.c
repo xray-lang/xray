@@ -5901,6 +5901,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                     fn_links->return_storage_scanned = true;
                     fn_links->return_storage_scan_in_progress = false;
+                    xa_ensure_function_return_ownership_prepass(ctx, fn_links);
                 }
                 if (fn_links && fn_links->return_storage_mixed) {
                     XrLocation loc = {
@@ -6756,8 +6757,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_DEFER_STMT:
             xa_freestanding_report_unavailable(ctx, node, "defer statement",
                                                "defer uses hosted cleanup/runtime state");
-            if (node->as.defer_stmt.expr)
+            if (node->as.defer_stmt.expr) {
                 xa_visit_infer_expr(ctx, node->as.defer_stmt.expr);
+                bool is_snapshot =
+                    ctx->current_block_node && ctx->current_block_node->type == AST_BLOCK &&
+                    ctx->current_block_node->as.block.is_synthetic_defer_capture;
+                xa_register_pending_defer_loans(ctx, node, is_snapshot);
+            }
             break;
         case AST_SCOPE_BLOCK:
             if (node->as.scope_block.body)

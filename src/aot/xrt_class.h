@@ -22,7 +22,7 @@
  * GENERATED CODE PATTERN:
  *   // --- module init ---
  *   static uint16_t _tid_Point;
- *   _tid_Point = xrt_type_register_hot(0, NULL, 0, NULL, nfields*16);
+ *   _tid_Point = xrt_type_register_hot(0, NULL, 0, NULL, NULL, nfields*16);
  *   xrt_type_set_name(_tid_Point, "Point", NULL);
  *
  *   // --- constructor call ---
@@ -31,7 +31,7 @@
  *     v5 = _inst; }
  *
  * RELATED MODULES:
- *   - xrt_arc.h: XrObjHeader, bump allocator
+ *   - xrt_arc.h: XrObjHeader, execution-local ARC arena
  *   - xrt_value.h: XrValue tagged union (PTR tag carries object pointer)
  *   - xi_cgen.c: emits class type registration and constructor calls
  */
@@ -54,6 +54,7 @@
  * ========================================================================= */
 
 typedef void (*XrtDestructor)(void *obj);
+typedef void (*XrtStoragePromoter)(void *obj, uint8_t storage_mode);
 typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 /* Compiled hash() / operator == of a class that implements Hashable by hand,
@@ -89,6 +90,7 @@ typedef struct {
     const XrtInterfaceMethodTable *itable;
     uint16_t itable_size;
     XrtDestructor destructor;  // NULL for classes without custom dtor
+    XrtStoragePromoter promote_storage; /* recursively publishes owned reference fields */
     uint32_t instance_size;    // byte size of instance fields
     XrtUserHashFn hash_fn;     // compiled hash(); NULL unless user-Hashable
     XrtUserEqFn eq_fn;         // compiled operator ==; NULL unless user-Hashable
@@ -136,6 +138,7 @@ extern uint16_t xrt_type_cap;
  * metadata installed separately by xrt_type_set_name()/xrt_type_set_generic_name(). */
 static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vtable,
                                              int vtable_size, XrtDestructor dtor,
+                                             XrtStoragePromoter promote_storage,
                                              uint32_t inst_size) {
     if (xrt_type_count >= xrt_type_cap) {
         uint32_t nc = xrt_type_cap ? (uint32_t) xrt_type_cap * 2u : (uint32_t) XRT_INIT_TYPES;
@@ -178,6 +181,7 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->itable = NULL;
     ti->itable_size = 0;
     ti->destructor = dtor;
+    ti->promote_storage = promote_storage;
     ti->instance_size = inst_size;
     ti->hash_fn = NULL;
     ti->eq_fn = NULL;
@@ -345,9 +349,9 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
 }
 
 /* =========================================================================
- * Object allocation — bump alloc + set type in XrObjHeader
+ * Object allocation — execution arena + type in XrObjHeader
  *
- * Uses xrt_arc_alloc (bump allocator) and stores the type_id
+ * Uses xrt_arc_alloc (normal RC plus residual arena ownership) and stores the type_id
  * in XrObjHeader.type for vtable dispatch and instanceof.
  * ========================================================================= */
 

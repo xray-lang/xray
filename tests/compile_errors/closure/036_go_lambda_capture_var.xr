@@ -1,0 +1,17 @@
+// 036_go_lambda_capture_var.xr
+// Expected: Compile error - go lambda call capturing a mutable local
+// Error should mention: cannot capture mutable
+//
+// The only inline spawn form is a lambda call. Capturing a plain `var` across
+// the coroutine boundary is rejected.
+
+fn main_logic() {
+    var counter = [0]
+    var t = go fn() {
+        counter.push(1)
+        return 0
+    }()
+    await t
+}
+
+main_logic()

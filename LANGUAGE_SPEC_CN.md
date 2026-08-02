@@ -2651,7 +2651,7 @@ throw AppError.NotFound                      // 值返回错误通道
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 ```
 
 ```xray
@@ -2668,9 +2668,20 @@ fn process() {
     }
     do_work()
 }
+
+fn snapshot_vs_reference() {
+    var n = 1
+    defer print("call", n)            // 注册时保存 1
+    defer { print("block", n) }       // 退出时读取 2
+    n = 2
+}                                      // 输出 block 2，再输出 call 1
 ```
 
 **语义**：
+- `defer` 只有两种正文：调用表达式或块；赋值、成员赋值、裸值和其他非调用表达式都是语法错误。任意清理逻辑写成 `defer { ... }`。
+- 调用形式在注册时按从左到右顺序立即求值并保存调用目标的接收者及全部实参，退出时只执行已保存的调用。动态可调用目标若无法静态证明为稳定调用，按 `E0392` 拒绝。
+- 块形式不做值快照；块体在退出时执行，并按引用观察届时的局部绑定值。因此 `defer conn.close()` 保存当时的 `conn`，而 `defer { conn.close() }` 读取退出时的 `conn`。
+- 调用快照或块捕获引用的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许，并由上述快照与引用语义决定 defer 最终观察到哪个值。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
@@ -4168,6 +4179,8 @@ print(c())      // 2
 
 - 闭包与原变量**共享**。
 - 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
+- 每个被读写捕获的变量只有一个共享 cell。外层赋值与所有闭包读写都访问同一 cell；
+  cell 及其中的新值按普通强引用计数转移和释放，不存在额外的隐藏保活规则。
 
 #### 闭包优化
 
@@ -4223,7 +4236,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
+go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
 ```
 
 #### 正确姿势
@@ -4270,14 +4283,14 @@ Xray 采用多层内存管理：
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
 | const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 | 最后强引用释放时立即回收；引用环不被回收，随 coroutine 结束与剩余 Region 块、大对象一起批量释放（§16.8） |
+| execution-local 回收域（一般局部对象） | 编译器插入的引用计数 + VM coroutine heap / AOT execution arena | 最后强引用释放时立即回收；引用环不被收集，随 physical coroutine 结束与域内残余图一起批量处置（§16.8） |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
 - 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
 - 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
-- 引用环不由运行时回收：静态证明（L0）、`weak` 显式断环（L1）、协程堆批量释放封顶（L2）。
+- 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
 - 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
 
 ---
@@ -4441,14 +4454,14 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 enum WorkerErr { Failed(string) }
 const err_ch = Channel<string>(1)
 
-go {
+go fn() {
     try {
         riskyWork()
         err_ch.send("ok")
     } catch (e) {
         err_ch.send("error")
     }
-}
+}()
 
 var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
@@ -4457,7 +4470,9 @@ var result = match (err_ch.recv()) {
 if (result != "ok") { log("worker failed") }
 ```
 
-2. **结构化并发 `linked scope`**（推荐，见 §10.5）：子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+
+3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
 
 ### 8.2 Panic 通道
 
@@ -4564,6 +4579,8 @@ main()
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
+
+调用形式在注册时快照接收者与实参；块形式在退出时按引用读取捕获绑定。两种形式持有的可移动 owner 在块退出前都不得被 `move` 或返回，否则报 `E0382`。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -5104,7 +5121,7 @@ print(typeName(c))             // "Container<int>" when type names are enabled
 
 > 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
 
-xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：写 `go { ... }` 就和写普通函数一样简单，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
+xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
 
 ### 10.1 协程模型
 
@@ -5121,26 +5138,26 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 ### 10.2 `go` — 启动协程
 
 ```ebnf
-GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` 是**表达式**，返回 `Task<T>` 句柄。三种形式都合法：
+`go` 是**表达式**，返回 `Task<T>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
 ```xray
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
+// 内联逻辑：lambda 也必须形成完整调用，并显式传参
 var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
-// 形式 3：块形式（隐式包装为零参 lambda）
-var t3 = go {
+// 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
+var t3 = go fn() -> int {
     return compute()
-}
+}()
 
 // 可选调试名称
 var named = go(name: "worker-1") worker(1, channel)
@@ -5155,7 +5172,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。它不得捕获任何外层 `var`，即使只读也不允许；已发布的 `const` 值和受验证同步句柄可以按能力捕获。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，并在参数位置显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -5170,8 +5187,9 @@ var task = go fn(x: int) -> int {
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
-- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
+- `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
+- `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
 
 ### 10.3 `await` — 等待结果
 
@@ -6464,11 +6482,11 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 ### 16.3 对象生命周期与回收
 
 - 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
-- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；协程堆批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
-- **协程堆边界（L2）**：每个协程拥有独立的协程堆；协程结束时其堆整体释放。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。进程级的永久泄漏只可能来自 `MODULE_STATIC` / `CONST_SHARED` / `SYNC_SHARED` 三个所有权域，以及主执行流自身的存活期。
-- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的协程堆提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是回收，是封顶。
+- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；执行局部回收域批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
+- **执行局部回收域边界（L2）**：每个物理协程拥有独立回收域。VM 用 per-coroutine Region heap 实现；hosted AOT 用 execution arena 登记仍然存活的普通 ARC 分配。无环对象仍在最后强引用处立即回收；协程结束时，回收域整体处置剩余对象图。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。跨执行发布必须先把共享或转移根的完整所有图从源域脱离；仅 MODULE_STATIC / CONST_SHARED / SYNC_SHARED 三个所有权域，以及主执行流的根回收域，可以存活到进程结束。
+- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的执行局部回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
 - Xray 没有并发 tracing GC，也没有环收集器；函数调用与后向跳转处不保留任何 GC hook。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前执行局部回收域（VM coroutine heap 或 AOT execution arena；无当前 coroutine 时回退到 main/root 域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 #### 16.3.1 引用计数的两个带
 
@@ -6565,7 +6583,7 @@ class PanicInfo {
 **回收点是精确的，且没有例外**：对象在它的最后一个强引用被释放的那一刻回收。VM 与 AOT 在这一点上给出相同的答案。
 
 - 这条承诺之所以能是全称的，是因为回收只有引用计数这一个机制。运行时没有环收集器、没有 tracing GC、没有任何"某次 GC 时"的不确定时点（任务 247）。
-- 唯一不被回收的形态是**引用环**，而它同样是确定的：环不由运行时回收，其泄漏范围由协程堆边界封顶（§16.3 的 L2）。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
+- 唯一不由 RC 回收的形态是**引用环**，而它同样是确定的：环不由运行时收集，其泄漏范围由执行局部回收域边界封顶（§16.3 的 L2）；域结束时处置残余图不是环收集。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
 - 仍**不提供**用户可见的确定性析构（destructor / finalizer / `Drop`）表面：程序不得依赖某个类型的析构钩子是否存在、以何顺序运行、或运行在哪个线程。精确的是**回收时刻**，不是"你能挂一段代码上去"。
 
 唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
@@ -6977,9 +6995,13 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-           |  'go' (Block | PostfixExpr)
+           |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
@@ -7109,7 +7131,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
@@ -7364,7 +7386,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数，无环收集器；环由静态证明/`weak`/协程堆封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
+| 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
 | 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 
@@ -7419,9 +7441,9 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
 | **defer** | 延迟执行：函数退出前执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
-| **GC** | Garbage Collection 的泛称；Xray 没有任何形式的 GC —— 既没有 tracing GC，也没有环收集器。回收只由引用计数完成，因此回收点是精确的；引用环不被回收，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 coroutine 堆为上界随协程结束整块释放（§16.8） |
+| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
 | **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
-| **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
+| **goroutine** | xray 中称作协程 (coroutine)，由 `go CallExpr` 启动；内联逻辑写作被立即调用的 lambda |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
 | **interface** | 接口（见 §5.5） |

@@ -3556,7 +3556,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo",
         .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
-        .summary = "Typed snapshot of the current coroutine heap and cycle collector",
+        .summary = "Typed snapshot of the current execution-local reclamation domain",
     },
     {
         .name = "RuntimeInfo.blocks",
@@ -3596,7 +3596,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "info",
         .signature = "(): RuntimeInfo",
-        .summary = "Get a typed snapshot of the current coroutine heap",
+        .summary = "Get a typed snapshot of the current execution-local reclamation domain",
     },
     {
         .name = "liveBytes",
@@ -6604,6 +6604,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    }\n"
             "    do_work()\n"
             "}\n"
+            "\n"
+            "fn snapshot_vs_reference() {\n"
+            "    var n = 1\n"
+            "    defer print(\"call\", n)            // saves 1 at registration\n"
+            "    defer { print(\"block\", n) }       // reads 2 at exit\n"
+            "    n = 2\n"
+            "}                                      // prints block 2, then call 1\n"
             "```\n"
             "\n"
             "### break / continue / return\n"
@@ -6649,15 +6656,15 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Form 1: call an existing function\n"
             "var t1 = go worker(0, channel)\n"
             "\n"
-            "// Form 2: call a lambda literal (inline logic + explicit arguments)\n"
+            "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
             "var t2 = go fn(d: Json) -> int {\n"
             "    return d.value * 2\n"
             "}(payload)\n"
             "\n"
-            "// Form 3: block form (implicitly wrapped as a zero-argument lambda)\n"
-            "var t3 = go {\n"
+            "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
+            "var t3 = go fn() -> int {\n"
             "    return compute()\n"
-            "}\n"
+            "}()\n"
             "\n"
             "// Optional debugging name\n"
             "var named = go(name: \"worker-1\") worker(1, channel)\n"
@@ -6686,7 +6693,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Common constraints\n"
-            "`go { ... }` is a zero-argument block form. It may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with inline values, `copy(...)`, or `move`. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous.\n"
+            "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: int) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous.\n"
             "\n"
             "### Task handle\n"
             "```xray\n"
@@ -6789,6 +6796,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    }\n"
             "    do_work()\n"
             "}\n"
+            "\n"
+            "fn snapshot_vs_reference() {\n"
+            "    var n = 1\n"
+            "    defer print(\"call\", n)            // saves 1 at registration\n"
+            "    defer { print(\"block\", n) }       // reads 2 at exit\n"
+            "    n = 2\n"
+            "}                                      // prints block 2, then call 1\n"
             "```\n"
             "",
     },
@@ -8866,7 +8880,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# runtime module\n"
             "\n"
-            "Runtime diagnostics and current coroutine heap introspection. Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes, and reference cycles are not collected at runtime (spec 16.8).\n"
+            "Runtime diagnostics and current execution-local reclamation-domain introspection (VM coroutine heap or AOT execution arena). Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes; cycles are not collected and are bounded by the physical coroutine domain (spec 16.8).\n"
             "\n"
             "Usage: `import runtime` then call `runtime.function()`.\n"
             "\n"
@@ -8874,7 +8888,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current coroutine heap and cycle collector |\n"
+            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.RuntimeInfo.blocks` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Record field |\n"
@@ -8882,7 +8896,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `runtime.RuntimeInfo.liveBytes` | `const int` | Record field |\n"
             "| `runtime.RuntimeInfo.liveKB` | `const float` | Record field |\n"
             "| `runtime.RuntimeInfo.liveObjects` | `const int` | Record field |\n"
-            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current coroutine heap |\n"
+            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
             "",
@@ -9860,15 +9874,15 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "// Form 1: call an existing function\n"
     "var t1 = go worker(0, channel)\n"
     "\n"
-    "// Form 2: call a lambda literal (inline logic + explicit arguments)\n"
+    "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
     "var t2 = go fn(d: Json) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
-    "// Form 3: block form (implicitly wrapped as a zero-argument lambda)\n"
-    "var t3 = go {\n"
+    "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
+    "var t3 = go fn() -> int {\n"
     "    return compute()\n"
-    "}\n"
+    "}()\n"
     "\n"
     "// Optional debugging name\n"
     "var named = go(name: \"worker-1\") worker(1, channel)\n"
@@ -10050,15 +10064,15 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "// Form 1: call an existing function\n"
     "var t1 = go worker(0, channel)\n"
     "\n"
-    "// Form 2: call a lambda literal (inline logic + explicit arguments)\n"
+    "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
     "var t2 = go fn(d: Json) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
-    "// Form 3: block form (implicitly wrapped as a zero-argument lambda)\n"
-    "var t3 = go {\n"
+    "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
+    "var t3 = go fn() -> int {\n"
     "    return compute()\n"
-    "}\n"
+    "}()\n"
     "\n"
     "// Optional debugging name\n"
     "var named = go(name: \"worker-1\") worker(1, channel)\n"

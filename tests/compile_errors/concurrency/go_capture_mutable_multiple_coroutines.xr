@@ -1,18 +1,18 @@
 fn main_logic() {
     var counter = 0
 
-    var first = go {
+    var first = go fn() {
         counter += 1
         return 0
-    }
-    var second = go {
+    }()
+    var second = go fn() {
         counter++
         return 0
-    }
-    var third = go {
+    }()
+    var third = go fn() {
         counter = 7
         return 0
-    }
+    }()
 
     await first
     await second

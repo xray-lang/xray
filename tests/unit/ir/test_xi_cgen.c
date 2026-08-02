@@ -6233,9 +6233,15 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            "AOT collection ref fields are RC-managed and need a destructor");
     assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
            "collection ref field destructors should release stored containers");
+    assert(contains(code, "static void xrt_native_test_Bag_promote_storage(void *obj, "
+                          "uint8_t storage_mode)") &&
+           contains(code, "xrt_value_set_storage(xr_mkptr((self)->f0, XR_TAG_ARRAY), "
+                          "storage_mode)") &&
+           "native class ref fields should publish their complete owned graph");
     assert(contains(code, "xrt_type_register_hot(0, NULL, 0, xrt_native_test_Bag_dtor, "
+                          "xrt_native_test_Bag_promote_storage, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class hot type registration should wire the collection ref-field destructor");
+           "class hot type registration should wire destructor and storage promoter");
     assert(contains(code, "xrt_type_set_name(_tid, \"Bag\", NULL)") &&
            "default hosted AOT should install class name metadata");
 
@@ -7174,6 +7180,10 @@ TEST(cgen_closure_cell_var_id_above_255) {
     closure->args[0] = captured;
     xi_block_set_return(entry, closure);
 
+    xi_pass_close(ir);
+    assert(closure->args[0] != captured && closure->args[0]->op == XI_CELL_NEW &&
+           "close pass must materialize a first-class cell XiValue");
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
@@ -7228,6 +7238,9 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     call->args[0] = closure;
     xi_block_set_return(entry, call);
 
+    xi_pass_close(ir);
+    assert(closure->args[0] != captured && closure->args[0]->op == XI_CELL_NEW &&
+           "stack closure must capture the explicit cell XiValue");
     xi_escape_analyze(ir);
     xi_stack_alloc_rewrite(ir);
     assert(closure->op == XI_STACK_ALLOC && "direct closure should stack allocate");

@@ -149,6 +149,16 @@ struct XrAotValueOps {
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
     void (*retain)(XrValue value);
     void (*release)(XrValue value);
+    /* Standalone AOT execution-local ownership. Each physical coroutine owns
+     * one opaque arena; generated value allocation enters it only while that
+     * coroutine is executing or releasing its frame. */
+    void *(*execution_arena_new)(void);
+    void *(*execution_arena_enter)(void *arena);
+    void (*execution_arena_restore)(void *previous);
+    void (*execution_arena_destroy)(void *arena);
+    int64_t (*execution_arena_live_bytes)(const void *arena);
+    int64_t (*execution_arena_live_objects)(const void *arena);
+    int64_t (*execution_arena_finalizer_count)(const void *arena);
     /* Report a coroutine's uncaught value-return error (spec §8.1.1). The
      * runtime decides *when* — it alone knows whether anything is left to
      * observe the error — while the generated program owns the rendering,

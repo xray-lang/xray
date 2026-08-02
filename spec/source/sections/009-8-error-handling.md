@@ -165,14 +165,14 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 enum WorkerErr { Failed(string) }
 const err_ch = Channel<string>(1)
 
-go {
+go fn() {
     try {
         riskyWork()
         err_ch.send("ok")
     } catch (e) {
         err_ch.send("error")
     }
-}
+}()
 
 var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
@@ -181,7 +181,9 @@ var result = match (err_ch.recv()) {
 if (result != "ok") { log("worker failed") }
 ```
 
-2. **结构化并发 `linked scope`**（推荐，见 §10.5）：子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+
+3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
 
 ### 8.2 Panic 通道
 
@@ -288,6 +290,8 @@ main()
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
+
+调用形式在注册时快照接收者与实参；块形式在退出时按引用读取捕获绑定。两种形式持有的可移动 owner 在块退出前都不得被 `move` 或返回，否则报 `E0382`。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -699,14 +703,14 @@ Ways to pass child coroutine errors:
 enum WorkerErr { Failed(string) }
 const err_ch = Channel<string>(1)
 
-go {
+go fn() {
     try {
         riskyWork()
         err_ch.send("ok")
     } catch (e) {
         err_ch.send("error")
     }
-}
+}()
 
 var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
@@ -715,7 +719,9 @@ var result = match (err_ch.recv()) {
 if (result != "ok") { log("worker failed") }
 ```
 
-2. **Structured concurrency `linked scope`** (recommended, see §10.5): child errors propagate to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
+2. **`linked go call()`** (see §10.2): failure of a standalone child Task cancels its parent Task and linked subtree; the returned Task still exposes the precise error to its caller.
+
+3. **Structured concurrency `linked scope`** (recommended, see §10.5): an error from any child in the scope propagates to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
 
 ### 8.2 Panic channel
 
@@ -834,6 +840,8 @@ formatters). The contract covers exactly that surface.
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
+
+The call form snapshots its receiver and arguments at registration; the block form reads captured bindings by reference at exit. A movable owner held by either form may not be moved or returned before the block exits (`E0382`). This owner-lifetime rule is independent of the error-channel rules below.
 
 ```xray
 fn fetch(url: string) -> string {

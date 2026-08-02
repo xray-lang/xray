@@ -755,6 +755,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn gzip {
@@ -767,6 +768,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn gunzip {
@@ -780,6 +782,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn deflate {
@@ -792,6 +795,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn deflate {
@@ -804,6 +808,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn inflate {
@@ -817,6 +822,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn zlibCompress {
@@ -829,6 +835,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn zlibCompress {
@@ -841,6 +848,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn zlibDecompress {
@@ -854,6 +862,7 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    return_ownership: "fresh"
   }
 
   fn isGzip {
@@ -892,6 +901,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn sha1 {
@@ -904,6 +914,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn sha256 {
@@ -916,6 +927,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn sha512 {
@@ -928,6 +940,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn hmac {
@@ -940,6 +953,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn randomBytes {
@@ -953,6 +967,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn uuid {
@@ -965,6 +980,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn encrypt {
@@ -977,6 +993,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn decrypt {
@@ -990,6 +1007,7 @@ module crypto {
     aot_direct: true
     link_object: true
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn timingSafeEqual {
@@ -1121,6 +1139,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn __osMutexNew {
@@ -1134,6 +1153,7 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn OsRwLock {
@@ -1146,6 +1166,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn OsCondvar {
@@ -1158,6 +1179,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn OsBarrier {
@@ -1170,6 +1192,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn OsOnce {
@@ -1182,6 +1205,7 @@ module sys {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn cpuCount {
@@ -1321,6 +1345,7 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __processSpawn {
@@ -1387,6 +1412,7 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __pipeRead {
@@ -1401,6 +1427,7 @@ module sys {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __pipeWrite {
@@ -1584,6 +1611,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn compile {
@@ -1598,6 +1626,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn test {
@@ -1640,6 +1669,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn findGroup {
@@ -1654,6 +1684,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn find {
@@ -1668,6 +1699,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn find {
@@ -1682,6 +1714,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn fullFind {
@@ -1696,6 +1729,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn findAll {
@@ -1710,6 +1744,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn findAll {
@@ -1724,6 +1759,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn replace {
@@ -1738,6 +1774,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn replaceAll {
@@ -1752,6 +1789,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn split {
@@ -1766,6 +1804,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn split {
@@ -1780,6 +1819,7 @@ module regex {
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn escape {
@@ -1792,6 +1832,7 @@ module regex {
     aot_direct: true
     link_object: false
     layer: "core"
+    return_ownership: "fresh"
   }
 
   fn isValid {
@@ -1862,6 +1903,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn setenv {
@@ -1898,6 +1940,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn exit {
@@ -1933,6 +1976,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn chdir {
@@ -1957,6 +2001,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn tmpdir {
@@ -1969,6 +2014,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn username {
@@ -1981,6 +2027,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn homedir {
@@ -1993,6 +2040,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn uid {
@@ -2113,6 +2161,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn clock {
@@ -2150,6 +2199,7 @@ module os {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn spawn {
@@ -2161,6 +2211,7 @@ module os {
     aot_direct: false
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 }
 
@@ -2228,6 +2279,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn exists {
@@ -2279,6 +2331,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn fileSize {
@@ -2364,6 +2417,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __readDirRecursive {
@@ -2377,6 +2431,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn readFile {
@@ -2390,6 +2445,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn readFileBytes {
@@ -2403,6 +2459,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn readLines {
@@ -2415,6 +2472,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn readStdin {
@@ -2427,6 +2485,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn readStdinBytes {
@@ -2439,6 +2498,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn __readlink {
@@ -2452,6 +2512,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __realpath {
@@ -2465,6 +2526,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn remove {
@@ -2513,6 +2575,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
   fn symlink {
@@ -2538,6 +2601,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __tempFile {
@@ -2551,6 +2615,7 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn touch {
@@ -2620,7 +2685,7 @@ module runtime {
   record RuntimeInfo {
     fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
     sealed: true
-    doc: "Typed snapshot of the current coroutine heap and cycle collector"
+    doc: "Typed snapshot of the current execution-local reclamation domain"
   }
 
   fn liveBytes {
@@ -2649,7 +2714,7 @@ module runtime {
 
   fn info {
     signature: "(): RuntimeInfo"
-    doc: "Get a typed snapshot of the current coroutine heap"
+    doc: "Get a typed snapshot of the current execution-local reclamation domain"
     vm: "runtime_info"
     aot: "xr_aot_runtime_info"
     argc: 0
@@ -2657,6 +2722,7 @@ module runtime {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 }
 
@@ -2817,6 +2883,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
+    return_ownership: "unknown"
   }
 
   const PROT_NONE {
@@ -2870,6 +2937,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn allocZeroed {
@@ -2883,6 +2951,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn allocAligned {
@@ -2896,6 +2965,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn pageAlloc {
@@ -2971,6 +3041,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
+    return_ownership: "unknown"
   }
 
   fn mutPtr {
@@ -3326,6 +3397,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn read {
@@ -3339,6 +3411,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn readInto {
@@ -3406,6 +3479,7 @@ module net {
     link_object: false
     layer: "runtime"
     effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
+    return_ownership: "unknown"
   }
 
   fn shutdownRead {
@@ -3526,6 +3600,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn lastErrno {
@@ -3549,6 +3624,7 @@ module net {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn hasTLS {
@@ -3575,6 +3651,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn dialTLS {
@@ -3589,6 +3666,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn upgradeTLS {
@@ -3602,6 +3680,7 @@ module net {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "borrowed_param:0"
   }
 
   fn udpBind {
@@ -3613,6 +3692,7 @@ module net {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn sendTo {
@@ -3637,6 +3717,7 @@ module net {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 }
 
@@ -3665,6 +3746,7 @@ module http {
     link_object: false
     layer: "runtime"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
 }
@@ -3736,6 +3818,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn nodes {
@@ -3747,6 +3830,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn channel {
@@ -3758,6 +3842,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "unknown"
   }
 
   fn monitor {
@@ -3769,6 +3854,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn discover {
@@ -3802,6 +3888,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn publish {
@@ -3824,6 +3911,7 @@ module cluster {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 }
 
@@ -3852,6 +3940,7 @@ module ws {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn send {
@@ -3876,6 +3965,7 @@ module ws {
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
   fn close {

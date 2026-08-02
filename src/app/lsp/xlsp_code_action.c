@@ -226,10 +226,10 @@ static void push_defer_clear_action(XrJsonValue *actions, const char *uri, const
     indent[ind] = '\0';
 
     char new_text[256];
-    snprintf(new_text, sizeof(new_text), "%sdefer %s = null\n", indent, expr);
+    snprintf(new_text, sizeof(new_text), "%sdefer { %s = null }\n", indent, expr);
 
     char title[192];
-    snprintf(title, sizeof(title), "Clear the field when the scope ends: defer %s = null", expr);
+    snprintf(title, sizeof(title), "Clear the field when the scope ends: defer { %s = null }", expr);
 
     XrJsonValue *action = xjson_new_object();
     xjson_object_set(action, "title", xjson_new_string(title));

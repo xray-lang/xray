@@ -126,7 +126,7 @@ static void xicgen_emit_bigint_literal_value(XiCgenCtx *ctx, FILE *out, const Xi
             "uint32_t limbs[%uu]; } _xr_bigint_lit_%u = {",
             (unsigned) lit.len, (unsigned) v->id);
     fprintf(out,
-            "{XR_TINSTANCE, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0u, 0u}, NULL, "
+            "{XR_TINSTANCE, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0u, 0u}, NULL, "
             "(int8_t)%d, {0}, %uu, %uu, 0u, {",
             lit.sign < 0 ? -1 : 1, (unsigned) lit.len, (unsigned) lit.len);
     for (uint32_t i = 0; i < lit.len; i++) {
@@ -650,12 +650,6 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                         const char *prefix) {
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_copy: need arg");
-    if (xi_copy_is_cell_read(v) && v->args[0] && cg_value_has_cell(ctx, v->args[0])) {
-        char cell_expr[64];
-        snprintf(cell_expr, sizeof(cell_expr), "cell_%u", (unsigned) v->args[0]->var_id);
-        emit_cell_get_for_rep(out, v, cell_expr);
-        return;
-    }
     if (cg_value_plan_is_vector(ctx, v) || cg_value_plan_is_vector(ctx, v->args[0])) {
         xicgen_identity(ctx, out, f, v, prefix);
         return;
@@ -4125,36 +4119,62 @@ static void xicgen_closure_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_closure_new_expr(ctx, out, f, prefix, v);
 }
 
-static bool xicgen_upval_needs_cell(const XiFunc *f, const XiValue *v) {
-    return v->aux_int >= 0 && v->aux_int < f->ncaptures && f->captures[v->aux_int].needs_cell;
+static void xicgen_cell_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "xrt_cell_new(");
+    emit_boxed_value_ref(out, v->args[0]);
+    fprintf(out, ")");
+}
+
+static void xicgen_cell_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) prefix;
+    XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+    if (rep == XR_REP_RAWPTR)
+        fprintf(out, "(void *)(uintptr_t)XR_TO_INT(");
+    fprintf(out, "xrt_cell_get(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ")");
+    if (rep == XR_REP_PTR)
+        fprintf(out, ".ptr");
+    else if (rep == XR_REP_RAWPTR)
+        fprintf(out, ")");
+    else if (rep == XR_REP_F64)
+        fprintf(out, ".f");
+    else if (rep == XR_REP_I64)
+        fprintf(out, ".i");
+}
+
+static void xicgen_cell_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) f;
+    (void) prefix;
+    fprintf(out, "(xrt_cell_set(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_boxed_value_ref(out, v->args[1]);
+    fprintf(out, "), XR_NULL_VAL)");
 }
 
 static void xicgen_load_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) prefix;
-    if (xicgen_upval_needs_cell(f, v)) {
-        char cell_expr[64];
-        snprintf(cell_expr, sizeof(cell_expr), "_cl->upvals[%d]", (int) v->aux_int);
-        emit_cell_get_for_rep(out, v, cell_expr);
-    } else {
-        char up_expr[64];
-        snprintf(up_expr, sizeof(up_expr), "_cl->upvals[%d]", (int) v->aux_int);
-        emit_upval_get_for_rep(out, cg_value_decl_storage_rep(ctx, f, v), up_expr);
-    }
+    char up_expr[64];
+    snprintf(up_expr, sizeof(up_expr), "_cl->upvals[%d]", (int) v->aux_int);
+    emit_upval_get_for_rep(out, cg_value_decl_storage_rep(ctx, f, v), up_expr);
 }
 
 static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    (void) f;
+    (void) v;
     (void) prefix;
-    if (xicgen_upval_needs_cell(f, v)) {
-        fprintf(out, "(xrt_cell_set(_cl->upvals[%d], ", (int) v->aux_int);
-        emit_boxed_value_ref(out, v->args[0]);
-        fprintf(out, "), XR_NULL_VAL)");
-    } else {
-        fprintf(out, "(_cl->upvals[%d] = ", (int) v->aux_int);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-    }
+    ctx->error = true;
+    fprintf(stderr, "[xi_cgen] ERROR: XI_STORE_UPVAL survived xi_pass_close\n");
+    emit_codegen_abort_expr(out);
 }
 
 static void xicgen_emit_assert_condition(XiCgenCtx *ctx, FILE *out, const XiValue *condition) {

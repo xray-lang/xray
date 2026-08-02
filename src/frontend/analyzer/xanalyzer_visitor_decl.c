@@ -4282,26 +4282,23 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     if (sym->is_const && links->declared_type)
         links->declared_type = xr_type_make_const(ctx->analyzer->isolate, links->declared_type);
 
-    // Recurse into go { block } initializers to collect nested scopes.
-    // go { ... } is parsed as go(anonymous_function_expr), whose body
+    // Recurse into inline go-lambda calls to collect nested scopes. Their body
     // needs Pass 1 scope collection for for-in variables, multi-value decls, etc.
-    // Must mirror Pass 2 structure: function scope → block scope → statements
-    // (xa_visit_function_expr enters function scope, then xa_visit_block_stmt
-    //  enters block scope for the body).
+    // Must mirror xa_visit_function_body_unified exactly: function scope,
+    // then the body statements inline. Function bodies deliberately do not
+    // add a second block scope; doing so strands the Pass 1 symbols in a child
+    // scope that Pass 2 never enters.
     AstNode *init = var->initializer;
     if (init && init->type == AST_GO_EXPR) {
-        AstNode *go_fn = init->as.go_expr.expr;
+        AstNode *go_call = init->as.go_expr.expr;
+        AstNode *go_fn = go_call && go_call->type == AST_CALL_EXPR
+                             ? go_call->as.call_expr.callee
+                             : NULL;
         if (go_fn && go_fn->type == AST_FUNCTION_EXPR) {
             FunctionDeclNode *fn = &go_fn->as.function_expr;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, go_fn);
-            if (fn->body && fn->body->type == AST_BLOCK) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fn->body);
-                xa_visit_collect_statements_with_hoisting(ctx, fn->body->as.block.statements,
-                                                          fn->body->as.block.count);
-                xa_analyzer_exit_scope(ctx->analyzer);
-            } else if (fn->body) {
+            if (fn->body)
                 xa_visit_collect(ctx, fn->body);
-            }
             xa_analyzer_exit_scope(ctx->analyzer);
         }
     }

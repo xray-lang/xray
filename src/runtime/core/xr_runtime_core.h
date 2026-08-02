@@ -102,6 +102,7 @@ XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
 XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_destroy_root_storage(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core);
 XR_FUNC struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core);
 XR_FUNC XrValue xr_runtime_core_builtin(const XrRuntimeCore *core, int32_t index);

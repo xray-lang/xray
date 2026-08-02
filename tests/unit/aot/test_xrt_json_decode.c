@@ -48,9 +48,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
 static void destroy_object(XrValue value) {
     if (value.tag != XR_TAG_PTR || !value.ptr || value.heap_type != 0)
         return;
-    xrt_json_t *object = (xrt_json_t *) value.ptr;
-    XRT_FREE((void *) object->field_names);
-    XRT_FREE(object);
+    xrt_release(value);
 }
 
 static XrValue user_json(void) {

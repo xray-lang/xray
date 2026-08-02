@@ -82,8 +82,16 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
  * in src/runtime/mem/xobj_header.h and share this same bit space.
  *
  *   bit 3  HAS_DTOR      - object's type has a destructor to run at rc==0.
- *   bit 11 STORAGE_BUMP  - AOT bump-allocated: RC dup/drop are no-ops (freed in
- *                          bulk with the bump arena) and no collector scans it.
+ *   bit 7  AOT_EXECUTION - AOT object owned by the current execution arena.
+ *                          Normal RC still applies; the arena is the cycle/
+ *                          abnormal-exit upper bound.
+ *   bit 8  AOT_SWEEP     - arena teardown is finalizing this object. Child
+ *                          releases back into the same arena are suppressed.
+ *   bit 9  AOT_ALLOCATION- object has an execution-allocation prefix. This
+ *                          remains set after publication so normal free can
+ *                          recover the real allocation base.
+ *   bit 11 IMMORTAL      - compiler-emitted process-lifetime metadata. RC
+ *                          dup/drop are no-ops and no collector scans it.
  *   bit 12 STORAGE_STACK - AOT stack-allocated object with a real destructor
  *                          but no heap block to free.
  *   bit 14 AOT_NATIVE    - AOT-native header-bearing value. It boxes with the
@@ -91,11 +99,14 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
  *                          but must stay on AOT clone/release paths.
  */
 #define XR_OBJ_HAS_DTOR 0x0008
-#define XR_OBJ_STORAGE_BUMP 0x0800
+#define XR_OBJ_AOT_EXECUTION 0x0080
+#define XR_OBJ_AOT_SWEEP 0x0100
+#define XR_OBJ_AOT_ALLOCATION 0x0200
+#define XR_OBJ_IMMORTAL 0x0800
 #define XR_OBJ_STORAGE_STACK 0x1000
 #define XR_OBJ_AOT_NATIVE 0x4000
 
-/* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so the
+/* Shared signed-RC sentinels. Immortal objects store XR_RC_STICKY so the
  * VM and AOT fast paths never mistake them for unique thread-local objects. */
 #define XR_RC_STICKY ((int32_t) INT32_MIN)
 #define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))

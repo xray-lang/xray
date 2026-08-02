@@ -106,7 +106,7 @@ export class Plan<S> {
     }
     forEach(range: Range, body: (S, int) -> ()) {
         this._begin()
-        defer fn() {
+        defer {
             this._end()
         }
         for (offset in 0..len(range)) {
@@ -115,7 +115,7 @@ export class Plan<S> {
     }
     map<T>(range: Range, body: (S, int) -> T) -> Array<T> {
         this._begin()
-        defer fn() {
+        defer {
             this._end()
         }
         var out: Array<T> = []
@@ -126,7 +126,7 @@ export class Plan<S> {
     }
     mapInto<T>(range: Range, output: ref Array<T>, body: (S, int) -> T) {
         this._begin()
-        defer fn() {
+        defer {
             this._end()
         }
         output.clear()
@@ -136,7 +136,7 @@ export class Plan<S> {
     }
     reduce<A>(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A) -> A {
         this._begin()
-        defer fn() {
+        defer {
             this._end()
         }
         var acc = initial

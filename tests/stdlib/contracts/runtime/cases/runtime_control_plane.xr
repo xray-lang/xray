@@ -1,4 +1,4 @@
-// VM/AOT control-plane contract: each backend observes its current coroutine heap.
+// VM/AOT control-plane contract: each backend observes its current execution-local domain.
 //
 // The cycle-collector toggles this case used to exercise are gone with the
 // collector (task 247). What remains is the part that still has meaning on

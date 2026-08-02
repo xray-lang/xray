@@ -8,10 +8,10 @@ import { Mutex, CountdownLatch } from sync
 const m = Mutex<int>(0)
 const done = CountdownLatch(1)
 
-go {
+go fn() {
     m.replace((v) -> v + 100)
     done.done()
-}
+}()
 
 done.wait()
 print(m.lock((v) -> v))   // 100 — mutation from the spawned coroutine is visible

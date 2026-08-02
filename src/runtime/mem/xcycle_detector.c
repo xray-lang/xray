@@ -64,7 +64,7 @@ static bool detector_walk_block(XrRegionBlock *block, const char *end, XrHeapObj
         XrObjHeader *obj = (XrObjHeader *) p;
         uint32_t size = obj->objsize;
 
-        /* A zero step would spin forever. XR_OBJ_STORAGE_BUMP objects carry
+        /* A zero step would spin forever. XR_OBJ_IMMORTAL objects carry
          * objsize 0 and cannot reach a VM region block, so this is a corrupted
          * or misaligned walk rather than a shape to skip. Fail loudly. */
         if (size == 0) {
@@ -675,9 +675,9 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
                 continue;
             const char *field = cycle_edge_field(&edges, e);
             if (field)
-                fprintf(stderr, "        defer <持有者>.%s = null\n", field);
+                fprintf(stderr, "        defer { <持有者>.%s = null }\n", field);
             else
-                fprintf(stderr, "        defer <%s 持有该闭包的字段> = null\n",
+                fprintf(stderr, "        defer { <%s 持有该闭包的字段> = null }\n",
                         cycle_obj_name(members[e->from]->obj));
         }
     }

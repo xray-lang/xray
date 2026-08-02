@@ -261,7 +261,7 @@ bool xfmt_emit_defer_closure(XrFmtContext *ctx, AstNode *node) {
  *     {                                  <- block, is_synthetic_defer_capture
  *         var __xr_dtmp_0 = a            <- one var decl per argument, in order
  *         var __xr_dtmp_1 = b
- *         defer fn() { f(__xr_dtmp_0, __xr_dtmp_1) }
+ *         defer { f(__xr_dtmp_0, __xr_dtmp_1) }
  *     }
  *
  * Returns NULL for anything that is not exactly that shape — including a block

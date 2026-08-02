@@ -5,13 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_arc.h - Bump allocator for AOT-generated code
+ * xrt_arc.h - Execution-local ARC allocator for AOT-generated code
  *
  * KEY CONCEPT:
  *   Self-contained memory management for AOT-generated code.
  *   Objects carry an XrObjHeader before user data for type tracking.
- *   The bump allocator provides a fast allocation path; all objects
- *   are freed in bulk by xrt_bump_destroy() at program exit.
+ *   Normal reference counting reclaims acyclic objects immediately. Every
+ *   remaining execution-local object is also registered with the current
+ *   coroutine arena, which is the deterministic upper bound for cycles.
  */
 
 #ifndef XRT_ARC_H
@@ -76,7 +77,7 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
 #endif
 
 /* =========================================================================
- * Object header — precedes every bump-allocated object.
+ * Object header — precedes every generic execution-arena allocation.
  *
  * Layout: [XrObjHeader][  user data  ]
  *          ^--- hdr pointer (via XRT_ARC_HDR macro)
@@ -84,7 +85,7 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
  * AOT objects carry the unified XrObjHeader (src/shared/xr_obj_header.h), the
  * same 16-byte header the VM/AOT runtime uses, so a value crossing the
  * coroutine boundary needs no re-shelling. `type` is the type-table tag for
- * destructor dispatch; `extra` carries XR_OBJ_STORAGE_BUMP (bump vs heap) and
+ * destructor dispatch; `extra` carries execution/immortal storage flags and
  * XR_OBJ_HAS_DTOR; `refcount` is the 0-based RC (rc == N means N+1 live refs).
  * ========================================================================= */
 
@@ -119,6 +120,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_JSON 13u
 #define XRT_ARC_KIND_STRBUF 14u
 #define XRT_ARC_KIND_ITERATOR 15u
+#define XRT_ARC_KIND_TUPLE 16u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -156,27 +158,52 @@ static inline void xrt_buffer_destroy_builtin(void *obj) {
 }
 
 /* =========================================================================
- * Bump allocator
+ * Execution-local arenas
  *
- * Primary allocation path for AOT-generated code. Objects are never
- * individually freed — the entire arena is released at program exit
- * via xrt_bump_destroy(). Each object carries an XrObjHeader for type
- * tracking. When xrt_bump_enabled is 0, falls back to calloc/free.
+ * An arena is an ownership registry, not a bump allocator. Objects retain
+ * normal RC and are individually reclaimed on their last release. The arena
+ * owns whatever remains when its physical coroutine ends, including strong
+ * reference cycles that pure RC cannot break. Publishing an object into the
+ * shared or transferable storage domain unbinds it from this registry first.
  * ========================================================================= */
 
-#define XRT_BUMP_BLOCK_SIZE (2u * 1024u * 1024u)  // 2 MB per block
+typedef struct XrtExecutionArena XrtExecutionArena;
+typedef struct XrtExecutionAllocation XrtExecutionAllocation;
+typedef void (*XrtExecutionFinalizer)(XrObjHeader *hdr);
 
-typedef struct XrtBumpBlock {
-    struct XrtBumpBlock *next;
-    uint64_t _pad;  // data starts at offset 16: malloc base is 16-aligned, so data is too
-    char data[];
-} XrtBumpBlock;
+struct XrtExecutionArena {
+    XrtExecutionAllocation *head;
+    uint64_t live_bytes;
+    uint64_t live_objects;
+    uint64_t finalizer_count;
+    uint8_t initialized;
+    uint8_t destroying;
+    uint8_t heap_owned;
+    uint8_t _pad[5];
+};
+
+/* The prefix is deliberately 16-byte sized/aligned as a whole: the following
+ * XrObjHeader and the user payload therefore preserve xrt_arc_alloc's 16-byte
+ * alignment contract on every supported 64-bit provider. */
+struct XrtExecutionAllocation {
+    XrtExecutionAllocation *prev;
+    XrtExecutionAllocation *next;
+    XrtExecutionArena *arena;
+    XrtExecutionFinalizer finalizer;
+    uint64_t object_bytes;
+    uint64_t magic;
+};
+
+#define XRT_EXECUTION_ALLOCATION_MAGIC UINT64_C(0x585241594152454e)
+_Static_assert((sizeof(XrtExecutionAllocation) & 15u) == 0,
+               "execution allocation prefix must preserve 16-byte alignment");
+
+static void xrt_execution_finalize_generic(XrObjHeader *hdr);
+static void xrt_execution_finalize_array(XrObjHeader *hdr);
 
 #ifdef XRT_IMPL
-char *xrt_bump_cursor;
-char *xrt_bump_end;
-XrtBumpBlock *xrt_bump_blocks;
-int xrt_bump_enabled = 0;  // 0 = calloc (safe default); 1 = bump (fast, no per-object free)
+XrtExecutionArena xrt_root_execution_arena;
+_Thread_local XrtExecutionArena *xrt_current_execution_arena;
 /* Depth-bounded recursive release (mirrors the VM's deferred_drops): when a
  * destructor cascade gets too deep, dead objects are queued here and drained
  * iteratively by the outermost xrt_release instead of recursing, so freeing a
@@ -192,10 +219,8 @@ _Thread_local XrObjHeader **xrt_deferred_stack;
 _Thread_local uint32_t xrt_deferred_count;
 _Thread_local uint32_t xrt_deferred_cap;
 #else
-extern char *xrt_bump_cursor;
-extern char *xrt_bump_end;
-extern XrtBumpBlock *xrt_bump_blocks;
-extern int xrt_bump_enabled;
+extern XrtExecutionArena xrt_root_execution_arena;
+extern _Thread_local XrtExecutionArena *xrt_current_execution_arena;
 extern _Thread_local int xrt_release_depth;
 extern _Thread_local XrObjHeader **xrt_deferred_stack;
 extern _Thread_local uint32_t xrt_deferred_count;
@@ -206,76 +231,138 @@ extern _Thread_local uint32_t xrt_deferred_cap;
  * iterative draining (matches XR_DESTROY_DEPTH_LIMIT on the VM side). */
 #define XRT_RELEASE_DEPTH_LIMIT 64
 
-static void xrt_bump_new_block(size_t min_size) {
-    size_t bsize = XRT_BUMP_BLOCK_SIZE;
-    if (min_size > bsize)
-        bsize = min_size;
-    XrtBumpBlock *b = (XrtBumpBlock *) XRT_MALLOC(sizeof(XrtBumpBlock) + bsize);
-    if (XR_UNLIKELY(!b)) {
-        fprintf(stderr, "xrt_bump: out of memory\n");
+static inline void xrt_execution_arena_init(XrtExecutionArena *arena, int heap_owned) {
+    if (!arena)
+        return;
+    memset(arena, 0, sizeof(*arena));
+    arena->initialized = 1;
+    arena->heap_owned = heap_owned ? 1 : 0;
+}
+
+static inline XrtExecutionArena *xrt_execution_root(void) {
+    if (!xrt_root_execution_arena.initialized)
+        xrt_execution_arena_init(&xrt_root_execution_arena, 0);
+    return &xrt_root_execution_arena;
+}
+
+static inline XrtExecutionArena *xrt_execution_current(void) {
+    if (!xrt_current_execution_arena)
+        xrt_current_execution_arena = xrt_execution_root();
+    return xrt_current_execution_arena;
+}
+
+static inline void *xrt_execution_arena_new(void) {
+    XrtExecutionArena *arena = (XrtExecutionArena *) XRT_CALLOC(1, sizeof(*arena));
+    if (XR_UNLIKELY(!arena))
+        return NULL;
+    xrt_execution_arena_init(arena, 1);
+    return arena;
+}
+
+static inline void *xrt_execution_arena_enter(void *raw_arena) {
+    XrtExecutionArena *previous = xrt_current_execution_arena;
+    XrtExecutionArena *arena = (XrtExecutionArena *) raw_arena;
+    if (!arena || !arena->initialized || arena->destroying) {
+        fprintf(stderr, "xrt_execution_arena_enter: invalid arena\n");
         abort();
     }
-    b->next = xrt_bump_blocks;
-    xrt_bump_blocks = b;
-    xrt_bump_cursor = b->data;
-    xrt_bump_end = b->data + bsize;
+    xrt_current_execution_arena = arena;
+    return previous;
 }
 
-static inline void *xrt_bump_alloc(size_t size) {
-    if (XR_LIKELY(xrt_bump_cursor && xrt_bump_cursor + size <= xrt_bump_end)) {
-        void *p = xrt_bump_cursor;
-        xrt_bump_cursor += size;
-        return p;
-    }
-    xrt_bump_new_block(size);
-    void *p = xrt_bump_cursor;
-    xrt_bump_cursor += size;
-    return p;
+static inline void xrt_execution_arena_restore(void *raw_previous) {
+    xrt_current_execution_arena = (XrtExecutionArena *) raw_previous;
 }
 
-static void xrt_bump_destroy(void) {
-    XrtBumpBlock *b = xrt_bump_blocks;
-    while (b) {
-        XrtBumpBlock *next = b->next;
-        XRT_FREE(b);
-        b = next;
-    }
-    xrt_bump_blocks = NULL;
-    xrt_bump_cursor = NULL;
-    xrt_bump_end = NULL;
-}
-
-/* Allocate a normal individually-reclaimed ARC object even when the optional
- * process-lifetime bump arena is enabled.  Objects whose destructor owns
- * separately allocated storage (for example StringBuilder's growable byte
- * buffer) must use this path: a sticky bump object never runs its destructor,
- * so its external storage would otherwise survive until process teardown. */
-static inline void *xrt_arc_alloc_heap(size_t obj_size) {
-    obj_size = (obj_size + 15u) & ~(size_t) 15u;
-    size_t total = sizeof(XrObjHeader) + obj_size;
-    XrObjHeader *hdr = (XrObjHeader *) XRT_CALLOC(1, total);
-    if (XR_UNLIKELY(!hdr)) {
-        fprintf(stderr, "xrt_arc_alloc_heap: out of memory\n");
+static inline XrtExecutionAllocation *xrt_execution_node(XrObjHeader *hdr) {
+    XrtExecutionAllocation *node =
+        (XrtExecutionAllocation *) ((char *) hdr - sizeof(XrtExecutionAllocation));
+    if (XR_UNLIKELY(node->magic != XRT_EXECUTION_ALLOCATION_MAGIC)) {
+        fprintf(stderr, "xrt: corrupt execution allocation prefix\n");
         abort();
     }
-    return (char *) hdr + sizeof(XrObjHeader);
+    return node;
 }
 
-/* Alignment contract: returned user pointers are 16-byte aligned.
- * Bump path: block data starts 16-aligned and every allocation advances the
- * cursor by a multiple of 16. Heap path: calloc returns max_align_t (>= 16
- * on 64-bit). XR_ASSUME_ALIGNED hints in generated code rely on this. */
+static inline void xrt_execution_unlink(XrObjHeader *hdr) {
+    if (!hdr || !(hdr->extra & XR_OBJ_AOT_EXECUTION))
+        return;
+    XrtExecutionAllocation *node = xrt_execution_node(hdr);
+    XrtExecutionArena *arena = node->arena;
+    if (node->prev)
+        node->prev->next = node->next;
+    else if (arena)
+        arena->head = node->next;
+    if (node->next)
+        node->next->prev = node->prev;
+    if (arena) {
+        arena->live_objects--;
+        arena->live_bytes -= node->object_bytes;
+    }
+    node->prev = NULL;
+    node->next = NULL;
+    node->arena = NULL;
+    hdr->extra &= (uint16_t) ~(uint16_t) XR_OBJ_AOT_EXECUTION;
+}
+
+static inline void xrt_execution_unbind(XrObjHeader *hdr) {
+    xrt_execution_unlink(hdr);
+}
+
+static inline void *xrt_execution_alloc(size_t object_bytes, XrtExecutionFinalizer finalizer) {
+    if (XR_UNLIKELY(object_bytes > SIZE_MAX - 15u)) {
+        fprintf(stderr, "xrt_execution_alloc: allocation size overflow\n");
+        abort();
+    }
+    object_bytes = (object_bytes + 15u) & ~(size_t) 15u;
+    if (XR_UNLIKELY(object_bytes > SIZE_MAX - sizeof(XrtExecutionAllocation))) {
+        fprintf(stderr, "xrt_execution_alloc: allocation size overflow\n");
+        abort();
+    }
+    XrtExecutionArena *arena = xrt_execution_current();
+    if (XR_UNLIKELY(arena->destroying)) {
+        fprintf(stderr, "xrt_execution_alloc: allocation during arena teardown\n");
+        abort();
+    }
+    XrtExecutionAllocation *node = (XrtExecutionAllocation *) XRT_CALLOC(
+        1, sizeof(XrtExecutionAllocation) + object_bytes);
+    if (XR_UNLIKELY(!node)) {
+        fprintf(stderr, "xrt_execution_alloc: out of memory\n");
+        abort();
+    }
+    node->arena = arena;
+    node->finalizer = finalizer;
+    node->object_bytes = object_bytes;
+    node->magic = XRT_EXECUTION_ALLOCATION_MAGIC;
+    node->next = arena->head;
+    if (arena->head)
+        arena->head->prev = node;
+    arena->head = node;
+    arena->live_objects++;
+    arena->live_bytes += object_bytes;
+    XrObjHeader *hdr = (XrObjHeader *) (node + 1);
+    hdr->extra = XR_OBJ_AOT_ALLOCATION | XR_OBJ_AOT_EXECUTION;
+    atomic_store_explicit(&hdr->refcount, XR_RC_INIT, memory_order_relaxed);
+    return hdr;
+}
+
+static inline void *xrt_execution_alloc_embedded(size_t object_bytes,
+                                                  XrtExecutionFinalizer finalizer) {
+    XrObjHeader *hdr = (XrObjHeader *) xrt_execution_alloc(object_bytes, finalizer);
+    hdr->extra |= XR_OBJ_AOT_NATIVE;
+    return hdr;
+}
+
+/* Alignment contract: the allocation prefix and unified header are both
+ * multiples of 16 bytes, so every returned user pointer is 16-byte aligned. */
 static inline void *xrt_arc_alloc(size_t obj_size) {
-    obj_size = (obj_size + 15u) & ~(size_t) 15u;
-    size_t total = sizeof(XrObjHeader) + obj_size;
-    XrObjHeader *hdr;
-    if (XR_LIKELY(xrt_bump_enabled)) {
-        hdr = (XrObjHeader *) xrt_bump_alloc(total);
-        memset(hdr, 0, total);
-        hdr->extra = XR_OBJ_STORAGE_BUMP;  // mark as bump-allocated
-        atomic_store_explicit(&hdr->refcount, XR_RC_STICKY, memory_order_relaxed);
-    } else
-        return xrt_arc_alloc_heap(obj_size);
+    if (XR_UNLIKELY(obj_size > SIZE_MAX - sizeof(XrObjHeader) - 15u)) {
+        fprintf(stderr, "xrt_arc_alloc: allocation size overflow\n");
+        abort();
+    }
+    size_t object_bytes = sizeof(XrObjHeader) + ((obj_size + 15u) & ~(size_t) 15u);
+    XrObjHeader *hdr =
+        (XrObjHeader *) xrt_execution_alloc(object_bytes, xrt_execution_finalize_generic);
     return (char *) hdr + sizeof(XrObjHeader);
 }
 
@@ -317,17 +404,30 @@ static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
     hdr->extra |= XR_OBJ_HAS_DTOR;
 }
 
-/* Initialize an embedded object header for an AOT bump-allocated object (one
- * whose XrObjHeader is the struct's first field rather than a prepended block).
- * Mirrors the xrt_arc_alloc bump init: STORAGE_BUMP makes RC dup/drop no-ops
- * and the GC skip the object, and a sticky RC keeps the unified fast paths from
- * mistaking it for a unique thread-local owner. The XrObjType id makes the
- * object self-describing with the same numeric type the VM stores, so a boxed
- * value can carry heap_type and be type-checked identically on both backends. */
-static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
+/* Static headers describe compiler-emitted process-lifetime metadata. They do
+ * not belong to an execution arena and are intentionally immortal. */
+static inline void xrt_static_header_init(XrObjHeader *h, uint16_t type) {
     h->type = type;
-    h->extra = XR_OBJ_STORAGE_BUMP;
+    h->extra = XR_OBJ_IMMORTAL;
     atomic_store_explicit(&h->refcount, XR_RC_STICKY, memory_order_relaxed);
+    h->objsize = 0;
+    h->_rsv = 0;
+}
+
+static inline void xrt_heap_header_init(XrObjHeader *h, uint16_t type) {
+    uint16_t allocation_flags =
+        h->extra & (XR_OBJ_AOT_ALLOCATION | XR_OBJ_AOT_EXECUTION | XR_OBJ_AOT_NATIVE);
+    h->type = type;
+    h->extra = allocation_flags;
+    atomic_store_explicit(&h->refcount, XR_RC_INIT, memory_order_relaxed);
+    h->objsize = 0;
+    h->_rsv = 0;
+}
+
+static inline void xrt_stack_header_init(XrObjHeader *h, uint16_t type) {
+    h->type = type;
+    h->extra = XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_NATIVE;
+    atomic_store_explicit(&h->refcount, XR_RC_INIT, memory_order_relaxed);
     h->objsize = 0;
     h->_rsv = 0;
 }
@@ -346,7 +446,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK ||
            v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
            v.tag == XR_TAG_THREAD || v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN ||
-           v.tag == XR_TAG_NET_LISTENER;
+           v.tag == XR_TAG_NET_LISTENER || v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE;
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
@@ -425,14 +525,23 @@ static inline void xrt_retain(XrValue v) {
     if (hdr->_rsv == XRT_RC_GUARD_POISON)
         xrt_rc_guard_fail("xrt_retain", v.ptr); /* retain of a released object */
 #endif
-    if (hdr->extra & XR_OBJ_STORAGE_BUMP)
-        return; /* bump objects: freed in bulk */
+    if (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP))
+        return;
+    if (XR_OBJ_IS_SHARED(hdr)) {
+        atomic_fetch_sub_explicit(&hdr->refcount, 1, memory_order_relaxed);
+        return;
+    }
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
 static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
-    if (!hdr || (hdr->extra & XR_OBJ_STORAGE_BUMP))
+    if (!hdr ||
+        (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return 0;
+    if (XR_OBJ_IS_SHARED(hdr)) {
+        int32_t old = atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_acq_rel);
+        return old == -1;
+    }
     for (;;) {
         int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_acquire);
         if (rc == XR_RC_STICKY)
@@ -466,7 +575,7 @@ static inline void xrt_array_ref_release_owned(XrValue v);
 /* Finalize one dead object (run its destructor, free its block). The
  * destructor releases child references, which may recurse back into
  * xrt_release. */
-static inline void xrt_finalize_one(XrObjHeader *hdr) {
+static inline void xrt_finalize_payload(XrObjHeader *hdr) {
     void *obj = (char *) hdr + sizeof(XrObjHeader);
     if (hdr->extra & XR_OBJ_HAS_DTOR) {
         if (hdr->_rsv != XRT_ARC_KIND_NONE)
@@ -474,6 +583,26 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
         else
             xrt_dispatch_destructor(hdr->type, obj);
     }
+}
+
+static inline void xrt_execution_free_allocation(XrObjHeader *hdr) {
+    if (!hdr)
+        return;
+    if (hdr->extra & XR_OBJ_AOT_SWEEP)
+        return;
+    if (hdr->extra & XR_OBJ_AOT_EXECUTION)
+        xrt_execution_unlink(hdr);
+    if (hdr->extra & XR_OBJ_AOT_ALLOCATION) {
+        XrtExecutionAllocation *node = xrt_execution_node(hdr);
+        node->magic = 0;
+        XRT_FREE(node);
+    } else {
+        XRT_FREE(hdr);
+    }
+}
+
+static inline void xrt_finalize_one(XrObjHeader *hdr) {
+    xrt_finalize_payload(hdr);
 #ifdef XR_RC_GUARD
     /* --rc-guard: quarantine instead of freeing so a later touch is caught.
      * The destructor above has already released children; stamp the poison
@@ -484,7 +613,70 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
     }
 #endif
     if (!(hdr->extra & XR_OBJ_STORAGE_STACK))
-        XRT_FREE(hdr);
+        xrt_execution_free_allocation(hdr);
+}
+
+static void xrt_execution_finalize_generic(XrObjHeader *hdr) {
+    xrt_finalize_payload(hdr);
+}
+
+static inline int64_t xrt_execution_arena_live_bytes(const void *raw_arena) {
+    const XrtExecutionArena *arena = (const XrtExecutionArena *) raw_arena;
+    return arena ? (int64_t) arena->live_bytes : 0;
+}
+
+static inline int64_t xrt_execution_arena_live_objects(const void *raw_arena) {
+    const XrtExecutionArena *arena = (const XrtExecutionArena *) raw_arena;
+    return arena ? (int64_t) arena->live_objects : 0;
+}
+
+static inline int64_t xrt_execution_arena_finalizer_count(const void *raw_arena) {
+    const XrtExecutionArena *arena = (const XrtExecutionArena *) raw_arena;
+    return arena ? (int64_t) arena->finalizer_count : 0;
+}
+
+/* Mark every member before running any finalizer. A destructor that releases
+ * another member of the same residual cycle then observes AOT_SWEEP and does
+ * nothing; external published children still take their ordinary RC path.
+ *
+ * Teardown is deliberately split into finalization and deallocation passes.
+ * Finalizers may inspect or release any same-arena peer, so every payload must
+ * remain addressable until all finalizers have completed. */
+static inline void xrt_execution_arena_dispose(XrtExecutionArena *arena) {
+    if (!arena || !arena->initialized || arena->destroying)
+        return;
+    arena->destroying = 1;
+    for (XrtExecutionAllocation *node = arena->head; node; node = node->next) {
+        XrObjHeader *hdr = (XrObjHeader *) (node + 1);
+        hdr->extra |= XR_OBJ_AOT_SWEEP;
+    }
+    for (XrtExecutionAllocation *node = arena->head; node; node = node->next) {
+        XrObjHeader *hdr = (XrObjHeader *) (node + 1);
+        if (node->finalizer)
+            node->finalizer(hdr);
+        arena->finalizer_count++;
+    }
+    XrtExecutionAllocation *node = arena->head;
+    while (node) {
+        XrtExecutionAllocation *next = node->next;
+        node->magic = 0;
+        XRT_FREE(node);
+        node = next;
+    }
+    arena->head = NULL;
+    arena->live_bytes = 0;
+    arena->live_objects = 0;
+    arena->destroying = 0;
+}
+
+static inline void xrt_execution_arena_destroy(void *raw_arena) {
+    XrtExecutionArena *arena = (XrtExecutionArena *) raw_arena;
+    if (!arena)
+        return;
+    xrt_execution_arena_dispose(arena);
+    arena->initialized = 0;
+    if (arena->heap_owned)
+        XRT_FREE(arena);
 }
 
 /* Queue a dead object for iterative finalization. Returns 0 if the stack could
@@ -615,7 +807,7 @@ static inline void xrt_array_ref_release_owned(XrValue v) {
     XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
     if (!xrt_rc_claim_release_last(hdr))
         return;
-    if (!(hdr->extra & XR_OBJ_STORAGE_BUMP) && XR_ARRAY_REF_ELEM_TYPE(v) == XR_NATIVE_VALUE) {
+    if (XR_ARRAY_REF_ELEM_TYPE(v) == XR_NATIVE_VALUE) {
         XrValue *values = (XrValue *) v.ptr;
         uint32_t count = XR_ARRAY_REF_ELEM_COUNT(v);
         for (uint32_t i = 0; i < count; i++)
@@ -632,12 +824,18 @@ static inline XrValue xrt_value_to_owned(XrValue v) {
 }
 
 static inline void xrt_arc_init(void) {
-    const char *arena = getenv("XRAY_AOT_ARENA");
-    xrt_bump_enabled = (arena && arena[0] == '1' && arena[1] == '\0') ? 1 : 0;
+    XrtExecutionArena *root = xrt_execution_root();
+    xrt_current_execution_arena = root;
+}
+
+static inline void xrt_arc_shutdown(void) {
+    XrtExecutionArena *root = xrt_execution_root();
+    xrt_execution_arena_dispose(root);
+    xrt_current_execution_arena = NULL;
 }
 
 /* =========================================================================
- * String constructors — header + bytes in one bump block.
+ * String constructors — header + bytes in one execution allocation.
  * Layout: [XrObjHeader][xrt_str_t][len+1 bytes]; data points at the tail.
  * Callers fill the bytes via xr_str_buf() after xrt_str_alloc().
  * ========================================================================= */

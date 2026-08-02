@@ -643,6 +643,32 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.weak.load.field
+  :class memory-read
+  :arity 1
+  :result-ownership owned
+  :own-use borrow
+  :vn-kind memory-read
+  :tbaa-group field
+  :ic-site field
+  :effects (memory-read)
+  :requires ()
+  :observable (weak-promotion)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.weak.store.field
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group field
+  :own-use borrow
+  :ic-site field
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable (weak-store)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.index.get
   :class memory-read
   :arity 2
@@ -1462,6 +1488,44 @@
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.cell.new
+  :class allocation
+  :arity 1
+  :result-ownership owned
+  :own-use consume
+  :escape-use heap
+  :escape-alloc heap
+  :tbaa-group fresh
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable (cell-allocation)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.cell.get
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :vn-kind memory-read
+  :tbaa-group upval
+  :effects (memory-read)
+  :requires ()
+  :observable (cell-read)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.cell.set
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :own-use stored-value
+  :escape-use heap
+  :tbaa-group upval
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable (cell-write)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.load.upval

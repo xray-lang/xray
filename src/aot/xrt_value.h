@@ -246,7 +246,7 @@ typedef struct XrValue {
 #define XR_TAG_MAP 16          /* AOT map */
 #define XR_TAG_STRBUF 17       /* AOT string builder */
 #define XR_TAG_CLOSURE 18      /* AOT closure */
-#define XR_TAG_STR_ARC 19      /* bump-allocated string */
+#define XR_TAG_STR_ARC 19      /* execution-arena ARC string */
 #define XR_TAG_CELL 20         /* AOT mutable closure cell */
 #define XR_TAG_TUPLE 21        /* AOT tuple */
 #define XR_TAG_SET 22          /* AOT set */
@@ -451,7 +451,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
 #define XR_NATIVE_USIZE 19
 #define XR_NATIVE_POINTER 20
 
-/* String type check (both literal and bump-allocated) */
+/* String type check (literal or execution-arena ARC allocation) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
 
 /* Header-bearing container type checks. These containers box as a tagged
@@ -468,7 +468,7 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
  * XR_TAG_STR marks compiler-interned literals: the header is static const
  * data with the content hash precomputed at C generation time.
  * XR_TAG_STR_ARC marks runtime-allocated strings: header and bytes live in
- * one bump/heap block, `data` points at the trailing bytes.
+ * one execution allocation, `data` points at the trailing bytes.
  *
  * `len` makes length O(1); `hash` caches the content hash for map keys and
  * equality short-circuits (0 = not computed yet; real hashes are never 0).

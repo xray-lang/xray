@@ -1383,12 +1383,12 @@ TEST(code_action_closure_cycle_offers_defer) {
         "closure cycle: this closure captures 'b' and is stored into 'b.onClick'\n"
         "Xray does not reclaim reference cycles, and `weak` is a field modifier that cannot break "
         "a capture edge.\n"
-        "hint: clear the field when the scope ends -- defer b.onClick = null -- or pass 'b' as a "
+        "hint: clear the field when the scope ends -- defer { b.onClick = null } -- or pass 'b' as a "
         "parameter instead of capturing it");
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
 
-    XrJsonValue *action = find_action_with_title(actions, "defer b.onClick = null");
+    XrJsonValue *action = find_action_with_title(actions, "defer { b.onClick = null }");
     ASSERT(action != NULL);
 
     XrJsonValue *edits =
@@ -1398,7 +1398,7 @@ TEST(code_action_closure_cycle_offers_defer) {
     XrJsonValue *text_edit = xjson_array_get(edits, 0);
     // Indentation is carried over from the assignment, so the result reads as
     // hand-written code rather than something to clean up after.
-    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "    defer b.onClick = null\n");
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "    defer { b.onClick = null }\n");
     XrJsonValue *start = xjson_get_object(xjson_get_object(text_edit, "range"), "start");
     ASSERT_EQ(xjson_get_int(start, "line"), 2);
     ASSERT_EQ(xjson_get_int(start, "character"), 0);

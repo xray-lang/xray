@@ -1,0 +1,23 @@
+import runtime
+import { makeOwnedArray, borrowImportedArray } from "../../fixtures/return_ownership_lib"
+
+@test
+fn test_imported_owned_return_is_reclaimed() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        var values = makeOwnedArray(i)
+        assert_eq(values[0], i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+@test
+fn test_imported_borrowed_return_is_retained_by_binding() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        var owner = [i]
+        var alias = borrowImportedArray(owner)
+        assert_eq(alias[0], owner[0])
+    }
+    assert(runtime.liveObjects() - before < 100)
+}

@@ -2,6 +2,6 @@ import parallel
 
 const plan = parallel.Plan<int>(parallel.Options(1), lane -> lane)
 
-go {
+go fn() {
     plan.forEach(0..1, (state, i) -> {})
-}
+}()

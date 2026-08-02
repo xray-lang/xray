@@ -96,7 +96,7 @@ static void test_static_map_storage_uses_prehashed_lookup(void) {
     (void) xrt_map_static_storage_freeze(&map);
 
     ASSERT_TRUE(value.ptr == &map, "static Map value points at caller-owned storage");
-    ASSERT_TRUE((map.hdr.extra & XR_OBJ_STORAGE_BUMP) != 0,
+    ASSERT_TRUE((map.hdr.extra & XR_OBJ_IMMORTAL) != 0,
                 "static Map has non-releasing lifetime header");
     ASSERT_TRUE((map.flags & XR_MAP_FLAG_STATIC_READONLY) != 0, "static Map freezes as readonly");
     ASSERT_EQ_INT(xrt_map_get_prehashed(&map, key, hash).i, 7,
@@ -118,7 +118,7 @@ static void test_static_set_storage_uses_prehashed_lookup(void) {
     (void) xrt_set_static_storage_freeze(&set);
 
     ASSERT_TRUE(value.ptr == &set, "static Set value points at caller-owned storage");
-    ASSERT_TRUE((set.hdr.extra & XR_OBJ_STORAGE_BUMP) != 0,
+    ASSERT_TRUE((set.hdr.extra & XR_OBJ_IMMORTAL) != 0,
                 "static Set has non-releasing lifetime header");
     ASSERT_TRUE((set.flags & XR_SET_FLAG_STATIC_READONLY) != 0, "static Set freezes as readonly");
     ASSERT_TRUE(xrt_set_has_prehashed(&set, key, hash), "static Set consumes producer prehash");

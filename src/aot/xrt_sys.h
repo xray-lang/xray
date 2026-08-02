@@ -130,18 +130,14 @@ static inline XrValue xrt_sys_array_new_typed_uninit(int64_t cap, uint8_t elem_t
     }
 
     size_t total = sizeof(xrt_sys_array_view_t) + data_bytes + pad;
-    xrt_sys_array_view_t *arr = (xrt_sys_array_view_t *) XRT_MALLOC(total);
+    xrt_sys_array_view_t *arr = (xrt_sys_array_view_t *)
+        xrt_execution_alloc_embedded(total, xrt_execution_finalize_array);
     if (XR_UNLIKELY(!arr)) {
         fprintf(stderr, "%s: out of memory\n", where);
         abort();
     }
-    memset(arr, 0, sizeof(*arr));
-    xrt_bump_header_init(&arr->hdr, XR_TARRAY);
-    arr->hdr.extra |= XR_OBJ_AOT_NATIVE;
-    if (!xrt_bump_enabled) {
-        arr->hdr.extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
-        atomic_store_explicit(&arr->hdr.refcount, 0, memory_order_relaxed);
-    }
+    memset((char *) arr + sizeof(XrObjHeader), 0, sizeof(*arr) - sizeof(XrObjHeader));
+    xrt_heap_header_init(&arr->hdr, XR_TARRAY);
     arr->capacity = cap;
     arr->data_storage = XR_ARRAY_DATA_INLINE;
     arr->elem_type = elem_type;

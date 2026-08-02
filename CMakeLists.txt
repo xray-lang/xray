@@ -1924,6 +1924,17 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME test_stdlib_return_ownership_gate
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_return_ownership_gate.py
+    )
+    set_tests_properties(test_stdlib_return_ownership_gate PROPERTIES
+        LABELS "stdlib;ownership;task-253;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME test_binary_public_native_readiness
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_binary_public_native_readiness.py
@@ -3118,7 +3129,7 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(regression_rc_closure_self_capture PROPERTIES
-        LABELS "regression;rc;vm"
+        LABELS "regression;rc;vm;task-254"
         TIMEOUT 30
     )
 
@@ -3139,11 +3150,24 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
-    # Task 249 phase A — the two construction-result ownership paths that do
-    # hold. The other two (moved out by return, stored into a container) are a
-    # known ARC gap tracked by tests/probes/rc/probe6_return_ownership_gap.xr
-    # and deliberately NOT registered until per-callee return-ownership
-    # summaries land.
+    # Task 252 — compare a small and large number of cycle-leaking physical
+    # coroutines by process max RSS.  A hosted provider runs the same source as
+    # AOT; provider-less hosts still keep the AOT arena implementation covered
+    # by test_xrt_execution_arena.
+    add_test(
+        NAME regression_aot_execution_arena_l2
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_execution_arena_l2.py
+                --xray $<TARGET_FILE:xray>
+                --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe7_aot_execution_arena_l2.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_aot_execution_arena_l2 PROPERTIES
+        LABELS "regression;rc;vm;aot;task-252"
+        TIMEOUT 120
+    )
+
+    # Task 249/253 — direct and cross-callee construction-result ownership.
     add_test(
         NAME regression_construction_result_ownership
         COMMAND $<TARGET_FILE:xray> test
@@ -3156,14 +3180,64 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME regression_return_ownership_summary
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe6_return_ownership_gap.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_return_ownership_summary PROPERTIES
+        LABELS "regression;rc;vm;task-253"
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME regression_cross_module_return_ownership_summary
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_cross_module_return_ownership_summary PROPERTIES
+        LABELS "regression;rc;vm;module;incremental;task-253"
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME regression_closure_capture_cell_reassign
         COMMAND $<TARGET_FILE:xray> test
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_mem/0805_closure_capture_cell_reassign.xr
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(regression_closure_capture_cell_reassign PROPERTIES
-        LABELS "regression;rc;vm"
+        LABELS "regression;rc;vm;task-254"
         TIMEOUT 30
+    )
+
+    add_test(
+        NAME regression_mutable_capture_cell_rss
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_mutable_capture_cell_rss.py
+                --xray $<TARGET_FILE:xray>
+                --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/probe8_mutable_capture_cell_rss.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_mutable_capture_cell_rss PROPERTIES
+        LABELS "regression;rc;vm;aot;task-254"
+        TIMEOUT 300
+    )
+
+    # Task 255 — converge go/defer on one grammar and keep every owner used by
+    # a registered defer alive until the surrounding user block exits.
+    add_test(
+        NAME regression_task255_go_defer_forms
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_task255_go_defer.py
+                --xray $<TARGET_FILE:xray>
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_task255_go_defer_forms PROPERTIES
+        LABELS "regression;frontend;ownership;rc;vm;task-255"
+        TIMEOUT 120
     )
 
     # Task 249 — RC reclamation gates. probe0 asserts that a local class

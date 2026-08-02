@@ -85,7 +85,7 @@ XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoroDesc *de
     if (!gen)
         return XR_NULL_VAL;
 
-    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc_heap(sizeof(xrt_iterator_t));
+    xrt_iterator_t *it = (xrt_iterator_t *) xrt_arc_alloc(sizeof(xrt_iterator_t));
     xrt_arc_mark_builtin(it, XRT_ARC_KIND_ITERATOR);
     it->coll = XR_NULL_VAL;
     it->cursor = 0;

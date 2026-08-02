@@ -1,0 +1,6 @@
+fn main_logic() {
+    var worker = fn() { print(1) }
+    go worker
+}
+
+main_logic()

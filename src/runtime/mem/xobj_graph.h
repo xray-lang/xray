@@ -38,7 +38,7 @@
  * altogether — and it must be skipped CONSISTENTLY in every phase of whatever
  * walks the graph, or the bookkeeping breaks. */
 static inline bool xr_obj_graph_child_eligible(const XrObjHeader *obj) {
-    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_STORAGE_BUMP))
+    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_IMMORTAL))
         return false;
     if (XR_OBJ_IS_SHARED(obj))
         return false;

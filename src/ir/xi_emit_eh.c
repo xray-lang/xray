@@ -534,9 +534,9 @@ XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
-    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
-    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
+    XiEmitReg start = reg_of(ctx, v->args[0]);
+    XiEmitReg end = reg_of(ctx, v->args[1]);
+    XiEmitReg workers = reg_of(ctx, v->args[2]);
     XiEmitReg closure = reg_of(ctx, v->args[3]);
     XiEmitReg states = 0;
     if (plan_state)
@@ -877,9 +877,9 @@ XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
-    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
-    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
+    XiEmitReg start = reg_of(ctx, v->args[0]);
+    XiEmitReg end = reg_of(ctx, v->args[1]);
+    XiEmitReg workers = reg_of(ctx, v->args[2]);
     XiEmitReg closure = reg_of(ctx, v->args[3]);
     XiEmitReg states = 0;
     uint16_t target_arg_index = data->plan_state ? 5 : 4;
@@ -1080,10 +1080,10 @@ XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    XiEmitReg start = reg_of_cell_deref(ctx, v->args[0]);
-    XiEmitReg end = reg_of_cell_deref(ctx, v->args[1]);
-    XiEmitReg workers = reg_of_cell_deref(ctx, v->args[2]);
-    XiEmitReg initial = reg_of_cell_deref(ctx, v->args[3]);
+    XiEmitReg start = reg_of(ctx, v->args[0]);
+    XiEmitReg end = reg_of(ctx, v->args[1]);
+    XiEmitReg workers = reg_of(ctx, v->args[2]);
+    XiEmitReg initial = reg_of(ctx, v->args[3]);
     XiEmitReg body_closure = reg_of(ctx, v->args[4]);
     XiEmitReg combine_closure = reg_of(ctx, v->args[5]);
     XiEmitReg states = 0;

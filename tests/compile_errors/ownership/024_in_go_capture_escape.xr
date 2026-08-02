@@ -1,7 +1,7 @@
 fn launch(data: Array<int>) {
-    var task = go {
+    var task = go fn() {
         return len(data)
-    }
+    }()
     print(await task)
 }
 

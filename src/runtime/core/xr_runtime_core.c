@@ -86,6 +86,15 @@ void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core) {
     xr_sysheap_destroy_coro_storage(core->sys_heap);
 }
 
+void xr_runtime_core_destroy_root_storage(XrRuntimeCore *core) {
+    if (!core || core->root_heap.is_tearing_down)
+        return;
+    /* Root execution region blocks are returned to the system-heap L2 pool.
+     * This therefore has to run before the pool owner itself is destroyed. */
+    core->root_alloc.local_heap = NULL;
+    xr_coro_heap_teardown_inplace(&core->root_heap);
+}
+
 void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     if (!core)
         return;
@@ -168,8 +177,7 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
     xr_runtime_core_destroy_coro_storage(core);
     /* Root heap first: its finalizers may still reach module-static objects,
      * which the fixed heap is about to tear down. */
-    core->root_alloc.local_heap = NULL;
-    xr_coro_heap_teardown_inplace(&core->root_heap);
+    xr_runtime_core_destroy_root_storage(core);
     xr_runtime_core_cleanup_fixed_heap(core);
 
     if (core->global_string_pool) {

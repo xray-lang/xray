@@ -1,3 +1,3 @@
 scope {
-    go { print(1) }
+    go fn() { print(1) }()
 }

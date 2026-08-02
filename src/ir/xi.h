@@ -350,6 +350,8 @@ typedef enum {
     /* Memory / field access */
     XI_LOAD_FIELD,      /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
     XI_STORE_FIELD,     /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
+    XI_WEAK_LOAD_FIELD, /* weak field load with owned promotion */
+    XI_WEAK_STORE_FIELD, /* weak field store; does not consume the stored value */
     XI_INDEX_GET,       /* obj[key]: args[0]=obj, args[1]=key */
     XI_INDEX_SET,       /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
     XI_ENUM_VARIANT_AT, /* checked EnumVariants<E>[index] -> EnumVariant<E> */
@@ -458,6 +460,9 @@ typedef enum {
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
+    XI_CELL_NEW,    /* create mutable capture cell: args[0]=initial value */
+    XI_CELL_GET,    /* read mutable capture cell: args[0]=cell */
+    XI_CELL_SET,    /* update mutable capture cell: args[0]=cell, args[1]=value */
     XI_LOAD_UPVAL,  /* load upvalue: aux_int=upval_index */
     XI_STORE_UPVAL, /* store upvalue: aux_int=upval_index, args[0]=val */
 
@@ -558,7 +563,8 @@ typedef enum {
      * aliases.  Lowering marks semantic value-struct copies with
      * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone,
      * and mutable-capture reads with XI_COPY_KIND_CELL_READ so optimizers do
-     * not fold them through stale SSA values before backend cell loads. */
+     * not fold them through stale SSA values before xi_pass_close rewrites
+     * them to explicit XI_CELL_GET values. */
     XI_COPY, /* identity by default: dst = args[0], may carry narrowed type */
 
     /* OOP: class creation */
@@ -840,20 +846,8 @@ typedef enum {
  * `super(...)` call lowers to the same XI_CALL_METHOD with aux "constructor"
  * but returns the receiver at +0, and it is deliberately NOT marked. */
 #define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
-/* This field load reads a `weak` slot, so its result is OWNED rather than the
- * borrowed reference an ordinary field load yields (spec 16.3 W1: reading a
- * weak field promotes, because handing back a borrow would let the target die
- * mid-expression). ARC reads this to drop the result at its death point.
- *
- * A lowering flag rather than a separate op: the difference is entirely in
- * result ownership, and every other property of the load is unchanged. */
-#define XI_LOWERING_FLAG_WEAK_FIELD_LOAD (1u << 6)
-/* This field store writes a `weak` slot, which does NOT take ownership of the
- * value — the slot holds a handle, and the target's lifetime is unaffected.
- * So unlike an ordinary field store this is not a consuming use: ARC must keep
- * the source alive to its own death point instead of moving it in. Moving it
- * in would kill the target at the assignment, which is precisely backwards. */
-#define XI_LOWERING_FLAG_WEAK_FIELD_STORE (1u << 7)
+/* Weak field ownership is represented by XI_WEAK_LOAD_FIELD and
+ * XI_WEAK_STORE_FIELD. No lowering flag or ARC-side exception is permitted. */
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
@@ -937,6 +931,22 @@ typedef enum XiViewOrigin {
     XI_VIEW_ORIGIN_ALLOCATION = 8,
 } XiViewOrigin;
 
+/* Per-callee ownership of a returned RC reference.  UNKNOWN is deliberately
+ * the zero/default state: ARC must never release an alias when compilation
+ * cannot prove where the reference came from. */
+typedef enum XiReturnOwnershipKind {
+    XI_RETURN_OWNERSHIP_UNKNOWN = 0,
+    XI_RETURN_OWNERSHIP_OWNED,
+    XI_RETURN_OWNERSHIP_BORROWED_PARAM,
+    XI_RETURN_OWNERSHIP_BORROWED_STATIC,
+} XiReturnOwnershipKind;
+
+typedef struct XiReturnOwnership {
+    uint8_t kind;       /* XiReturnOwnershipKind */
+    int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
+    bool complete;      /* every reachable return has the same provenance */
+} XiReturnOwnership;
+
 /* Compiler-only proof attached to a Slice-producing Xi value.  Function
  * summaries publish a symbolic PARAM/RECEIVER/STATIC template; lowering
  * instantiates it at a call site by recording the actual Xi operand that is
@@ -1000,6 +1010,9 @@ typedef struct XiValue {
     XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
     XiCallPlan *call_plan;          /* verified read/ref/move call contract */
     XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
+    /* Instantiated result provenance for calls whose body is outside this Xi
+     * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
+    XiReturnOwnership call_return_ownership;
     struct XiValue **args;          /* operand values (SSA uses) */
     uint16_t nargs;                 /* number of args */
     int16_t uses;                   /* use count (for DCE; -1 = not computed) */
@@ -1069,14 +1082,14 @@ static inline bool xi_value_is_constructor_call(const XiValue *value) {
     return value && (value->lowering_flags & XI_LOWERING_FLAG_CONSTRUCTOR_CALL) != 0;
 }
 
-/* Does this load read a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_LOAD)? */
+/* Does this value use the explicit weak-field load operation? */
 static inline bool xi_value_is_weak_field_load(const XiValue *value) {
-    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_LOAD) != 0;
+    return value && value->op == XI_WEAK_LOAD_FIELD;
 }
 
-/* Does this store write a `weak` field (see XI_LOWERING_FLAG_WEAK_FIELD_STORE)? */
+/* Does this value use the explicit weak-field store operation? */
 static inline bool xi_value_is_weak_field_store(const XiValue *value) {
-    return value && (value->lowering_flags & XI_LOWERING_FLAG_WEAK_FIELD_STORE) != 0;
+    return value && value->op == XI_WEAK_STORE_FIELD;
 }
 
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
@@ -1095,6 +1108,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->conversion = src->conversion;
     dst->view_evidence = src->view_evidence;
+    dst->call_return_ownership = src->call_return_ownership;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
@@ -1562,11 +1576,10 @@ typedef struct XiFunc {
      * a callee that never releases it). Arena-allocated; NULL until computed. */
     struct XiBorrowSig *arc_borrow_sig;
 
-    /* ARC return-ownership: 1 if this function provably returns a FRESH (+1)
-     * owned reference on every return (a new allocation or a known fresh call),
-     * so a caller that discards the result must release it. Computed alongside
-     * arc_borrow_sig; meaningful only once arc_borrow_sig is non-NULL. */
-    uint8_t arc_returns_fresh;
+    /* ARC return-ownership summary, computed to a fixpoint on pre-ARC IR.
+     * UNKNOWN is fail-closed: callers retain as needed but do not emit an
+     * unconsumed drop that could free a borrowed alias. */
+    XiReturnOwnership arc_return_ownership;
 
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */

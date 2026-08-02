@@ -1734,7 +1734,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
     // ========== Coroutine syntax ==========
 
-    // defer statement: defer fn() or defer { block }
+    // defer statement: defer call() or defer { block }
     if (xr_parser_match(parser, TK_DEFER)) {
         return xr_parse_defer_statement(parser);
     }

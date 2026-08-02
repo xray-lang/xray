@@ -166,6 +166,9 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             (v->flags & XI_FLAG_TAIL)
                 ? OP_TAILCALL
                 : (emit_callee_is_plain_closure(ctx, v->args[0]) ? OP_CALL_STATIC : OP_CALL);
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            emit_inst(ctx, CREATE_ABC(OP_SET_STORAGE_CTX, storage_mode, 0, 0));
         emit_inst(ctx, CREATE_ABC(call_op, base, nargs, (uint8_t) nresults));
         emit_copy_call_results(ctx, dst, base, nresults);
     }

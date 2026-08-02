@@ -750,9 +750,8 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
         xr_task_attach_child(parent->task, task);
     }
 
-    /* monitored go: no auto-Channel here. Codegen only allocates one register
-     * for go result, writing base[a+1] would corrupt the stack frame.
-     * Users should call task.monitor() to get the notification Channel. */
+    /* A go expression produces only a Task handle. Completion observation is
+     * explicit through Task APIs, so no implicit Channel occupies base[a+1]. */
 
     base[a] = task ? xr_value_from_task(task) : xr_null();
     frame->pc = pc;

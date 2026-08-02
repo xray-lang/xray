@@ -101,9 +101,13 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-           |  'go' (Block | PostfixExpr)
+           |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
@@ -233,7 +237,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
@@ -432,9 +436,13 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-           |  'go' (Block | PostfixExpr)
+           |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
@@ -565,7 +573,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 
 // print is a normal global function call, syntactically an ExprStmt.
 

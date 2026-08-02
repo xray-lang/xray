@@ -1,0 +1,15 @@
+// anchor: defer-receiver-snapshot-task-255
+class Conn {
+    id: int = 0
+    constructor(id: int) { this.id = id }
+    close() { print("closing conn", this.id) }
+}
+
+fn receiver_snapshot() {
+    var conn = Conn(1)
+    defer conn.close()
+    conn = Conn(2)
+    print("body done")
+}
+
+receiver_snapshot()

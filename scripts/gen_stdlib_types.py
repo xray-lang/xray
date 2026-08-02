@@ -912,6 +912,11 @@ def return_ownership_contract_init(member):
     value = (member.get('return_ownership') or '').strip()
     if value == 'fresh':
         return 'XA_BUILTIN_RETURN_FRESH'
+    if value == 'borrowed_static':
+        return 'XA_BUILTIN_RETURN_BORROWED_STATIC'
+    match = re.fullmatch(r'borrowed_param:([0-9]+)', value)
+    if match:
+        return f'XA_BUILTIN_RETURN_BORROWED_PARAM_{match.group(1)}'
     return 'XA_BUILTIN_RETURN_UNKNOWN'
 
 

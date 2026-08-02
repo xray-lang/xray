@@ -78,7 +78,7 @@ static void test_sticky_noop(void) {
 static void test_bump_storage_noop(void) {
     XrObjHeader o = {0};
     o.refcount = XR_RC_INIT;
-    XR_OBJ_SET_FLAG(&o, XR_OBJ_STORAGE_BUMP);
+    XR_OBJ_SET_FLAG(&o, XR_OBJ_IMMORTAL);
 
     xr_obj_dup(&o);
     ASSERT_EQ(o.refcount, XR_RC_INIT, "bump dup is no-op");

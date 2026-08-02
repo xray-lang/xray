@@ -1,8 +1,8 @@
 fn main_logic() {
     var answer = 41
-    var task = go {
+    var task = go fn() {
         return answer + 1
-    }
+    }()
     await task
 }
 

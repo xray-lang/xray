@@ -211,10 +211,10 @@ static void test_generic_enum_key_hash_eq_consistency(void) {
 static void test_scalar_enum_sidecar_identity_and_hash(void) {
     static const char *const names[3] = {"Red", "Green", "Blue"};
     static const XrAotEnumScalarLayout layout_a = {
-        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
+        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
     };
     static const XrAotEnumScalarLayout layout_b = {
-        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
+        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
     };
     XrValue green_a = xrt_enum_scalar_box(&layout_a, 1);
     XrValue green_b = xrt_enum_scalar_box(&layout_b, 1);

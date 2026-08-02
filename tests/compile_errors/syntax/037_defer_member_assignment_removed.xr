@@ -1,0 +1,8 @@
+class Box { value: int = 0 }
+
+fn main_logic() {
+    var box = Box()
+    defer box.value = 7
+}
+
+main_logic()

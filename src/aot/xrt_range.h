@@ -92,7 +92,7 @@ static inline XrValue xrt_range_new_raw(int64_t start, int64_t end, int64_t step
         fprintf(stderr, "xrt_range: step must not be zero\n");
         abort();
     }
-    xrt_range_t *r = (xrt_range_t *) XRT_MALLOC(sizeof(xrt_range_t));
+    xrt_range_t *r = (xrt_range_t *) xrt_arc_alloc(sizeof(xrt_range_t));
     if (XR_UNLIKELY(!r)) {
         fprintf(stderr, "xrt_range: out of memory\n");
         abort();

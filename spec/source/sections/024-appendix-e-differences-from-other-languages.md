@@ -33,7 +33,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数，无环收集器；环由静态证明/`weak`/协程堆封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
+| 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
 | 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 

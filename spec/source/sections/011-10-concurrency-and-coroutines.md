@@ -10,7 +10,7 @@ order: 011
 
 > 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
 
-xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：写 `go { ... }` 就和写普通函数一样简单，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
+xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
 
 ### 10.1 协程模型
 
@@ -27,26 +27,26 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 ### 10.2 `go` — 启动协程
 
 ```ebnf
-GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` 是**表达式**，返回 `Task<T>` 句柄。三种形式都合法：
+`go` 是**表达式**，返回 `Task<T>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
 ```xray @id=coro-go-forms
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
+// 内联逻辑：lambda 也必须形成完整调用，并显式传参
 var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
-// 形式 3：块形式（隐式包装为零参 lambda）
-var t3 = go {
+// 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
+var t3 = go fn() -> int {
     return compute()
-}
+}()
 
 // 可选调试名称
 var named = go(name: "worker-1") worker(1, channel)
@@ -61,7 +61,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。它不得捕获任何外层 `var`，即使只读也不允许；已发布的 `const` 值和受验证同步句柄可以按能力捕获。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，并在参数位置显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -76,8 +76,9 @@ var task = go fn(x: int) -> int {
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
-- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
+- `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
+- `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
 
 ### 10.3 `await` — 等待结果
 
@@ -488,7 +489,7 @@ Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。F
 
 > Source of truth: `src/coro/xcoro*.c`, `src/coro/xtask*.c`, `src/coro/xchannel.c`, `src/coro/xscope*.c`, `src/frontend/analyzer/xanalyzer_escape.c`, and `docs/rules/design-principles.md`.
 
-xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. Design goal: writing `go { ... }` is as simple as writing an ordinary function call, while the **compiler guarantees no data race** within the language's safe subset. The precise form of that guarantee, its boundary, and the synchronisation edges each construct in this section establishes are defined in §16.9.
+xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. The design makes `go worker(args)` use the same explicit argument and ownership boundary as an ordinary call, while the **compiler guarantees no data race** within the language's safe subset. The precise form of that guarantee, its boundary, and the synchronisation edges each construct in this section establishes are defined in §16.9.
 
 ### 10.1 Coroutine model
 
@@ -505,26 +506,26 @@ Coroutines are distributed across multiple worker threads by default; the runtim
 ### 10.2 `go` — start a coroutine
 
 ```ebnf
-GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` is an **expression** returning a `Task<T>` handle. Three forms are valid:
+`go` is an **expression** returning a `Task<T>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
 
 ```xray @id=coro-go-forms
 // Form 1: call an existing function
 var t1 = go worker(0, channel)
 
-// Form 2: call a lambda literal (inline logic + explicit arguments)
+// Inline logic: a lambda must still form a complete call with explicit arguments
 var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
-// Form 3: block form (implicitly wrapped as a zero-argument lambda)
-var t3 = go {
+// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist
+var t3 = go fn() -> int {
     return compute()
-}
+}()
 
 // Optional debugging name
 var named = go(name: "worker-1") worker(1, channel)
@@ -539,7 +540,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. It may not capture any outer `var`, even for reads; published `const` values and verified synchronization handles may be captured according to their capabilities. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
+`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and spell `copy(...)` / `move` explicitly in argument positions:
 
 ```xray
 var n = 10
@@ -554,8 +555,9 @@ var task = go fn(x: int) -> int {
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Execution-local heap values (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
-- The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
+- `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
+- `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
 
 ### 10.3 `await` — wait for a result
 

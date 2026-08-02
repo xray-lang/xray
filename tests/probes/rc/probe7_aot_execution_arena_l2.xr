@@ -1,0 +1,59 @@
+// Task 252 — L2 is a backend-neutral memory bound, not merely a VM behavior.
+//
+// Every worker deliberately leaves strong cycles behind. Running a small and a
+// large number of short physical coroutines makes the L2 boundary observable
+// to check_execution_arena_l2.py and run_probes.sh: max RSS must remain bounded
+// because each finished coroutine tears down its residual graph in bulk.  The
+// AOT arena's liveBytes/liveObjects bookkeeping is asserted independently by
+// test_xrt_execution_arena, so a permanently-zero counter cannot make this
+// process-level gate pass.
+//
+// Before task 252 the AOT process retained every cycle until exit.  The VM
+// already satisfied the same bounded-growth assertion.
+
+import runtime
+
+class ArenaCycleNode {
+    peer: ArenaCycleNode?
+    value: int
+
+    constructor(value) {
+        this.peer = null
+        this.value = value
+    }
+}
+
+fn leave_cycles(count: int) -> int {
+    var checksum = 0
+    var i = 0
+    while (i < count) {
+        var left = ArenaCycleNode(i)
+        var right = ArenaCycleNode(i + 1)
+        left.peer = right
+        right.peer = left
+        checksum += left.value + right.value
+        i += 1
+    }
+
+    assert(checksum == count * count)
+    return checksum
+}
+
+fn run_one_execution(count: int) -> int {
+    var task = go leave_cycles(count)
+    return await task
+}
+
+var rounds = len(process.args) > 0 ? (int(process.args[0]) ?? 2000) : 2000
+var cycles_per_round = len(process.args) > 1 ? (int(process.args[1]) ?? 32) : 32
+var objects_before = runtime.liveObjects()
+var bytes_before = runtime.liveBytes()
+var total = 0
+var round = 0
+while (round < rounds) {
+    total += run_one_execution(cycles_per_round)
+    round += 1
+}
+assert(total == rounds * cycles_per_round * cycles_per_round)
+assert(runtime.liveObjects() - objects_before < 16)
+assert(runtime.liveBytes() - bytes_before < 4096)

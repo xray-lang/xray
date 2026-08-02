@@ -61,6 +61,10 @@ either side has to be argued rather than drift.
   FIELD -> FIELD_ID refinement. A pass that rewrites an op in place
   reassigns the group from `xi_tbaa_group_for_op()`; the verifier checks the
   value against the table rather than against a list of exempt ops.
+  Mutable capture cell reads/writes are explicit `xi.cell.get` /
+  `xi.cell.set` operations in the `upval` group. Weak field promotion/storage
+  are explicit weak-field operations; neither meaning may be recovered from a
+  lowering flag or backend register state.
 
 ## Reference counting
 
@@ -92,13 +96,13 @@ A change to these rules re-runs and, where the expected output moves, updates:
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def c6ed4ebdf26a291fffcceae52bd2ab3a0d3daf816f88e98e2a896987aa9e0732
+anchor-sha256: xisa/xi/ops.def edac98373bbcbca5c894aabf853c96b12abc977c5ef12d172c853f389d06c132
 anchor-sha256: src/ir/xi_tbaa.c cf085e40b1873b73dba919d9598ded130e83c0bea035798f345c125414f39c02
 anchor-sha256: src/ir/xi_tbaa.h 65cdf0c6f0fb09ef18ef6f4befdcdcb3632628fe23191ce0e455bc59b39fc3ef
 anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
 anchor-sha256: src/ir/xi_opt_gvn_pre.c 9eaa49c8c91f83534dc5fe159b411e13c404b5443eff44951bc71043c420ddfd
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 53050362c3fd0681aa791e80479334349655eee7b7340769bb4c399654a1a6fc
-anchor-sha256: src/coro/xtask.c f5a0fae1cf5cf5a5c90be51b1b6a356676310818b988a4f9fd80b88fac961c63
+anchor-sha256: src/coro/xtask.c 0557f8dbbfa4e8fdd1cecbd4724107aa83db4e629d53bb7ff3d0a67497ec1e20
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
 anchor-sha256: src/frontend/canonical/xcanon.c 6511de9fd3a2a07df02441ceae660a0e47d1cb784fe0a8c6a0cea674f9785ff3

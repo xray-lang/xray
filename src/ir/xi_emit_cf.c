@@ -364,12 +364,6 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 XiEmitReg r = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK)
                     return;
-                /* If the return value was cell-wrapped for closure capture,
-                 * dereference the cell to return the actual value. */
-                if ((blk->control->id < ctx->reg_map_size && ctx->cell_wrapped[blk->control->id]) ||
-                    xi_emit_var_has_side_cell(ctx, blk->control->var_id)) {
-                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, r, r, 0));
-                }
                 emit_inst(ctx, CREATE_ABC(OP_RETURN1, r, 0, 0));
             } else {
                 emit_inst(ctx, CREATE_ABC(OP_RETURN0, 0, 0, 0));
@@ -413,42 +407,6 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 XiEmitReg b = reg_of(ctx, rhs);
                 if (ctx->status != XI_EMIT_OK)
                     return;
-
-                /* Unwrap cells: fused cmp bypasses emit_value arg unwrap.
-                 * Every cell-wrapped variable must be dereferenced here;
-                 * failure to do so means comparing the cell pointer instead
-                 * of the contained value. */
-                if (xi_emit_var_has_side_cell(ctx, lhs->var_id)) {
-                    if (ctx->next_reg >= MAX_REGS) {
-                        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-                        return;
-                    }
-                    XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-                    if (ctx->next_reg > ctx->max_reg)
-                        ctx->max_reg = ctx->next_reg;
-                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, a, 0));
-                    a = tmp;
-                }
-                if (xi_emit_var_has_side_cell(ctx, rhs->var_id)) {
-                    if (ctx->next_reg >= MAX_REGS) {
-                        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-                        return;
-                    }
-                    XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-                    if (ctx->next_reg > ctx->max_reg)
-                        ctx->max_reg = ctx->next_reg;
-                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, b, 0));
-                    b = tmp;
-                }
-
-                /* Verify cell unwrap: after unwrapping, the comparison
-                 * registers must NOT be the raw cell registers. */
-                XR_DCHECK(!xi_emit_var_has_side_cell(ctx, lhs->var_id) ||
-                              a != ctx->cell_side_reg[lhs->var_id],
-                          "fused cmp LHS still holds cell register");
-                XR_DCHECK(!xi_emit_var_has_side_cell(ctx, rhs->var_id) ||
-                              b != ctx->cell_side_reg[rhs->var_id],
-                          "fused cmp RHS still holds cell register");
 
                 /* Determine branch-form opcode and sense.  GT/GE swap args. */
                 OpCode branch_op;

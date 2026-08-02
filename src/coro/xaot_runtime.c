@@ -34,6 +34,7 @@ typedef struct XrAotCoroState {
     const XrAotCoroDesc *desc;
     void *frame;
     XrAotRuntime *runtime;
+    void *execution_arena;
 } XrAotCoroState;
 
 static XrCoroHeap *aot_runtime_control_heap(const XrAotContext *ctx) {
@@ -44,18 +45,72 @@ static XrCoroHeap *aot_runtime_control_heap(const XrAotContext *ctx) {
     return NULL;
 }
 
+static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
+    if (!coro || !coro->backend_state)
+        return NULL;
+    return (XrAotCoroState *) coro->backend_state;
+}
+
+static const XrAotValueOps *aot_state_value_ops(const XrAotCoroState *state) {
+    return state && state->runtime ? state->runtime->value_ops : NULL;
+}
+
+static void *aot_state_arena_enter(const XrAotCoroState *state) {
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    return ops && ops->execution_arena_enter && state->execution_arena
+               ? ops->execution_arena_enter(state->execution_arena)
+               : NULL;
+}
+
+static void aot_state_arena_restore(const XrAotCoroState *state, void *previous) {
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_restore && state->execution_arena)
+        ops->execution_arena_restore(previous);
+}
+
+static void aot_state_arena_destroy(XrAotCoroState *state) {
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_destroy && state->execution_arena)
+        ops->execution_arena_destroy(state->execution_arena);
+    state->execution_arena = NULL;
+}
+
+static const XrAotCoroState *aot_context_state(const XrAotContext *ctx) {
+    return ctx && ctx->coro ? aot_state_from_coro(ctx->coro) : NULL;
+}
+
 int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx) {
+    const XrAotCoroState *state = aot_context_state(ctx);
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_live_bytes && state->execution_arena)
+        return ops->execution_arena_live_bytes(state->execution_arena);
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     return heap ? heap->totalbytes : 0;
 }
 
 int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
+    const XrAotCoroState *state = aot_context_state(ctx);
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_live_objects && state->execution_arena)
+        return ops->execution_arena_live_objects(state->execution_arena);
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     return heap ? (int64_t) heap->object_count : 0;
 }
 
 XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
     XrAotRuntimeInfo info = {0};
+    const XrAotCoroState *state = aot_context_state(ctx);
+    const XrAotValueOps *ops = aot_state_value_ops(state);
+    if (ops && ops->execution_arena_live_bytes && ops->execution_arena_live_objects &&
+        state->execution_arena) {
+        info.live_bytes = ops->execution_arena_live_bytes(state->execution_arena);
+        info.live_kb = (double) info.live_bytes / 1024.0;
+        info.live_objects = ops->execution_arena_live_objects(state->execution_arena);
+        if (ops->execution_arena_finalizer_count)
+            info.finalizer_count =
+                ops->execution_arena_finalizer_count(state->execution_arena);
+        return info;
+    }
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     if (!heap)
         return info;
@@ -69,12 +124,6 @@ XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
     info.free_blocks = (int64_t) stats.free_blocks;
     info.full_blocks = (int64_t) stats.full_blocks;
     return info;
-}
-
-static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
-    if (!coro || !coro->backend_state)
-        return NULL;
-    return (XrAotCoroState *) coro->backend_state;
 }
 
 static void aot_drop_coro_locals(XrCoroutine *coro, XrAotRuntime *runtime) {
@@ -113,9 +162,11 @@ static void aot_run_cancellation_cleanup(XrCoroutine *coro) {
     XrAotCoroState *state = aot_state_from_coro(coro);
     if (!state || !state->frame || !state->desc || !state->desc->run_pending_defers)
         return;
+    void *previous_arena = aot_state_arena_enter(state);
     XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
     state->desc->run_pending_defers(state->frame);
     xr_exec_context_restore(previous);
+    aot_state_arena_restore(state, previous_arena);
 }
 
 static void aot_release_state(XrCoroutine *coro) {
@@ -123,8 +174,11 @@ static void aot_release_state(XrCoroutine *coro) {
     if (!state)
         return;
 
+    void *previous_arena = aot_state_arena_enter(state);
     aot_drop_coro_locals(coro, state->runtime);
     aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
+    aot_state_arena_restore(state, previous_arena);
+    aot_state_arena_destroy(state);
     xr_free(state);
     coro->backend_state = NULL;
     coro->backend = NULL;
@@ -135,8 +189,11 @@ static void aot_clear_reusable_state(XrCoroutine *coro, XrAotCoroState *state) {
     if (!state)
         return;
 
+    void *previous_arena = aot_state_arena_enter(state);
     aot_drop_coro_locals(coro, state->runtime);
     aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
+    aot_state_arena_restore(state, previous_arena);
+    aot_state_arena_destroy(state);
     state->desc = NULL;
     state->frame = NULL;
     state->runtime = NULL;
@@ -369,7 +426,10 @@ static XrCoroRunResult aot_runtime_backend_resume(XrCoroutine *coro, const XrCor
     ctx.vm_host = NULL;
     ctx.worker = run_ctx ? (void *) run_ctx->worker : NULL;
 
-    return aot_map_result(coro, state->desc->resume(state->frame, &ctx));
+    void *previous_arena = aot_state_arena_enter(state);
+    XrCoroRunResult result = aot_map_result(coro, state->desc->resume(state->frame, &ctx));
+    aot_state_arena_restore(state, previous_arena);
+    return result;
 }
 
 // Synchronous generator pull: run the (non-scheduled) AOT coroutine to its next
@@ -394,7 +454,9 @@ static XrCoroRunKind aot_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
     ctx.worker = NULL;
 
     aot_mark_running(coro);
+    void *previous_arena = aot_state_arena_enter(state);
     XrAotResult result = state->desc->resume(state->frame, &ctx);
+    aot_state_arena_restore(state, previous_arena);
 
     switch (result.kind) {
         case XR_AOT_RUN_GEN_YIELD:
@@ -721,6 +783,7 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
     }
 
     XrAotCoroState *state = NULL;
+    bool allocated_state = false;
     if (coro->backend == &aot_runtime_backend_vtable)
         state = aot_state_from_coro(coro);
     if (!state) {
@@ -730,10 +793,31 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
             aot_release_frame(desc, frame, NULL);
             return NULL;
         }
+        allocated_state = true;
     }
     state->desc = desc;
     state->frame = frame;
     state->runtime = runtime;
+    state->execution_arena = NULL;
+    if (runtime->value_ops && runtime->value_ops->execution_arena_new) {
+        const XrAotValueOps *ops = runtime->value_ops;
+        if (!ops->execution_arena_enter || !ops->execution_arena_restore ||
+            !ops->execution_arena_destroy) {
+            aot_clear_reusable_state(coro, state);
+            if (allocated_state)
+                xr_free(state);
+            xr_coro_discard_runtime_empty(scheduler, coro);
+            return NULL;
+        }
+        state->execution_arena = ops->execution_arena_new();
+        if (!state->execution_arena) {
+            aot_clear_reusable_state(coro, state);
+            if (allocated_state)
+                xr_free(state);
+            xr_coro_discard_runtime_empty(scheduler, coro);
+            return NULL;
+        }
+    }
 
     xr_coro_attach_backend(coro, &aot_runtime_backend_vtable, state);
     coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;

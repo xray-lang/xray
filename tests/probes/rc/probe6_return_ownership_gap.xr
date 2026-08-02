@@ -16,8 +16,8 @@
 //   存入容器：  20000 轮残留 20000
 //   200 万 churn max RSS 156.0 MB —— 与阶段 A 修复前的 156.7 MB 同量级
 //
-// 这是**诊断资产，不是门禁**，故意不注册进 ctest：它会一直红，直到
-// per-callee 返回所有权摘要（Roc/Koka 风格）落地。
+// 任务 253 将它注册为门禁：per-callee 返回所有权摘要必须同时覆盖直接
+// return 转移与容器消费，不能只修其中一种表面。
 
 import runtime
 
@@ -40,6 +40,27 @@ fn make(v: int) -> Node {
     return Node(v)
 }
 
+fn borrow_node(value: Node) -> Node {
+    return value
+}
+
+fn forward_node(value: move Node) -> Node {
+    return value
+}
+
+fn move_roundtrip_once(i: int) -> int {
+    var source = Node(i)
+    var result = forward_node(move source)
+    return result.v
+}
+
+fn recursive_factory(depth: int, value: int) -> Node {
+    if (depth > 0) {
+        recursive_factory(depth - 1, value)
+    }
+    return Node(value)
+}
+
 @test
 fn test_construction_result_moved_out_by_return() {
     var before = runtime.liveObjects()
@@ -59,6 +80,52 @@ fn test_construction_result_stored_into_container() {
         var a: Array<Node> = []
         a.push(Node(i))
         assert_eq(a[0].v, i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+// A borrowed result must retain at the call boundary; treating it as fresh
+// would let the alias release the caller's only owner.
+@test
+fn test_borrowed_parameter_result_remains_an_alias() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        var owner = Node(i)
+        var alias = borrow_node(owner)
+        assert_eq(alias.v, owner.v)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+// A move parameter is already a +1 owner. Returning it transfers that owner
+// rather than publishing a borrowed-parameter summary.
+@test
+fn test_move_parameter_result_transfers_ownership() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        assert_eq(move_roundtrip_once(i), i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+// Native reference returns have no XiFunc body.  Their explicit stdlib
+// metadata is therefore the only proof that a discarded result owns +1.
+@test
+fn test_native_owned_return_uses_stdlib_summary() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        var snapshot = runtime.info()
+        assert(snapshot.liveObjects >= 0)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+@test
+fn test_recursive_owned_summary_converges() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        var result = recursive_factory(3, i)
+        assert_eq(result.v, i)
     }
     assert(runtime.liveObjects() - before < 100)
 }

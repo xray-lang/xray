@@ -13,14 +13,14 @@ const cv = Condvar()
 const box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
 const consumed = CountdownLatch(1)
 
-go {
+go fn() {
     cv.lock()
     while (box.load() < 0) { cv.wait() }
     var v = box.load()
     cv.unlock()
     print(v)              // 42
     consumed.done()
-}
+}()
 
 cv.lock()
 box.store(42)
@@ -39,13 +39,13 @@ const woke = Atomic<int>(0)
 const all = CountdownLatch(3)
 
 for (i in 0..3) {
-    go {
+    go fn() {
         cv2.lock()
         while (!ready.load()) { cv2.wait() }
         cv2.unlock()
         woke.fetchAdd(1)
         all.done()
-    }
+    }()
 }
 
 cv2.lock()

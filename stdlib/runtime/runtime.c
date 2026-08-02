@@ -19,7 +19,7 @@
  *   - runtime.info()                     - typed RuntimeInfo snapshot
  *
  *   Standalone AOT routes the same surface through the provider-owned current
- *   coroutine heap. The compiler materializes RuntimeInfo with the same typed
+ *   execution-local reclamation domain. The compiler materializes RuntimeInfo with the same typed
  *   field layout, so neither backend reports unrelated host-process state.
  */
 

@@ -13,7 +13,7 @@ tests/regression/11_coroutine/1108_await_all.xr
 tests/regression/11_coroutine/1109_await_any.xr
 tests/regression/11_coroutine/1110_scope.xr
 tests/regression/11_coroutine/1111_comprehensive.xr
-tests/regression/11_coroutine/1112_go_block.xr
+tests/regression/11_coroutine/1112_go_lambda_call.xr
 tests/regression/11_coroutine/1113_select_send.xr
 tests/regression/11_coroutine/1114_select_after.xr
 tests/regression/11_coroutine/1115_cancel.xr
