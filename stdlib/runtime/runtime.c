@@ -29,6 +29,7 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/mem/xcoro_heap.h"
+#include "../../src/runtime/mem/xsystem_heap.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
@@ -60,6 +61,27 @@ static XrValue runtime_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc)
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
     return heap ? xr_int(heap->totalbytes) : xr_int(0);
+}
+
+/* ========== runtime.sharedBytes() / runtime.staticBytes() ========== */
+
+// Live bytes held by SYNC_SHARED system-heap objects. liveBytes() reads the
+// current coroutine heap; this reads the one domain a coroutine's teardown
+// never bounds — a monotonic rise here is the cheap production signal of a
+// shared-domain cycle leak (task 259 §3).
+static XrValue runtime_shared_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) argc;
+    (void) args;
+    return xr_int((int64_t) xr_sysheap_shared_live_bytes_total());
+}
+
+// Bytes allocated into the MODULE_STATIC class/module arena (grows only).
+static XrValue runtime_static_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) argc;
+    (void) args;
+    return xr_int((int64_t) xr_sysheap_static_alloc_bytes_total());
 }
 
 /* ========== runtime.disableCycleCollection() / runtime.enableCycleCollection() ========== */

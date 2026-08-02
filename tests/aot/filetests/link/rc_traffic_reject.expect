@@ -1,0 +1,5 @@
+status=fail
+contains=contract 'rcTrafficReject' failed
+contains=reference-count traffic
+contains=R7
+not_contains=CRASH

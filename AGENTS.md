@@ -50,6 +50,53 @@ Changes under `src/ir/`, `src/aot/`, or `src/analysis/` must preserve the Task 2
 
 Document any platform-only LeakSanitizer suppression in `scripts/lsan.supp`; the suppression budget may shrink but may not grow without an explicit contract review.
 
+## Coding and commit rules
+
+The full coding standard lives in the sibling `xray-docs` repository, checked
+out next to this repo in the umbrella directory (`../xray-docs` from the
+primary checkout; from a worktree under `.claude/worktrees/`, resolve it via
+the primary tree). Read the file that matches the work:
+
+- `xray-docs/rules/c-coding-standards.md` — memory, visibility, assertion
+  density, naming, size caps, the file-header template, and the comment rules.
+- `xray-docs/rules/architecture.md` — the L0→L8 include DAG, `XR_OS_*`
+  platform macros, native types via the prelude table, and the task-218/219
+  ownership and RC contracts.
+- `xray-docs/rules/dev-workflow.md` — build/test/debug entry points, Windows
+  `scripts/win_pd_test.sh` discipline, and the shared-worktree git rules
+  (no `git stash`, `reset --hard`, or `checkout -- <file>` in a shared tree;
+  commit with pathspecs).
+- `xray-docs/rules/design-principles.md` and
+  `xray-docs/rules/concurrency-ownership-surface.md` — the language's type and
+  sharing model. These win over any older doc that still shows `shared`
+  declarations (removed) or `any` (removed).
+
+(`.devin/rules/` in this repo is the legacy Windsurf-era digest of the same
+rules — its process content is mostly still right, but its `xray-lang.md`
+predates the `shared` removal; on any conflict the `xray-docs/rules/` files
+above are authoritative.)
+
+The rules agents break most often:
+
+- **All C comments and all commit messages are in English and self-contained.**
+  Never reference a `.md` document path from a source comment or a commit
+  message, and never use phase talk (`Phase A/B/C`, `Step 2`, `P0/P1`,
+  `Round 2`, 本次重构) — docs move and phases expire, but code history must
+  stand alone. State the fact and the reason; long-lived design intent belongs
+  in the doc comment of the owning function or type.
+- **Commits carry no AI attribution.** No `Co-Authored-By` trailer naming
+  Claude or any other tool, no tool as author or committer, no tool mentions
+  in the message. The only sanctioned trailer is `CONTRACT-CHANGE:` (next
+  section).
+- **Allocate only through `xr_malloc`/`xr_free`**, check for NULL, and pass
+  `xr_realloc` results through a temporary pointer. Non-`static` functions
+  carry `XRAY_API`/`XR_FUNC`; preprocessor OS checks use `XR_OS_*`, never
+  `_WIN32`/`__APPLE__`/`__linux__`.
+- **Bugs are zero-tolerance.** Fix the root cause with a regression test now,
+  or report immediately and record it in `xray-docs/known_bugs.md`. Never
+  skip-and-continue, and never mask a bug with catch-and-ignore or a skipped
+  test.
+
 ## Semantic contract freeze
 
 The machine-checked semantic contracts live in `contracts/`. Before changing a

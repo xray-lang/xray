@@ -3786,6 +3786,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
         .signature = "(): int",
         .summary = "Get live object count",
     },
+    {
+        .name = "sharedBytes",
+        .signature = "(): int",
+        .summary = "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak",
+    },
+    {
+        .name = "staticBytes",
+        .signature = "(): int",
+        .summary = "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)",
+    },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
@@ -9130,6 +9140,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
+            "| `runtime.sharedBytes` | `(): int` | Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak |\n"
+            "| `runtime.staticBytes` | `(): int` | Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only) |\n"
             "",
         .symbols = _symbols_runtime,
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),

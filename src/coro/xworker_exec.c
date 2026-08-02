@@ -365,10 +365,39 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             break;
         }
         case XR_CORO_RUN_YIELD:
+            /* A yield IS a scheduling point: children spawned since the last
+             * one must become runnable now. Without this flush, a coroutine
+             * that only ever yields (a poll loop preempted on reductions)
+             * keeps its deferred `go` spawns parked forever — the scheduler
+             * ran fine while the work it was supposed to run did not exist. */
+            xr_coro_submit_deferred_spawns(coro);
             xr_coro_resume_store(coro, XR_RESUME_OK);
             xr_coro_transition_to_ready(coro);
             worker->p.stats.yielded_count++;
             worker->p.yield_streak++;
+            /* Yielding while peers are READY sends the yielder to the back of
+             * the global line. The owner side of the deque pops what it
+             * pushed last, so a coroutine that yields on reductions and is
+             * re-pushed every turn permanently shadows every other READY
+             * coroutine in the same deque — with one worker (the default
+             * profile for plain-`go` programs, XR_SCHED_SINGLE) nobody can
+             * steal the shadowed work, and a poll loop starves its peers
+             * forever (task 260 §3). This is deliberately a state test, not
+             * the yield_streak heuristic: backend fast paths reset the streak
+             * mid-slice, and fairness must not depend on who kept a counter.
+             * A lone yielder (empty queue) keeps the zero-detour fast path. */
+            if (runtime && xr_proc_local_runq_len(&worker->p) > 0) {
+                /* Publication order: the resume/READY stores above must be
+                 * visible before any worker can pull this coroutine from the
+                 * injection queue. The push's own synchronization is expected
+                 * to carry this, but the detour fires far more often than the
+                 * old streak path ever did — make the edge explicit rather
+                 * than inherited (TSan sampled a window here, task 260 §8). */
+                atomic_thread_fence(memory_order_release);
+                xr_injectq_push(runtime, coro);
+                worker->p.yield_streak = 0;
+                break;
+            }
             if (runtime && runtime->worker_count > 1 &&
                 worker->p.yield_streak >= runtime->worker_count / 2) {
                 xr_injectq_push(runtime, coro);
@@ -612,9 +641,10 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         fast_dispatch_budget--;
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;
-        if (!worker_process_blocked(worker, coro)) {
-            worker_reset_spawn_burst(coro);
-        }
+        /* No spawn-burst reset here: the coro is published on a wait queue
+         * and a concurrent wake may already own it. prepare_scheduled_coro
+         * resets the burst on the enqueuer side instead. */
+        (void) worker_process_blocked(worker, coro);
 
         // Periodic lightweight housekeeping during fast dispatch
         if ((fast_dispatch_budget & 7) == 0) {
@@ -715,6 +745,11 @@ XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     XrCoroEvent event = worker_event_from_coro(coro);
     if (!coro || !coro->backend || !coro->backend->resume)
         return xr_coro_run_error(XR_NULL_VAL, false);
+    /* Park-latch hygiene: a sleep park announced in a previous slice was
+     * consumed by that slice's finalize; a stale leftover must not make this
+     * slice's finalize touch a published (claimable) coroutine. */
+    if (worker)
+        worker->p.suspend_park_pending = false;
     xr_coro_finish_backend_resume_tokens(coro, xr_coro_resume_load(coro));
     XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
     XrCoroRunResult result = coro->backend->resume(coro, &event, &run_ctx);

@@ -526,6 +526,11 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
     bool ok = false;
     XrCountdownLatchWaitStatus wait;
     if (current) {
+        /* Replay state must be in the frame BEFORE the latch wait: it
+         * publishes BLOCKED under the latch lock, and a lane finishing on
+         * another worker can claim and resume this coroutine the moment the
+         * lock is released. A later frame write would race the resumer. */
+        vm_suspend_replay_current(frame, pc);
         wait = resume ? xr_countdown_latch_wait_resume_for_coro(current, &ok)
                       : xr_countdown_latch_wait_for_coro(batch->latch, current, &ok);
     } else {
@@ -538,7 +543,7 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
         wait = XR_COUNTDOWN_LATCH_WAIT_DONE;
     }
     if (wait == XR_COUNTDOWN_LATCH_WAIT_BLOCKED) {
-        vm_suspend_replay_current(frame, pc);
+        /* Frame state was published before the wait — hands off. */
         return XR_DISP_BLOCKED;
     }
     if (wait != XR_COUNTDOWN_LATCH_WAIT_DONE || !ok) {

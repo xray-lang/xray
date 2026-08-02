@@ -41,6 +41,7 @@ XR_FUNC XrRuntime *xr_isolate_get_scheduler_runtime(XrVMRuntime *X);
 // Memory subsystem
 XR_FUNC XrFixedHeap *xr_isolate_get_fixed_heap(XrVMRuntime *X);
 XR_FUNC struct XrSystemHeap *xr_isolate_get_sys_heap(XrVMRuntime *X);
+XR_FUNC size_t xr_isolate_sys_thread_count(XrVMRuntime *X);
 XR_FUNC struct XrCoroHeap *xr_isolate_get_heap(XrVMRuntime *X);
 
 // Type subsystem (XrTypePool removed - now using XrType directly)

@@ -1,11 +1,12 @@
 # Zero-cost residue contract
 
-Status: re-frozen after Task 245 introduced a small semantic-neutral native
-code-shape control layer. Ordinary optimization remains automatic and inferred;
-source controls never assert zero cost, effects, allocation, safety, ownership,
-linkage, or ABI. A request may alter one native shape dimension, while typed
-verification assets determine whether the requested stage was actually
-reached. Residue categories and allowance semantics are unchanged.
+Status: re-frozen after Task 259 split reference-count traffic out of the
+runtime-helper category into its own R7. Task 245's semantic-neutral native
+code-shape control layer is unchanged: ordinary optimization remains automatic
+and inferred; source controls never assert zero cost, effects, allocation,
+safety, ownership, linkage, or ABI. A request may alter one native shape
+dimension, while typed verification assets determine whether the requested
+stage was actually reached.
 Task 254 removes backend-only mutable-capture cell maps and emits the explicit
 Xi cell graph directly; this changes neither the residue categories nor their
 measurement point.
@@ -25,8 +26,24 @@ categories are:
 - R4: bounds-panic branches.
 - R5: tagged `XrValue` box/unbox traffic.
 - R6: aggregate/native-vector lane round trips.
+- R7: reference-count traffic (`xrt_retain` / `xrt_release`; weak-promote
+  helpers join the needle set when AOT weak lowering lands).
 
-Header-inline raw helpers are not runtime-helper residue by themselves. A
+R1 and R7 partition the runtime-call surface. R1 is pure runtime dispatch;
+literal retain/release tokens are counted only as R7, never as R1 (the same
+carve-out allocation helpers already have into R2). Reference counting hidden
+inside a composite runtime helper — a tagged property store, a container
+operation — is accounted by that helper's own R1 token. The two categories are
+therefore jointly closed: a function with R1 == 0 and R7 == 0 performs no
+reference-count traffic in either form. That pair, together with
+`no_reference_cycles` (leak-freedom over the L0 type graph), `runtime_heap`,
+and `box`, is the machine-checkable zero-overhead statement for RC-managed
+code. R7 counts the residue of incomplete borrow-signature or last-use
+evidence — the shape names an inference gap, not a policy knob.
+
+Header-inline raw helpers on the R1 whitelist are not runtime-helper residue
+by themselves; retain/release are header-inline too, but they are never
+exempt — they are R7 by definition. A
 checked fixed-width byte-Slice load/store contributes R4 when its generated
 bounds-panic branch remains; when the AOT plan proves the same Slice receiver,
 non-negative affine offset, dominating relational length guard, constant width,
@@ -72,7 +89,7 @@ that cite the affected category.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xi_cgen.h fcffdd760d0bbb8c2ab4c04ccf81de071a2ce9afb209ec22d1b03b396584831d
-anchor-sha256: src/aot/xi_cgen.c 11f3911b78284de1e8ce272634b128fb0d73cd7bbbd2efc8757a19d9ec64215d
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c d325e616c77b3ac1ac6925954f909c6297bdb3e58fecc3c1cad2ab9fd62705b4
-anchor-sha256: src/app/cli/xcmd_verify.c 932ea0eba80546c8eded92dfa6dc1aa50d72f5f1581bfe309596e417585e9216
+anchor-sha256: src/aot/xi_cgen.h d52f5b3ccce889e377d32df39dd2378e65f4d55bdc8749432d90529cbe4aa81a
+anchor-sha256: src/aot/xi_cgen.c 74d783231d3a6a0a80f4a8ebe3d14505ff7c71d002a3e493fa5974dc89308a9b
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 357e708ceea0bf83721325d5c1452b8b72af16423b26925a5a24da3540ddbc2e
+anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29

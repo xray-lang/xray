@@ -327,6 +327,18 @@ typedef struct XrProc {
     int direct_switch_budget;
     XrCoroutine *vm_settled_coro;
 
+    /* suspend_park_pending: owner-thread latch set by the worker-local timer
+     * park (xr_coro_sleep) — the one suspension that does NOT publish BLOCKED
+     * inside the blocking call. Consumed by xr_coro_finalize_blocked_suspend,
+     * which performs the deferred-spawn submission and RUNNING→BLOCKED CAS
+     * only for that announced park. Published suspensions (wait queues,
+     * channels, netpoll, select, awaits) complete all owner-side work before
+     * the coroutine becomes claimable, and finalize must not touch them —
+     * the blind CAS would re-park a claimed coroutine that a waker already
+     * resumed, letting a second waker double-run it.
+     * Cleared at each xr_coro_run_on_worker entry as a staleness guard. */
+    bool suspend_park_pending;
+
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
     XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection
 

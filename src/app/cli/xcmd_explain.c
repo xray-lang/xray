@@ -442,7 +442,42 @@ static void explain_print_memory_effect(const XaMemoryEffectSummary *memory) {
     }
 }
 
-static int explain_effect(const char *subject) {
+static void explain_print_suspend_view(const XaEffectSummary *effect) {
+    if (!effect) {
+        printf("suspend: effect summary missing\n");
+        return;
+    }
+    bool sched = (effect->semantic_effects & XA_SEM_EFFECT_SCHED_SUSPEND) != 0;
+    bool sched_unknown = (effect->unknown_semantic_effects & XA_SEM_EFFECT_SCHED_SUSPEND) != 0;
+    bool gen = (effect->semantic_effects & XA_SEM_EFFECT_GEN_SUSPEND) != 0;
+    if (sched) {
+        printf("scheduler-suspend: yes — coroutine ABI on AOT (heap frame, back-edge "
+               "safepoints, cancellation points; spec 10.1)\n");
+    } else if (sched_unknown) {
+        printf("scheduler-suspend: unproven (fail-closed: compiled as suspendable)\n");
+        XaUnknownReason r = effect->unknown_reasons;
+        if (r & XA_UNKNOWN_UNRESOLVED_CALLEE)
+            printf("  reason: call target unresolved\n");
+        if (r & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH)
+            printf("  reason: open virtual dispatch\n");
+        if (r & XA_UNKNOWN_DYNAMIC_CALL_TARGET)
+            printf("  reason: dynamic call target\n");
+        if (r & XA_UNKNOWN_NATIVE_CONTRACT_MISSING)
+            printf("  reason: extern without an audited native contract\n");
+        if (r & XA_UNKNOWN_MISSING_IMPORTED_EFFECT)
+            printf("  reason: imported effect summary missing\n");
+    } else {
+        printf("scheduler-suspend: no — plain ABI (zero coroutine tax; no scheduling "
+               "points by design, spec 10.1)\n");
+    }
+    printf("generator-suspend: %s\n", gen ? "yes (`yield expr` body; frame survives the "
+                                            "driving iterator, scheduler never involved)"
+                                          : "no");
+    printf("contracts: no_suspend forbids both dimensions; no_reschedule forbids the "
+           "scheduler one only\n");
+}
+
+static int explain_effect_view(const char *subject, bool suspend_view) {
     char root[XR_CLI_PATH_MAX];
     if (!xr_cli_find_project_root(".", root, sizeof(root))) {
         xr_cli_error("explain", "effect explanation requires a project xray.toml");
@@ -554,7 +589,10 @@ static int explain_effect(const char *subject) {
         } else {
             printf("effect: missing\n");
         }
-        explain_print_memory_effect(memory);
+        if (suspend_view)
+            explain_print_suspend_view(effect);
+        else
+            explain_print_memory_effect(memory);
     }
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
@@ -571,12 +609,12 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv) {
     const char *input = inv->positional_count > 1 ? inv->positionals[1] : ".";
     if (strcmp(topic, "native") == 0)
         return explain_native(inv, input);
-    if (strcmp(topic, "effect") == 0) {
+    if (strcmp(topic, "effect") == 0 || strcmp(topic, "suspend") == 0) {
         if (inv->positional_count < 2) {
-            xr_cli_error("explain", "effect requires a symbol");
+            xr_cli_error("explain", "%s requires a symbol", topic);
             return XR_CLI_EXIT_USAGE;
         }
-        return explain_effect(input);
+        return explain_effect_view(input, strcmp(topic, "suspend") == 0);
     }
     if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 || strcmp(topic, "alias") == 0 ||
         strcmp(topic, "codegen") == 0) {
@@ -588,7 +626,7 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv) {
     }
     xr_cli_error("explain",
                  "unknown evidence topic '%s' (expected native, storage, transfer, ownership, "
-                 "view, bounds, alias, codegen, effect, or residue)",
+                 "view, bounds, alias, codegen, effect, suspend, or residue)",
                  topic);
     return XR_CLI_EXIT_USAGE;
 }

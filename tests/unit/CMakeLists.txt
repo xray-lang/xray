@@ -49,6 +49,13 @@ add_xray_unit_test(test_cycle_detector_traversal mem/test_cycle_detector_travers
 if(XR_ENABLE_CYCLE_DETECTOR)
     target_compile_definitions(test_cycle_detector_traversal PRIVATE XR_ENABLE_CYCLE_DETECTOR=1)
 endif()
+# Task 259 §3: the shared-domain scan (system-heap registry, dual-band trial
+# deletion, channel/task edges) plus per-domain metering. Same no-op-by-default
+# shape as the traversal test above.
+add_xray_unit_test(test_cycle_detector_shared mem/test_cycle_detector_shared.c)
+if(XR_ENABLE_CYCLE_DETECTOR)
+    target_compile_definitions(test_cycle_detector_shared PRIVATE XR_ENABLE_CYCLE_DETECTOR=1)
+endif()
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

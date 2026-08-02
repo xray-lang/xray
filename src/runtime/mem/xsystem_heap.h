@@ -192,4 +192,15 @@ XR_FUNC bool xr_sysheap_block_pool_push(XrSystemHeap *heap, void *block);
 XR_FUNC void xr_sysheap_get_stats(XrSystemHeap *heap, XrSysHeapStats *stats);
 XR_FUNC void xr_sysheap_print_stats(XrSystemHeap *heap);
 
+/* ========== Per-domain live-byte metering (task 259 §3) ==========
+ *
+ * Process-wide, deliberately: a shared object's last release runs on whatever
+ * worker drops the final reference, deep inside destroy paths that carry no
+ * heap handle. A monotonic rise in the shared reading is the one cheap
+ * production signal a SYNC_SHARED cycle leak gives off; the static reading
+ * answers "how much did module state and caches take" (an arena, so it only
+ * grows). Exposed as runtime.sharedBytes() / runtime.staticBytes(). */
+XR_FUNC uint64_t xr_sysheap_shared_live_bytes_total(void);
+XR_FUNC uint64_t xr_sysheap_static_alloc_bytes_total(void);
+
 #endif  // XSYSTEM_HEAP_H

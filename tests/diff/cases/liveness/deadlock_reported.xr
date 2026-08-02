@@ -1,0 +1,18 @@
+// Liveness: a whole-program stall must be REPORTED, not sat on. A bare recv
+// on a channel nobody sends to used to hang silently on both backends
+// (analysis experiment deadlock2, exit 124 by timeout); the runtime now
+// proves quiescence (no ready work, timers, I/O waiters, async jobs, or
+// sys.Thread) with channel waiters parked, prints the fatal report, and
+// exits 71 (task 260 §4).
+//
+// vm_only: the v1 detector activates only on cores with a VM owner — the
+// AOT thread-spawn path keeps no census the neutral scheduler can read, so
+// an AOT-standalone core cannot prove "no live threads" and stays silent
+// (documented deviation; the AOT leg follows with a neutral census).
+print("before recv")
+var ch = Channel<int>(0)
+var got = match (ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
+print(got)

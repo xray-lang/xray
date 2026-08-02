@@ -1,0 +1,24 @@
+// Liveness: cancel() reaches a coroutine parked at a blocking scheduling
+// point within a bounded wall clock, on both backends.
+import time
+
+fn sleeper(ch: Channel<int>) -> int {
+    var got = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
+    return got
+}
+
+print("spawn")
+var ch = Channel<int>(1)
+var t = go sleeper(ch)
+time.sleep(5)
+t.cancel()
+var res = match (t.awaitResult()) {
+    TaskResult.Cancelled -> "cancelled"
+    _ -> "other"
+}
+print(res)
+ch.close()
+print("done")

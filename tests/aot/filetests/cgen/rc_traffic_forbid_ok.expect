@@ -1,0 +1,3 @@
+c_contains=int64_t rcFreeAxpy(int64_t p0, int64_t p1, int64_t p2)
+c_not_contains=xrt_retain(
+c_not_contains=xrt_release(

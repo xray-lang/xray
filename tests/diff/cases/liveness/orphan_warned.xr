@@ -1,0 +1,19 @@
+// Liveness: a root that exits while a bare-go child is still parked must say
+// so (task 260 §5). The child is dropped, its defer does not run (spec 16.8's
+// explicit process-exit exception), and the runtime prints the parked count -
+// on BOTH backends, because the census is isolate-neutral.
+import time
+
+fn child(ch: Channel<int>) -> int {
+    var got = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+    print("child done")
+    return got
+}
+
+var ch = Channel<int>(0)
+go child(ch)
+time.sleep(30)
+print("main exits")

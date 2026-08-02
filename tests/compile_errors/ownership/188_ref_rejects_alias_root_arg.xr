@@ -1,0 +1,13 @@
+class Node {
+    tag: int
+    constructor(tag: int) { this.tag = tag }
+}
+
+fn mutate_and_read(target: ref Node, snapshot: Node) {
+    target.tag = 9
+    print(snapshot.tag)
+}
+
+var a = Node(1)
+var b = a
+mutate_and_read(ref a, b)

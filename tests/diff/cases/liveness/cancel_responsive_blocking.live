@@ -1,0 +1,4 @@
+timeout=10
+contains=spawn
+contains=cancelled
+contains=done

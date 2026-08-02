@@ -232,8 +232,18 @@ vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, Xr
     int base_offset = (int) (base - vm_ctx->stack);
     int frame_index = frame ? (int) (frame - vm_ctx->frames) : -1;
 
+    /* Replay state must be published BEFORE the native — polling natives
+     * make the coroutine claimable while still inside the call (see the
+     * OP_INVOKE yieldable branch). Continuation setups restore the
+     * continue-from-next pc via XR_CALL_REPLAY_PRESET. */
+    vm_suspend_preset_replay_yielded(frame, pc);
     XrValue result = xr_null();
     XrCFuncResult status = method->as.yieldable_primitive(isolate, self, args, nargs, &result);
+    if (status == XR_CFUNC_BLOCKED) {
+        /* Suspend state was pre-published; the coroutine may already run on
+         * another worker — no frame access (not even the rebind reads). */
+        return XR_DISP_BLOCKED;
+    }
     if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
         return XR_DISP_FATAL;
     if (frame_io)
@@ -241,14 +251,16 @@ vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, Xr
 
     switch (status) {
         case XR_CFUNC_DONE:
-            vm_suspend_clear_yielded(frame);
+            vm_suspend_finish_preset(frame, pc);
             base[a] = result;
             return vm_ready_operation_next_or_yield(isolate, vm_get_coro(vm_ctx), frame, pc,
                                                     XR_VM_YIELDABLE_READY_REDUCTION_COST);
         case XR_CFUNC_BLOCKED:
-            return vm_suspend_block_replay_yielded(frame, pc);
+            return XR_DISP_BLOCKED;
         case XR_CFUNC_YIELD:
-            return vm_suspend_yield_replay_yielded(frame, pc);
+            if (frame && (frame->call_status & XR_CALL_HAS_CONT) == 0)
+                frame->call_status &= ~(uint32_t) XR_CALL_REPLAY_PRESET;
+            return XR_DISP_YIELD;
         case XR_CFUNC_ERROR:
         case XR_CFUNC_WOULD_BLOCK:
         case XR_CFUNC_CALL_CLOSURE:

@@ -25,5 +25,5 @@ the VM/AOT program-output comparison remain byte-native and are not normalized.
 ## Digest anchors
 
 anchor-sha256: tests/diff/run_backend_diff.sh 2065d507708a4ab8d3f967b78abd49cd387327fac44f7b40131dc4c5675d5dfb
-anchor-sha256: tests/diff/run_backend_diff_fast.py 87cc2b0682630397a8b1dcc1c52e31285c164d00d237cce95c4c4f3b425110a1
-anchor-sha256: tests/aot/TOMBSTONES.tsv 01db981e6f0742672435ae3871e0f072f6a73f6f17d1ba3d09fdfeee0983a2a7
+anchor-sha256: tests/diff/run_backend_diff_fast.py fdcd4f78e214d28e8b946ef07fad4c7c782a15ad3dcbfe661d481be117ff8f33
+anchor-sha256: tests/aot/TOMBSTONES.tsv f9c9208800fbef44b4802b27e903f0cf95f48d0b7e50c5c9818ec2ddd2802016

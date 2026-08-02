@@ -21,8 +21,16 @@ static XrRep xi_coro_rep(const XiValue *v) {
     return v ? (XrRep) v->rep : XR_REP_TAGGED;
 }
 
-/* Interprocedural recursion bound for suspendability (matches the historic
- * AOT depth limit; deeper call graphs conservatively report non-suspendable). */
+/* Interprocedural recursion bound for suspendability. This walk is a
+ * FALLBACK: every plan-covered function answers through
+ * resolver->func_suspendability (the analyzer's converged, fail-closed
+ * summaries) and never recurses here — only plan-less synthetic functions
+ * reach the walk at all. Past the bound the walk reports SUSPENDABLE:
+ * "conservative" for this analysis means assuming a suspension may exist
+ * (the caller compiles a resumable frame it may not need), never assuming
+ * its absence (a suspendable function emitted with a plain sync ABI is a
+ * miscompile). Task 260 §7 flipped the direction; the old text claimed
+ * non-suspendable was the conservative answer, which is fail-open. */
 #define XI_CORO_RESOLVE_DEPTH_MAX 8
 
 /* ========== Op classifier ========== */
@@ -276,8 +284,10 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
     }
     if (xi_coro_func_intrinsic_suspends(f, resolver))
         return true;
-    if (!f || !resolver || depth >= XI_CORO_RESOLVE_DEPTH_MAX)
+    if (!f || !resolver)
         return false;
+    if (depth >= XI_CORO_RESOLVE_DEPTH_MAX)
+        return true; /* unknown past the bound: assume it suspends (fail-closed) */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)

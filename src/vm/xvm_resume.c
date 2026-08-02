@@ -81,6 +81,13 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrVMRuntime *X, XrCoroutine *coro, int 
                                 frame->cfunc_result_slot, frame->base_offset,
                                 coro_ctx->frame_count - 1);
 
+                    // The continuation consumed this resume event. Reset the
+                    // status so a leftover (e.g. XR_RESUME_TIMEOUT from a
+                    // sleep/join timer) cannot leak into the next wait's
+                    // resume check — vm_await reads it on entry and would
+                    // report "unexpected timeout" for a timeoutless await.
+                    xr_coro_resume_store(coro, XR_RESUME_OK);
+
                     // If this is the coroutine's last frame (frame_count=1),
                     // store result in VM stack[0]; run_on_worker reads it from there.
                     if (coro_ctx->frame_count == 1 && coro_ctx->stack != NULL) {
@@ -116,6 +123,9 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrVMRuntime *X, XrCoroutine *coro, int 
                 case XR_CFUNC_CALL_CLOSURE:
                     // Continuation called xr_call_closure, closure frame pushed.
                     // Return OK so run_cfunc_coro calls run() to execute the closure.
+                    // The resume event was consumed here too — clear it so the
+                    // closure's own waits don't observe a stale status.
+                    xr_coro_resume_store(coro, XR_RESUME_OK);
                     return XR_VM_OK;
 
                 case XR_CFUNC_WOULD_BLOCK:
@@ -129,8 +139,10 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrVMRuntime *X, XrCoroutine *coro, int 
 
         // If bytecode frame (not C function), stop unroll, continue bytecode execution
         if (!(frame->call_status & XR_CALL_C)) {
-            // Clear YIELDED flag, prepare to continue execution
-            frame->call_status &= ~XR_CALL_YIELDED;
+            // Clear YIELDED (and its pre-set marker), prepare to continue
+            // execution — frame->pc still points at the parked instruction,
+            // so the yieldable invoke replays and re-arms its own state.
+            frame->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
             break;
         }
 

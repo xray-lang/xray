@@ -19,6 +19,7 @@
 #include "../value/xvalue.h"
 #include "../value/xenum_layout.h"
 #include "../../shared/xr_derive_flags.h"
+#include <stdatomic.h>
 #include <stdint.h>
 
 struct XrRuntimeCore;
@@ -53,13 +54,23 @@ typedef struct XrEnumType {
     XrObjHeader hdr;
     const char *name;  // Interned in symbol table; not owned.
     uint32_t member_count;
-    struct XrClass *enum_class;
+    /* Published-once ADT class. Invariant: a non-NULL value is always fully
+     * ADT-configured (field_count 0, builtin_kind XR_BK_ADT_ENUM,
+     * builtin_data == this type) BEFORE it becomes visible here — VM enums
+     * configure at creation (single-threaded registration), core enums
+     * CAS-publish a minimal class from xr_enum_type_ensure_adt_class.
+     * Concurrent constructors do acquire loads only; nobody mutates a
+     * published class. */
+    _Atomic(struct XrClass *) enum_class;
 
     struct XrEnumMember {
         const char *name;  // Interned in symbol table; not owned.
         int symbol;
         XrEnumCtor *ctor;
-        XrEnumAggregateValue *value;  // Canonical 0-payload aggregate, lazily allocated.
+        /* Canonical 0-payload aggregate. Lazily built under
+         * core->metadata_lock and release-published; readers acquire-load
+         * (worker threads race on first touch). */
+        _Atomic(XrEnumAggregateValue *) value;
     } *members;
 
     int *symbol_to_index;  // symbol -> member index

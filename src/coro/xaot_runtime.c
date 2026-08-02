@@ -21,6 +21,7 @@
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/mem/xalloc_unified.h"
 #include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../runtime/object/xstring.h"
 #include "xblock.h"
@@ -95,6 +96,18 @@ int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
         return ops->execution_arena_live_objects(state->execution_arena);
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
     return heap ? (int64_t) heap->object_count : 0;
+}
+
+/* Process-global by design (see xsystem_heap.h): the counters are the same
+ * ones the VM natives read, so the two backends report identical semantics. */
+int64_t xr_aot_runtime_shared_bytes(const XrAotContext *ctx) {
+    (void) ctx;
+    return (int64_t) xr_sysheap_shared_live_bytes_total();
+}
+
+int64_t xr_aot_runtime_static_bytes(const XrAotContext *ctx) {
+    (void) ctx;
+    return (int64_t) xr_sysheap_static_alloc_bytes_total();
 }
 
 XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
@@ -768,6 +781,20 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
 
     XrCoroutine *coro = xr_coro_create_runtime_empty(core, scheduler, name ? name : desc->name);
     if (!coro) {
+        aot_release_frame(desc, frame, NULL);
+        return NULL;
+    }
+
+    /* Task 250: an execution that runs language code owns an exec heap from
+     * birth, so its EXEC_LOCAL allocation context never falls through to
+     * storage that outlives the execution. The VM wires this inside
+     * xr_coro_init_shell_owner behind need_storage, which requires a backend
+     * prepare_execution_state hook the AOT backend does not have — so the
+     * runtime-empty shell arrives heapless and the wiring happens here.
+     * Generated code does reach this context: channel Recv/SendResult ADT
+     * wrappers and friends allocate through coro->alloc_ctx. */
+    if (!xr_coro_ensure_heap(coro)) {
+        xr_coro_discard_runtime_empty(scheduler, coro);
         aot_release_frame(desc, frame, NULL);
         return NULL;
     }

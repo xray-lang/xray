@@ -1,0 +1,13 @@
+version = 1
+
+[[function]]
+symbol = "rcFreeAxpy"
+scope = "backend"
+backend = "aot"
+target = "native"
+profile = "hosted"
+requires = ["no_runtime_heap"]
+
+[function.shape]
+forbid = ["rc_traffic", "runtime_dispatch", "runtime_heap", "box"]
+allow = []

@@ -49,13 +49,20 @@ static void test_ext_destroy_api(XrObjHeader *obj, void *owner_heap) {
     test_ext_destroy(obj, (XrCoroHeap *) owner_heap);
 }
 
-static void setup_test_ext_finalizer(void) {
+/* Minimal runtime core so xr_coro_heap_create/new_obj accept the heap even
+ * under XR_DCHECK; a zeroed core (sys_heap NULL, empty destroy table) makes
+ * every heap path fall back to plain malloc/OS alloc. */
+static void setup_test_core(void) {
     memset(&g_test_iso, 0, sizeof(g_test_iso));
     memset(&g_test_core, 0, sizeof(g_test_core));
     g_test_iso.core_rt = &g_test_core;
     g_test_core.vm_owner = &g_test_iso;
-    xr_register_extension_destroy(&g_test_iso, XR_TEST_EXT_TYPE, test_ext_destroy_api);
     dummy_coro.core = &g_test_core;
+}
+
+static void setup_test_ext_finalizer(void) {
+    setup_test_core();
+    xr_register_extension_destroy(&g_test_iso, XR_TEST_EXT_TYPE, test_ext_destroy_api);
 }
 
 /* ========== Test Framework ========== */
@@ -298,6 +305,7 @@ static void perf_bulk_destroy(void) {
 
 int main(void) {
     xr_test_suppress_dialogs();
+    setup_test_core();
     printf("\n========================================\n");
     printf("  Region Single-Bitmap GC Unit Tests\n");
     printf("========================================\n\n");

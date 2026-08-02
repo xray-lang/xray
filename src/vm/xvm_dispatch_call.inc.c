@@ -230,6 +230,12 @@ op_call_cfunc:
             if (handoff_p) {
                 xr_worker_exitsyscall();
             }
+            if (status == XR_CFUNC_BLOCKED) {
+                /* Continuation state was saved before the native published
+                 * BLOCKED; a waker may already run this coroutine elsewhere.
+                 * Skip the rebind — even frame reads would race the resumer. */
+                return XR_VM_BLOCKED;
+            }
             VM_REBIND_AFTER_NATIVE_CALL();
 
             switch (status) {
@@ -238,9 +244,6 @@ op_call_cfunc:
                     vmbreak;
 
                 case XR_CFUNC_BLOCKED:
-                    // Coroutine needs to block, save state and yield
-                    XR_DBG_CORO("VM BLOCKED: result_slot=%d, frame_idx=%d", (int) (GETARG_A(i)),
-                                VM_FRAME_COUNT - 1);
                     return XR_VM_BLOCKED;
 
                 case XR_CFUNC_YIELD:
@@ -624,6 +627,10 @@ vmcase(OP_TAILCALL) {
 
             if (handoff_p)
                 xr_worker_exitsyscall();
+            if (status == XR_CFUNC_BLOCKED) {
+                /* Published inside the native — hands off, skip the rebind. */
+                return XR_VM_BLOCKED;
+            }
             VM_REBIND_AFTER_NATIVE_CALL();
 
             switch (status) {

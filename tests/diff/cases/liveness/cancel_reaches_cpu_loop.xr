@@ -1,0 +1,38 @@
+// Liveness: t.cancel() must land inside a pure-CPU loop in a SUSPENDABLE
+// function within a bounded wall clock, on BOTH backends. The VM preempts
+// on reductions; AOT coro-ABI functions carry compiler-inserted back-edge
+// poll safepoints (cg_coro_insert_loop_poll_safepoints) — this pins that
+// they deliver cancellation, not just fairness.
+//
+// The blocking recv is what makes grinder suspendable (= coro ABI on AOT).
+// A plain-ABI sync function spinning like this is the DOCUMENTED residual
+// boundary instead (spec 10.1): no suspend points, no scheduling points —
+// that shape is the price of the no-suspend zero-tax promise.
+import time
+
+fn grinder(ch: Channel<int>) -> int {
+    var seed = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> 1
+    }
+    var acc = seed
+    while (true) {
+        acc = (acc * 31 + 7) % 1000003
+        if (acc == -1) { break }
+    }
+    return acc
+}
+
+print("spawn")
+var ch = Channel<int>(1)
+ch.send(9)
+var t = go grinder(ch)
+time.sleep(30)
+t.cancel()
+var res = match (t.awaitResult()) {
+    TaskResult.Cancelled -> "cancelled"
+    _ -> "other"
+}
+print(res)
+ch.close()
+print("done")

@@ -4254,11 +4254,30 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
                                       slot, param_mode);
 }
 
-static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_node,
-                                          uint32_t *arg_symbol_ids, const char **arg_names,
-                                          XrParamMode *arg_modes,
-                                          char (*arg_paths)[XA_CALL_ALIAS_PATH_MAX],
-                                          bool *arg_path_precise, int arg_count) {
+/* The place suffix past the leading identifier: "" for "a", ".x" for "a.x",
+ * "[0]" for "a[0]".  Two bindings of the same ownership root spell the same
+ * object under different heads, so overlap between them is decided on the
+ * suffixes alone. */
+static const char *xa_call_alias_path_after_head(const char *path) {
+    if (!path)
+        return "";
+    const char *p = path;
+    while (*p && *p != '.' && *p != '[')
+        p++;
+    return p;
+}
+
+static bool xa_call_alias_suffixes_may_overlap(const char *a, bool a_precise, const char *b,
+                                               bool b_precise) {
+    return xa_call_alias_paths_may_overlap(xa_call_alias_path_after_head(a), a_precise,
+                                           xa_call_alias_path_after_head(b), b_precise);
+}
+
+static void xa_check_ref_argument_aliases(
+    XaInferContext *ctx, AstNode *call_node, uint32_t *arg_symbol_ids, uint32_t *arg_root_ids,
+    const char **arg_names, XrParamMode *arg_modes, char (*arg_paths)[XA_CALL_ALIAS_PATH_MAX],
+    bool *arg_path_precise, int arg_count, uint32_t recv_symbol_id, uint32_t recv_root_id,
+    const char *recv_name, const char *recv_path, bool recv_path_precise) {
     if (!ctx || !ctx->analyzer || !arg_symbol_ids || !arg_names || !arg_modes)
         return;
     for (int i = 0; i < arg_count; i++) {
@@ -4267,26 +4286,90 @@ static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_nod
         for (int j = i + 1; j < arg_count; j++) {
             if (arg_symbol_ids[j] == 0)
                 continue;
-            if (arg_symbol_ids[i] != arg_symbol_ids[j])
+            bool same_symbol = arg_symbol_ids[i] == arg_symbol_ids[j];
+            /* A second binding of the same ownership root (`var b = a`) names
+             * the same object; exclusivity is a fact about the object, not
+             * the spelling. */
+            bool same_root = !same_symbol && arg_root_ids && arg_root_ids[i] != 0 &&
+                             arg_root_ids[i] == arg_root_ids[j];
+            if (!same_symbol && !same_root)
                 continue;
             if (arg_modes[i] == XR_PARAM_READ && arg_modes[j] == XR_PARAM_READ)
                 continue;
-            if (arg_paths && arg_path_precise &&
-                !xa_call_alias_paths_may_overlap(arg_paths[i], arg_path_precise[i], arg_paths[j],
-                                                 arg_path_precise[j]))
-                continue;
+            if (arg_paths && arg_path_precise) {
+                bool overlap =
+                    same_symbol
+                        ? xa_call_alias_paths_may_overlap(arg_paths[i], arg_path_precise[i],
+                                                          arg_paths[j], arg_path_precise[j])
+                        : xa_call_alias_suffixes_may_overlap(arg_paths[i], arg_path_precise[i],
+                                                             arg_paths[j], arg_path_precise[j]);
+                if (!overlap)
+                    continue;
+            }
 
             XrLocation loc = {
                 .file = ctx->file_path, .line = call_node->line, .column = call_node->column};
             char msg[256];
-            snprintf(msg, sizeof(msg),
-                     "Cannot pass '%s' to both %s parameter %d and %s parameter %d in the same "
-                     "call",
-                     arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
-                     i + 1, xa_call_param_mode_label(arg_modes[j]), j + 1);
+            if (same_symbol) {
+                snprintf(msg, sizeof(msg),
+                         "Cannot pass '%s' to both %s parameter %d and %s parameter %d in the "
+                         "same call",
+                         arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
+                         i + 1, xa_call_param_mode_label(arg_modes[j]), j + 1);
+            } else {
+                snprintf(msg, sizeof(msg),
+                         "Cannot pass '%s' to %s parameter %d and its alias '%s' to %s parameter "
+                         "%d in the same call",
+                         arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
+                         i + 1, arg_names[j] ? arg_names[j] : "?",
+                         xa_call_param_mode_label(arg_modes[j]), j + 1);
+            }
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
         }
+    }
+
+    /* The receiver is a live borrow of its object for the whole call, so an
+     * exclusive `ref` (or consuming `move`) argument may not name the same
+     * whole place.  First cut is deliberately narrow (zero false positives):
+     * it fires when the argument is the receiver place itself or an ancestor
+     * of it, not when the argument is a strict sub-place of the receiver. */
+    if (recv_symbol_id == 0 && recv_root_id == 0)
+        return;
+    for (int i = 0; i < arg_count; i++) {
+        if (arg_symbol_ids[i] == 0)
+            continue;
+        if (arg_modes[i] != XR_PARAM_REF && arg_modes[i] != XR_PARAM_MOVE)
+            continue;
+        bool same_symbol = recv_symbol_id != 0 && arg_symbol_ids[i] == recv_symbol_id;
+        bool same_root =
+            !same_symbol && arg_root_ids && recv_root_id != 0 && arg_root_ids[i] == recv_root_id;
+        if (!same_symbol && !same_root)
+            continue;
+        const char *arg_suffix = xa_call_alias_path_after_head(arg_paths ? arg_paths[i] : NULL);
+        const char *recv_suffix = xa_call_alias_path_after_head(recv_path);
+        bool arg_precise = arg_path_precise ? arg_path_precise[i] : false;
+        if (arg_precise && recv_path_precise &&
+            !xa_call_alias_path_is_same_or_nested(recv_suffix, arg_suffix))
+            continue;
+
+        XrLocation loc = {
+            .file = ctx->file_path, .line = call_node->line, .column = call_node->column};
+        char msg[256];
+        if (same_symbol || !recv_name || !arg_names[i] || strcmp(recv_name, arg_names[i]) == 0) {
+            snprintf(msg, sizeof(msg),
+                     "Cannot pass '%s' as %s parameter %d while it is the receiver of this call",
+                     arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
+                     i + 1);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "Cannot pass '%s' as %s parameter %d while its alias '%s' is the receiver "
+                     "of this call",
+                     arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
+                     i + 1, recv_name);
+        }
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                                   msg, &loc);
     }
 }
 
@@ -6531,12 +6614,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (arg_count > 0)
         effective_arg_types = (XrType **) xr_calloc((size_t) arg_count, sizeof(XrType *));
     uint32_t *effective_arg_symbol_ids = NULL;
+    uint32_t *effective_arg_root_ids = NULL;
     const char **effective_arg_names = NULL;
     XrParamMode *effective_arg_modes = NULL;
     char (*effective_arg_paths)[XA_CALL_ALIAS_PATH_MAX] = NULL;
     bool *effective_arg_path_precise = NULL;
     if (arg_count > 0) {
         effective_arg_symbol_ids = (uint32_t *) xr_calloc((size_t) arg_count, sizeof(uint32_t));
+        effective_arg_root_ids = (uint32_t *) xr_calloc((size_t) arg_count, sizeof(uint32_t));
         effective_arg_names = (const char **) xr_calloc((size_t) arg_count, sizeof(const char *));
         effective_arg_modes = (XrParamMode *) xr_calloc((size_t) arg_count, sizeof(XrParamMode));
         effective_arg_paths = (char (*)[XA_CALL_ALIAS_PATH_MAX]) xr_calloc(
@@ -6780,6 +6865,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 arg_sym->links.value_mutated = true;
             if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
                 effective_arg_symbol_ids[slot] = arg_sym->id;
+                if (effective_arg_root_ids)
+                    effective_arg_root_ids[slot] = arg_sym->links.root_id;
                 effective_arg_names[slot] = arg_sym->name;
                 if (effective_arg_paths && effective_arg_path_precise) {
                     xa_call_alias_path_copy(effective_arg_paths[slot], XA_CALL_ALIAS_PATH_MAX,
@@ -6849,9 +6936,34 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
         slot++;
     }
-    xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
-                                  effective_arg_modes, effective_arg_paths,
-                                  effective_arg_path_precise, arg_count);
+    {
+        uint32_t recv_symbol_id = 0;
+        uint32_t recv_root_id = 0;
+        const char *recv_name = NULL;
+        char recv_path[XA_CALL_ALIAS_PATH_MAX];
+        bool recv_path_precise = false;
+        recv_path[0] = '\0';
+        if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+            XaSymbol *recv_sym =
+                xa_call_alias_path_symbol(ctx, call->callee->as.member_access.object, recv_path,
+                                          sizeof(recv_path), &recv_path_precise);
+            /* Only an instance receiver is a borrow of an object; a module or
+             * type head (os.getenv, Type.static) borrows nothing. */
+            if (recv_sym &&
+                (recv_sym->kind == XA_SYM_VARIABLE || recv_sym->kind == XA_SYM_PARAMETER)) {
+                recv_symbol_id = recv_sym->id;
+                recv_root_id = recv_sym->links.root_id;
+                recv_name = recv_sym->name;
+                recv_path_precise = recv_path_precise && recv_path[0] != '\0';
+            } else {
+                recv_path_precise = false;
+            }
+        }
+        xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_root_ids,
+                                      effective_arg_names, effective_arg_modes, effective_arg_paths,
+                                      effective_arg_path_precise, arg_count, recv_symbol_id,
+                                      recv_root_id, recv_name, recv_path, recv_path_precise);
+    }
     XaSymbolLinks *escape_links = fn_links;
     const char *escape_name = NULL;
     if (call->callee && call->callee->type == AST_VARIABLE)
@@ -7202,6 +7314,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                            xr_type_copy(ctx->analyzer->isolate, final_type));
     xr_free(effective_arg_types);
     xr_free(effective_arg_symbol_ids);
+    xr_free(effective_arg_root_ids);
     xr_free(effective_arg_names);
     xr_free(effective_arg_modes);
     xr_free(effective_arg_paths);

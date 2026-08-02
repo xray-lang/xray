@@ -129,6 +129,14 @@ XrCoroBlockResult xr_coro_chan_send_resume(XrCoroutine *coro, XrSlotRef result_s
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
     if (resume_status == XR_RESUME_TIMEOUT) {
+        if (!coro->ext ||
+            atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire) == NULL) {
+            /* Stale TIMEOUT from an earlier wait (e.g. a sleep park) — no
+             * channel wait is armed, so it cannot be ours. Consume it and
+             * treat this as a fresh send. */
+            coro_finish_resume(coro);
+            return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
+        }
         coro_finish_resume(coro);
         xr_slot_store_value(result_slot, xr_bool(false));
         return block_result(XR_CORO_BLOCK_TIMEOUT, xr_null(), false);
@@ -159,6 +167,13 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrCoroutine *coro, XrSlotRef value_sl
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
     if (resume_status == XR_RESUME_TIMEOUT) {
+        if (!coro->ext ||
+            atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire) == NULL) {
+            /* Stale TIMEOUT with no armed channel wait — not ours; consume
+             * and treat as a fresh receive. */
+            coro_finish_resume(coro);
+            return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
+        }
         coro_finish_resume(coro);
         xr_slot_store_value(value_slot, xr_null());
         xr_slot_store_value(ok_slot, xr_bool(false));
@@ -318,15 +333,22 @@ static XrCoroBlockResult coro_await_task_resume_impl(XrCoroutine *coro, XrTask *
         return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 
     if (xr_coro_resume_load(coro) == XR_RESUME_TIMEOUT) {
-        coro_finish_resume(coro);
         XrCoroWaitState *wait = xr_coro_wait_state(coro);
-        if (wait)
-            xr_await_wait_token_timeout(&wait->await_token);
-        xr_task_unregister_await_waiters(coro);
-        if (wait) {
-            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
-            xr_await_wait_token_finish(&wait->await_token);
+        XrTask *armed = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
+        if (!armed) {
+            /* Leftover TIMEOUT from an earlier wait (a sleep park has no
+             * resume-status consumer of its own): no await is armed, so it
+             * cannot be ours. Consume it and treat this as a fresh await —
+             * otherwise a timeoutless await panics with "unexpected
+             * timeout". */
+            coro_finish_resume(coro);
+            return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
         }
+        coro_finish_resume(coro);
+        xr_await_wait_token_timeout(&wait->await_token);
+        xr_task_unregister_await_waiters(coro);
+        atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
+        xr_await_wait_token_finish(&wait->await_token);
         return block_result(XR_CORO_BLOCK_TIMEOUT, xr_null(), false);
     }
 

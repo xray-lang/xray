@@ -1,0 +1,5 @@
+timeout=15
+contains=spawn
+contains=cancelled
+contains=done
+env=XRAY_WORKERS=1

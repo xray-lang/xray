@@ -27,9 +27,43 @@
 #include <string.h>
 #include <stdio.h>
 #include "../../os/os_mem.h"
+#include "xcycle_detector.h"
 
 // Large object threshold: use mmap for objects >= 64KB
 #define XR_SHARED_MMAP_THRESHOLD (64 * 1024)
+
+/* ========== Per-domain live-byte metering (task 259 §3) ==========
+ *
+ * Shared objects are freed from destroy paths that carry no heap handle, so
+ * the counters are process globals rather than XrSysHeapStats members. The
+ * shared counter tracks header allocations through this allocator only —
+ * container side buffers allocate elsewhere and are not attributed here. */
+static _Atomic uint64_t g_shared_live_bytes;
+static _Atomic uint64_t g_static_alloc_bytes;
+
+uint64_t xr_sysheap_shared_live_bytes_total(void) {
+    return atomic_load_explicit(&g_shared_live_bytes, memory_order_relaxed);
+}
+
+uint64_t xr_sysheap_static_alloc_bytes_total(void) {
+    return atomic_load_explicit(&g_static_alloc_bytes, memory_order_relaxed);
+}
+
+/* One place decides whether an object participates in shared-domain
+ * accounting: allocated by xr_sysheap_alloc_shared (which stamps objsize) and
+ * still carrying the shared storage flag. */
+static bool sysheap_shared_metered(const XrObjHeader *obj) {
+    return obj && XR_OBJ_IS_SHARED(obj) && obj->objsize > 0;
+}
+
+static void sysheap_shared_retire(XrObjHeader *obj) {
+    if (!sysheap_shared_metered(obj))
+        return;
+    atomic_fetch_sub_explicit(&g_shared_live_bytes, obj->objsize, memory_order_relaxed);
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+    xr_cycle_detector_shared_unregister(obj);
+#endif
+}
 
 /* ========== Lifecycle API ========== */
 
@@ -314,6 +348,10 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         if (obj) {
             memset(obj, 0, size);
             obj->type = type;
+            /* Stamp the size on the malloc path too: the destroy paths have
+             * no size parameter, so the header is what per-domain metering
+             * and the shared-domain cycle scan read it back from. */
+            obj->objsize = (uint32_t) size;
             obj->extra = XR_OBJ_STORAGE_SHARED;
         }
     }
@@ -327,6 +365,10 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
          * would free a live shared object. */
         xr_shared_set_refc(obj, 1);
         atomic_fetch_add(&heap->stats.shared_alloc_count, 1);
+        atomic_fetch_add_explicit(&g_shared_live_bytes, size, memory_order_relaxed);
+#ifdef XR_ENABLE_CYCLE_DETECTOR
+        xr_cycle_detector_shared_register(obj);
+#endif
     }
     return obj;
 }
@@ -337,6 +379,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
         return;
 
     XrObjHeader *obj = (XrObjHeader *) ptr;
+    sysheap_shared_retire(obj);
     if (XR_OBJ_IS_MMAP(obj)) {
         xr_mem_unmap(ptr, size);
     } else {
@@ -356,6 +399,7 @@ void *xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size) {
     if (ptr) {
         atomic_fetch_add(&heap->stats.class_alloc_count, 1);
         atomic_fetch_add(&heap->stats.class_alloc_bytes, size);
+        atomic_fetch_add_explicit(&g_static_alloc_bytes, size, memory_order_relaxed);
     }
 
     return ptr;
@@ -370,6 +414,7 @@ void *xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size) {
     void *ptr = xr_arena_alloc(&heap->class_arena, size);
     if (ptr) {
         atomic_fetch_add(&heap->stats.module_alloc_count, 1);
+        atomic_fetch_add_explicit(&g_static_alloc_bytes, size, memory_order_relaxed);
     }
 
     return ptr;
@@ -458,6 +503,8 @@ void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
     if (destroy)
         destroy(obj, NULL);
+
+    sysheap_shared_retire(obj);
 
     // Free the object itself
     if (XR_OBJ_IS_MMAP(obj)) {

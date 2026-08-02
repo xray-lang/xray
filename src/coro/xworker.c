@@ -509,6 +509,19 @@ void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime) {
     }
     leak_check_ms = teardown_elapsed_ms(stage_start_ns);
 
+    // Orphan coroutines: the root finished while children were still parked.
+    // Spec 10.12 says they are dropped and their defers do not run - say so
+    // instead of exiting silently (same family as the channel warning below).
+    {
+        int64_t parked = xr_runtime_parked_waiters_total(runtime);
+        if (parked > 0) {
+            xr_log_warning("runtime",
+                           "%lld coroutine(s) still parked at exit; dropped without "
+                           "running their defers (use scope to wait for children)",
+                           (long long) parked);
+        }
+    }
+
     // Channel leak detection: compare create vs close counts
     stage_start_ns = xr_time_monotonic_ns();
     {

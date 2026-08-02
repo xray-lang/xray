@@ -168,6 +168,18 @@ check "acyclic program exits zero" "0" "$RC"
 n="$(printf '%s' "$OUT" | grep -c '#cycle ')"
 check "acyclic program reports no cycles" "0" "$n"
 
+# ---- 共享域（任务 259 §3）----
+# 无误报：一段共享吞吐量不小的合法程序，退出扫描必须零报告。
+# 正向覆盖在 tests/unit/mem/test_cycle_detector_shared.c（分配器层构造环，
+# 因为当前带纪律把共享环的源级构造路径全部挡死——那正是防线在工作）。
+OUT="$("$XRAY" run "${SCRIPT_DIR}/shared_domain_clean.xr" 2>&1)"
+RC=$?
+check "shared-domain clean program exits zero" "0" "$RC"
+n="$(printf '%s' "$OUT" | grep -c '共享域')"
+check "shared-domain clean program reports no shared cycles" "0" "$n"
+n="$(printf '%s' "$OUT" | grep -c 'true')"
+check "shared-domain metering shows no monotonic residue" "1" "$n"
+
 rm -f "$SIDECAR"
 XRAY_CYCLE_REPORT="$SIDECAR" "$XRAY" run "${SCRIPT_DIR}/detector_acyclic.xr" >/dev/null 2>&1
 if [ -f "$SIDECAR" ]; then

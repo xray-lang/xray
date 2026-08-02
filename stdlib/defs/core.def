@@ -2700,6 +2700,30 @@ module runtime {
     layer: "runtime"
   }
 
+  fn sharedBytes {
+    signature: "(): int"
+    doc: "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak"
+    vm: "runtime_shared_bytes"
+    aot: "xr_aot_runtime_shared_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn staticBytes {
+    signature: "(): int"
+    doc: "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)"
+    vm: "runtime_static_bytes"
+    aot: "xr_aot_runtime_static_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
   fn info {
     signature: "(): RuntimeInfo"
     doc: "Get a typed snapshot of the current execution-local reclamation domain"

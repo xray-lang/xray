@@ -30,6 +30,10 @@
 #include "xsched_trace.h"
 #include "../os/os_thread.h"
 #include <time.h>
+#include <stdlib.h>
+#include "xasync.h"
+#include "xchannel.h"
+#include "xthread_obj.h"
 
 static bool runtime_has_work(XrRuntime *runtime);
 
@@ -740,6 +744,152 @@ static bool runtime_has_work(XrRuntime *runtime) {
     return false;
 }
 
+/* ========== Global deadlock detection (task 260 §4) ==========
+ *
+ * A whole-program stall used to be silent: every worker parks, every
+ * coroutine is waiting on something no one will ever provide, and the
+ * process just sits there (deadlock2.xr: a bare recv on a channel nobody
+ * sends to — VM and AOT both hung with zero output). The judgement is
+ * deliberately one-sided: a false report is fatal, a missed one merely
+ * keeps the old behaviour, so every condition below must PROVE quiescence
+ * and any unknown disables the check.
+ *
+ * Wake sources accounted: ready work (queues/inboxes/inject), pending
+ * timers, netpoll waiters, in-flight async I/O, and live sys.Thread
+ * entries. The thread count currently lives on the VM isolate, so the
+ * check activates only when the core has a vm_owner — an AOT-standalone
+ * core (owner NULL) skips detection until a backend-neutral thread
+ * liveness source exists (recorded as a task-260 deviation). Foreign FFI
+ * threads that re-enter through CFn callbacks are outside any counter;
+ * XRAY_NO_DEADLOCK_DETECT=1 is the escape hatch for such embeddings. */
+
+static uint64_t runtime_pending_timer_total(XrRuntime *runtime) {
+    uint64_t n = 0;
+    for (int i = 0; i < runtime->worker_count; i++) {
+        XrTimerWheel *tw = runtime->workers[i].p.timer_wheel;
+        if (tw && tw->nto > 0)
+            n += (uint64_t) tw->nto;
+    }
+    return n;
+}
+
+static uint64_t runtime_report_blocked_waiters(XrRuntime *runtime, bool print) {
+    uint64_t listed = 0;
+    for (int i = 0; i < runtime->worker_count; i++) {
+        XrProc *p = &runtime->workers[i].p;
+        for (int b = 0; b < XR_BLOCKED_BUCKET_SIZE; b++) {
+            for (XrBlockedBucket *bucket = p->blocked_buckets[b]; bucket; bucket = bucket->next) {
+                for (int side = 0; side < 2; side++) {
+                    XrCoroutine *c = side == 0 ? bucket->recv_head : bucket->send_head;
+                    for (; c; c = c->ext ? c->ext->wait_link : NULL) {
+                        listed++;
+                        if (print) {
+                            const char *name = xr_coro_name(c);
+                            fprintf(stderr,
+                                    "  W%d: coroutine %s%s%s(id %d) blocked on channel "
+                                    "%s %p\n",
+                                    i, name ? "'" : "", name ? name : "", name ? "' " : "", c->id,
+                                    side == 0 ? "recv" : "send", bucket->channel);
+                        }
+                    }
+                }
+                for (XrSelectCase *sc = bucket->select_head; sc; sc = sc->next) {
+                    listed++;
+                    if (print)
+                        fprintf(stderr,
+                                "  W%d: coroutine (id %d) parked in select on channel "
+                                "%p\n",
+                                i, sc->owner ? sc->owner->id : -1, bucket->channel);
+                }
+            }
+        }
+    }
+    return listed;
+}
+
+/* Coroutines observably parked right now: the channel-waitq census plus the
+ * bucket-visible timer/select waiters. Shutdown's orphan warning reads this
+ * after the workers stop (task 260 §5); the deadlock judgement above uses the
+ * same sources. */
+int64_t xr_runtime_parked_waiters_total(XrRuntime *runtime) {
+    int64_t n = xr_channel_waiters_total();
+    if (runtime)
+        n += (int64_t) runtime_report_blocked_waiters(runtime, false);
+    return n;
+}
+
+/* Callers hold the "last awake worker" position: active_workers already
+ * counts this worker out, everyone else is parked. Returns true when the
+ * stall was reported (the process exits and never returns here). */
+static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool self_still_active) {
+    (void) worker;
+    if (!runtime || !atomic_load(&runtime->running))
+        return false;
+    /* Lazily probed by whichever worker gets here first; atomic because
+     * several workers can race the first probe. Duplicate stores of the
+     * same value are fine. */
+    static _Atomic int disabled = -1;
+    int detect_off = atomic_load_explicit(&disabled, memory_order_relaxed);
+    if (detect_off < 0) {
+        detect_off = getenv("XRAY_NO_DEADLOCK_DETECT") ? 1 : 0;
+        atomic_store_explicit(&disabled, detect_off, memory_order_relaxed);
+    }
+    if (detect_off)
+        return false;
+    (void) self_still_active;
+    /* Nobody may be mid-slice: a running coroutine can wake anything. The
+     * dispatcher nulls current_coro on every normal result, so an all-NULL
+     * scan plus empty queues (below, twice, fenced) is quiescence. */
+    for (int i = 0; i < runtime->worker_count; i++) {
+        XrMachine *m = runtime->workers[i].m;
+        if (m && atomic_load_explicit(&m->current_coro, memory_order_acquire) != NULL)
+            return false;
+    }
+
+    /* v1 activates only for VM-owned cores: the AOT thread spawn path keeps
+     * no census the neutral scheduler can read, so an AOT-standalone core
+     * cannot prove "no live threads". Presence is the only fact read. */
+    if (!runtime->core || xr_runtime_core_vm_owner(runtime->core) == NULL)
+        return false;
+
+    for (int pass = 0; pass < 2; pass++) {
+        atomic_thread_fence(memory_order_seq_cst);
+        if (runtime_has_work(runtime))
+            return false;
+        if (runtime_pending_timer_total(runtime) != 0)
+            return false;
+        if (atomic_load_explicit(&runtime->netpoll.waiters, memory_order_acquire) != 0)
+            return false;
+        if (runtime->async_pool &&
+            (atomic_load_explicit(&runtime->async_pool->in_flight, memory_order_acquire) != 0 ||
+             runtime->async_pool->queue_head != NULL))
+            return false;
+        if (xr_sys_thread_live_total() != 0)
+            return false;
+        /* Someone must actually be stuck. Channel waitq membership is the
+         * precise census (maintained at the four link/unlink sites in
+         * xchannel.c); bucket-visible select waiters extend it. Head counts
+         * are NOT usable here: fast-path completions skip completed_count,
+         * so spawned-completed drifts thousands high under churn. A stall
+         * with no channel/select waiter (a pure await/latch cycle) is not
+         * judged — fail-negative by design. */
+        if (xr_channel_waiters_total() <= 0 && runtime_report_blocked_waiters(runtime, false) == 0)
+            return false;
+    }
+
+    int64_t waiters = xr_channel_waiters_total();
+    fprintf(stderr, "\nfatal error: all coroutines are blocked - deadlock\n");
+    fprintf(stderr,
+            "  %lld coroutine(s) parked on channel wait queues; timer/select waiters "
+            "are itemized below.\n",
+            (long long) waiters);
+    (void) runtime_report_blocked_waiters(runtime, true);
+    fprintf(stderr, "  no ready work, no pending timers, no I/O waiters, no async jobs, "
+                    "no sys.Thread - nothing can wake them.\n");
+    fflush(stderr);
+    exit(71);
+}
+
 // Worker Park with last-spinner-notify protocol
 //
 // Key protocol:
@@ -862,6 +1012,9 @@ static void worker_park(XrWorker *worker) {
 park_recheck_work:
     // Recheck for work before sleeping
     if (!runtime_has_work(runtime) && atomic_load(&runtime->running)) {
+        /* Last worker awake and provably nothing to wake anyone: report the
+         * deadlock instead of sleeping on it (never returns on a report). */
+        (void) runtime_check_deadlock(runtime, worker, false);
         // Adaptive timeout: IO-heavy workloads use shorter sleep (faster response),
         // CPU-heavy workloads use longer sleep (less futex overhead).
         // io_poll_ewma > 128 means >50% of polls had IO events.
@@ -1404,6 +1557,16 @@ void *worker_loop(void *arg) {
             uint32_t sched_sample = xr_xorshift32(&worker->p.rng_state);
             if (sched_sample % (2 * runtime->worker_count) == 0) {
                 worker_drain_inbox(worker);
+                /* Same anti-starvation logic for the timer wheel: housekeeping
+                 * only runs when the local queue is EMPTY, so a worker whose
+                 * queue always holds a runnable coroutine (a poll loop yielding
+                 * on reductions) would otherwise never fire its due timers —
+                 * a sleeper parked on this wheel would starve forever (task
+                 * 260 §3). bump_due_timers self-guards on "anything due", so
+                 * the sampled hot-path cost is one clock read and a compare. */
+                if (worker->p.timer_wheel) {
+                    worker_bump_due_timers(worker, xr_runtime_now_ticks(runtime), false);
+                }
             }
             bool inject_nonempty =
                 atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire);
@@ -1448,6 +1611,12 @@ void *worker_loop(void *arg) {
 
             // Spinning: enter spinning state to find work.
             if (!coro) {
+                /* The single-worker profile never parks — the sole worker
+                 * lives in this idle cycle polling sources. This is its
+                 * deadlock checkpoint; fleets keep the one in worker_park
+                 * (never returns on a report). */
+                if (runtime->worker_count == 1)
+                    (void) runtime_check_deadlock(runtime, worker, true);
                 bool exit_flag = false;
                 coro = worker_spin(worker, runtime, running_ptr, &exit_flag);
                 if (exit_flag)

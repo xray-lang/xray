@@ -1,0 +1,21 @@
+// Task 259 §4 (R7 rc_traffic): reassigning a managed field emits the
+// retain-new / release-old write barrier as literal RC tokens in the
+// generated C, so a contract forbidding rc_traffic must reject this body
+// and name the reference-count category — not runtime dispatch.
+class Holder {
+    data: Array<int>
+    n: int
+    constructor() {
+        this.data = [0]
+        this.n = 0
+    }
+}
+
+fn rcTrafficReject(n: int) -> int {
+    var h = Holder()
+    h.data = [n, n]
+    h.data = [n]
+    return len(h.data) + h.n
+}
+
+print(rcTrafficReject(3))

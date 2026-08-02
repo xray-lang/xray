@@ -2444,6 +2444,20 @@ if(BUILD_TESTS)
             COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
+        # Task 260 §8 F.2: the work-stealing scheduler and two-band RC under
+        # ThreadSanitizer, on the CURRENT canonical concurrency assets (the
+        # legacy hand-run directories are documented pre-clean-slate drafts).
+        add_test(
+            NAME tsan_focused
+            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tsan_focused.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(tsan_focused PROPERTIES
+            LABELS "sanitizer;tsan;coro;task-260"
+            RUN_SERIAL TRUE
+            COST 1200
+            TIMEOUT 3600
+        )
         # COST drives ctest's launch order (highest first). On a fresh checkout
         # with no CTestCostData.txt yet, this is the only signal ctest has, so
         # pin the known-heavy lanes to their measured wall times to keep them
@@ -3396,16 +3410,20 @@ if(BUILD_TESTS)
 
     # The cycle detector is a compile-time switch. In a default build its
     # symbols must not exist at all — not as no-ops, not behind a runtime flag.
-    add_test(
-        NAME cycle_detector_absent_by_default
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(cycle_detector_absent_by_default PROPERTIES
-        LABELS "regression;rc;vm;task-247"
-        TIMEOUT 60
-    )
+    # (A detector build legitimately carries them, so the assertion only
+    # registers where it can hold.)
+    if(NOT XR_ENABLE_CYCLE_DETECTOR)
+        add_test(
+            NAME cycle_detector_absent_by_default
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(cycle_detector_absent_by_default PROPERTIES
+            LABELS "regression;rc;vm;task-247"
+            TIMEOUT 60
+        )
+    endif()
 
     # ========================================================================
     # Task 220 — Verification asset governance gates (appended registrations)

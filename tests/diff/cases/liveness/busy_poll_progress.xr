@@ -1,0 +1,31 @@
+// Liveness: a busy-polling root (go + tryRecv spin, no suspend point) must
+// still let the spawned producer and its timer make progress on BOTH
+// backends. Historically the head progress gap of the coroutine model
+// (known_bugs 2026-06-18; task 260 §3): three scheduler-layer defects
+// stacked — deferred spawns never flushed on yield, due timers never fired
+// while the local queue stayed busy, and a reduction-yield spinner
+// permanently shadowed READY peers on the owner side of the deque.
+import time
+
+fn producer(ch: Channel<int>) {
+    time.sleep(20)
+    ch.send(100)
+}
+
+var ch = Channel<int>(1)
+go producer(ch)
+var got = 0
+var running = true
+while (running) {
+    var r = ch.tryRecv()
+    match (r) {
+        Recv.Value(v) -> {
+            got = v
+            running = false
+        }
+        _ -> {
+            got = got
+        }
+    }
+}
+print(got)

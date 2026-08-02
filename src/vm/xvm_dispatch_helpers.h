@@ -152,7 +152,40 @@ static inline void vm_suspend_replay_yielded(XrBcCallFrame *frame, XrInstruction
 static inline void vm_suspend_clear_yielded(XrBcCallFrame *frame) {
     if (!frame)
         return;
-    frame->call_status &= ~XR_CALL_YIELDED;
+    frame->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
+}
+
+/* Pre-publish replay suspend state BEFORE calling a yieldable native.
+ *
+ * Polling-style natives (EventCount.wait, Semaphore.acquire, CountdownLatch
+ * .wait, WorkQueue.pop, ResultGroup.recv, ...) publish BLOCKED while still
+ * inside the call, under the wait-queue lock. The moment that lock is
+ * released a waker may claim the coroutine and resume it on another worker;
+ * any frame write after that races the resumer (a missed XR_CALL_YIELDED
+ * skips the replay entirely, and a late pc rollback lands on a frame the
+ * resumed coroutine is already executing). So the replay state must be in
+ * the frame before the native runs.
+ *
+ * Continuation-backed natives (Thread.join, sleep, I/O) instead resume
+ * after the call instruction with the result delivered via
+ * cfunc_result_slot: vm_backend_setup_yield_continuation sees
+ * XR_CALL_REPLAY_PRESET, restores continue-from-next and clears it —
+ * still before the coroutine becomes claimable. A native that completes
+ * without suspending is unwound via vm_suspend_finish_preset. */
+static inline void vm_suspend_preset_replay_yielded(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc - 1;
+    frame->call_status |= XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET;
+}
+
+/* Yieldable native returned without suspending (DONE): restore the
+ * savepc() continue-from-next pc and drop the pre-set replay state. */
+static inline void vm_suspend_finish_preset(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc;
+    frame->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
 }
 
 static inline XrDispatchAction vm_suspend_block_replay(XrBcCallFrame *frame, XrInstruction *pc) {

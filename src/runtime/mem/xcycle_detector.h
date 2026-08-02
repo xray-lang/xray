@@ -35,6 +35,7 @@
 
 struct XrCoroHeap;
 struct XrClass;
+struct XrObjHeader;
 
 #ifdef XR_ENABLE_CYCLE_DETECTOR
 
@@ -63,6 +64,25 @@ bool xr_cycle_detector_scan(struct XrCoroHeap *heap, XrCycleReport *out);
  *
  * Returns false if a self-check tripped during the walk. */
 bool xr_cycle_detector_count_live(struct XrCoroHeap *heap, uint32_t *out_count);
+
+/* ========== Shared-domain scan (task 259 §3) ==========
+ *
+ * SYNC_SHARED objects live in the system heap: `weak` is forbidden on them
+ * (W4), no coroutine-heap teardown bounds them, and the per-heap scan above
+ * never sees them — the one place a cycle used to be a silent process-lifetime
+ * leak. The system heap has no walkable block structure (shared objects are
+ * plain malloc/mmap), so the allocator registers every live shared object
+ * here, under the same build flag: a production binary carries neither the
+ * registry nor the calls that would fill it. */
+void xr_cycle_detector_shared_register(struct XrObjHeader *obj);
+void xr_cycle_detector_shared_unregister(struct XrObjHeader *obj);
+
+/* Scan the registered shared objects for dead cycles, exactly like the
+ * per-heap scan but over the atomic refcount band, with channel buffers and
+ * task results as additional edges. Runs at main-execution exit, when workers
+ * are quiescent. `weak` cannot break these cycles, so the advice differs:
+ * restructure the back reference or break it explicitly before release. */
+bool xr_cycle_detector_scan_shared(XrCycleReport *out);
 
 /* Process-wide accumulation, so `xray test` can fail the run once at the end
  * rather than per coroutine. */
