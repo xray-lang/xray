@@ -14,6 +14,8 @@
 #   exit=N | exit=nonzero    expected exit code (default: 0)
 #   contains=SUBSTRING       required in the backend's combined output
 #                            (repeatable; checked on both backends)
+#   env=NAME=VALUE           extra environment for both runs (repeatable);
+#                            how the single-worker profile variants pin N=1
 #   vm_only=1                skip the AOT half (documented reason required
 #                            in the case header) — use sparingly.
 #
@@ -96,8 +98,15 @@ for xr in "$CASE_DIR"/*.xr; do
         continue
     fi
 
+    case_env=()
+    while IFS= read -r pair; do
+        [ -n "$pair" ] && case_env+=("$pair")
+    done <<EOF
+$(read_conf "$conf" env)
+EOF
+
     vm_out="$WORK/${base}.vm.out"
-    "$TIMEOUT_BIN" "$budget" "$XRAY" run "$xr" >"$vm_out" 2>&1
+    env ${case_env[@]+"${case_env[@]}"} "$TIMEOUT_BIN" "$budget" "$XRAY" run "$xr" >"$vm_out" 2>&1
     vm_rc=$?
     if ! msg="$(check_output vm "$vm_rc" "$want_exit" "$vm_out" "$conf")"; then
         echo "$msg"
@@ -120,7 +129,7 @@ for xr in "$CASE_DIR"/*.xr; do
         continue
     fi
     aot_out="$WORK/${base}.aot.out"
-    "$TIMEOUT_BIN" "$budget" "$bin" >"$aot_out" 2>&1
+    env ${case_env[@]+"${case_env[@]}"} "$TIMEOUT_BIN" "$budget" "$bin" >"$aot_out" 2>&1
     aot_rc=$?
     if ! msg="$(check_output aot "$aot_rc" "$want_exit" "$aot_out" "$conf")"; then
         echo "$msg"

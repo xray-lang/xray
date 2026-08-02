@@ -1,0 +1,3 @@
+timeout=10
+contains=100
+env=XRAY_WORKERS=1

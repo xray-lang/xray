@@ -1404,6 +1404,16 @@ void *worker_loop(void *arg) {
             uint32_t sched_sample = xr_xorshift32(&worker->p.rng_state);
             if (sched_sample % (2 * runtime->worker_count) == 0) {
                 worker_drain_inbox(worker);
+                /* Same anti-starvation logic for the timer wheel: housekeeping
+                 * only runs when the local queue is EMPTY, so a worker whose
+                 * queue always holds a runnable coroutine (a poll loop yielding
+                 * on reductions) would otherwise never fire its due timers —
+                 * a sleeper parked on this wheel would starve forever (task
+                 * 260 §3). bump_due_timers self-guards on "anything due", so
+                 * the sampled hot-path cost is one clock read and a compare. */
+                if (worker->p.timer_wheel) {
+                    worker_bump_due_timers(worker, xr_runtime_now_ticks(runtime), false);
+                }
             }
             bool inject_nonempty =
                 atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire);

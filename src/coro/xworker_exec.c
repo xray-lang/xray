@@ -365,10 +365,32 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             break;
         }
         case XR_CORO_RUN_YIELD:
+            /* A yield IS a scheduling point: children spawned since the last
+             * one must become runnable now. Without this flush, a coroutine
+             * that only ever yields (a poll loop preempted on reductions)
+             * keeps its deferred `go` spawns parked forever — the scheduler
+             * ran fine while the work it was supposed to run did not exist. */
+            xr_coro_submit_deferred_spawns(coro);
             xr_coro_resume_store(coro, XR_RESUME_OK);
             xr_coro_transition_to_ready(coro);
             worker->p.stats.yielded_count++;
             worker->p.yield_streak++;
+            /* Yielding while peers are READY sends the yielder to the back of
+             * the global line. The owner side of the deque pops what it
+             * pushed last, so a coroutine that yields on reductions and is
+             * re-pushed every turn permanently shadows every other READY
+             * coroutine in the same deque — with one worker (the default
+             * profile for plain-`go` programs, XR_SCHED_SINGLE) nobody can
+             * steal the shadowed work, and a poll loop starves its peers
+             * forever (task 260 §3). This is deliberately a state test, not
+             * the yield_streak heuristic: backend fast paths reset the streak
+             * mid-slice, and fairness must not depend on who kept a counter.
+             * A lone yielder (empty queue) keeps the zero-detour fast path. */
+            if (runtime && xr_proc_local_runq_len(&worker->p) > 0) {
+                xr_injectq_push(runtime, coro);
+                worker->p.yield_streak = 0;
+                break;
+            }
             if (runtime && runtime->worker_count > 1 &&
                 worker->p.yield_streak >= runtime->worker_count / 2) {
                 xr_injectq_push(runtime, coro);
