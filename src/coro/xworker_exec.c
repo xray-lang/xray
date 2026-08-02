@@ -387,6 +387,13 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
              * mid-slice, and fairness must not depend on who kept a counter.
              * A lone yielder (empty queue) keeps the zero-detour fast path. */
             if (runtime && xr_proc_local_runq_len(&worker->p) > 0) {
+                /* Publication order: the resume/READY stores above must be
+                 * visible before any worker can pull this coroutine from the
+                 * injection queue. The push's own synchronization is expected
+                 * to carry this, but the detour fires far more often than the
+                 * old streak path ever did — make the edge explicit rather
+                 * than inherited (TSan sampled a window here, task 260 §8). */
+                atomic_thread_fence(memory_order_release);
                 xr_injectq_push(runtime, coro);
                 worker->p.yield_streak = 0;
                 break;

@@ -596,6 +596,7 @@ XR_FUNC void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro);
 // Wake one idle worker (O(1) pop from idle stack + unpark)
 XR_FUNC void xr_runtime_wake_idle_worker(XrRuntime *runtime);
 XR_FUNC void xr_runtime_wake_worker(XrRuntime *runtime, int worker_id);
+XR_FUNC int64_t xr_runtime_parked_waiters_total(XrRuntime *runtime);
 
 // Sum per-Worker local_active_coros (replaces global atomic active_coros)
 static inline int xr_runtime_active_coros(XrRuntime *runtime) {

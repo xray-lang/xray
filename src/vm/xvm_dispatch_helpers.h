@@ -128,6 +128,19 @@ static inline XrCoroHeap *vm_weak_heap(XrVMContext *vm_ctx) {
     return vm_exec_local_heap();
 }
 
+/* SCRATCH diagnostics: widen the publish->frame-save window to prove the
+ * yieldable-invoke suspend race. Enabled via XR_RACE_DELAY env var. */
+#include <unistd.h>
+#include <stdlib.h>
+static inline void xr_scratch_race_window_delay(void) {
+    static int enabled = -1;
+    if (enabled < 0)
+        enabled = getenv("XR_RACE_DELAY") ? 1 : 0;
+    if (enabled)
+        usleep(300);
+}
+#define XR_SCRATCH_RACE_WINDOW_DELAY() xr_scratch_race_window_delay()
+
 /* ========== VM Suspend Continuation Helpers ========== */
 
 static inline void vm_suspend_replay_current(XrBcCallFrame *frame, XrInstruction *pc) {

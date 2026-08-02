@@ -1762,10 +1762,79 @@ TEST(backend_accepts_range_op) {
     xi_func_free(f);
 }
 
+/* ========== Coroutine suspendability depth bound (task 260 §7) ========== */
+
+/* Resolver for a synthetic linear chain f0 -> f1 -> ... -> fN. Prepared
+ * suspendability is deliberately UNKNOWN (-1) for every function, forcing
+ * the depth-bounded fallback walk. */
+typedef struct {
+    XiFunc **chain;
+    int len;
+} ChainResolverCtx;
+
+static const XiFunc *chain_resolve_callee(void *ud, const XiFunc *caller, const XiValue *callee) {
+    (void) callee;
+    ChainResolverCtx *c = (ChainResolverCtx *) ud;
+    for (int i = 0; i + 1 < c->len; i++) {
+        if (c->chain[i] == caller)
+            return c->chain[i + 1];
+    }
+    return NULL;
+}
+
+static int chain_unknown_suspendability(void *ud, const XiFunc *func) {
+    (void) ud;
+    (void) func;
+    return -1;
+}
+
+TEST(coro_depth_bound_fails_closed) {
+    enum {
+        CHAIN = 12
+    }; /* deeper than XI_CORO_RESOLVE_DEPTH_MAX (8) */
+    XiFunc *chain[CHAIN];
+    for (int i = 0; i < CHAIN; i++) {
+        chain[i] = make_func("chain_fn");
+        ASSERT(chain[i] != NULL);
+        if (i > 0) {
+            /* caller i-1 gets a call value the resolver maps to i */
+            XiValue *fnv = xi_value_new(chain[i - 1], chain[i - 1]->entry, XI_CONST, &stub_int, 0);
+            ASSERT(fnv != NULL);
+            XiValue *call = xi_value_new(chain[i - 1], chain[i - 1]->entry, XI_CALL, &stub_int, 1);
+            ASSERT(call != NULL);
+            call->args[0] = fnv;
+        }
+    }
+    ChainResolverCtx ctx = {.chain = chain, .len = CHAIN};
+    XiCoroResolver resolver = {0};
+    resolver.resolve_callee = chain_resolve_callee;
+    resolver.func_suspendability = chain_unknown_suspendability;
+    resolver.ud = &ctx;
+
+    /* Past the recursion bound nothing is proven either way. The only safe
+     * answer is "may suspend": a resumable frame the program did not need
+     * costs cycles, a plain sync ABI on a function that does suspend is a
+     * miscompile. The old direction (report non-suspendable) was fail-open;
+     * this pins the flip. */
+    ASSERT(xi_coro_func_is_suspendable(chain[0], &resolver));
+
+    /* Within the bound, an all-unknown chain with no suspend evidence stays
+     * non-suspendable: the flip only covers what the walk cannot see. */
+    ChainResolverCtx short_ctx = {.chain = chain + (CHAIN - 4), .len = 4};
+    XiCoroResolver short_resolver = resolver;
+    short_resolver.ud = &short_ctx;
+    ASSERT(!xi_coro_func_is_suspendable(chain[CHAIN - 4], &short_resolver));
+
+    for (int i = 0; i < CHAIN; i++)
+        xi_func_free(chain[i]);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
     printf("=== Xi Extended Verifier Tests ===\n\n");
+
+    run_coro_depth_bound_fails_closed();
 
     run_non_unit_return_requires_value();
     run_unit_return_rejects_value();

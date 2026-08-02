@@ -807,6 +807,17 @@ static uint64_t runtime_report_blocked_waiters(XrRuntime *runtime, bool print) {
     return listed;
 }
 
+/* Coroutines observably parked right now: the channel-waitq census plus the
+ * bucket-visible timer/select waiters. Shutdown's orphan warning reads this
+ * after the workers stop (task 260 §5); the deadlock judgement above uses the
+ * same sources. */
+int64_t xr_runtime_parked_waiters_total(XrRuntime *runtime) {
+    int64_t n = xr_channel_waiters_total();
+    if (runtime)
+        n += (int64_t) runtime_report_blocked_waiters(runtime, false);
+    return n;
+}
+
 /* Callers hold the "last awake worker" position: active_workers already
  * counts this worker out, everyone else is parked. Returns true when the
  * stall was reported (the process exits and never returns here). */

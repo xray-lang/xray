@@ -2332,6 +2332,20 @@ if(BUILD_TESTS)
             COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
+        # Task 260 §8 F.2: the work-stealing scheduler and two-band RC under
+        # ThreadSanitizer, on the CURRENT canonical concurrency assets (the
+        # legacy hand-run directories are documented pre-clean-slate drafts).
+        add_test(
+            NAME tsan_focused
+            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tsan_focused.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(tsan_focused PROPERTIES
+            LABELS "sanitizer;tsan;coro;task-260"
+            RUN_SERIAL TRUE
+            COST 1200
+            TIMEOUT 3600
+        )
         # COST drives ctest's launch order (highest first). On a fresh checkout
         # with no CTestCostData.txt yet, this is the only signal ctest has, so
         # pin the known-heavy lanes to their measured wall times to keep them

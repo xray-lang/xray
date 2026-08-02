@@ -333,6 +333,7 @@ invoke_dispatch:;
                 /* Continuation-backed natives already saved the next pc and
                  * publish their result through cfunc_result_slot on resume.
                  * Replay is only for polling-style natives with no continuation. */
+                XR_SCRATCH_RACE_WINDOW_DELAY();
                 if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
                     vm_suspend_block_replay_yielded(ci, pc);
                 return XR_VM_BLOCKED;

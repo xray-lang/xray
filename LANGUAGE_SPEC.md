@@ -5125,7 +5125,7 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Dimension | Choice |
 |--|--|
 | Scheduling model | M:N (user-space coroutines on multiple OS threads) |
-| Scheduling policy | Cooperative + work stealing. Scheduling points are: every suspension point (channels, `await`, `Coro.yield()`, timers, and similar), and **loop back edges inside suspendable functions** — on the VM every function is interpreted and preempted on reductions, and AOT inserts reduction-throttled safepoints on the back edges of every coroutine-ABI function, so a CPU loop in a suspendable function yields and observes cancellation on both backends. A **non-suspendable (plain-ABI) function body contains no scheduling points by design**: that is the other face of the "code that does not use coroutines pays no coroutine tax" promise (§10.12) — a provably `no_suspend` function is exactly as free of safepoints as it is of frames. A long-running pure-CPU loop that must stay preemptible therefore belongs in a suspendable function; one that must stay tax-free belongs in a sync function and is expected to return. |
+| Scheduling policy | Cooperative (back edges, channels, `await`, `Coro.yield()`, and similar scheduling/suspension points) + work stealing |
 | Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
 | Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
 | Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
@@ -6513,7 +6513,6 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 - M:N scheduling (M OS threads × N coroutines).
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
-- **Deadlock detection**: when the runtime can prove global quiescence — no ready work, no pending timers, no I/O waiters, no in-flight async jobs, no live `sys.Thread` — while coroutines are still parked on channel wait queues, it prints `fatal error: all coroutines are blocked - deadlock` with the waiter census and exits with code **71**. The judgement is deliberately one-sided (any unprovable wake source disables it): v1 activates on VM-owned runtimes; a stall with only await/latch waiters is not judged. `XRAY_NO_DEADLOCK_DETECT=1` disables it for embeddings whose foreign threads re-enter through `CFn` callbacks.
 - **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
 - **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
 

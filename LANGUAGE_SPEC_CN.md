@@ -5111,7 +5111,7 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 | 维度 | 选择 |
 |--|--|
 | 调度模型 | M:N（用户态协程 + 多 OS 线程） |
-| 调度策略 | 协作式 + work-stealing。调度点是：每一个挂起点（Channel、`await`、`Coro.yield()`、定时器等），以及**可挂起函数体内的循环回边**——VM 上所有函数都由解释器按 reduction 抢占；AOT 在每个协程 ABI 函数的循环回边插入 reduction 节流的 safepoint。因此可挂起函数里的 CPU 循环在两个后端上都会让出并观察取消。**不可挂起（plain-ABI）函数体内没有任何调度点，这是设计**：它是「不用协程的代码不付协程税」承诺（§10.12）的另一面——可证明 `no_suspend` 的函数既没有帧、也没有 safepoint。需要保持可抢占的长 CPU 循环应放进可挂起函数；需要零税的放进同步函数、并以「会返回」为契约。 |
+| 调度策略 | 协作式（后向跳转、Channel、`await`、`Coro.yield()` 等调度/挂起点）+ work-stealing |
 | 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
 | 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
 | 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
@@ -6499,7 +6499,6 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - M:N 调度（M OS 线程 × N 协程）。
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
-- **死锁检测**：当运行时能证明全局静止——无就绪工作、无待决定时器、无 I/O 等待者、无在途 async 任务、无存活 `sys.Thread`——而仍有协程停靠在 channel 等待队列上时，打印 `fatal error: all coroutines are blocked - deadlock` 与等待者普查，并以退出码 **71** 结束。判定刻意单边（任何无法证明的唤醒源都会使其放弃）：v1 只在有 VM owner 的运行时激活；只有 await/latch 等待者的停摆不判。`XRAY_NO_DEADLOCK_DETECT=1` 供外部线程经 `CFn` 回调再入的嵌入场景关闭。
 - **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
 - **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
 
