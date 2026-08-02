@@ -106,15 +106,15 @@ static void shape_process_error(const XrProcessSpec *spec, const XrProcessResult
         snprintf(err, err_size, "shape-oracle compiler timed out after %u ms", spec->timeout_ms);
         return;
     }
-    const char *output = process->stderr_data && process->stderr_data[0]
-                             ? process->stderr_data
-                             : process->stdout_data;
-    size_t len = output ? strlen(output) : 0;
+    const XrProcessByteBuffer *output = process->stderr_bytes.length > 0
+                                            ? &process->stderr_bytes
+                                            : &process->stdout_bytes;
+    size_t len = output->length;
     if (len > 0) {
         char redacted[512];
         if (len >= sizeof(redacted))
             len = sizeof(redacted) - 1;
-        xtc_process_redact_output(output, len, redacted, sizeof(redacted));
+        xtc_process_redact_bytes(output->data, len, redacted, sizeof(redacted));
         snprintf(err, err_size, "shape-oracle compiler failed: %s", redacted);
     } else {
         snprintf(err, err_size, "shape-oracle compiler exited with status %d", process->exit_code);

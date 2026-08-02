@@ -304,26 +304,34 @@ static bool xtc_probe_command_init(const XrToolchainSelection *selection, XtcPro
     return xtc_command_emit_driver(selection, &selection->target, &sink, detail, detail_size);
 }
 
-static bool xtc_probe_line_has_token(const char *line, size_t line_len, const char *token) {
+static bool xtc_probe_line_has_token(const uint8_t *line, size_t line_len, const char *token) {
     size_t token_len = strlen(token);
     if (!line || token_len == 0 || line_len < token_len)
         return false;
     for (size_t i = 0; i + token_len <= line_len; i++)
-        if (strncmp(line + i, token, token_len) == 0)
+        if (memcmp(line + i, token, token_len) == 0)
             return true;
     return false;
 }
 
-static void xtc_probe_select_diagnostic_line(const char *output, const char **selected,
-                                             size_t *selected_len) {
-    *selected = output;
-    *selected_len = output ? strcspn(output, "\r\n") : 0;
-    const char *line = output;
-    for (unsigned inspected = 0; line && *line && inspected < 12; inspected++) {
-        size_t len = strcspn(line, "\r\n");
+static void xtc_probe_select_diagnostic_line(const XrProcessByteBuffer *output,
+                                             const uint8_t **selected, size_t *selected_len) {
+    *selected = output ? output->data : NULL;
+    *selected_len = 0;
+    if (!output || !output->data)
+        return;
+    size_t offset = 0;
+    while (*selected_len < output->length && output->data[*selected_len] != '\r' &&
+           output->data[*selected_len] != '\n')
+        (*selected_len)++;
+    for (unsigned inspected = 0; offset < output->length && inspected < 12; inspected++) {
+        const uint8_t *line = output->data + offset;
+        size_t len = 0;
+        while (offset + len < output->length && line[len] != '\r' && line[len] != '\n')
+            len++;
         if (xtc_probe_line_has_token(line, len, "error") ||
             xtc_probe_line_has_token(line, len, "fatal")) {
-            const char *stable = line;
+            const uint8_t *stable = line;
             for (size_t i = 0; i < len; i++)
                 if (line[i] == '/' || line[i] == '\\')
                     stable = line + i + 1;
@@ -331,9 +339,10 @@ static void xtc_probe_select_diagnostic_line(const char *output, const char **se
             *selected_len = len - (size_t) (stable - line);
             return;
         }
-        line += len;
-        while (*line == '\r' || *line == '\n')
-            line++;
+        offset += len;
+        while (offset < output->length &&
+               (output->data[offset] == '\r' || output->data[offset] == '\n'))
+            offset++;
     }
 }
 
@@ -349,15 +358,16 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
         return false;
     }
     if (process->exit_code != 0) {
-        const char *output = process->stderr_data && process->stderr_data[0] ? process->stderr_data
-                                                                             : process->stdout_data;
-        const char *diagnostic = NULL;
+        const XrProcessByteBuffer *output = process->stderr_bytes.length > 0
+                                                ? &process->stderr_bytes
+                                                : &process->stdout_bytes;
+        const uint8_t *diagnostic = NULL;
         size_t len = 0;
         xtc_probe_select_diagnostic_line(output, &diagnostic, &len);
         if (len > detail_size - 1)
             len = detail_size - 1;
         if (len > 0) {
-            xtc_process_redact_output(diagnostic, len, detail, detail_size);
+            xtc_process_redact_bytes(diagnostic, len, detail, detail_size);
         } else {
             snprintf(detail, detail_size, "process exited with status %d", process->exit_code);
         }
@@ -541,8 +551,13 @@ static bool xtc_probe_target_matches(const XrToolchainSelection *selection, char
         xtc_process_result_free(&process);
         return false;
     }
-    const char *triple = process.stdout_data;
+    char triple[256];
     const char *target = selection->target.name;
+    if (!xtc_process_copy_ascii_line(&process.stdout_bytes, triple, sizeof(triple))) {
+        snprintf(detail, detail_size, "compiler target triple is not strict ASCII");
+        xtc_process_result_free(&process);
+        return false;
+    }
     bool arch_ok =
         (strstr(target, "aarch64") && (strstr(triple, "aarch64") || strstr(triple, "arm64"))) ||
         (strstr(target, "x86_64") && strstr(triple, "x86_64")) ||

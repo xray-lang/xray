@@ -43,6 +43,9 @@ ABI.
 Task 254 makes mutable capture cells explicit in Xi and changes the internal VM
 cell opcode operand shape. Closure upvalues remain tagged `XrValue` slots and
 the public target ABI, calling convention, and closure layout are unchanged.
+Task 257 changes provider probe capture from implicit C text to bounded byte
+buffers. Target triples are accepted only as strict ASCII; this changes no
+target identity, generated-C ABI, calling convention, or runtime layout.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -204,6 +207,6 @@ anchor-sha256: src/aot/xrt_core_freestanding.h 60b6e6631209dcb72806d62e0715635f4
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c d9839000fb4a06ee3472a73d34489f72d2f61afbb145c5936f7b8d190610ac0d
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
-anchor-sha256: src/app/toolchain/xtc_probe.c 86579d1fe2ee698f944dd334c58f26284bf98e02ce64a29e7da82a8c091dcfea
+anchor-sha256: src/app/toolchain/xtc_probe.c 78ecab6e52428fcc05c9fae5bba166581feeca0cc676468133120321fbcc6ffd
 anchor-sha256: src/ir/xi.h 20734874b718c17ea93d7350d74b77690ca4f1f16fabfc15deb4bb2c6910fbb8
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

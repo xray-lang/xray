@@ -159,7 +159,7 @@ def check_required_text(root: Path) -> list[str]:
         if not path.exists():
             errors.append(f"{rel_path}: required parallel backend ABI file is missing")
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8", errors="strict")
         for snippet in snippets:
             if snippet not in text:
                 errors.append(f"{rel_path}: missing required parallel backend ABI snippet: {snippet}")

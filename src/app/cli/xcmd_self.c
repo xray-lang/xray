@@ -84,7 +84,7 @@ static bool self_query(const char *program, const char *const *args, size_t coun
         return false;
     bool ok = !result.timed_out && result.exit_code == 0;
     if (ok && output && output_size)
-        snprintf(output, output_size, "%s", result.stdout_data ? result.stdout_data : "");
+        ok = xtc_process_copy_ascii(&result.stdout_bytes, output, output_size);
     xtc_process_result_free(&result);
     return ok;
 }

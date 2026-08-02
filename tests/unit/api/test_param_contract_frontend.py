@@ -40,6 +40,8 @@ class ParamContractFrontendTest(unittest.TestCase):
             [str(self.xray), *args],
             cwd=ROOT,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,

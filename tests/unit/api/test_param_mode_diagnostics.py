@@ -29,6 +29,8 @@ class ParamModeDiagnosticsTest(unittest.TestCase):
             [str(self.xray), str(ROOT / rel)],
             cwd=ROOT,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,

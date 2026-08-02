@@ -16,6 +16,9 @@
 #include "xrt_value.h"
 #include "../base/xplatform.h"
 #include "../shared/xr_os_core.h"
+#ifdef _WIN32
+#include "../shared/xr_win_utf.h"
+#endif
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -216,12 +219,22 @@ static inline XrValue xrt_os_environ(void) {
     XrValue map_value = xrt_map_new(64);
     xrt_map_t *map = (xrt_map_t *) map_value.ptr;
 #ifdef _WIN32
-    LPCH env_block = GetEnvironmentStringsA();
+    LPWCH env_block = GetEnvironmentStringsW();
     if (!env_block)
         return map_value;
-    for (const char *p = env_block; *p; p += strlen(p) + 1)
-        xrt_os_environ_set_entry(map, p);
-    FreeEnvironmentStringsA(env_block);
+    for (const wchar_t *p = env_block; *p; p += wcslen(p) + 1) {
+        size_t wide_len = wcslen(p);
+        int required = xr_win_utf16_to_utf8_required(p, wide_len);
+        if (required == 0)
+            continue;
+        char *entry = (char *) XRT_MALLOC((size_t) required);
+        if (!entry)
+            break;
+        if (xr_win_utf16_to_utf8(p, wide_len, entry, (size_t) required))
+            xrt_os_environ_set_entry(map, entry);
+        XRT_FREE(entry);
+    }
+    FreeEnvironmentStringsW(env_block);
 #else
     for (char **env = environ; env && *env; env++)
         xrt_os_environ_set_entry(map, *env);

@@ -98,7 +98,9 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         invariant is asserted against the registry rather than against a source
         snippet in whichever file happens to consume it.
         """
-        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
+        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("Failed(" "unknown)", native_defs)
 
         registry = builtin_symbols.load(ROOT)
@@ -114,11 +116,13 @@ class SourceUnknownInventoryTest(unittest.TestCase):
     def test_task_outcome_public_surface_is_removed(self) -> None:
         task_outcome = "Task" "Outcome"
         task_outcome_global = "XR_GLOBAL_VAR_TASK_" "OUTCOME"
-        analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
-        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
-        prelude_source = (ROOT / "stdlib/prelude/prelude.c").read_text()
-        coroutine_defs = (ROOT / "stdlib/types/coroutine.xr").read_text()
-        api_inventory = (ROOT / "scripts/gen_api_inventory.py").read_text()
+        analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text(encoding="utf-8")
+        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text(
+            encoding="utf-8"
+        )
+        prelude_source = (ROOT / "stdlib/prelude/prelude.c").read_text(encoding="utf-8")
+        coroutine_defs = (ROOT / "stdlib/types/coroutine.xr").read_text(encoding="utf-8")
+        api_inventory = (ROOT / "scripts/gen_api_inventory.py").read_text(encoding="utf-8")
 
         self.assertNotIn(task_outcome, analyzer_source)
         self.assertNotIn(task_outcome, native_defs)

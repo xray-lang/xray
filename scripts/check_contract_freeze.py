@@ -75,6 +75,21 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "process-byte-stream.md",
+        (
+            "src/os/win/proc_win.c",
+            "src/aot/xrt_sys.h",
+            "src/aot/xrt_os.h",
+            "src/app/toolchain/xtc_process.h",
+            "src/app/toolchain/xtc_process.c",
+            "scripts/check_subprocess_text_boundaries.py",
+            "scripts/check_process_zero_cost.py",
+            "tests/probes/rc/check_execution_arena_l2.py",
+            "tests/probes/rc/check_mutable_capture_cell_rss.py",
+            "tests/unit/cli/test_cli_toolchain.c",
+        ),
+    ),
+    ContractSpec(
         "target-abi.md",
         (
             "src/aot/xaot_link.c",
@@ -174,7 +189,8 @@ def verify_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> lis
 
 def run_git(root: Path, args: list[str]) -> str:
     proc = subprocess.run(
-        ["git", *args], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ["git", *args], cwd=root, text=True, encoding="utf-8", errors="strict",
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     return proc.stdout if proc.returncode == 0 else ""
 

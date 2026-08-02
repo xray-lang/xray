@@ -32,21 +32,34 @@ typedef struct XrProcessSpec {
     size_t output_limit;
 } XrProcessSpec;
 
+typedef struct XrProcessByteBuffer {
+    uint8_t *data;
+    size_t length;
+    bool truncated;
+} XrProcessByteBuffer;
+
 typedef struct XrProcessResult {
     int exit_code;
     bool timed_out;
-    bool output_truncated;
     uint64_t duration_ms;
-    char *stdout_data;
-    char *stderr_data;
+    XrProcessByteBuffer stdout_bytes;
+    XrProcessByteBuffer stderr_bytes;
 } XrProcessResult;
 
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,
                                    uint32_t timeout_ms);
 XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, char *err,
                              size_t err_size);
-XR_FUNC void xtc_process_redact_output(const char *input, size_t input_size, char *output,
-                                       size_t output_size);
+XR_FUNC void xtc_process_redact_bytes(const uint8_t *input, size_t input_size, char *output,
+                                      size_t output_size);
+XR_FUNC bool xtc_process_copy_ascii_line(const XrProcessByteBuffer *bytes, char *output,
+                                         size_t output_size);
+XR_FUNC bool xtc_process_copy_ascii(const XrProcessByteBuffer *bytes, char *output,
+                                    size_t output_size);
+XR_FUNC bool xtc_process_copy_utf8_line(const XrProcessByteBuffer *bytes, char *output,
+                                        size_t output_size);
+XR_FUNC bool xtc_process_bytes_contains_ascii(const XrProcessByteBuffer *bytes,
+                                              const char *needle);
 XR_FUNC void xtc_process_result_free(XrProcessResult *result);
 
 #endif /* XTC_PROCESS_H */

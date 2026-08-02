@@ -31,6 +31,8 @@ class McpSession:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             bufsize=1,
         )
         if self.proc.stdin is None or self.proc.stdout is None or self.proc.stderr is None:

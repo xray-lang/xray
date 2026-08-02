@@ -101,12 +101,12 @@ def is_allowed_runtime_case(case: str) -> bool:
     )
 
 
-def manifest_from_stdout(stdout: str) -> dict[str, Any]:
-    start = stdout.find("{")
-    end = stdout.rfind("}")
+def manifest_from_stdout(stdout: bytes) -> dict[str, Any]:
+    start = stdout.find(b"{")
+    end = stdout.rfind(b"}")
     if start < 0 or end < start:
         raise ValueError("xray output did not contain a JSON manifest")
-    return json.loads(stdout[start : end + 1])
+    return json.loads(stdout[start : end + 1].decode("utf-8", "strict"))
 
 
 def run_manifest(xray: pathlib.Path, case: pathlib.Path, out_c: pathlib.Path) -> dict[str, Any]:
@@ -124,11 +124,10 @@ def run_manifest(xray: pathlib.Path, case: pathlib.Path, out_c: pathlib.Path) ->
         cwd=PROJECT_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
     )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout).strip().splitlines()
-        excerpt = "\n".join(detail[:40])
+        excerpt = repr(b"\n".join(detail[:40]))
         raise RuntimeError(f"xray build failed for {rel(case)}\n{excerpt}")
     return manifest_from_stdout(proc.stdout)
 

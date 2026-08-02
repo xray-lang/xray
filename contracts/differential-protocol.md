@@ -1,10 +1,11 @@
 # Differential and oracle protocol contract
 
-Status: re-frozen by task 237.
+Status: re-frozen by task 257 after making subprocess capture byte-native.
 
 1. Backend differential equivalence compares observable exit status and stdout
    byte-for-byte. Normalized stderr is compared only when the lane explicitly
-   enables that channel; backend build logs are not program output.
+   enables that channel; backend build logs are not program output. The harness
+   must not decode either backend's program output before this comparison.
 2. A checked-in `.expected` sidecar is an exact stdout oracle and requires a
    zero exit status. A `.stdin` sidecar supplies identical bytes to each backend.
    A directory `xray.toml` is part of the case identity and supplies the same
@@ -22,5 +23,5 @@ Status: re-frozen by task 237.
 ## Digest anchors
 
 anchor-sha256: tests/diff/run_backend_diff.sh 2065d507708a4ab8d3f967b78abd49cd387327fac44f7b40131dc4c5675d5dfb
-anchor-sha256: tests/diff/run_backend_diff_fast.py 3c8e6af669827f3412a199fe7bc481a328179f0b88d103b26511eec937e8bc25
+anchor-sha256: tests/diff/run_backend_diff_fast.py 87cc2b0682630397a8b1dcc1c52e31285c164d00d237cce95c4c4f3b425110a1
 anchor-sha256: tests/aot/TOMBSTONES.tsv 01db981e6f0742672435ae3871e0f072f6a73f6f17d1ba3d09fdfeee0983a2a7

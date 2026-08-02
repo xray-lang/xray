@@ -198,7 +198,7 @@ def append_case_manifest(manifest: str) -> list[Path] | None:
         return None
 
     cases: list[Path] = []
-    for raw in manifest_path.read_text().splitlines():
+    for raw in manifest_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -227,7 +227,7 @@ def read_args(path: Path) -> list[str]:
     if not argfile.is_file():
         return []
     try:
-        first = argfile.read_text().splitlines()[0]
+        first = argfile.read_text(encoding="utf-8").splitlines()[0]
     except (OSError, IndexError):
         return []
     return first.split()
@@ -621,7 +621,7 @@ def main(argv: list[str]) -> int:
     baseline_path = Path(os.environ.get("XRAY_DIFF_BASELINE", str(SCRIPT_DIR / "known_failures.txt")))
     baseline: set[str] = set()
     if baseline_path.is_file():
-        for line in baseline_path.read_text().splitlines():
+        for line in baseline_path.read_text(encoding="utf-8").splitlines():
             line = line.split("#", 1)[0].strip()
             if line:
                 baseline.add(line)

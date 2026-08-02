@@ -178,7 +178,7 @@ def stdlib_exported_names(root: Path) -> set[str]:
     )
     for path in list((root / "stdlib").rglob("*.def")) + list((root / "stdlib").rglob("*.xr")):
         try:
-            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            for line in path.read_text(encoding="utf-8", errors="strict").splitlines():
                 match = declaration.match(line)
                 if match:
                     names.add(match.group(1))
@@ -242,6 +242,8 @@ def check_r3(root: Path, registry: builtin_symbols.Registry, xray: Path) -> list
                 [str(xray), mode, str(probe)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="strict",
                 timeout=120,
             )
             if result.returncode != 0:

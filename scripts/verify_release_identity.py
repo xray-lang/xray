@@ -12,7 +12,8 @@ import sys
 
 
 def run(*args: str, cwd: Path | None = None) -> str:
-    return subprocess.check_output(args, cwd=cwd, text=True).strip()
+    return subprocess.check_output(args, cwd=cwd, text=True, encoding="utf-8",
+                                   errors="strict").strip()
 
 
 def cmake_version(source: Path) -> str:
@@ -47,7 +48,8 @@ def verify(source: Path, binary: Path, payload: Path, tag: str) -> None:
         raise ValueError("release checkout is dirty after build")
 
     binary_identity = json.loads(
-        subprocess.check_output([str(binary), "--version", "--json"], text=True)
+        subprocess.check_output([str(binary), "--version", "--json"], text=True,
+                                encoding="utf-8", errors="strict")
     )
     payload_identity = load_json(payload)
     expected = {

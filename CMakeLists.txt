@@ -3364,6 +3364,46 @@ if(BUILD_TESTS)
         TIMEOUT 300
     )
 
+    # Task 257: subprocess pipes remain byte streams unless a caller names a
+    # stable ASCII/UTF-8 protocol and selects strict decoding explicitly.
+    add_test(
+        NAME subprocess_text_boundaries
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_subprocess_text_boundaries.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(subprocess_text_boundaries PROPERTIES
+        LABELS "meta;process;bytes;task-257"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME subprocess_text_boundaries_injection
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_subprocess_text_boundaries.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(subprocess_text_boundaries_injection PROPERTIES
+        LABELS "meta;process;bytes;task-257"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME process_zero_cost
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_process_zero_cost.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(process_zero_cost PROPERTIES
+        LABELS "meta;process;zero-cost;task-257"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     # P0: semantic contract anchor digests and CONTRACT-CHANGE trailers. The
     # self-test injects both an anchor drift and a missing trailer to prove the
     # gate fails closed independently of the live repository state.

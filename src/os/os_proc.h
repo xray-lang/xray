@@ -90,7 +90,7 @@ typedef struct XrProcSpawnOptions {
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
 // array; argv[0] is conventionally the program name. The child
 // inherits the parent's stdin / stdout / stderr and environment. PATH is
-// searched for unqualified program names (POSIX execvp / Win32 CreateProcessA
+// searched for unqualified program names (POSIX execvp / Win32 CreateProcessW
 // with lpApplicationName=NULL).
 //
 // Returns the child's process id on success, XR_PROC_INVALID on

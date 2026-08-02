@@ -791,6 +791,8 @@ def source_marker_hits(root: Path, marker: str) -> list[Path]:
             f":(glob)**/{marker}",
         ],
         text=True,
+        encoding="utf-8",
+        errors="strict",
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         check=False,

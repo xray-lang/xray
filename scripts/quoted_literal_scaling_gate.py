@@ -28,7 +28,8 @@ def run_timed(
     started = time.perf_counter()
     try:
         result = subprocess.run(
-            command, cwd=cwd, text=True, capture_output=True, check=False, timeout=timeout
+            command, cwd=cwd, text=True, encoding="utf-8", errors="strict",
+            capture_output=True, check=False, timeout=timeout
         )
     except subprocess.TimeoutExpired as error:
         stdout = error.stdout.decode() if isinstance(error.stdout, bytes) else (error.stdout or "")

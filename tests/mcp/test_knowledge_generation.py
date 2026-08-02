@@ -132,7 +132,8 @@ def check_card_sources(root: Path) -> list[str]:
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+    return subprocess.run(cmd, cwd=str(cwd), text=True, encoding="utf-8", errors="strict",
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
 
 
 def check_xray_fences(root: Path, xray: Path) -> list[str]:

@@ -163,7 +163,7 @@ def parse_opcodes(def_path: Path) -> list[tuple[str, str, str, str]]:
     first, then run a single DOTALL regex scan so each opcode entry
     is matched whether or not it crosses line boundaries.
     """
-    text = def_path.read_text()
+    text = def_path.read_text(encoding="utf-8")
     # Strip comments first so docstring placeholders such as
     # `_(NAME, FMT_TAG, KOP_TAG, "...")` cannot be matched as real
     # opcode entries.
@@ -280,7 +280,7 @@ def main() -> int:
         if not OUT_FILE.exists():
             sys.stderr.write(f"{OUT_FILE} missing; run without --check\n")
             return 1
-        existing = OUT_FILE.read_text()
+        existing = OUT_FILE.read_text(encoding="utf-8")
         if existing != rendered:
             sys.stderr.write(
                 f"{OUT_FILE} is out of sync with {DEF_FILE}; "
@@ -289,7 +289,7 @@ def main() -> int:
             return 1
         print(f"{OUT_FILE} in sync ({len(opcodes)} opcodes)")
         return 0
-    OUT_FILE.write_text(rendered)
+    OUT_FILE.write_text(rendered, encoding="utf-8")
     print(f"wrote {OUT_FILE} ({len(opcodes)} opcodes)")
     return 0
 

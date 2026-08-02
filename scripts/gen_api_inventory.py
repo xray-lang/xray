@@ -523,6 +523,8 @@ def load_builtin_dump(root: Path, xray: Path | None, builtin_dump: Path | None) 
         [str(xray), "builtin-dump"],
         cwd=str(root),
         text=True,
+        encoding="utf-8",
+        errors="strict",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=20,

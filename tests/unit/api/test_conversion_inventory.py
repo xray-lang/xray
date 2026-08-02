@@ -15,6 +15,7 @@ def run(xray: Path, source: Path) -> subprocess.CompletedProcess[str]:
         [str(xray), "language", "conversions", "--json", str(source)],
         text=True,
         encoding="utf-8",
+        errors="strict",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,

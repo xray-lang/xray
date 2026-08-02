@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 
-TIMING_RE = re.compile(r"^\[cgen-verify\] cpu_us=(\d+) bytes=(\d+) tu=(.*)$", re.MULTILINE)
+TIMING_RE = re.compile(br"^\[cgen-verify\] cpu_us=(\d+) bytes=(\d+) tu=(.*)$", re.MULTILINE)
 
 
 def main() -> int:
@@ -58,14 +58,13 @@ def main() -> int:
                 [str(xray), "build", str(main_file), "--native", "--c-only", "-o", str(output)],
                 cwd=main_file.parent.parent,
                 env=env,
-                text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             wall_us = (time.perf_counter() - started) * 1_000_000.0
             if run.returncode != 0:
-                print(run.stdout, end="")
-                print(run.stderr, end="")
+                print(f"stdout bytes={run.stdout!r}")
+                print(f"stderr bytes={run.stderr!r}")
                 return run.returncode
             timings = TIMING_RE.findall(run.stderr)
             if not timings:

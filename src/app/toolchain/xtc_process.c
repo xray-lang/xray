@@ -13,6 +13,7 @@
 #include "../../os/os_pipe.h"
 #include "../../os/os_proc.h"
 #include "../../os/os_time.h"
+#include "../../base/xutf8.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -27,7 +28,7 @@ extern char **environ;
 #endif
 
 typedef struct XtcCapture {
-    char *data;
+    uint8_t *data;
     size_t len;
     size_t cap;
     size_t limit;
@@ -68,9 +69,10 @@ static bool xtc_env_key_is_secret(const char *key, size_t key_size) {
     return false;
 }
 
-XR_FUNC void xtc_process_redact_output(const char *input, size_t input_size, char *output,
-                                       size_t output_size) {
+XR_FUNC void xtc_process_redact_bytes(const uint8_t *input, size_t input_size, char *output,
+                                      size_t output_size) {
     static const char replacement[] = "<redacted>";
+    static const char hex[] = "0123456789ABCDEF";
     if (!output || output_size == 0)
         return;
     output[0] = '\0';
@@ -103,9 +105,82 @@ XR_FUNC void xtc_process_redact_output(const char *input, size_t input_size, cha
             in_pos += secret_size;
             continue;
         }
-        output[out_pos++] = input[in_pos++];
+        uint8_t byte = input[in_pos++];
+        if ((byte >= 0x20 && byte <= 0x7e) || byte == '\t') {
+            output[out_pos++] = (char) byte;
+        } else if (out_pos + 4 < output_size) {
+            output[out_pos++] = '\\';
+            output[out_pos++] = 'x';
+            output[out_pos++] = hex[byte >> 4];
+            output[out_pos++] = hex[byte & 0x0f];
+        } else {
+            break;
+        }
     }
     output[out_pos] = '\0';
+}
+
+static size_t xtc_process_first_line_length(const XrProcessByteBuffer *bytes) {
+    if (!bytes || !bytes->data)
+        return 0;
+    size_t len = 0;
+    while (len < bytes->length && bytes->data[len] != '\r' && bytes->data[len] != '\n')
+        len++;
+    return len;
+}
+
+XR_FUNC bool xtc_process_copy_ascii_line(const XrProcessByteBuffer *bytes, char *output,
+                                         size_t output_size) {
+    size_t len = xtc_process_first_line_length(bytes);
+    if (!output || output_size == 0 || len == 0 || len >= output_size)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        if (bytes->data[i] < 0x20 || bytes->data[i] > 0x7e)
+            return false;
+    }
+    memcpy(output, bytes->data, len);
+    output[len] = '\0';
+    return true;
+}
+
+XR_FUNC bool xtc_process_copy_ascii(const XrProcessByteBuffer *bytes, char *output,
+                                    size_t output_size) {
+    if (!bytes || !bytes->data || !output || output_size == 0 ||
+        bytes->length >= output_size)
+        return false;
+    for (size_t i = 0; i < bytes->length; i++) {
+        uint8_t byte = bytes->data[i];
+        if (byte != '\r' && byte != '\n' && byte != '\t' && (byte < 0x20 || byte > 0x7e))
+            return false;
+    }
+    memcpy(output, bytes->data, bytes->length);
+    output[bytes->length] = '\0';
+    return true;
+}
+
+XR_FUNC bool xtc_process_copy_utf8_line(const XrProcessByteBuffer *bytes, char *output,
+                                        size_t output_size) {
+    size_t len = xtc_process_first_line_length(bytes);
+    if (!output || output_size == 0 || len == 0 || len >= output_size ||
+        memchr(bytes->data, '\0', len) != NULL ||
+        !xr_utf8_validate((const char *) bytes->data, len))
+        return false;
+    memcpy(output, bytes->data, len);
+    output[len] = '\0';
+    return true;
+}
+
+XR_FUNC bool xtc_process_bytes_contains_ascii(const XrProcessByteBuffer *bytes,
+                                              const char *needle) {
+    if (!bytes || !bytes->data || !needle)
+        return false;
+    size_t needle_len = strlen(needle);
+    if (needle_len == 0 || needle_len > bytes->length)
+        return false;
+    for (size_t i = 0; i + needle_len <= bytes->length; i++)
+        if (memcmp(bytes->data + i, needle, needle_len) == 0)
+            return true;
+    return false;
 }
 
 static bool xtc_capture_init(XtcCapture *capture, size_t limit) {
@@ -114,7 +189,7 @@ static bool xtc_capture_init(XtcCapture *capture, size_t limit) {
     capture->cap = limit < 4096 ? limit + 1 : 4096;
     if (capture->cap == 0)
         capture->cap = 1;
-    capture->data = (char *) malloc(capture->cap);  // xr:allow-raw-alloc
+    capture->data = (uint8_t *) malloc(capture->cap);  // xr:allow-raw-alloc
     if (!capture->data)
         return false;
     capture->data[0] = '\0';
@@ -131,7 +206,7 @@ static bool xtc_capture_reserve(XtcCapture *capture, size_t needed) {
         if (next < needed)
             return false;
     }
-    char *data = (char *) realloc(capture->data, next);  // xr:allow-raw-alloc
+    uint8_t *data = (uint8_t *) realloc(capture->data, next);  // xr:allow-raw-alloc
     if (!data)
         return false;
     capture->data = data;
@@ -139,7 +214,7 @@ static bool xtc_capture_reserve(XtcCapture *capture, size_t needed) {
     return true;
 }
 
-static bool xtc_capture_append(XtcCapture *capture, const char *data, size_t len) {
+static bool xtc_capture_append(XtcCapture *capture, const uint8_t *data, size_t len) {
     size_t available = capture->len < capture->limit ? capture->limit - capture->len : 0;
     size_t accepted = len < available ? len : available;
     if (accepted > 0) {
@@ -155,7 +230,7 @@ static bool xtc_capture_append(XtcCapture *capture, const char *data, size_t len
 }
 
 static bool xtc_capture_drain(XrPipeHandle handle, XtcCapture *capture) {
-    char buffer[4096];
+    uint8_t buffer[4096];
     for (;;) {
         int64_t count = 0;
         XrPipeIoStatus status = xr_pipe_try_read(handle, buffer, sizeof(buffer), &count);
@@ -280,9 +355,12 @@ XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, ch
         xtc_process_error(err, err_size, "failed while capturing process output");
         return false;
     }
-    out->stdout_data = stdout_capture.data;
-    out->stderr_data = stderr_capture.data;
-    out->output_truncated = stdout_capture.truncated || stderr_capture.truncated;
+    out->stdout_bytes.data = stdout_capture.data;
+    out->stdout_bytes.length = stdout_capture.len;
+    out->stdout_bytes.truncated = stdout_capture.truncated;
+    out->stderr_bytes.data = stderr_capture.data;
+    out->stderr_bytes.length = stderr_capture.len;
+    out->stderr_bytes.truncated = stderr_capture.truncated;
 
     out->duration_ms = xr_time_monotonic_ms() - start_ms;
     return true;
@@ -291,8 +369,8 @@ XR_FUNC bool xtc_process_run(const XrProcessSpec *spec, XrProcessResult *out, ch
 XR_FUNC void xtc_process_result_free(XrProcessResult *result) {
     if (!result)
         return;
-    free(result->stdout_data);  // xr:allow-raw-alloc
-    free(result->stderr_data);  // xr:allow-raw-alloc
+    free(result->stdout_bytes.data);  // xr:allow-raw-alloc
+    free(result->stderr_bytes.data);  // xr:allow-raw-alloc
     memset(result, 0, sizeof(*result));
     result->exit_code = -1;
 }

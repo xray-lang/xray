@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(XR_OS_WINDOWS)
+#include "../shared/xr_win_utf.h"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -166,6 +167,8 @@ static inline char *xrt_sys_cstr_dup_arg(const char *data, int64_t len) {
     if (n64 > (uint64_t) SIZE_MAX - 1u)
         return NULL;
     size_t n = (size_t) n64;
+    if (memchr(data, '\0', n) != NULL)
+        return NULL;
     char *out = (char *) XRT_MALLOC(n + 1u);
     if (!out)
         return NULL;
@@ -415,17 +418,33 @@ static inline int xrt_sys_process_pipe_handle_from_optional(XrValue value, bool 
 }
 
 #if defined(XR_OS_WINDOWS)
-static inline void xrt_sys_process_append_escaped_arg(char *buf, size_t *pos, const char *arg) {
+static inline wchar_t *xrt_sys_process_utf8_dup(const char *input) {
+    if (!input)
+        return NULL;
+    size_t len = strlen(input);
+    int required = xr_win_utf8_to_utf16_required(input, len);
+    if (required == 0 || (size_t) required > SIZE_MAX / sizeof(wchar_t))
+        return NULL;
+    wchar_t *output = (wchar_t *) XRT_MALLOC((size_t) required * sizeof(wchar_t));
+    if (!output || !xr_win_utf8_to_utf16(input, len, output, (size_t) required)) {
+        XRT_FREE(output);
+        return NULL;
+    }
+    return output;
+}
+
+static inline void xrt_sys_process_append_escaped_arg(wchar_t *buf, size_t *pos,
+                                                       const wchar_t *arg) {
     size_t backslashes = 0;
-    for (const char *p = arg; *p; p++) {
-        if (*p == '\\') {
+    for (const wchar_t *p = arg; *p; p++) {
+        if (*p == L'\\') {
             backslashes++;
-            buf[(*pos)++] = '\\';
-        } else if (*p == '"') {
+            buf[(*pos)++] = L'\\';
+        } else if (*p == L'"') {
             for (size_t k = 0; k < backslashes; k++)
-                buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '"';
+                buf[(*pos)++] = L'\\';
+            buf[(*pos)++] = L'\\';
+            buf[(*pos)++] = L'"';
             backslashes = 0;
         } else {
             backslashes = 0;
@@ -433,58 +452,85 @@ static inline void xrt_sys_process_append_escaped_arg(char *buf, size_t *pos, co
         }
     }
     for (size_t k = 0; k < backslashes; k++)
-        buf[(*pos)++] = '\\';
+        buf[(*pos)++] = L'\\';
 }
 
-static inline char *xrt_sys_process_build_command_line(const char *prog, char *const argv[]) {
+static inline int xrt_sys_process_arg_needs_quotes(const wchar_t *arg) {
+    return arg[0] == L'\0' || wcspbrk(arg, L" \t\"") != NULL;
+}
+
+static inline void xrt_sys_process_append_arg(wchar_t *buf, size_t *pos, const wchar_t *arg) {
+    if (!xrt_sys_process_arg_needs_quotes(arg)) {
+        size_t len = wcslen(arg);
+        memcpy(buf + *pos, arg, len * sizeof(wchar_t));
+        *pos += len;
+        return;
+    }
+    buf[(*pos)++] = L'"';
+    xrt_sys_process_append_escaped_arg(buf, pos, arg);
+    buf[(*pos)++] = L'"';
+}
+
+static inline wchar_t *xrt_sys_process_build_command_line(const char *prog, char *const argv[]) {
     size_t cap = strlen(prog) * 2u + 3u;
     for (size_t i = 0; argv[i] != NULL; i++)
         cap += strlen(argv[i]) * 2u + 3u;
-    char *buf = (char *) XRT_MALLOC(cap + 1u);
+    if (cap > SIZE_MAX / sizeof(wchar_t) - 1u)
+        return NULL;
+    wchar_t *buf = (wchar_t *) XRT_MALLOC((cap + 1u) * sizeof(wchar_t));
     if (!buf)
         return NULL;
     size_t pos = 0;
     if (argv[0] == NULL || strcmp(argv[0], prog) != 0) {
-        buf[pos++] = '"';
-        xrt_sys_process_append_escaped_arg(buf, &pos, prog);
-        buf[pos++] = '"';
+        wchar_t *wide = xrt_sys_process_utf8_dup(prog);
+        if (!wide) {
+            XRT_FREE(buf);
+            return NULL;
+        }
+        xrt_sys_process_append_arg(buf, &pos, wide);
+        XRT_FREE(wide);
     }
     for (size_t i = 0; argv[i] != NULL; i++) {
         if (pos > 0)
-            buf[pos++] = ' ';
-        buf[pos++] = '"';
-        xrt_sys_process_append_escaped_arg(buf, &pos, argv[i]);
-        buf[pos++] = '"';
+            buf[pos++] = L' ';
+        wchar_t *wide = xrt_sys_process_utf8_dup(argv[i]);
+        if (!wide) {
+            XRT_FREE(buf);
+            return NULL;
+        }
+        xrt_sys_process_append_arg(buf, &pos, wide);
+        XRT_FREE(wide);
     }
-    buf[pos] = '\0';
+    buf[pos] = L'\0';
     return buf;
 }
 
-static inline char *xrt_sys_process_strdup(const char *s) {
-    size_t len = strlen(s);
-    char *out = (char *) XRT_MALLOC(len + 1u);
+static inline wchar_t *xrt_sys_process_wcsdup(const wchar_t *s) {
+    size_t len = wcslen(s);
+    wchar_t *out = (wchar_t *) XRT_MALLOC((len + 1u) * sizeof(wchar_t));
     if (!out)
         return NULL;
-    memcpy(out, s, len + 1u);
+    memcpy(out, s, (len + 1u) * sizeof(wchar_t));
     return out;
 }
 
-static inline int xrt_sys_process_env_entry_matches_key(const char *entry, const char *key) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
+static inline int xrt_sys_process_env_entry_matches_key(const wchar_t *entry,
+                                                         const wchar_t *key) {
+    const wchar_t *eq = entry ? wcschr(entry, L'=') : NULL;
     if (!eq || eq == entry || !key)
         return 0;
     size_t name_len = (size_t) (eq - entry);
-    return strlen(key) == name_len && _strnicmp(entry, key, name_len) == 0;
+    return wcslen(key) == name_len && _wcsnicmp(entry, key, name_len) == 0;
 }
 
 static inline int xrt_sys_process_env_entry_cmp(const void *a, const void *b) {
-    const char *ea = *(const char *const *) a;
-    const char *eb = *(const char *const *) b;
-    return _stricmp(ea, eb);
+    const wchar_t *ea = *(const wchar_t *const *) a;
+    const wchar_t *eb = *(const wchar_t *const *) b;
+    return _wcsicmp(ea, eb);
 }
 
 typedef struct xrt_sys_process_env_entries {
-    char **items;
+    wchar_t **items;
     size_t count;
     size_t cap;
 } xrt_sys_process_env_entries_t;
@@ -501,10 +547,11 @@ static inline void xrt_sys_process_env_entries_free(xrt_sys_process_env_entries_
 }
 
 static inline int xrt_sys_process_env_entries_push(xrt_sys_process_env_entries_t *entries,
-                                                   char *item) {
+                                                   wchar_t *item) {
     if (entries->count == entries->cap) {
         size_t next_cap = entries->cap ? entries->cap * 2u : 32u;
-        char **next = (char **) XRT_REALLOC(entries->items, next_cap * sizeof(char *));
+        wchar_t **next =
+            (wchar_t **) XRT_REALLOC(entries->items, next_cap * sizeof(wchar_t *));
         if (!next)
             return 0;
         entries->items = next;
@@ -515,52 +562,72 @@ static inline int xrt_sys_process_env_entries_push(xrt_sys_process_env_entries_t
 }
 
 static inline int xrt_sys_process_env_key_overridden(char *const env_keys[], size_t env_count,
-                                                     const char *entry) {
+                                                     const wchar_t *entry) {
     for (size_t i = 0; i < env_count; i++) {
-        if (xrt_sys_process_env_entry_matches_key(entry, env_keys[i]))
+        wchar_t *key = xrt_sys_process_utf8_dup(env_keys[i]);
+        if (!key)
+            return 0;
+        int match = xrt_sys_process_env_entry_matches_key(entry, key);
+        XRT_FREE(key);
+        if (match)
             return 1;
     }
     return 0;
 }
 
-static inline char *xrt_sys_process_env_pair_new(const char *key, const char *value) {
-    size_t key_len = strlen(key);
-    size_t value_len = strlen(value);
+static inline wchar_t *xrt_sys_process_env_pair_new(const char *key, const char *value) {
+    wchar_t *wide_key = xrt_sys_process_utf8_dup(key);
+    wchar_t *wide_value = xrt_sys_process_utf8_dup(value);
+    if (!wide_key || !wide_value) {
+        XRT_FREE(wide_key);
+        XRT_FREE(wide_value);
+        return NULL;
+    }
+    size_t key_len = wcslen(wide_key);
+    size_t value_len = wcslen(wide_value);
     if (key_len > SIZE_MAX - value_len - 2u)
-        return NULL;
-    char *out = (char *) XRT_MALLOC(key_len + value_len + 2u);
+        goto fail;
+    wchar_t *out = (wchar_t *) XRT_MALLOC((key_len + value_len + 2u) * sizeof(wchar_t));
     if (!out)
-        return NULL;
-    memcpy(out, key, key_len);
-    out[key_len] = '=';
-    memcpy(out + key_len + 1u, value, value_len + 1u);
+        goto fail;
+    memcpy(out, wide_key, key_len * sizeof(wchar_t));
+    out[key_len] = L'=';
+    memcpy(out + key_len + 1u, wide_value, (value_len + 1u) * sizeof(wchar_t));
+    XRT_FREE(wide_key);
+    XRT_FREE(wide_value);
     return out;
+
+fail:
+    XRT_FREE(wide_key);
+    XRT_FREE(wide_value);
+    return NULL;
 }
 
-static inline char *xrt_sys_process_env_block_build(char *const env_keys[],
-                                                    char *const env_values[], size_t env_count) {
+static inline wchar_t *xrt_sys_process_env_block_build(char *const env_keys[],
+                                                       char *const env_values[],
+                                                       size_t env_count) {
     if (env_count == 0)
         return NULL;
 
     xrt_sys_process_env_entries_t entries = {0};
-    LPCH current = GetEnvironmentStringsA();
-    if (current) {
-        for (const char *p = current; *p; p += strlen(p) + 1u) {
-            if (xrt_sys_process_env_key_overridden(env_keys, env_count, p))
-                continue;
-            char *copy = xrt_sys_process_strdup(p);
-            if (!copy || !xrt_sys_process_env_entries_push(&entries, copy)) {
-                XRT_FREE(copy);
-                FreeEnvironmentStringsA(current);
-                xrt_sys_process_env_entries_free(&entries);
-                return NULL;
-            }
+    LPWCH current = GetEnvironmentStringsW();
+    if (!current)
+        return NULL;
+    for (const wchar_t *p = current; *p; p += wcslen(p) + 1u) {
+        if (xrt_sys_process_env_key_overridden(env_keys, env_count, p))
+            continue;
+        wchar_t *copy = xrt_sys_process_wcsdup(p);
+        if (!copy || !xrt_sys_process_env_entries_push(&entries, copy)) {
+            XRT_FREE(copy);
+            FreeEnvironmentStringsW(current);
+            xrt_sys_process_env_entries_free(&entries);
+            return NULL;
         }
-        FreeEnvironmentStringsA(current);
     }
+    FreeEnvironmentStringsW(current);
 
     for (size_t i = 0; i < env_count; i++) {
-        char *pair = xrt_sys_process_env_pair_new(env_keys[i], env_values[i]);
+        wchar_t *pair = xrt_sys_process_env_pair_new(env_keys[i], env_values[i]);
         if (!pair || !xrt_sys_process_env_entries_push(&entries, pair)) {
             XRT_FREE(pair);
             xrt_sys_process_env_entries_free(&entries);
@@ -568,30 +635,34 @@ static inline char *xrt_sys_process_env_block_build(char *const env_keys[],
         }
     }
 
-    qsort(entries.items, entries.count, sizeof(char *), xrt_sys_process_env_entry_cmp);
+    qsort(entries.items, entries.count, sizeof(wchar_t *), xrt_sys_process_env_entry_cmp);
 
-    size_t bytes = 1u;
+    size_t units = 1u;
     for (size_t i = 0; i < entries.count; i++) {
-        size_t len = strlen(entries.items[i]);
-        if (bytes > SIZE_MAX - len - 1u) {
+        size_t len = wcslen(entries.items[i]);
+        if (units > SIZE_MAX - len - 1u) {
             xrt_sys_process_env_entries_free(&entries);
             return NULL;
         }
-        bytes += len + 1u;
+        units += len + 1u;
     }
 
-    char *block = (char *) XRT_MALLOC(bytes);
+    if (units > SIZE_MAX / sizeof(wchar_t)) {
+        xrt_sys_process_env_entries_free(&entries);
+        return NULL;
+    }
+    wchar_t *block = (wchar_t *) XRT_MALLOC(units * sizeof(wchar_t));
     if (!block) {
         xrt_sys_process_env_entries_free(&entries);
         return NULL;
     }
-    char *dst = block;
+    wchar_t *dst = block;
     for (size_t i = 0; i < entries.count; i++) {
-        size_t len = strlen(entries.items[i]) + 1u;
-        memcpy(dst, entries.items[i], len);
+        size_t len = wcslen(entries.items[i]) + 1u;
+        memcpy(dst, entries.items[i], len * sizeof(wchar_t));
         dst += len;
     }
-    *dst = '\0';
+    *dst = L'\0';
     xrt_sys_process_env_entries_free(&entries);
     return block;
 }
@@ -626,7 +697,7 @@ static inline int xrt_sys_process_duplicate_inheritable(HANDLE src, HANDLE *out)
 static inline int xrt_sys_process_stdio_prepare(bool has_stdin, XrPipeHandle stdin_read,
                                                 bool has_stdout, XrPipeHandle stdout_write,
                                                 bool has_stderr, XrPipeHandle stderr_write,
-                                                STARTUPINFOA *si,
+                                                STARTUPINFOW *si,
                                                 xrt_sys_process_stdio_dup_t *dup) {
     if (!has_stdin && !has_stdout && !has_stderr)
         return 1;
@@ -1337,14 +1408,14 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     }
 
 #if defined(XR_OS_WINDOWS)
-    char *cmdline = xrt_sys_process_build_command_line(argv[0], argv);
+    wchar_t *cmdline = xrt_sys_process_build_command_line(argv[0], argv);
     if (!cmdline) {
         xrt_sys_process_argv_free(argv);
         xrt_sys_process_env_free(env_keys, env_values, env_count);
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
-    STARTUPINFOA si;
+    STARTUPINFOW si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     xrt_sys_process_stdio_dup_t stdio_dup = {0};
@@ -1359,7 +1430,7 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
     }
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    char *env_block = xrt_sys_process_env_block_build(env_keys, env_values, env_count);
+    wchar_t *env_block = xrt_sys_process_env_block_build(env_keys, env_values, env_count);
     if (env_count > 0 && !env_block) {
         xrt_sys_process_stdio_dup_close(&stdio_dup);
         XRT_FREE(cmdline);
@@ -1368,10 +1439,26 @@ static inline XrValue xrt_sys_process_spawn(const char *program_data, int64_t pr
         XRT_FREE(cwd);
         return XR_FROM_INT(-1);
     }
+    wchar_t *wide_cwd = NULL;
+    if (cwd && cwd[0] != '\0') {
+        wide_cwd = xrt_sys_process_utf8_dup(cwd);
+        if (!wide_cwd) {
+            xrt_sys_process_stdio_dup_close(&stdio_dup);
+            XRT_FREE(env_block);
+            XRT_FREE(cmdline);
+            xrt_sys_process_argv_free(argv);
+            xrt_sys_process_env_free(env_keys, env_values, env_count);
+            XRT_FREE(cwd);
+            return XR_FROM_INT(-1);
+        }
+    }
     DWORD create_flags = detached ? CREATE_NEW_PROCESS_GROUP : 0;
-    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block,
-                             (cwd && cwd[0] != '\0') ? cwd : NULL, &si, &pi);
+    if (env_block)
+        create_flags |= CREATE_UNICODE_ENVIRONMENT;
+    BOOL ok = CreateProcessW(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block, wide_cwd,
+                             &si, &pi);
     xrt_sys_process_stdio_dup_close(&stdio_dup);
+    XRT_FREE(wide_cwd);
     XRT_FREE(env_block);
     XRT_FREE(cmdline);
     xrt_sys_process_argv_free(argv);

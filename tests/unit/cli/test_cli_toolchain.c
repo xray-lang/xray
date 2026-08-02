@@ -22,7 +22,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#include "shared/xr_win_utf.h"
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -454,14 +457,17 @@ TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
     ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
 }
 
-TEST(msvc_version_parser_accepts_banner_text) {
+TEST(version_parser_reads_ascii_token_from_arbitrary_bytes) {
     char version[64];
-    ASSERT_TRUE(xtc_msvc_version_from_banner(
-        "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35219 for x64", version,
-        sizeof(version)));
+    static const uint8_t banner[] =
+        "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35219 for x64";
+    static const uint8_t help[] = "Microsoft C/C++ compiler help";
+    static const uint8_t localized[] = {0xd6, 0xd0, 0xce, 0xc4, ' ', '1', '8', '.', '2', '.', '1'};
+    ASSERT_TRUE(xtc_version_from_banner(banner, sizeof(banner) - 1, version, sizeof(version)));
     ASSERT_STR_EQ(version, "19.44.35219");
-    ASSERT_FALSE(
-        xtc_msvc_version_from_banner("Microsoft C/C++ compiler help", version, sizeof(version)));
+    ASSERT_TRUE(xtc_version_from_banner(localized, sizeof(localized), version, sizeof(version)));
+    ASSERT_STR_EQ(version, "18.2.1");
+    ASSERT_FALSE(xtc_version_from_banner(help, sizeof(help) - 1, version, sizeof(version)));
 }
 
 TEST(cross_target_rejects_explicit_host_without_fallback) {
@@ -643,11 +649,109 @@ TEST(process_capture_and_output_limit) {
     spec.output_limit = 5;
     ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
     ASSERT_EQ_INT(result.exit_code, 0);
-    ASSERT_STR_EQ(result.stdout_data, "12345");
-    ASSERT_STR_EQ(result.stderr_data, "abcde");
-    ASSERT_TRUE(result.output_truncated);
+    ASSERT_EQ_UINT(result.stdout_bytes.length, 5);
+    ASSERT_EQ_UINT(result.stderr_bytes.length, 5);
+    ASSERT_MEM_EQ(result.stdout_bytes.data, "12345", 5);
+    ASSERT_MEM_EQ(result.stderr_bytes.data, "abcde", 5);
+    ASSERT_TRUE(result.stdout_bytes.truncated);
+    ASSERT_TRUE(result.stderr_bytes.truncated);
     xtc_process_result_free(&result);
 }
+
+TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
+    char shell[1200];
+    char err[256];
+    XrProcessSpec spec;
+    XrProcessResult result;
+#ifdef _WIN32
+    ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.argv[1] = "-NoLogo";
+    spec.argv[2] = "-NoProfile";
+    spec.argv[3] = "-NonInteractive";
+    spec.argv[4] = "-Command";
+    spec.argv[5] =
+        "$b=[byte[]](0x66,0x6f,0x80,0x00,0xff);"
+        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[6] = NULL;
+#else
+    ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.argv[1] = "-c";
+    spec.argv[2] = "printf 'fo\\200\\000\\377'";
+    spec.argv[3] = NULL;
+#endif
+    static const uint8_t expected[] = {0x66, 0x6f, 0x80, 0x00, 0xff};
+    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    ASSERT_EQ_INT(result.exit_code, 0);
+    ASSERT_EQ_UINT(result.stdout_bytes.length, sizeof(expected));
+    ASSERT_MEM_EQ(result.stdout_bytes.data, expected, sizeof(expected));
+    ASSERT_EQ_UINT(result.stderr_bytes.length, 0);
+    ASSERT_FALSE(result.stdout_bytes.truncated);
+    xtc_process_result_free(&result);
+}
+
+#ifdef _WIN32
+TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
+    wchar_t wide_temp[MAX_PATH];
+    wchar_t wide_leaf[96];
+    wchar_t wide_dir[MAX_PATH];
+    char utf8_dir[1600];
+    char utf8_leaf[256];
+    char expected[768];
+    char shell[1200];
+    char err[256];
+    XrProcessSpec spec;
+    XrProcessResult result;
+    DWORD temp_len = GetTempPathW((DWORD) (sizeof(wide_temp) / sizeof(wide_temp[0])), wide_temp);
+    ASSERT_TRUE(temp_len > 0 && temp_len < sizeof(wide_temp) / sizeof(wide_temp[0]));
+    _snwprintf_s(wide_leaf, sizeof(wide_leaf) / sizeof(wide_leaf[0]), _TRUNCATE,
+                 L"xray-\u76ee\u5f55-%lu", (unsigned long) GetCurrentProcessId());
+    _snwprintf_s(wide_dir, sizeof(wide_dir) / sizeof(wide_dir[0]), _TRUNCATE, L"%ls%ls",
+                 wide_temp, wide_leaf);
+    ASSERT_TRUE(CreateDirectoryW(wide_dir, NULL) || GetLastError() == ERROR_ALREADY_EXISTS);
+    ASSERT_TRUE(xr_win_utf16_to_utf8(wide_dir, wcslen(wide_dir), utf8_dir, sizeof(utf8_dir)) != 0);
+    ASSERT_TRUE(
+        xr_win_utf16_to_utf8(wide_leaf, wcslen(wide_leaf), utf8_leaf, sizeof(utf8_leaf)) != 0);
+    ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.cwd = utf8_dir;
+    spec.env_keys[0] = "XRAY_UNICODE_VALUE";
+    spec.env_values[0] = "\u73af\u5883\u503c";
+    spec.env_count = 1;
+    spec.argv[1] = "-NoLogo";
+    spec.argv[2] = "-NoProfile";
+    spec.argv[3] = "-NonInteractive";
+    spec.argv[4] = "-Command";
+    spec.argv[5] =
+        "$t='\u53c2\u6570\u503c'+'|'+$env:XRAY_UNICODE_VALUE+'|'+"
+        "(Split-Path -Leaf (Get-Location).Path);"
+        "$u=[Text.UTF8Encoding]::new($false);$b=$u.GetBytes($t);"
+        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[6] = NULL;
+    snprintf(expected, sizeof(expected), "\u53c2\u6570\u503c|\u73af\u5883\u503c|%s", utf8_leaf);
+    ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    ASSERT_EQ_INT(result.exit_code, 0);
+    ASSERT_EQ_UINT(result.stdout_bytes.length, strlen(expected));
+    ASSERT_MEM_EQ(result.stdout_bytes.data, expected, strlen(expected));
+    xtc_process_result_free(&result);
+    ASSERT_TRUE(RemoveDirectoryW(wide_dir));
+}
+
+TEST(process_spawn_rejects_invalid_utf8_input) {
+    static const char invalid_utf8[] = {(char) 0xc3, '(', '\0'};
+    char shell[1200];
+    char err[256];
+    XrProcessSpec spec;
+    XrProcessResult result;
+    ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
+    xtc_process_spec_init(&spec, shell, 5000);
+    spec.argv[1] = invalid_utf8;
+    spec.argv[2] = NULL;
+    ASSERT_FALSE(xtc_process_run(&spec, &result, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "failed to spawn process") != NULL);
+}
+#endif
 
 TEST(process_timeout_is_bounded) {
     char shell[1200];
@@ -685,7 +789,7 @@ TEST(process_diagnostic_redacts_secret_environment_values) {
     ASSERT_EQ_INT(setenv("XRAY_TEST_SECRET_TOKEN", secret, 1), 0);
 #endif
     const char *input = "compiler failed: token=xray-super-secret-value";
-    xtc_process_redact_output(input, strlen(input), output, sizeof(output));
+    xtc_process_redact_bytes((const uint8_t *) input, strlen(input), output, sizeof(output));
     ASSERT_TRUE(strstr(output, secret) == NULL);
     ASSERT_TRUE(strstr(output, "token=<redacted>") != NULL);
 #ifdef _WIN32
@@ -844,7 +948,7 @@ RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
 RUN_TEST(build_tree_runtime_manifest_matches_host_platform);
-RUN_TEST(msvc_version_parser_accepts_banner_text);
+RUN_TEST(version_parser_reads_ascii_token_from_arbitrary_bytes);
 RUN_TEST(cross_target_rejects_explicit_host_without_fallback);
 RUN_TEST(explicit_provider_has_no_fallback);
 RUN_TEST(explicit_clang_is_classified_from_banner);
@@ -856,6 +960,11 @@ RUN_TEST(config_corruption_is_preserved);
 
 RUN_TEST_SUITE("Toolchain process runner");
 RUN_TEST(process_capture_and_output_limit);
+RUN_TEST(process_capture_preserves_arbitrary_bytes_and_nul);
+#ifdef _WIN32
+RUN_TEST(process_spawn_preserves_unicode_argv_env_and_cwd);
+RUN_TEST(process_spawn_rejects_invalid_utf8_input);
+#endif
 RUN_TEST(process_timeout_is_bounded);
 RUN_TEST(process_diagnostic_redacts_secret_environment_values);
 

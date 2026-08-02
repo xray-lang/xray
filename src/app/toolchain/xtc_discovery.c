@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef XR_OS_WINDOWS
+#include "../../shared/xr_win_utf.h"
 #include <io.h>
 #else
 #include <unistd.h>
@@ -34,12 +35,9 @@ XR_FUNC bool xtc_active_apple_sdk(char *out, size_t out_size, char *err, size_t 
     spec.argv[2] = NULL;
     if (!xtc_process_run(&spec, &result, err, err_size))
         return false;
-    const char *source = result.stdout_data;
-    size_t len = source ? strcspn(source, "\r\n") : 0;
-    bool ok = !result.timed_out && result.exit_code == 0 && len > 0 && len < out_size;
+    bool ok = !result.timed_out && result.exit_code == 0 &&
+              xtc_process_copy_utf8_line(&result.stdout_bytes, out, out_size);
     if (ok) {
-        memcpy(out, source, len);
-        out[len] = '\0';
         ok = xr_fs_is_dir(out);
     }
     xtc_process_result_free(&result);
@@ -71,7 +69,21 @@ static bool xtc_is_executable(const char *path) {
     if (!path || !path[0])
         return false;
 #ifdef XR_OS_WINDOWS
-    return _access(path, 0) == 0;
+    int required = xr_win_utf8_to_utf16_required(path, strlen(path));
+    if (required == 0)
+        return false;
+    wchar_t stack[1200];
+    wchar_t *wide = stack;
+    if ((size_t) required > sizeof(stack) / sizeof(stack[0])) {
+        wide = (wchar_t *) malloc((size_t) required * sizeof(wchar_t));  // xr:allow-raw-alloc
+        if (!wide)
+            return false;
+    }
+    bool ok = xr_win_utf8_to_utf16(path, strlen(path), wide, (size_t) required) != 0 &&
+              _waccess(wide, 0) == 0;
+    if (wide != stack)
+        free(wide);  // xr:allow-raw-alloc
+    return ok;
 #else
     return access(path, X_OK) == 0;
 #endif
@@ -217,14 +229,9 @@ static bool xtc_xcrun_find_clang(char *out, size_t out_size) {
     spec.output_limit = 4096;
     if (!xtc_process_run(&spec, &result, err, sizeof(err)))
         return false;
-    const char *source = result.stdout_data;
-    bool ok = result.exit_code == 0 && source && source[0];
+    bool ok = result.exit_code == 0 &&
+              xtc_process_copy_utf8_line(&result.stdout_bytes, line, sizeof(line));
     if (ok) {
-        size_t len = strcspn(source, "\r\n");
-        if (len >= sizeof(line))
-            len = sizeof(line) - 1;
-        memcpy(line, source, len);
-        line[len] = '\0';
         ok = xtc_find_executable(line, out, out_size);
     }
     xtc_process_result_free(&result);
@@ -250,31 +257,55 @@ static bool xtc_windows_safe_batch_path(const char *path) {
     return path && path[0] && !strpbrk(path, "\"&|<>^\r\n");
 }
 
-static bool xtc_windows_apply_msvc_environment(char *environment) {
+static bool xtc_windows_apply_msvc_environment(const XrProcessByteBuffer *output) {
+    if (!output || !output->data || output->length == 0 || output->length % sizeof(wchar_t) != 0)
+        return false;
+    size_t units = output->length / sizeof(wchar_t);
+    wchar_t *wide = (wchar_t *) malloc((units + 1) * sizeof(wchar_t));  // xr:allow-raw-alloc
+    if (!wide)
+        return false;
+    memcpy(wide, output->data, output->length);
+    wide[units] = L'\0';
+    wchar_t *environment = wide + (units > 0 && wide[0] == 0xfeff ? 1 : 0);
     bool path_set = false;
     bool include_set = false;
     bool lib_set = false;
-    for (char *line = environment; line && *line;) {
-        char *next = strpbrk(line, "\r\n");
+    for (wchar_t *line = environment; line && *line;) {
+        wchar_t *next = wcspbrk(line, L"\r\n");
         if (next) {
-            *next++ = '\0';
-            while (*next == '\r' || *next == '\n')
+            *next++ = L'\0';
+            while (*next == L'\r' || *next == L'\n')
                 next++;
         }
-        char *equals = strchr(line, '=');
+        wchar_t *equals = wcschr(line, L'=');
         if (equals) {
-            *equals = '\0';
-            const char *value = equals + 1;
-            bool needed = _stricmp(line, "PATH") == 0 || _stricmp(line, "INCLUDE") == 0 ||
-                          _stricmp(line, "LIB") == 0 || _stricmp(line, "LIBPATH") == 0;
-            if (needed && _putenv_s(line, value) != 0)
-                return false;
-            path_set = path_set || _stricmp(line, "PATH") == 0;
-            include_set = include_set || _stricmp(line, "INCLUDE") == 0;
-            lib_set = lib_set || _stricmp(line, "LIB") == 0;
+            *equals = L'\0';
+            const wchar_t *value = equals + 1;
+            bool needed = _wcsicmp(line, L"PATH") == 0 || _wcsicmp(line, L"INCLUDE") == 0 ||
+                          _wcsicmp(line, L"LIB") == 0 || _wcsicmp(line, L"LIBPATH") == 0;
+            if (needed) {
+                int key_size = xr_win_utf16_to_utf8_required(line, wcslen(line));
+                int value_size = xr_win_utf16_to_utf8_required(value, wcslen(value));
+                char key[32];
+                char *utf8_value = value_size > 0 ? (char *) malloc((size_t) value_size) : NULL;
+                bool mirrored = key_size > 0 && (size_t) key_size <= sizeof(key) && utf8_value &&
+                                xr_win_utf16_to_utf8(line, wcslen(line), key, sizeof(key)) != 0 &&
+                                xr_win_utf16_to_utf8(value, wcslen(value), utf8_value,
+                                                    (size_t) value_size) != 0 &&
+                                _putenv_s(key, utf8_value) == 0;
+                free(utf8_value);  // xr:allow-raw-alloc
+                if (!SetEnvironmentVariableW(line, value) || !mirrored) {
+                    free(wide);  // xr:allow-raw-alloc
+                    return false;
+                }
+            }
+            path_set = path_set || _wcsicmp(line, L"PATH") == 0;
+            include_set = include_set || _wcsicmp(line, L"INCLUDE") == 0;
+            lib_set = lib_set || _wcsicmp(line, L"LIB") == 0;
         }
         line = next;
     }
+    free(wide);  // xr:allow-raw-alloc
     return path_set && include_set && lib_set;
 }
 
@@ -304,13 +335,9 @@ static bool xtc_windows_activate_latest_msvc(void) {
     spec.output_limit = 16384;
     if (!xtc_process_run(&spec, &result, err, sizeof(err)))
         return false;
-    const char *source = result.stdout_data;
-    size_t len = source ? strcspn(source, "\r\n") : 0;
-    bool ok = !result.timed_out && result.exit_code == 0 && len > 0 && len < sizeof(installation);
-    if (ok) {
-        memcpy(installation, source, len);
-        installation[len] = '\0';
-    }
+    bool ok = !result.timed_out && result.exit_code == 0 &&
+              xtc_process_copy_utf8_line(&result.stdout_bytes, installation,
+                                         sizeof(installation));
     xtc_process_result_free(&result);
     if (!ok ||
         snprintf(script, sizeof(script), "%s/Common7/Tools/VsDevCmd.bat", installation) < 0 ||
@@ -319,20 +346,21 @@ static bool xtc_windows_activate_latest_msvc(void) {
     xtc_process_spec_init(&spec, cmd, 15000);
     spec.argv[1] = "/d";
     spec.argv[2] = "/s";
-    spec.argv[3] = "/c";
-    spec.argv[4] = "call";
-    spec.argv[5] = script;
-    spec.argv[6] = "-no_logo";
-    spec.argv[7] = "-arch=x64";
-    spec.argv[8] = "-host_arch=x64";
-    spec.argv[9] = "&&";
-    spec.argv[10] = "set";
-    spec.argv[11] = NULL;
+    spec.argv[3] = "/u";
+    spec.argv[4] = "/c";
+    spec.argv[5] = "call";
+    spec.argv[6] = script;
+    spec.argv[7] = "-no_logo";
+    spec.argv[8] = "-arch=x64";
+    spec.argv[9] = "-host_arch=x64";
+    spec.argv[10] = "&&";
+    spec.argv[11] = "set";
+    spec.argv[12] = NULL;
     spec.output_limit = 256 * 1024;
     if (!xtc_process_run(&spec, &result, err, sizeof(err)))
         return false;
-    ok = !result.timed_out && result.exit_code == 0 && result.stdout_data &&
-         xtc_windows_apply_msvc_environment(result.stdout_data);
+    ok = !result.timed_out && result.exit_code == 0 &&
+         xtc_windows_apply_msvc_environment(&result.stdout_bytes);
     xtc_process_result_free(&result);
     return ok;
 }
@@ -461,28 +489,29 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
     return true;
 }
 
-XR_FUNC bool xtc_msvc_version_from_banner(const char *source, char *version,
-                                          size_t version_size) {
+XR_FUNC bool xtc_version_from_banner(const uint8_t *source, size_t source_size, char *version,
+                                     size_t version_size) {
     if (!source || !version || version_size == 0)
         return false;
-    for (const char *start = source; *start; start++) {
-        if (!isdigit((unsigned char) *start))
+    for (size_t offset = 0; offset < source_size; offset++) {
+        const uint8_t *start = source + offset;
+        if (!isdigit(*start))
             continue;
-        const char *cursor = start;
+        size_t cursor = offset;
         size_t components = 0;
         for (;;) {
-            if (!isdigit((unsigned char) *cursor))
+            if (cursor >= source_size || !isdigit(source[cursor]))
                 break;
-            while (isdigit((unsigned char) *cursor))
+            while (cursor < source_size && isdigit(source[cursor]))
                 cursor++;
             components++;
-            if (*cursor != '.' || components >= 4)
+            if (cursor >= source_size || source[cursor] != '.' || components >= 4)
                 break;
             cursor++;
         }
         if (components < 3)
             continue;
-        size_t len = (size_t) (cursor - start);
+        size_t len = cursor - offset;
         if (len >= version_size)
             len = version_size - 1;
         memcpy(version, start, len);
@@ -509,34 +538,32 @@ XR_FUNC bool xtc_candidate_read_version(XrToolchainCandidate *candidate, char *e
     spec.output_limit = 16384;
     if (!xtc_process_run(&spec, &result, err, err_size))
         return false;
-    const char *source =
-        result.stdout_data && result.stdout_data[0] ? result.stdout_data : result.stderr_data;
+    const XrProcessByteBuffer *source =
+        result.stdout_bytes.length > 0 ? &result.stdout_bytes : &result.stderr_bytes;
     bool ok = !result.timed_out &&
               (result.exit_code == 0 || candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC);
     if (ok) {
         if (candidate->provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
             /* cl.exe writes its version banner to stderr and its /? help body to stdout. */
-            ok = xtc_msvc_version_from_banner(result.stderr_data, candidate->version,
-                                              sizeof(candidate->version)) ||
-                 xtc_msvc_version_from_banner(result.stdout_data, candidate->version,
-                                              sizeof(candidate->version));
-        } else if (source && source[0]) {
-            size_t len = strcspn(source, "\r\n");
-            if (len >= sizeof(candidate->version))
-                len = sizeof(candidate->version) - 1;
-            memcpy(candidate->version, source, len);
-            candidate->version[len] = '\0';
+            ok = xtc_version_from_banner(result.stderr_bytes.data, result.stderr_bytes.length,
+                                         candidate->version, sizeof(candidate->version)) ||
+                 xtc_version_from_banner(result.stdout_bytes.data, result.stdout_bytes.length,
+                                         candidate->version, sizeof(candidate->version));
+        } else if (source->length > 0) {
+            ok = xtc_version_from_banner(source->data, source->length, candidate->version,
+                                         sizeof(candidate->version));
         } else {
             ok = false;
         }
     }
     if (ok) {
         candidate->runnable = true;
-        if (strstr(source, "Apple clang"))
+        if (xtc_process_bytes_contains_ascii(source, "Apple clang"))
             candidate->provider = XR_TOOLCHAIN_PROVIDER_APPLE_CLANG;
-        else if (strstr(source, "clang"))
+        else if (xtc_process_bytes_contains_ascii(source, "clang"))
             candidate->provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
-        else if (strstr(source, "gcc") || strstr(source, "GCC"))
+        else if (xtc_process_bytes_contains_ascii(source, "gcc") ||
+                 xtc_process_bytes_contains_ascii(source, "GCC"))
             candidate->provider = XR_TOOLCHAIN_PROVIDER_GCC;
     }
     xtc_process_result_free(&result);

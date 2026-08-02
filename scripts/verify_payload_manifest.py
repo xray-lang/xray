@@ -48,7 +48,8 @@ def sha256(path: Path) -> str:
 
 def verify_identity(binary: Path, manifest: dict, root: Path) -> None:
     version = json.loads(
-        subprocess.check_output([str(binary), "--version", "--json"], text=True)
+        subprocess.check_output([str(binary), "--version", "--json"], text=True,
+                                encoding="utf-8", errors="strict")
     )
     for key in ("product", "version", "commit", "dirty", "target", "buildProfile"):
         if version.get(key) != manifest.get(key):
@@ -56,7 +57,8 @@ def verify_identity(binary: Path, manifest: dict, root: Path) -> None:
 
     installation = json.loads(
         subprocess.check_output(
-            [str(binary), "info", "--installation", "--json"], text=True
+            [str(binary), "info", "--installation", "--json"], text=True,
+            encoding="utf-8", errors="strict"
         )
     ).get("installation", {})
     if installation.get("installed") is not True:

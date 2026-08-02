@@ -125,6 +125,8 @@ def compile_bytecodes(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="strict",
         )
         if proc.returncode != 0:
             if proc.stdout:

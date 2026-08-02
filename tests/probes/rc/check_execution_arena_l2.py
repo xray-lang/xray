@@ -13,7 +13,7 @@ import tempfile
 import time
 
 
-def _windows_peak_rss(proc: subprocess.Popen[str]) -> int:
+def _windows_peak_rss(proc: subprocess.Popen[bytes]) -> int:
     from ctypes import wintypes
 
     class Counters(ctypes.Structure):
@@ -54,6 +54,8 @@ def _unix_rss(pid: int) -> int:
         result = subprocess.run(
             ["ps", "-o", "rss=", "-p", str(pid)],
             text=True,
+            encoding="ascii",
+            errors="strict",
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             check=False,
@@ -63,13 +65,10 @@ def _unix_rss(pid: int) -> int:
         return 0
 
 
-def run_measured(command: list[str], cwd: Path) -> tuple[int, str, int]:
+def run_measured(command: list[str], cwd: Path) -> tuple[int, bytes, int]:
     proc = subprocess.Popen(
         command,
         cwd=cwd,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -82,7 +81,7 @@ def run_measured(command: list[str], cwd: Path) -> tuple[int, str, int]:
         time.sleep(0.01)
     if os.name == "nt":
         peak = max(peak, _windows_peak_rss(proc))
-    output = proc.stdout.read() if proc.stdout else ""
+    output = proc.stdout.read() if proc.stdout else b""
     return proc.returncode, output, peak
 
 
@@ -102,7 +101,7 @@ def assert_bound(
         code, output, peak = run_measured(command, cwd)
         if code != 0:
             raise RuntimeError(
-                f"{name} workload failed ({' '.join(command)}):\n{output.rstrip()}"
+                f"{name} workload failed ({' '.join(command)}): bytes={output.rstrip()!r}"
             )
         if peak <= 0:
             raise RuntimeError(f"{name} peak RSS could not be measured")
@@ -158,18 +157,15 @@ def main() -> int:
         suffix = ".exe" if os.name == "nt" else ""
         native = Path(temp) / f"l2{suffix}"
         built = subprocess.run(
-            [str(xray), "build", "-o", str(native), str(source)],
+            [str(xray), "build", "--native", "-o", str(native), str(source)],
             cwd=cwd,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
         )
         if built.returncode != 0:
             if args.require_aot:
-                print(built.stdout, file=sys.stderr)
+                print(f"provider output bytes={built.stdout!r}", file=sys.stderr)
                 raise RuntimeError("hosted AOT provider is required but build failed")
             print("AOT: SKIP (hosted provider unavailable on this machine)")
             return 0

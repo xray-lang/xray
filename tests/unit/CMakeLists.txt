@@ -726,6 +726,12 @@ target_include_directories(test_cli_toolchain PRIVATE
 target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
 
+add_executable(process_spawn_benchmark EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tests/benchmarks/process/process_spawn_benchmark.c
+)
+target_include_directories(process_spawn_benchmark PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(process_spawn_benchmark PRIVATE xray_core)
+
 # ============================================================================
 # test_harness/ — xray test runner self-tests
 # Verify that @test discover, execution, pass/fail/skip, and exit codes

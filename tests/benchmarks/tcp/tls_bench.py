@@ -192,7 +192,8 @@ def run_xray_tls_client(xray_bin, host, port, mode, cert_file, timeout):
     env = os.environ.copy()
     env["SSL_CERT_FILE"] = str(cert_file)
     cmd = [xray_bin, str(SCRIPT_DIR / "tls_client.xr"), "--", host, str(port), mode]
-    proc = subprocess.run(cmd, text=True, capture_output=True, env=env, timeout=timeout)
+    proc = subprocess.run(cmd, text=True, encoding="utf-8", errors="strict",
+                          capture_output=True, env=env, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(
             "xray TLS client failed\n"
@@ -246,7 +247,7 @@ def main():
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(output, indent=2))
+    output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"Results saved to {output_path}")
     print(json.dumps(output["results"], indent=2))
 

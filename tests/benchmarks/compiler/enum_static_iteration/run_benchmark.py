@@ -133,7 +133,8 @@ def run_timed(command: list[str], *, cwd: Path) -> tuple[float, int | None, str,
     if time_bin.is_file():
         wrapped = [str(time_bin), "-l" if platform.system() == "Darwin" else "-v", *command]
     started = time.perf_counter_ns()
-    proc = subprocess.run(wrapped, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(wrapped, cwd=cwd, text=True, encoding="utf-8", errors="strict",
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000.0
     if proc.returncode != 0:
         raise RuntimeError(
@@ -144,7 +145,8 @@ def run_timed(command: list[str], *, cwd: Path) -> tuple[float, int | None, str,
 
 def macho_sections(binary: Path) -> dict[str, int]:
     try:
-        output = subprocess.check_output(["/usr/bin/size", "-m", str(binary)], text=True)
+        output = subprocess.check_output(["/usr/bin/size", "-m", str(binary)], text=True,
+                                         encoding="utf-8", errors="strict")
     except (FileNotFoundError, subprocess.CalledProcessError):
         return {}
     sections: dict[str, int] = {}
@@ -160,7 +162,8 @@ def run_hot(binary: Path, samples: int) -> dict[str, Any]:
     output = None
     for _ in range(samples):
         started = time.perf_counter_ns()
-        proc = subprocess.run([str(binary)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run([str(binary)], text=True, encoding="utf-8", errors="strict",
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         duration = time.perf_counter_ns() - started
         if proc.returncode != 0:
             raise RuntimeError(f"benchmark binary failed: {binary}\n{proc.stderr}")
@@ -178,7 +181,8 @@ def run_hot(binary: Path, samples: int) -> dict[str, Any]:
 
 
 def git_sha() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+                                   encoding="ascii", errors="strict").strip()
 
 
 def measure_case(args: argparse.Namespace, work: Path, count: int, mode: str) -> dict[str, Any]:
@@ -207,7 +211,7 @@ def measure_case(args: argparse.Namespace, work: Path, count: int, mode: str) ->
     ]
     subprocess.run(bytecode_command, cwd=ROOT, check=True, stdout=subprocess.PIPE,
                    stderr=subprocess.PIPE)
-    c_text = c_file.read_text(encoding="utf-8", errors="replace")
+    c_text = c_file.read_text(encoding="utf-8", errors="strict")
 
     forbidden = [symbol for symbol in FORBIDDEN_C_SYMBOLS if symbol in c_text]
     if mode in {"manual", "value", "descriptor", "length"} and forbidden:

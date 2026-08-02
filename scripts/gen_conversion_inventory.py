@@ -153,6 +153,7 @@ def run_entry(xray: Path, entry: Path) -> tuple[Path, dict[str, Any] | None, str
         cwd=entry.parent,
         text=True,
         encoding="utf-8",
+        errors="strict",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,

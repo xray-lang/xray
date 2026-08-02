@@ -192,18 +192,18 @@ class Gen:
 
 
 def run_vm(xray, path):
-    p = subprocess.run([xray, "run", path], capture_output=True, text=True)
+    p = subprocess.run([xray, "run", path], capture_output=True)
     return p.stdout, p.returncode
 
 
 def run_aot(xray, path, out_bin):
     b = subprocess.run(
         [xray, "build", "--native", path, "-o", out_bin],
-        capture_output=True, text=True,
+        capture_output=True,
     )
     if b.returncode != 0:
         return None, 200  # build failure sentinel
-    p = subprocess.run([out_bin], capture_output=True, text=True)
+    p = subprocess.run([out_bin], capture_output=True)
     return p.stdout, p.returncode
 
 

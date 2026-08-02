@@ -14,6 +14,8 @@ def invoke(xray: Path, root: Path, mode: str, source: Path) -> subprocess.Comple
         [str(xray), mode, str(source)],
         cwd=root,
         text=True,
+        encoding="utf-8",
+        errors="strict",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,

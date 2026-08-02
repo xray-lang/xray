@@ -13,7 +13,7 @@ import tempfile
 import time
 
 
-def windows_peak_rss(proc: subprocess.Popen[str]) -> int:
+def windows_peak_rss(proc: subprocess.Popen[bytes]) -> int:
     from ctypes import wintypes
 
     class Counters(ctypes.Structure):
@@ -53,13 +53,10 @@ def unix_rss(pid: int) -> int:
     return 0
 
 
-def measured(command: list[str], cwd: Path) -> tuple[str, int]:
+def measured(command: list[str], cwd: Path) -> tuple[bytes, int]:
     proc = subprocess.Popen(
         command,
         cwd=cwd,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -68,11 +65,11 @@ def measured(command: list[str], cwd: Path) -> tuple[str, int]:
         sample = windows_peak_rss(proc) if os.name == "nt" else unix_rss(proc.pid)
         peak = max(peak, sample)
         time.sleep(0.01)
-    output = proc.stdout.read() if proc.stdout else ""
+    output = proc.stdout.read() if proc.stdout else b""
     if proc.returncode != 0:
-        raise RuntimeError(f"workload failed ({' '.join(command)}):\n{output.rstrip()}")
-    if "cell_churn_ok" not in output:
-        raise RuntimeError(f"workload did not publish its completion marker:\n{output.rstrip()}")
+        raise RuntimeError(f"workload failed ({' '.join(command)}): bytes={output.rstrip()!r}")
+    if b"cell_churn_ok" not in output:
+        raise RuntimeError(f"workload did not publish its completion marker: bytes={output!r}")
     if peak <= 0:
         raise RuntimeError("peak RSS could not be measured")
     return output, peak
@@ -114,18 +111,15 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-task254-") as temp:
         native = Path(temp) / ("cell-rss.exe" if os.name == "nt" else "cell-rss")
         built = subprocess.run(
-            [str(xray), "build", "-o", str(native), str(source)],
+            [str(xray), "build", "--native", "-o", str(native), str(source)],
             cwd=cwd,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
         )
         if built.returncode != 0:
             if args.require_aot:
-                raise RuntimeError(f"hosted AOT provider is required:\n{built.stdout.rstrip()}")
+                raise RuntimeError(f"hosted AOT provider is required: bytes={built.stdout!r}")
             print("AOT: SKIP (hosted provider unavailable on this machine)")
             return 0
         assert_bounded("AOT", [str(native)], cwd, args.small, args.large, max_growth)

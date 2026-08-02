@@ -37,7 +37,8 @@ def parse_args():
 def repo_git_sha():
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True
+            ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True,
+            encoding="ascii", errors="strict"
         ).strip()
     except subprocess.CalledProcessError:
         return "unknown"
@@ -49,7 +50,7 @@ def detect_build_mode():
         return env_mode
     cache = REPO_ROOT / "build" / "CMakeCache.txt"
     if cache.is_file():
-        for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+        for line in cache.read_text(encoding="utf-8", errors="strict").splitlines():
             if line.startswith("CMAKE_BUILD_TYPE:"):
                 value = line.split("=", 1)[-1].strip()
                 return value if value else "default"
@@ -82,6 +83,8 @@ def run_one(xray, bench_file, timeout):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="strict",
         timeout=timeout,
     )
     elapsed = time.perf_counter_ns() - started

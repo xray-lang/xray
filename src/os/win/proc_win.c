@@ -16,13 +16,16 @@
  */
 
 #include "../os_proc.h"
+#include "../../shared/xr_win_utf.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
 #define XR_PROC_MAX_LIVE 64
@@ -65,17 +68,17 @@ static HANDLE live_pop(DWORD pid) {
 // Microsoft CommandLineToArgvW contract: a run of backslashes is only
 // doubled when it precedes a literal `"` or the closing quote; ordinary
 // backslashes are emitted verbatim. The caller writes the surrounding quotes.
-static void append_escaped_arg(char *buf, size_t *pos, const char *arg) {
+static void append_escaped_arg(wchar_t *buf, size_t *pos, const wchar_t *arg) {
     size_t backslashes = 0;
-    for (const char *p = arg; *p; p++) {
-        if (*p == '\\') {
+    for (const wchar_t *p = arg; *p; p++) {
+        if (*p == L'\\') {
             backslashes++;
-            buf[(*pos)++] = '\\';
-        } else if (*p == '"') {
+            buf[(*pos)++] = L'\\';
+        } else if (*p == L'"') {
             for (size_t k = 0; k < backslashes; k++)
-                buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '\\';
-            buf[(*pos)++] = '"';
+                buf[(*pos)++] = L'\\';
+            buf[(*pos)++] = L'\\';
+            buf[(*pos)++] = L'"';
             backslashes = 0;
         } else {
             backslashes = 0;
@@ -83,49 +86,78 @@ static void append_escaped_arg(char *buf, size_t *pos, const char *arg) {
         }
     }
     for (size_t k = 0; k < backslashes; k++)
-        buf[(*pos)++] = '\\';
+        buf[(*pos)++] = L'\\';
 }
 
-static bool command_arg_needs_quotes(const char *arg) {
-    return arg[0] == '\0' || strpbrk(arg, " \t\"") != NULL;
+static bool command_arg_needs_quotes(const wchar_t *arg) {
+    return arg[0] == L'\0' || wcspbrk(arg, L" \t\"") != NULL;
 }
 
-static void append_command_arg(char *buf, size_t *pos, const char *arg) {
+static void append_command_arg(wchar_t *buf, size_t *pos, const wchar_t *arg) {
     if (!command_arg_needs_quotes(arg)) {
-        size_t len = strlen(arg);
-        memcpy(buf + *pos, arg, len);
+        size_t len = wcslen(arg);
+        memcpy(buf + *pos, arg, len * sizeof(wchar_t));
         *pos += len;
         return;
     }
-    buf[(*pos)++] = '"';
+    buf[(*pos)++] = L'"';
     append_escaped_arg(buf, pos, arg);
-    buf[(*pos)++] = '"';
+    buf[(*pos)++] = L'"';
+}
+
+static wchar_t *proc_utf8_dup(const char *input) {
+    if (!input)
+        return NULL;
+    size_t len = strlen(input);
+    int required = xr_win_utf8_to_utf16_required(input, len);
+    if (required == 0 || (size_t) required > SIZE_MAX / sizeof(wchar_t))
+        return NULL;
+    wchar_t *output = (wchar_t *) malloc((size_t) required * sizeof(wchar_t));
+    if (!output || !xr_win_utf8_to_utf16(input, len, output, (size_t) required)) {
+        free(output);  // xr:allow-raw-alloc
+        return NULL;
+    }
+    return output;
 }
 
 // Quote-and-join argv into a single command line. Arguments are quoted only
 // when the Windows argv contract requires it. Besides producing the same argv
 // for ordinary programs, this matters for cmd.exe: quoting every token turns
 // builtins and control operators into literal text.
-static char *build_command_line(const char *prog, const char *const argv[]) {
+static wchar_t *build_command_line(const char *prog, const char *const argv[]) {
     size_t cap = strlen(prog) * 2 + 3;
     for (int i = 0; argv[i] != NULL; i++) {
         cap += strlen(argv[i]) * 2 + 3;
     }
-    char *buf = (char *) malloc(cap + 1);  // xr:allow-raw-alloc
+    if (cap > SIZE_MAX / sizeof(wchar_t) - 1)
+        return NULL;
+    wchar_t *buf = (wchar_t *) malloc((cap + 1) * sizeof(wchar_t));  // xr:allow-raw-alloc
     if (!buf) {
         return NULL;
     }
     size_t pos = 0;
     if (argv[0] == NULL || strcmp(argv[0], prog) != 0) {
-        append_command_arg(buf, &pos, prog);
+        wchar_t *wide = proc_utf8_dup(prog);
+        if (!wide) {
+            free(buf);  // xr:allow-raw-alloc
+            return NULL;
+        }
+        append_command_arg(buf, &pos, wide);
+        free(wide);  // xr:allow-raw-alloc
     }
     for (int i = 0; argv[i] != NULL; i++) {
         if (pos > 0) {
-            buf[pos++] = ' ';
+            buf[pos++] = L' ';
         }
-        append_command_arg(buf, &pos, argv[i]);
+        wchar_t *wide = proc_utf8_dup(argv[i]);
+        if (!wide) {
+            free(buf);  // xr:allow-raw-alloc
+            return NULL;
+        }
+        append_command_arg(buf, &pos, wide);
+        free(wide);  // xr:allow-raw-alloc
     }
-    buf[pos] = '\0';
+    buf[pos] = L'\0';
     return buf;
 }
 
@@ -147,39 +179,44 @@ static bool proc_spawn_options_valid(const XrProcSpawnOptions *options) {
     return true;
 }
 
-static char *proc_strdup(const char *s) {
-    size_t len = strlen(s);
-    char *out = (char *) malloc(len + 1);  // xr:allow-raw-alloc
+static wchar_t *proc_wcsdup(const wchar_t *s) {
+    size_t len = wcslen(s);
+    wchar_t *out = (wchar_t *) malloc((len + 1) * sizeof(wchar_t));  // xr:allow-raw-alloc
     if (!out)
         return NULL;
-    memcpy(out, s, len + 1);
+    memcpy(out, s, (len + 1) * sizeof(wchar_t));
     return out;
 }
 
-static bool proc_env_entry_matches_key(const char *entry, const char *key) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
+static bool proc_env_entry_matches_key(const wchar_t *entry, const wchar_t *key) {
+    const wchar_t *eq = entry ? wcschr(entry, L'=') : NULL;
     if (!eq || eq == entry || !key)
         return false;
     size_t name_len = (size_t) (eq - entry);
-    return strlen(key) == name_len && _strnicmp(entry, key, name_len) == 0;
+    return wcslen(key) == name_len && _wcsnicmp(entry, key, name_len) == 0;
 }
 
-static bool proc_env_key_is_overridden(const XrProcSpawnOptions *options, const char *entry) {
+static bool proc_env_key_is_overridden(const XrProcSpawnOptions *options, const wchar_t *entry) {
     for (size_t i = 0; i < options->env_count; i++) {
-        if (proc_env_entry_matches_key(entry, options->env_keys[i]))
+        wchar_t *key = proc_utf8_dup(options->env_keys[i]);
+        if (!key)
+            return false;
+        bool match = proc_env_entry_matches_key(entry, key);
+        free(key);  // xr:allow-raw-alloc
+        if (match)
             return true;
     }
     return false;
 }
 
 static int proc_env_entry_cmp(const void *a, const void *b) {
-    const char *ea = *(const char *const *) a;
-    const char *eb = *(const char *const *) b;
-    return _stricmp(ea, eb);
+    const wchar_t *ea = *(const wchar_t *const *) a;
+    const wchar_t *eb = *(const wchar_t *const *) b;
+    return _wcsicmp(ea, eb);
 }
 
 typedef struct ProcEnvEntries {
-    char **items;
+    wchar_t **items;
     size_t count;
     size_t cap;
 } ProcEnvEntries;
@@ -195,10 +232,11 @@ static void proc_env_entries_free(ProcEnvEntries *entries) {
     entries->cap = 0;
 }
 
-static bool proc_env_entries_push(ProcEnvEntries *entries, char *item) {
+static bool proc_env_entries_push(ProcEnvEntries *entries, wchar_t *item) {
     if (entries->count == entries->cap) {
         size_t next_cap = entries->cap ? entries->cap * 2 : 32;
-        char **next = (char **) realloc(entries->items, next_cap * sizeof(char *));
+        wchar_t **next =
+            (wchar_t **) realloc(entries->items, next_cap * sizeof(wchar_t *));
         if (!next)
             return false;
         entries->items = next;
@@ -208,43 +246,58 @@ static bool proc_env_entries_push(ProcEnvEntries *entries, char *item) {
     return true;
 }
 
-static char *proc_env_pair_new(const char *key, const char *value) {
-    size_t key_len = strlen(key);
-    size_t value_len = strlen(value);
+static wchar_t *proc_env_pair_new(const char *key, const char *value) {
+    wchar_t *wide_key = proc_utf8_dup(key);
+    wchar_t *wide_value = proc_utf8_dup(value);
+    if (!wide_key || !wide_value) {
+        free(wide_key);    // xr:allow-raw-alloc
+        free(wide_value);  // xr:allow-raw-alloc
+        return NULL;
+    }
+    size_t key_len = wcslen(wide_key);
+    size_t value_len = wcslen(wide_value);
     if (key_len > SIZE_MAX - value_len - 2)
-        return NULL;
-    char *out = (char *) malloc(key_len + value_len + 2);  // xr:allow-raw-alloc
+        goto fail;
+    wchar_t *out =
+        (wchar_t *) malloc((key_len + value_len + 2) * sizeof(wchar_t));  // xr:allow-raw-alloc
     if (!out)
-        return NULL;
-    memcpy(out, key, key_len);
-    out[key_len] = '=';
-    memcpy(out + key_len + 1, value, value_len + 1);
+        goto fail;
+    memcpy(out, wide_key, key_len * sizeof(wchar_t));
+    out[key_len] = L'=';
+    memcpy(out + key_len + 1, wide_value, (value_len + 1) * sizeof(wchar_t));
+    free(wide_key);    // xr:allow-raw-alloc
+    free(wide_value);  // xr:allow-raw-alloc
     return out;
+
+fail:
+    free(wide_key);    // xr:allow-raw-alloc
+    free(wide_value);  // xr:allow-raw-alloc
+    return NULL;
 }
 
-static char *proc_env_block_build(const XrProcSpawnOptions *options) {
+static wchar_t *proc_env_block_build(const XrProcSpawnOptions *options) {
     if (!options || options->env_count == 0)
         return NULL;
 
     ProcEnvEntries entries = {0};
-    LPCH current = GetEnvironmentStringsA();
-    if (current) {
-        for (const char *p = current; *p; p += strlen(p) + 1) {
-            if (proc_env_key_is_overridden(options, p))
-                continue;
-            char *copy = proc_strdup(p);
-            if (!copy || !proc_env_entries_push(&entries, copy)) {
-                free(copy);  // xr:allow-raw-alloc
-                FreeEnvironmentStringsA(current);
-                proc_env_entries_free(&entries);
-                return NULL;
-            }
+    LPWCH current = GetEnvironmentStringsW();
+    if (!current)
+        return NULL;
+    for (const wchar_t *p = current; *p; p += wcslen(p) + 1) {
+        if (proc_env_key_is_overridden(options, p))
+            continue;
+        wchar_t *copy = proc_wcsdup(p);
+        if (!copy || !proc_env_entries_push(&entries, copy)) {
+            free(copy);  // xr:allow-raw-alloc
+            FreeEnvironmentStringsW(current);
+            proc_env_entries_free(&entries);
+            return NULL;
         }
-        FreeEnvironmentStringsA(current);
     }
+    FreeEnvironmentStringsW(current);
 
     for (size_t i = 0; i < options->env_count; i++) {
-        char *pair = proc_env_pair_new(options->env_keys[i], options->env_values[i]);
+        wchar_t *pair = proc_env_pair_new(options->env_keys[i], options->env_values[i]);
         if (!pair || !proc_env_entries_push(&entries, pair)) {
             free(pair);  // xr:allow-raw-alloc
             proc_env_entries_free(&entries);
@@ -252,30 +305,34 @@ static char *proc_env_block_build(const XrProcSpawnOptions *options) {
         }
     }
 
-    qsort(entries.items, entries.count, sizeof(char *), proc_env_entry_cmp);
+    qsort(entries.items, entries.count, sizeof(wchar_t *), proc_env_entry_cmp);
 
-    size_t bytes = 1;
+    size_t units = 1;
     for (size_t i = 0; i < entries.count; i++) {
-        size_t len = strlen(entries.items[i]);
-        if (bytes > SIZE_MAX - len - 1) {
+        size_t len = wcslen(entries.items[i]);
+        if (units > SIZE_MAX - len - 1) {
             proc_env_entries_free(&entries);
             return NULL;
         }
-        bytes += len + 1;
+        units += len + 1;
     }
 
-    char *block = (char *) malloc(bytes);  // xr:allow-raw-alloc
+    if (units > SIZE_MAX / sizeof(wchar_t)) {
+        proc_env_entries_free(&entries);
+        return NULL;
+    }
+    wchar_t *block = (wchar_t *) malloc(units * sizeof(wchar_t));  // xr:allow-raw-alloc
     if (!block) {
         proc_env_entries_free(&entries);
         return NULL;
     }
-    char *dst = block;
+    wchar_t *dst = block;
     for (size_t i = 0; i < entries.count; i++) {
-        size_t len = strlen(entries.items[i]) + 1;
-        memcpy(dst, entries.items[i], len);
+        size_t len = wcslen(entries.items[i]) + 1;
+        memcpy(dst, entries.items[i], len * sizeof(wchar_t));
         dst += len;
     }
-    *dst = '\0';
+    *dst = L'\0';
     proc_env_entries_free(&entries);
     return block;
 }
@@ -308,7 +365,7 @@ static bool proc_duplicate_inheritable(HANDLE src, HANDLE *out) {
                                                                                        : false;
 }
 
-static bool proc_stdio_prepare(const XrProcSpawnOptions *options, STARTUPINFOA *si,
+static bool proc_stdio_prepare(const XrProcSpawnOptions *options, STARTUPINFOW *si,
                                ProcStdioDup *dup) {
     if (!options || (!options->has_stdin && !options->has_stdout && !options->has_stderr))
         return true;
@@ -342,11 +399,11 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
     if (prog == NULL || argv == NULL || !proc_spawn_options_valid(options)) {
         return XR_PROC_INVALID;
     }
-    char *cmdline = build_command_line(prog, argv);
+    wchar_t *cmdline = build_command_line(prog, argv);
     if (!cmdline) {
         return XR_PROC_INVALID;
     }
-    STARTUPINFOA si;
+    STARTUPINFOW si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     ProcStdioDup stdio_dup = {0};
@@ -357,20 +414,32 @@ XrProcId xr_proc_spawn_ex(const char *prog, const char *const argv[],
     }
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    const char *cwd = (options && options->cwd && options->cwd[0] != '\0') ? options->cwd : NULL;
-    char *env_block = proc_env_block_build(options);
+    wchar_t *cwd = NULL;
+    if (options && options->cwd && options->cwd[0] != '\0') {
+        cwd = proc_utf8_dup(options->cwd);
+        if (!cwd) {
+            proc_stdio_dup_close(&stdio_dup);
+            free(cmdline);  // xr:allow-raw-alloc
+            return XR_PROC_INVALID;
+        }
+    }
+    wchar_t *env_block = proc_env_block_build(options);
     if (options && options->env_count > 0 && !env_block) {
         proc_stdio_dup_close(&stdio_dup);
+        free(cwd);      // xr:allow-raw-alloc
         free(cmdline);  // xr:allow-raw-alloc
         return XR_PROC_INVALID;
     }
     DWORD create_flags = (options && (options->detached || options->new_process_group))
                              ? CREATE_NEW_PROCESS_GROUP
                              : 0;
+    if (env_block)
+        create_flags |= CREATE_UNICODE_ENVIRONMENT;
     BOOL ok =
-        CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block, cwd, &si, &pi);
+        CreateProcessW(NULL, cmdline, NULL, NULL, TRUE, create_flags, env_block, cwd, &si, &pi);
     proc_stdio_dup_close(&stdio_dup);
     free(env_block);  // xr:allow-raw-alloc
+    free(cwd);        // xr:allow-raw-alloc
     free(cmdline);    // xr:allow-raw-alloc
     if (!ok) {
         return XR_PROC_INVALID;
@@ -525,9 +594,11 @@ int xr_proc_self_exe_path(char *buf, size_t size) {
     if (buf == NULL || size == 0) {
         return -1;
     }
-    DWORD n = GetModuleFileNameA(NULL, buf, (DWORD) size);
-    /* n == 0 means failure; n == size means truncation. */
-    if (n == 0 || (size_t) n >= size) {
+    wchar_t wide[32768];
+    DWORD n = GetModuleFileNameW(NULL, wide, (DWORD) (sizeof(wide) / sizeof(wide[0])));
+    /* n == 0 means failure; n == capacity means truncation. */
+    if (n == 0 || (size_t) n >= sizeof(wide) / sizeof(wide[0]) ||
+        !xr_win_utf16_to_utf8(wide, (size_t) n, buf, size)) {
         return -1;
     }
     return 0;

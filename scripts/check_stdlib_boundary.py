@@ -192,7 +192,7 @@ def check_fastpaths(root: Path) -> list[str]:
     benchmark_data = load_toml(root / "tests/benchmarks/stdlib/manifest.toml")
     benchmark_ids = {entry.get("id") for entry in benchmark_data.get("benchmark", ())}
     aot_text = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore")
+        path.read_text(encoding="utf-8", errors="strict")
         for path in (root / "src/aot").rglob("*")
         if path.is_file() and path.suffix in {".c", ".h"}
     )
