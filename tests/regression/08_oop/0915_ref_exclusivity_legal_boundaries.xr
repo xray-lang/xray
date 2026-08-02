@@ -1,0 +1,46 @@
+// Task 259 §5 (ref call-site exclusivity): the two forms that stay LEGAL.
+//
+// 1. A nested argument reads the root before the call begins: arguments are
+//    evaluated first, and the exclusive loan spans only the callee execution,
+//    so `f(ref a, g(a))` is not an overlap.
+// 2. A ref argument that is a strict sub-place of the receiver
+//    (`this.m(ref this.field)`) is outside the first, zero-false-positive cut
+//    of the receiver check; only the receiver place itself (or an ancestor)
+//    conflicts.
+
+fn snapshot_len(data: Array<int>) -> int {
+    return len(data)
+}
+
+fn push_n(target: ref Array<int>, n: int) {
+    target.push(n)
+}
+
+class Counter {
+    hits: Array<int>
+    constructor() { this.hits = [] }
+
+    bump(slot: ref Array<int>) {
+        slot.push(1)
+    }
+
+    bumpSelfField() {
+        // receiver `this`, ref arg `this.hits`: strict sub-place, allowed.
+        this.bump(ref this.hits)
+    }
+}
+
+@test
+fn test_nested_read_before_call_is_legal() {
+    var a: Array<int> = [1, 2]
+    push_n(ref a, snapshot_len(a))
+    assert(len(a) == 3)
+    assert(a[2] == 2)
+}
+
+@test
+fn test_ref_to_receiver_subplace_is_legal() {
+    var c = Counter()
+    c.bumpSelfField()
+    assert(len(c.hits) == 1)
+}

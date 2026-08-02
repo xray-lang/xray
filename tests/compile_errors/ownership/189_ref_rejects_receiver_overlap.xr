@@ -1,0 +1,11 @@
+class Box {
+    n: int
+    constructor() { this.n = 0 }
+    poke(other: ref Box) {
+        other.n = other.n + 1
+        print(this.n)
+    }
+}
+
+var bx = Box()
+bx.poke(ref bx)
