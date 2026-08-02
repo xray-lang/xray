@@ -9465,6 +9465,9 @@ static uint32_t cg_scan_r1_runtime_calls(const char *text) {
             cg_name_matches(p, len, "xrt_str_concat") || cg_name_matches(p, len, "xrt_gc_alloc") ||
             cg_name_matches(p, len, "xrt_alloc"))
             continue;
+        /* Reference-count traffic belongs to R7, not R1 (task 259 §4). */
+        if (cg_name_matches(p, len, "xrt_retain") || cg_name_matches(p, len, "xrt_release"))
+            continue;
         if (!cg_r1_call_is_whitelisted(p, len))
             n++;
     }
@@ -9513,6 +9516,14 @@ static void cg_scan_function_residue(XiCgenCtx *ctx, const XiFunc *f, const char
     /* R6 aggregate<->native vector round-trip. */
     cg_residue_add(r, XI_RESIDUE_R6_LANES_ROUNDTRIP, cg_scan_count(body, "_lanes"), line,
                    "vector value spilled to lane aggregate (native SSA not planned)");
+
+    /* R7 reference-count traffic.  Only literal retain/release tokens count
+     * here; RC embedded in a composite helper is that helper's R1 token, so
+     * the two categories together close over both forms.  Weak-promote
+     * helpers join this needle set when AOT weak lowering lands (task 254). */
+    uint32_t r7 = cg_scan_count(body, "xrt_retain(") + cg_scan_count(body, "xrt_release(");
+    cg_residue_add(r, XI_RESIDUE_R7_RC_TRAFFIC, r7, line,
+                   "rc traffic not elided (borrow signature or last-use evidence incomplete)");
 
     /* R1 non-whitelisted runtime-helper call. */
     cg_residue_add(r, XI_RESIDUE_R1_RUNTIME_CALL, cg_scan_r1_runtime_calls(body), line,

@@ -1,0 +1,9 @@
+// Task 259 §4: a pure-scalar hot function carries no reference-count traffic,
+// so a contract forbidding the R7 category passes. Together with
+// runtime_dispatch (R1) this is the machine-checkable "zero RC traffic"
+// statement: RC hidden inside a composite helper would surface as R1.
+fn rcFreeAxpy(a: int, x: int, y: int) -> int {
+    return a * x + y
+}
+
+print(rcFreeAxpy(2, 3, 4))

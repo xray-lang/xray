@@ -188,6 +188,8 @@ XR_FUNC const char *xi_residue_category_short(XiResidueCategory category) {
             return "R5";
         case XI_RESIDUE_R6_LANES_ROUNDTRIP:
             return "R6";
+        case XI_RESIDUE_R7_RC_TRAFFIC:
+            return "R7";
         default:
             return "R?";
     }
@@ -207,6 +209,8 @@ XR_FUNC const char *xi_residue_category_label(XiResidueCategory category) {
             return "XrValue box/unbox";
         case XI_RESIDUE_R6_LANES_ROUNDTRIP:
             return "aggregate<->native round-trip";
+        case XI_RESIDUE_R7_RC_TRAFFIC:
+            return "reference-count traffic";
         default:
             return "unknown residue";
     }
@@ -218,20 +222,22 @@ XR_FUNC char *xi_cgen_residue_dump(const XiCgenCtx *ctx) {
     FILE *out = xr_open_memstream(&buf, &bufsz);
     if (!out)
         return NULL;
-    fprintf(out, "# task 217 per-function residue (R1 runtime-call, R2 heap-alloc, "
-                 "R3 pending-error, R4 bounds-panic, R5 box/unbox, R6 lanes-roundtrip)\n");
-    fprintf(out, "function\tsource\tR1\tR2\tR3\tR4\tR5\tR6\ttotal\n");
+    fprintf(out, "# task 217+259 per-function residue (R1 runtime-call, R2 heap-alloc, "
+                 "R3 pending-error, R4 bounds-panic, R5 box/unbox, R6 lanes-roundtrip, "
+                 "R7 rc-traffic)\n");
+    fprintf(out, "function\tsource\tR1\tR2\tR3\tR4\tR5\tR6\tR7\ttotal\n");
     size_t n = ctx ? ctx->nfunc_residues : 0;
     for (size_t i = 0; i < n; i++) {
         const XiFuncResidue *r = &ctx->func_residues[i];
         uint32_t total = 0;
         for (int c = 0; c < XI_RESIDUE_CATEGORY_COUNT; c++)
             total += r->counts[c];
-        fprintf(out, "%s\t%s\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", r->func_name ? r->func_name : "?",
+        fprintf(out, "%s\t%s\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\n", r->func_name ? r->func_name : "?",
                 r->source_file ? r->source_file : "-", r->counts[XI_RESIDUE_R1_RUNTIME_CALL],
                 r->counts[XI_RESIDUE_R2_HEAP_ALLOC], r->counts[XI_RESIDUE_R3_PENDING_ERROR],
                 r->counts[XI_RESIDUE_R4_BOUNDS_PANIC], r->counts[XI_RESIDUE_R5_BOX_UNBOX],
-                r->counts[XI_RESIDUE_R6_LANES_ROUNDTRIP], total);
+                r->counts[XI_RESIDUE_R6_LANES_ROUNDTRIP], r->counts[XI_RESIDUE_R7_RC_TRAFFIC],
+                total);
     }
     /* Per-occurrence detail as comment lines (ignored by TSV consumers). */
     for (size_t i = 0; i < n; i++) {

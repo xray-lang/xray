@@ -443,6 +443,8 @@ static int verify_shape_category(const char *name) {
         return XI_RESIDUE_R5_BOX_UNBOX;
     if (strcmp(name, "lane_spill") == 0)
         return XI_RESIDUE_R6_LANES_ROUNDTRIP;
+    if (strcmp(name, "rc_traffic") == 0)
+        return XI_RESIDUE_R7_RC_TRAFFIC;
     return -1;
 }
 
@@ -455,10 +457,10 @@ static bool verify_parse_residue_row(const char *dump, const char *symbol,
         size_t len = end ? (size_t) (end - line) : strlen(line);
         if (len && line[0] != '#' && strncmp(line, "function\t", 9) != 0) {
             char name[256], source[512];
-            unsigned values[7];
-            if (sscanf(line, "%255[^\t]\t%511[^\t]\t%u\t%u\t%u\t%u\t%u\t%u\t%u", name, source,
+            unsigned values[8];
+            if (sscanf(line, "%255[^\t]\t%511[^\t]\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", name, source,
                        &values[0], &values[1], &values[2], &values[3], &values[4], &values[5],
-                       &values[6]) == 9 &&
+                       &values[6], &values[7]) == 10 &&
                 (strcmp(name, symbol) == 0 ||
                  strcmp(verify_final_component(name), verify_final_component(symbol)) == 0)) {
                 if (found)

@@ -1,0 +1,9 @@
+[package]
+name = "filetest-rc-traffic-forbid-ok"
+version = "1.0.0"
+license = "MIT"
+main = "rc_traffic_forbid_ok.xr"
+
+[[export.c]]
+xray = "rcFreeAxpy"
+symbol = "rcFreeAxpy"

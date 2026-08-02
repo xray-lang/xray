@@ -52,10 +52,17 @@ typedef struct XiCgenStats {
     uint32_t xi_unbox_ops;
 } XiCgenStats;
 
-/* Per-function abstraction-cost residue categories (task 217 §3.3, R1–R6).
+/* Per-function abstraction-cost residue categories (task 217 §3.3 R1–R6,
+ * task 259 §4 R7).
  * These are the shapes external residue contracts can forbid in generated AOT code; the
  * enum order is the stable dump/diagnostic order and doubles as the allow-mask
- * bit index (1u << category). */
+ * bit index (1u << category).  New categories append only — reordering would
+ * silently reinterpret every frozen allow mask.
+ *
+ * R1 and R7 partition the runtime-call surface: R1 is pure runtime dispatch,
+ * R7 is reference-count traffic.  RC hidden inside a composite helper (e.g.
+ * xrt_setprop_key) is accounted by that helper's own R1 token, so
+ * R1 == 0 && R7 == 0 implies zero RC traffic in either form. */
 typedef enum XiResidueCategory {
     XI_RESIDUE_R1_RUNTIME_CALL = 0, /* non-whitelisted xrt_* runtime helper call */
     XI_RESIDUE_R2_HEAP_ALLOC,       /* heap / runtime allocation */
@@ -63,6 +70,7 @@ typedef enum XiResidueCategory {
     XI_RESIDUE_R4_BOUNDS_PANIC,     /* bounds-panic branch (missing range evidence) */
     XI_RESIDUE_R5_BOX_UNBOX,        /* XrValue box / unbox */
     XI_RESIDUE_R6_LANES_ROUNDTRIP,  /* aggregate<->native vector round-trip (_lanes) */
+    XI_RESIDUE_R7_RC_TRAFFIC,       /* retain / release / weak-promote traffic */
     XI_RESIDUE_CATEGORY_COUNT,
 } XiResidueCategory;
 
