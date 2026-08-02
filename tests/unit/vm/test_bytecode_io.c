@@ -22,6 +22,7 @@
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
 #include "runtime/value/xstruct_layout.h"
+#include "../../../stdlib/stdlib_cache.h"
 #include "xray_vm.h"
 
 #include <string.h>
@@ -817,7 +818,8 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     ASSERT_NOT_NULL(proto);
 
     char *members[] = {"Ok", "Err"};
-    XrEnumType *enum_type = xr_enum_type_new(writer, "BytecodeResult", members, 2);
+    XrEnumType *enum_type =
+        xr_enum_type_new(writer, "test.bytecode", "BytecodeResult", members, 2);
     ASSERT_NOT_NULL(enum_type);
     int payload_counts[] = {0, 1};
     ASSERT_TRUE(xr_enum_type_set_adt_payloads(enum_type, payload_counts, 2));
@@ -873,6 +875,80 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     xr_free(bytes);
     xr_vm_proto_free(proto);
     xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
+TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrEnumType *writer_canonical = xr_stdlib_enum_type_get(writer, "net", "NetError");
+    XrEnumType *reader_enum = xr_stdlib_enum_type_get(reader, "net", "NetError");
+    ASSERT_NOT_NULL(writer_canonical);
+    ASSERT_NOT_NULL(reader_enum);
+
+    /* The source compiler creates a distinct enum object for the declaration.
+     * Stdlib serialization must attach the explicit module identity rather
+     * than depending on pointer identity with the native cache. */
+    char *members[10];
+    ASSERT_EQ_UINT(writer_canonical->member_count, 10);
+    for (uint32_t i = 0; i < writer_canonical->member_count; i++)
+        members[i] = (char *) xr_enum_type_member_name(writer_canonical, i);
+    XrEnumType *writer_enum = xr_enum_type_new(writer, "net", "NetError", members, 10);
+    ASSERT_NOT_NULL(writer_enum);
+    ASSERT_TRUE(writer_enum != writer_canonical);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(writer_enum));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 1;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, kidx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    XrBcError error = XR_BC_OK;
+    uint8_t *bytes =
+        xr_bytecode_write_stdlib(writer, "net", proto, 0, &size, &error);
+    ASSERT_NOT_NULL(bytes);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+    ASSERT_TRUE(XR_IS_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)));
+    ASSERT_TRUE(XR_TO_ENUM_TYPE(PROTO_CONSTANT(roundtrip, 0)) == reader_enum);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
+TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+
+    char *members[] = {"Closed"};
+    XrEnumType *wrong = xr_enum_type_new(writer, "net", "NetError", members, 1);
+    ASSERT_NOT_NULL(wrong);
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(wrong)), 0);
+
+    size_t size = 123;
+    XrBcError error = XR_BC_OK;
+    ASSERT_NULL(xr_bytecode_write_stdlib(writer, "net", proto, 0, &size, &error));
+    ASSERT_EQ_UINT(size, 0);
+    ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
+
+    xr_vm_proto_free(proto);
     xray_vm_delete(writer);
 }
 
@@ -1114,6 +1190,8 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);
     RUN_TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);
+    RUN_TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules);
+    RUN_TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);

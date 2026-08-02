@@ -1,0 +1,18 @@
+// Deterministic local server benchmark. The runner owns the client peer.
+import net
+import os
+import strconv
+
+var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+var listener = net.listen(port, 8)!
+var conn = net.accept(listener)!
+var iterations = 64
+var completed = 0
+while (completed < iterations) {
+    var request = net.read(conn, 4)!
+    net.write(conn, request)
+    if (request == "ping") { completed = completed + 1 }
+}
+net.close(conn)
+net.close(listener)
+print(completed)

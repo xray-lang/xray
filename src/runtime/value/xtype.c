@@ -1405,16 +1405,15 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
         }
     }
 
-    // Frozen singleton without cached nullable: must copy before mutation
-    if (type->frozen) {
-        XrType *copy = xr_type_copy(X, type);
-        if (copy)
-            copy->is_nullable = true;
-        return copy;
-    }
-
-    type->is_nullable = true;
-    return type;
+    /* Qualifiers are values, not mutations of declaration identity.  Named
+     * enum/class/record types are shared through analyzer symbol links even
+     * before they are frozen; mutating one while resolving `T?` would silently
+     * make the exported declaration itself nullable.  Mirror
+     * xr_type_make_const(): every non-singleton qualifier gets its own copy. */
+    XrType *copy = xr_type_copy(X, type);
+    if (copy)
+        copy->is_nullable = true;
+    return copy;
 }
 
 // Check if source type is assignable to target type

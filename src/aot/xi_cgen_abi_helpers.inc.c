@@ -661,6 +661,8 @@ static void cg_reset_enum_scalar_sidecars(XiCgenCtx *ctx) {
 static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
     if (!ctx || !out || !ctx->aot_bundle || !ctx->enum_scalar_sidecar_used)
         return;
+    const char *module_prefix =
+        ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
     for (uint32_t index = 0; index < ctx->aot_bundle->nenum_plans; index++) {
         if (index >= ctx->enum_scalar_sidecar_cap || !ctx->enum_scalar_sidecar_used[index])
             continue;
@@ -673,8 +675,8 @@ static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
          * its nominal name table is part of the boundary representation even
          * when the local descriptor-use bitmap did not request `.name`.
          * Enums that remain fully typed still emit no sidecar or name table. */
-        fprintf(out, "static const char *const _xenum_scalar_names_%u[%u] = {", (unsigned) index,
-                (unsigned) plan->member_count);
+        fprintf(out, "static const char *const _xenum_scalar_names_%s_%u[%u] = {",
+                module_prefix, (unsigned) index, (unsigned) plan->member_count);
         for (uint32_t i = 0; i < plan->member_count; i++) {
             if (i > 0)
                 fprintf(out, ",");
@@ -682,11 +684,11 @@ static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
         }
         fprintf(out, "};\n");
         fprintf(out,
-                "static const XrAotEnumScalarLayout _xenum_scalar_layout_%u = "
+                "static const XrAotEnumScalarLayout _xenum_scalar_layout_%s_%u = "
                 "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, ",
-                (unsigned) index);
+                module_prefix, (unsigned) index);
         emit_c_string_literal(out, plan->enum_data->name ? plan->enum_data->name : "");
-        fprintf(out, ", _xenum_scalar_names_%u", (unsigned) index);
+        fprintf(out, ", _xenum_scalar_names_%s_%u", module_prefix, (unsigned) index);
         fprintf(out, ", %u, %u};\n\n", (unsigned) plan->member_count, (unsigned) plan->layout_id);
     }
 }
@@ -708,7 +710,10 @@ static const char *emit_conversion_prefix_ctx(XiCgenCtx *ctx, FILE *out, const X
         uint32_t index = 0;
         if (!cg_mark_enum_scalar_sidecar(ctx, plan, &index))
             return emit_conversion_prefix(out, type, from_rep, to_rep);
-        fprintf(out, "xrt_enum_scalar_box(&_xenum_scalar_layout_%u, (", (unsigned) index);
+        const char *module_prefix =
+            ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
+        fprintf(out, "xrt_enum_scalar_box(&_xenum_scalar_layout_%s_%u, (", module_prefix,
+                (unsigned) index);
         return "))";
     }
     return emit_conversion_prefix(out, type, from_rep, to_rep);
@@ -997,6 +1002,17 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
     if (call_plan && (target_plan->abi.ret.rep.kind == XAOT_VALUE_AGGREGATE ||
                       call_plan->rep.kind == XAOT_VALUE_AGGREGATE)) {
         XaotValueRep target_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
+        if (target_rep.kind != XAOT_VALUE_AGGREGATE &&
+            xaot_value_storage_rep(target_rep) == XR_REP_TAGGED &&
+            cg_value_rep_is_adt_aggregate(call_plan->rep)) {
+            if (cg_value_rep_is_typed_adt_aggregate(call_plan->rep)) {
+                fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(",
+                        call_plan->rep.c_type);
+                return "))";
+            }
+            fprintf(out, "xrt_value_to_enum_aggregate(");
+            return ")";
+        }
         if (target_rep.kind == XAOT_VALUE_AGGREGATE &&
             call_plan->rep.kind != XAOT_VALUE_AGGREGATE &&
             xaot_value_storage_rep(call_plan->rep) == XR_REP_TAGGED &&

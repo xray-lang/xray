@@ -838,7 +838,7 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                 return false;
         }
     }
-    if (!bundle->emit_program_main) {
+    if (bundle->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY) {
         for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
             const XiModule *mod = bundle->modules[mi];
             if (!mod)

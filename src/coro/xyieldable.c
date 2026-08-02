@@ -50,6 +50,11 @@ static inline bool yield_setup_continuation(XrVMRuntime *X, XrCoroutine *coro, X
     return backend->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
+bool xr_yield_set_continuation(XrVMRuntime *X, XrContinuation cont, void *user_data) {
+    XrCoroutine *coro = get_current_coro(X);
+    return coro && cont && yield_setup_continuation(X, coro, cont, user_data);
+}
+
 static bool yield_prepare_io_wait(XrCoroutine *coro, int fd, int events, int64_t timeout_ms) {
     XrCoroExt *ext = xr_coro_ensure_ext(coro);
     if (!ext)

@@ -13,6 +13,8 @@
  */
 
 #include "xbytecode_io.h"
+#include "xmodule.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
@@ -59,6 +61,7 @@ typedef struct {
     size_t size;
     size_t capacity;
     XrVMRuntime *X;
+    const char *stdlib_module;
     int flags;
     XrBcError error;
     BcWriteLayoutEntry *layouts;
@@ -66,17 +69,32 @@ typedef struct {
     uint32_t layout_capacity;
 } BcWriter;
 
-static void bc_writer_init(BcWriter *w, XrVMRuntime *X, int flags) {
+static void bc_writer_init(BcWriter *w, XrVMRuntime *X, const char *stdlib_module, int flags) {
     XR_DCHECK(w != NULL, "bc_writer_init: NULL writer");
     w->buf = NULL;
     w->size = 0;
     w->capacity = 0;
     w->X = X;
+    w->stdlib_module = stdlib_module;
     w->flags = flags;
     w->error = XR_BC_OK;
     w->layouts = NULL;
     w->layout_count = 0;
     w->layout_capacity = 0;
+}
+
+static bool bc_enum_shape_matches(const XrEnumType *actual, const XrEnumType *canonical) {
+    if (!actual || !canonical || actual->member_count != canonical->member_count)
+        return false;
+    for (uint32_t i = 0; i < actual->member_count; i++) {
+        const char *actual_name = xr_enum_type_member_name(actual, i);
+        const char *canonical_name = xr_enum_type_member_name(canonical, i);
+        if (!actual_name || !canonical_name || strcmp(actual_name, canonical_name) != 0 ||
+            xr_enum_type_payload_count(actual, i) !=
+                xr_enum_type_payload_count(canonical, i))
+            return false;
+    }
+    return true;
 }
 
 static bool bc_writer_ensure(BcWriter *w, size_t need) {
@@ -840,10 +858,23 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
         return false;
 
     XrEnumType *enum_type = XR_TO_ENUM_TYPE(val);
-    if (!enum_type || !enum_type->name || enum_type->member_count > UINT16_MAX)
+    const char *nominal_owner =
+        enum_type && enum_type->layout ? enum_type->layout->nominal_owner : NULL;
+    if (!enum_type || !nominal_owner || !nominal_owner[0] || !enum_type->name ||
+        enum_type->member_count > UINT16_MAX)
         return false;
 
     if (!bc_put_u8(w, BC_VAL_ENUM_TYPE))
+        return false;
+    if (w->stdlib_module && strcmp(nominal_owner, w->stdlib_module) == 0) {
+        XrEnumType *canonical =
+            xr_stdlib_enum_type_get(w->X, w->stdlib_module, enum_type->name);
+        if (canonical && !bc_enum_shape_matches(enum_type, canonical)) {
+            w->error = XR_BC_ERR_METADATA;
+            return false;
+        }
+    }
+    if (!bc_put_string(w, nominal_owner))
         return false;
     if (!bc_put_string(w, enum_type->name))
         return false;
@@ -1093,14 +1124,18 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
 }
 
 static XrValue bc_read_enum_type(BcReader *r) {
+    char *nominal_owner = bc_read_string_or_empty(r);
     char *enum_name = bc_read_string_or_empty(r);
     uint32_t member_count = bc_get_u32(r);
     uint32_t derive_flags = bc_get_u32(r);
     if (r->error != XR_BC_OK) {
+        xr_free(nominal_owner);
         xr_free(enum_name);
         return xr_null();
     }
-    if (!enum_name || enum_name[0] == '\0' || member_count == 0 || member_count > UINT16_MAX) {
+    if (!nominal_owner || nominal_owner[0] == '\0' || !enum_name || enum_name[0] == '\0' ||
+        member_count == 0 || member_count > UINT16_MAX) {
+        xr_free(nominal_owner);
         xr_free(enum_name);
         r->error = XR_BC_ERR_CORRUPT;
         return xr_null();
@@ -1111,6 +1146,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
     char ***payload_names = xr_calloc(member_count, sizeof(char **));
     uint8_t **payload_type_ids = xr_calloc(member_count, sizeof(uint8_t *));
     if (!member_names || !payload_counts || !payload_names || !payload_type_ids) {
+        xr_free(nominal_owner);
         xr_free(enum_name);
         xr_free(member_names);
         xr_free(payload_counts);
@@ -1156,10 +1192,28 @@ static XrValue bc_read_enum_type(BcReader *r) {
 
     XrEnumType *enum_type = NULL;
     if (r->error == XR_BC_OK) {
-        enum_type = xr_enum_type_new(r->X, enum_name, member_names, (int) member_count);
-        if (!enum_type) {
-            r->error = XR_BC_ERR_ALLOC;
-        } else {
+        XrEnumType *canonical = xr_stdlib_enum_type_get(r->X, nominal_owner, enum_name);
+        if (canonical) {
+            bool shape_matches = canonical->member_count == member_count;
+            for (uint32_t i = 0; shape_matches && i < member_count; i++) {
+                const char *canonical_name = xr_enum_type_member_name(canonical, i);
+                shape_matches = canonical_name && strcmp(canonical_name, member_names[i]) == 0 &&
+                                xr_enum_type_payload_count(canonical, i) == payload_counts[i];
+            }
+            if (!shape_matches) {
+                r->error = XR_BC_ERR_CORRUPT;
+            } else {
+                canonical->derive_flags = derive_flags;
+                enum_type = canonical;
+            }
+        } else if (r->error == XR_BC_OK) {
+            enum_type = xr_enum_type_new(r->X, nominal_owner, enum_name, member_names,
+                                         (int) member_count);
+            if (!enum_type) {
+                r->error = XR_BC_ERR_ALLOC;
+            }
+        }
+        if (enum_type && enum_type != canonical) {
             enum_type->derive_flags = derive_flags;
             if (has_payloads &&
                 !xr_enum_type_set_adt_payloads(enum_type, payload_counts, (int) member_count)) {
@@ -1192,6 +1246,7 @@ static XrValue bc_read_enum_type(BcReader *r) {
     xr_free(payload_counts);
     xr_free(payload_names);
     xr_free(payload_type_ids);
+    xr_free(nominal_owner);
     xr_free(enum_name);
 
     return (r->error == XR_BC_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();
@@ -1924,8 +1979,8 @@ const char *xr_bytecode_error_string(XrBcError error) {
     }
 }
 
-uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
-                           XrBcError *error) {
+static uint8_t *bytecode_write_impl(XrVMRuntime *X, const char *stdlib_module, XrProto *proto,
+                                    int flags, size_t *out_size, XrBcError *error) {
     if (error)
         *error = XR_BC_OK;
     if (!X || !proto || !out_size) {
@@ -1941,7 +1996,7 @@ uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *ou
     }
 
     BcWriter w;
-    bc_writer_init(&w, X, flags);
+    bc_writer_init(&w, X, stdlib_module, flags);
 
     if (!bc_collect_layouts_from_proto(&w, proto, 0))
         goto fail;
@@ -1994,6 +2049,23 @@ fail:
     if (error)
         *error = w.error == XR_BC_OK ? XR_BC_ERR_METADATA : w.error;
     return NULL;
+}
+
+uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
+                           XrBcError *error) {
+    return bytecode_write_impl(X, NULL, proto, flags, out_size, error);
+}
+
+uint8_t *xr_bytecode_write_stdlib(XrVMRuntime *X, const char *canonical_module, XrProto *proto,
+                                  int flags, size_t *out_size, XrBcError *error) {
+    if (!canonical_module || !canonical_module[0]) {
+        if (error)
+            *error = XR_BC_ERR_METADATA;
+        if (out_size)
+            *out_size = 0;
+        return NULL;
+    }
+    return bytecode_write_impl(X, canonical_module, proto, flags, out_size, error);
 }
 
 XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBcError *error) {

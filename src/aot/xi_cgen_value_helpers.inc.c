@@ -210,6 +210,19 @@ typedef struct CgPreludeEnumData {
     uint32_t member_count;
 } CgPreludeEnumData;
 
+static const int cg_prelude_enum_builtin_indices[] = {
+    XR_GLOBAL_VAR_ORDERING,
+    XR_GLOBAL_VAR_ENDIAN,
+    XR_GLOBAL_VAR_RECV,
+    XR_GLOBAL_VAR_SEND_RESULT,
+    XR_GLOBAL_VAR_TASK_RESULT,
+    XR_GLOBAL_VAR_TASK_STATUS,
+    XR_GLOBAL_VAR_UTF8_ERROR,
+    XR_GLOBAL_VAR_STRING_SLICE_ERROR,
+    XR_GLOBAL_VAR_COMPRESSION_ERROR,
+    XR_GLOBAL_VAR_CRYPTO_ERROR,
+};
+
 static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
     static const CgPreludeEnumMember ordering[] = {
         {"Relaxed", false},        {"Acquire", false}, {"Release", false},
@@ -291,6 +304,126 @@ static bool cg_prelude_enum_has_payload_member(const CgPreludeEnumData *ed) {
     return false;
 }
 
+static int cg_prelude_enum_scalar_sidecar_slot(const CgPreludeEnumData *ed) {
+    if (!ed)
+        return -1;
+    for (uint32_t i = 0;
+         i < (uint32_t) (sizeof(cg_prelude_enum_builtin_indices) /
+                         sizeof(cg_prelude_enum_builtin_indices[0]));
+         i++) {
+        if (cg_prelude_enum_builtin_indices[i] == ed->builtin_index)
+            return (int) i;
+    }
+    return -1;
+}
+
+static bool cg_mark_prelude_enum_scalar_sidecar(XiCgenCtx *ctx,
+                                                 const CgPreludeEnumData *ed,
+                                                 uint32_t *out_slot) {
+    int slot = cg_prelude_enum_scalar_sidecar_slot(ed);
+    if (!ctx || slot < 0 || slot >= 32 || cg_prelude_enum_has_payload_member(ed)) {
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+    ctx->prelude_enum_scalar_sidecar_mask |= UINT32_C(1) << (uint32_t) slot;
+    if (out_slot)
+        *out_slot = (uint32_t) slot;
+    return true;
+}
+
+static void cg_reset_prelude_enum_scalar_sidecars(XiCgenCtx *ctx) {
+    if (ctx)
+        ctx->prelude_enum_scalar_sidecar_mask = 0;
+}
+
+static void emit_prelude_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out || ctx->prelude_enum_scalar_sidecar_mask == 0)
+        return;
+    const char *module_prefix =
+        ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
+    for (uint32_t slot = 0;
+         slot < (uint32_t) (sizeof(cg_prelude_enum_builtin_indices) /
+                            sizeof(cg_prelude_enum_builtin_indices[0]));
+         slot++) {
+        if ((ctx->prelude_enum_scalar_sidecar_mask & (UINT32_C(1) << slot)) == 0)
+            continue;
+        const CgPreludeEnumData *ed =
+            cg_prelude_enum_data(cg_prelude_enum_builtin_indices[slot]);
+        if (!ed || cg_prelude_enum_has_payload_member(ed)) {
+            ctx->error = true;
+            return;
+        }
+        fprintf(out, "static const char *const _xprelude_enum_scalar_names_%s_%u[%u] = {",
+                module_prefix, (unsigned) slot, (unsigned) ed->member_count);
+        for (uint32_t i = 0; i < ed->member_count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            emit_c_string_literal(out, ed->members[i].name ? ed->members[i].name : "");
+        }
+        fprintf(out, "};\n");
+        fprintf(out,
+                "static const XrAotEnumScalarLayout "
+                "_xprelude_enum_scalar_layout_%s_%u = "
+                "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, ",
+                module_prefix, (unsigned) slot);
+        emit_c_string_literal(out, ed->enum_name ? ed->enum_name : "");
+        fprintf(out, ", _xprelude_enum_scalar_names_%s_%u, %u, 0};\n\n", module_prefix,
+                (unsigned) slot, (unsigned) ed->member_count);
+    }
+}
+
+static const XaotEnumPlan *cg_unique_unit_enum_scalar_plan_named(XiCgenCtx *ctx,
+                                                                 const char *enum_name) {
+    if (!ctx || ctx->freestanding_profile || !ctx->aot_bundle || !enum_name || !enum_name[0])
+        return NULL;
+    const XaotEnumPlan *match = NULL;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nenum_plans; i++) {
+        const XaotEnumPlan *candidate = &ctx->aot_bundle->enum_plans[i];
+        if (!candidate->enum_data || !candidate->enum_data->name || !candidate->members ||
+            candidate->member_count == 0 || candidate->max_payload != 0 ||
+            strcmp(candidate->enum_data->name, enum_name) != 0)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static bool emit_portable_scalar_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
+                                                         const XiValue *value,
+                                                         const char *enum_name,
+                                                         const CgPreludeEnumData *prelude_enum,
+                                                         uint32_t member_index) {
+    const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, value ? value->type : NULL);
+    if (!plan)
+        plan = cg_unique_unit_enum_scalar_plan_named(ctx, enum_name);
+    if (!plan && prelude_enum) {
+        uint32_t slot = 0;
+        if (!cg_mark_prelude_enum_scalar_sidecar(ctx, prelude_enum, &slot))
+            return false;
+        const char *module_prefix =
+            ctx && ctx->module && ctx->module->name && ctx->module->name[0]
+                ? ctx->module->name
+                : "mod";
+        fprintf(out,
+                "xrt_enum_scalar_box(&_xprelude_enum_scalar_layout_%s_%u, INT64_C(%u))",
+                module_prefix, (unsigned) slot, (unsigned) member_index);
+        return true;
+    }
+    uint32_t sidecar_index = 0;
+    if (!plan || !cg_mark_enum_scalar_sidecar(ctx, plan, &sidecar_index))
+        return false;
+    const char *module_prefix =
+        ctx && ctx->module && ctx->module->name && ctx->module->name[0]
+            ? ctx->module->name
+            : "mod";
+    fprintf(out, "xrt_enum_scalar_box(&_xenum_scalar_layout_%s_%u, INT64_C(%u))",
+            module_prefix, (unsigned) sidecar_index, (unsigned) member_index);
+    return true;
+}
+
 static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumData *ed,
                                                 uint32_t member_index) {
     const CgPreludeEnumMember *member =
@@ -340,7 +473,8 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
                                                      cg_value_plan_storage_rep(ctx, v));
     if (source_rep == XR_REP_I64)
         fprintf(out, "INT64_C(%d)", member_index);
-    else
+    else if (!emit_portable_scalar_enum_member_value_expr(
+                 ctx, out, v, ed->enum_name, ed, (uint32_t) member_index))
         emit_prelude_enum_member_value_expr(out, ed, (uint32_t) member_index);
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -359,7 +493,8 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
                                                      cg_value_plan_storage_rep(ctx, v));
     if (source_rep == XR_REP_I64) {
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
-    } else {
+    } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, ed->name, NULL,
+                                                             member_index)) {
         fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
                 (unsigned) ed->layout_id, (unsigned) member_index);
         /* Reaching a tagged static box is itself an erased representation
@@ -406,7 +541,8 @@ static bool emit_static_builtin_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
                                                      cg_value_plan_storage_rep(ctx, v));
     if (source_rep == XR_REP_I64) {
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
-    } else {
+    } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, decl->name, NULL,
+                                                             member_index)) {
         fprintf(out, "({ static const XrAotEnumBox _xbuiltin_enum_%u_%u = {{0, 0}, NULL, ",
                 (unsigned) decl->layout_id, (unsigned) member_index);
         emit_c_string_literal(out, decl->name ? decl->name : "");
@@ -981,6 +1117,43 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
         }
     }
     fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
+}
+
+static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const XiValue *v) {
+    if (!ctx || !out || !f || !v || v->op != XI_STR_CONCAT || v->nargs <= 1)
+        return false;
+
+    if (!ctx->pre_decl_all) {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    {\n        xrt_strpart_t _scp_%u[%u];\n", v->id,
+            (unsigned) v->nargs);
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        fprintf(out, "        ");
+        if (cg_value_type_is_unsigned_int(v->args[i])) {
+            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id,
+                    (unsigned) i);
+            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_I64);
+        } else {
+            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
+            emit_value_as_display_tagged(ctx, out, v->args[i]);
+        }
+        fprintf(out, ");\n");
+    }
+    fprintf(out, "        ");
+    emit_vref(out, v);
+    fprintf(out, " = ");
+    const char *suffix = emit_conversion_prefix(
+        out, v->type, XR_REP_TAGGED, cg_value_decl_storage_rep(ctx, f, v));
+    fprintf(out, "xrt_str_concat_parts(%u, _scp_%u)", (unsigned) v->nargs, v->id);
+    emit_conversion_suffix(out, suffix);
+    fprintf(out, ";\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
 }
 
 static void emit_closure_entry_pointer(XiCgenCtx *ctx, FILE *out, const char *prefix,

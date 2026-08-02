@@ -48,6 +48,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     } while (0)
 
 typedef struct ArenaTestBox {
+    XrObjHeader hdr;
     XrValue child;
 } ArenaTestBox;
 
@@ -74,6 +75,13 @@ int main(void) {
     xrt_release(scalar);
     CHECK(xrt_execution_arena_live_objects(arena) == 0,
           "normal RC release unlinks and reclaims an acyclic object");
+
+    XrValue json = xrt_json_new(0);
+    CHECK(((XrObjHeader *) json.ptr)->type == XR_TINSTANCE,
+          "JSON uses the canonical instance object kind");
+    CHECK(xrt_aot_class_type_id((XrObjHeader *) json.ptr) == 0,
+          "builtin JSON destructor metadata is not a local class id");
+    xrt_release(json);
 
     XrValue tuple_child = xrt_str_from_cstr("tuple-owned");
     XrValue tuple = xrt_tuple_make(1, &tuple_child);
@@ -126,6 +134,12 @@ int main(void) {
     ArenaTestBox *box = (ArenaTestBox *) xrt_obj_alloc(box_type, sizeof(*box));
     box->child = xrt_str_from_cstr("native-field");
     XrValue published_box = xrt_box_obj(box);
+    CHECK(published_box.ptr == (void *) &box->hdr,
+          "native class uses the canonical header-at-value-pointer ABI");
+    CHECK(box->hdr.type == XR_TINSTANCE,
+          "native class header stores the canonical instance object kind");
+    CHECK(xrt_aot_class_type_id(&box->hdr) == box_type,
+          "native class id uses the disjoint AOT-local auxiliary domain");
     CHECK(xrt_execution_arena_live_objects(arena) == 2,
           "native class and reference field start in the producer execution");
     published_box = xrt_value_set_storage(published_box, XR_OBJ_STORAGE_SHARED);

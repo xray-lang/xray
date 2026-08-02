@@ -205,26 +205,9 @@ baseline:
  *   [8-15] payload   union     int64 / double / pointer
  * ========================================================================= */
 
-typedef struct XrValue {
-    union {
-        struct {
-            uint8_t tag;        /* [0]   XR_TAG_* */
-            uint8_t flags;      /* [1]   reserved = 0 */
-            uint16_t heap_type; /* [2-3] object subtype (PTR only) */
-            uint32_t ext;       /* [4-7] reserved = 0 */
-        };
-        uint64_t descriptor; /* [0-7] bulk load/compare */
-    };
-    union {
-        int64_t i; /* [8-15] integer payload (I64) */
-        double f;  /* [8-15] float payload (F64) */
-        void *ptr; /* [8-15] heap pointer */
-    };
-} XrValue;
+#include "xray_value_abi.h"
 
 #define XRT_VALUE_FLAG_ARRAY_REF_OWNED 0x01u
-#define XR_VALUE_FLAG_EMBEDDED_HEADER 0x02u
-#define XRT_VALUE_FLAG_EMBEDDED_HEADER XR_VALUE_FLAG_EMBEDDED_HEADER
 
 /* =========================================================================
  * Tag constants — base tags (0-7) identical to VM's XrValueTag.

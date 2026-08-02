@@ -5049,13 +5049,14 @@ static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
         const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, call->callee);
         XaSymbol *target = sel ? sel->target_symbol : NULL;
         XrType *receiver = sel ? sel->receiver_type : NULL;
-        bool closed_value_dispatch =
+        bool closed_dispatch =
             target &&
-            (target->is_static || (receiver && receiver->kind == XR_KIND_ENUM) ||
+            ((sel && sel->kind == XA_SEL_MODULE_EXPORT) || target->is_static ||
+             (receiver && receiver->kind == XR_KIND_ENUM) ||
              (receiver && receiver->kind == XR_KIND_INSTANCE && receiver->instance.class_ref &&
               receiver->instance.class_ref->struct_layout));
         XaSymbolLinks *links =
-            closed_value_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
+            closed_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
         if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
             fn_type = links->type;
     }

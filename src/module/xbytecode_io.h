@@ -45,7 +45,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 22        // v22: enum payload field-name/type metadata
+#define XR_BC_VERSION 24        // v24: canonical owner-backed enum nominal identity
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
@@ -69,6 +69,14 @@ XR_FUNC const char *xr_bytecode_error_string(XrBcError error);
 // Serialize XrProto to byte array, caller must free
 XR_FUNC uint8_t *xr_bytecode_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
                                    size_t *out_size, XrBcError *error);
+
+/* Serialize a built-in stdlib module.  The canonical module identity is part
+ * of the compilation unit, not inferred from load order: enum constants that
+ * also have native producers are encoded as that module's nominal type. */
+XR_FUNC uint8_t *xr_bytecode_write_stdlib(struct XrVMRuntime *X,
+                                          const char *canonical_module,
+                                          struct XrProto *proto, int flags,
+                                          size_t *out_size, XrBcError *error);
 
 // Deserialize XrProto from byte array
 XR_FUNC struct XrProto *xr_bytecode_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,

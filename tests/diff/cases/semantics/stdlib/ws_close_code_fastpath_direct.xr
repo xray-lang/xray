@@ -1,0 +1,12 @@
+import ws
+
+print(ws.isValidCloseCode(999))
+print(ws.isValidCloseCode(1000))
+print(ws.isValidCloseCode(1004))
+print(ws.isValidCloseCode(1007))
+print(ws.isValidCloseCode(1011))
+print(ws.isValidCloseCode(1012))
+print(ws.isValidCloseCode(2999))
+print(ws.isValidCloseCode(3000))
+print(ws.isValidCloseCode(4999))
+print(ws.isValidCloseCode(5000))

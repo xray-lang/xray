@@ -39,21 +39,22 @@ Write-Host "== [asan_focused/windows] build=$buildDir config=$configuration jobs
 
 if ($env:XR_ASAN_SKIP_BUILD -ne '1') {
     Invoke-Checked -Command cmake -Arguments @(
-        '-S', $repoRoot, '-B', $buildDir, '-G', 'Visual Studio 17 2022', '-A', 'x64',
+        '-S', $repoRoot, '-B', $buildDir, '-G', 'Ninja',
+        "-DCMAKE_BUILD_TYPE=$configuration",
         '-DENABLE_ASAN=ON', '-DENABLE_UBSAN=OFF', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
     )
     # Build only the executable and focused test binaries exercised below.
     # Their normal target dependencies still rebuild the compiler and runtime;
     # avoiding the unrelated all-tests solution keeps this gate practical.
     Invoke-Checked -Command cmake -Arguments @(
-        '--build', $buildDir, '--config', $configuration,
+        '--build', $buildDir,
         '--target', 'xray', 'test_xi_cgen', 'test_xaot_driver',
         'test_cgen_verify_output', 'test_cli_toolchain', 'test_xglobal_summary',
         '--parallel', [string]$jobs
     )
 }
 
-$xrayExe = Join-Path $buildDir "$configuration\xray.exe"
+$xrayExe = Join-Path $buildDir 'xray.exe'
 if (-not (Test-Path -LiteralPath $xrayExe -PathType Leaf)) {
     if ($env:XR_ASAN_SKIP_BUILD -eq '1') {
         throw "XR_ASAN_SKIP_BUILD=1 but no ASan binary at ${xrayExe}: build it first."
@@ -83,8 +84,8 @@ $toolLine = Select-String -LiteralPath $cache `
     -Pattern '^(?:CMAKE_C_COMPILER|CMAKE_LINKER):FILEPATH=(.+)$' |
     Select-Object -First 1
 if ($toolLine) {
-    # Visual Studio generators do not persist CMAKE_C_COMPILER in the cache,
-    # but CMAKE_LINKER lives beside cl.exe and both MSVC ASan runtime DLLs.
+    # Ninja persists the concrete MSVC compiler/linker paths in the cache; both
+    # live beside the MSVC ASan runtime DLLs.
     $compilerDir = Split-Path -Parent $toolLine.Matches[0].Groups[1].Value
     if (Test-Path -LiteralPath $compilerDir -PathType Container) {
         $asanRuntimes = @(Get-ChildItem -LiteralPath $compilerDir -File `
@@ -99,15 +100,8 @@ if ($toolLine) {
         # PATH, so stage both the release and debug ASan runtimes when the
         # active MSVC toolset provides them. This also prevents an interactive
         # missing-DLL dialog from blocking unattended validation.
-        $configurationSuffix = "$([System.IO.Path]::DirectorySeparatorChar)$configuration"
         $asanOutputDirectories = @(Get-ChildItem -LiteralPath $buildDir -Recurse -File `
             -Filter '*.exe' |
-            Where-Object {
-                $_.DirectoryName.EndsWith(
-                    $configurationSuffix,
-                    [System.StringComparison]::OrdinalIgnoreCase
-                )
-            } |
             ForEach-Object { $_.Directory.FullName } |
             Sort-Object -Unique)
         if ($asanOutputDirectories.Count -eq 0) {
@@ -160,7 +154,7 @@ $focusedRegex = if ($env:XR_ASAN_CTEST_REGEX) {
 }
 Write-Host "== [asan_focused/windows] focused CTest regex: $focusedRegex"
 Invoke-Checked -Command ctest -Arguments @(
-    '--test-dir', $buildDir, '-C', $configuration, '--output-on-failure',
+    '--test-dir', $buildDir, '--output-on-failure',
     '-j', [string]$jobs, '-R', $focusedRegex, '--timeout', '600'
 )
 

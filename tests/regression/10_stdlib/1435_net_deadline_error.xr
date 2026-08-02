@@ -2,6 +2,7 @@
 // 测试：TCP deadline 与 lastError / lastErrno 基础诊断
 
 import net
+import { NetError } from net
 import time
 
 fn acceptSlowWrite(lst: NetListener) {
@@ -30,7 +31,7 @@ fn test_accept_deadline_timeout() {
 
     var conn = net.accept(lst)
     assert_true(conn == null)
-    assert_eq(net.lastError(lst), "timeout")
+    assert_eq(net.lastError(lst), NetError.Timeout)
     assert_eq(net.lastErrno(lst), 0)
 
     net.close(lst)
@@ -49,7 +50,7 @@ fn test_read_deadline_timeout() {
 
     var data = net.read(c)
     assert_true(data == null)
-    assert_eq(net.lastError(c), "timeout")
+    assert_eq(net.lastError(c), NetError.Timeout)
     assert_eq(net.lastErrno(c), 0)
 
     net.close(c)
@@ -68,7 +69,7 @@ fn test_closed_handle_error() {
     net.close(c)
 
     assert_eq(net.write(c, "x"), -1)
-    assert_eq(net.lastError(c), "closed")
+    assert_eq(net.lastError(c), NetError.Closed)
 
     net.close(lst)
 }

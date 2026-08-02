@@ -12,6 +12,7 @@
  */
 
 #include "xmodule.h"
+#include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
@@ -308,6 +309,28 @@ void xr_module_add_export(XrVMRuntime *isolate, XrModule *module, const char *na
     XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_register_in_table(sym_table, name);
     xr_module_add_export_sym(isolate, module, sym, value, false);
+}
+
+bool xr_module_set_initializing_export(XrVMRuntime *isolate, XrModule *module, const char *name,
+                                       XrValue value, bool is_const) {
+    if (!isolate || !module || !name ||
+        atomic_load_explicit(&module->state, memory_order_acquire) != XR_MODULE_INITIALIZING)
+        return false;
+
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
+    SymbolId sym = xr_symbol_register_in_table(sym_table, name);
+    if (sym < 0)
+        return false;
+    for (uint16_t i = 0; i < module->export_count; i++) {
+        if (module->export_symbols[i] != sym)
+            continue;
+        module->export_values[i] = value;
+        if (module->export_flags)
+            module->export_flags[i] = is_const ? XR_EXPORT_CONST : 0;
+        return true;
+    }
+    xr_module_add_export_sym(isolate, module, sym, value, is_const);
+    return true;
 }
 
 /*
@@ -736,6 +759,11 @@ static bool proto_has_invalid_class_descriptors(XrProto *proto) {
 ** The native module is already INITIALIZING; importing it from the extension is a
 ** circular dependency and fails instead of exposing a partially initialized module.
 */
+static void module_script_source_path(const XrModuleRegistry *registry, const char *module_name,
+                                      char *path, size_t path_size) {
+    snprintf(path, path_size, "%s/%s/%s.xr", registry->stdlib_path, module_name, module_name);
+}
+
 static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
@@ -794,8 +822,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     // override C exports.
 #ifdef XR_STDLIB_FROM_FILE
     if (registry->stdlib_path) {
-        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
-                 module_name);
+        module_script_source_path(registry, module_name, path, sizeof(path));
 
         XR_DBG_MODULE("load_script_extension: trying %s", path);
 
@@ -807,8 +834,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     }
 #else
     if (!code && !source && registry->stdlib_path) {
-        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
-                 module_name);
+        module_script_source_path(registry, module_name, path, sizeof(path));
 
         XR_DBG_MODULE("load_script_extension: trying fallback %s", path);
 
@@ -828,7 +854,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
         xr_isolate_set_current_module(isolate, prev_module);
         if (module->requires_script) {
             xr_log_warning("module",
-                           "stdlib module '%s' requires its script layer but no embedded or file "
+                           "module '%s' requires its script layer but no embedded or file "
                            "artifact was found at '%s'; set XRAY_STDLIB_PATH or reinstall xray",
                            module_name, registry->stdlib_path ? path : "<no stdlib path>");
             return false;
@@ -874,6 +900,12 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 
     if (result != 0) {
         xr_log_warning("module", "failed to execute extension '%s'", path);
+        return false;
+    }
+
+    if (!xr_stdlib_vm_fastpath_install(isolate, module, module_name)) {
+        xr_log_warning("module", "failed to install generated stdlib-native entries for '%s'",
+                       module_name);
         return false;
     }
 
@@ -1467,7 +1499,18 @@ static const StdlibEntry stdlib_test_modules[] = {
 static const StdlibEntry stdlib_network[] = {
     {"net", xr_load_module_net},
     {"http", xr_load_module_http},
+};
+#endif
+
+#if defined(XR_HAS_WS)
+static const StdlibEntry stdlib_ws[] = {
     {"ws", xr_load_module_ws},
+};
+#endif
+
+#if defined(XR_HAS_HTTP2)
+static const StdlibEntry stdlib_http2[] = {
+    {"http2", xr_load_module_http2},
 };
 #endif
 
@@ -1520,6 +1563,12 @@ void xr_module_register_stdlib(XrVMRuntime *isolate) {
 #endif
 #if defined(XR_HAS_NETWORK)
     REGISTER_TABLE(stdlib_network);
+#endif
+#if defined(XR_HAS_WS)
+    REGISTER_TABLE(stdlib_ws);
+#endif
+#if defined(XR_HAS_HTTP2)
+    REGISTER_TABLE(stdlib_http2);
 #endif
 #if defined(XR_HAS_CRYPTO)
     REGISTER_TABLE(stdlib_crypto);

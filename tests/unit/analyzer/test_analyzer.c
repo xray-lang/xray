@@ -174,6 +174,18 @@ TEST(type_const_capability_is_part_of_identity_and_format) {
     ASSERT(xr_type_equals(scalar, xr_type_make_const(g_isolate, scalar)));
 }
 
+TEST(type_nullable_qualifier_does_not_mutate_declaration_identity) {
+    setup_pool();
+    XrType *enum_type = xr_type_new_enum(g_isolate, "NetError");
+    XrType *nullable_enum = xr_type_make_nullable(g_isolate, enum_type);
+
+    ASSERT(enum_type != nullable_enum);
+    ASSERT(!enum_type->is_nullable);
+    ASSERT(nullable_enum->is_nullable);
+    ASSERT(nullable_enum->kind == XR_KIND_ENUM);
+    ASSERT(strcmp(nullable_enum->enum_type.enum_name, "NetError") == 0);
+}
+
 TEST(type_containers) {
     XrType *elem = xr_type_new_int(NULL);
     XrType *arr = xr_type_new_array(g_isolate, elem);
@@ -3497,18 +3509,24 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_module_func_effect_contract("compress", "gunzip");
     const XaEffectContract *decrypt_contract =
         xa_builtin_get_module_func_effect_contract("crypto", "decrypt");
+    const XaEffectContract *private_copy_contract =
+        xa_builtin_get_module_func_abi_effect_contract("net", "__copyBidirectional");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
     ASSERT(gunzip_contract != NULL);
     ASSERT(decrypt_contract != NULL);
+    ASSERT(private_copy_contract != NULL);
+    ASSERT(xa_builtin_get_module_func_effect_contract("net", "__copyBidirectional") == NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(decrypt_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(private_copy_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);
     ASSERT(slice_bytes_contract->error_count == 1);
     ASSERT(gunzip_contract->error_count == 1);
     ASSERT(decrypt_contract->error_count == 1);
+    ASSERT(private_copy_contract->error_count == 10);
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
     ASSERT(strcmp(gunzip_contract->errors[0], "CompressionError.InvalidData") == 0);
@@ -6398,29 +6416,12 @@ TEST(class_info_members) {
 
 TEST(builtin_http_old_fd_helpers_removed) {
     const XaBuiltinModule *mod = xa_builtin_get_module_info("http");
-    ASSERT(mod != NULL);
+    ASSERT(mod == NULL);
 
-    const XaBuiltinMember *parse_req = NULL;
-    const XaBuiltinMember *send_resp = NULL;
-    const XaBuiltinMember *set_conn_handler = NULL;
-    const XaBuiltinMember *get_conn_handler = NULL;
-
-    for (int i = 0; i < mod->function_count; i++) {
-        const XaBuiltinMember *fn = &mod->functions[i];
-        if (strcmp(fn->name, "parseRequest") == 0)
-            parse_req = fn;
-        if (strcmp(fn->name, "sendResponse") == 0)
-            send_resp = fn;
-        if (strcmp(fn->name, "setConnHandler") == 0)
-            set_conn_handler = fn;
-        if (strcmp(fn->name, "__getConnHandler") == 0)
-            get_conn_handler = fn;
-    }
-
-    ASSERT(parse_req == NULL);
-    ASSERT(send_resp == NULL);
-    ASSERT(set_conn_handler == NULL);
-    ASSERT(get_conn_handler == NULL);
+    ASSERT(xa_builtin_get_module_func_signature("http", "parseRequest") == NULL);
+    ASSERT(xa_builtin_get_module_func_signature("http", "sendResponse") == NULL);
+    ASSERT(xa_builtin_get_module_func_signature("http", "setConnHandler") == NULL);
+    ASSERT(xa_builtin_get_module_func_signature("http", "__getConnHandler") == NULL);
 }
 
 TEST(builtin_datetime_type_methods_not_from_native_defs) {
@@ -6451,6 +6452,7 @@ int main(void) {
     RUN_TEST(type_primitives);
     RUN_TEST(type_scalar_alias_identity);
     RUN_TEST(type_const_capability_is_part_of_identity_and_format);
+    RUN_TEST(type_nullable_qualifier_does_not_mutate_declaration_identity);
     RUN_TEST(type_containers);
     RUN_TEST(type_union);
     RUN_TEST(type_error_recovery);

@@ -822,18 +822,54 @@ def c_string(value):
 
 
 def stable_enum_layout_id(module_name, enum):
-    """Return the stdlibgen-compatible stable identity for a native enum."""
-    shape = [f"{module_name}.{enum['name']}"]
+    """Mirror xr_enum_layout_nominal_id for analyzer/runtime parity."""
+    mask = (1 << 64) - 1
+
+    def byte(hash_value, value):
+        return ((hash_value ^ value) * 1099511628211) & mask
+
+    def u32(hash_value, value):
+        for shift in (24, 16, 8, 0):
+            hash_value = byte(hash_value, (value >> shift) & 0xff)
+        return hash_value
+
+    def string(hash_value, value):
+        encoded = value.encode('utf-8')
+        hash_value = u32(hash_value, len(encoded))
+        for item in encoded:
+            hash_value = byte(hash_value, item)
+        return hash_value
+
+    hash_value = 1469598103934665603
+    hash_value = string(hash_value, 'xray.enum.nominal.v1')
+    hash_value = string(hash_value, module_name)
+    hash_value = string(hash_value, enum['name'])
+    hash_value = u32(hash_value, len(enum['variants']))
     for variant in enum['variants']:
-        payloads = ','.join(variant.get('payload_types', []))
-        shape.append(f"{variant['name']}({payloads})")
-    digest = hashlib.sha256('|'.join(shape).encode('utf-8')).digest()
-    return int.from_bytes(digest[:4], 'big') | 0x80000000
+        hash_value = string(hash_value, variant['name'])
+        hash_value = u32(hash_value, len(variant.get('payload_types', [])))
+
+    hash_value ^= hash_value >> 30
+    hash_value = (hash_value * 0xbf58476d1ce4e5b9) & mask
+    hash_value ^= hash_value >> 27
+    hash_value = (hash_value * 0x94d049bb133111eb) & mask
+    hash_value ^= hash_value >> 31
+    return (hash_value & 0xffffffff) | 0x80000000
 
 
 def c_ident(value):
     """Return a stable C identifier fragment for generated symbol names."""
     ident = re.sub(r'[^0-9A-Za-z_]', '_', value).lower()
+    if not ident:
+        return "unnamed"
+    if ident[0].isdigit():
+        ident = "_" + ident
+    return ident
+
+
+def c_module_ident(value):
+    """Preserve existing module symbol spelling while mangling owner/name paths."""
+    ident = re.sub(r'[^0-9A-Za-z_]', '_', value)
     if not ident:
         return "unnamed"
     if ident[0].isdigit():
@@ -967,9 +1003,11 @@ def generate_header(type_results, module_results):
         lines.append("")
 
         for mod_name, mod_data in sorted(module_results.items()):
+            mod_ident = c_module_ident(mod_name)
+            mod_macro = mod_ident.upper()
             # Handle types
             for handle in mod_data.get('handles', []):
-                var_name = f"g_gen_{mod_name}_{handle['name'].lower()}_fields"
+                var_name = f"g_gen_{mod_ident}_{handle['name'].lower()}_fields"
                 lines.append(f"// {mod_name}.{handle['name']} handle fields")
                 lines.append(f"static const XaBuiltinHandleField {var_name}[] = {{")
                 for f in handle['fields']:
@@ -982,19 +1020,19 @@ def generate_header(type_results, module_results):
 
             # Handle array
             if mod_data.get('handles'):
-                lines.append(f"static const XaBuiltinHandle g_gen_{mod_name}_handles[] = {{")
+                lines.append(f"static const XaBuiltinHandle g_gen_{mod_ident}_handles[] = {{")
                 for handle in mod_data['handles']:
-                    var_name = f"g_gen_{mod_name}_{handle['name'].lower()}_fields"
+                    var_name = f"g_gen_{mod_ident}_{handle['name'].lower()}_fields"
                     lines.append(
                         f'    {{"{c_string(handle["name"])}", {var_name}, '
                         f'{len(handle["fields"])}, NULL, 0}},')
                 lines.append("};")
-                lines.append(f"#define GEN_{mod_name.upper()}_HANDLE_COUNT {len(mod_data['handles'])}")
+                lines.append(f"#define GEN_{mod_macro}_HANDLE_COUNT {len(mod_data['handles'])}")
                 lines.append("")
 
             # Named sealed records returned by native module functions.
             for record in mod_data.get('records', []):
-                field_var = f"g_gen_{mod_name}_{record['name'].lower()}_record_fields"
+                field_var = f"g_gen_{mod_ident}_{record['name'].lower()}_record_fields"
                 lines.append(f"// {mod_name}.{record['name']} record fields")
                 lines.append(f"static const XaBuiltinRecordField {field_var}[] = {{")
                 for field in record['fields']:
@@ -1004,22 +1042,22 @@ def generate_header(type_results, module_results):
                 lines.append("};")
                 lines.append("")
             if mod_data.get('records'):
-                lines.append(f"static const XaBuiltinRecord g_gen_{mod_name}_records[] = {{")
+                lines.append(f"static const XaBuiltinRecord g_gen_{mod_ident}_records[] = {{")
                 for record in mod_data['records']:
-                    field_var = f"g_gen_{mod_name}_{record['name'].lower()}_record_fields"
+                    field_var = f"g_gen_{mod_ident}_{record['name'].lower()}_record_fields"
                     lines.append(
                         f'    {{"{c_string(record["name"])}", "{c_string(record["doc"])}", '
                         f'{field_var}, {len(record["fields"])}, '
                         f'{"true" if record.get("sealed", True) else "false"}}},'
                     )
                 lines.append("};")
-                lines.append(f"#define GEN_{mod_name.upper()}_RECORD_COUNT {len(mod_data['records'])}")
+                lines.append(f"#define GEN_{mod_macro}_RECORD_COUNT {len(mod_data['records'])}")
                 lines.append("")
 
             # Module-scoped enum declarations. Payload types are kept as
             # declaration strings and parsed by the analyzer on import.
             for enum in mod_data.get('enums', []):
-                prefix = f"g_gen_{mod_name}_{enum['name'].lower()}"
+                prefix = f"g_gen_{mod_ident}_{enum['name'].lower()}"
                 for index, variant in enumerate(enum['variants']):
                     payload_types = variant.get('payload_types', [])
                     if not payload_types:
@@ -1042,16 +1080,16 @@ def generate_header(type_results, module_results):
                 lines.append("};")
                 lines.append("")
             if mod_data.get('enums'):
-                lines.append(f"static const XaBuiltinEnum g_gen_{mod_name}_enums[] = {{")
+                lines.append(f"static const XaBuiltinEnum g_gen_{mod_ident}_enums[] = {{")
                 for enum in mod_data['enums']:
-                    variants_var = f"g_gen_{mod_name}_{enum['name'].lower()}_variants"
+                    variants_var = f"g_gen_{mod_ident}_{enum['name'].lower()}_variants"
                     lines.append(
                         f'    {{"{c_string(enum["name"])}", "{c_string(enum["doc"])}", '
                         f'{variants_var}, {len(enum["variants"])}, '
                         f'UINT32_C({stable_enum_layout_id(mod_name, enum)})}},'
                     )
                 lines.append("};")
-                lines.append(f"#define GEN_{mod_name.upper()}_ENUM_COUNT {len(mod_data['enums'])}")
+                lines.append(f"#define GEN_{mod_macro}_ENUM_COUNT {len(mod_data['enums'])}")
                 lines.append("")
 
             # Function declarations.
@@ -1071,7 +1109,7 @@ def generate_header(type_results, module_results):
                     errors = effect_error_refs(m)
                     if not errors:
                         continue
-                    var_name = f"g_gen_{mod_name}_{c_ident(m['name'])}_{idx}_errors"
+                    var_name = f"g_gen_{mod_ident}_{c_ident(m['name'])}_{idx}_errors"
                     method_effect_vars[idx] = (var_name, errors)
                     lines.append(f"static const char *{var_name}[] = {{")
                     for error_ref in errors:
@@ -1079,7 +1117,7 @@ def generate_header(type_results, module_results):
                     lines.append("};")
                     lines.append("")
                 lines.append(f"// {mod_name} module functions")
-                lines.append(f"static const XaBuiltinMember g_gen_{mod_name}_functions[] = {{")
+                lines.append(f"static const XaBuiltinMember g_gen_{mod_ident}_functions[] = {{")
                 for idx, m in enumerate(method_entries):
                     is_method = "true" if '(' in m['signature'] else "false"
                     is_yieldable = "true" if m.get("vm_binding") == "yieldable" else "false"
@@ -1106,24 +1144,26 @@ def generate_header(type_results, module_results):
                             f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING, false, '
                             f'XA_BUILTIN_RETURN_UNKNOWN}},')
                 lines.append("};")
-                lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
+                lines.append(f"#define GEN_{mod_macro}_FUNCTION_COUNT {total}")
                 lines.append("")
 
         # Module registry
         lines.append("// Module registry")
         lines.append("static const XaBuiltinModule g_gen_builtin_modules[] = {")
         for mod_name, mod_data in sorted(module_results.items()):
+            mod_ident = c_module_ident(mod_name)
+            mod_macro = mod_ident.upper()
             # A module emits a function table when it has methods OR typed
             # constants; constants alone are enough to need a non-NULL slot.
             has_function_slot = bool(mod_data.get('methods') or mod_data.get('constants'))
-            func_ref = f"g_gen_{mod_name}_functions" if has_function_slot else "NULL"
-            func_count = f"GEN_{mod_name.upper()}_FUNCTION_COUNT" if has_function_slot else "0"
-            handle_ref = f"g_gen_{mod_name}_handles" if mod_data.get('handles') else "NULL"
-            handle_count = f"GEN_{mod_name.upper()}_HANDLE_COUNT" if mod_data.get('handles') else "0"
-            record_ref = f"g_gen_{mod_name}_records" if mod_data.get('records') else "NULL"
-            record_count = f"GEN_{mod_name.upper()}_RECORD_COUNT" if mod_data.get('records') else "0"
-            enum_ref = f"g_gen_{mod_name}_enums" if mod_data.get('enums') else "NULL"
-            enum_count = f"GEN_{mod_name.upper()}_ENUM_COUNT" if mod_data.get('enums') else "0"
+            func_ref = f"g_gen_{mod_ident}_functions" if has_function_slot else "NULL"
+            func_count = f"GEN_{mod_macro}_FUNCTION_COUNT" if has_function_slot else "0"
+            handle_ref = f"g_gen_{mod_ident}_handles" if mod_data.get('handles') else "NULL"
+            handle_count = f"GEN_{mod_macro}_HANDLE_COUNT" if mod_data.get('handles') else "0"
+            record_ref = f"g_gen_{mod_ident}_records" if mod_data.get('records') else "NULL"
+            record_count = f"GEN_{mod_macro}_RECORD_COUNT" if mod_data.get('records') else "0"
+            enum_ref = f"g_gen_{mod_ident}_enums" if mod_data.get('enums') else "NULL"
+            enum_count = f"GEN_{mod_macro}_ENUM_COUNT" if mod_data.get('enums') else "0"
             lines.append(
                 f'    {{"{c_string(mod_name)}", {func_ref}, {func_count}, '
                 f'{handle_ref}, {handle_count}, {record_ref}, {record_count}, '

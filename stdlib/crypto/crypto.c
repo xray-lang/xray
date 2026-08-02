@@ -18,7 +18,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xmalloc.h"
 #ifndef XR_CRYPTO_CORE_ONLY
-#include "../common.h"
+#include "../../stdlib/common.h"
 #include "../../src/os/os_random.h"
 #include "../../src/base/xglobal_indices.h"
 #include "../../src/runtime/class/xenum.h"

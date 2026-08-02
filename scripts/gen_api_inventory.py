@@ -341,19 +341,19 @@ def decode_c_string(raw: str) -> str:
 
 CLASS_RE = re.compile(
     r"(?m)^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?(?:(?:final|packed)\s+)?"
-    r"(?:class|struct|union)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?"
+    r"(?:class|struct|union|interface)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?"
     r"(?:\s+align\s*\([^\n)]*\))?\s*\{"
 )
 TOP_FN_RE = re.compile(
     r"(?m)^(?:export\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
-    r"(?:<[^>{]+>)?\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^{\n]+))?"
+    r"(?:<[^>{]+>)?\("
 )
 TOP_CONST_RE = re.compile(
     r"(?m)^(?:export\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
     r"(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
 )
 MEMBER_METHOD_RE = re.compile(
-    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^/{\n]+))?"
+    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\("
 )
 MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]*(?:<[^>{]+>)?\s*\(")
 MEMBER_FIELD_RE = re.compile(r"^\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$")
@@ -381,14 +381,34 @@ def parse_member_method_line(line: str) -> tuple[bool, str, str, str | None] | N
     match = MEMBER_METHOD_RE.match(line)
     if not match:
         return None
-    params = match.group("params")
-    ret = match.group("ret")
-    if "=" in params and params.count("(") > params.count(")"):
-        open_index = line.find("(", match.start())
-        parsed = parse_signature_tail(line, open_index)
-        if parsed is not None:
-            params, ret = parsed
+    open_index = line.find("(", match.start())
+    parsed = parse_signature_tail(line, open_index)
+    if parsed is None:
+        return None
+    params, ret = parsed
     return bool(match.group(1)), match.group(2), params, ret
+
+
+def parse_top_functions(text: str) -> list[tuple[re.Match[str], str, str, str | None]]:
+    """Return complete top-level function signatures, including multiline ones."""
+    out: list[tuple[re.Match[str], str, str, str | None]] = []
+    for match in TOP_FN_RE.finditer(text):
+        open_index = text.find("(", match.start(), match.end())
+        close_index = matching_paren_index(text, open_index)
+        if close_index < 0:
+            continue
+        body_index = text.find("{", close_index + 1)
+        if body_index < 0:
+            signature_end = text.find("\n", close_index + 1)
+            signature_end = len(text) if signature_end < 0 else signature_end
+        else:
+            signature_end = body_index + 1
+        parsed = parse_signature_tail(text[:signature_end], open_index)
+        if parsed is None:
+            continue
+        params, ret = parsed
+        out.append((match, match.group(1), params, ret))
+    return out
 
 
 def parse_class_body(
@@ -404,20 +424,39 @@ def parse_class_body(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     depth = 0
-    pending_signature = False
-    for local_lineno, raw in enumerate(body.splitlines(), 1):
+    lines = body.splitlines()
+    line_index = 0
+    while line_index < len(lines):
+        local_lineno = line_index + 1
+        raw = lines[line_index]
         line = strip_line_comment(raw).rstrip()
         if not line.strip() or line.strip().startswith("@"):
             depth = max(0, depth + brace_delta(line))
-            continue
-        if pending_signature:
-            if "{" in line:
-                pending_signature = False
-                depth = max(0, depth + brace_delta(line))
+            line_index += 1
             continue
         if depth != 0:
             depth = max(0, depth + brace_delta(line))
+            line_index += 1
             continue
+
+        # Class member signatures may span any number of physical lines and
+        # may themselves contain nested function-type parentheses.  Parse one
+        # complete logical signature from the source instead of dropping the
+        # continuation lines; the inventory is an input to generated ABI
+        # wrappers, so silently turning a six-argument constructor into a
+        # zero-argument constructor is not an acceptable approximation.
+        signature_delta = brace_delta(line)
+        if MEMBER_SIGNATURE_START_RE.match(line):
+            signature_parts = [line.strip()]
+            while parse_member_method_line(" ".join(signature_parts)) is None:
+                line_index += 1
+                if line_index >= len(lines):
+                    break
+                continuation = strip_line_comment(lines[line_index]).strip()
+                signature_parts.append(continuation)
+                signature_delta += brace_delta(continuation)
+            line = " ".join(signature_parts)
+
         method = parse_member_method_line(line)
         if method:
             static, name, params, ret = method
@@ -436,11 +475,8 @@ def parse_class_body(
                     doc_module=module,
                 )
             )
-            depth = max(0, depth + brace_delta(line))
-            continue
-        if MEMBER_SIGNATURE_START_RE.match(line):
-            pending_signature = "{" not in line
-            depth = max(0, depth + brace_delta(line))
+            depth = max(0, depth + signature_delta)
+            line_index += 1
             continue
         field = MEMBER_FIELD_RE.match(line)
         if field:
@@ -460,6 +496,7 @@ def parse_class_body(
                 )
             )
         depth = max(0, depth + brace_delta(line))
+        line_index += 1
     return out
 
 
@@ -563,7 +600,7 @@ def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str
             line = raw.split("#", 1)[0].strip()
             if not line:
                 continue
-            module_match = re.fullmatch(r"module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            module_match = re.fullmatch(r"module\s+([A-Za-z_][A-Za-z0-9_/]*)\s*\{", line)
             if module_match:
                 current_module = module_match.group(1)
                 continue
@@ -582,6 +619,10 @@ def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str
                 index[(kind, current_module, name)] = (rel(root, path), lineno)
                 break
     return index
+
+
+def module_inventory_surface(module: str) -> tuple[str, str, str]:
+    return "stdlib-module", "stdlib", module
 
 
 def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
@@ -608,10 +649,11 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
         if entry.is_internal:
             continue
         source, line = source_for("fn", entry.module, entry.name)
-        surface, doc_module = stdlib_doc_surface_for_name("stdlib", entry.module, entry.name)
+        category, surface, doc_module = module_inventory_surface(entry.module)
+        surface, doc_module = stdlib_doc_surface_for_name(surface, doc_module, entry.name)
         out.append(
             item(
-                category="stdlib-module",
+                category=category,
                 namespace=entry.module,
                 name=entry.name,
                 kind="function",
@@ -624,11 +666,14 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
             )
         )
     for const in constants:
+        if getattr(const, "is_internal", False):
+            continue
         source, line = source_for("const", const.module, const.name)
-        surface, doc_module = stdlib_doc_surface_for_name("stdlib", const.module, const.name)
+        category, surface, doc_module = module_inventory_surface(const.module)
+        surface, doc_module = stdlib_doc_surface_for_name(surface, doc_module, const.name)
         out.append(
             item(
-                category="stdlib-module",
+                category=category,
                 namespace=const.module,
                 name=const.name,
                 kind="const",
@@ -641,10 +686,13 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
             )
         )
     for handle in handles:
+        if getattr(handle, "is_internal", False):
+            continue
         source, line = source_for("handle", handle.module, handle.name)
+        category, surface, doc_module = module_inventory_surface(handle.module)
         out.append(
             item(
-                category="stdlib-module",
+                category=category,
                 namespace=handle.module,
                 name=handle.name,
                 kind="handle",
@@ -652,14 +700,14 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                 summary=handle.doc,
                 source=source,
                 line=line,
-                doc_surface="stdlib",
-                doc_module=handle.module,
+                doc_surface=surface,
+                doc_module=doc_module,
             )
         )
         for field in handle.fields:
             out.append(
                 item(
-                    category="stdlib-module",
+                    category=category,
                     namespace=handle.module,
                     name=f"{handle.name}.{field.name}",
                     kind="field",
@@ -667,15 +715,18 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     summary="Handle field",
                     source=source,
                     line=line,
-                    doc_surface="stdlib",
-                    doc_module=handle.module,
+                    doc_surface=surface,
+                    doc_module=doc_module,
                 )
             )
     for record in records:
+        if getattr(record, "is_internal", False):
+            continue
         source, line = source_for("record", record.module, record.name)
+        category, surface, doc_module = module_inventory_surface(record.module)
         out.append(
             item(
-                category="stdlib-module",
+                category=category,
                 namespace=record.module,
                 name=record.name,
                 kind="type",
@@ -685,14 +736,14 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                 summary=record.doc,
                 source=source,
                 line=line,
-                doc_surface="stdlib",
-                doc_module=record.module,
+                doc_surface=surface,
+                doc_module=doc_module,
             )
         )
         for field in record.fields:
             out.append(
                 item(
-                    category="stdlib-module",
+                    category=category,
                     namespace=record.module,
                     name=f"{record.name}.{field.name}",
                     kind="field",
@@ -700,15 +751,18 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     summary="Record field",
                     source=source,
                     line=line,
-                    doc_surface="stdlib",
-                    doc_module=record.module,
+                    doc_surface=surface,
+                    doc_module=doc_module,
                 )
             )
     for enum in enums:
+        if getattr(enum, "is_internal", False):
+            continue
         source, line = source_for("enum", enum.module, enum.name)
+        category, surface, doc_module = module_inventory_surface(enum.module)
         out.append(
             item(
-                category="stdlib-module",
+                category=category,
                 namespace=enum.module,
                 name=enum.name,
                 kind="enum",
@@ -716,8 +770,8 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                 summary=enum.doc,
                 source=source,
                 line=line,
-                doc_surface="stdlib",
-                doc_module=enum.module,
+                doc_surface=surface,
+                doc_module=doc_module,
             )
         )
         for variant in enum.variants:
@@ -728,7 +782,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
             )
             out.append(
                 item(
-                    category="stdlib-module",
+                    category=category,
                     namespace=enum.module,
                     name=f"{enum.name}.{variant.name}",
                     kind="enum-variant",
@@ -736,8 +790,8 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     summary="Enum variant",
                     source=source,
                     line=line,
-                    doc_surface="stdlib",
-                    doc_module=enum.module,
+                    doc_surface=surface,
+                    doc_module=doc_module,
                 )
             )
     return out
@@ -869,8 +923,7 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
                     doc_module=doc_module,
                 )
             )
-        for match in TOP_FN_RE.finditer(text):
-            name = match.group(1)
+        for match, name, params, ret in parse_top_functions(text):
             if name not in exported:
                 continue
             surface, doc_module = stdlib_doc_surface_for_name("stdlib", module, name)
@@ -880,7 +933,7 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
                     namespace=module,
                     name=name,
                     kind="function",
-                    signature=normalize_signature(match.group("params"), match.group("ret")),
+                    signature=normalize_signature(params, ret),
                     source=rel(root, path),
                     line=line_for_offset(text, match.start()),
                     doc_surface=surface,

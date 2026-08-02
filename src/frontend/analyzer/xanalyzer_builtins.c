@@ -893,6 +893,12 @@ const char *xa_builtin_get_module_func_signature(const char *module_name, const 
     return member ? member->signature : NULL;
 }
 
+const char *xa_builtin_get_module_func_abi_signature(const char *module_name,
+                                                     const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
+    return member ? member->signature : NULL;
+}
+
 const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
     return member ? member->doc : NULL;
@@ -901,6 +907,12 @@ const char *xa_builtin_get_module_func_doc(const char *module_name, const char *
 const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *module_name,
                                                                    const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? &member->effect_contract : NULL;
+}
+
+const XaEffectContract *
+xa_builtin_get_module_func_abi_effect_contract(const char *module_name, const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
     return member ? &member->effect_contract : NULL;
 }
 
@@ -1008,6 +1020,19 @@ XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *recor
     return type ? type : xr_type_new_error(X);
 }
 
+static const char *xa_builtin_enum_nominal_owner(const XaBuiltinEnum *enum_decl) {
+    if (!enum_decl)
+        return NULL;
+    for (int i = 0; i < builtin_module_count; i++) {
+        const XaBuiltinModule *module = &builtin_modules[i];
+        for (int j = 0; j < module->enum_count; j++) {
+            if (&module->enums[j] == enum_decl)
+                return module->name;
+        }
+    }
+    return NULL;
+}
+
 XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
                                   XaEnumInfo **out_info) {
     if (out_info)
@@ -1015,7 +1040,11 @@ XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl
     if (!enum_decl || !enum_decl->name || enum_decl->variant_count <= 0 || !enum_decl->variants)
         return xr_type_new_error(X);
 
-    XaEnumInfo *info = xa_enum_info_new(enum_decl->name, (uint32_t) enum_decl->variant_count);
+    const char *nominal_owner = xa_builtin_enum_nominal_owner(enum_decl);
+    if (!nominal_owner)
+        return xr_type_new_error(X);
+    XaEnumInfo *info =
+        xa_enum_info_new(nominal_owner, enum_decl->name, (uint32_t) enum_decl->variant_count);
     if (!info)
         return xr_type_new_error(X);
     for (int i = 0; i < enum_decl->variant_count; i++) {

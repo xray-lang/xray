@@ -1942,7 +1942,80 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
+    {
+        .name = "request",
+        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?",
+        .summary = "Execute one typed HTTP/2 request",
+    },
+    {
+        .name = "supported",
+        .signature = "(): bool",
+        .summary = "Whether the built-in HTTP/2 standard module is available on this target",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
+    {
+        .name = "BufReader",
+        .signature = "BufReader",
+        .summary = "",
+    },
+    {
+        .name = "BufReader.close",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "BufReader.open",
+        .signature = "(path: Path, chunkSize: int = 131072): BufReader?",
+        .summary = "",
+    },
+    {
+        .name = "BufReader.readLine",
+        .signature = "(): string?",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter",
+        .signature = "BufWriter",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.constructor",
+        .signature = "(path: Path, capacity: int = 131072): ()",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.flush",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.reset",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.size",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.write",
+        .signature = "(data: Slice<byte>): int",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.writeBytes",
+        .signature = "(data: Array<byte>): int",
+        .summary = "",
+    },
+    {
+        .name = "BufWriter.writeString",
+        .signature = "(data: string): int",
+        .summary = "",
+    },
     {
         .name = "File",
         .signature = "File",
@@ -1971,77 +2044,97 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "FileStat",
         .signature = "FileStat",
-        .summary = "Native handle type",
+        .summary = "",
     },
     {
         .name = "FileStat.atime",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.ctime",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.gid",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.isDir",
-        .signature = "const bool",
-        .summary = "Handle field",
+        .signature = ": bool",
+        .summary = "",
     },
     {
         .name = "FileStat.isFile",
-        .signature = "const bool",
-        .summary = "Handle field",
+        .signature = ": bool",
+        .summary = "",
     },
     {
         .name = "FileStat.isSymlink",
-        .signature = "const bool",
-        .summary = "Handle field",
+        .signature = ": bool",
+        .summary = "",
     },
     {
         .name = "FileStat.mode",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.mtime",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.size",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "FileStat.uid",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "LineIterator",
+        .signature = "LineIterator",
+        .summary = "",
+    },
+    {
+        .name = "LineIterator.constructor",
+        .signature = "(reader: BufReader): ()",
+        .summary = "",
+    },
+    {
+        .name = "LineIterator.hasNext",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "LineIterator.next",
+        .signature = "(): string?",
+        .summary = "",
     },
     {
         .name = "appendFile",
         .signature = "(path: Path, data: string): bool",
-        .summary = "Append string to file",
+        .summary = "",
     },
     {
         .name = "chdir",
         .signature = "(path: Path): bool",
-        .summary = "Change working directory",
+        .summary = "",
     },
     {
         .name = "chmod",
         .signature = "(path: Path, mode: int): bool",
-        .summary = "Change file permissions",
+        .summary = "",
     },
     {
         .name = "copyFile",
         .signature = "(src: Path, dst: Path): bool",
-        .summary = "Copy a file",
+        .summary = "",
     },
     {
         .name = "cwd",
@@ -2051,107 +2144,112 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "exists",
         .signature = "(path: Path): bool",
-        .summary = "Check if path exists",
+        .summary = "",
     },
     {
         .name = "fileSize",
         .signature = "(path: Path): int",
-        .summary = "Get file size in bytes",
+        .summary = "",
     },
     {
         .name = "isDir",
         .signature = "(path: Path): bool",
-        .summary = "Check if path is a directory",
+        .summary = "",
     },
     {
         .name = "isFile",
         .signature = "(path: Path): bool",
-        .summary = "Check if path is a file",
+        .summary = "",
     },
     {
         .name = "isSymlink",
         .signature = "(path: Path): bool",
-        .summary = "Check if path is a symlink",
+        .summary = "",
+    },
+    {
+        .name = "lines",
+        .signature = "(path: Path): LineIterator?",
+        .summary = "",
     },
     {
         .name = "mkdir",
         .signature = "(path: Path): bool",
-        .summary = "Create directory",
+        .summary = "",
     },
     {
         .name = "mkdirp",
         .signature = "(path: Path): bool",
-        .summary = "Create directory recursively",
+        .summary = "",
     },
     {
         .name = "readDir",
-        .signature = "(p: Path): Array<Path>",
+        .signature = "(path: Path): Array<Path>",
         .summary = "",
     },
     {
         .name = "readDirRecursive",
-        .signature = "(p: Path): Array<Path>",
+        .signature = "(path: Path): Array<Path>",
         .summary = "",
     },
     {
         .name = "readFile",
         .signature = "(path: Path): string?",
-        .summary = "Read entire file as string",
+        .summary = "",
     },
     {
         .name = "readFileBytes",
         .signature = "(path: Path): Array<byte>?",
-        .summary = "Read entire file as byte array",
+        .summary = "",
     },
     {
         .name = "readLines",
         .signature = "(path: Path): Array<string>",
-        .summary = "Read file as lines",
+        .summary = "",
     },
     {
         .name = "readStdin",
         .signature = "(): string?",
-        .summary = "Read all data from standard input",
+        .summary = "",
     },
     {
         .name = "readStdinBytes",
         .signature = "(): Array<byte>?",
-        .summary = "Read all standard input as binary bytes",
+        .summary = "",
     },
     {
         .name = "readlink",
-        .signature = "(p: Path): Path?",
+        .signature = "(path: Path): Path?",
         .summary = "",
     },
     {
         .name = "realpath",
-        .signature = "(p: Path): Path?",
+        .signature = "(path: Path): Path?",
         .summary = "",
     },
     {
         .name = "remove",
         .signature = "(path: Path): bool",
-        .summary = "Remove a file",
+        .summary = "",
     },
     {
         .name = "removeAll",
         .signature = "(path: Path): bool",
-        .summary = "Remove directory recursively",
+        .summary = "",
     },
     {
         .name = "rename",
-        .signature = "(old: Path, new: Path): bool",
-        .summary = "Rename a file",
+        .signature = "(old: Path, newPath: Path): bool",
+        .summary = "",
     },
     {
         .name = "stat",
         .signature = "(path: Path): FileStat?",
-        .summary = "Get file stat info",
+        .summary = "",
     },
     {
         .name = "symlink",
         .signature = "(target: Path, link: Path): bool",
-        .summary = "Create symbolic link",
+        .summary = "",
     },
     {
         .name = "tempDir",
@@ -2166,27 +2264,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "touch",
         .signature = "(path: Path): bool",
-        .summary = "Create or update file timestamp",
+        .summary = "",
     },
     {
         .name = "writeFile",
         .signature = "(path: Path, data: string): bool",
-        .summary = "Write string to file",
+        .summary = "",
     },
     {
         .name = "writeFileBytes",
         .signature = "(path: Path, data: Array<byte>): bool",
-        .summary = "Write byte array to file",
+        .summary = "",
     },
     {
         .name = "writeStderr",
         .signature = "(data: string): bool",
-        .summary = "Write text to standard error without adding a newline",
+        .summary = "",
     },
     {
         .name = "writeStdout",
         .signature = "(data: string): bool",
-        .summary = "Write text to standard output without adding a newline",
+        .summary = "",
     },
 };
 
@@ -2845,18 +2943,83 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "CopyBidirectionalResult",
-        .signature = "{ aToB: int, bToA: int }",
-        .summary = "Byte counts copied in each direction by copyBidirectional",
+        .signature = "CopyBidirectionalResult",
+        .summary = "",
     },
     {
         .name = "CopyBidirectionalResult.aToB",
-        .signature = "const int",
-        .summary = "Record field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "CopyBidirectionalResult.bToA",
-        .signature = "const int",
-        .summary = "Record field",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "CopyBidirectionalResult.constructor",
+        .signature = "(aToB: int, bToA: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "DialOptions",
+        .signature = "DialOptions",
+        .summary = "",
+    },
+    {
+        .name = "DialOptions.constructor",
+        .signature = "(timeoutMs: int = 30000, tls: bool = false): ()",
+        .summary = "",
+    },
+    {
+        .name = "DialOptions.timeoutMs",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "DialOptions.tls",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Endpoint",
+        .signature = "Endpoint",
+        .summary = "",
+    },
+    {
+        .name = "Endpoint.constructor",
+        .signature = "(host: string, port: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "Endpoint.host",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Endpoint.port",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "IpAddress",
+        .signature = "IpAddress",
+        .summary = "",
+    },
+    {
+        .name = "IpAddress.constructor",
+        .signature = "(value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "IpAddress.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "IpAddress.value",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "NetError",
@@ -2916,157 +3079,172 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "UdpPacket",
         .signature = "UdpPacket",
-        .summary = "Native handle type",
+        .summary = "",
+    },
+    {
+        .name = "UdpPacket.constructor",
+        .signature = "(data: string, host: string, port: int): ()",
+        .summary = "",
     },
     {
         .name = "UdpPacket.data",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "UdpPacket.host",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "UdpPacket.port",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "accept",
         .signature = "(listener: NetListener): NetConn?",
-        .summary = "Accept a new connection",
+        .summary = "",
     },
     {
         .name = "close",
         .signature = "(handle: NetConn | NetListener): ()",
-        .summary = "Close a connection or listener",
+        .summary = "",
     },
     {
         .name = "copy",
-        .signature = "(src: NetConn, dst: NetConn, bufferSize?: int): int",
-        .summary = "Copy a TCP/TLS stream using a reusable native buffer",
+        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = 65536): int",
+        .summary = "",
     },
     {
         .name = "copyBidirectional",
         .signature = "(a: NetConn, b: NetConn): CopyBidirectionalResult",
-        .summary = "Copy two TCP/TLS streams in both directions",
+        .summary = "",
     },
     {
         .name = "dial",
-        .signature = "(host: string, port: int, timeout?: int): NetConn?",
-        .summary = "Dial a TCP connection",
+        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
+        .summary = "",
+    },
+    {
+        .name = "dialEndpoint",
+        .signature = "(endpoint: Endpoint, options: DialOptions = DialOptions(): ()",
+        .summary = "",
     },
     {
         .name = "dialTLS",
-        .signature = "(host: string, port: int, timeout?: int): NetConn?",
-        .summary = "Dial a TLS connection",
+        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
+        .summary = "",
     },
     {
         .name = "fd",
         .signature = "(handle: NetConn | NetListener): int",
-        .summary = "Get fd from handle",
+        .summary = "",
     },
     {
         .name = "hasTLS",
         .signature = "(): bool",
-        .summary = "Check if TLS support is available",
+        .summary = "",
     },
     {
         .name = "lastErrno",
         .signature = "(handle: NetConn | NetListener): int",
-        .summary = "Return the last system errno",
+        .summary = "",
     },
     {
         .name = "lastError",
-        .signature = "(handle: NetConn | NetListener): string?",
-        .summary = "Return the last network error name",
+        .signature = "(handle: NetConn | NetListener): NetError?",
+        .summary = "",
     },
     {
         .name = "listen",
-        .signature = "(port: int, backlog?: int): NetListener?",
-        .summary = "Start listening on a port",
+        .signature = "(port: int, backlog: int = 1024): NetListener?",
+        .summary = "",
     },
     {
         .name = "lookup",
         .signature = "(hostname: string): string?",
-        .summary = "DNS lookup",
+        .summary = "",
     },
     {
         .name = "read",
-        .signature = "(conn: NetConn, maxlen?: int): string?",
-        .summary = "Read data from connection",
+        .signature = "(conn: NetConn, maxlen: int = 4096): string?",
+        .summary = "",
     },
     {
         .name = "readInto",
-        .signature = "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int",
-        .summary = "Read data into a reusable Array<byte> buffer",
+        .signature = "(conn: NetConn, buffer: Array<byte>, maxlen: int = 1048576): int",
+        .summary = "",
     },
     {
         .name = "recvFrom",
-        .signature = "(handle: NetConn, maxlen?: int): UdpPacket?",
-        .summary = "Receive UDP datagram (returns flat handle: data, host, port)",
+        .signature = "(handle: NetConn, maxlen: int = 4096): UdpPacket?",
+        .summary = "",
+    },
+    {
+        .name = "resolve",
+        .signature = "(hostname: string): IpAddress?",
+        .summary = "",
     },
     {
         .name = "sendTo",
         .signature = "(handle: NetConn, data: string, host: string, port: int): int",
-        .summary = "Send UDP datagram",
+        .summary = "",
     },
     {
         .name = "setAcceptDeadline",
         .signature = "(listener: NetListener, deadline: int): bool",
-        .summary = "Set accept deadline in monotonic ms",
+        .summary = "",
     },
     {
         .name = "setDeadline",
         .signature = "(conn: NetConn, deadline: int): bool",
-        .summary = "Set read and write deadlines in monotonic ms",
+        .summary = "",
     },
     {
         .name = "setReadDeadline",
         .signature = "(conn: NetConn, deadline: int): bool",
-        .summary = "Set read deadline in monotonic ms",
+        .summary = "",
     },
     {
         .name = "setWriteDeadline",
         .signature = "(conn: NetConn, deadline: int): bool",
-        .summary = "Set write deadline in monotonic ms",
+        .summary = "",
     },
     {
         .name = "shutdown",
         .signature = "(conn: NetConn): bool",
-        .summary = "Shut down both sides of a TCP connection",
+        .summary = "",
     },
     {
         .name = "shutdownRead",
         .signature = "(conn: NetConn): bool",
-        .summary = "Shut down the read side of a TCP connection",
+        .summary = "",
     },
     {
         .name = "shutdownWrite",
         .signature = "(conn: NetConn): bool",
-        .summary = "Shut down the write side of a TCP connection",
+        .summary = "",
     },
     {
         .name = "udpBind",
-        .signature = "(port: int, addr?: string): NetConn?",
-        .summary = "Bind a UDP socket",
+        .signature = "(port: int, address: string = \"\"): NetConn?",
+        .summary = "",
     },
     {
         .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string, timeout?: int): NetConn?",
-        .summary = "Upgrade connection to TLS",
+        .signature = "(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?",
+        .summary = "",
     },
     {
         .name = "write",
         .signature = "(conn: NetConn, data: string): int",
-        .summary = "Write data to connection",
+        .summary = "",
     },
     {
         .name = "writeBytes",
         .signature = "(conn: NetConn, data: Array<byte>): int",
-        .summary = "Write Array<byte> data to connection",
+        .summary = "",
     },
 };
 
@@ -3074,22 +3252,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "ExecResult",
         .signature = "ExecResult",
-        .summary = "Native handle type",
+        .summary = "",
+    },
+    {
+        .name = "ExecResult.constructor",
+        .signature = "(stdout: string, stderr: string, exitCode: int): ()",
+        .summary = "",
     },
     {
         .name = "ExecResult.exitCode",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "ExecResult.stderr",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "ExecResult.stdout",
-        .signature = "const string",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "arch",
@@ -3097,24 +3280,19 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .summary = "Current CPU architecture name",
     },
     {
-        .name = "chdir",
-        .signature = "(path: Path): bool",
-        .summary = "Change working directory",
-    },
-    {
         .name = "clock",
         .signature = "(): float",
-        .summary = "Get process CPU time in seconds",
+        .summary = "",
     },
     {
         .name = "cpuCount",
         .signature = "(): int",
-        .summary = "Get number of CPU cores",
+        .summary = "",
     },
     {
         .name = "environ",
         .signature = "(): Map<string, string>",
-        .summary = "Get all environment variables",
+        .summary = "",
     },
     {
         .name = "eol",
@@ -3123,58 +3301,58 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "exec",
-        .signature = "(cmd: string): ExecResult?",
-        .summary = "Execute shell command",
+        .signature = "(command: string): ExecResult?",
+        .summary = "",
     },
     {
         .name = "exit",
-        .signature = "(code?: int): ()",
-        .summary = "Exit process",
+        .signature = "(code: int = 0): ()",
+        .summary = "",
     },
     {
         .name = "freeMemory",
         .signature = "(): int",
-        .summary = "Get available system memory in bytes",
+        .summary = "",
     },
     {
         .name = "getcwd",
         .signature = "(): string",
-        .summary = "Get current working directory",
+        .summary = "",
     },
     {
         .name = "getenv",
         .signature = "(name: string): string?",
-        .summary = "Get environment variable",
+        .summary = "",
     },
     {
         .name = "getpid",
         .signature = "(): int",
-        .summary = "Get process ID",
+        .summary = "",
     },
     {
         .name = "gid",
         .signature = "(): int",
-        .summary = "Get group ID",
+        .summary = "",
     },
     {
         .name = "homedir",
         .signature = "(): string?",
-        .summary = "Get user home directory",
+        .summary = "",
     },
     {
         .name = "hostname",
         .signature = "(): string",
-        .summary = "Get hostname",
+        .summary = "",
     },
     {
         .name = "kill",
-        .signature = "(pid: int, signal?: int): bool",
-        .summary = "Send signal to process",
+        .signature = "(pid: int, signal: int = 15): bool",
+        .summary = "",
     },
     {
         .name = "loadavg",
         .signature = "(): Array<float>",
-        .summary = "Get system load averages (1, 5, 15 min)",
+        .summary = "",
     },
     {
         .name = "platform",
@@ -3184,7 +3362,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "ppid",
         .signature = "(): int",
-        .summary = "Get parent process ID",
+        .summary = "",
     },
     {
         .name = "sep",
@@ -3194,47 +3372,47 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "setenv",
         .signature = "(name: string, value: string): bool",
-        .summary = "Set environment variable",
+        .summary = "",
     },
     {
         .name = "sleep",
         .signature = "(ms: int): ()",
-        .summary = "Sleep for milliseconds",
+        .summary = "",
     },
     {
         .name = "spawn",
         .signature = "(program: string, args: Array<string>): ExecResult?",
-        .summary = "Execute a program without a shell (injection-safe argv)",
+        .summary = "",
     },
     {
         .name = "tmpdir",
         .signature = "(): string",
-        .summary = "Get temporary directory path",
+        .summary = "",
     },
     {
         .name = "totalMemory",
         .signature = "(): int",
-        .summary = "Get total system memory in bytes",
+        .summary = "",
     },
     {
         .name = "uid",
         .signature = "(): int",
-        .summary = "Get user ID",
+        .summary = "",
     },
     {
         .name = "unsetenv",
         .signature = "(name: string): bool",
-        .summary = "Unset environment variable",
+        .summary = "",
     },
     {
         .name = "uptime",
         .signature = "(): float",
-        .summary = "Get system uptime in seconds",
+        .summary = "",
     },
     {
         .name = "username",
         .signature = "(): string?",
-        .summary = "Get current user name",
+        .summary = "",
     },
 };
 
@@ -8315,6 +8493,26 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_http) / sizeof(_symbols_http[0])),
     },
     {
+        .module = "http2",
+        .summary = "HTTP/2 capability and typed request transport",
+        .body =
+            "# http2 module\n"
+            "\n"
+            "HTTP/2 capability and typed request transport.\n"
+            "\n"
+            "Usage: `import http2` then call `http2.function()`.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?` | Execute one typed HTTP/2 request |\n"
+            "| `http2.supported` | `(): bool` | Whether the built-in HTTP/2 standard module is available on this target |\n"
+            "",
+        .symbols = _symbols_http2,
+        .symbol_count = (int)(sizeof(_symbols_http2) / sizeof(_symbols_http2[0])),
+    },
+    {
         .module = "io",
         .summary = "File I/O operations",
         .body =
@@ -8328,55 +8526,72 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `BufReader` | `BufReader` |  |\n"
+            "| `BufReader.close` | `(): bool` |  |\n"
+            "| `BufReader.open` | `(path: Path, chunkSize: int = 131072): BufReader?` |  |\n"
+            "| `BufReader.readLine` | `(): string?` |  |\n"
+            "| `BufWriter` | `BufWriter` |  |\n"
+            "| `BufWriter.constructor` | `(path: Path, capacity: int = 131072): ()` |  |\n"
+            "| `BufWriter.flush` | `(): bool` |  |\n"
+            "| `BufWriter.reset` | `(): ()` |  |\n"
+            "| `BufWriter.size` | `(): int` |  |\n"
+            "| `BufWriter.write` | `(data: Slice<byte>): int` |  |\n"
+            "| `BufWriter.writeBytes` | `(data: Array<byte>): int` |  |\n"
+            "| `BufWriter.writeString` | `(data: string): int` |  |\n"
             "| `File` | `File` |  |\n"
             "| `File.close` | `(): bool` |  |\n"
             "| `File.open` | `(path: Path): File?` |  |\n"
             "| `File.read` | `(maxBytes: int = 131072): Array<byte>?` |  |\n"
             "| `File.stdin` | `(): File` |  |\n"
-            "| `io.FileStat` | `FileStat` | Native handle type |\n"
-            "| `io.FileStat.atime` | `const int` | Handle field |\n"
-            "| `io.FileStat.ctime` | `const int` | Handle field |\n"
-            "| `io.FileStat.gid` | `const int` | Handle field |\n"
-            "| `io.FileStat.isDir` | `const bool` | Handle field |\n"
-            "| `io.FileStat.isFile` | `const bool` | Handle field |\n"
-            "| `io.FileStat.isSymlink` | `const bool` | Handle field |\n"
-            "| `io.FileStat.mode` | `const int` | Handle field |\n"
-            "| `io.FileStat.mtime` | `const int` | Handle field |\n"
-            "| `io.FileStat.size` | `const int` | Handle field |\n"
-            "| `io.FileStat.uid` | `const int` | Handle field |\n"
-            "| `io.appendFile` | `(path: Path, data: string): bool` | Append string to file |\n"
-            "| `io.chdir` | `(path: Path): bool` | Change working directory |\n"
-            "| `io.chmod` | `(path: Path, mode: int): bool` | Change file permissions |\n"
-            "| `io.copyFile` | `(src: Path, dst: Path): bool` | Copy a file |\n"
+            "| `FileStat` | `FileStat` |  |\n"
+            "| `FileStat.atime` | `: int` |  |\n"
+            "| `FileStat.ctime` | `: int` |  |\n"
+            "| `FileStat.gid` | `: int` |  |\n"
+            "| `FileStat.isDir` | `: bool` |  |\n"
+            "| `FileStat.isFile` | `: bool` |  |\n"
+            "| `FileStat.isSymlink` | `: bool` |  |\n"
+            "| `FileStat.mode` | `: int` |  |\n"
+            "| `FileStat.mtime` | `: int` |  |\n"
+            "| `FileStat.size` | `: int` |  |\n"
+            "| `FileStat.uid` | `: int` |  |\n"
+            "| `LineIterator` | `LineIterator` |  |\n"
+            "| `LineIterator.constructor` | `(reader: BufReader): ()` |  |\n"
+            "| `LineIterator.hasNext` | `(): bool` |  |\n"
+            "| `LineIterator.next` | `(): string?` |  |\n"
+            "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n"
+            "| `io.chdir` | `(path: Path): bool` |  |\n"
+            "| `io.chmod` | `(path: Path, mode: int): bool` |  |\n"
+            "| `io.copyFile` | `(src: Path, dst: Path): bool` |  |\n"
             "| `io.cwd` | `(): Path` |  |\n"
-            "| `io.exists` | `(path: Path): bool` | Check if path exists |\n"
-            "| `io.fileSize` | `(path: Path): int` | Get file size in bytes |\n"
-            "| `io.isDir` | `(path: Path): bool` | Check if path is a directory |\n"
-            "| `io.isFile` | `(path: Path): bool` | Check if path is a file |\n"
-            "| `io.isSymlink` | `(path: Path): bool` | Check if path is a symlink |\n"
-            "| `io.mkdir` | `(path: Path): bool` | Create directory |\n"
-            "| `io.mkdirp` | `(path: Path): bool` | Create directory recursively |\n"
-            "| `io.readDir` | `(p: Path): Array<Path>` |  |\n"
-            "| `io.readDirRecursive` | `(p: Path): Array<Path>` |  |\n"
-            "| `io.readFile` | `(path: Path): string?` | Read entire file as string |\n"
-            "| `io.readFileBytes` | `(path: Path): Array<byte>?` | Read entire file as byte array |\n"
-            "| `io.readLines` | `(path: Path): Array<string>` | Read file as lines |\n"
-            "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
-            "| `io.readStdinBytes` | `(): Array<byte>?` | Read all standard input as binary bytes |\n"
-            "| `io.readlink` | `(p: Path): Path?` |  |\n"
-            "| `io.realpath` | `(p: Path): Path?` |  |\n"
-            "| `io.remove` | `(path: Path): bool` | Remove a file |\n"
-            "| `io.removeAll` | `(path: Path): bool` | Remove directory recursively |\n"
-            "| `io.rename` | `(old: Path, new: Path): bool` | Rename a file |\n"
-            "| `io.stat` | `(path: Path): FileStat?` | Get file stat info |\n"
-            "| `io.symlink` | `(target: Path, link: Path): bool` | Create symbolic link |\n"
+            "| `io.exists` | `(path: Path): bool` |  |\n"
+            "| `io.fileSize` | `(path: Path): int` |  |\n"
+            "| `io.isDir` | `(path: Path): bool` |  |\n"
+            "| `io.isFile` | `(path: Path): bool` |  |\n"
+            "| `io.isSymlink` | `(path: Path): bool` |  |\n"
+            "| `io.lines` | `(path: Path): LineIterator?` |  |\n"
+            "| `io.mkdir` | `(path: Path): bool` |  |\n"
+            "| `io.mkdirp` | `(path: Path): bool` |  |\n"
+            "| `io.readDir` | `(path: Path): Array<Path>` |  |\n"
+            "| `io.readDirRecursive` | `(path: Path): Array<Path>` |  |\n"
+            "| `io.readFile` | `(path: Path): string?` |  |\n"
+            "| `io.readFileBytes` | `(path: Path): Array<byte>?` |  |\n"
+            "| `io.readLines` | `(path: Path): Array<string>` |  |\n"
+            "| `io.readStdin` | `(): string?` |  |\n"
+            "| `io.readStdinBytes` | `(): Array<byte>?` |  |\n"
+            "| `io.readlink` | `(path: Path): Path?` |  |\n"
+            "| `io.realpath` | `(path: Path): Path?` |  |\n"
+            "| `io.remove` | `(path: Path): bool` |  |\n"
+            "| `io.removeAll` | `(path: Path): bool` |  |\n"
+            "| `io.rename` | `(old: Path, newPath: Path): bool` |  |\n"
+            "| `io.stat` | `(path: Path): FileStat?` |  |\n"
+            "| `io.symlink` | `(target: Path, link: Path): bool` |  |\n"
             "| `io.tempDir` | `(): Path?` |  |\n"
             "| `io.tempFile` | `(): Path?` |  |\n"
-            "| `io.touch` | `(path: Path): bool` | Create or update file timestamp |\n"
-            "| `io.writeFile` | `(path: Path, data: string): bool` | Write string to file |\n"
-            "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` | Write byte array to file |\n"
-            "| `io.writeStderr` | `(data: string): bool` | Write text to standard error without adding a newline |\n"
-            "| `io.writeStdout` | `(data: string): bool` | Write text to standard output without adding a newline |\n"
+            "| `io.touch` | `(path: Path): bool` |  |\n"
+            "| `io.writeFile` | `(path: Path, data: string): bool` |  |\n"
+            "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` |  |\n"
+            "| `io.writeStderr` | `(data: string): bool` |  |\n"
+            "| `io.writeStdout` | `(data: string): bool` |  |\n"
             "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
@@ -8637,9 +8852,22 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `net.CopyBidirectionalResult` | `{ aToB: int, bToA: int }` | Byte counts copied in each direction by copyBidirectional |\n"
-            "| `net.CopyBidirectionalResult.aToB` | `const int` | Record field |\n"
-            "| `net.CopyBidirectionalResult.bToA` | `const int` | Record field |\n"
+            "| `CopyBidirectionalResult` | `CopyBidirectionalResult` |  |\n"
+            "| `CopyBidirectionalResult.aToB` | `: int` |  |\n"
+            "| `CopyBidirectionalResult.bToA` | `: int` |  |\n"
+            "| `CopyBidirectionalResult.constructor` | `(aToB: int, bToA: int): ()` |  |\n"
+            "| `DialOptions` | `DialOptions` |  |\n"
+            "| `DialOptions.constructor` | `(timeoutMs: int = 30000, tls: bool = false): ()` |  |\n"
+            "| `DialOptions.timeoutMs` | `: int` |  |\n"
+            "| `DialOptions.tls` | `: bool` |  |\n"
+            "| `Endpoint` | `Endpoint` |  |\n"
+            "| `Endpoint.constructor` | `(host: string, port: int): ()` |  |\n"
+            "| `Endpoint.host` | `: string` |  |\n"
+            "| `Endpoint.port` | `: int` |  |\n"
+            "| `IpAddress` | `IpAddress` |  |\n"
+            "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
+            "| `IpAddress.toString` | `(): string` |  |\n"
+            "| `IpAddress.value` | `: string` |  |\n"
             "| `net.NetError` | `enum NetError` | Typed failure from native network operations |\n"
             "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
             "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
@@ -8651,37 +8879,40 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
             "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
             "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
-            "| `net.UdpPacket` | `UdpPacket` | Native handle type |\n"
-            "| `net.UdpPacket.data` | `const string` | Handle field |\n"
-            "| `net.UdpPacket.host` | `const string` | Handle field |\n"
-            "| `net.UdpPacket.port` | `const int` | Handle field |\n"
-            "| `net.accept` | `(listener: NetListener): NetConn?` | Accept a new connection |\n"
-            "| `net.close` | `(handle: NetConn \\| NetListener): ()` | Close a connection or listener |\n"
-            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize?: int): int` | Copy a TCP/TLS stream using a reusable native buffer |\n"
-            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` | Copy two TCP/TLS streams in both directions |\n"
-            "| `net.dial` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TCP connection |\n"
-            "| `net.dialTLS` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TLS connection |\n"
-            "| `net.fd` | `(handle: NetConn \\| NetListener): int` | Get fd from handle |\n"
-            "| `net.hasTLS` | `(): bool` | Check if TLS support is available |\n"
-            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` | Return the last system errno |\n"
-            "| `net.lastError` | `(handle: NetConn \\| NetListener): string?` | Return the last network error name |\n"
-            "| `net.listen` | `(port: int, backlog?: int): NetListener?` | Start listening on a port |\n"
-            "| `net.lookup` | `(hostname: string): string?` | DNS lookup |\n"
-            "| `net.read` | `(conn: NetConn, maxlen?: int): string?` | Read data from connection |\n"
-            "| `net.readInto` | `(conn: NetConn, buffer: Array<byte>, maxlen?: int): int` | Read data into a reusable Array<byte> buffer |\n"
-            "| `net.recvFrom` | `(handle: NetConn, maxlen?: int): UdpPacket?` | Receive UDP datagram (returns flat handle: data, host, port) |\n"
-            "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` | Send UDP datagram |\n"
-            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` | Set accept deadline in monotonic ms |\n"
-            "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` | Set read and write deadlines in monotonic ms |\n"
-            "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` | Set read deadline in monotonic ms |\n"
-            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: int): bool` | Set write deadline in monotonic ms |\n"
-            "| `net.shutdown` | `(conn: NetConn): bool` | Shut down both sides of a TCP connection |\n"
-            "| `net.shutdownRead` | `(conn: NetConn): bool` | Shut down the read side of a TCP connection |\n"
-            "| `net.shutdownWrite` | `(conn: NetConn): bool` | Shut down the write side of a TCP connection |\n"
-            "| `net.udpBind` | `(port: int, addr?: string): NetConn?` | Bind a UDP socket |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout?: int): NetConn?` | Upgrade connection to TLS |\n"
-            "| `net.write` | `(conn: NetConn, data: string): int` | Write data to connection |\n"
-            "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` | Write Array<byte> data to connection |\n"
+            "| `UdpPacket` | `UdpPacket` |  |\n"
+            "| `UdpPacket.constructor` | `(data: string, host: string, port: int): ()` |  |\n"
+            "| `UdpPacket.data` | `: string` |  |\n"
+            "| `UdpPacket.host` | `: string` |  |\n"
+            "| `UdpPacket.port` | `: int` |  |\n"
+            "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
+            "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n"
+            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = 65536): int` |  |\n"
+            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
+            "| `net.dial` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions = DialOptions(): ()` |  |\n"
+            "| `net.dialTLS` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.fd` | `(handle: NetConn \\| NetListener): int` |  |\n"
+            "| `net.hasTLS` | `(): bool` |  |\n"
+            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` |  |\n"
+            "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
+            "| `net.listen` | `(port: int, backlog: int = 1024): NetListener?` |  |\n"
+            "| `net.lookup` | `(hostname: string): string?` |  |\n"
+            "| `net.read` | `(conn: NetConn, maxlen: int = 4096): string?` |  |\n"
+            "| `net.readInto` | `(conn: NetConn, buffer: Array<byte>, maxlen: int = 1048576): int` |  |\n"
+            "| `net.recvFrom` | `(handle: NetConn, maxlen: int = 4096): UdpPacket?` |  |\n"
+            "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
+            "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` |  |\n"
+            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` |  |\n"
+            "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
+            "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
+            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
+            "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
+            "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
+            "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
+            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn?` |  |\n"
+            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.write` | `(conn: NetConn, data: string): int` |  |\n"
+            "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` |  |\n"
             "",
         .symbols = _symbols_net,
         .symbol_count = (int)(sizeof(_symbols_net) / sizeof(_symbols_net[0])),
@@ -8700,39 +8931,39 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `os.ExecResult` | `ExecResult` | Native handle type |\n"
-            "| `os.ExecResult.exitCode` | `const int` | Handle field |\n"
-            "| `os.ExecResult.stderr` | `const string` | Handle field |\n"
-            "| `os.ExecResult.stdout` | `const string` | Handle field |\n"
+            "| `ExecResult` | `ExecResult` |  |\n"
+            "| `ExecResult.constructor` | `(stdout: string, stderr: string, exitCode: int): ()` |  |\n"
+            "| `ExecResult.exitCode` | `: int` |  |\n"
+            "| `ExecResult.stderr` | `: string` |  |\n"
+            "| `ExecResult.stdout` | `: string` |  |\n"
             "| `os.arch` | `: string` | Current CPU architecture name |\n"
-            "| `os.chdir` | `(path: Path): bool` | Change working directory |\n"
-            "| `os.clock` | `(): float` | Get process CPU time in seconds |\n"
-            "| `os.cpuCount` | `(): int` | Get number of CPU cores |\n"
-            "| `os.environ` | `(): Map<string, string>` | Get all environment variables |\n"
+            "| `os.clock` | `(): float` |  |\n"
+            "| `os.cpuCount` | `(): int` |  |\n"
+            "| `os.environ` | `(): Map<string, string>` |  |\n"
             "| `os.eol` | `: string` | Platform end-of-line string |\n"
-            "| `os.exec` | `(cmd: string): ExecResult?` | Execute shell command |\n"
-            "| `os.exit` | `(code?: int): ()` | Exit process |\n"
-            "| `os.freeMemory` | `(): int` | Get available system memory in bytes |\n"
-            "| `os.getcwd` | `(): string` | Get current working directory |\n"
-            "| `os.getenv` | `(name: string): string?` | Get environment variable |\n"
-            "| `os.getpid` | `(): int` | Get process ID |\n"
-            "| `os.gid` | `(): int` | Get group ID |\n"
-            "| `os.homedir` | `(): string?` | Get user home directory |\n"
-            "| `os.hostname` | `(): string` | Get hostname |\n"
-            "| `os.kill` | `(pid: int, signal?: int): bool` | Send signal to process |\n"
-            "| `os.loadavg` | `(): Array<float>` | Get system load averages (1, 5, 15 min) |\n"
+            "| `os.exec` | `(command: string): ExecResult?` |  |\n"
+            "| `os.exit` | `(code: int = 0): ()` |  |\n"
+            "| `os.freeMemory` | `(): int` |  |\n"
+            "| `os.getcwd` | `(): string` |  |\n"
+            "| `os.getenv` | `(name: string): string?` |  |\n"
+            "| `os.getpid` | `(): int` |  |\n"
+            "| `os.gid` | `(): int` |  |\n"
+            "| `os.homedir` | `(): string?` |  |\n"
+            "| `os.hostname` | `(): string` |  |\n"
+            "| `os.kill` | `(pid: int, signal: int = 15): bool` |  |\n"
+            "| `os.loadavg` | `(): Array<float>` |  |\n"
             "| `os.platform` | `: string` | Current operating system name |\n"
-            "| `os.ppid` | `(): int` | Get parent process ID |\n"
+            "| `os.ppid` | `(): int` |  |\n"
             "| `os.sep` | `: string` | Platform path separator |\n"
-            "| `os.setenv` | `(name: string, value: string): bool` | Set environment variable |\n"
-            "| `os.sleep` | `(ms: int): ()` | Sleep for milliseconds |\n"
-            "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` | Execute a program without a shell (injection-safe argv) |\n"
-            "| `os.tmpdir` | `(): string` | Get temporary directory path |\n"
-            "| `os.totalMemory` | `(): int` | Get total system memory in bytes |\n"
-            "| `os.uid` | `(): int` | Get user ID |\n"
-            "| `os.unsetenv` | `(name: string): bool` | Unset environment variable |\n"
-            "| `os.uptime` | `(): float` | Get system uptime in seconds |\n"
-            "| `os.username` | `(): string?` | Get current user name |\n"
+            "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
+            "| `os.sleep` | `(ms: int): ()` |  |\n"
+            "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"
+            "| `os.tmpdir` | `(): string` |  |\n"
+            "| `os.totalMemory` | `(): int` |  |\n"
+            "| `os.uid` | `(): int` |  |\n"
+            "| `os.unsetenv` | `(name: string): bool` |  |\n"
+            "| `os.uptime` | `(): float` |  |\n"
+            "| `os.username` | `(): string?` |  |\n"
             "",
         .symbols = _symbols_os,
         .symbol_count = (int)(sizeof(_symbols_os) / sizeof(_symbols_os[0])),
@@ -9645,7 +9876,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 33;
+XR_DATADEF const int xmcp_generated_stdlib_count = 34;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
@@ -10187,24 +10418,25 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "|--------|-------------|\n"
     "| `base64` | Base64 encoding/decoding |\n"
     "| `cluster` | Distributed cluster communication |\n"
-    "| `compress` | Compression/decompression (zlib) |\n"
-    "| `crypto` | Cryptographic hashing and encryption |\n"
+    "| `compress` | Compression/decompression and checksums |\n"
+    "| `crypto` | Cryptographic hashing, encryption, randomness, and constant-time comparison |\n"
     "| `csv` | CSV parsing and generation |\n"
     "| `datetime` | Date and time manipulation |\n"
     "| `encoding` | Character encoding conversion |\n"
-    "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n"
-    "| `parallel` | Structured CPU data-parallel operations |\n"
-    "| `runtime` | Runtime and heap introspection |\n"
-    "| `sync` | Coroutine-domain synchronization primitives |\n"
-    "| `sys` | OS-thread-domain system primitives |\n"
-    "| `http` | HTTP client/server, REST API, routing |\n"
+    "| `http` | HTTP/1.x client/server, REST API, and routing |\n"
+    "| `http2` | HTTP/2 capability and typed request transport |\n"
     "| `io` | File I/O operations |\n"
     "| `log` | Structured logging system |\n"
     "| `math` | Mathematical functions |\n"
+    "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n"
     "| `net` | TCP/UDP/TLS networking |\n"
     "| `os` | Operating system interface |\n"
+    "| `parallel` | Structured CPU data-parallel operations |\n"
     "| `path` | File path manipulation |\n"
     "| `regex` | Regular expressions |\n"
+    "| `runtime` | Runtime and heap introspection |\n"
+    "| `sync` | Coroutine-domain synchronization primitives |\n"
+    "| `sys` | OS-thread-domain system primitives |\n"
     "| `time` | Time, timers, sleep |\n"
     "| `toml` | TOML configuration parsing |\n"
     "| `url` | URL parsing and construction |\n"
@@ -10212,7 +10444,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `xml` | XML parsing |\n"
     "| `yaml` | YAML parsing |\n"
     "\n"
-    "Usage: `import <module>` then call `module.function()`.\n"
+    "Usage: `import <module>` then call `module.function()`. All listed modules ship in the Xray standard-library installation unit.\n"
     "\n"
     "Built-in JSON helpers are exposed as `Json.parse()` / `Json.encode()` / `Json.stringify()` without `import`.\n"
     "";

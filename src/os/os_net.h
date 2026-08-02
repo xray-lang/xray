@@ -81,6 +81,10 @@ typedef SOCKET xr_socket_t;
 #define XR_EWOULDBLOCK WSAEWOULDBLOCK
 #define XR_EINPROGRESS WSAEINPROGRESS
 #define XR_ECONNREFUSED WSAECONNREFUSED
+#define XR_ECONNRESET WSAECONNRESET
+#define XR_EBADF WSAENOTSOCK
+#define XR_ENOTCONN WSAENOTCONN
+#define XR_EPIPE WSAESHUTDOWN
 #define XR_ETIMEDOUT WSAETIMEDOUT
 #define XR_EINTR WSAEINTR
 
@@ -154,6 +158,14 @@ typedef int xr_socket_t;
 #define XR_EWOULDBLOCK EWOULDBLOCK
 #define XR_EINPROGRESS EINPROGRESS
 #define XR_ECONNREFUSED ECONNREFUSED
+#define XR_ECONNRESET ECONNRESET
+#define XR_EBADF EBADF
+#define XR_ENOTCONN ENOTCONN
+#ifdef EPIPE
+#define XR_EPIPE EPIPE
+#else
+#define XR_EPIPE ECONNRESET
+#endif
 #define XR_ETIMEDOUT ETIMEDOUT
 #define XR_EINTR EINTR
 
@@ -210,6 +222,13 @@ static inline ssize_t xr_socket_send(xr_socket_t fd, const void *buf, size_t len
 // it.
 static inline bool xr_socket_err_is_again(int err) {
     return err == XR_EAGAIN || err == XR_EWOULDBLOCK;
+}
+
+/* A non-blocking connect may report either the platform's explicit
+ * in-progress code or its would-block code. Keep that distinction out of
+ * every protocol implementation so Winsock never falls through to errno. */
+static inline bool xr_socket_err_is_inprogress(int err) {
+    return err == XR_EINPROGRESS || xr_socket_err_is_again(err);
 }
 
 static inline int xr_socket_set_nonblocking(xr_socket_t fd) {

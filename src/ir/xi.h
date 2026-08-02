@@ -1679,6 +1679,10 @@ typedef struct XiFunc {
     uint64_t analyzer_memory_effect_fingerprint;
     bool analyzer_effect_complete;
     bool analyzer_memory_effect_complete;
+    /* Detached, backend-consumable error-channel classification.  False is
+     * deliberately fail-closed: only a complete analyzer error set with no
+     * escaping variants may elide the hosted-fragment signal probe. */
+    bool error_effect_nothrow;
     bool contains_unsafe_op;
     bool requires_unsafe_at_call;
 

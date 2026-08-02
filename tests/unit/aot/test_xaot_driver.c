@@ -689,6 +689,36 @@ static bool manifest_has_define(const XaotLinkManifest *manifest, const char *ne
     return false;
 }
 
+static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources > 0);
+    ASSERT_TRUE(!manifest_has_define(&result.link_manifest, "XRT_IMPL"));
+    for (int i = 0; i < result.n_sources; i++) {
+        const char *source = result.sources[i].c_source;
+        ASSERT_TRUE(source != NULL);
+        ASSERT_TRUE(strstr(source, "#define XRT_IMPL") == NULL);
+        ASSERT_TRUE(strstr(source, "int main(") == NULL);
+        ASSERT_TRUE(strstr(source, "xrt_shared_lib_ctor") == NULL);
+    }
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static void test_driver_validates_freestanding_runtime_provider(void) {
     char source_path[256];
     XaotTarget target = {0};
@@ -922,6 +952,7 @@ int main(void) {
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();
     test_driver_analyzes_riscv64_layout_with_selected_target();
+    test_driver_hosted_fragment_borrows_runtime_ownership();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();

@@ -1584,12 +1584,13 @@ static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
  *                 keeps). EVERY consuming use dups first; never dropped.
  *   OWN_CALL_RESULT — a call result whose ownership we cannot statically
  *                 prove: it may be a fresh (+1) reference or an alias of an
- *                 argument (e.g. arr.push(x) returns self). A consuming use
- *                 dups first whenever the result remains live afterwards,
- *                 including through a borrow in a successor. We never insert
- *                 an unconsumed drop (dropping an aliased borrow would be a
- *                 use-after-free). This can leak a discarded fresh return,
- *                 but never releases an alias owned elsewhere. */
+ *                 argument (e.g. Map.get returns stored data). UNKNOWN uses
+ *                 the fail-closed borrowed convention: EVERY consuming use
+ *                 dups first, and no unconsumed drop is inserted. Skipping a
+ *                 final retain would transfer a reference the function never
+ *                 owned and let the consumer free storage still held by the
+ *                 container. This can leak a fresh result; per-callee return
+ *                 summaries refine that conservative case. */
 typedef enum {
     OWN_OWNED = 0,
     OWN_BORROWED,
@@ -1606,29 +1607,12 @@ static void insert_dup_at_consume_site(XiFunc *f, XiValue *target, const Consume
 }
 
 static void process_call_result_consumes(XiFunc *f, XiValue *target, const ConsumeSiteVec *sites) {
-    /* Alias-uncertain call result: a static "all but last consume" rule is
-     * insufficient because the last consume can precede a borrow on one
-     * successor. That exact shape occurs when a local owner-forward feeds a
-     * phi on one branch while the original call result is sliced on the
-     * sibling branch. Use CFG liveness to keep that original reference valid.
-     * Never place a death drop here: an unconsumed result may still be a
-     * borrowed alias owned by an argument. */
-    ArcLive *live = NULL;
-    uint32_t *pos_by_id = NULL;
-    if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
-        /* OOM: retain before every consume. This may leak a fresh result, but
-         * count raising is the only fail-closed choice when aliasing and
-         * liveness are both unknown. */
-        for (uint32_t i = 0; i < sites->count; i++)
-            insert_dup_at_consume_site(f, target, &sites->items[i]);
-        return;
-    }
-    for (uint32_t i = 0; i < sites->count; i++) {
-        if (consume_is_live_after(&sites->items[i], live, pos_by_id))
-            insert_dup_at_consume_site(f, target, &sites->items[i]);
-    }
-    xr_free(pos_by_id);
-    xr_free(live);
+    /* UNKNOWN is fail-closed as a +0 borrow. A last consuming use transfers an
+     * owning reference to its consumer, so it needs a retain just as much as
+     * every earlier consume. Liveness decides only how many independent
+     * owners are needed; it cannot prove that the original result was +1. */
+    for (uint32_t i = 0; i < sites->count; i++)
+        insert_dup_at_consume_site(f, target, &sites->items[i]);
 }
 
 static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {

@@ -419,6 +419,54 @@ bool xaot_storage_capture_plans_build(XaotBundle *bundle) {
     return true;
 }
 
+static bool verify_addresses_recursive(const XaotBundle *bundle, const XiModule *module,
+                                       const XiFunc *func, uint32_t *address_count,
+                                       char *errbuf, size_t errbuf_len) {
+    if (!bundle || !module || !func || !address_count)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XaotAddressPlan expected;
+            const XaotAddressPlan *actual;
+            const XiValue *value = block->values[vi];
+            if (!address_plan_for_value(bundle, module, func, value, &expected))
+                continue;
+            if (address_has_forbidden_escape(func, &expected)) {
+                if (errbuf && errbuf_len)
+                    snprintf(errbuf, errbuf_len,
+                             "AOT address provenance permits a lifetime escape");
+                return false;
+            }
+            /* Plans are keyed by SSA identity. Optimizer debug mode may
+             * legally reorder blocks and topologically independent values;
+             * array position is not provenance. */
+            actual = xaot_address_plan_find(bundle, value);
+            if (!actual || memcmp(&expected, actual, sizeof(expected)) != 0) {
+                if (errbuf && errbuf_len)
+                    snprintf(errbuf, errbuf_len,
+                             "AOT address provenance plan is stale at %s v%u "
+                             "(actual=%s, origin=%u/%u, escape=%u/%u)",
+                             func->name ? func->name : "<anonymous>", value->id,
+                             actual ? "present" : "missing", expected.provenance.origin,
+                             actual ? actual->provenance.origin : 0,
+                             expected.provenance.escape,
+                             actual ? actual->provenance.escape : 0);
+                return false;
+            }
+            (*address_count)++;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (!verify_addresses_recursive(bundle, module, func->children[ci], address_count,
+                                        errbuf, errbuf_len))
+            return false;
+    }
+    return true;
+}
+
 bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     uint32_t storage_index = 0;
     uint32_t capture_index = 0;
@@ -483,58 +531,11 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
     }
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *module = bundle->modules[mi];
-        const XiFunc *stack[256];
-        uint32_t depth = 0;
         if (!module || !module->init)
             return false;
-        stack[depth++] = module->init;
-        while (depth > 0) {
-            const XiFunc *func = stack[--depth];
-            for (uint32_t bi = 0; bi < func->nblocks; bi++) {
-                const XiBlock *block = func->blocks[bi];
-                if (!block)
-                    continue;
-                for (uint32_t vi = 0; vi < block->nvalues; vi++) {
-                    XaotAddressPlan expected;
-                    const XaotAddressPlan *actual;
-                    const XiValue *value = block->values[vi];
-                    if (!address_plan_for_value(bundle, module, func, value, &expected))
-                        continue;
-                    if (address_has_forbidden_escape(func, &expected)) {
-                        if (errbuf && errbuf_len)
-                            snprintf(errbuf, errbuf_len,
-                                     "AOT address provenance permits a lifetime escape");
-                        return false;
-                    }
-                    /* Plans are keyed by SSA identity. Optimizer debug mode may
-                     * legally reorder blocks and topologically independent
-                     * values after the plan was sealed; array position is not
-                     * provenance. */
-                    actual = xaot_address_plan_find(bundle, value);
-                    if (!actual || memcmp(&expected, actual, sizeof(expected)) != 0) {
-                        if (errbuf && errbuf_len)
-                            snprintf(errbuf, errbuf_len,
-                                     "AOT address provenance plan is stale at %s v%u "
-                                     "(actual=%s, origin=%u/%u, escape=%u/%u)",
-                                     func->name ? func->name : "<anonymous>", value->id,
-                                     actual ? "present" : "missing", expected.provenance.origin,
-                                     actual ? actual->provenance.origin : 0,
-                                     expected.provenance.escape,
-                                     actual ? actual->provenance.escape : 0);
-                        return false;
-                    }
-                    address_count++;
-                }
-            }
-            for (uint16_t ci = func->nchildren; ci > 0; ci--) {
-                if (depth >= sizeof(stack) / sizeof(stack[0])) {
-                    if (errbuf && errbuf_len)
-                        snprintf(errbuf, errbuf_len, "AOT address provenance nesting too deep");
-                    return false;
-                }
-                stack[depth++] = func->children[ci - 1];
-            }
-        }
+        if (!verify_addresses_recursive(bundle, module, module->init, &address_count,
+                                        errbuf, errbuf_len))
+            return false;
     }
     if (address_count != bundle->naddress_plans) {
         if (errbuf && errbuf_len)

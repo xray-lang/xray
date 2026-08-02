@@ -861,6 +861,16 @@ static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
     return XR_NULL_VAL;
 }
 
+/* ISO C expression form used by MSVC-hosted fragments.  Keeping the temporary
+ * inside an inline function gives the same single-evaluation guarantee as the
+ * old GNU statement expression without leaking a compiler extension into
+ * generated C. */
+static inline int64_t xrt_len_i64(XrValue recv, int json_dynamic) {
+    if (recv.tag == XR_TAG_RANGE)
+        return xrt_range_length_ptr((const xrt_range_t *) recv.ptr);
+    return XR_TO_INT(xrt_len_value(recv, json_dynamic));
+}
+
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     /* Static string constructors do not depend on the runtime class value. */
     if (sym == XRT_SYM_FROM_UTF8 || sym == XRT_SYM_FROM_UTF8_LOSSY)

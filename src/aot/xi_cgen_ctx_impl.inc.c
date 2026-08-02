@@ -13,7 +13,7 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
     if (!ctx)
         return NULL;
     ctx->shared_name = "xrt_shared";
-    ctx->emit_main = true;
+    ctx->artifact_kind = XAOT_ARTIFACT_EXECUTABLE;
     ctx->type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     /* Allocate the grow-on-demand shared-slot / method / import tables at
      * their initial capacity (cg_reserve_* grow them for large modules). */
@@ -121,9 +121,9 @@ XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bo
     }
 }
 
-XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main) {
+XR_FUNC void xi_cgen_ctx_set_artifact_kind(XiCgenCtx *ctx, XaotArtifactKind artifact_kind) {
     if (ctx)
-        ctx->emit_main = emit_main;
+        ctx->artifact_kind = artifact_kind;
 }
 
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding) {

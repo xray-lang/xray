@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Generate embedded stdlib script source and bytecode tables.
+"""Generate embedded built-in standard-library source and bytecode tables.
 
-Only canonical script layers named stdlib/<module>/<module>.xr are embedded.
-Type declaration files (stdlib/types/*.xr) and other helper fixtures are not
-runtime module script layers.
+Every script module has one canonical source at
+``stdlib/<module>/<module>.xr`` and one bare module name.
 """
 
 from __future__ import annotations
@@ -47,12 +46,10 @@ def c_byte_array(data: bytes) -> str:
 
 def canonical_module_name(root: Path, path: Path) -> str | None:
     rel = path.relative_to(root)
-    if len(rel.parts) != 3 or rel.parts[0] != "stdlib":
-        return None
-    module_dir = rel.parts[1]
-    if rel.name != f"{module_dir}.xr":
-        return None
-    return module_dir
+    if len(rel.parts) == 3 and rel.parts[0] == "stdlib":
+        module_dir = rel.parts[1]
+        return module_dir if rel.name == f"{module_dir}.xr" else None
+    return None
 
 
 def collect_entries(root: Path, sources: list[Path]) -> list[tuple[str, Path, bytes]]:
@@ -107,7 +104,7 @@ def compile_bytecodes(
     env = os.environ.copy()
     env["XRAY_STDLIB_PATH"] = str(root / "stdlib")
     for name, path, _data in entries:
-        out_path = bytecode_dir / f"{name}.xrc"
+        out_path = bytecode_dir / f"{c_ident(name)}.xrc"
         proc = subprocess.run(
             [
                 str(compiler),
@@ -147,7 +144,7 @@ def emit_bytecodes(
     bytecode_entries: list[tuple[str, bytes]] = []
     if bytecode_dir is not None:
         for name, _path, _data in entries:
-            bc_path = bytecode_dir / f"{name}.xrc"
+            bc_path = bytecode_dir / f"{c_ident(name)}.xrc"
             if bc_path.is_file():
                 bytecode_entries.append((name, bc_path.read_bytes()))
             elif require_bytecode:

@@ -14,10 +14,10 @@
 
 #include "cluster.h"
 #include "cluster_internal.h"
-#include "../common.h"
+#include "../../stdlib/common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
-#include "../net/io.h"
-#include "../stdlib_cache.h"
+#include "../../stdlib/net/io.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../../src/runtime/class/xenum.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"

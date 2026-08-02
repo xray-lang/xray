@@ -269,8 +269,7 @@ def iter_text_files(root: Path):
                 yield path
 
 
-def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
-    rel_path = rel(root, path)
+def classify_line(rel_path: Path, lineno: int, line: str) -> list[Hit]:
     rel_str = str(rel_path)
     stripped = line.strip()
     hits: list[Hit] = []
@@ -298,12 +297,13 @@ def build_inventory(root: Path) -> dict[str, list[Hit]]:
             by_category[hit.category].append(hit)
 
     for path in iter_text_files(root):
+        rel_path = rel(root, path)
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
             continue
         for lineno, line in enumerate(lines, 1):
-            for hit in classify_line(root, path, lineno, line):
+            for hit in classify_line(rel_path, lineno, line):
                 by_category[hit.category].append(hit)
 
     deduped: dict[str, list[Hit]] = {}

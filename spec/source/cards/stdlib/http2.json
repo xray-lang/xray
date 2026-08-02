@@ -1,0 +1,5 @@
+{
+  "module": "http2",
+  "summary": "HTTP/2 capability and typed request transport",
+  "lead": "HTTP/2 capability and typed request transport."
+}

@@ -296,23 +296,6 @@ static inline XrValue xrt_os_getcwd(void) {
     return xrt_os_cstr_value(buf);
 }
 
-static inline XrValue xrt_os_chdir(const char *path, int64_t len) {
-    char stack_path[XRT_OS_PATH_MAX];
-    char *owned = NULL;
-    char *dir = xrt_os_copy_cstr_arg(path, len, stack_path, sizeof(stack_path), &owned);
-    bool ok = false;
-    if (dir) {
-#ifdef _WIN32
-        ok = SetCurrentDirectoryA(dir) != 0;
-#else
-        ok = chdir(dir) == 0;
-#endif
-    }
-    if (owned)
-        XRT_FREE(owned);
-    return XR_FROM_BOOL(ok);
-}
-
 static inline XrValue xrt_os_hostname(void) {
     char buf[256];
 #ifdef _WIN32
@@ -492,10 +475,11 @@ static inline XrValue xrt_os_loadavg(void) {
         avg[2] = 0.0;
     }
 #endif
-    XrValue arr = xrt_array_new(0);
-    xrt_array_push(arr, XR_FROM_FLOAT(avg[0]));
-    xrt_array_push(arr, XR_FROM_FLOAT(avg[1]));
-    xrt_array_push(arr, XR_FROM_FLOAT(avg[2]));
+    XrValue arr = xrt_array_new_typed(3, XR_ELEM_F64);
+    xrt_array_t *typed = (xrt_array_t *) arr.ptr;
+    ((double *) typed->data)[0] = avg[0];
+    ((double *) typed->data)[1] = avg[1];
+    ((double *) typed->data)[2] = avg[2];
     return arr;
 }
 

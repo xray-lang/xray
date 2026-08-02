@@ -22,13 +22,13 @@
 #include "../../src/coro/xworker.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xutf8.h"
-#include "../base64/base64.h"
+#include "ws_base64.h"
 #if XR_HAS_ZLIB
 #include "../compress/compress.h"
 #endif
-#include "../net/io.h"
+#include "../../stdlib/net/io.h"
 #include "../../src/io/xdns.h"
-#include "../net/tls.h"
+#include "../../stdlib/net/tls.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1225,7 +1225,7 @@ int ws_connect_start(XrWebSocket *ws) {
     }
 
     int cret = connect(ws->fd, sa, sa_len);
-    if (cret < 0 && errno != EINPROGRESS) {
+    if (cret < 0 && !xr_socket_err_is_inprogress(xr_get_socket_error())) {
         xr_closesocket(ws->fd);
         ws->fd = -1;
         return -WS_ERR_CONNECT;

@@ -11,11 +11,55 @@
 #include "xenum_layout.h"
 #include "xvalue.h"
 #include "../../base/xmalloc.h"
+#include "../../shared/xr_hash_core.h"
 
 #include <stdalign.h>
-#include <stdatomic.h>
+#include <string.h>
 
-static _Atomic uint32_t xr_next_enum_layout_id = 1;
+#define XR_ENUM_NOMINAL_HASH_SEED UINT64_C(1469598103934665603)
+#define XR_ENUM_NOMINAL_HASH_PRIME UINT64_C(1099511628211)
+
+static uint64_t enum_nominal_hash_byte(uint64_t hash, uint8_t value) {
+    return (hash ^ value) * XR_ENUM_NOMINAL_HASH_PRIME;
+}
+
+static uint64_t enum_nominal_hash_u32(uint64_t hash, uint32_t value) {
+    hash = enum_nominal_hash_byte(hash, (uint8_t) (value >> 24));
+    hash = enum_nominal_hash_byte(hash, (uint8_t) (value >> 16));
+    hash = enum_nominal_hash_byte(hash, (uint8_t) (value >> 8));
+    return enum_nominal_hash_byte(hash, (uint8_t) value);
+}
+
+static uint64_t enum_nominal_hash_string(uint64_t hash, const char *value) {
+    size_t length = value ? strlen(value) : 0;
+    hash = enum_nominal_hash_u32(hash, (uint32_t) length);
+    for (size_t i = 0; i < length; i++)
+        hash = enum_nominal_hash_byte(hash, (uint8_t) value[i]);
+    return hash;
+}
+
+uint32_t xr_enum_layout_nominal_id(const XrEnumLayout *layout) {
+    if (!layout || !layout->nominal_owner || !layout->nominal_owner[0] || !layout->name ||
+        !layout->name[0] || !layout->variants || layout->variant_count == 0)
+        return 0;
+
+    uint64_t hash = XR_ENUM_NOMINAL_HASH_SEED;
+    hash = enum_nominal_hash_string(hash, "xray.enum.nominal.v1");
+    hash = enum_nominal_hash_string(hash, layout->nominal_owner);
+    hash = enum_nominal_hash_string(hash, layout->name);
+    hash = enum_nominal_hash_u32(hash, layout->variant_count);
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        hash = enum_nominal_hash_string(hash, layout->variants[i].name);
+        hash = enum_nominal_hash_u32(hash, layout->variants[i].payload_count);
+    }
+    hash = xr_hash_core_mix_u64(hash);
+    return ((uint32_t) hash) | UINT32_C(0x80000000);
+}
+
+static void enum_layout_refresh_nominal_id(XrEnumLayout *layout) {
+    if (layout)
+        layout->layout_id = xr_enum_layout_nominal_id(layout);
+}
 
 static uint32_t enum_align_up(uint32_t value, uint32_t align) {
     if (align <= 1)
@@ -68,9 +112,9 @@ static void enum_layout_recompute(XrEnumLayout *layout) {
     }
 }
 
-XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *variant_names,
-                                 uint32_t variant_count) {
-    if (!name || !variant_names || variant_count == 0)
+XrEnumLayout *xr_enum_layout_new(const char *nominal_owner, const char *name,
+                                 const char *const *variant_names, uint32_t variant_count) {
+    if (!nominal_owner || !nominal_owner[0] || !name || !variant_names || variant_count == 0)
         return NULL;
 
     XrEnumLayout *layout = (XrEnumLayout *) xr_calloc(1, sizeof(*layout));
@@ -84,7 +128,12 @@ XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *variant_na
         return NULL;
     }
 
-    layout->layout_id = atomic_fetch_add_explicit(&xr_next_enum_layout_id, 1, memory_order_relaxed);
+    layout->nominal_owner = xr_strdup(nominal_owner);
+    if (!layout->nominal_owner) {
+        xr_free(layout->variants);
+        xr_free(layout);
+        return NULL;
+    }
     layout->name = name;
     layout->variant_count = variant_count;
     for (uint32_t i = 0; i < variant_count; i++) {
@@ -94,6 +143,7 @@ XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *variant_na
     }
 
     enum_layout_recompute(layout);
+    enum_layout_refresh_nominal_id(layout);
     return layout;
 }
 
@@ -108,6 +158,7 @@ bool xr_enum_layout_set_payload_counts(XrEnumLayout *layout, const int *payload_
     for (uint32_t i = 0; i < count; i++)
         layout->variants[i].payload_count = (uint16_t) payload_counts[i];
     enum_layout_recompute(layout);
+    enum_layout_refresh_nominal_id(layout);
     return true;
 }
 
@@ -193,5 +244,6 @@ void xr_enum_layout_free(XrEnumLayout *layout) {
         }
         xr_free(layout->variants);
     }
+    xr_free((void *) layout->nominal_owner);
     xr_free(layout);
 }

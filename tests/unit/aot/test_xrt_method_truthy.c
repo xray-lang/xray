@@ -48,6 +48,9 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic ignored "-Wundefined-internal"
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
+static inline int xrt_has_pending_error(void) {
+    return 0;
+}
 #include "../../../src/aot/xrt_method.h"
 #if defined(__clang__)
 #pragma clang diagnostic pop

@@ -84,23 +84,6 @@ void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name, X
     inst->fields[index] = value;
 }
 
-XrValue xr_instance_get_field_by_index(XrInstance *inst, int index) {
-    XR_DCHECK(inst != NULL, "Instance must not be NULL");
-    XrClass *klass = xr_instance_get_class(inst);
-    XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
-    (void) klass;
-    return inst->fields[index];
-}
-
-void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) {
-    XR_DCHECK(inst != NULL, "Instance must not be NULL");
-    XrClass *klass = xr_instance_get_class(inst);
-    XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
-    (void) klass;
-    xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
-    inst->fields[index] = value;
-}
-
 XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name, XrValue *args,
                                 int argc) {
     if (!X || !inst || !name)

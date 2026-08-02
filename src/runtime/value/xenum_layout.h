@@ -29,6 +29,7 @@ typedef struct XrEnumVariantLayout {
 
 typedef struct XrEnumLayout {
     uint32_t layout_id;
+    const char *nominal_owner; /* Canonical module/prelude owner; owned. */
     const char *name; /* Interned/stable; not owned by the layout. */
     uint32_t variant_count;
     uint8_t tag_size;
@@ -41,8 +42,10 @@ typedef struct XrEnumLayout {
     XrEnumVariantLayout *variants;
 } XrEnumLayout;
 
-XR_FUNC XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *variant_names,
+XR_FUNC XrEnumLayout *xr_enum_layout_new(const char *nominal_owner, const char *name,
+                                         const char *const *variant_names,
                                          uint32_t variant_count);
+XR_FUNC uint32_t xr_enum_layout_nominal_id(const XrEnumLayout *layout);
 XR_FUNC bool xr_enum_layout_set_payload_counts(XrEnumLayout *layout, const int *payload_counts,
                                                uint32_t count);
 XR_FUNC bool xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t tag,

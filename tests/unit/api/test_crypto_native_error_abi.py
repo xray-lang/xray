@@ -110,7 +110,7 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
         )
 
     def assert_vm_native_aot_parity(self, fixture: Path, expected: bytes, native_stem: str) -> None:
-        vm = self.run_checked([str(self.xray), str(fixture)]).stdout
+        vm = self.run_checked([str(self.xray), str(fixture)]).stdout.replace(b"\r\n", b"\n")
         self.assertEqual(expected, vm)
 
         output_dir = ROOT / "build" / ".xray-test-tmp"
@@ -133,7 +133,7 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
                 ],
                 stdout=subprocess.DEVNULL,
             )
-            aot = self.run_checked([str(native)]).stdout
+            aot = self.run_checked([str(native)]).stdout.replace(b"\r\n", b"\n")
         finally:
             native.unlink(missing_ok=True)
 

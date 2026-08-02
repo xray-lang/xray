@@ -23,11 +23,12 @@ fn _hexVal(c: int) -> int {
 
 export fn hexEncode(data: Slice<byte>) -> string {
     var src = data
+    var alphabet: Slice<byte> = HEX.bytes()
     var out = StringBuilder()
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as int
-        out.append(HEX.runes().nth(b >> 4))
-        out.append(HEX.runes().nth(b & 15))
+        out.append(rune(int(alphabet[b >> 4]))!)
+        out.append(rune(int(alphabet[b & 15]))!)
     }
     return out.toString()
 }

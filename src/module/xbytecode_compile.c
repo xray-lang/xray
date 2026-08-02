@@ -22,8 +22,8 @@
 #include "xray_vm.h"
 #include <stdio.h>
 
-bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
-                        const char *output_file, int flags) {
+static bool compile_to_file_impl(XrCompilerSession *session, const char *canonical_module,
+                                 const char *source_file, const char *output_file, int flags) {
     if (!session) {
         xr_log_warning("compile", "compiler session is required");
         return false;
@@ -52,7 +52,10 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
     // Serialize
     size_t bc_size;
     XrBcError bc_error = XR_BC_OK;
-    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
+    uint8_t *bc = canonical_module
+                      ? xr_bytecode_write_stdlib(X, canonical_module, proto, flags, &bc_size,
+                                                 &bc_error)
+                      : xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
     if (!bc) {
         xr_vm_proto_free(proto);
         xr_log_warning("compile", "bytecode serialization failed: %s",
@@ -75,6 +78,11 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
     xr_free(bc);
 
     return true;
+}
+
+bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
+                        const char *output_file, int flags) {
+    return compile_to_file_impl(session, NULL, source_file, output_file, flags);
 }
 
 bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical_module,
@@ -140,7 +148,8 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
         }
     }
 
-    bool ok = xr_compile_to_file(session, source_file, output_file, flags);
+    bool ok =
+        compile_to_file_impl(session, canonical_module, source_file, output_file, flags);
 
     xr_compiler_session_set_module_graph(session, NULL);
     if (graph_analyzer) {

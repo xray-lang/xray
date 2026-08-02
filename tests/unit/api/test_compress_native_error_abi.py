@@ -114,7 +114,7 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
         self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_zlib_decompress)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
-        vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
+        vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout.replace(b"\r\n", b"\n")
         self.assertEqual(EXPECTED_OUTPUT, vm)
 
         output_dir = ROOT / "build" / ".xray-test-tmp"
@@ -137,7 +137,7 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
                 ],
                 stdout=subprocess.DEVNULL,
             )
-            aot = self.run_checked([str(native)]).stdout
+            aot = self.run_checked([str(native)]).stdout.replace(b"\r\n", b"\n")
         finally:
             native.unlink(missing_ok=True)
 

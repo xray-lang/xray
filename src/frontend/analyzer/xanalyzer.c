@@ -263,7 +263,7 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     }
 
     if (member_count > 0) {
-        XaEnumInfo *info = xa_enum_info_new(name, (uint32_t) member_count);
+        XaEnumInfo *info = xa_enum_info_new("prelude", name, (uint32_t) member_count);
         if (info) {
             for (int i = 0; i < member_count; i++) {
                 info->variants[i].name = member_names[i];
@@ -1540,8 +1540,53 @@ static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t 
     return true;
 }
 
+char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file) {
+    if (!analyzer)
+        return NULL;
+    if (!file || !file[0])
+        return analyzer->current_module_canonical && analyzer->current_module_canonical[0]
+                   ? xr_strdup(analyzer->current_module_canonical)
+                   : NULL;
+
+    /* Built-in stdlib module identity is its import name, never the absolute
+     * checkout path used by a stage compiler.  Resolve this before the graph:
+     * a standalone `--stdlib-module` compile can deliberately have a file-path
+     * graph canonical while its semantic owner remains `log`, `base64`, etc. */
+    char stdlib_module[128];
+    if (xa_stdlib_module_name_from_path(file, stdlib_module, sizeof(stdlib_module)))
+        return xr_strdup(stdlib_module);
+
+    XrModuleGraph *graph = analyzer->graph;
+    for (int i = 0; graph && i < graph->spec_count; i++) {
+        const XrModuleSpec *spec = &graph->specs[i];
+        if (!spec->canonical || !spec->source_path)
+            continue;
+        size_t file_len = strlen(file);
+        size_t source_len = strlen(spec->source_path);
+        if (file_len != source_len)
+            continue;
+        bool same = true;
+        for (size_t j = 0; j < file_len; j++) {
+            if (!xa_path_char_matches(file[j], spec->source_path[j])) {
+                same = false;
+                break;
+            }
+        }
+        if (same)
+            return xr_strdup(spec->canonical);
+    }
+
+    /* Tool/bootstrap graphs can analyze an embedded stdlib AST without
+     * retaining the full graph entry.  Its canonical module is encoded in the
+     * governed stdlib path, so intern that name as the deterministic fallback. */
+    if (analyzer->current_file == file && analyzer->current_module_canonical &&
+        analyzer->current_module_canonical[0])
+        return xr_strdup(analyzer->current_module_canonical);
+    return xr_strdup(file);
+}
+
 static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope, const char *file,
-                                            const char *name) {
+                                            const char *name, bool is_exported) {
     if (!analyzer || !scope || !name)
         return;
     if (xa_scope_lookup_local(scope, name))
@@ -1553,7 +1598,7 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
     sym->location.line = 0;
     sym->is_builtin = true;
     sym->is_const = true;
-    sym->is_exported = true;
+    sym->is_exported = is_exported;
     xa_scope_add_symbol(scope, sym);
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -1569,6 +1614,81 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
     }
 }
 
+static bool xa_stdlib_native_type_is_internal(const char *name) {
+    return name && name[0] == '_' && name[1] == '_';
+}
+
+/* A semantic stdlib source file is the implementation body of its native
+ * module, so it needs the module's private raw value types in the same scope as
+ * its private `__*` functions. Public imports still see only exported source
+ * declarations plus explicitly public native types. */
+static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const char *file,
+                                                   XaScope *scope) {
+    char module_name[64];
+    if (!analyzer || !scope ||
+        !xa_stdlib_module_name_from_path(file, module_name, sizeof(module_name)))
+        return;
+
+    const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
+    if (!module)
+        return;
+
+    for (int i = 0; i < module->handle_count; i++) {
+        const XaBuiltinHandle *handle = &module->handles[i];
+        if (handle->name)
+            xa_register_native_class_symbol(analyzer, scope, file, handle->name,
+                                            !xa_stdlib_native_type_is_internal(handle->name));
+    }
+
+    for (int i = 0; i < module->record_count; i++) {
+        const XaBuiltinRecord *record = &module->records[i];
+        if (!record->name || xa_scope_lookup_local(scope, record->name))
+            continue;
+        XaSymbol *sym = xa_symbol_new(record->name, XA_SYM_TYPE_ALIAS);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        sym->is_exported = !xa_stdlib_native_type_is_internal(record->name);
+        sym->alias_type = xa_builtin_record_decl_type(analyzer->isolate, record);
+        xa_scope_add_symbol(scope, sym);
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (links) {
+            links->type = sym->alias_type;
+            links->declared_type = links->type;
+            links->is_definitely_assigned = true;
+            links->file_path = file;
+            links->module_name = module_name;
+            links->import_member_name = record->name;
+        }
+    }
+
+    for (int i = 0; i < module->enum_count; i++) {
+        const XaBuiltinEnum *enum_decl = &module->enums[i];
+        if (!enum_decl->name || xa_scope_lookup_local(scope, enum_decl->name))
+            continue;
+        XaSymbol *sym = xa_symbol_new(enum_decl->name, XA_SYM_ENUM);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        sym->is_exported = !xa_stdlib_native_type_is_internal(enum_decl->name);
+        xa_scope_add_symbol(scope, sym);
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (links) {
+            links->type =
+                xa_builtin_enum_decl_type(analyzer->isolate, enum_decl, &links->enum_info);
+            links->declared_type = links->type;
+            links->is_definitely_assigned = true;
+            links->file_path = file;
+            links->module_name = module_name;
+            links->import_member_name = enum_decl->name;
+        }
+    }
+}
+
 static void xa_register_sync_native_class_symbols(XaAnalyzer *analyzer, const char *file,
                                                   XaScope *scope) {
     if (!xa_path_is_sync_stdlib_module(file))
@@ -1576,7 +1696,40 @@ static void xa_register_sync_native_class_symbols(XaAnalyzer *analyzer, const ch
     static const char *names[] = {"Semaphore", "CountdownLatch", "EventCount", "WorkQueue",
                                   "ResultGroup"};
     for (int i = 0; i < (int) (sizeof(names) / sizeof(names[0])); i++)
-        xa_register_native_class_symbol(analyzer, scope, file, names[i]);
+        xa_register_native_class_symbol(analyzer, scope, file, names[i], true);
+}
+
+static void xa_register_native_return_ownership(XaSymbolLinks *links,
+                                                XaBuiltinReturnOwnership ownership) {
+    if (!links)
+        return;
+    links->return_ownership = (XaReturnOwnershipSummary) {
+        .kind = XA_RETURN_OWNERSHIP_UNKNOWN,
+        .param_index = -1,
+        .complete = false,
+    };
+    switch (ownership) {
+        case XA_BUILTIN_RETURN_FRESH:
+            links->return_ownership.kind = XA_RETURN_OWNERSHIP_OWNED;
+            links->return_ownership.complete = true;
+            break;
+        case XA_BUILTIN_RETURN_BORROWED_STATIC:
+            links->return_ownership.kind = XA_RETURN_OWNERSHIP_BORROWED_STATIC;
+            links->return_ownership.complete = true;
+            break;
+        default: {
+            int param_index = xa_builtin_return_ownership_param_index(ownership);
+            if (param_index >= 0) {
+                links->return_ownership.kind = XA_RETURN_OWNERSHIP_BORROWED_PARAM;
+                links->return_ownership.param_index = (int16_t) param_index;
+                links->return_ownership.complete = true;
+            }
+            break;
+        }
+    }
+    /* Bodyless primitive contracts come exclusively from generated metadata;
+     * there is no AST body for the generic prepass to inspect. */
+    links->return_ownership_scanned = true;
 }
 
 static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, const char *file,
@@ -1614,6 +1767,7 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         links->file_path = file;
         links->module_name = mod->name;
         links->import_member_name = member->name;
+        xa_register_native_return_ownership(links, member->return_ownership);
     }
 }
 
@@ -1657,6 +1811,7 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     analyzer->current_file = file;
     analyzer->current_scope = file_scope;
     xa_register_sync_native_class_symbols(analyzer, file, file_scope);
+    xa_register_stdlib_native_module_types(analyzer, file, file_scope);
     xa_register_stdlib_native_module_functions(analyzer, file, file_scope);
 
     // Use the visitor-based analysis

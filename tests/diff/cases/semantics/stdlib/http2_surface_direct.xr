@@ -1,0 +1,4 @@
+// diff-backends: vm,aot
+import http2
+
+println(http2.supported())

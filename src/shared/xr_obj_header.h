@@ -20,7 +20,8 @@
  *   [2-3]   extra    (2B) - flags word: storage/mmap + XR_OBJ_*
  *   [4-7]   refcount (4B) - 0-based sign-tagged RC (atomic; relaxed fast path)
  *   [8-11]  objsize  (4B) - allocation size (region sweep / munmap)
- *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
+ *   [12-15] _rsv     (4B) - runtime-domain auxiliary discriminator/state;
+ *                           never an object-kind tag
  */
 
 #ifndef XR_OBJ_HEADER_H
@@ -41,7 +42,10 @@ typedef struct XrObjHeader {
                                 * codegen to a plain int on x86/arm64) and the
                                 * shared band uses stronger orders. */
     uint32_t objsize;          /* [8-11] allocation size */
-    uint32_t _rsv;             /* [12-15] reserved (weak slot / cycle-report id) */
+    uint32_t _rsv;             /* [12-15] runtime-domain auxiliary word. VM uses
+                                * it for weak/cycle state; AOT uses disjoint
+                                * tagged domains for builtin destruction and
+                                * compilation-local class identity. */
 } XrObjHeader;
 
 _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");

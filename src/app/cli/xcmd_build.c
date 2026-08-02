@@ -3251,7 +3251,8 @@ static int cmd_build_native(
     build_options.c_dialect = c_dialect;
     build_options.type_name_profile = type_name_profile;
     build_options.emit_plan_dump = dump_xaot_plan;
-    build_options.emit_program_main = !shared_library;
+    build_options.artifact_kind = shared_library ? XAOT_ARTIFACT_SHARED_LIBRARY
+                                                 : XAOT_ARTIFACT_EXECUTABLE;
     build_options.emit_global_evidence_dump = dump_global_evidence;
     build_options.emit_local_evidence_dump = dump_xi_evidence;
     build_options.emit_residue_dump = dump_residue;
@@ -3497,7 +3498,61 @@ static int cmd_build_native(
         return 1;
     }
 
+    /* COFF has no equivalent of the ELF/Mach-O `ld -r` operation for merging
+     * several objects into one relocatable object.  The generated-C contract
+     * already provides a verified, compilable amalgamation for --c-only; use
+     * that same representation as the provider lowering for a multi-module
+     * freestanding object on Windows.  This preserves the requested artifact
+     * kind (one relocatable .o), instead of silently changing it to an archive
+     * or shared library. */
     bool has_objcopy = target_config && objcopy_output && objcopy_output[0];
+    bool coff_relocatable_amalgamation =
+        aot_result.link_manifest.link.relocatable && target &&
+        target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS && n_sources > 1;
+    if (coff_relocatable_amalgamation) {
+        if (aot_result.link_manifest.n_runtime_objects != 0 ||
+            aot_result.link_manifest.n_stdlib_objects != 0 ||
+            aot_result.link_manifest.n_native_inputs != 0 ||
+            aot_result.link_manifest.n_system_libs != 0 ||
+            aot_result.link_manifest.n_ld_flags != 0 ||
+            aot_result.link_manifest.link.linker_script[0] != '\0') {
+            fprintf(stderr,
+                    "Error: COFF relocatable amalgamation cannot honor link-stage inputs\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+
+        size_t amalgamated_size = 0;
+        char *amalgamated = xaot_build_result_amalgamate(&aot_result, &amalgamated_size);
+        XaotModuleSource unity_source = {.name = "coff-relocatable-amalgamation",
+                                         .c_source = amalgamated};
+        char cached_object[XR_PATH_MAX];
+        int ret = amalgamated
+                      ? xaot_compile_source_cached(
+                            toolchain_plan, target, &aot_result.link_manifest, opt_flag,
+                            &unity_source, cache_dir, sysroot, dump_link_command || verbose,
+                            keep_c, verbose, rebuild, dry_run_link, cached_object,
+                            sizeof(cached_object), c_dialect)
+                      : 1;
+        if (!amalgamated)
+            fprintf(stderr, "Error: cannot amalgamate COFF relocatable translation units\n");
+        if (ret == 0 && !dry_run_link && xaot_copy_file(cached_object, output, 0644) != 0) {
+            fprintf(stderr, "Error: cannot create COFF relocatable object '%s'\n", output);
+            ret = 1;
+        }
+        if (ret == 0 && has_objcopy)
+            ret = invoke_target_objcopy(target_config, output, objcopy_output,
+                                        dump_link_command || verbose || dry_run_link,
+                                        dry_run_link);
+        if (ret == 0 && (dump_link_command || verbose || dry_run_link))
+            printf("COFF relocatable: one amalgamated translation unit; no link stage\n");
+        if (ret == 0 && !dry_run_link)
+            printf("Generated: %s\n", output);
+        xr_free(amalgamated);
+        xaot_build_result_free(&aot_result);
+        return ret;
+    }
+
     bool use_link_output_cache = !has_objcopy && !rebuild && !dry_run_link && !dump_link_command &&
                                  !verbose && !debug_symbols && !shared_library && !keep_c;
     uint64_t link_output_cache_key = 0;

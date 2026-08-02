@@ -24,8 +24,9 @@ static XR_THREAD_LOCAL uint32_t *g_symbol_id_ptr = NULL;
 // Thread-local symbol registry for O(1) ID lookup (set by analyzer)
 static XR_THREAD_LOCAL XrIntMap *g_symbol_registry = NULL;
 
-XaEnumInfo *xa_enum_info_new(const char *name, uint32_t variant_count) {
-    if (!name || variant_count == 0)
+XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name,
+                             uint32_t variant_count) {
+    if (!nominal_owner || !nominal_owner[0] || !name || variant_count == 0)
         return NULL;
     XaEnumInfo *info = (XaEnumInfo *) xr_calloc(1, sizeof(*info));
     if (!info)
@@ -33,6 +34,12 @@ XaEnumInfo *xa_enum_info_new(const char *name, uint32_t variant_count) {
     info->variants =
         (XaEnumVariantInfo *) xr_calloc((size_t) variant_count, sizeof(*info->variants));
     if (!info->variants) {
+        xr_free(info);
+        return NULL;
+    }
+    info->nominal_owner = xr_strdup(nominal_owner);
+    if (!info->nominal_owner) {
+        xr_free(info->variants);
         xr_free(info);
         return NULL;
     }
@@ -67,7 +74,8 @@ bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
             has_payloads = true;
     }
 
-    XrEnumLayout *layout = xr_enum_layout_new(info->name, names, info->variant_count);
+    XrEnumLayout *layout =
+        xr_enum_layout_new(info->nominal_owner, info->name, names, info->variant_count);
     if (layout && has_payloads &&
         !xr_enum_layout_set_payload_counts(layout, payload_counts, info->variant_count)) {
         xr_enum_layout_free(layout);
@@ -109,7 +117,7 @@ bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
 XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src) {
     if (!src)
         return NULL;
-    XaEnumInfo *dst = xa_enum_info_new(src->name, src->variant_count);
+    XaEnumInfo *dst = xa_enum_info_new(src->nominal_owner, src->name, src->variant_count);
     if (!dst)
         return NULL;
     for (uint32_t i = 0; i < src->variant_count; i++) {
@@ -152,6 +160,7 @@ void xa_enum_info_free(XaEnumInfo *info) {
     }
     if (info->layout)
         xr_enum_layout_free(info->layout);
+    xr_free((void *) info->nominal_owner);
     xr_free(info);
 }
 

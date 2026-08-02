@@ -145,6 +145,14 @@ class StdlibHandleEntry:
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
 
+    @property
+    def is_internal(self) -> bool:
+        return self.name.startswith("__")
+
+    @property
+    def is_internal(self) -> bool:
+        return self.name.startswith("__")
+
 
 @dataclasses.dataclass(frozen=True)
 class StdlibRecordEntry:
@@ -157,6 +165,10 @@ class StdlibRecordEntry:
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.name.startswith("__")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -176,14 +188,46 @@ class StdlibEnumEntry:
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
 
+    @property
+    def is_internal(self) -> bool:
+        return self.name.startswith("__")
+
 
 def stable_enum_layout_id(module: str, enum: StdlibEnumEntry) -> int:
-    """Return a deterministic, non-zero layout identity for native enums."""
-    shape = [f"{module}.{enum.name}"]
+    """Mirror xr_enum_layout_nominal_id for source/native enum parity."""
+
+    mask = (1 << 64) - 1
+
+    def byte(hash_value: int, value: int) -> int:
+        return ((hash_value ^ value) * 1099511628211) & mask
+
+    def u32(hash_value: int, value: int) -> int:
+        for shift in (24, 16, 8, 0):
+            hash_value = byte(hash_value, (value >> shift) & 0xFF)
+        return hash_value
+
+    def string(hash_value: int, value: str) -> int:
+        encoded = value.encode("utf-8")
+        hash_value = u32(hash_value, len(encoded))
+        for item in encoded:
+            hash_value = byte(hash_value, item)
+        return hash_value
+
+    hash_value = 1469598103934665603
+    hash_value = string(hash_value, "xray.enum.nominal.v1")
+    hash_value = string(hash_value, module)
+    hash_value = string(hash_value, enum.name)
+    hash_value = u32(hash_value, len(enum.variants))
     for variant in enum.variants:
-        shape.append(f"{variant.name}({','.join(variant.payload_types)})")
-    digest = hashlib.sha256("|".join(shape).encode("utf-8")).digest()
-    return int.from_bytes(digest[:4], "big") | 0x80000000
+        hash_value = string(hash_value, variant.name)
+        hash_value = u32(hash_value, len(variant.payload_types))
+
+    hash_value ^= hash_value >> 30
+    hash_value = (hash_value * 0xBF58476D1CE4E5B9) & mask
+    hash_value ^= hash_value >> 27
+    hash_value = (hash_value * 0x94D049BB133111EB) & mask
+    hash_value ^= hash_value >> 31
+    return (hash_value & 0xFFFFFFFF) | 0x80000000
 
 
 @dataclasses.dataclass(frozen=True)
@@ -483,7 +527,9 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported vm_ifdef for "
                     f"{current_module}.{current_name}: {vm_ifdef}"
                 )
-            visibility = str(props.get("visibility", "public"))
+            visibility = str(
+                props.get("visibility", "internal" if current_name.startswith("__") else "public")
+            )
             if visibility not in {"public", "internal"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported visibility for "
@@ -739,7 +785,10 @@ def parse_def_metadata(
             line = strip_comment(raw_line)
             if not line:
                 continue
-            m = re.fullmatch(r"module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            m = re.fullmatch(
+                r"module\s+([A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)?)\s*\{",
+                line,
+            )
             if m:
                 if current_module is not None or current_kind is not None:
                     raise SystemExit(f"{path}:{line_no}: nested module block")
@@ -923,6 +972,11 @@ def c_ident(value: str, context: str) -> str:
     return value
 
 
+def c_module_ident(value: str) -> str:
+    """Map a canonical owner/name module path to a generated C identifier."""
+    return c_ident(value.replace("/", "_"), f"module {value}")
+
+
 def c_int_expr(value: str, context: str) -> str:
     value = value.strip()
     if not re.fullmatch(r"-?[0-9]+", value):
@@ -1041,7 +1095,7 @@ def emit_aot_methods(
             raise SystemExit(
                 f"{e.symbol}: unknown aot_error_enum {e.module}.{e.aot_error_enum}"
             )
-        variants_name = f"g_aot_stdlib_{e.module}_{e.name}_error_variants"
+        variants_name = f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_error_variants"
         lines.append(f"static const char *const {variants_name}[] = {{")
         for variant in enum.variants:
             lines.append(f"    {c_string(variant.name)},")
@@ -1054,7 +1108,11 @@ def emit_aot_methods(
         enum = (
             enum_by_symbol.get(f"{e.module}.{e.aot_error_enum}") if e.aot_error_enum else None
         )
-        variants_ref = f"g_aot_stdlib_{e.module}_{e.name}_error_variants" if enum else "NULL"
+        variants_ref = (
+            f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_error_variants"
+            if enum
+            else "NULL"
+        )
         layout_id = stable_enum_layout_id(e.module, enum) if enum else 0
         enum_name = c_string(enum.name) if enum else "NULL"
         variant_count = len(enum.variants) if enum else 0
@@ -1324,8 +1382,9 @@ def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntr
         ]
     )
     for module in sorted(set(rows_by_module) | set(consts_by_module)):
-        macro = f"XR_STDLIB_VM_BIND_MODULE_{module.upper()}"
-        func = f"xr_stdlib_vm_bind_{module}_generated"
+        module_ident = c_module_ident(module)
+        macro = f"XR_STDLIB_VM_BIND_MODULE_{module_ident.upper()}"
+        func = f"xr_stdlib_vm_bind_{module_ident}_generated"
         lines.append(f"#ifdef {macro}")
         lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
         for e in rows_by_module.get(module, []):
@@ -1660,7 +1719,7 @@ def emit_defs_header(
         ]
     )
     for record in records:
-        field_array = f"xr_stdlib_record_fields_{record.module}_{record.name}"
+        field_array = f"xr_stdlib_record_fields_{c_module_ident(record.module)}_{record.name}"
         lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
         for field in record.fields:
             lines.append(
@@ -1673,7 +1732,7 @@ def emit_defs_header(
         lines.append("")
     lines.append("static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {")
     for record in records:
-        field_array = f"xr_stdlib_record_fields_{record.module}_{record.name}"
+        field_array = f"xr_stdlib_record_fields_{c_module_ident(record.module)}_{record.name}"
         lines.append(
             "    {"
             f"{c_string(record.module)}, {c_string(record.name)}, {c_string(record.doc)}, "
@@ -1690,7 +1749,7 @@ def emit_defs_header(
         ]
     )
     for enum in enums:
-        enum_prefix = f"xr_stdlib_enum_{enum.module}_{enum.name}"
+        enum_prefix = f"xr_stdlib_enum_{c_module_ident(enum.module)}_{enum.name}"
         for index, variant in enumerate(enum.variants):
             if not variant.payload_types:
                 continue
@@ -1715,7 +1774,7 @@ def emit_defs_header(
         lines.append("")
     lines.append("static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {")
     for enum in enums:
-        variant_array = f"xr_stdlib_enum_{enum.module}_{enum.name}_variants"
+        variant_array = f"xr_stdlib_enum_{c_module_ident(enum.module)}_{enum.name}_variants"
         lines.append(
             "    {"
             f"{c_string(enum.module)}, {c_string(enum.name)}, {c_string(enum.doc)}, "
@@ -1733,7 +1792,7 @@ def emit_defs_header(
         ]
     )
     for h in handles:
-        field_array = f"xr_stdlib_handle_fields_{h.module}_{h.name}"
+        field_array = f"xr_stdlib_handle_fields_{c_module_ident(h.module)}_{h.name}"
         lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
         for field in h.fields:
             lines.append(
@@ -1746,7 +1805,7 @@ def emit_defs_header(
         lines.append("")
     lines.append("static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {")
     for h in handles:
-        field_array = f"xr_stdlib_handle_fields_{h.module}_{h.name}"
+        field_array = f"xr_stdlib_handle_fields_{c_module_ident(h.module)}_{h.name}"
         lines.append(
             "    {"
             f"{c_string(h.module)}, {c_string(h.name)}, {c_string(h.doc)}, "

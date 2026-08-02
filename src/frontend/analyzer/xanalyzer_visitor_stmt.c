@@ -6816,22 +6816,46 @@ XR_FUNC AstNode *xa_whole_binding_value(AstNode *value) {
     return value;
 }
 
+static AstNode *xa_direct_function_value_source(AstNode *expr);
+static XaSymbol *xa_function_value_source_symbol(XaInferContext *ctx, AstNode *source);
+
 static bool xa_call_is_compiler_fresh_factory(XaInferContext *ctx, AstNode *callee) {
     callee = xa_whole_binding_value(callee);
-    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+    if (!ctx || !ctx->analyzer || !callee)
         return false;
-    MemberAccessNode *member = &callee->as.member_access;
-    AstNode *object = xa_whole_binding_value(member->object);
-    if (!member->name || !object || object->type != AST_VARIABLE || !object->as.variable.name)
+    if (callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &callee->as.member_access;
+        AstNode *object = xa_whole_binding_value(member->object);
+        if (member->name && object && object->type == AST_VARIABLE &&
+            object->as.variable.name) {
+            XaSymbol *module =
+                xa_scope_lookup(ctx->analyzer->current_scope, object->as.variable.name);
+            XaSymbolLinks *module_links =
+                module && module->kind == XA_SYM_MODULE
+                    ? xa_analyzer_get_links(ctx->analyzer, module)
+                    : NULL;
+            const char *module_name =
+                module_links && module_links->module_name ? module_links->module_name : NULL;
+            if (module_name && module_name[0] != '.' && module_name[0] != '/' &&
+                xa_builtin_get_module_func_return_ownership(module_name, member->name) ==
+                    XA_BUILTIN_RETURN_FRESH)
+                return true;
+        }
+    }
+
+    /* Xray stdlib wrappers preserve the ownership summary of their private
+     * native primitive.  Resolve the source callee just like the general
+     * return-provenance pass so a wrapper such as net.listen remains a fresh
+     * factory without being reintroduced as a public builtin. */
+    AstNode *source = xa_direct_function_value_source(callee);
+    XaSymbol *symbol = xa_function_value_source_symbol(ctx, source);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(ctx->analyzer, symbol) : NULL;
+    if (!links)
         return false;
-    XaSymbol *module = xa_scope_lookup(ctx->analyzer->current_scope, object->as.variable.name);
-    if (!module || module->kind != XA_SYM_MODULE)
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, module);
-    const char *module_name = links && links->module_name ? links->module_name : NULL;
-    return module_name && module_name[0] != '.' && module_name[0] != '/' &&
-           xa_builtin_get_module_func_return_ownership(module_name, member->name) ==
-               XA_BUILTIN_RETURN_FRESH;
+    if (!links->return_ownership_scanned && !links->return_ownership_scan_in_progress)
+        xa_ensure_function_return_ownership_prepass(ctx, links);
+    return links->return_ownership.complete &&
+           links->return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED;
 }
 
 XR_FUNC XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value) {

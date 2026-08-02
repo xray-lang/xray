@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "../net/xneterror.h"
+#include "../../stdlib/net/xneterror.h"
 
 #ifndef XR_VALUE_DEFINED
 typedef struct XrValue XrValue;

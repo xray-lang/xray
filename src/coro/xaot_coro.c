@@ -806,7 +806,8 @@ static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int 
     if (member_count <= 0)
         return NULL;
 
-    XrEnumType *type = xr_enum_type_new_core(core, name, members, member_count);
+    XrEnumType *type =
+        xr_enum_type_new_core(core, "prelude", name, members, member_count);
     if (!type)
         return NULL;
     if (payload_counts && !xr_enum_type_set_adt_payloads(type, payload_counts, member_count))

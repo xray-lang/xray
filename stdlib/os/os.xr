@@ -1,0 +1,49 @@
+// os — typed public process/environment surface over private platform syscalls.
+
+export final class ExecResult {
+    stdout: string
+    stderr: string
+    exitCode: int
+
+    constructor(stdout: string, stderr: string, exitCode: int) {
+        this.stdout = stdout
+        this.stderr = stderr
+        this.exitCode = exitCode
+    }
+}
+
+fn _execResult(raw: __ExecResult?) -> ExecResult? {
+    if (raw == null) { return null }
+    return ExecResult(raw!.stdout, raw!.stderr, raw!.exitCode)
+}
+
+export fn getenv(name: string) -> string? { return __getenv(name) }
+export fn setenv(name: string, value: string) -> bool { return __setenv(name, value) }
+export fn unsetenv(name: string) -> bool { return __unsetenv(name) }
+export fn environ() -> Map<string, string> { return __environ() }
+export fn exit(code: int = 0) { __exit(code) }
+export fn getpid() -> int { return __getpid() }
+export fn getcwd() -> string { return __getcwd() }
+export fn hostname() -> string { return __hostname() }
+export fn tmpdir() -> string { return __tmpdir() }
+export fn username() -> string? { return __username() }
+export fn homedir() -> string? { return __homedir() }
+export fn uid() -> int { return __uid() }
+export fn gid() -> int { return __gid() }
+export fn cpuCount() -> int { return __cpuCount() }
+export fn ppid() -> int { return __ppid() }
+export fn kill(pid: int, signal: int = 15) -> bool { return __kill(pid, signal) }
+export fn totalMemory() -> int { return __totalMemory() }
+export fn freeMemory() -> int { return __freeMemory() }
+export fn uptime() -> float { return __uptime() }
+export fn loadavg() -> Array<float> { return __loadavg() }
+export fn clock() -> float { return __clock() }
+export fn sleep(ms: int) { __sleep(ms) }
+
+export fn exec(command: string) -> ExecResult? {
+    return _execResult(__exec(command))
+}
+
+export fn spawn(program: string, args: Array<string>) -> ExecResult? {
+    return _execResult(__spawn(program, args))
+}

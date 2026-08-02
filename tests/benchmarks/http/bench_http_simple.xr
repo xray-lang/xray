@@ -1,13 +1,14 @@
 import http
 import { HttpRequest, HttpResponse } from http
 
-http.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
+var server = http.Server()
+server.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
     return http.textResponse("Hello, World!")
 })
 
-http.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
     return http.jsonResponse({message: "Hello, World!"})
 })
 
 const serverRunning = Atomic(true)
-http.listen(8080, serverRunning)
+server.listen(8080, serverRunning)

@@ -1,6 +1,7 @@
 // 1161_os_extended.xr - OS module extended tests (user info, sysinfo, exec)
 
 import os
+import io
 import path
 
 // ===== User Information =====
@@ -160,6 +161,6 @@ fn test_unsetenv_return_value() {
 
 @test
 fn test_chdir_invalid_path() {
-    var ok = os.chdir(path.from("/nonexistent_xray_test_path_12345"))
+    var ok = io.chdir(path.from("/nonexistent_xray_test_path_12345"))
     assert_eq(ok, false)
 }

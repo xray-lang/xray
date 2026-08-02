@@ -20,22 +20,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../runtime/value/xvalue.h"
+#include "../../include/xray_yieldable_abi.h"
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
 typedef struct XrClosure XrClosure;
-
-#ifndef XR_CFUNC_RESULT_DEFINED
-typedef enum {
-    XR_CFUNC_DONE = 0,
-    XR_CFUNC_YIELD,
-    XR_CFUNC_BLOCKED,
-    XR_CFUNC_ERROR,
-    XR_CFUNC_CALL_CLOSURE,
-    XR_CFUNC_WOULD_BLOCK
-} XrCFuncResult;
-#define XR_CFUNC_RESULT_DEFINED
-#endif
 
 typedef XrCFuncResult (*XrCoroCFuncEntry)(XrVMRuntime *isolate, XrValue *args, int nargs,
                                           XrValue *result);

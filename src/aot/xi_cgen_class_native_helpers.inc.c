@@ -832,7 +832,6 @@ static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiCl
         fprintf(out, "0");
     }
     fprintf(out, ", (uint32_t)sizeof(*dst));\n");
-    fprintf(out, "    memset(dst, 0, sizeof(*dst));\n");
     for (uint16_t slot = 0; slot < cd->instance_layout->field_count; slot++) {
         const XgClassFieldSummary *source = NULL;
         if (!cg_class_native_clone_field_supported(ctx, cd, slot, &source))
@@ -872,28 +871,31 @@ static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiCl
 }
 
 static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
-                                                   const XrAggregateLayout *layout, uint16_t idx,
-                                                   const char *object_expr, const XiValue *value) {
+                                                    const XrAggregateLayout *layout, uint16_t idx,
+                                                    const char *object_expr, const XiValue *value) {
     const XrAggregateFieldLayout *field = cg_struct_field(layout, idx);
     if (!cg_class_native_field_is_ref(field))
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
-    fprintf(out, "({ XrValue _new = ");
-    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
-        fprintf(out, "; xrt_retain(_new); xrt_release(");
+        fprintf(out, "(xrt_retain(");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out, "), xrt_release(");
         emit_class_native_ref_field_value(ctx, out, cd, layout, idx, object_expr);
-        fprintf(out, "); ");
+        fprintf(out, "), ");
     } else {
-        fprintf(out, "; ");
+        fprintf(out, "(");
     }
     emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
     if (tag_name) {
-        fprintf(out, " = (%s)_new.ptr", cg_struct_field_c_type(layout, idx));
+        fprintf(out, " = (%s)(", cg_struct_field_c_type(layout, idx));
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out, ").ptr");
     } else {
-        fprintf(out, " = _new");
+        fprintf(out, " = ");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     }
-    fprintf(out, "; })");
+    fprintf(out, ")");
     return true;
 }
 
@@ -906,22 +908,25 @@ static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE
     if (!cg_class_native_field_is_ref(field))
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
-    fprintf(out, "({ XrValue _new = ");
-    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
-        fprintf(out, "; xrt_retain(_new); xrt_release(");
+        fprintf(out, "(xrt_retain(");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out, "), xrt_release(");
         emit_class_native_receiver_ref_field_value(ctx, out, f, cd, layout, idx, recv);
-        fprintf(out, "); ");
+        fprintf(out, "), ");
     } else {
-        fprintf(out, "; ");
+        fprintf(out, "(");
     }
     emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
     if (tag_name) {
-        fprintf(out, " = (%s)_new.ptr", cg_struct_field_c_type(layout, idx));
+        fprintf(out, " = (%s)(", cg_struct_field_c_type(layout, idx));
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out, ").ptr");
     } else {
-        fprintf(out, " = _new");
+        fprintf(out, " = ");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     }
-    fprintf(out, "; })");
+    fprintf(out, ")");
     return true;
 }
 
@@ -932,7 +937,7 @@ static bool cg_class_native_type_registers_native_layout(const XiCgenCtx *ctx,
 }
 
 static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
-                                                 const char *prefix) {
+                                                  const char *prefix) {
     const char *name = cd && cd->class_name ? cd->class_name : "?";
     bool native_layout = cg_class_native_type_registers_native_layout(ctx, cd);
     const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
@@ -978,6 +983,14 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
         fprintf(out, "0");
     }
     fprintf(out, ")");
+}
+
+static void emit_class_native_type_register_helper_name(FILE *out, const char *prefix,
+                                                        const XiClassData *cd) {
+    char class_name[128];
+    sanitize_c_ident_part(class_name, sizeof(class_name),
+                          cd && cd->class_name ? cd->class_name : "Class");
+    fprintf(out, "xrt_register_%s_%s", prefix ? prefix : "mod", class_name);
 }
 
 static bool cg_class_native_has_inspect_sidecar(const XiClassData *cd) {
@@ -4079,6 +4092,67 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
     return true;
 }
 
+/* Hosted fragments must be valid target C, including MSVC C11.  A native
+ * instance field store traditionally used a GNU statement expression so it
+ * could live in the generic value RHS.  Stores are unit-valued, so emit an
+ * ordinary scoped statement for the hosted artifact instead. */
+static bool emit_hosted_class_native_instance_field_store_stmt(
+    XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v, const char *prefix) {
+    (void)f;
+    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !v ||
+        v->op != XI_STORE_FIELD || v->nargs < 2 || !v->aux)
+        return false;
+    const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
+    if (!cd || !cd->instance_layout)
+        return false;
+    int idx = cg_class_native_field_index_for_value(ctx, cd, cd->instance_layout, v);
+    if (idx < 0)
+        return false;
+    const XrAggregateFieldLayout *field =
+        cg_struct_field(cd->instance_layout, (uint16_t)idx);
+    if (!field)
+        return false;
+
+    char native_name[48];
+    snprintf(native_name, sizeof(native_name), "_hosted_native_%u", v->id);
+    fprintf(out, "    {\n");
+    if (cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_PTR) {
+        fprintf(out, "        ");
+        emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, cd, prefix),
+                                    cd->class_name);
+        fprintf(out, " *%s = ", native_name);
+        emit_class_native_ptr_value(ctx, out, cd, prefix, v->args[0]);
+        fprintf(out, ";\n");
+    } else {
+        char object_name[48];
+        snprintf(object_name, sizeof(object_name), "_hosted_object_%u", v->id);
+        fprintf(out, "        XrValue %s = ", object_name);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ";\n        ");
+        emit_class_native_instance_guard(ctx, out, cd, object_name);
+        fprintf(out, "\n        ");
+        emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, cd, prefix),
+                                    cd->class_name);
+        fprintf(out, " *%s = ", native_name);
+        emit_class_native_boxed_instance_ptr(ctx, out, cd, prefix, object_name);
+        fprintf(out, ";\n");
+    }
+
+    fprintf(out, "        (void)");
+    if (!emit_class_native_ref_field_store_expr(ctx, out, cd, cd->instance_layout,
+                                                (uint16_t)idx, native_name, v->args[1])) {
+        fprintf(out, "(%s->", native_name);
+        emit_class_native_field_path(ctx, out, cd, (uint16_t)idx);
+        fprintf(out, " = (%s)", cg_struct_field_c_type(cd->instance_layout, (uint16_t)idx));
+        emit_value_as_rep_ctx(ctx, out, v->args[1],
+                              cg_struct_field_rep(cd->instance_layout, (uint16_t)idx));
+        fprintf(out, ")");
+    }
+    fprintf(out, ";\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    return true;
+}
+
 static bool emit_class_native_return_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiBlock *blk) {
     if (!cg_class_func_is_native_constructor(ctx, f) || !blk)
@@ -4536,6 +4610,114 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
+/* Hosted fragments are compiled by the platform C compiler, including MSVC.
+ * Keep heap-backed native construction in statement position so the generated
+ * translation unit never needs GNU statement expressions.  This is the heap
+ * counterpart of emit_class_native_ctor_value_stmt(): it deliberately retains
+ * the normal object header, field-default, constructor and storage-mode rules. */
+static bool emit_hosted_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
+                                                     const XiFunc *f, const char *prefix,
+                                                     const XiValue *v) {
+    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v)
+        return false;
+
+    const XiFunc *target = NULL;
+    const char *ctor_prefix = NULL;
+    const XiClassData *cd =
+        cg_class_native_ctor_call_data(ctx, f, v, &target, &ctor_prefix);
+    if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
+        return false;
+
+    const char *class_prefix = ctor_prefix ? ctor_prefix : prefix;
+    if (target) {
+        CgClassNativeFunc info = cg_class_native_func(ctx, target);
+        if (!info.layout || !info.is_constructor || info.class_data != cd)
+            return false;
+    }
+
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, " *_hosted_inst_%u = (", v->id);
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, "*)xrt_obj_alloc((uint16_t)");
+    emit_class_native_type_id_expr(ctx, out, cd);
+    fprintf(out, ", (uint32_t)sizeof(*_hosted_inst_%u));\n", v->id);
+
+    if (cg_class_native_has_field_defaults(ctx, cd)) {
+        fprintf(out, "    ");
+        char inst[48];
+        snprintf(inst, sizeof(inst), "_hosted_inst_%u", v->id);
+        emit_class_native_field_default_stores(ctx, out, cd, cd, inst);
+        fprintf(out, "\n");
+    }
+
+    if (target && cg_func_needs_aot_coro_ctx(ctx, target)) {
+        fprintf(out, "    void *_hosted_ctor_frame_%u = ", v->id);
+        emit_fname_suffix(ctx, out, class_prefix, target, "_aot_frame_new");
+        fprintf(out, "(");
+        bool need_comma = false;
+        if (target->ncaptures > 0) {
+            fprintf(out, "NULL");
+            need_comma = true;
+        }
+        if (need_comma)
+            fprintf(out, ", ");
+        fprintf(out, "xrt_box_obj(_hosted_inst_%u)", v->id);
+        need_comma = true;
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            if (need_comma)
+                fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
+            need_comma = true;
+        }
+        fprintf(out, ");\n");
+        fprintf(out, "    if (!_hosted_ctor_frame_%u) abort();\n", v->id);
+        fprintf(out, "    XrAotResult _hosted_ctor_result_%u = ", v->id);
+        emit_fname_suffix(ctx, out, class_prefix, target, "_aot_resume");
+        fprintf(out, "(_hosted_ctor_frame_%u, %s);\n", v->id,
+                cg_aot_context_expr(ctx, f));
+        fprintf(out, "    ");
+        emit_fname_suffix(ctx, out, class_prefix, target, "_aot_release");
+        fprintf(out, "(_hosted_ctor_frame_%u, NULL);\n", v->id);
+        fprintf(out, "    if (_hosted_ctor_result_%u.kind != XR_AOT_RUN_DONE) abort();\n",
+                v->id);
+    } else if (target) {
+        fprintf(out, "    (void)");
+        emit_fname(ctx, out, class_prefix, target);
+        fprintf(out, "(NULL, _hosted_inst_%u", v->id);
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, v, target, a, v->args[a]);
+        }
+        fprintf(out, ");\n");
+    }
+
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL) {
+        fprintf(out,
+                "    (void)xrt_value_set_storage(xrt_box_obj(_hosted_inst_%u), %u);\n",
+                v->id, (unsigned) storage_mode);
+    }
+
+    if (ctx->pre_decl_all) {
+        fprintf(out, "    ");
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    } else {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    }
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR)
+        fprintf(out, "_hosted_inst_%u", v->id);
+    else
+        fprintf(out, "xrt_box_obj(_hosted_inst_%u)", v->id);
+    fprintf(out, ";\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
+}
+
 static bool emit_class_native_default_constructor_expr(XiCgenCtx *ctx, FILE *out,
                                                        const char *prefix, const XiValue *v,
                                                        const XiClassData *cd,
@@ -4550,8 +4732,12 @@ static bool emit_class_native_default_constructor_expr(XiCgenCtx *ctx, FILE *out
     emit_class_native_type_name(out, class_prefix, cd->class_name);
     fprintf(out, "*)xrt_obj_alloc((uint16_t)");
     emit_class_native_type_id_expr(ctx, out, cd);
-    fprintf(out, ", (uint32_t)sizeof(*_inst)); memset(_inst, 0, sizeof(*_inst)); ");
+    fprintf(out, ", (uint32_t)sizeof(*_inst)); ");
     emit_class_native_field_default_stores(ctx, out, cd, cd, "_inst");
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "(void)xrt_value_set_storage(xrt_box_obj(_inst), %u); ",
+                (unsigned) storage_mode);
     fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
     fprintf(out, "; })");
     return true;
@@ -4596,8 +4782,7 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
         }
         fprintf(out, "); if (!_ctor_frame) abort(); XrAotResult _ctor_result = ");
         emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_resume");
-        fprintf(out, "(_ctor_frame, %s); ",
-                cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx");
+        fprintf(out, "(_ctor_frame, %s); ", cg_aot_context_expr(ctx, f));
         emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_release");
         fprintf(out, "(_ctor_frame, NULL); if (_ctor_result.kind != XR_AOT_RUN_DONE) abort(); ");
     } else {
@@ -4609,6 +4794,10 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
         }
         fprintf(out, "); ");
     }
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "(void)xrt_value_set_storage(xrt_box_obj(_inst), %u); ",
+                (unsigned) storage_mode);
     fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
     fprintf(out, "; })");
     return true;
@@ -5984,21 +6173,22 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     fprintf(out, "typedef struct ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, " { ");
-    if (cd->inherited_field_count > 0 && cd->super_name) {
+    const XiClassData *super_cd =
+        cd->super_name ? cg_class_native_data_by_name(ctx, cd->super_name) : NULL;
+    if (super_cd && super_cd->instance_layout) {
         /* The base member's struct type must carry the parent's own module
          * prefix, which differs from `prefix` when the parent lives in another
          * module (cross-module inheritance). */
-        const XiClassData *super_cd = cg_class_native_data_by_name(ctx, cd->super_name);
         const char *super_prefix =
             super_cd ? cg_class_native_prefix_for_data(ctx, super_cd, prefix) : prefix;
         emit_class_native_type_name(out, super_prefix,
                                     super_cd ? super_cd->class_name : cd->super_name);
         fprintf(out, " base; ");
+    } else {
+        fprintf(out, "XrObjHeader hdr; ");
     }
     for (uint16_t fi = cd->inherited_field_count; fi < cd->instance_layout->field_count; fi++)
         fprintf(out, "%s f%u; ", cg_struct_field_c_type(cd->instance_layout, fi), (unsigned) fi);
-    if (cd->instance_layout->field_count == 0)
-        fprintf(out, "char _empty; ");
     fprintf(out, "} ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, ";\n");
@@ -6020,7 +6210,11 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
                 cd->instance_layout->field_names ? cd->instance_layout->field_names[fi] : NULL;
             fprintf(out, "%s{", fi > 0 ? ", " : "");
             emit_c_string_literal(out, field_name ? field_name : "?");
-            fprintf(out, ", %uu, %u}", field ? (unsigned) field->offset : 0u,
+            fprintf(out, ", (uint32_t)offsetof(");
+            emit_class_native_type_name(out, prefix, cd->class_name);
+            fprintf(out, ", ");
+            emit_class_native_field_path(ctx, out, cd, fi);
+            fprintf(out, "), %u}",
                     field ? (unsigned) field->native_type : (unsigned) XR_NATIVE_VALUE);
         }
         fprintf(out, "};\n");

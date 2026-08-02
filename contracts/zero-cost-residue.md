@@ -9,6 +9,11 @@ reached. Residue categories and allowance semantics are unchanged.
 Task 254 removes backend-only mutable-capture cell maps and emits the explicit
 Xi cell graph directly; this changes neither the residue categories nor their
 measurement point.
+Task 256 adds an explicit hosted-fragment artifact and source-generated VM
+stdlib entries. A fragment has no program entry or runtime ownership, and an
+entry is admitted only after the ordinary post-CGen W1-W4 verifier plus its
+typed ABI gate pass. The residue categories, allowance set, and measurement
+point remain unchanged.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -67,7 +72,7 @@ that cite the affected category.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xi_cgen.h f830e12e06f1cc4934c368144e4e79acda88b7c5a8b3130bbbfbb8627842c434
-anchor-sha256: src/aot/xi_cgen.c ccfbf24176c4567842a9ba2c2d9031cac0e1827ee17a93b816de88d58e52bc13
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 0a1cff4b2732570397990c6d9b85320dd679aece9c0c0c0082af996363fea70d
+anchor-sha256: src/aot/xi_cgen.h fcffdd760d0bbb8c2ab4c04ccf81de071a2ce9afb209ec22d1b03b396584831d
+anchor-sha256: src/aot/xi_cgen.c 11f3911b78284de1e8ce272634b128fb0d73cd7bbbd2efc8757a19d9ec64215d
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c d325e616c77b3ac1ac6925954f909c6297bdb3e58fecc3c1cad2ab9fd62705b4
 anchor-sha256: src/app/cli/xcmd_verify.c 932ea0eba80546c8eded92dfa6dc1aa50d72f5f1581bfe309596e417585e9216

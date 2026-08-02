@@ -3,9 +3,6 @@
 // Public binary input is always Slice<byte>. Decoding returns owned bytes and
 // reports recoverable user-input failures through Base64Error instead of null.
 
-const STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-const URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-
 export enum Base64Alphabet {
     Standard,
     UrlSafe
@@ -44,9 +41,14 @@ export class Base64DecodeOptions {
     }
 }
 
-fn _alphabet(options: Base64Alphabet) -> string {
-    if (options == Base64Alphabet.UrlSafe) { return URL }
-    return STD
+fn _encodeRune(index: int, alphabet: Base64Alphabet) -> rune {
+    if (index < 26) { return rune(65 + index)! }
+    if (index < 52) { return rune(97 + index - 26)! }
+    if (index < 62) { return rune(48 + index - 52)! }
+    if (index == 62) {
+        return alphabet == Base64Alphabet.UrlSafe ? '-' : '+'
+    }
+    return alphabet == Base64Alphabet.UrlSafe ? '_' : '/'
 }
 
 fn _decodeChar(c: int, alphabet: Base64Alphabet) -> int {
@@ -123,7 +125,7 @@ fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, in
     return (0, 0, zero, end, rem, outLen)
 }
 
-fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
+fn _encodeAlpha(data: Slice<byte>, alphabet: Base64Alphabet, padding: bool) -> string {
     var n = len(data)
     var out = StringBuilder()
     var i = 0
@@ -131,24 +133,24 @@ fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
         var b0 = data[i] as int
         var b1 = data[i + 1] as int
         var b2 = data[i + 2] as int
-        out.append(alpha.runes().nth(b0 >> 2))
-        out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(alpha.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
-        out.append(alpha.runes().nth(b2 & 63))
+        out.append(_encodeRune(b0 >> 2, alphabet))
+        out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
+        out.append(_encodeRune(((b1 & 15) << 2) | (b2 >> 6), alphabet))
+        out.append(_encodeRune(b2 & 63, alphabet))
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = data[i] as int
-        out.append(alpha.runes().nth(b0 >> 2))
-        out.append(alpha.runes().nth((b0 & 3) << 4))
+        out.append(_encodeRune(b0 >> 2, alphabet))
+        out.append(_encodeRune((b0 & 3) << 4, alphabet))
         if (padding) { out.append("==") }
     } else if (rem == 2) {
         var b0 = data[i] as int
         var b1 = data[i + 1] as int
-        out.append(alpha.runes().nth(b0 >> 2))
-        out.append(alpha.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(alpha.runes().nth((b1 & 15) << 2))
+        out.append(_encodeRune(b0 >> 2, alphabet))
+        out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
+        out.append(_encodeRune((b1 & 15) << 2, alphabet))
         if (padding) { out.append("=") }
     }
     return out.toString()
@@ -197,7 +199,7 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
 
 export fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
     var resolved = options == null ? Base64EncodeOptions() : options!
-    return _encodeAlpha(data, _alphabet(resolved.alphabet), resolved.padding)
+    return _encodeAlpha(data, resolved.alphabet, resolved.padding)
 }
 
 export fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {

@@ -26,6 +26,7 @@
 #include "../base/xchecks.h"
 #include "../analysis/xglobal_summary.h"
 #include "xi_cgen.h"
+#include "xaot_artifact.h"
 #include "xaot_link.h"
 #include "xaot_prepare.h"
 #include <stdbool.h>
@@ -141,10 +142,10 @@ typedef struct XaotBuildOptions {
     const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
+    XaotArtifactKind artifact_kind;
     XiCgenCDialect c_dialect;
     XiCgenTypeNameProfile type_name_profile;
     bool emit_plan_dump;
-    bool emit_program_main;
     bool emit_global_evidence_dump;
     bool emit_local_evidence_dump;
     bool emit_residue_dump; /* task 217 --dump-residue */

@@ -17,7 +17,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
-#include "../../stdlib/crypto/crypto.h"
+#include "../shared/xr_crypto_core.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>

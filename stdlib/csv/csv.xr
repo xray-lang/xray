@@ -189,15 +189,25 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
     var candidates: Array<rune> = [',', '\t', ';', '|']
     var counts: Array<int> = [0, 0, 0, 0]
     var quoted = false
-    var limit = len(data)
-    if (limit > 4096) { limit = 4096 }
+    var iter = data.runes()
+    var hasPending = false
+    var pending = '\u{0}'
+    var examined = 0
 
-    var i = 0
-    while (i < limit) {
-        var c = data.runes().nth(i)
-        if (quoted && c == escapeChar && i + 1 < limit && data.runes().nth(i + 1) == quoteChar) {
-            i = i + 2
-            continue
+    while ((hasPending || iter.hasNext()) && examined < 4096) {
+        var c = pending
+        if (hasPending) {
+            hasPending = false
+        } else {
+            c = iter.next()
+        }
+        examined = examined + 1
+        if (quoted && c == escapeChar && iter.hasNext() && examined < 4096) {
+            var next = iter.next()
+            examined = examined + 1
+            if (next == quoteChar) { continue }
+            pending = next
+            hasPending = true
         }
         if (c == quoteChar) {
             quoted = !quoted
@@ -206,7 +216,6 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
                 if (c == candidates[j]) { counts[j] = counts[j] + 1 }
             }
         }
-        i = i + 1
     }
 
     var best = ','
@@ -310,17 +319,9 @@ fn _observeLinebreak(state: ref _CsvState, value: string) {
     state.physicalLine = state.physicalLine + 1
 }
 
-fn _newlineWidth(data: string, pos: int) -> int {
-    if (data.runes().nth(pos) == '\r' && pos + 1 < len(data) &&
-        data.runes().nth(pos + 1) == '\n') {
-        return 2
-    }
-    return 1
-}
-
-fn _newlineText(data: string, pos: int, width: int) -> string {
+fn _newlineText(current: rune, width: int) -> string {
     if (width == 2) { return "\r\n" }
-    return data.runes().nth(pos).toString()
+    return current.toString()
 }
 
 fn _startsWith(s: string, prefix: string) -> bool {
@@ -405,17 +406,35 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
 
     var field = StringBuilder()
     var parserState = STATE_FIELD_START
-    var pos = 0
+    var iter = data.runes()
+    var hasPending = false
+    var pending = '\u{0}'
     var bytePos = 0
-    if (len(data) > 0 && data.runes().nth(0) == '\u{FEFF}') {
-        pos = 1
-        bytePos = 3
-    }
 
-    while (pos < len(data)) {
-        var startPos = pos
+    while (hasPending || iter.hasNext()) {
+        var c = pending
+        if (hasPending) {
+            hasPending = false
+        } else {
+            c = iter.next()
+        }
+        if (bytePos == 0 && c == '\u{FEFF}') {
+            bytePos = 3
+            continue
+        }
         state.byteOffset = bytePos
-        var c = data.runes().nth(pos)
+        var consumedWidth = 0
+        var newlineWidth = 1
+        if (_isNewline(c) && iter.hasNext()) {
+            var next = iter.next()
+            if (c == '\r' && next == '\n') {
+                newlineWidth = 2
+                consumedWidth = _utf8Width(next)
+            } else {
+                pending = next
+                hasPending = true
+            }
+        }
 
         if (parserState == STATE_FIELD_START) {
             if (c == options.quoteChar) {
@@ -425,10 +444,8 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 _finishField(ref state, options, ref field)
             } else if (_isNewline(c)) {
                 _finishField(ref state, options, ref field)
-                var width = _newlineWidth(data, pos)
-                _observeLinebreak(ref state, _newlineText(data, pos, width))
+                _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
-                pos = pos + width - 1
             } else {
                 _appendRune(ref state, ref field, c, options)
                 parserState = STATE_UNQUOTED
@@ -439,27 +456,29 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 parserState = STATE_FIELD_START
             } else if (_isNewline(c)) {
                 _finishField(ref state, options, ref field)
-                var width = _newlineWidth(data, pos)
-                _observeLinebreak(ref state, _newlineText(data, pos, width))
+                _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
-                pos = pos + width - 1
                 parserState = STATE_FIELD_START
             } else {
                 _appendRune(ref state, ref field, c, options)
             }
         } else if (parserState == STATE_QUOTED) {
-            if (c == options.escapeChar && pos + 1 < len(data) &&
-                data.runes().nth(pos + 1) == options.quoteChar) {
-                _appendRune(ref state, ref field, options.quoteChar, options)
-                pos = pos + 1
+            if (c == options.escapeChar && iter.hasNext()) {
+                var next = iter.next()
+                if (next == options.quoteChar) {
+                    _appendRune(ref state, ref field, options.quoteChar, options)
+                    consumedWidth = _utf8Width(next)
+                } else {
+                    pending = next
+                    hasPending = true
+                    parserState = STATE_QUOTE_END
+                }
             } else if (c == options.quoteChar) {
                 parserState = STATE_QUOTE_END
             } else if (_isNewline(c)) {
-                var width = _newlineWidth(data, pos)
-                var newline = _newlineText(data, pos, width)
+                var newline = _newlineText(c, newlineWidth)
                 _appendText(ref state, ref field, newline, options)
                 _observeLinebreak(ref state, newline)
-                pos = pos + width - 1
             } else {
                 _appendRune(ref state, ref field, c, options)
             }
@@ -469,10 +488,8 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 parserState = STATE_FIELD_START
             } else if (_isNewline(c)) {
                 _finishField(ref state, options, ref field)
-                var width = _newlineWidth(data, pos)
-                _observeLinebreak(ref state, _newlineText(data, pos, width))
+                _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
-                pos = pos + width - 1
                 parserState = STATE_FIELD_START
             } else {
                 _addDiagnostic(ref state, CsvErrorKind.InvalidEscape,
@@ -481,9 +498,7 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 parserState = STATE_UNQUOTED
             }
         }
-        bytePos = bytePos + _utf8Width(c)
-        if (pos > startPos) { bytePos = bytePos + _utf8Width(data.runes().nth(pos)) }
-        pos = pos + 1
+        bytePos = bytePos + _utf8Width(c) + consumedWidth
     }
 
     state.byteOffset = len(data.bytes())
@@ -541,20 +556,21 @@ export fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
 }
 
 fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
-    if (len(value) == 0) { return false }
-    if (value.runes().nth(0) == ' ' || value.runes().nth(0) == '\t' ||
-        value.runes().nth(len(value) - 1) == ' ' ||
-        value.runes().nth(len(value) - 1) == '\t') {
-        return true
-    }
-    for (var i = 0; i < len(value); i++) {
-        var c = value.runes().nth(i)
+    var iter = value.runes()
+    if (!iter.hasNext()) { return false }
+    var first = true
+    var previous = '\u{0}'
+    while (iter.hasNext()) {
+        var c = iter.next()
+        if (first && (c == ' ' || c == '\t')) { return true }
         if (c == options.delimiter || c == options.quoteChar || c == options.escapeChar ||
             _isNewline(c)) {
             return true
         }
+        previous = c
+        first = false
     }
-    return false
+    return previous == ' ' || previous == '\t'
 }
 
 fn _writeField(out: ref StringBuilder, value: string, options: CsvWriteOptions) {
@@ -564,8 +580,9 @@ fn _writeField(out: ref StringBuilder, value: string, options: CsvWriteOptions) 
     }
     out.append(options.quoteChar)
     var prefixMode = options.escapeChar != options.quoteChar
-    for (var i = 0; i < len(value); i++) {
-        var c = value.runes().nth(i)
+    var iter = value.runes()
+    while (iter.hasNext()) {
+        var c = iter.next()
         if (c == options.quoteChar || (prefixMode && c == options.escapeChar)) {
             out.append(options.escapeChar)
             out.append(c)

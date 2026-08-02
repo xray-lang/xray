@@ -1126,10 +1126,30 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
     } else if (xr_value_is_class(fn_val)) {
         XrClass *klass = xr_value_to_class(fn_val);
 
-        // Find constructor
+        /* Generated hosted classes publish a static primitive `call` that
+         * constructs the AOT instance and returns its VM proxy. Module-member
+         * invocation must use the same class-call rule as direct OP_CALL;
+         * allocating an ordinary VM XrInstance here would split identity and
+         * bypass the fragment constructor. */
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
+        int call_symbol = xr_symbol_lookup_in_table(sym_table, "call");
+        XrMethod *constructor =
+            call_symbol >= 0 ? xr_class_lookup_method(klass, call_symbol) : NULL;
+        if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
+            int base_offset = (int) (base - vm_ctx->stack);
+            int frame_index = (int) (frame - vm_ctx->frames);
+            XrValue result = constructor->as.primitive(
+                isolate, fn_val, &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(
+                    vm_ctx, base_offset, frame_index, &base, &frame))
+                return XR_DISP_FATAL;
+            base[a] = result;
+            return XR_DISP_NEXT;
+        }
+
+        // Find ordinary closure constructor for non-hosted user classes.
         int ctor_symbol = xr_symbol_lookup_in_table(sym_table, XR_KEYWORD_CONSTRUCTOR);
-        XrMethod *constructor = NULL;
+        constructor = NULL;
         if (ctor_symbol >= 0) {
             constructor = xr_class_lookup_method(klass, ctor_symbol);
         }

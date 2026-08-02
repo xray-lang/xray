@@ -43,7 +43,7 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
     if (!isolate || !name || !members || member_count <= 0)
         return NULL;
 
-    XrEnumType *type = xr_enum_type_new(isolate, name, members, member_count);
+    XrEnumType *type = xr_enum_type_new(isolate, "prelude", name, members, member_count);
     if (!type || !payload_counts)
         return type;
 

@@ -128,6 +128,13 @@ XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrVMRuntime *isolate);
 XR_FUNC struct XrEnumType *xr_stdlib_enum_type_get(struct XrVMRuntime *isolate, const char *module,
                                                    const char *name);
 
+// Return the generated declaration owner for an already-materialized native
+// stdlib enum.  Bytecode serialization uses this nominal (module, name)
+// identity instead of guessing the owner from the module that happens to load
+// the bytecode.  Returns NULL for ordinary user-declared enums.
+XR_FUNC const char *xr_stdlib_enum_type_module(struct XrVMRuntime *isolate,
+                                               const struct XrEnumType *type);
+
 // Materialize the runtime shape for a module-scoped native sealed Record.
 // The returned class is canonical for (isolate, module, name).
 XR_FUNC struct XrClass *xr_stdlib_record_class_get(struct XrVMRuntime *isolate, const char *module,

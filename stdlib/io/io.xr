@@ -1,16 +1,40 @@
-// io — filesystem module (script layer over the native-primitive C boundary).
+// io — typed filesystem composition over a private syscall boundary.
 //
-// The C layer (stdlib/io/io.c) implements every filesystem operation directly.
-// Operations that yield a filesystem *path* return a raw string through a private
-// `__*` primitive; this script layer wraps those raw strings into the native
-// `path.Path` class so the public `io` surface is typed in `Path`, matching the
-// VM byte-for-byte.  All non-path operations (chmod, stat, writeFile, exists, …)
-// stay direct C primitives and are not re-declared here.
+// Native entry points are deliberately internal `__*` primitives. Resource
+// ownership, buffering, line iteration, Path shaping, and public value types
+// live here so VM and AOT compile the same Xray semantics.
 import { Path } from path
 
+export final class FileStat {
+    size: int
+    mode: int
+    mtime: int
+    atime: int
+    ctime: int
+    uid: int
+    gid: int
+    isFile: bool
+    isDir: bool
+    isSymlink: bool
+
+    constructor(size: int, mode: int, mtime: int, atime: int, ctime: int,
+                uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool) {
+        this.size = size
+        this.mode = mode
+        this.mtime = mtime
+        this.atime = atime
+        this.ctime = ctime
+        this.uid = uid
+        this.gid = gid
+        this.isFile = isFile
+        this.isDir = isDir
+        this.isSymlink = isSymlink
+    }
+}
+
 // File is a synchronous read-only byte stream. It deliberately requires an
-// explicit close (normally `defer file.close()`): Xray does not expose a
-// deterministic finalizer contract, so native resources must not depend on GC.
+// explicit close (normally `defer file.close()`): native resources must not
+// depend on a nondeterministic finalizer contract.
 export final class File {
     private _handle: int
     private _open: bool
@@ -24,93 +48,234 @@ export final class File {
 
     static open(path: Path) -> File? {
         var handle = __fileOpen(path)
-        if (handle < 0) {
-            return null
-        }
+        if (handle < 0) { return null }
         return File(handle, true)
     }
 
-    static stdin() -> File {
-        return File(0, false)
-    }
+    static stdin() -> File { return File(0, false) }
 
     read(maxBytes: int = 131072) -> Array<byte>? {
-        if (!this._open || maxBytes < 0) {
-            return null
-        }
+        if (!this._open || maxBytes < 0) { return null }
         return __fileRead(this._handle, maxBytes)
     }
 
     close() -> bool {
-        if (!this._open) {
-            return true
-        }
+        if (!this._open) { return true }
         var ok = true
-        if (this._owned) {
-            ok = __fileClose(this._handle)
-        }
+        if (this._owned) { ok = __fileClose(this._handle) }
         this._open = false
         return ok
     }
 }
 
-// cwd — the current working directory.
-export fn cwd() -> Path {
-    return Path(__cwd())
+export final class BufReader {
+    private _file: File
+    private _buffer: Array<byte>
+    private _cursor: int
+    private _chunkSize: int
+    private _eof: bool
+
+    private constructor(file: File, chunkSize: int) {
+        this._file = file
+        this._buffer = Array<byte>(0)
+        this._cursor = 0
+        this._chunkSize = chunkSize
+        this._eof = false
+    }
+
+    static open(path: Path, chunkSize: int = 131072) -> BufReader? {
+        if (chunkSize <= 0) { return null }
+        var file = File.open(path)
+        if (file == null) { return null }
+        return BufReader(file!, chunkSize)
+    }
+
+    private fill() -> bool {
+        if (this._eof) { return false }
+        var chunk = this._file.read(this._chunkSize)
+        if (chunk == null || len(chunk!) == 0) {
+            this._buffer = Array<byte>(0)
+            this._cursor = 0
+            this._eof = true
+            return false
+        }
+        this._buffer = chunk!
+        this._cursor = 0
+        return true
+    }
+
+    readLine() -> string? {
+        var out = Array<byte>()
+        while (true) {
+            if (this._cursor >= len(this._buffer) && !this.fill()) {
+                if (len(out) == 0) { return null }
+                return string.fromUtf8Lossy(out[:])
+            }
+            var value = this._buffer[this._cursor]
+            this._cursor = this._cursor + 1
+            if (value == 10) {
+                if (len(out) > 0 && out[len(out) - 1] == 13) { out.pop() }
+                return string.fromUtf8Lossy(out[:])
+            }
+            out.push(value)
+        }
+        return null
+    }
+
+    close() -> bool {
+        this._eof = true
+        return this._file.close()
+    }
 }
 
-// tempDir — create a temporary directory and return its path.
+export final class LineIterator {
+    private _reader: BufReader
+    private _next: string?
+    private _done: bool
+
+    constructor(reader: BufReader) {
+        this._reader = reader
+        this._next = null
+        this._done = false
+        this.advance()
+    }
+
+    private advance() {
+        this._next = this._reader.readLine()
+        if (this._next == null) {
+            this._done = true
+            this._reader.close()
+        }
+    }
+
+    hasNext() -> bool { return !this._done }
+
+    next() -> string? {
+        if (this._done) { return null }
+        var value = this._next
+        this.advance()
+        return value
+    }
+}
+
+// BufWriter batches byte writes and publishes them atomically through the
+// whole-file primitive. Repeated flushes rewrite the same complete buffer;
+// callers may reset explicitly before composing another file image.
+export final class BufWriter {
+    private _path: Path
+    private _buffer: Array<byte>
+
+    constructor(path: Path, capacity: int = 131072) {
+        this._path = path
+        this._buffer = Array<byte>()
+        this._buffer.reserve(capacity)
+    }
+
+    write(data: Slice<byte>) -> int {
+        for (var i = 0; i < len(data); i++) { this._buffer.push(data[i]) }
+        return len(data)
+    }
+
+    writeBytes(data: Array<byte>) -> int { return this.write(data[:]) }
+
+    writeString(data: string) -> int {
+        var bytes = data.copyBytes()
+        return this.write(bytes[:])
+    }
+
+    flush() -> bool { return __writeFileBytes(this._path, this._buffer) }
+
+    reset() { this._buffer.clear() }
+
+    size() -> int { return len(this._buffer) }
+}
+
+export fn appendFile(path: Path, data: string) -> bool { return __appendFile(path, data) }
+export fn chmod(path: Path, mode: int) -> bool { return __chmod(path, mode) }
+export fn chdir(path: Path) -> bool { return __chdir(path) }
+export fn copyFile(src: Path, dst: Path) -> bool { return __copyFile(src, dst) }
+export fn cwd() -> Path { return Path(__cwd()) }
+export fn exists(path: Path) -> bool { return __exists(path) }
+export fn fileSize(path: Path) -> int { return __fileSize(path) }
+export fn isDir(path: Path) -> bool { return __isDir(path) }
+export fn isFile(path: Path) -> bool { return __isFile(path) }
+export fn isSymlink(path: Path) -> bool { return __isSymlink(path) }
+export fn mkdir(path: Path) -> bool { return __mkdir(path) }
+export fn mkdirp(path: Path) -> bool { return __mkdirp(path) }
+export fn readFile(path: Path) -> string? { return __readFile(path) }
+export fn readFileBytes(path: Path) -> Array<byte>? { return __readFileBytes(path) }
+export fn readStdin() -> string? { return __readStdin() }
+export fn readStdinBytes() -> Array<byte>? { return __readStdinBytes() }
+export fn remove(path: Path) -> bool { return __remove(path) }
+export fn removeAll(path: Path) -> bool { return __removeAll(path) }
+export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
+export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, link) }
+export fn touch(path: Path) -> bool { return __touch(path) }
+export fn writeFile(path: Path, data: string) -> bool { return __writeFile(path, data) }
+export fn writeFileBytes(path: Path, data: Array<byte>) -> bool {
+    return __writeFileBytes(path, data)
+}
+export fn writeStderr(data: string) -> bool { return __writeStderr(data) }
+export fn writeStdout(data: string) -> bool { return __writeStdout(data) }
+
+export fn stat(path: Path) -> FileStat? {
+    var raw = __stat(path)
+    if (raw == null) { return null }
+    return FileStat(raw!.size, raw!.mode, raw!.mtime, raw!.atime, raw!.ctime,
+                    raw!.uid, raw!.gid, raw!.isFile, raw!.isDir, raw!.isSymlink)
+}
+
 export fn tempDir() -> Path? {
     var raw = __tempDir()
-    if (raw == null) {
-        return null
-    }
+    if (raw == null) { return null }
     return Path(raw!)
 }
 
-// tempFile — create a temporary file and return its path.
 export fn tempFile() -> Path? {
     var raw = __tempFile()
-    if (raw == null) {
-        return null
-    }
+    if (raw == null) { return null }
     return Path(raw!)
 }
 
-// readlink — the target of a symbolic link.
-export fn readlink(p: Path) -> Path? {
-    var raw = __readlink(p)
-    if (raw == null) {
-        return null
-    }
+export fn readlink(path: Path) -> Path? {
+    var raw = __readlink(path)
+    if (raw == null) { return null }
     return Path(raw!)
 }
 
-// realpath — the canonical absolute path.
-export fn realpath(p: Path) -> Path? {
-    var raw = __realpath(p)
-    if (raw == null) {
-        return null
-    }
+export fn realpath(path: Path) -> Path? {
+    var raw = __realpath(path)
+    if (raw == null) { return null }
     return Path(raw!)
 }
 
-// readDir — the immediate entries of a directory.
-export fn readDir(p: Path) -> Array<Path> {
-    var raws = __readDir(p)
+export fn readDir(path: Path) -> Array<Path> {
+    var raws = __readDir(path)
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) {
-        out.push(Path(raws[i]))
-    }
+    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
     return out
 }
 
-// readDirRecursive — every entry beneath a directory.
-export fn readDirRecursive(p: Path) -> Array<Path> {
-    var raws = __readDirRecursive(p)
+export fn readDirRecursive(path: Path) -> Array<Path> {
+    var raws = __readDirRecursive(path)
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) {
-        out.push(Path(raws[i]))
+    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
+    return out
+}
+
+export fn lines(path: Path) -> LineIterator? {
+    var reader = BufReader.open(path)
+    if (reader == null) { return null }
+    return LineIterator(reader!)
+}
+
+export fn readLines(path: Path) -> Array<string> {
+    var iterator = lines(path)
+    var out = Array<string>()
+    if (iterator == null) { return out }
+    while (iterator!.hasNext()) {
+        var line = iterator!.next()
+        if (line != null) { out.push(line!) }
     }
     return out
 }

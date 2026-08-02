@@ -1,0 +1,16 @@
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn buildBox() -> Box {
+    Coro.yield()
+    return Box(41)
+}
+
+var task = go buildBox()
+var box = await task
+print(box.value + 1)

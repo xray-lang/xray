@@ -12,7 +12,7 @@
  *
  * WHY THIS DESIGN:
  *   - HTTP/1.x request semantics live in pure Xray stdlib/http/http.xr
- *   - Native code remains only for HTTP/2 and internal XPkg/client data planes
+ *   - Native code remains only for internal XPkg/client data planes
  *   - Per-Isolate pools avoid cross-runtime connection lifetime coupling
  */
 
@@ -22,9 +22,6 @@
 #include "../../src/base/xmalloc.h"
 
 /* ========== External Declarations ========== */
-
-extern XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc);
-extern XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc);
 
 /* ========== HTTP Context Management ========== */
 
@@ -67,17 +64,8 @@ static void http_context_destroy(void *handle) {
         xr_free(ctx->http_conn_pool);
         ctx->http_conn_pool = NULL;
     }
-    if (ctx->h2_client_pool) {
-        http2_client_pool_destroy(ctx->h2_client_pool);
-        ctx->h2_client_pool = NULL;
-    }
-
     xr_free(ctx);
 }
-
-#define XR_STDLIB_VM_BIND_MODULE_HTTP 1
-#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_MODULE_HTTP
 
 XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     // 1. Create Native module
@@ -86,9 +74,8 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
         return NULL;
     mod->native_handle_destroy = http_context_destroy;
 
-    xr_stdlib_vm_bind_http_generated(isolate, mod);
-
-    // 3. Mark as loaded
+    // Mark the module as a pure-Xray public surface with a private native
+    // context used only by the package manager's HTTP/1.x client.
     mod->requires_script = true;
     return mod;
 }

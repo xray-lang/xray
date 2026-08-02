@@ -27,7 +27,7 @@ fn serveBytes(conn: NetConn) {
     defer net.close(conn)
     var buf = Array<byte>(65536)
     while (true) {
-        var n = net.readInto(conn, buf)
+        var n = net.readInto(conn, ref buf)
         if (n <= 0) {
             break
         }

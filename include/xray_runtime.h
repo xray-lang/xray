@@ -26,25 +26,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "xray_export.h"
+#include "xray_value_abi.h"
 
 /* ========== Tagged Union Value (16 bytes, tag@0, payload@8) ========== */
-
-typedef struct XrValue {
-    union {
-        struct {
-            uint8_t tag;        /* [0]   XR_TAG_* */
-            uint8_t flags;      /* [1]   reserved = 0 */
-            uint16_t heap_type; /* [2-3] object subtype (PTR only) */
-            uint32_t ext;       /* [4-7] reserved = 0 */
-        };
-        uint64_t descriptor; /* [0-7] bulk load/compare */
-    };
-    union {
-        int64_t i; /* [8-15] integer payload */
-        double f;  /* [8-15] float payload */
-        void *ptr; /* [8-15] heap pointer */
-    };
-} XrValue;
 
 /* ========== Value Tags ========== */
 

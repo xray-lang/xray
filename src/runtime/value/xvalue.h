@@ -36,6 +36,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include "../../../include/xray_value_abi.h"
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_int_arith.h"
@@ -73,40 +74,6 @@ typedef enum {
     XR_TAG_NOTFOUND = 7,  // sentinel: map lookup miss
     XR_TAG_PLACE = 8,     // VM-only call-bound place (payload is absolute stack slot)
 } XrValueTag;
-
-/* ========== Tagged Union Value (16 bytes, struct-of-union) ========== */
-
-typedef struct XrValue {
-    union {
-        struct {
-            uint8_t tag;         // [0]   XrValueTag
-            uint8_t flags;       // [1]   XR_FLAG_* bits
-            uint16_t heap_type;  // [2-3] GC type (PTR only)
-            uint32_t ext;        // [4-7] reserved = 0
-        };
-        uint64_t descriptor;  // [0-7] full descriptor (bulk load/compare)
-    };
-    union {
-        int64_t i;  // [8-15] integer payload (I64)
-        double f;   // [8-15] float payload (F64)
-        void *ptr;  // [8-15] GC heap pointer (PTR)
-    };
-} XrValue;
-
-/* Cross-runtime value-descriptor bit: the object header lives at value.ptr
- * instead of immediately before it.  AOT records use this layout and runtime
- * ownership paths must preserve the bit when calling the AOT release hook. */
-#define XR_VALUE_FLAG_EMBEDDED_HEADER 0x02u
-
-// Layout offset constants — change only here if layout ever changes
-#define XRVAL_OFF_TAG 0        // offsetof(XrValue, tag)       uint8_t
-#define XRVAL_OFF_FLAGS 1      // offsetof(XrValue, flags)     uint8_t
-#define XRVAL_OFF_HEAP_TYPE 2  // offsetof(XrValue, heap_type) uint16_t
-#define XRVAL_OFF_EXT 4        // offsetof(XrValue, ext)       uint32_t
-#define XRVAL_OFF_PAYLOAD 8    // offsetof(XrValue, i/f/ptr)   int64_t
-#define XRVAL_SIZE 16          // sizeof(XrValue)
-
-#define XR_VALUE_DEFINED
 
 /* ========== Singleton Values ========== */
 

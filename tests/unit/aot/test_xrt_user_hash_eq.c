@@ -53,6 +53,7 @@ static void test_free_aligned(void *ptr) {
 #endif
 
 typedef struct {
+    XrObjHeader hdr;
     int64_t value;
 } TestToken;
 

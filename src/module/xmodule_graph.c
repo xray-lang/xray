@@ -192,8 +192,10 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     }
     xr_free(err);
 
-    /* Stdlib native modules without a script layer need no graph node. */
-    if (mid.kind == XR_MOD_STDLIB && !mid.source_path) {
+    /* Statically linked core/official modules can carry an embedded script
+     * layer even when no development source tree is present. */
+    if (!mid.source_path &&
+        (mid.kind == XR_MOD_STDLIB || mid.kind == XR_MOD_PACKAGE)) {
         char embedded_path[XR_PATH_MAX];
         if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
             mid.source_path = xr_strdup(embedded_path);
@@ -207,7 +209,7 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     int target_idx = xr_module_graph_find(g, mid.canonical);
     if (target_idx < 0) {
         target_idx = graph_add_spec(g, mid.canonical, mid.source_path, mid.kind);
-        if (target_idx >= 0 && mid.kind == XR_MOD_STDLIB && mid.source_path &&
+        if (target_idx >= 0 && mid.source_path &&
             strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
                     strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
             g->specs[target_idx].embedded_source = true;

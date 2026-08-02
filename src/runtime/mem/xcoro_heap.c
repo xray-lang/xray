@@ -685,6 +685,14 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
     if (obj->extra & XR_OBJ_DEAD)
         return;
 
+    /* A hosted-fragment object owns its generated destructor and allocation
+     * prefix.  Its canonical header is sufficient for VM RC, but treating the
+     * payload as a VM XrArray/XrInstance at the last drop would dispatch the
+     * wrong destructor and recycle foreign storage. */
+    if ((obj->extra & XR_OBJ_AOT_NATIVE) != 0 &&
+        xr_runtime_core_release_aot_native_value(coro_heap_core(heap), obj))
+        return;
+
     /* Shared objects: atomic refcount + shared destroy (not coro-local). */
     if (XR_OBJ_IS_SHARED(obj)) {
         xr_shared_destroy_core(coro_heap_core(heap), obj);

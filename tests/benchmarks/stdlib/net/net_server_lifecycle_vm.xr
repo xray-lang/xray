@@ -1,0 +1,19 @@
+import net
+import os
+import strconv
+
+@test
+fn benchmark_server_lifecycle() {
+    var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+    var listener = net.listen(port, 8)!
+    var conn = net.accept(listener)!
+    var completed = 0
+    while (completed < 64) {
+        var request = net.read(conn, 4)!
+        net.write(conn, request)
+        if (request == "ping") { completed = completed + 1 }
+    }
+    net.close(conn)
+    net.close(listener)
+    assert_eq(completed, 64)
+}

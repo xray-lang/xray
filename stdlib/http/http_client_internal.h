@@ -17,6 +17,7 @@
 
 #include "http_parser_internal.h"
 #include "../net/xneterror.h"
+#include "../../src/shared/xr_http_url.h"
 #include <stdbool.h>
 
 // Forward declaration
@@ -24,8 +25,6 @@ typedef struct XrVMRuntime XrVMRuntime;
 
 /* ========== Constants ========== */
 
-#define XR_HTTP_DEFAULT_PORT 80
-#define XR_HTTP_DEFAULT_HTTPS_PORT 443
 #define XR_HTTP_DEFAULT_TIMEOUT 30000  // 30 seconds
 #define XR_HTTP_RECV_BUFFER_SIZE 8192
 #define XR_HTTP_SEND_BUFFER_SIZE 4096
@@ -43,16 +42,6 @@ typedef XrNetError XrHttpError;
 #define XR_HTTP_ERR_TOO_LARGE XR_NERR_TOO_LARGE
 #define XR_HTTP_ERR_MEMORY XR_NERR_MEMORY
 #define XR_HTTP_ERR_TLS XR_NERR_TLS
-
-/* ========== URL Parse Result ========== */
-
-typedef struct {
-    char *scheme;   // http or https
-    char *host;     // Hostname
-    int port;       // Port number
-    char *path;     // Path (with query string)
-    bool is_https;  // Is HTTPS
-} XrHttpUrl;
 
 /* ========== HTTP Request Config ========== */
 
@@ -87,18 +76,6 @@ typedef struct {
 } XrHttpResult;
 
 /* ========== Internal Client API ========== */
-
-/*
- * Parse URL
- * Returns: 0 on success, -1 on failure
- * Note: caller must call http_url_free to free
- */
-int http_url_parse(const char *url, XrHttpUrl *out);
-
-/*
- * Free URL structure
- */
-void http_url_free(XrHttpUrl *url);
 
 /*
  * Initialize request config

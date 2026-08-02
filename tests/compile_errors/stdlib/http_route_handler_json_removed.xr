@@ -4,4 +4,5 @@ fn legacy(req: Json) -> Json {
     return req
 }
 
-http.routeHandler("GET", "/legacy", legacy)
+var server = http.Server()
+server.routeHandler("GET", "/legacy", legacy)

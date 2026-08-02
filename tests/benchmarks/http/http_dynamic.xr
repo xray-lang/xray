@@ -20,22 +20,23 @@ var port = 8080
 if (len(process.args) > 0) {
     port = int(process.args[0]) ?? 8080
 }
+var server = http.Server()
 
 // Dynamic plaintext (fn callback, NOT prebuilt)
-http.routeHandler("GET", "/plaintext", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/plaintext", fn(req: HttpRequest) -> HttpResponse {
     return http.textResponse("Hello, World!")
 })
 
 // Dynamic JSON response
-http.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
     return http.jsonResponse({ message: "Hello, World!" })
 })
 
 // Path params + string concatenation
-http.routeHandler("GET", "/users/:id", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/users/:id", fn(req: HttpRequest) -> HttpResponse {
     return http.textResponse("User: " + (req.params.get("id") ?? ""))
 })
 
 print("xray Dynamic Handler Benchmark on port " + string(port))
 const serverRunning = Atomic(true)
-http.listen(port, serverRunning)
+server.listen(port, serverRunning)

@@ -284,6 +284,11 @@ add_xray_unit_test(test_mpsc_queue coro/test_mpsc_queue.c)
 add_xray_unit_test(test_steal_queue coro/test_steal_queue.c)
 add_xray_unit_test(test_async_pool coro/test_async_pool.c)
 add_xray_unit_test(test_scheduler_runq coro/test_scheduler_runq.c)
+if(MSVC)
+    # Scheduler fixtures embed the complete isolate/runtime state and exceed
+    # the PE default 1 MiB stack before the first assertion can run.
+    target_link_options(test_scheduler_runq PRIVATE "/STACK:16777216")
+endif()
 add_xray_unit_test(test_timer_wheel coro/test_timer_wheel.c)
 add_xray_unit_test(test_channel_close coro/test_channel_close.c)
 add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
@@ -354,6 +359,23 @@ add_xray_unit_test(test_http_buffer stdlib/test_http_buffer.c)
 add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")
+if(XRAY_STDLIB_VM_FASTPATHS)
+    add_xray_unit_test(test_stdlib_vm_fastpath_abi stdlib/test_stdlib_vm_fastpath_abi.c)
+    set_tests_properties(test_stdlib_vm_fastpath_abi PROPERTIES
+        LABELS "stdlib;performance;abi;task-256"
+        RUN_SERIAL TRUE
+        TIMEOUT 120
+    )
+    add_test(
+        NAME test_generate_vm_fastpaths
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/test_generate_vm_fastpaths.py
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(test_generate_vm_fastpaths PROPERTIES
+        LABELS "stdlib;metadata;tooling;task-256"
+    )
+endif()
 if(NOT WIN32)
     add_xray_unit_test(test_io stdlib/test_io.c)
 endif()

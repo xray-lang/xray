@@ -15,7 +15,10 @@
  */
 
 #include "../../api/xisolate_profile.h"
+#include "../../aot/xaot_driver.h"
+#include "../../base/xmalloc.h"
 #include "../../module/xbytecode_io.h"
+#include "../../module/xproject.h"
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "xray_vm.h"
@@ -24,10 +27,91 @@
 #include <string.h>
 
 static int usage(void) {
-    fprintf(stderr, "usage: xray_stdlib_bcgen compile <input.xr> --output <output.xrc> "
-                    "--format bytecode [--stdlib-module <canonical-name>] "
-                    "[--strip-debug] [--strip-source]\n");
+    fprintf(stderr,
+            "usage:\n"
+            "  xray_stdlib_bcgen compile <input.xr> --output <output.xrc> "
+            "--format bytecode [--stdlib-module <canonical-name>] "
+            "[--strip-debug] [--strip-source]\n"
+            "  xray_stdlib_bcgen native-fastpaths <input.xr> --output <output.c> "
+            "--header <output.h>\n");
     return 2;
+}
+
+static bool write_bytes(const char *path, const char *bytes, size_t size) {
+    FILE *out = path ? fopen(path, "wb") : NULL;
+    bool ok = out && fwrite(bytes, 1, size, out) == size;
+    if (out && fclose(out) != 0)
+        ok = false;
+    if (!ok)
+        fprintf(stderr, "xray_stdlib_bcgen: cannot write '%s'\n", path ? path : "<null>");
+    return ok;
+}
+
+static int generate_native_fastpaths(int argc, char **argv) {
+    if (argc < 5)
+        return usage();
+    const char *input = argv[2];
+    const char *output = NULL;
+    const char *header = NULL;
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
+            output = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--header") == 0 && i + 1 < argc) {
+            header = argv[++i];
+            continue;
+        }
+        fprintf(stderr, "xray_stdlib_bcgen: unknown native-fastpaths argument '%s'\n", argv[i]);
+        return 2;
+    }
+    if (!output || !header)
+        return usage();
+
+    XaotTarget target;
+    XaotBuildOptions options;
+    XaotBuildResult result;
+    XrProject *project = xr_project_load(NULL, ".");
+    if (!project || !project->initialized || !project->native_plan) {
+        fprintf(stderr, "xray_stdlib_bcgen: invalid generated fastpath manifest%s%s\n",
+                project && project->native_plan && project->native_plan->error ? ": " : "",
+                project && project->native_plan && project->native_plan->error
+                    ? project->native_plan->error
+                    : "");
+        xr_project_free(project);
+        return 1;
+    }
+    if (!xaot_target_init(&target, "native-c90")) {
+        fprintf(stderr, "xray_stdlib_bcgen: cannot initialize hosted AOT target\n");
+        xr_project_free(project);
+        return 1;
+    }
+    memset(&options, 0, sizeof(options));
+    options.target = &target;
+    options.native_package_plan = project->native_plan;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.c_dialect = XI_CGEN_C_DIALECT_C11;
+    options.type_name_profile = XI_CGEN_TYPE_NAMES_NONE;
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    options.quiet = true;
+
+    int rc = xaot_build(input, &options, &result);
+    xaot_target_free(&target);
+    if (rc != 0) {
+        xr_project_free(project);
+        return rc;
+    }
+
+    size_t c_size = 0;
+    char *c_source = xaot_build_result_amalgamate(&result, &c_size);
+    const char *header_source = result.c_export_header;
+    bool ok = c_source && header_source &&
+              write_bytes(output, c_source, c_size) &&
+              write_bytes(header, header_source, strlen(header_source));
+    xr_free(c_source);
+    xaot_build_result_free(&result);
+    xr_project_free(project);
+    return ok ? 0 : 1;
 }
 
 int main(int argc, char **argv) {
@@ -35,6 +119,8 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
+    if (argc >= 2 && strcmp(argv[1], "native-fastpaths") == 0)
+        return generate_native_fastpaths(argc, argv);
     if (argc < 3 || strcmp(argv[1], "compile") != 0)
         return usage();
 

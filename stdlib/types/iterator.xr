@@ -1,0 +1,10 @@
+// Built-in pull iterator handle. Generator-backed and collection-backed
+// implementations share this sealed native surface.
+class Iterator<T> {
+    // @lowered
+    hasNext() -> bool
+    // @lowered
+    next() -> T
+    // @lowered
+    nth(index: int) -> T
+}

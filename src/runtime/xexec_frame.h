@@ -25,6 +25,7 @@
 #include "value/xvalue.h"
 #include "value/xchunk.h"
 #include "closure/xclosure.h"
+#include "../../include/xray_yieldable_abi.h"
 
 /* ========== Call Frame ========== */
 
@@ -74,18 +75,6 @@ typedef struct XrExceptionHandler {
 } XrExceptionHandler;
 
 /* ========== C Function Types ========== */
-
-#ifndef XR_CFUNC_RESULT_DEFINED
-typedef enum {
-    XR_CFUNC_DONE = 0,
-    XR_CFUNC_YIELD,
-    XR_CFUNC_BLOCKED,
-    XR_CFUNC_ERROR,
-    XR_CFUNC_CALL_CLOSURE,  // closure frame pushed, execute it
-    XR_CFUNC_WOULD_BLOCK    // try-mode: would block, no side effects
-} XrCFuncResult;
-#define XR_CFUNC_RESULT_DEFINED
-#endif
 
 #ifndef XR_CFUNCTION_PTR_DEFINED
 typedef XrValue (*XrCFunctionPtr)(XrVMRuntime *isolate, XrValue *args, int nargs);

@@ -2,6 +2,7 @@
 // 测试：TLS handshake timeout 必须尊重 dialTLS / upgradeTLS 的 timeout 参数
 
 import net
+import { NetError } from net
 import time
 
 fn acceptHold(lst: NetListener) {
@@ -50,7 +51,7 @@ fn test_upgrade_tls_handshake_timeout() {
     var tls = net.upgradeTLS(conn, "localhost", 30)
 
     assert_true(tls == null)
-    assert_eq(net.lastError(conn), "timeout")
+    assert_eq(net.lastError(conn), NetError.Timeout)
 
     net.close(conn)
     net.close(lst)

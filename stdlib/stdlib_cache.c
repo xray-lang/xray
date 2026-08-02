@@ -88,7 +88,7 @@ static XrEnumType *stdlib_enum_type_build(XrVMRuntime *isolate, const XrStdlibEn
         payload_counts[i] = (int) decl->variants[i].payload_count;
         has_payloads = has_payloads || payload_counts[i] > 0;
     }
-    XrEnumType *type = xr_enum_type_new(isolate, decl->name, names, count);
+    XrEnumType *type = xr_enum_type_new(isolate, decl->module, decl->name, names, count);
     if (type && has_payloads && !xr_enum_type_set_adt_payloads(type, payload_counts, count))
         type = NULL;
     xr_free(names);
@@ -149,6 +149,19 @@ XR_FUNC XrEnumType *xr_stdlib_enum_type_get(XrVMRuntime *isolate, const char *mo
     entries[cache->native_enum_count++] =
         (XrStdlibNativeEnumCacheEntry) {.decl = decl, .type = type};
     return type;
+}
+
+XR_FUNC const char *xr_stdlib_enum_type_module(XrVMRuntime *isolate, const XrEnumType *type) {
+    XrStdlibCache *cache = isolate ? (XrStdlibCache *) isolate->stdlib_cache : NULL;
+    if (!cache || !type)
+        return NULL;
+    XrStdlibNativeEnumCacheEntry *entries =
+        (XrStdlibNativeEnumCacheEntry *) cache->native_enum_cache;
+    for (size_t i = 0; i < cache->native_enum_count; i++) {
+        if (entries[i].type == type)
+            return entries[i].decl->module;
+    }
+    return NULL;
 }
 
 XR_FUNC XrClass *xr_stdlib_record_class_get(XrVMRuntime *isolate, const char *module,

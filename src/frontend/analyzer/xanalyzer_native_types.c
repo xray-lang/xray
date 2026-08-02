@@ -352,6 +352,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"Json", XR_TID_JSON, TYPE_NAME_JSON},
     {"BigInt", XR_TID_BIGINT, TYPE_NAME_BIGINT},
     {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
+    {"Iterator", XR_TID_ITERATOR, TYPE_NAME_ITERATOR},
     {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
     {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},

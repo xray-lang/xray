@@ -15,8 +15,10 @@ import {
     resolve as resolveUrl
 } from url
 import crypto
+import http2
 import io
 import net
+import { NetError } from net
 import "path" as pathutil
 import time
 
@@ -773,20 +775,6 @@ class _ServerRouter {
     }
 }
 
-var _serverRouter = _ServerRouter()
-
-export fn route<T>(method: string, path: string, value: T) {
-    _serverRouter.add(method, path, value)
-}
-
-export fn routeHandler(
-    method: string,
-    path: string,
-    handler: (HttpRequest) -> HttpResponse
-) {
-    _serverRouter.addHandler(method, path, handler)
-}
-
 fn _serverTargetPath(target: string) -> string {
     var q = target.indexOf("?")
     if (q >= 0) { return target.slice(0, q) }
@@ -924,19 +912,17 @@ fn _serverWriteAll(conn: NetConn, data: string) -> bool {
 }
 
 fn _serverGracefulClose(conn: NetConn) {
-    // A response can be followed by request bytes that were already queued in
-    // the kernel (notably an oversized body).  An immediate SHUT_RDWR close in
-    // that state may reset TCP and discard the response.  Half-close writes,
-    // drain only until a bounded deadline, then release the unique handle.
+    // Commit the queued response with a write half-close, explicitly discard
+    // any unread request body, then release the unique socket.  Waiting for a
+    // peer that deliberately withholds the rest of an oversized body would
+    // keep a structured connection task alive indefinitely.
     net.shutdownWrite(conn)
-    net.setReadDeadline(conn, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-    while (net.read(conn, HTTP_SERVER_READ_CHUNK_BYTES) != null) {}
-    net.close(conn)
+    net.shutdownRead(conn)
 }
 
-fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
+fn _serverDispatch(router: _ServerRouter, conn: NetConn, msg: RequestMessage) -> bool {
     var path = _serverTargetPath(msg.head.target)
-    var found = _serverRouter.find(msg.head.method, path)
+    var found = router.find(msg.head.method, path)
     if (found == null) {
         return _serverWriteAll(conn, _serverStatusResponse(404, "Not Found", msg.head.keepAlive)) &&
                msg.head.keepAlive
@@ -958,8 +944,15 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
            msg.head.keepAlive
 }
 
-fn _serveHttpConnection(conn: move NetConn, running: Atomic<bool>) {
+fn _serveHttpConnection(
+    conn: move NetConn,
+    router: _ServerRouter,
+    running: Atomic<bool>
+) -> bool {
     var live = conn
+    defer {
+        try { net.close(live) } catch (e) {}
+    }
     var raw = ""
     while (running.load()) {
         var headEnd = _responseHeadEnd(raw)
@@ -968,20 +961,20 @@ fn _serveHttpConnection(conn: move NetConn, running: Atomic<bool>) {
             if (head == null) {
                 _serverWriteAll(live, _serverStatusResponse(400, "Bad Request", false))
                 _serverGracefulClose(live)
-                return
+                return false
             }
             if (head!.contentLength > HTTP_SERVER_MAX_BODY_BYTES) {
                 _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
                 _serverGracefulClose(live)
-                return
+                return false
             }
 
             var msg = parseRequestText(raw, HTTP_SERVER_MAX_BODY_BYTES)
             if (msg != null) {
-                var keep = _serverDispatch(live, msg!)
+                var keep = _serverDispatch(router, live, msg!)
                 if (!keep) {
                     _serverGracefulClose(live)
-                    return
+                    return true
                 }
                 var rest = _byteSlice(raw, msg!.consumedBytes, len(raw.bytes()))
                 raw = rest ?? ""
@@ -991,49 +984,103 @@ fn _serveHttpConnection(conn: move NetConn, running: Atomic<bool>) {
         if (len(raw.bytes()) > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
             _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
             _serverGracefulClose(live)
-            return
+            return false
         }
 
+        net.setReadDeadline(live, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
         var chunk = net.read(live, HTTP_SERVER_READ_CHUNK_BYTES)
         if (chunk == null) {
-            net.close(live)
-            return
+            var err = net.lastError(live)
+            if (running.load() && err == NetError.Timeout) { continue }
+            return true
         }
         raw = raw + chunk!
     }
-    net.close(live)
+    return true
 }
 
-// Listen while the caller-owned synchronization capability remains true.
-// The explicit Atomic handle keeps lifecycle state out of hidden mutable
-// module globals and lets another coroutine request shutdown with
-// running.store(false).  A false initial value is rejected.
-export fn listen(port: int, running: Atomic<bool>) -> bool {
+enum _ServerControl {
+    StopRequested
+}
+
+fn _serverStopWatch(running: Atomic<bool>) {
+    while (running.load()) {
+        time.sleep(HTTP_SERVER_ACCEPT_POLL_MS)
+    }
+    throw _ServerControl.StopRequested
+}
+
+fn _serverListen(router: _ServerRouter, port: int, running: Atomic<bool>) -> bool {
     if (!running.load()) { return false }
     var listener = net.listen(port, HTTP_SERVER_BACKLOG)
     if (listener == null) { return false }
 
-    while (running.load()) {
-        net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-        var conn = net.accept(listener!)
-        if (conn != null) {
-            // Accepted connections are unique capabilities.  Until the route
-            // table has an immutable, SyncShareable snapshot representation,
-            // the listener owns request dispatch and never shares the mutable
-            // router with per-connection coroutines.
-            var accepted: NetConn = conn!
-            conn = null
-            _serveHttpConnection(move accepted, running)
-            continue
+    // `const` publishes this one-time deep copy into Xray's read-only shared
+    // domain.  Every connection coroutine receives the same route graph with
+    // zero-copy atomic retains; later builder mutations cannot reach it.
+    const snapshot: _ServerRouter = copy(router)
+    var healthy = true
+    try {
+        // The watcher converts an ordinary lifecycle transition into linked
+        // scope cancellation.  Active reads are therefore cancelled and run
+        // their socket defer before listen returns; completed child tasks are
+        // reaped by the scope without an ever-growing task registry.
+        linked scope {
+            go _serverStopWatch(running)
+            while (running.load()) {
+                net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
+                var conn = net.accept(listener!)
+                if (conn != null) {
+                    var accepted: NetConn = conn!
+                    conn = null
+                    go _serveHttpConnection(move accepted, snapshot, running)
+                    continue
+                }
+                var err = net.lastError(listener!)
+                if (!running.load() || err == NetError.Closed) { break }
+                if (err == NetError.Timeout) { continue }
+                healthy = false
+                running.store(false)
+                break
+            }
         }
-        var err = net.lastError(listener!)
-        if (!running.load() || err == "closed") { break }
-        if (err == "timeout") { continue }
-        break
+    } catch (e) {
+        // _serverStopWatch is the only throwing child.  Handler failures are
+        // converted to HTTP 500 inside _serverDispatch.
     }
 
     net.close(listener!)
-    return true
+    return healthy
+}
+
+// Server owns a mutable route builder until listen begins.  listen publishes
+// an immutable snapshot and then runs one structured coroutine per accepted
+// connection.  There is no hidden module-global server or route registry.
+export class Server {
+    private router: _ServerRouter
+
+    constructor() {
+        this.router = _ServerRouter()
+    }
+
+    route<T>(method: string, path: string, value: T) -> bool {
+        return this.router.add(method, path, value)
+    }
+
+    routeHandler(
+        method: string,
+        path: string,
+        handler: (HttpRequest) -> HttpResponse
+    ) -> bool {
+        return this.router.addHandler(method, path, handler)
+    }
+
+    // Listen while the caller-owned synchronization capability remains true.
+    // A false initial value is rejected.  Setting it to false stops accept and
+    // lets the structured scope drain active keep-alive connections promptly.
+    listen(port: int, running: Atomic<bool>) -> bool {
+        return _serverListen(this.router, port, running)
+    }
 }
 
 // MultipartBody - Built multipart/form-data payload and matching Content-Type.
@@ -1930,7 +1977,7 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
     var closeDelimited = false
     while (len(raw) <= HTTP_MAX_RESPONSE_BYTES) {
         var chunk = Array<byte>(8192)
-        var read = net.readInto(conn, chunk, 8192)
+        var read = net.readInto(conn, ref chunk, 8192)
         if (read < 0) { return null }
         if (read == 0) { break }
         for (var i = 0; i < read; i++) { raw.push(chunk[i]) }
@@ -2026,7 +2073,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
 fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Headers,
                        body: Array<byte>, timeoutMs: int,
                        stripSensitive: bool) -> HttpResponse {
-    if (!__h2Supported()) { throw HttpError.UnsupportedVersion(HttpVersion.Http2) }
+    if (!http2.supported()) { throw HttpError.UnsupportedVersion(HttpVersion.Http2) }
     if (!url.isHttps) {
         throw HttpError.ProtocolError("HTTP/2 requires HTTPS")
     }
@@ -2045,7 +2092,7 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
         values.push(pairs[i].1)
     }
 
-    var raw = __h2Request(
+    var raw = http2.request(
         _httpRequestUrlText(url), method.token, names, values, body, timeoutMs
     )
     if (raw == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }

@@ -12,7 +12,8 @@
  *   request/response semantics stay in the Xray control plane.
  */
 
-#include "http_internal.h"
+#include "http2_internal.h"
+#include "../../stdlib/common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
@@ -20,7 +21,7 @@
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/runtime/object/xtuple.h"
-#include "../net/tls.h"
+#include "../../stdlib/net/tls.h"
 #include <string.h>
 
 // clang-format off
@@ -37,6 +38,31 @@ static void throw_tls_unavailable(XrVMRuntime *X) {
 // External declarations
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
+
+typedef struct XrHttp2Context {
+    XrH2Pool *client_pool;
+} XrHttp2Context;
+
+static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
+    XrModuleRegistry *registry = X ? (XrModuleRegistry *) X->module_registry : NULL;
+    XrModule *module = registry && registry->loaded_modules
+                           ? (XrModule *) xr_hashmap_get(registry->loaded_modules, "http2")
+                           : NULL;
+    if (!module)
+        return NULL;
+    if (!module->native_handle)
+        module->native_handle = xr_calloc(1, sizeof(XrHttp2Context));
+    return (XrHttp2Context *) module->native_handle;
+}
+
+static void http2_context_destroy(void *handle) {
+    XrHttp2Context *ctx = (XrHttp2Context *) handle;
+    if (!ctx)
+        return;
+    if (ctx->client_pool)
+        http2_client_pool_destroy(ctx->client_pool);
+    xr_free(ctx);
+}
 
 // Helper function: create string value
 static bool ascii_ieq(const char *a, size_t a_len, const char *b) {
@@ -209,12 +235,12 @@ XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    XrHttpContext *ctx = http_get_context(X);
+    XrHttp2Context *ctx = http2_get_context(X);
     if (!ctx)
         return xr_null();
-    if (!ctx->h2_client_pool) {
-        ctx->h2_client_pool = http2_client_pool_create();
-        if (!ctx->h2_client_pool)
+    if (!ctx->client_pool) {
+        ctx->client_pool = http2_client_pool_create();
+        if (!ctx->client_pool)
             return xr_null();
     }
 
@@ -249,7 +275,7 @@ XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    XrH2Response *resp = http2_client_request(X, ctx->h2_client_pool, url->data, &req, timeout_ms);
+    XrH2Response *resp = http2_client_request(X, ctx->client_pool, url->data, &req, timeout_ms);
 
     xr_free(headers);
 
@@ -262,4 +288,17 @@ XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
     XrValue result = h2_typed_response(X, resp);
     http2_client_response_free(resp);
     return result;
+}
+
+#define XR_STDLIB_VM_BIND_MODULE_HTTP2 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_HTTP2
+
+XR_FUNC XrModule *xr_load_module_http2(XrVMRuntime *isolate) {
+    XrModule *module = xr_module_create_native(isolate, "http2");
+    if (!module)
+        return NULL;
+    module->native_handle_destroy = http2_context_destroy;
+    xr_stdlib_vm_bind_http2_generated(isolate, module);
+    return module;
 }

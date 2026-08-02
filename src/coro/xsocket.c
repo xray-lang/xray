@@ -92,7 +92,7 @@ int xr_socket_accept(XrVMRuntime *X, int listen_fd) {
     XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     if (!runtime) {
         // No Runtime, use system blocking accept
-        struct sockaddr_in client_addr;
+        struct sockaddr_storage client_addr;
         socklen_t addr_len = sizeof(client_addr);
         return accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
     }
@@ -104,7 +104,7 @@ int xr_socket_accept(XrVMRuntime *X, int listen_fd) {
     }
 
     while (1) {
-        struct sockaddr_in client_addr;
+        struct sockaddr_storage client_addr;
         socklen_t addr_len = sizeof(client_addr);
         int client_fd = (int) accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
@@ -442,7 +442,7 @@ XrCFuncResult xr_socket_accept_yieldable(XrVMRuntime *X, XrAcceptState *state) {
     XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     if (!runtime) {
         // No Runtime, use blocking accept
-        struct sockaddr_in client_addr;
+        struct sockaddr_storage client_addr;
         socklen_t addr_len = sizeof(client_addr);
         state->result_fd =
             (int) accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
@@ -458,7 +458,7 @@ XrCFuncResult xr_socket_accept_yieldable(XrVMRuntime *X, XrAcceptState *state) {
     }
 
     // Try non-blocking accept
-    struct sockaddr_in client_addr;
+    struct sockaddr_storage client_addr;
     socklen_t addr_len = sizeof(client_addr);
     int client_fd = (int) accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
@@ -507,7 +507,7 @@ XrIOTryResult xr_socket_accept_try(XrVMRuntime *X, int listen_fd) {
     (void) X;
     XrIOTryResult result = {false, -1, 0};
 
-    struct sockaddr_in client_addr;
+    struct sockaddr_storage client_addr;
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd = (int) accept(listen_fd, (struct sockaddr *) &client_addr, &client_len);

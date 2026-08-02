@@ -147,6 +147,7 @@ fn byteString(b: int) -> string {
 
 fn encodeImpl(s: string, form: bool) -> string {
     var src = s.copyBytes()
+    var alphabet: Slice<byte> = HEX.bytes()
     var out = ""
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as int
@@ -156,8 +157,8 @@ fn encodeImpl(s: string, form: bool) -> string {
             out = out + byteString(b)
         } else {
             out = out + "%"
-            out = out + HEX.runes().nth((b >> 4) & 15)
-            out = out + HEX.runes().nth(b & 15)
+            out = out + rune(int(alphabet[(b >> 4) & 15]))!
+            out = out + rune(int(alphabet[b & 15]))!
         }
     }
     return out
@@ -270,12 +271,13 @@ fn startsWithAt(s: string, pos: int, prefix: string) -> bool {
 }
 
 fn portIsValid(port: string) -> bool {
-    if (len(port) == 0 || len(port) > 5) { return false }
+    var bytes: Slice<byte> = port.bytes()
+    if (len(bytes) == 0 || len(bytes) > 5) { return false }
     var v = 0
-    for (var i = 0; i < len(port); i++) {
-        var c = port.runes().nth(i).toUInt32()
+    for (var i = 0; i < len(bytes); i++) {
+        var c = int(bytes[i])
         if (c < 48 || c > 57) { return false }
-        v = v * 10 + ((c - 48) as int)
+        v = v * 10 + (c - 48)
     }
     return v <= 65535
 }
@@ -406,7 +408,7 @@ export fn decodeForm(s: string) -> string {
 export fn parseQuery(qs: string) -> QueryParams {
     var out = QueryParams()
     var start = 0
-    if (len(qs) > 0 && qs.runes().nth(0) == '?') { start = 1 }
+    if (qs.startsWith("?")) { start = 1 }
 
     while (start < len(qs)) {
         var amp = findChar(qs, '&', start, len(qs))
@@ -444,8 +446,8 @@ fn emitBaseAuthority(parts: URL) -> string {
 
 fn removeDotSegments(path: string) -> string {
     if (len(path) == 0) { return "" }
-    var isAbs = path.runes().nth(0) == '/'
-    var trailing = len(path) > 1 && path.runes().nth(len(path) - 1) == '/'
+    var isAbs = path.startsWith("/")
+    var trailing = len(path) > 1 && path.endsWith("/")
     var segs: Array<string> = []
     var parts = path.split("/")
 
@@ -468,7 +470,7 @@ fn removeDotSegments(path: string) -> string {
         if (len(body) == 0) { return "/" }
         body = "/" + body
     }
-    if (trailing && len(body) > 0 && body.runes().nth(len(body) - 1) != '/') {
+    if (trailing && len(body) > 0 && !body.endsWith("/")) {
         body = body + "/"
     }
     return body
@@ -515,7 +517,7 @@ export fn resolve(base: string, relative: string) -> string {
     var relQuery = parts.1
     var relHash = parts.2
 
-    if (len(relative) > 1 && relative.runes().nth(0) == '/' && relative.runes().nth(1) == '/') {
+    if (relative.startsWith("//")) {
         var authorityEnd = findChar(relative, '/', 2, len(relPath))
         if (authorityEnd < 0) { authorityEnd = len(relPath) }
         var out = bp.protocol + relative.slice(0, authorityEnd)
@@ -525,7 +527,7 @@ export fn resolve(base: string, relative: string) -> string {
         return out + relQuery + relHash
     }
 
-    if (len(relPath) > 0 && relPath.runes().nth(0) == '/') {
+    if (relPath.startsWith("/")) {
         return emitBaseAuthority(bp) + removeDotSegments(relPath) + relQuery + relHash
     }
 
@@ -550,10 +552,10 @@ export fn join(...parts: string) -> string {
         var seg = parts[i]
         if (len(seg) == 0) { continue }
 
-        if (len(out) > 0 && out.runes().nth(len(out) - 1) == '/') {
+        if (out.endsWith("/")) {
             out = out.slice(0, len(out) - 1)
         }
-        if (len(out) > 0 && seg.runes().nth(0) != '/') {
+        if (len(out) > 0 && !seg.startsWith("/")) {
             out = out + "/"
         }
         out = out + seg

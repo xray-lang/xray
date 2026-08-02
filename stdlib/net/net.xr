@@ -1,0 +1,152 @@
+// net — public network composition over private socket/TLS/netpoll primitives.
+// Yielding, deadline and waiter state remains native; address shaping, options,
+// error classification and public result values are compiled from this source.
+
+export final class IpAddress {
+    value: string
+
+    constructor(value: string) { this.value = value }
+
+    toString() -> string { return this.value }
+}
+
+export final class Endpoint {
+    host: string
+    port: int
+
+    constructor(host: string, port: int) {
+        this.host = host
+        this.port = port
+    }
+}
+
+export final class DialOptions {
+    timeoutMs: int
+    tls: bool
+
+    constructor(timeoutMs: int = 30000, tls: bool = false) {
+        this.timeoutMs = timeoutMs
+        this.tls = tls
+    }
+}
+
+export final class CopyBidirectionalResult {
+    aToB: int
+    bToA: int
+
+    constructor(aToB: int, bToA: int) {
+        this.aToB = aToB
+        this.bToA = bToA
+    }
+}
+
+export final class UdpPacket {
+    data: string
+    host: string
+    port: int
+
+    constructor(data: string, host: string, port: int) {
+        this.data = data
+        this.host = host
+        this.port = port
+    }
+}
+
+export fn dial(host: string, port: int, timeout: int = 30000) -> NetConn? {
+    return __dial(host, port, timeout)
+}
+
+export fn dialTLS(host: string, port: int, timeout: int = 30000) -> NetConn? {
+    return __dialTLS(host, port, timeout)
+}
+
+export fn dialEndpoint(endpoint: Endpoint, options: DialOptions = DialOptions()) -> NetConn? {
+    if (options.timeoutMs <= 0 || endpoint.port < 0 || endpoint.port > 65535) { return null }
+    if (options.tls) { return __dialTLS(endpoint.host, endpoint.port, options.timeoutMs) }
+    return __dial(endpoint.host, endpoint.port, options.timeoutMs)
+}
+
+export fn listen(port: int, backlog: int = 1024) -> NetListener? {
+    return __listen(port, backlog)
+}
+
+export fn accept(listener: NetListener) -> NetConn? { return __accept(listener) }
+
+export fn read(conn: NetConn, maxlen: int = 4096) -> string? {
+    return __read(conn, maxlen)
+}
+
+export fn readInto(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576) -> int {
+    return __readInto(conn, buffer, maxlen)
+}
+
+export fn write(conn: NetConn, data: string) -> int { return __write(conn, data) }
+
+export fn writeBytes(conn: NetConn, data: Array<byte>) -> int {
+    return __writeBytes(conn, data)
+}
+
+export fn copy(src: NetConn, dst: NetConn, bufferSize: int = 65536) -> int {
+    return __copy(src, dst, bufferSize)
+}
+
+export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
+    var raw = __copyBidirectional(a, b)
+    return CopyBidirectionalResult(raw.aToB, raw.bToA)
+}
+
+export fn shutdownRead(conn: NetConn) -> bool { return __shutdownRead(conn) }
+export fn shutdownWrite(conn: NetConn) -> bool { return __shutdownWrite(conn) }
+export fn shutdown(conn: NetConn) -> bool { return __shutdown(conn) }
+export fn close(handle: NetConn | NetListener) { __close(handle) }
+export fn fd(handle: NetConn | NetListener) -> int { return __fd(handle) }
+
+export fn setReadDeadline(conn: NetConn, deadline: int) -> bool {
+    return __setReadDeadline(conn, deadline)
+}
+
+export fn setWriteDeadline(conn: NetConn, deadline: int) -> bool {
+    return __setWriteDeadline(conn, deadline)
+}
+
+export fn setDeadline(conn: NetConn, deadline: int) -> bool {
+    return __setDeadline(conn, deadline)
+}
+
+export fn setAcceptDeadline(listener: NetListener, deadline: int) -> bool {
+    return __setAcceptDeadline(listener, deadline)
+}
+
+export fn lastError(handle: NetConn | NetListener) -> NetError? {
+    return __lastError(handle)
+}
+
+export fn lastErrno(handle: NetConn | NetListener) -> int { return __lastErrno(handle) }
+
+export fn lookup(hostname: string) -> string? { return __lookup(hostname) }
+
+export fn resolve(hostname: string) -> IpAddress? {
+    var raw = lookup(hostname)
+    if (raw == null) { return null }
+    return IpAddress(raw!)
+}
+
+export fn hasTLS() -> bool { return __hasTLS() }
+
+export fn upgradeTLS(conn: NetConn, hostname: string, timeout: int = 30000) -> NetConn? {
+    return __upgradeTLS(conn, hostname, timeout)
+}
+
+export fn udpBind(port: int, address: string = "") -> NetConn? {
+    return __udpBind(port, address)
+}
+
+export fn sendTo(handle: NetConn, data: string, host: string, port: int) -> int {
+    return __sendTo(handle, data, host, port)
+}
+
+export fn recvFrom(handle: NetConn, maxlen: int = 4096) -> UdpPacket? {
+    var raw = __recvFrom(handle, maxlen)
+    if (raw == null) { return null }
+    return UdpPacket(raw!.data, raw!.host, raw!.port)
+}

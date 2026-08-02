@@ -1413,6 +1413,7 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
 
 static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget *target,
                                 XaotLinkManifest *manifest, bool freestanding_profile,
+                                XaotArtifactKind artifact_kind,
                                 const XaotTargetCapabilityProvider *provider,
                                 const XrEntryPlan *entry_plan) {
     bool ok = false;
@@ -1425,7 +1426,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
 
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_GENERATED_C_FILE, "<aot-generated-c>"))
         goto done;
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_IMPL"))
+    if (artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_IMPL"))
         goto done;
     if (!xaot_target_is_windows(target) &&
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
@@ -1511,7 +1513,8 @@ static bool xaot_c90_build_options_supported(const XaotBuildOptions *options) {
     const XaotTarget *target = options ? options->target : NULL;
     if (!options || options->c_dialect != XI_CGEN_C_DIALECT_C90)
         return true;
-    return options->profile == XAOT_BUILD_PROFILE_FREESTANDING && !options->emit_program_main &&
+    return options->profile == XAOT_BUILD_PROFILE_FREESTANDING &&
+           options->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
            target && target->pointer_bits == 64 && target->os &&
            (strcmp(target->os, "linux") == 0 || strcmp(target->os, "darwin") == 0) &&
            target->simd_mode == XAOT_SIMD_SCALAR && target->simd_features == 0;
@@ -1526,7 +1529,7 @@ static bool xaot_c90_link_manifest_supported(const XaotLinkManifest *manifest) {
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
-    bool emit_program_main;
+    XaotArtifactKind artifact_kind;
     bool emit_global_evidence_dump;
     bool emit_local_evidence_dump;
     bool quiet;
@@ -1564,7 +1567,14 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         return 1;
     }
     emit_plan_dump = options->emit_plan_dump;
-    emit_program_main = options->emit_program_main;
+    artifact_kind = options->artifact_kind;
+    if (artifact_kind < XAOT_ARTIFACT_EXECUTABLE ||
+        artifact_kind > XAOT_ARTIFACT_HOSTED_FRAGMENT ||
+        (artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT &&
+         options->profile != XAOT_BUILD_PROFILE_HOSTED)) {
+        fprintf(stderr, "Error: invalid AOT artifact/profile combination\n");
+        return 1;
+    }
     emit_global_evidence_dump = options->emit_global_evidence_dump;
     emit_local_evidence_dump = options->emit_local_evidence_dump;
     quiet = options->quiet;
@@ -2001,7 +2011,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
-    aot_bundle.emit_program_main = emit_program_main;
+    aot_bundle.artifact_kind = artifact_kind;
     if (!xaot_bundle_set_target_data_layout(&aot_bundle,
                                             xr_compiler_session_target_data_layout(session))) {
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
@@ -2082,7 +2092,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
     xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
-    xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
+    xi_cgen_ctx_set_artifact_kind(cg_ctx, artifact_kind);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_c_dialect(cg_ctx, options->c_dialect);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
@@ -2219,6 +2229,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     features_apply_extern_decls(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING,
+                             artifact_kind,
                              options->capability_provider, &aot_bundle.entry_plan)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
         goto fail_free_ir;

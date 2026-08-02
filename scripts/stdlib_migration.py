@@ -205,8 +205,15 @@ def run_diff(root: Path, contract: dict[str, Any], xray: Path) -> int:
     env["XRAY_DIFF_CASES_FILE"] = str(root / str(contract["diff_cases_manifest"]))
     env["XRAY_DIFF_EXTRA_CASES_FILE"] = ""
     env["XRAY_DIFF_BACKENDS"] = ",".join(contract.get("backends", ["vm", "aot"]))
+    # The Python runner is the canonical fast path used by the shell wrapper,
+    # and is directly executable on every supported host (including Windows,
+    # where invoking a .sh file through CreateProcess fails with WinError 193).
+    if os.name == "nt":
+        env.setdefault("PYTHONUTF8", "1")
     return subprocess.run(
-        [str(root / "tests/diff/run_backend_diff.sh"), str(xray)], cwd=root, env=env
+        [sys.executable, str(root / "tests/diff/run_backend_diff_fast.py"), str(xray)],
+        cwd=root,
+        env=env,
     ).returncode
 
 

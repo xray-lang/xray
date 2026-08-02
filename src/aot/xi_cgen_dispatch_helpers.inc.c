@@ -4321,13 +4321,9 @@ static void xicgen_len(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
-        fprintf(out, "({ XrValue _xr_len_value = ");
+        fprintf(out, "xrt_len_i64(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out,
-                "; _xr_len_value.tag == XR_TAG_RANGE ? "
-                "xrt_range_length_ptr((const xrt_range_t *)_xr_len_value.ptr) : "
-                "XR_TO_INT(xrt_len_value(_xr_len_value, %d)); })",
-                v->aux_int != 0 ? 1 : 0);
+        fprintf(out, ", %d)", v->aux_int != 0 ? 1 : 0);
     }
     emit_conversion_suffix(out, suffix);
 }
@@ -4691,7 +4687,7 @@ static const char *xicgen_atomic_suffix(CgAtomicKind kind) {
 }
 
 static const char *xicgen_aot_context_expr(XiCgenCtx *ctx, const XiFunc *f) {
-    return cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx";
+    return cg_aot_context_expr(ctx, f);
 }
 
 static bool xicgen_type_is_span_like(const XrType *type) {
@@ -7569,6 +7565,9 @@ static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFun
     if (!method || nargs != 0 || !v || v->nargs < 1)
         return false;
     const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    const XrType *recv_type = v->args[0] ? v->args[0]->type : NULL;
+    if (!recv_class && recv_type && recv_type->kind == XR_KIND_INSTANCE)
+        recv_class = recv_type->instance.class_name;
     if (!recv_class)
         return false;
 
@@ -9537,22 +9536,7 @@ static bool xicgen_emit_atomic_method(XiCgenCtx *ctx, FILE *out, const XiValue *
 
     if (is_compare_exchange) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        if (kind == CG_ATOMIC_FLOAT) {
-            fprintf(out,
-                    "({ double _atomic_prev_%u = 0.0; bool _atomic_ok_%u = "
-                    "xr_aot_atomic_compare_exchange_f64(",
-                    v->id, v->id);
-        } else if (kind == CG_ATOMIC_BOOL) {
-            fprintf(out,
-                    "({ bool _atomic_prev_%u = false; bool _atomic_ok_%u = "
-                    "xr_aot_atomic_compare_exchange_bool(",
-                    v->id, v->id);
-        } else {
-            fprintf(out,
-                    "({ int64_t _atomic_prev_%u = 0; bool _atomic_ok_%u = "
-                    "xr_aot_atomic_compare_exchange_i64(",
-                    v->id, v->id);
-        }
+        fprintf(out, "xrt_atomic_compare_exchange_%s_tuple(", xicgen_atomic_suffix(kind));
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         xicgen_emit_atomic_arg(out, v->args[1], kind);
@@ -9560,14 +9544,7 @@ static bool xicgen_emit_atomic_method(XiCgenCtx *ctx, FILE *out, const XiValue *
         xicgen_emit_atomic_arg(out, v->args[2], kind);
         fprintf(out, ", ");
         xicgen_emit_atomic_ordering_arg(out, ordering_arg);
-        fprintf(out, ", &_atomic_prev_%u); xrt_tuple_make(2, (XrValue[]){", v->id);
-        if (kind == CG_ATOMIC_FLOAT)
-            fprintf(out, "XR_FROM_FLOAT(_atomic_prev_%u)", v->id);
-        else if (kind == CG_ATOMIC_BOOL)
-            fprintf(out, "XR_FROM_BOOL(_atomic_prev_%u)", v->id);
-        else
-            fprintf(out, "XR_FROM_INT(_atomic_prev_%u)", v->id);
-        fprintf(out, ", XR_FROM_BOOL(_atomic_ok_%u)}); })", v->id);
+        fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -10624,6 +10601,96 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     return xicgen_emit_resolved_user_constructor(ctx, out, f, v, prefix, ctor, call_prefix, NULL);
 }
 
+/* Map-shaped class construction used to be emitted only as a GNU statement
+ * expression.  Hosted fragments are consumed by the target C compiler, so
+ * materialize the same operation as ordinary statements with a site-unique
+ * temporary.  Native-layout classes are handled by the earlier native
+ * constructor statement lowering. */
+static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
+                                                  const XiFunc *f, const char *prefix,
+                                                  const XiValue *v) {
+    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v ||
+        v->op != XI_CALL || v->nargs == 0)
+        return false;
+
+    const XiFunc *ctor = NULL;
+    const XiClassData *class_data = NULL;
+    const char *call_prefix = NULL;
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    if (call.is_class_constructor) {
+        ctor = call.func;
+        class_data = call.class_data;
+        call_prefix = call.prefix;
+    } else {
+        class_data = xicgen_shared_class_data(ctx, v->args[0]);
+        if (class_data) {
+            ctor = xicgen_find_constructor_for_class_data(ctx, f, class_data, &call_prefix);
+        } else if (!xicgen_resolve_direct_class_ctor(f, v->args[0], &ctor)) {
+            /* A normal function may return a class.  Its result type alone is
+             * not evidence that the call itself is a constructor. */
+            return false;
+        } else {
+            call_prefix = cg_module_prefix_for_func(ctx, ctor);
+        }
+    }
+    if (!ctor && class_data)
+        ctor = xicgen_find_constructor_for_class_data(ctx, f, class_data, &call_prefix);
+    if (!ctor || cg_func_needs_aot_coro_ctx(ctx, ctor))
+        return false;
+    if (!class_data)
+        class_data = cg_class_data_for_type_name(ctx, v->type);
+    if (!class_data || class_data->instance_layout)
+        return false;
+
+    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+    if (!class_name)
+        class_name = class_data->class_name ? class_data->class_name : class_data->display_name;
+    if (!class_name)
+        return false;
+
+    fprintf(out, "    XrValue _hosted_map_inst_%u = xrt_map_new(4);\n", v->id);
+    fprintf(out, "    xrt_map_set_class_name(_hosted_map_inst_%u, ", v->id);
+    xicgen_emit_c_string_literal(out, class_name);
+    fprintf(out, ");\n");
+    if (cg_class_native_has_field_defaults(ctx, class_data)) {
+        char inst[48];
+        snprintf(inst, sizeof(inst), "_hosted_map_inst_%u", v->id);
+        fprintf(out, "    ");
+        emit_class_map_field_default_stores(ctx, out, class_data, inst);
+        fprintf(out, "\n");
+    }
+    fprintf(out, "    (void)");
+    emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);
+    fprintf(out, "(NULL, _hosted_map_inst_%u", v->id);
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_direct_call_arg(ctx, out, f, v, ctor, a, v->args[a]);
+    }
+    fprintf(out, ");\n");
+    uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+    if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+        fprintf(out, "    (void)xrt_value_set_storage(_hosted_map_inst_%u, %u);\n", v->id,
+                (unsigned) storage_mode);
+
+    if (ctx->pre_decl_all) {
+        fprintf(out, "    ");
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    } else {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    }
+    XrRep target_rep = cg_value_decl_storage_rep(ctx, f, v);
+    const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+    fprintf(out, "_hosted_map_inst_%u", v->id);
+    emit_conversion_suffix(out, suffix);
+    fprintf(out, ";\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
+}
+
 /* Resolve a static method by class and name, walking the (possibly
  * cross-module) inheritance chain.  Static methods have no receiver, so they
  * are dispatched directly to the resolved function. */
@@ -10970,13 +11037,22 @@ static void xicgen_emit_class_itable_init(XiCgenCtx *ctx, FILE *out, const XiCla
 }
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                const char *prefix) {
+                                 const char *prefix) {
     (void) f;
     const XiClassData *cd = (const XiClassData *) v->aux;
     if (!cd) {
         fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
         return;
     }
+    emit_class_native_type_register_helper_name(out, prefix, cd);
+    fprintf(out, "()");
+}
+
+static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out,
+                                                       const XiClassData *cd,
+                                                       const char *prefix) {
+    if (!ctx || !out || !cd)
+        return;
     const char *name = cd->class_name ? cd->class_name : "?";
     bool emit_type_names = cg_emit_type_name_for_class(ctx, cd);
     bool is_mono = cd->is_monomorphized && cd->display_name;
@@ -10984,44 +11060,54 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     if (is_mono)
         origin_slot = cg_find_class_slot(ctx, cd->generic_origin_name ? cd->generic_origin_name
                                                                       : cd->display_name);
-    fprintf(out, "({ ");
-    if (emit_type_names && is_mono) {
-        if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
-            fprintf(out, "static const char *_ta_%s[] = {", name);
-            for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
-                fprintf(out, "%s\"%s\"", ti > 0 ? ", " : "",
-                        cd->mono_type_arg_names[ti] ? cd->mono_type_arg_names[ti] : "unknown");
-            }
-            fprintf(out, "}; ");
+
+    fprintf(out, "static XrValue ");
+    emit_class_native_type_register_helper_name(out, prefix, cd);
+    fprintf(out, "(void) {\n");
+    if (emit_type_names && is_mono && cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+        fprintf(out, "    static const char *_ta_%s[] = {", name);
+        for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
+            fprintf(out, "%s\"%s\"", ti > 0 ? ", " : "",
+                    cd->mono_type_arg_names[ti] ? cd->mono_type_arg_names[ti] : "unknown");
         }
+        fprintf(out, "};\n");
     }
-    fprintf(out, "uint16_t _tid = ");
+    fprintf(out, "    uint16_t _tid = ");
     emit_class_native_type_register_expr(ctx, out, cd, prefix);
-    fprintf(out, "; ");
+    fprintf(out, ";\n    ");
     xicgen_emit_class_itable_init(ctx, out, cd, prefix, "_tid");
-    if (emit_type_names) {
-        fprintf(out, "xrt_type_set_name(_tid, \"%s\", NULL); ", name);
-    }
+    fprintf(out, "\n");
+    if (emit_type_names)
+        fprintf(out, "    xrt_type_set_name(_tid, \"%s\", NULL);\n", name);
     if (is_mono) {
         if (origin_slot >= 0) {
-            fprintf(out, "xrt_type_set_generic_origin(_tid, (uint16_t)%s[%d].i); ",
-                    ctx && ctx->shared_name ? ctx->shared_name : "xrt_shared", origin_slot);
+            fprintf(out, "    xrt_type_set_generic_origin(_tid, (uint16_t)%s[%d].i);\n",
+                    ctx->shared_name ? ctx->shared_name : "xrt_shared", origin_slot);
         } else {
-            fprintf(out, "xrt_type_set_generic_origin(_tid, 0); ");
+            fprintf(out, "    xrt_type_set_generic_origin(_tid, 0);\n");
         }
         if (emit_type_names) {
-            fprintf(out, "xrt_type_set_generic_name(_tid, \"%s\", ", cd->display_name);
-            if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+            fprintf(out, "    xrt_type_set_generic_name(_tid, \"%s\", ", cd->display_name);
+            if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names)
                 fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
-            } else {
+            else
                 fprintf(out, "NULL, 0");
-            }
-            fprintf(out, "); ");
+            fprintf(out, ");\n");
         }
     }
+    fprintf(out, "    ");
     emit_class_native_type_derive_init(ctx, out, cd, prefix, "_tid");
+    fprintf(out, "\n    ");
     emit_class_user_hash_eq_init(ctx, out, cd, prefix, "_tid");
-    fprintf(out, "XR_FROM_INT(_tid); })");
+    fprintf(out, "\n    return XR_FROM_INT(_tid);\n}\n");
+}
+
+static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, XiModule *module,
+                                                    const char *prefix) {
+    if (!module || !module->classes)
+        return;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++)
+        emit_one_class_native_type_register_helper(ctx, out, module->classes[ci], prefix);
 }
 
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

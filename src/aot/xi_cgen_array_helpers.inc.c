@@ -4581,6 +4581,118 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
                                                   cg_value_decl_storage_rep(ctx, f, v));
 }
 
+static void emit_span_ref_expr(FILE *out, const XiValue *value);
+
+static bool emit_hosted_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out,
+                                                       const XiFunc *f, const XiValue *v,
+                                                       const char *prefix) {
+    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v)
+        return false;
+
+    if (v->op == XI_INDEX_GET && v->nargs >= 2) {
+        CgArrayElemInfo info;
+        bool span = cg_value_plan_is_span_aggregate(ctx, v->args[0]) &&
+                    cg_span_elem_info_from_value(ctx, v->args[0], &info);
+        bool array = !span &&
+                     cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                                 CG_ARRAY_STORAGE_READ);
+        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        if ((!span && !array) ||
+            (plan && (cg_value_rep_is_struct_aggregate(plan->rep) ||
+                      cg_value_rep_is_typed_adt_aggregate(plan->rep))))
+            return false;
+
+        bool unchecked = span
+                             ? cg_span_index_bounds_proven(ctx, f, v,
+                                                          XAOT_SLICE_ACCESS_INDEX_GET)
+                             : cg_array_index_access_bounds_proven(ctx, f, v);
+        bool borrowed = info.rep == XR_REP_TAGGED &&
+                        cg_tagged_array_index_get_can_borrow(ctx, f, v);
+        fprintf(out, "    XrValue _hosted_load_%u = ", v->id);
+        if (span) {
+            fprintf(out, "xrt_span_index_get_portable(");
+            emit_span_ref_expr(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ", %s, %d, %d);\n", info.elem_name, unchecked ? 0 : 1,
+                    borrowed ? 0 : 1);
+        } else {
+            fprintf(out, "xrt_array_index_get_portable((xrt_array_t *)");
+            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ", %d, %d);\n", unchecked ? 0 : 1, borrowed ? 0 : 1);
+        }
+        if (ctx->pre_decl_all) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        } else {
+            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
+        const char *suffix = emit_conversion_prefix_ctx(
+            ctx, out, v->type, XR_REP_TAGGED, cg_value_decl_storage_rep(ctx, f, v));
+        fprintf(out, "_hosted_load_%u", v->id);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        emit_debug_source_var_sync(ctx, out, f, v);
+        return true;
+    }
+
+    if (v->op == XI_INDEX_SET && v->nargs >= 3) {
+        CgArrayElemInfo info;
+        bool span = cg_value_plan_is_span_aggregate(ctx, v->args[0]) &&
+                    cg_span_elem_info_from_value(ctx, v->args[0], &info);
+        bool array = !span &&
+                     cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                                 CG_ARRAY_STORAGE_MUTABLE);
+        if (!span && !array)
+            return false;
+        bool unchecked = span
+                             ? cg_span_index_bounds_proven(ctx, f, v,
+                                                          XAOT_SLICE_ACCESS_INDEX_SET)
+                             : cg_array_index_access_bounds_proven(ctx, f, v);
+        fprintf(out, "    (void)");
+        if (span) {
+            fprintf(out, "xrt_span_index_set_portable(");
+            emit_span_ref_expr(out, v->args[0]);
+        } else {
+            fprintf(out, "xrt_array_index_set_portable((xrt_array_t *)");
+            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+        }
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        if (span)
+            fprintf(out, ", %s, %d);\n", info.elem_name, unchecked ? 0 : 1);
+        else
+            fprintf(out, ", %d);\n", unchecked ? 0 : 1);
+        emit_value_generated_line_reset(ctx, out, v);
+        return true;
+    }
+
+    if (v->op == XI_CALL_METHOD && v->nargs == 2 && v->aux &&
+        strcmp((const char *) v->aux, "push") == 0) {
+        CgArrayElemInfo info;
+        if (!cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                         CG_ARRAY_STORAGE_MUTABLE))
+            return false;
+        fprintf(out, "    xrt_array_push(xr_mkptr((void *)");
+        emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+        fprintf(out, ", XR_TAG_ARRAY), ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        return true;
+    }
+
+    return false;
+}
+
 static void emit_span_ref_expr(FILE *out, const XiValue *value) {
     emit_vref(out, cg_unwrap_identity_value(value));
 }

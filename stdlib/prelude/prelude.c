@@ -125,7 +125,7 @@ static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const cha
             memcpy(names[i], member_names[i], len);
     }
 
-    XrEnumType *et = xr_enum_type_new(X, name, names, count);
+    XrEnumType *et = xr_enum_type_new(X, "prelude", name, names, count);
 
     if (et && is_adt && payload_counts)
         (void) xr_enum_type_set_adt_payloads(et, payload_counts, count);

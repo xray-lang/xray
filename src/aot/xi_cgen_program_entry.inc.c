@@ -429,14 +429,22 @@ static void cg_emit_cxx_linkage_end(FILE *out) {
 
 XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out) {
     XR_DCHECK(out != NULL, "xi_cgen_header: NULL output");
-    bool runtime_bridge = cg_tu_needs_runtime_bridge(ctx);
-    cg_emit_tu_includes(out, true, ctx && ctx->freestanding_profile, runtime_bridge,
+    bool hosted_fragment = ctx && ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    bool runtime_bridge = hosted_fragment || cg_tu_needs_runtime_bridge(ctx);
+    cg_emit_tu_includes(out,
+                        !ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
+                        ctx && ctx->freestanding_profile, runtime_bridge,
                         ctx && ctx->simd_active && ctx->target ? ctx->target->simd_features : 0,
                         cg_static_x86_compile_width_for_module(ctx, NULL),
                         ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90);
+    if (ctx && ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT)
+        fprintf(out, "#include \"xray_hosted_fragment_abi.h\"\n\n");
     if (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
         return;
-    if (runtime_bridge)
+    if (hosted_fragment)
+        fprintf(out,
+                "extern XR_THREAD_LOCAL const XrAotContext *xrt_hosted_aot_context;\n");
+    else if (runtime_bridge)
         fprintf(out, "static XrAotContext xrt_global_ctx;\n");
     fprintf(out, "static XrValue xrt_builtins[%d];\n\n", XR_USER_GLOBALS_START);
 }
@@ -672,6 +680,61 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
     return (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
 
+/* A hosted artifact has no process entry point, but its immutable module
+ * constants and native class identities still require the same dependency-
+ * ordered initialization as an executable.  The host serializes this entry
+ * exactly once before publishing any fragment function. */
+static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out,
+                                                XiModule **modules, int n) {
+    for (int m = 0; m < n; m++) {
+        if (!modules[m] || !modules[m]->init)
+            continue;
+        fprintf(out, "XRT_INTERNAL XrValue ");
+        emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
+        fprintf(out, "(xrt_closure_t *_cl);\n");
+    }
+    fprintf(out, "\n");
+    fprintf(out,
+            "bool xr_hosted_fragment_initialize(\n"
+            "    const XrHostedFragmentContext *context) {\n"
+            "    if (!context || !context->runtime_ops || xrt_has_pending_error())\n"
+            "        return false;\n"
+            "    XrAotContext _hosted_runtime_context = {0};\n"
+            "    _hosted_runtime_context.coro = (struct XrCoroutine *)context->coroutine;\n"
+            "    _hosted_runtime_context.vm_host_ops =\n"
+            "        (const XrAotVmHostOps *)context->runtime_ops;\n"
+            "    _hosted_runtime_context.vm_host = context->host;\n"
+            "    const XrAotContext *_hosted_previous_runtime_context =\n"
+            "        xrt_hosted_aot_context;\n"
+            "    xrt_hosted_aot_context = &_hosted_runtime_context;\n");
+    for (int m = 0; m < n; m++) {
+        if (!modules[m] || !modules[m]->init)
+            continue;
+        if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: hosted fragment module init '%s' must not suspend\n",
+                    modules[m]->name ? modules[m]->name : "mod");
+            ctx->error = true;
+            continue;
+        }
+        fprintf(out, "    ");
+        emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
+        fprintf(out, "(NULL);\n");
+        fprintf(out,
+                "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n"
+                "        XrValue _hosted_init_error = xrt_pending_error;\n"
+                "        xrt_pending_error = XR_NULL_VAL;\n"
+                "        xrt_release(_hosted_init_error);\n"
+                "        xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
+                "        return false;\n"
+                "    }\n");
+    }
+    fprintf(out,
+            "    xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
+            "    return true;\n"
+            "}\n\n");
+}
+
 /* Shared-library init: --shared exports a C ABI library, so loading it executes
  * the complete module graph before any manifest export wrapper can run. This is the
  * library equivalent of main's ordered module-init sequence: both initialized
@@ -838,6 +901,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     if (ctx->error)
         return;
     cg_reset_enum_scalar_sidecars(ctx);
+    cg_reset_prelude_enum_scalar_sidecars(ctx);
 
     /* Build every section off-output.  The final unit is assembled in fixed
      * phase order and copied to the caller only after every buffer closes and
@@ -891,9 +955,10 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_emit_freestanding_imported_static_const_decls(ctx, statics, module);
 
     emit_class_native_clone_helpers(ctx, body, module, prefix);
+    emit_class_native_type_register_helpers(ctx, body, module, prefix);
     xi_cgen_func(ctx, body, main_func, prefix);
 
-    if (ctx->emit_main) {
+    if (ctx->artifact_kind == XAOT_ARTIFACT_EXECUTABLE) {
         CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
         const char *entry_source_path = cg_entry_source_path(ctx, single_module, 1, 0);
         bool entry_is_coro = cg_entry_init_uses_resumable_frame(ctx, single_module, 1, 0);
@@ -951,12 +1016,16 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         fprintf(body, "    xrt_arc_shutdown();\n");
         fprintf(body, "    return 0;\n");
         fprintf(body, "}\n");
-    } else if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90) {
+    } else if (ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
+               ctx->c_dialect != XI_CGEN_C_DIALECT_C90) {
         xi_cgen_shared_lib_ctor(ctx, body, single_module, 1, 0);
+    } else if (ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT) {
+        xi_cgen_hosted_fragment_initializer(ctx, body, single_module, 1);
     }
 
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
+    emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
     close_failed = (xr_close_memstream(forwards, &forwardbuf, &forwardsz) != 0) || close_failed;
@@ -1097,6 +1166,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         return;
     }
     cg_reset_enum_scalar_sidecars(ctx);
+    cg_reset_prelude_enum_scalar_sidecars(ctx);
 
     char *staticbuf = NULL;
     size_t staticsz = 0;
@@ -1129,18 +1199,23 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_emit_freestanding_static_tuple_defs(ctx, statics, module);
     cg_emit_freestanding_static_struct_defs(ctx, statics, module, prefix);
     emit_class_native_clone_helpers(ctx, body, module, prefix);
+    emit_class_native_type_register_helpers(ctx, body, module, prefix);
     xi_cgen_func(ctx, body, module->init, prefix);
 
     if (is_entry) {
-        if (ctx->emit_main)
+        if (ctx->artifact_kind == XAOT_ARTIFACT_EXECUTABLE)
             xi_cgen_main(ctx, body, modules, nmodules, entry_index);
-        else if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
+        else if (ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
+                  ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
             xi_cgen_shared_lib_ctor(ctx, body, modules, nmodules, entry_index);
+        else if (ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT)
+            xi_cgen_hosted_fragment_initializer(ctx, body, modules, nmodules);
     }
     ctx->collect_xmod_refs = false;
 
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
+    emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;
     close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;
@@ -1168,11 +1243,19 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     /* Shared includes; the entry unit defines the runtime impl (XRT_IMPL) and
      * xrt_builtins, every other unit only declares them. */
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INCLUDES)) {
-        cg_emit_tu_includes(unit, is_entry, ctx->freestanding_profile,
-                            cg_tu_needs_runtime_bridge(ctx),
+        bool hosted_fragment = ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT;
+        cg_emit_tu_includes(unit,
+                            is_entry && ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
+                            ctx->freestanding_profile,
+                            hosted_fragment || cg_tu_needs_runtime_bridge(ctx),
                             ctx->simd_active && ctx->target ? ctx->target->simd_features : 0,
                             cg_static_x86_compile_width_for_module(ctx, module),
                             ctx->c_dialect == XI_CGEN_C_DIALECT_C90);
+        if (ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT)
+            fprintf(unit,
+                    "#include \"xray_hosted_fragment_abi.h\"\n\n"
+                    "extern XR_THREAD_LOCAL const XrAotContext "
+                    "*xrt_hosted_aot_context;\n\n");
         if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
             cg_emit_cxx_linkage_begin(unit);
     }

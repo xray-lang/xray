@@ -9,8 +9,9 @@
  *
  * KEY CONCEPT:
  *   All heap objects (class instances, promoted structs) carry XrObjHeader
- *   from xrt_arc.h as a common header.  XrObjHeader.type indexes into
- *   xrt_type_table[] for class metadata (name, parent, vtable, destructor).
+ *   from xrt_arc.h as a common header. XrObjHeader.type stores the canonical
+ *   XR_TINSTANCE object kind; xrt_aot_class_type_id() decodes the separately
+ *   tagged compilation-local id used to index xrt_type_table[].
  *
  *   Field access is via C struct members (compile-time offsets).
  *   Method dispatch:
@@ -50,7 +51,7 @@
 
 /* =========================================================================
  * Type Info — one hot entry plus optional cold name/derive entries per
- * class/struct type. XrObjHeader.type indexes into xrt_type_table[].
+ * class/struct type. xrt_aot_class_type_id() indexes into xrt_type_table[].
  * ========================================================================= */
 
 typedef void (*XrtDestructor)(void *obj);
@@ -219,14 +220,14 @@ static inline void xrt_type_set_user_hash_eq(uint16_t type_id, XrtUserHashFn has
 static inline XrtUserHashFn xrt_instance_user_hash_fn(XrValue v) {
     if (v.tag != XR_TAG_PTR || v.heap_type != XR_TINSTANCE || !v.ptr)
         return NULL;
-    uint16_t tid = XRT_ARC_HDR(v.ptr)->type;
+    uint16_t tid = xrt_aot_class_type_id((const XrObjHeader *) v.ptr);
     return (tid && tid < xrt_type_count) ? xrt_type_table[tid].hash_fn : NULL;
 }
 
 static inline XrtUserEqFn xrt_instance_user_eq_fn(XrValue v) {
     if (v.tag != XR_TAG_PTR || v.heap_type != XR_TINSTANCE || !v.ptr)
         return NULL;
-    uint16_t tid = XRT_ARC_HDR(v.ptr)->type;
+    uint16_t tid = xrt_aot_class_type_id((const XrObjHeader *) v.ptr);
     return (tid && tid < xrt_type_count) ? xrt_type_table[tid].eq_fn : NULL;
 }
 
@@ -351,21 +352,35 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
 /* =========================================================================
  * Object allocation — execution arena + type in XrObjHeader
  *
- * Uses xrt_arc_alloc (normal RC plus residual arena ownership) and stores the type_id
- * in XrObjHeader.type for vtable dispatch and instanceof.
+ * Uses the execution arena (normal RC plus residual arena ownership), stores
+ * XR_TINSTANCE in XrObjHeader.type, and stores the compilation-local type_id in
+ * the disjoint tagged auxiliary encoding used for vtable dispatch/instanceof.
  * ========================================================================= */
 
 static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
-    void *obj = xrt_arc_alloc((size_t) size);
-    XrObjHeader *h = XRT_ARC_HDR(obj);
-    h->type = type_id;
+    if (type_id == 0) {
+        fprintf(stderr, "xrt_obj_alloc: class type id must be non-zero\n");
+        abort();
+    }
+    if (size < sizeof(XrObjHeader)) {
+        fprintf(stderr, "xrt_obj_alloc: native object is smaller than XrObjHeader\n");
+        abort();
+    }
+    void *obj = xrt_execution_alloc_embedded((size_t) size, xrt_execution_finalize_generic);
+    XrObjHeader *h = (XrObjHeader *) obj;
+    xrt_heap_header_init(h, XR_TINSTANCE);
+    xrt_aot_class_type_set(h, type_id);
     h->extra |= XR_OBJ_HAS_DTOR;  // mark as having type metadata
     return obj;
 }
 
 /* Box an object pointer into XrValue */
 static inline XrValue xrt_box_obj(void *obj) {
-    return obj ? xr_mkheap(obj, XR_TINSTANCE) : XR_NULL_VAL;
+    if (!obj)
+        return XR_NULL_VAL;
+    XrValue value = xr_mkheap(obj, XR_TINSTANCE);
+    value.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
+    return value;
 }
 
 /* Unbox XrValue to object pointer (no type check) */
@@ -396,8 +411,8 @@ static inline int xrt_type_internal_name_eq(uint16_t type_id, const char *name) 
 static inline int xrt_instance_exact_type(XrValue val, uint16_t expected_tid) {
     if (expected_tid == 0 || val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return 0;
-    XrObjHeader *h = XRT_ARC_HDR(val.ptr);
-    return h->type == expected_tid;
+    XrObjHeader *h = (XrObjHeader *) val.ptr;
+    return xrt_aot_class_type_id(h) == expected_tid;
 }
 
 /* Walk inheritance chain: true if value is an instance of target_tid
@@ -406,8 +421,8 @@ static inline int xrt_instance_exact_type(XrValue val, uint16_t expected_tid) {
 static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
     if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return 0;
-    XrObjHeader *h = XRT_ARC_HDR(val.ptr);
-    uint16_t cur = h->type;
+    XrObjHeader *h = (XrObjHeader *) val.ptr;
+    uint16_t cur = xrt_aot_class_type_id(h);
     while (cur != 0 && cur < xrt_type_count) {
         if (cur == target_tid)
             return 1;
@@ -423,8 +438,8 @@ static inline XrtMethodFn xrt_itable_method(XrValue val, uint32_t interface_id, 
         fprintf(stderr, "xrt_itable_method: receiver is not an interface object\n");
         abort();
     }
-    XrObjHeader *h = XRT_ARC_HDR(val.ptr);
-    uint16_t cur = h->type;
+    XrObjHeader *h = (XrObjHeader *) val.ptr;
+    uint16_t cur = xrt_aot_class_type_id(h);
     while (cur != 0 && cur < xrt_type_count) {
         const XrtTypeInfo *ti = &xrt_type_table[cur];
         for (uint16_t i = 0; i < ti->itable_size; i++) {

@@ -22,6 +22,18 @@ static XrVMRuntime *make_full_isolate(void) {
     return xray_vm_new_full(&params);
 }
 
+static const XaBuiltinMember *find_module_member(const char *module_name,
+                                                 const char *member_name) {
+    const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
+    if (!module || !member_name)
+        return NULL;
+    for (int i = 0; i < module->function_count; i++) {
+        if (module->functions[i].name && strcmp(module->functions[i].name, member_name) == 0)
+            return &module->functions[i];
+    }
+    return NULL;
+}
+
 TEST(native_type_methods_match_runtime_tables) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
@@ -41,7 +53,8 @@ TEST(native_module_record_and_enum_metadata) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
 
-    const XaBuiltinRecord *record = xa_builtin_get_record_type("net", "CopyBidirectionalResult");
+    const XaBuiltinRecord *record =
+        xa_builtin_get_record_type("net", "__CopyBidirectionalResult");
     ASSERT_NOT_NULL(record);
     ASSERT_TRUE(record->is_sealed);
     ASSERT_EQ_INT(record->field_count, 2);
@@ -77,19 +90,17 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_EQ_INT(runtime_enum->members[0].ctor->layout_id, enum_decl->layout_id);
     xa_enum_info_free(enum_info);
 
-    const char *signature = xa_builtin_get_module_func_signature("net", "copyBidirectional");
-    ASSERT_NOT_NULL(signature);
-    XrType *fn = xa_builtin_parse_full_signature(iso, signature);
+    const XaBuiltinMember *copy_bidi = find_module_member("net", "__copyBidirectional");
+    ASSERT_NOT_NULL(copy_bidi);
+    ASSERT_TRUE(copy_bidi->is_internal);
+    XrType *fn = xa_builtin_parse_full_signature(iso, copy_bidi->signature);
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
     ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_RECORD);
 
-    const XaEffectContract *effect =
-        xa_builtin_get_module_func_effect_contract("net", "copyBidirectional");
-    ASSERT_NOT_NULL(effect);
-    ASSERT_EQ_INT(effect->kind, XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT_EQ_INT(effect->error_count, 10);
+    ASSERT_EQ_INT(copy_bidi->effect_contract.kind, XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT_EQ_INT(copy_bidi->effect_contract.error_count, 10);
 
     const XaBuiltinRecord *ws_options = xa_builtin_get_record_type("ws", "WsConnectOptions");
     ASSERT_NOT_NULL(ws_options);

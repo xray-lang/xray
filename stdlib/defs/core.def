@@ -1849,7 +1849,7 @@ module regex {
 }
 
 module os {
-  handle ExecResult {
+  handle __ExecResult {
     fields: "const stdout: string, const stderr: string, const exitCode: int"
   }
 
@@ -1893,7 +1893,7 @@ module os {
     layer: "system"
   }
 
-  fn getenv {
+  fn __getenv {
     signature: "(name: string): string?"
     doc: "Get environment variable"
     vm: "os_getenv"
@@ -1906,7 +1906,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn setenv {
+  fn __setenv {
     signature: "(name: string, value: string): bool"
     doc: "Set environment variable"
     vm: "os_setenv"
@@ -1918,7 +1918,7 @@ module os {
     layer: "system"
   }
 
-  fn unsetenv {
+  fn __unsetenv {
     signature: "(name: string): bool"
     doc: "Unset environment variable"
     vm: "os_unsetenv"
@@ -1930,7 +1930,7 @@ module os {
     layer: "system"
   }
 
-  fn environ {
+  fn __environ {
     signature: "(): Map<string, string>"
     doc: "Get all environment variables"
     vm: "os_environ"
@@ -1943,7 +1943,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn exit {
+  fn __exit {
     signature: "(code?: int): ()"
     doc: "Exit process"
     vm: "os_exit"
@@ -1954,7 +1954,7 @@ module os {
     layer: "system"
   }
 
-  fn getpid {
+  fn __getpid {
     signature: "(): int"
     doc: "Get process ID"
     vm: "os_getpid"
@@ -1966,7 +1966,7 @@ module os {
     layer: "system"
   }
 
-  fn getcwd {
+  fn __getcwd {
     signature: "(): string"
     doc: "Get current working directory"
     vm: "os_getcwd"
@@ -1979,19 +1979,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn chdir {
-    signature: "(path: Path): bool"
-    doc: "Change working directory"
-    vm: "os_chdir"
-    aot: "xrt_os_chdir"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn hostname {
+  fn __hostname {
     signature: "(): string"
     doc: "Get hostname"
     vm: "os_hostname"
@@ -2004,7 +1992,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn tmpdir {
+  fn __tmpdir {
     signature: "(): string"
     doc: "Get temporary directory path"
     vm: "os_tmpdir"
@@ -2017,7 +2005,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn username {
+  fn __username {
     signature: "(): string?"
     doc: "Get current user name"
     vm: "os_username"
@@ -2030,7 +2018,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn homedir {
+  fn __homedir {
     signature: "(): string?"
     doc: "Get user home directory"
     vm: "os_homedir"
@@ -2043,7 +2031,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn uid {
+  fn __uid {
     signature: "(): int"
     doc: "Get user ID"
     vm: "os_uid"
@@ -2055,7 +2043,7 @@ module os {
     layer: "system"
   }
 
-  fn gid {
+  fn __gid {
     signature: "(): int"
     doc: "Get group ID"
     vm: "os_gid"
@@ -2067,7 +2055,7 @@ module os {
     layer: "system"
   }
 
-  fn cpuCount {
+  fn __cpuCount {
     signature: "(): int"
     doc: "Get number of CPU cores"
     vm: "os_cpuCount"
@@ -2079,7 +2067,7 @@ module os {
     layer: "system"
   }
 
-  fn ppid {
+  fn __ppid {
     signature: "(): int"
     doc: "Get parent process ID"
     vm: "os_ppid"
@@ -2091,7 +2079,7 @@ module os {
     layer: "system"
   }
 
-  fn kill {
+  fn __kill {
     signature: "(pid: int, signal?: int): bool"
     doc: "Send signal to process"
     vm: "os_kill"
@@ -2103,7 +2091,7 @@ module os {
     layer: "system"
   }
 
-  fn kill {
+  fn __kill {
     signature: "(pid: int, signal?: int): bool"
     doc: "Send signal to process"
     vm: "os_kill"
@@ -2115,7 +2103,7 @@ module os {
     layer: "system"
   }
 
-  fn totalMemory {
+  fn __totalMemory {
     signature: "(): int"
     doc: "Get total system memory in bytes"
     vm: "os_totalMemory"
@@ -2127,7 +2115,7 @@ module os {
     layer: "system"
   }
 
-  fn freeMemory {
+  fn __freeMemory {
     signature: "(): int"
     doc: "Get available system memory in bytes"
     vm: "os_freeMemory"
@@ -2139,7 +2127,7 @@ module os {
     layer: "system"
   }
 
-  fn uptime {
+  fn __uptime {
     signature: "(): float"
     doc: "Get system uptime in seconds"
     vm: "os_uptime"
@@ -2151,7 +2139,7 @@ module os {
     layer: "system"
   }
 
-  fn loadavg {
+  fn __loadavg {
     signature: "(): Array<float>"
     doc: "Get system load averages (1, 5, 15 min)"
     vm: "os_loadavg"
@@ -2164,7 +2152,7 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn clock {
+  fn __clock {
     signature: "(): float"
     doc: "Get process CPU time in seconds"
     vm: "os_clock"
@@ -2176,7 +2164,7 @@ module os {
     layer: "system"
   }
 
-  fn sleep {
+  fn __sleep {
     signature: "(ms: int): ()"
     doc: "Sleep for milliseconds"
     vm: "os_sleep"
@@ -2189,8 +2177,8 @@ module os {
     layer: "system"
   }
 
-  fn exec {
-    signature: "(cmd: string): ExecResult?"
+  fn __exec {
+    signature: "(cmd: string): __ExecResult?"
     doc: "Execute shell command"
     vm: "os_exec"
     aot: "xrt_os_exec"
@@ -2202,8 +2190,8 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn spawn {
-    signature: "(program: string, args: Array<string>): ExecResult?"
+  fn __spawn {
+    signature: "(program: string, args: Array<string>): __ExecResult?"
     doc: "Execute a program without a shell (injection-safe argv)"
     vm: "os_spawn"
     argc: 2
@@ -2216,11 +2204,11 @@ module os {
 }
 
 module io {
-  handle FileStat {
+  handle __FileStat {
     fields: "const size: int, const mode: int, const mtime: int, const atime: int, const ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const isSymlink: bool"
   }
 
-  fn appendFile {
+  fn __appendFile {
     signature: "(path: Path, data: string): bool"
     doc: "Append string to file"
     vm: "io_appendFile"
@@ -2232,7 +2220,7 @@ module io {
     layer: "system"
   }
 
-  fn chmod {
+  fn __chmod {
     signature: "(path: Path, mode: int): bool"
     doc: "Change file permissions"
     vm: "io_chmod"
@@ -2244,7 +2232,7 @@ module io {
     layer: "system"
   }
 
-  fn chdir {
+  fn __chdir {
     signature: "(path: Path): bool"
     doc: "Change working directory"
     vm: "io_chdir"
@@ -2256,7 +2244,7 @@ module io {
     layer: "system"
   }
 
-  fn copyFile {
+  fn __copyFile {
     signature: "(src: Path, dst: Path): bool"
     doc: "Copy a file"
     vm: "io_copyFile"
@@ -2282,7 +2270,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn exists {
+  fn __exists {
     signature: "(path: Path): bool"
     doc: "Check if path exists"
     vm: "io_exists"
@@ -2334,7 +2322,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn fileSize {
+  fn __fileSize {
     signature: "(path: Path): int"
     doc: "Get file size in bytes"
     vm: "io_fileSize"
@@ -2346,7 +2334,7 @@ module io {
     layer: "system"
   }
 
-  fn isDir {
+  fn __isDir {
     signature: "(path: Path): bool"
     doc: "Check if path is a directory"
     vm: "io_isDir"
@@ -2358,7 +2346,7 @@ module io {
     layer: "system"
   }
 
-  fn isFile {
+  fn __isFile {
     signature: "(path: Path): bool"
     doc: "Check if path is a file"
     vm: "io_isFile"
@@ -2370,7 +2358,7 @@ module io {
     layer: "system"
   }
 
-  fn isSymlink {
+  fn __isSymlink {
     signature: "(path: Path): bool"
     doc: "Check if path is a symlink"
     vm: "io_isSymlink"
@@ -2382,7 +2370,7 @@ module io {
     layer: "system"
   }
 
-  fn mkdir {
+  fn __mkdir {
     signature: "(path: Path): bool"
     doc: "Create directory"
     vm: "io_mkdir"
@@ -2394,7 +2382,7 @@ module io {
     layer: "system"
   }
 
-  fn mkdirp {
+  fn __mkdirp {
     signature: "(path: Path): bool"
     doc: "Create directory recursively"
     vm: "io_mkdirp"
@@ -2434,7 +2422,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn readFile {
+  fn __readFile {
     signature: "(path: Path): string?"
     doc: "Read entire file as string"
     vm: "io_readFile"
@@ -2448,7 +2436,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn readFileBytes {
+  fn __readFileBytes {
     signature: "(path: Path): Array<byte>?"
     doc: "Read entire file as byte array"
     vm: "io_readFileBytes"
@@ -2462,7 +2450,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn readLines {
+  fn __readLines {
     signature: "(path: Path): Array<string>"
     doc: "Read file as lines"
     vm: "io_readLines"
@@ -2475,7 +2463,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn readStdin {
+  fn __readStdin {
     signature: "(): string?"
     doc: "Read all data from standard input"
     vm: "io_readStdin"
@@ -2488,7 +2476,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn readStdinBytes {
+  fn __readStdinBytes {
     signature: "(): Array<byte>?"
     doc: "Read all standard input as binary bytes"
     vm: "io_readStdinBytes"
@@ -2529,7 +2517,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn remove {
+  fn __remove {
     signature: "(path: Path): bool"
     doc: "Remove a file"
     vm: "io_remove"
@@ -2541,7 +2529,7 @@ module io {
     layer: "system"
   }
 
-  fn removeAll {
+  fn __removeAll {
     signature: "(path: Path): bool"
     doc: "Remove directory recursively"
     vm: "io_removeAll"
@@ -2553,7 +2541,7 @@ module io {
     layer: "system"
   }
 
-  fn rename {
+  fn __rename {
     signature: "(old: Path, new: Path): bool"
     doc: "Rename a file"
     vm: "io_rename"
@@ -2565,8 +2553,8 @@ module io {
     layer: "system"
   }
 
-  fn stat {
-    signature: "(path: Path): FileStat?"
+  fn __stat {
+    signature: "(path: Path): __FileStat?"
     doc: "Get file stat info"
     vm: "io_stat"
     aot: "xrt_io_stat"
@@ -2578,7 +2566,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn symlink {
+  fn __symlink {
     signature: "(target: Path, link: Path): bool"
     doc: "Create symbolic link"
     vm: "io_symlink"
@@ -2618,7 +2606,7 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn touch {
+  fn __touch {
     signature: "(path: Path): bool"
     doc: "Create or update file timestamp"
     vm: "io_touch"
@@ -2630,7 +2618,7 @@ module io {
     layer: "system"
   }
 
-  fn writeFile {
+  fn __writeFile {
     signature: "(path: Path, data: string): bool"
     doc: "Write string to file"
     vm: "io_writeFile"
@@ -2643,7 +2631,7 @@ module io {
     layer: "system"
   }
 
-  fn writeFileBytes {
+  fn __writeFileBytes {
     signature: "(path: Path, data: Array<byte>): bool"
     doc: "Write byte array to file"
     vm: "io_writeFileBytes"
@@ -2656,7 +2644,7 @@ module io {
     layer: "system"
   }
 
-  fn writeStderr {
+  fn __writeStderr {
     signature: "(data: string): bool"
     doc: "Write text to standard error without adding a newline"
     vm: "io_writeStderr"
@@ -2668,7 +2656,7 @@ module io {
     layer: "system"
   }
 
-  fn writeStdout {
+  fn __writeStdout {
     signature: "(data: string): bool"
     doc: "Write text to standard output without adding a newline"
     vm: "io_writeStdout"
@@ -3249,7 +3237,7 @@ module Coro {
 }
 
 module net {
-  record CopyBidirectionalResult {
+  record __CopyBidirectionalResult {
     fields: "const aToB: int, const bToA: int"
     sealed: true
     doc: "Byte counts copied in each direction by copyBidirectional"
@@ -3260,7 +3248,7 @@ module net {
     doc: "Typed failure from native network operations"
   }
 
-  handle UdpPacket {
+  handle __UdpPacket {
     fields: "const data: string, const host: string, const port: int"
   }
 
@@ -3318,7 +3306,7 @@ module net {
     argc: 0
   }
 
-  fn dial {
+  fn __dial {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TCP connection"
     vm: "net_dial_yieldable"
@@ -3332,7 +3320,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn dial {
+  fn __dial {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TCP connection"
     vm: "net_dial_yieldable"
@@ -3346,7 +3334,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn listen {
+  fn __listen {
     signature: "(port: int, backlog?: int): NetListener?"
     doc: "Start listening on a port"
     vm: "net_listen_handle"
@@ -3359,7 +3347,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn listen {
+  fn __listen {
     signature: "(port: int, backlog?: int): NetListener?"
     doc: "Start listening on a port"
     vm: "net_listen_handle"
@@ -3372,7 +3360,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn accept {
+  fn __accept {
     signature: "(listener: NetListener): NetConn?"
     doc: "Accept a new connection"
     vm: "net_accept_handle_yieldable"
@@ -3386,7 +3374,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn read {
+  fn __read {
     signature: "(conn: NetConn, maxlen?: int): string?"
     doc: "Read data from connection"
     vm: "net_read_handle_yieldable"
@@ -3400,7 +3388,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn read {
+  fn __read {
     signature: "(conn: NetConn, maxlen?: int): string?"
     doc: "Read data from connection"
     vm: "net_read_handle_yieldable"
@@ -3414,7 +3402,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn readInto {
+  fn __readInto {
     signature: "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int"
     doc: "Read data into a reusable Array<byte> buffer"
     vm: "net_read_into_yieldable"
@@ -3427,7 +3415,7 @@ module net {
     layer: "runtime"
   }
 
-  fn write {
+  fn __write {
     signature: "(conn: NetConn, data: string): int"
     doc: "Write data to connection"
     vm: "net_write_handle_yieldable"
@@ -3440,7 +3428,7 @@ module net {
     layer: "runtime"
   }
 
-  fn writeBytes {
+  fn __writeBytes {
     signature: "(conn: NetConn, data: Array<byte>): int"
     doc: "Write Array<byte> data to connection"
     vm: "net_write_bytes_yieldable"
@@ -3453,7 +3441,7 @@ module net {
     layer: "runtime"
   }
 
-  fn copy {
+  fn __copy {
     signature: "(src: NetConn, dst: NetConn, bufferSize?: int): int"
     doc: "Copy a TCP/TLS stream using a reusable native buffer"
     vm: "net_copy_yieldable"
@@ -3465,8 +3453,8 @@ module net {
     layer: "runtime"
   }
 
-  fn copyBidirectional {
-    signature: "(a: NetConn, b: NetConn): CopyBidirectionalResult"
+  fn __copyBidirectional {
+    signature: "(a: NetConn, b: NetConn): __CopyBidirectionalResult"
     doc: "Copy two TCP/TLS streams in both directions"
     vm: "net_copy_bidirectional_yieldable"
     vm_binding: "yieldable"
@@ -3482,7 +3470,7 @@ module net {
     return_ownership: "unknown"
   }
 
-  fn shutdownRead {
+  fn __shutdownRead {
     signature: "(conn: NetConn): bool"
     doc: "Shut down the read side of a TCP connection"
     vm: "net_shutdown_read"
@@ -3494,7 +3482,7 @@ module net {
     layer: "runtime"
   }
 
-  fn shutdownWrite {
+  fn __shutdownWrite {
     signature: "(conn: NetConn): bool"
     doc: "Shut down the write side of a TCP connection"
     vm: "net_shutdown_write"
@@ -3506,7 +3494,7 @@ module net {
     layer: "runtime"
   }
 
-  fn shutdown {
+  fn __shutdown {
     signature: "(conn: NetConn): bool"
     doc: "Shut down both sides of a TCP connection"
     vm: "net_shutdown_conn"
@@ -3518,7 +3506,7 @@ module net {
     layer: "runtime"
   }
 
-  fn close {
+  fn __close {
     signature: "(handle: NetConn | NetListener): ()"
     doc: "Close a connection or listener"
     vm: "net_close_handle"
@@ -3530,7 +3518,7 @@ module net {
     layer: "runtime"
   }
 
-  fn fd {
+  fn __fd {
     signature: "(handle: NetConn | NetListener): int"
     doc: "Get fd from handle"
     vm: "net_fd_handle"
@@ -3542,7 +3530,7 @@ module net {
     layer: "runtime"
   }
 
-  fn setReadDeadline {
+  fn __setReadDeadline {
     signature: "(conn: NetConn, deadline: int): bool"
     doc: "Set read deadline in monotonic ms"
     vm: "net_set_read_deadline"
@@ -3554,7 +3542,7 @@ module net {
     layer: "runtime"
   }
 
-  fn setWriteDeadline {
+  fn __setWriteDeadline {
     signature: "(conn: NetConn, deadline: int): bool"
     doc: "Set write deadline in monotonic ms"
     vm: "net_set_write_deadline"
@@ -3566,7 +3554,7 @@ module net {
     layer: "runtime"
   }
 
-  fn setDeadline {
+  fn __setDeadline {
     signature: "(conn: NetConn, deadline: int): bool"
     doc: "Set read and write deadlines in monotonic ms"
     vm: "net_set_deadline"
@@ -3578,7 +3566,7 @@ module net {
     layer: "runtime"
   }
 
-  fn setAcceptDeadline {
+  fn __setAcceptDeadline {
     signature: "(listener: NetListener, deadline: int): bool"
     doc: "Set accept deadline in monotonic ms"
     vm: "net_set_accept_deadline"
@@ -3590,9 +3578,9 @@ module net {
     layer: "runtime"
   }
 
-  fn lastError {
-    signature: "(handle: NetConn | NetListener): string?"
-    doc: "Return the last network error name"
+  fn __lastError {
+    signature: "(handle: NetConn | NetListener): NetError?"
+    doc: "Return the last typed network error"
     vm: "net_last_error"
     argc: 1
     arg_spec: "v"
@@ -3603,7 +3591,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn lastErrno {
+  fn __lastErrno {
     signature: "(handle: NetConn | NetListener): int"
     doc: "Return the last system errno"
     vm: "net_last_errno"
@@ -3615,19 +3603,20 @@ module net {
     layer: "runtime"
   }
 
-  fn lookup {
+  fn __lookup {
     signature: "(hostname: string): string?"
     doc: "DNS lookup"
     vm: "net_dns_lookup"
+    aot: "xrt_net_lookup"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "s"
+    aot_direct: true
     link_object: false
     layer: "runtime"
     return_ownership: "fresh"
   }
 
-  fn hasTLS {
+  fn __hasTLS {
     signature: "(): bool"
     doc: "Check if TLS support is available"
     vm: "net_has_tls"
@@ -3639,7 +3628,7 @@ module net {
     layer: "runtime"
   }
 
-  fn dialTLS {
+  fn __dialTLS {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TLS connection"
     vm: "net_dial_tls_yieldable"
@@ -3654,7 +3643,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn dialTLS {
+  fn __dialTLS {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TLS connection"
     vm: "net_dial_tls_yieldable"
@@ -3669,7 +3658,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn upgradeTLS {
+  fn __upgradeTLS {
     signature: "(conn: NetConn, hostname: string, timeout?: int): NetConn?"
     doc: "Upgrade connection to TLS"
     vm: "net_upgrade_tls_yieldable"
@@ -3683,7 +3672,7 @@ module net {
     return_ownership: "borrowed_param:0"
   }
 
-  fn udpBind {
+  fn __udpBind {
     signature: "(port: int, addr?: string): NetConn?"
     doc: "Bind a UDP socket"
     vm: "net_udp_bind_handle"
@@ -3695,7 +3684,7 @@ module net {
     return_ownership: "fresh"
   }
 
-  fn sendTo {
+  fn __sendTo {
     signature: "(handle: NetConn, data: string, host: string, port: int): int"
     doc: "Send UDP datagram"
     vm: "net_send_to_yieldable"
@@ -3707,8 +3696,8 @@ module net {
     layer: "runtime"
   }
 
-  fn recvFrom {
-    signature: "(handle: NetConn, maxlen?: int): UdpPacket?"
+  fn __recvFrom {
+    signature: "(handle: NetConn, maxlen?: int): __UdpPacket?"
     doc: "Receive UDP datagram (returns flat handle: data, host, port)"
     vm: "net_recv_from_yieldable"
     vm_binding: "yieldable"
@@ -3721,10 +3710,10 @@ module net {
   }
 }
 
-module http {
-  fn __h2Supported {
+module http2 {
+  fn supported {
     signature: "(): bool"
-    doc: "Whether this backend provides the internal HTTP/2 data plane"
+    doc: "Whether the built-in HTTP/2 standard module is available on this target"
     vm: "h2_supported"
     argc: 0
     arg_spec: ""
@@ -3732,12 +3721,11 @@ module http {
     aot_direct: true
     link_object: false
     layer: "runtime"
-    visibility: "internal"
   }
 
-  fn __h2Request {
+  fn request {
     signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?"
-    doc: "Internal typed HTTP/2 data-plane request"
+    doc: "Execute one typed HTTP/2 request"
     vm: "h2_request_typed"
     argc: 6
     arg_spec: "vvvvvv"
@@ -3745,7 +3733,6 @@ module http {
     aot_direct: true
     link_object: false
     layer: "runtime"
-    visibility: "internal"
     return_ownership: "fresh"
   }
 

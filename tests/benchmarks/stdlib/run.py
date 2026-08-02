@@ -7,10 +7,12 @@ import argparse
 import hashlib
 import json
 import os
+import socket
 import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -23,7 +25,16 @@ from stdlib_manifest import load_manifest, load_toml  # noqa: E402
 
 
 MANIFEST_PATH = ROOT / "tests/benchmarks/stdlib/manifest.toml"
-VALID_KINDS = {"tiny_helper", "cpu_kernel", "parser", "protocol_helper", "server", "async_io", "startup"}
+VALID_KINDS = {
+    "tiny_helper",
+    "cpu_kernel",
+    "parser",
+    "protocol_helper",
+    "server",
+    "async_io",
+    "startup",
+}
+VALID_FIXTURES = {"tcp_echo", "tcp_client"}
 
 
 def validate_manifest(data: dict[str, Any]) -> list[str]:
@@ -31,8 +42,9 @@ def validate_manifest(data: dict[str, Any]) -> list[str]:
     if data.get("schema") != 1:
         errors.append("benchmark manifest schema must be 1")
     boundary = load_manifest(ROOT)
+    governed_units = boundary.by_name
     governed = set(data.get("governed_suites", ()))
-    expected = {str(module["perf_suite"]) for module in boundary.modules}
+    expected = {str(unit["perf_suite"]) for unit in governed_units.values()}
     if governed != expected:
         missing = sorted(expected - governed)
         stale = sorted(governed - expected)
@@ -47,19 +59,25 @@ def validate_manifest(data: dict[str, Any]) -> list[str]:
             errors.append(f"benchmark id is missing or duplicated: {bench_id!r}")
         seen.add(bench_id)
         module = str(entry.get("module", ""))
-        if module not in boundary.by_name:
+        if module not in governed_units:
             errors.append(f"benchmark {bench_id}: unknown boundary module {module!r}")
-        elif entry.get("suite") != boundary.by_name[module].get("perf_suite"):
+        elif entry.get("suite") != governed_units[module].get("perf_suite"):
             errors.append(f"benchmark {bench_id}: suite does not match module boundary")
         if entry.get("kind") not in VALID_KINDS:
             errors.append(f"benchmark {bench_id}: invalid kind {entry.get('kind')!r}")
         source = ROOT / str(entry.get("source", ""))
         if not source.is_file():
             errors.append(f"benchmark {bench_id}: source does not exist: {entry.get('source')}")
+        vm_source_value = entry.get("vm_source")
+        if vm_source_value and not (ROOT / str(vm_source_value)).is_file():
+            errors.append(f"benchmark {bench_id}: vm_source does not exist: {vm_source_value}")
         if entry.get("metrics") != ["wall_ns"]:
             errors.append(f"benchmark {bench_id}: unsupported metrics; runner currently records wall_ns")
         if entry.get("compare") != ["vm", "aot"]:
             errors.append(f"benchmark {bench_id}: compare must be ['vm', 'aot']")
+        fixture = entry.get("fixture")
+        if fixture is not None and fixture not in VALID_FIXTURES:
+            errors.append(f"benchmark {bench_id}: invalid fixture {fixture!r}")
         for field in ("warmup", "iterations", "quick_iterations"):
             if not isinstance(entry.get(field), int) or entry[field] < 1:
                 errors.append(f"benchmark {bench_id}: {field} must be a positive integer")
@@ -77,12 +95,100 @@ def find_xray(value: str | None) -> Path:
     raise RuntimeError("xray executable not found; pass --xray or build the xray target")
 
 
-def run_sample(command: list[str]) -> tuple[int, bytes, bytes, int]:
-    start = time.perf_counter_ns()
-    proc = subprocess.run(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    elapsed = time.perf_counter_ns() - start
-    return proc.returncode, proc.stdout, proc.stderr, elapsed
+def recv_exact(conn: socket.socket, size: int) -> bytes:
+    data = bytearray()
+    while len(data) < size:
+        chunk = conn.recv(size - len(data))
+        if not chunk:
+            raise RuntimeError("TCP fixture peer closed early")
+        data.extend(chunk)
+    return bytes(data)
 
+
+def run_sample(command: list[str], fixture: str | None = None) -> tuple[int, bytes, bytes, int]:
+    if fixture is None:
+        start = time.perf_counter_ns()
+        proc = subprocess.run(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        elapsed = time.perf_counter_ns() - start
+        return proc.returncode, proc.stdout, proc.stderr, elapsed
+
+    exchanges = 64
+    env = os.environ.copy()
+    fixture_errors: list[str] = []
+    if fixture == "tcp_echo":
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        env["XRAY_BENCH_PORT"] = str(listener.getsockname()[1])
+
+        def echo_server() -> None:
+            try:
+                conn, _addr = listener.accept()
+                with conn:
+                    for _ in range(exchanges):
+                        payload = recv_exact(conn, 4)
+                        conn.sendall(payload)
+            except Exception as exc:  # pragma: no cover - failure evidence only
+                fixture_errors.append(str(exc))
+            finally:
+                listener.close()
+
+        thread = threading.Thread(target=echo_server, daemon=True)
+        thread.start()
+        start = time.perf_counter_ns()
+        proc = subprocess.run(
+            command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        elapsed = time.perf_counter_ns() - start
+        thread.join(timeout=5)
+        if thread.is_alive():
+            fixture_errors.append("TCP echo fixture did not finish")
+        stderr = proc.stderr
+        if fixture_errors:
+            stderr += ("\n" + "; ".join(fixture_errors)).encode()
+        output = b"64\n" if proc.returncode == 0 and not fixture_errors else proc.stdout
+        return proc.returncode if not fixture_errors else 1, output, stderr, elapsed
+
+    reservation = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    reservation.bind(("127.0.0.1", 0))
+    port = reservation.getsockname()[1]
+    reservation.close()
+    env["XRAY_BENCH_PORT"] = str(port)
+    start = time.perf_counter_ns()
+    proc = subprocess.Popen(
+        command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    try:
+        conn: socket.socket | None = None
+        deadline = time.monotonic() + 5.0
+        while conn is None and time.monotonic() < deadline:
+            candidate = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            candidate.settimeout(0.1)
+            try:
+                candidate.connect(("127.0.0.1", port))
+                conn = candidate
+            except OSError:
+                candidate.close()
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.01)
+        if conn is None:
+            raise RuntimeError("Xray TCP server fixture did not become ready")
+        with conn:
+            for _ in range(exchanges):
+                conn.sendall(b"ping")
+                if recv_exact(conn, 4) != b"ping":
+                    raise RuntimeError("Xray TCP server returned mismatched payload")
+        stdout, stderr = proc.communicate(timeout=5)
+        elapsed = time.perf_counter_ns() - start
+        output = b"64\n" if proc.returncode == 0 else stdout
+        return proc.returncode, output, stderr, elapsed
+    except Exception as exc:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+        elapsed = time.perf_counter_ns() - start
+        return 1, stdout, stderr + ("\n" + str(exc)).encode(), elapsed
 
 def execute(entry: dict[str, Any], xray: Path, quick: bool, work: Path) -> dict[str, Any]:
     source = ROOT / str(entry["source"])
@@ -95,18 +201,24 @@ def execute(entry: dict[str, Any], xray: Path, quick: bool, work: Path) -> dict[
     )
     if build.returncode:
         raise RuntimeError(build.stderr.decode("utf-8", "replace") or "AOT build failed")
-    commands = {"vm": [str(xray), "run", str(source)], "aot": [str(binary)]}
+    vm_source = entry.get("vm_source")
+    commands = {
+        "vm": [str(xray), "test", str(ROOT / str(vm_source))]
+        if vm_source
+        else [str(xray), "run", str(source)],
+        "aot": [str(binary)],
+    }
     warmup = int(entry["warmup"])
     iterations = int(entry["quick_iterations"] if quick else entry["iterations"])
     samples: dict[str, list[int]] = {"vm": [], "aot": []}
     outputs: dict[str, bytes] = {}
     for backend, command in commands.items():
         for _ in range(warmup):
-            rc, _stdout, stderr, _elapsed = run_sample(command)
+            rc, _stdout, stderr, _elapsed = run_sample(command, entry.get("fixture"))
             if rc:
                 raise RuntimeError(f"{backend} warmup failed: {stderr.decode('utf-8', 'replace')}")
         for _ in range(iterations):
-            rc, stdout, stderr, elapsed = run_sample(command)
+            rc, stdout, stderr, elapsed = run_sample(command, entry.get("fixture"))
             if rc:
                 raise RuntimeError(f"{backend} sample failed: {stderr.decode('utf-8', 'replace')}")
             outputs.setdefault(backend, stdout)

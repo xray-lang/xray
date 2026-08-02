@@ -72,8 +72,22 @@ extern XrValue xr_value_from_array(XrArray *arr);
 /* ========== Windows Compatibility ========== */
 
 #ifdef XR_OS_WINDOWS
-#define os_setenv_impl(name, value) _putenv_s(name, value)
-#define os_unsetenv_impl(name) _putenv_s(name, "")
+static int os_setenv_impl(const char *name, const char *value) {
+    if (!SetEnvironmentVariableA(name, value))
+        return -1;
+    /* Keep the CRT view synchronized when it can represent the value. The
+     * Windows process environment is authoritative because the CRT treats an
+     * empty value as deletion while Win32 distinguishes empty from missing. */
+    (void) _putenv_s(name, value);
+    return 0;
+}
+
+static int os_unsetenv_impl(const char *name) {
+    if (!SetEnvironmentVariableA(name, NULL))
+        return -1;
+    (void) _putenv_s(name, "");
+    return 0;
+}
 #define os_getpid_impl() _getpid()
 #else
 #define os_setenv_impl(name, value) setenv(name, value, 1)
@@ -83,7 +97,19 @@ extern XrValue xr_value_from_array(XrArray *arr);
 
 static const char *os_core_getenv(void *ctx, const char *name) {
     (void) ctx;
+#ifdef XR_OS_WINDOWS
+    static XR_THREAD_LOCAL char value[32768];
+    SetLastError(ERROR_SUCCESS);
+    DWORD length = GetEnvironmentVariableA(name, value, (DWORD) sizeof(value));
+    if (length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+        return NULL;
+    if (length >= sizeof(value))
+        return NULL;
+    value[length] = '\0';
+    return value;
+#else
     return getenv(name);
+#endif
 }
 
 #ifndef XR_OS_WINDOWS
@@ -104,7 +130,7 @@ static XrValue os_getenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name)
         return xr_null();
 
-    const char *value = getenv(name);
+    const char *value = os_core_getenv(NULL, name);
     if (!value)
         return xr_null();
 
@@ -218,19 +244,6 @@ static XrValue os_getcwd(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     }
     return xrs_string_value_c(X, buf);
-}
-
-// chdir(path) - Change working directory
-static XrValue os_chdir(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-    return xr_bool(xr_fs_chdir(path) == 0);
 }
 
 // hostname() - Get hostname
@@ -1105,10 +1118,30 @@ static const char *get_arch(void) {
 #endif
 }
 
+static const char *get_sep(void) {
+#ifdef XR_OS_WINDOWS
+    return "\\";
+#else
+    return "/";
+#endif
+}
+
+static const char *get_eol(void) {
+#ifdef XR_OS_WINDOWS
+    return "\r\n";
+#else
+    return "\n";
+#endif
+}
+
 /* ========== Module Loading ========== */
 
-/* Declarations live in stdlib/defs/core.def (parsed by gen_stdlib_types.py);
- * VM exports are registered explicitly below. */
+#define XR_STDLIB_VM_BIND_MODULE_OS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_OS
+
+/* Private syscall declarations and VM binding names have one authority:
+ * stdlib/defs/core.def. The script layer publishes the public API. */
 
 XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
@@ -1118,57 +1151,9 @@ XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    // 2. Add exported functions
-    XRS_EXPORT(mod, isolate, "getenv", os_getenv);
-    XRS_EXPORT(mod, isolate, "setenv", os_setenv);
-    XRS_EXPORT(mod, isolate, "unsetenv", os_unsetenv);
-    XRS_EXPORT(mod, isolate, "environ", os_environ);
+    // 2. Add private native primitives.
+    xr_stdlib_vm_bind_os_generated(isolate, mod);
 
-    // Process control
-    XRS_EXPORT(mod, isolate, "exit", os_exit);
-    XRS_EXPORT(mod, isolate, "getpid", os_getpid);
-    XRS_EXPORT(mod, isolate, "getcwd", os_getcwd);
-    XRS_EXPORT(mod, isolate, "chdir", os_chdir);
-    XRS_EXPORT(mod, isolate, "hostname", os_hostname);
-    XRS_EXPORT(mod, isolate, "tmpdir", os_tmpdir);
-
-    // User information
-    XRS_EXPORT(mod, isolate, "username", os_username);
-    XRS_EXPORT(mod, isolate, "homedir", os_homedir);
-    XRS_EXPORT(mod, isolate, "uid", os_uid);
-    XRS_EXPORT(mod, isolate, "gid", os_gid);
-
-    // System information
-    XRS_EXPORT(mod, isolate, "cpuCount", os_cpuCount);
-    XRS_EXPORT(mod, isolate, "totalMemory", os_totalMemory);
-    XRS_EXPORT(mod, isolate, "freeMemory", os_freeMemory);
-    XRS_EXPORT(mod, isolate, "uptime", os_uptime);
-    XRS_EXPORT(mod, isolate, "loadavg", os_loadavg);
-
-    // Process & signal
-    XRS_EXPORT(mod, isolate, "ppid", os_ppid);
-    XRS_EXPORT(mod, isolate, "kill", os_kill);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sleep", os_sleep);
-    XRS_EXPORT(mod, isolate, "clock", os_clock);
-
-    // Process execution. spawn() is the injection-safe default (argv array, no
-    // shell); exec() runs the string through /bin/sh -c and must never be fed
-    // untrusted, unescaped input.
-    XRS_EXPORT(mod, isolate, "exec", os_exec);
-    XRS_EXPORT(mod, isolate, "spawn", os_spawn);
-
-    // 3. Add constants
-    xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));
-    xr_module_add_export(isolate, mod, "arch", xrs_string_value_c(isolate, get_arch()));
-
-#ifdef XR_OS_WINDOWS
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "\\"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\r\n"));
-#else
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "/"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\n"));
-#endif
-
-    // 4. Mark as loaded
+    // 3. Mark as loaded
     return mod;
 }

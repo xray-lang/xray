@@ -2,7 +2,7 @@ schema = 1
 raw_samples_required = true
 minimum_release_repetitions = 5
 governed_suites = [
-  "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/codegen", "stdlib/compress", "stdlib/crypto",
+  "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/codegen", "stdlib/compress", "stdlib/crypto", "stdlib/http2",
   "stdlib/csv", "stdlib/datetime", "stdlib/encoding", "stdlib/http", "stdlib/io",
   "stdlib/log", "stdlib/math", "stdlib/mem", "stdlib/net", "stdlib/os", "stdlib/parallel",
   "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/simd", "stdlib/strconv",
@@ -153,6 +153,19 @@ metrics = ["wall_ns"]
 compare = ["vm", "aot"]
 vm_budget_ratio = 60.0
 
+[[benchmark]]
+id = "http2.surface.contract"
+module = "http2"
+suite = "stdlib/http2"
+kind = "protocol_helper"
+source = "tests/diff/cases/semantics/stdlib/http2_surface_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 60.0
+
 # --- Task 221 Phase C: benchmark activation for the remaining governed suites ---
 # Every governed stdlib suite now has at least one active benchmark, clearing the
 # stdlib self-hosting completion gate's `missing_active_benchmarks` blocker
@@ -261,6 +274,36 @@ quick_iterations = 2
 metrics = ["wall_ns"]
 compare = ["vm", "aot"]
 vm_budget_ratio = 20.0
+
+[[benchmark]]
+id = "net.async-loopback.contract"
+module = "net"
+suite = "stdlib/net"
+kind = "async_io"
+source = "tests/benchmarks/stdlib/net/net_async_loopback.xr"
+vm_source = "tests/benchmarks/stdlib/net/net_async_loopback_vm.xr"
+fixture = "tcp_echo"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 10.0
+
+[[benchmark]]
+id = "net.server-lifecycle.contract"
+module = "net"
+suite = "stdlib/net"
+kind = "server"
+source = "tests/benchmarks/stdlib/net/net_server_lifecycle.xr"
+vm_source = "tests/benchmarks/stdlib/net/net_server_lifecycle_vm.xr"
+fixture = "tcp_client"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 10.0
 
 [[benchmark]]
 id = "os.query.contract"

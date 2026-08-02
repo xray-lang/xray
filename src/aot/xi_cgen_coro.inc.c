@@ -88,6 +88,23 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
     return true;
 }
 
+/* Await always receives a tagged cross-coroutine value from XrSlotRef.  Most
+ * tagged await results can use their final local directly, and scalar results
+ * reuse a typed UNBOX consumer.  A native class/record result is different:
+ * its final AOT storage is a pointer even though the boundary value is tagged.
+ * Give that boundary its own XrValue temporary, then bridge and convert it once
+ * the await completes.  This keeps the runtime slot ABI and the typed local ABI
+ * explicit instead of assigning two physical representations to one C local. */
+static bool cg_coro_await_needs_tagged_boundary_temp(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v) {
+    return v && v->op == XI_AWAIT && cg_coro_value_has_storage(f, v) &&
+           cg_rep(v) == XR_REP_TAGGED && cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED;
+}
+
+static void emit_coro_await_boundary_temp_ref(FILE *out, const XiValue *v) {
+    fprintf(out, "_xr_await_boundary_v%u", v->id);
+}
+
 static void emit_coro_clear_inline_await_all_task_handles(FILE *out, const XiFunc *f,
                                                           const CgInlineAwaitAllLiteral *literal) {
     if (!out || !literal)
@@ -636,6 +653,12 @@ static void emit_coro_await_result_slot(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const XiValue *typed_slot_value) {
     if (typed_slot_value) {
         emit_coro_slot_ref(ctx, out, f, prefix, typed_slot_value);
+        return;
+    }
+    if (cg_coro_await_needs_tagged_boundary_temp(ctx, f, await_value)) {
+        fprintf(out, "xr_slot_xvalue_ptr(&");
+        emit_coro_await_boundary_temp_ref(out, await_value);
+        fprintf(out, ")");
         return;
     }
     if (cg_coro_value_has_storage(f, await_value)) {
@@ -1969,6 +1992,11 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
 
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            if (cg_coro_await_needs_tagged_boundary_temp(ctx, f, v)) {
+                fprintf(out, "    XrValue ");
+                emit_coro_await_boundary_temp_ref(out, v);
+                fprintf(out, " = XR_NULL_VAL;\n");
+            }
             if (cg_value_is_i64_optional_blocking_result_root(v) &&
                 cg_value_is_elided_i64_optional_blocking_result(f, v) &&
                 !cg_coro_i64_optional_needs_frame(ctx, f, v)) {
@@ -2969,7 +2997,19 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "        return xr_aot_error(XR_NULL_VAL, false);\n");
         }
         if (!scalarize_await_all_result && !dynamic_await_all_xrt_result && !await_into_result &&
-            cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+            cg_coro_await_needs_tagged_boundary_temp(ctx, f, v)) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+            const char *suffix = emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
+            fprintf(out, "xr_aot_bridge_value_to_xrt(");
+            emit_coro_await_boundary_temp_ref(out, v);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, suffix);
+            fprintf(out, ";\n");
+        } else if (!scalarize_await_all_result && !dynamic_await_all_xrt_result &&
+                   !await_into_result && cg_coro_value_has_storage(f, v) &&
+                   cg_rep(v) == XR_REP_TAGGED) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = xr_aot_bridge_value_to_xrt(");
@@ -5427,7 +5467,7 @@ static void xicgen_gen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_codegen_abort_expr(out);
         return;
     }
-    const char *aot_ctx = cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx";
+    const char *aot_ctx = cg_aot_context_expr(ctx, f);
     fprintf(out, "({ void *_gen_frame_%u = ", v->id);
     emit_fname_suffix(ctx, out, gen_prefix, target, "_aot_frame_new");
     fprintf(out, "(");

@@ -16,9 +16,9 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
 #include "../../src/os/os_thread.h"
-#include "http_internal.h"
-#include "../net/io.h"
-#include "../net/tls.h"
+#include "http2_internal.h"
+#include "../../stdlib/net/io.h"
+#include "../../stdlib/net/tls.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

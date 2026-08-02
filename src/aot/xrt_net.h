@@ -161,24 +161,24 @@ static inline void xrt_net_set_error_base(xrt_net_handle_base_t *base, uint8_t k
     base->last_errno = err;
 }
 
-static inline const char *xrt_net_error_name(uint8_t kind) {
+static inline const char *xrt_net_error_variant_name(uint8_t kind) {
     switch (kind) {
         case XRT_NETERR_TIMEOUT:
-            return "timeout";
+            return "Timeout";
         case XRT_NETERR_CLOSED:
-            return "closed";
+            return "Closed";
         case XRT_NETERR_RESET:
-            return "reset";
+            return "Reset";
         case XRT_NETERR_REFUSED:
-            return "refused";
+            return "Refused";
         case XRT_NETERR_DNS:
-            return "dns";
+            return "Dns";
         case XRT_NETERR_TLS:
-            return "tls";
+            return "Tls";
         case XRT_NETERR_IO:
-            return "io";
+            return "Io";
         case XRT_NETERR_INVALID:
-            return "invalid";
+            return "Invalid";
         default:
             return NULL;
     }
@@ -301,6 +301,47 @@ static inline char *xrt_net_cstr_dup_arg(const char *data, int64_t len) {
     memcpy(out, data, n);
     out[n] = '\0';
     return out;
+}
+
+static inline XrValue xrt_net_lookup(const char *host_data, int64_t host_len) {
+    xrt_net_init_once();
+    char *host = xrt_net_cstr_dup_arg(host_data, host_len);
+    if (!host || host[0] == '\0') {
+        XRT_FREE(host);
+        return XR_NULL_VAL;
+    }
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo *addresses = NULL;
+    int status = getaddrinfo(host, NULL, &hints, &addresses);
+    XRT_FREE(host);
+    if (status != 0 || !addresses)
+        return XR_NULL_VAL;
+
+    char text[INET6_ADDRSTRLEN];
+    const char *resolved = NULL;
+    for (const struct addrinfo *item = addresses; item; item = item->ai_next) {
+        const void *address = NULL;
+        if (item->ai_family == AF_INET)
+            address = &((const struct sockaddr_in *) item->ai_addr)->sin_addr;
+        else if (item->ai_family == AF_INET6)
+            address = &((const struct sockaddr_in6 *) item->ai_addr)->sin6_addr;
+        if (address && inet_ntop(item->ai_family, address, text, sizeof(text))) {
+            resolved = text;
+            break;
+        }
+    }
+    XrValue result = XR_NULL_VAL;
+    if (resolved) {
+        size_t length = strlen(resolved);
+        result = xrt_str_alloc(length);
+        if (length != 0)
+            memcpy(xr_str_buf(result), resolved, length);
+    }
+    freeaddrinfo(addresses);
+    return result;
 }
 
 static inline XrValue xrt_net_dial(const char *host_data, int64_t host_len, XrValue port_value,
@@ -892,9 +933,23 @@ static inline XrValue xrt_net_set_accept_deadline(XrValue listener_value, XrValu
 
 static inline XrValue xrt_net_last_error(XrValue handle_value) {
     xrt_net_handle_base_t *base = xrt_net_handle_base_ptr(handle_value);
-    const char *name =
-        xrt_net_error_name(base ? base->last_error : (uint8_t) XRT_NETERR_INVALID);
-    return name ? xrt_str_from_cstr(name) : XR_NULL_VAL;
+    uint8_t kind = base ? base->last_error : (uint8_t) XRT_NETERR_INVALID;
+    const char *name = xrt_net_error_variant_name(kind);
+    if (!name)
+        return XR_NULL_VAL;
+    static const char *const member_names[] = {"Timeout",   "Closed",    "Reset",
+                                               "Refused",   "Dns",       "Tls",
+                                               "Io",        "Invalid",   "Cancelled",
+                                               "OutOfMemory"};
+    static const XrAotEnumScalarLayout layout = {
+        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0},
+        "NetError",
+        member_names,
+        10,
+        UINT32_C(2619647518),
+    };
+    (void) name;
+    return xrt_enum_scalar_box(&layout, (int64_t) xrt_net_error_variant_index(kind));
 }
 
 static inline XrValue xrt_net_last_errno(XrValue handle_value) {

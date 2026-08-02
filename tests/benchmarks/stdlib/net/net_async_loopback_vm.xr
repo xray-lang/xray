@@ -1,0 +1,16 @@
+import net
+import os
+import strconv
+
+@test
+fn benchmark_async_loopback() {
+    var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+    var conn = net.dial("127.0.0.1", port, 5000)!
+    var completed = 0
+    while (completed < 64) {
+        net.write(conn, "ping")
+        if (net.read(conn, 4)! == "ping") { completed = completed + 1 }
+    }
+    net.close(conn)
+    assert_eq(completed, 64)
+}

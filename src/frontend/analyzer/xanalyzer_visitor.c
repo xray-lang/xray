@@ -3337,8 +3337,11 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
 
                 // Store enum member names and payload metadata for exhaustiveness checking.
                 if (edecl->member_count > 0) {
-                    XaEnumInfo *enum_meta =
-                        xa_enum_info_new(edecl->name, (uint32_t) edecl->member_count);
+                    char *nominal_owner = xa_analyzer_nominal_owner_for_file(
+                        ctx->analyzer, ctx->file_path);
+                    XaEnumInfo *enum_meta = xa_enum_info_new(
+                        nominal_owner, edecl->name, (uint32_t) edecl->member_count);
+                    xr_free(nominal_owner);
                     uint32_t enum_index = 0;
                     for (int m = 0; m < edecl->member_count; m++) {
                         AstNode *mem = edecl->members[m];
@@ -3400,8 +3403,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         }
                         enum_index++;
                     }
-                    if (enum_meta && enum_index == enum_meta->variant_count &&
-                        xa_enum_info_finalize_layout(enum_meta)) {
+                    bool enum_layout_ready = enum_meta &&
+                                             enum_index == enum_meta->variant_count &&
+                                             xa_enum_info_finalize_layout(enum_meta);
+                    if (enum_layout_ready) {
                         links->enum_info = enum_meta;
                         if (links->type && links->type->kind == XR_KIND_ENUM) {
                             links->type->enum_type.layout = enum_meta->layout;
@@ -7423,6 +7428,7 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     XaInferContext *ctx = xa_infer_context_new(analyzer);
     if (!ctx)
         return;
+    ctx->file_path = analyzer->current_file;
 
     xa_reset_scope_move_states(analyzer->global_scope);
 

@@ -47,10 +47,18 @@ check_backend_diff() {
 
 check_output "vm_path_empty_stdlib" "demo.xr" \
     "$XRAY" -e 'import path; print(path.basename(path.from("/tmp/demo.xr")))'
-check_output "vm_http_empty_stdlib" "fn router" \
+check_output "vm_http_empty_stdlib" "<fn>" \
     "$XRAY" -e $'import http\nprint(http.router)'
-check_output "vm_cluster_empty_stdlib" "true" \
-    "$XRAY" -e $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
+if ! printf '%s\n' $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))' | \
+    env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" run - >"$WORK/vm_cluster_empty_stdlib.out" 2>"$WORK/vm_cluster_empty_stdlib.err"; then
+    echo "FAIL vm_cluster_empty_stdlib: command failed" >&2
+    cat "$WORK/vm_cluster_empty_stdlib.err" >&2
+    exit 1
+fi
+if [ "$(sed -e 's/[[:space:]]*$//' -e '/^$/d' "$WORK/vm_cluster_empty_stdlib.out")" != "true" ]; then
+    echo "FAIL vm_cluster_empty_stdlib: expected 'true'" >&2
+    exit 1
+fi
 
 check_backend_diff "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr"
 check_backend_diff "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr"

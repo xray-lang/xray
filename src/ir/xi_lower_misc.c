@@ -312,7 +312,20 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         }
     }
 
-    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, names, n);
+    XaSymbol *enum_symbol = ed->symbol_id
+                                ? xa_scope_lookup_by_id(l->analyzer->global_scope, ed->symbol_id)
+                                : NULL;
+    XaSymbolLinks *enum_links = enum_symbol
+                                    ? xa_analyzer_get_links(l->analyzer, enum_symbol)
+                                    : NULL;
+    const char *nominal_owner = enum_links && enum_links->enum_info
+                                    ? enum_links->enum_info->nominal_owner
+                                    : NULL;
+    XrEnumType *et = nominal_owner
+                         ? xr_enum_type_new(l->isolate, nominal_owner, ed->name, names, n)
+                         : NULL;
+    if (!et)
+        l->had_error = true;
     if (et)
         et->derive_flags = xi_lower_decl_derive_flags(ed->attributes, ed->attr_count);
     for (int i = 0; i < n; i++)

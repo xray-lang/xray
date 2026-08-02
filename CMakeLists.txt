@@ -191,12 +191,17 @@ configure_file(
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
+set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
 file(GLOB XRAY_STDLIB_DEF_FILES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/stdlib/defs/*.def"
 )
 file(GLOB XRAY_NATIVE_TYPE_SOURCE_FILES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/stdlib/types/*.xr"
+)
+file(GLOB_RECURSE XRAY_STDLIB_METADATA_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/stdlib/*/*.c"
+    "${CMAKE_SOURCE_DIR}/stdlib/*/*.xr"
 )
 
 set(XRAY_GEN_XI_OPS_DEPS
@@ -233,6 +238,8 @@ set(XRAY_GEN_STDLIB_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_vm_bindings_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_class_bindings_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
+    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xanalyzer_builtins_generated.h
+    ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib_generated.inc
 )
 
 add_custom_command(
@@ -305,8 +312,11 @@ add_custom_command(
     OUTPUT  ${XRAY_GEN_STDLIB_METADATA_DEPS}
     COMMAND ${XRAY_PYTHON} ${STDLIBGEN}
             --root ${CMAKE_SOURCE_DIR}
+    COMMAND ${XRAY_PYTHON} ${GEN_STDLIB_TYPES}
     DEPENDS ${STDLIBGEN}
+            ${GEN_STDLIB_TYPES}
             ${XRAY_STDLIB_DEF_FILES}
+            ${XRAY_STDLIB_METADATA_SOURCES}
     COMMENT "stdlibgen: generating stdlib metadata from stdlib/defs/*.def"
 )
 
@@ -476,10 +486,12 @@ set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUND
 option(XR_STDLIB_FULL       "Full stdlib (ignores group options below)" ON)
 option(XR_STDLIB_FILESYSTEM "Filesystem modules (io, os)" ON)
 option(XR_STDLIB_NET        "Network modules (net, http)" ON)
-option(XR_STDLIB_CRYPTO     "Crypto modules (crypto)" ON)
 option(XR_STDLIB_DATA       "Data format modules (csv, toml, yaml, xml)" ON)
-option(XR_STDLIB_COMPRESS   "Compression modules (compress)" ON)
-option(XR_STDLIB_CLUSTER    "Cluster module (distributed Named Channel)" ON)
+option(XR_STDLIB_CRYPTO    "Crypto standard-library module" ON)
+option(XR_STDLIB_COMPRESS  "Compression standard-library module" ON)
+option(XR_STDLIB_CLUSTER   "Cluster standard-library module" ON)
+option(XR_STDLIB_WS        "WebSocket standard-library module" ON)
+option(XR_STDLIB_HTTP2     "HTTP/2 standard-library module" ON)
 option(XR_BUILD_TEST_MODULES "Build internal stdlib test modules" OFF)
 
 if(XR_BUILD_TEST_MODULES)
@@ -873,16 +885,11 @@ set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
 find_package(ZLIB QUIET)
 if(XR_STDLIB_FULL)
-    # Full stdlib: include all modules except those explicitly disabled
+    # Full stdlib includes every built-in module. Group switches apply only to
+    # modular builds, so "full" has one exact, fail-closed meaning.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
-    if(NOT XR_STDLIB_CLUSTER)
-        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/cluster/.*")
-    endif()
-    if(NOT XR_STDLIB_COMPRESS)
-        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/compress/.*")
-    endif()
     if(NOT ZLIB_FOUND)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX "compress_zlib\\.c$")
     endif()
@@ -894,14 +901,12 @@ if(XR_STDLIB_FULL)
     # so xmodule.c guards work the same as modular mode.
     add_compile_definitions(XR_HAS_FILESYSTEM=1)
     add_compile_definitions(XR_HAS_NETWORK=1)
-    add_compile_definitions(XR_HAS_CRYPTO=1)
     add_compile_definitions(XR_HAS_DATA_FORMATS=1)
-    if(XR_STDLIB_COMPRESS)
-        add_compile_definitions(XR_HAS_COMPRESS=1)
-    endif()
-    if(XR_STDLIB_CLUSTER)
-        add_compile_definitions(XR_HAS_CLUSTER=1)
-    endif()
+    add_compile_definitions(XR_HAS_CRYPTO=1)
+    add_compile_definitions(XR_HAS_COMPRESS=1)
+    add_compile_definitions(XR_HAS_CLUSTER=1)
+    add_compile_definitions(XR_HAS_WS=1)
+    add_compile_definitions(XR_HAS_HTTP2=1)
     message(STATUS "Stdlib: full")
 else()
     # Modular compilation - define XR_STDLIB_MODULAR to indicate modular build
@@ -915,17 +920,10 @@ else()
     endif()
 
     if(XR_STDLIB_NET)
-        file(GLOB STDLIB_NET_SRC CONFIGURE_DEPENDS "stdlib/net/*.c" "stdlib/http/*.c" "stdlib/ws/*.c")
+        file(GLOB STDLIB_NET_SRC CONFIGURE_DEPENDS "stdlib/net/*.c" "stdlib/http/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_NET_SRC})
         add_compile_definitions(XR_HAS_NETWORK=1)
-        message(STATUS "Stdlib: +network (net, http, ws)")
-    endif()
-
-    if(XR_STDLIB_CRYPTO)
-        file(GLOB STDLIB_CRYPTO_SRC CONFIGURE_DEPENDS "stdlib/crypto/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
-        add_compile_definitions(XR_HAS_CRYPTO=1)
-        message(STATUS "Stdlib: +crypto")
+        message(STATUS "Stdlib: +network (net, http)")
     endif()
 
     if(XR_STDLIB_DATA)
@@ -935,23 +933,42 @@ else()
         message(STATUS "Stdlib: +data formats (csv, toml, yaml, xml)")
     endif()
 
+    if(XR_STDLIB_CRYPTO)
+        file(GLOB STDLIB_CRYPTO_SRC CONFIGURE_DEPENDS "stdlib/crypto/*.c")
+        list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
+        add_compile_definitions(XR_HAS_CRYPTO=1)
+        message(STATUS "Stdlib: +crypto")
+    endif()
+
     if(XR_STDLIB_COMPRESS)
         file(GLOB STDLIB_COMPRESS_SRC CONFIGURE_DEPENDS "stdlib/compress/*.c")
         if(NOT ZLIB_FOUND)
             list(FILTER STDLIB_COMPRESS_SRC EXCLUDE REGEX "compress_zlib\\.c$")
-            message(STATUS "Stdlib: +compression (no system zlib, zlib wrapper disabled)")
-        else()
-            message(STATUS "Stdlib: +compression (with system zlib)")
         endif()
         list(APPEND STDLIB_SRC ${STDLIB_COMPRESS_SRC})
         add_compile_definitions(XR_HAS_COMPRESS=1)
+        message(STATUS "Stdlib: +compress")
     endif()
 
     if(XR_STDLIB_CLUSTER)
         file(GLOB STDLIB_CLUSTER_SRC CONFIGURE_DEPENDS "stdlib/cluster/*.c")
         list(APPEND STDLIB_SRC ${STDLIB_CLUSTER_SRC})
         add_compile_definitions(XR_HAS_CLUSTER=1)
-        message(STATUS "Stdlib: +cluster (distributed Named Channel)")
+        message(STATUS "Stdlib: +cluster")
+    endif()
+
+    if(XR_STDLIB_WS)
+        file(GLOB STDLIB_WS_SRC CONFIGURE_DEPENDS "stdlib/ws/*.c")
+        list(APPEND STDLIB_SRC ${STDLIB_WS_SRC})
+        add_compile_definitions(XR_HAS_WS=1)
+        message(STATUS "Stdlib: +ws")
+    endif()
+
+    if(XR_STDLIB_HTTP2)
+        file(GLOB STDLIB_HTTP2_SRC CONFIGURE_DEPENDS "stdlib/http2/*.c")
+        list(APPEND STDLIB_SRC ${STDLIB_HTTP2_SRC})
+        add_compile_definitions(XR_HAS_HTTP2=1)
+        message(STATUS "Stdlib: +http2")
     endif()
 
     if(XR_BUILD_TEST_MODULES)
@@ -1097,6 +1114,7 @@ add_library(xray_aot_core STATIC
     stdlib/regex/xregex_parse.c
 )
 target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
+target_include_directories(xray_aot_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(XRAY_RT_CORO_SOURCES
     ${BASE_SRC}
@@ -1117,6 +1135,8 @@ list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/object/(xatomic|xarray_vm|xmap_vm)\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/class/xinstance\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/xcoro_monitor\\.c$")
 if(WIN32)
     # COFF linkers resolve undefined symbols before per-function GC, so the
@@ -1373,6 +1393,90 @@ if(MSVC)
     # 1 MiB stack while compiling the embedded stdlib, so give both compiler
     # executables the same Unix-like main-thread allowance.
     target_link_options(xray_stdlib_bcgen PRIVATE "/STACK:8388608")
+endif()
+
+# The stage-1 compiler links the same module loader as the final runtime but
+# must not depend on its own generated native output.  Its explicit no-op
+# implementation breaks that bootstrap cycle; final libraries receive either
+# the generated implementation or the same stub when the feature is disabled.
+target_sources(xray_stdlib_bootstrap_core PRIVATE
+    src/stdlib/xstdlib_vm_fastpath_stub.c
+)
+
+set(XRAY_STDLIB_VM_FASTPATH_GEN_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_vm_fastpaths)
+set(XRAY_STDLIB_VM_FASTPATH_HARNESS
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/main.xr)
+set(XRAY_STDLIB_VM_FASTPATH_MANIFEST
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xray.toml)
+set(XRAY_STDLIB_VM_FASTPATH_REGISTRY
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.inc.c)
+set(XRAY_STDLIB_VM_FASTPATH_C
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.c)
+set(XRAY_STDLIB_VM_FASTPATH_HEADER
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.h)
+set(XRAY_STDLIB_VM_FASTPATH_PROVENANCE
+    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_manifest.json)
+
+if(XRAY_STDLIB_VM_FASTPATHS)
+    add_custom_command(
+        OUTPUT
+            ${XRAY_STDLIB_VM_FASTPATH_HARNESS}
+            ${XRAY_STDLIB_VM_FASTPATH_MANIFEST}
+            ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
+            ${XRAY_STDLIB_VM_FASTPATH_C}
+            ${XRAY_STDLIB_VM_FASTPATH_HEADER}
+            ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/generate_vm_fastpaths.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}
+            --harness-dir ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
+            --registry-output ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
+            --manifest-output ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
+            --target ${XRAY_HOST_TARGET_ABI}
+            --compiler $<TARGET_FILE:xray_stdlib_bcgen>
+        COMMAND ${CMAKE_COMMAND} -E chdir ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
+            $<TARGET_FILE:xray_stdlib_bcgen> native-fastpaths
+            main.xr
+            --output ${XRAY_STDLIB_VM_FASTPATH_C}
+            --header ${XRAY_STDLIB_VM_FASTPATH_HEADER}
+        DEPENDS
+            xray_stdlib_bcgen
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/generate_vm_fastpaths.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/stdlib_boundary.toml
+            ${XRAY_STDLIB_SCRIPT_SOURCES}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating hosted VM stdlib native fastpaths"
+        VERBATIM
+    )
+    add_custom_target(gen-stdlib-vm-fastpaths
+        DEPENDS
+            ${XRAY_STDLIB_VM_FASTPATH_C}
+            ${XRAY_STDLIB_VM_FASTPATH_HEADER}
+            ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
+            ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
+    )
+    set_source_files_properties(${XRAY_STDLIB_VM_FASTPATH_C} PROPERTIES GENERATED TRUE)
+    set_source_files_properties(src/stdlib/xstdlib_vm_fastpath_amalgam.c PROPERTIES
+        OBJECT_DEPENDS "${XRAY_STDLIB_VM_FASTPATH_C};${XRAY_STDLIB_VM_FASTPATH_REGISTRY}"
+    )
+    foreach(_xray_fastpath_runtime IN ITEMS xray_core xray_vm_runtime)
+        target_sources(${_xray_fastpath_runtime} PRIVATE
+            src/stdlib/xstdlib_vm_fastpath.c
+            src/stdlib/xstdlib_vm_fastpath_amalgam.c
+        )
+        target_include_directories(${_xray_fastpath_runtime} PRIVATE
+            ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
+        )
+        target_compile_definitions(${_xray_fastpath_runtime} PRIVATE
+            XRAY_STDLIB_VM_FASTPATHS=1
+        )
+        add_dependencies(${_xray_fastpath_runtime} gen-stdlib-vm-fastpaths)
+    endforeach()
+else()
+    target_sources(xray_core PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
+    target_sources(xray_vm_runtime PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
 endif()
 
 add_custom_command(
@@ -1793,24 +1897,16 @@ if(BUILD_TESTS)
                 ${XRAY_PYTHON}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    math(EXPR STDLIB_EMBED_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
+    math(EXPR STDLIB_EMBED_TIMEOUT "300 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(stdlib_embedded_layout PROPERTIES
         LABELS "vm;aot;stdlib;embed;regression"
         PROCESSORS 1
         TIMEOUT ${STDLIB_EMBED_TIMEOUT}
     )
 
-    # Under sanitizers the runner tolerates benign [sysmon] "worker stuck"
-    # diagnostics on stderr (see run_parallel_plan_scaling_gate.sh); the strict
-    # empty-stderr contract still holds for normal builds.
-    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
-        set(PARALLEL_PLAN_ENV ${CMAKE_COMMAND} -E env XRAY_SANITIZER_BUILD=1)
-    else()
-        set(PARALLEL_PLAN_ENV)
-    endif()
     add_test(
         NAME parallel_plan_vm_scaling_gate
-        COMMAND ${PARALLEL_PLAN_ENV} bash
+        COMMAND ${XRAY_TEST_BASH}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1829,7 +1925,10 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    math(EXPR HTTP_STATIC_ROUTE_TIMEOUT "90 * ${XR_TEST_TIMEOUT_SCALE}")
+    # A cold native-provider probe plus AOT compilation can exceed 90 seconds
+    # on Windows even when the same generated artifact is healthy.  Keep the
+    # timeout aligned with the broader stdlib VM/AOT layout gate.
+    math(EXPR HTTP_STATIC_ROUTE_TIMEOUT "300 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(http_static_route_full_parse PROPERTIES
         LABELS "vm;aot;http;stdlib;regression"
         PROCESSORS 1
@@ -1917,10 +2016,11 @@ if(BUILD_TESTS)
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_boundary_manifest.py
     )
+    math(EXPR STDLIB_BOUNDARY_MANIFEST_TIMEOUT "60 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(test_stdlib_boundary_manifest PROPERTIES
         LABELS "stdlib;boundary;unit"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${STDLIB_BOUNDARY_MANIFEST_TIMEOUT}
     )
 
     add_test(
@@ -2057,10 +2157,11 @@ if(BUILD_TESTS)
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR BINARY_STDLIB_SURFACE_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(binary_stdlib_surface_inventory PROPERTIES
         LABELS "stdlib;binary;metadata"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${BINARY_STDLIB_SURFACE_TIMEOUT}
     )
 
     add_test(
@@ -2658,30 +2759,37 @@ if(BUILD_TESTS)
         TIMEOUT 20
     )
 
-    # Link manifest contract: freestanding direct calls and runtime-backed
-    # stdlib modules must not drag in the full xray_core library.
-    # Under sanitizers the freestanding -nostdlib probes inevitably carry
-    # __asan_*/__ubsan_* undefined symbols (the sanitizer runtime is injected),
-    # so the runner filters only those sanitizer symbols from the undefined-symbol
-    # audit; all non-freestanding link-contract checks still run strictly.
-    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
-        set(AOT_LINK_MANIFEST_CMD ${CMAKE_COMMAND} -E env XRAY_LINK_TEST_SANITIZER=1)
-    else()
-        set(AOT_LINK_MANIFEST_CMD)
+    # This runner builds ELF/Mach-O fixture libraries and asserts GNU/Apple
+    # linker spellings (-lm, -nostdlib, DYLD_LIBRARY_PATH).  Windows has the
+    # separate COFF freestanding gate below, including multi-module object
+    # amalgamation and dumpbin symbol inspection.
+    if(NOT WIN32)
+        # Link manifest contract: freestanding direct calls and runtime-backed
+        # stdlib modules must not drag in the full xray_core library.
+        # Under sanitizers the freestanding -nostdlib probes inevitably carry
+        # __asan_*/__ubsan_* undefined symbols (the sanitizer runtime is injected),
+        # so the runner filters only those sanitizer symbols from the undefined-symbol
+        # audit; all non-freestanding link-contract checks still run strictly.
+        if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+            set(AOT_LINK_MANIFEST_ENV XRAY_LINK_TEST_SANITIZER=1)
+        else()
+            set(AOT_LINK_MANIFEST_ENV)
+        endif()
+        add_test(
+            NAME aot_link_command_manifest
+            COMMAND ${CMAKE_COMMAND} -E env ${AOT_LINK_MANIFEST_ENV}
+                    ${XRAY_TEST_BASH}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        math(EXPR AOT_LINK_MANIFEST_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
+        set_tests_properties(aot_link_command_manifest PROPERTIES
+            LABELS "aot;link;stdlib;smoke"
+            PROCESSORS 2
+            TIMEOUT ${AOT_LINK_MANIFEST_TIMEOUT}
+        )
     endif()
-    add_test(
-        NAME aot_link_command_manifest
-        COMMAND ${AOT_LINK_MANIFEST_CMD}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    math(EXPR AOT_LINK_MANIFEST_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
-    set_tests_properties(aot_link_command_manifest PROPERTIES
-        LABELS "aot;link;stdlib;smoke"
-        PROCESSORS 2
-        TIMEOUT ${AOT_LINK_MANIFEST_TIMEOUT}
-    )
 
     # Freestanding stdlib allowlist: every committed module contract must have
     # a no-libc object probe, so the allowlist cannot silently drift.

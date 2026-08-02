@@ -71,10 +71,11 @@ static bool cg_type_is_json(const XrType *type) {
         return false;
     if (XR_TYPE_HAS_OBJECT_SHAPE(type))
         return true;
-    /* ExecResult is a core.def Json-backed handle (os.exec) whose instances are
-     * Json objects. PathInfo was such a handle too, but the path module migrated
+    /* __ExecResult is the private core.def Json-backed handle used by os.exec;
+     * its VM representation is a Json object. PathInfo was such a handle too,
+     * but the path module migrated
      * to a pure-Xray class, so it must go through normal class field access. */
-    if (xr_type_is_builtin_named_class(type, "ExecResult"))
+    if (xr_type_is_builtin_named_class(type, "__ExecResult"))
         return true;
     if (type->kind == XR_KIND_UNION) {
         for (uint8_t i = 0; i < type->union_type.member_count; i++) {

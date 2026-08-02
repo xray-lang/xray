@@ -19,6 +19,7 @@
 
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
+#include "xaot_artifact.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -110,7 +111,7 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active);
-XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
+XR_FUNC void xi_cgen_ctx_set_artifact_kind(XiCgenCtx *ctx, XaotArtifactKind artifact_kind);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
 XR_FUNC void xi_cgen_ctx_set_c_dialect(XiCgenCtx *ctx, XiCgenCDialect dialect);
 XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile);

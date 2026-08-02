@@ -81,9 +81,9 @@ static XrClass *xr_enum_minimal_adt_class_new(const char *name) {
     return cls;
 }
 
-static XrEnumLayout *xr_enum_layout_from_members(const char *name,
+static XrEnumLayout *xr_enum_layout_from_members(const char *nominal_owner, const char *name,
                                                  const struct XrEnumMember *members, int count) {
-    if (!name || !members || count <= 0)
+    if (!nominal_owner || !name || !members || count <= 0)
         return NULL;
 
     const char **names = (const char **) xr_malloc(sizeof(*names) * (size_t) count);
@@ -92,12 +92,16 @@ static XrEnumLayout *xr_enum_layout_from_members(const char *name,
     for (int i = 0; i < count; i++)
         names[i] = members[i].name;
 
-    XrEnumLayout *layout = xr_enum_layout_new(name, names, (uint32_t) count);
+    XrEnumLayout *layout =
+        xr_enum_layout_new(nominal_owner, name, names, (uint32_t) count);
     xr_free(names);
     return layout;
 }
 
-XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_names, int count) {
+XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *nominal_owner, const char *name,
+                             char **member_names, int count) {
+    if (!X || !nominal_owner || !nominal_owner[0] || !name || !member_names || count <= 0)
+        return NULL;
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumType *enum_type = (XrEnumType *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
                                                                sizeof(XrEnumType), XR_TENUM_TYPE);
@@ -130,7 +134,8 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_nam
             enum_type->members[i].ctor->parent_type = enum_type;
     }
 
-    enum_type->layout = xr_enum_layout_from_members(enum_type->name, enum_type->members,
+    const char *owner = xr_symbol_intern(X, nominal_owner);
+    enum_type->layout = xr_enum_layout_from_members(owner, enum_type->name, enum_type->members,
                                                     (int) enum_type->member_count);
     if (!enum_type->layout) {
         xr_free(enum_type->members);
@@ -148,9 +153,9 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_nam
     return enum_type;
 }
 
-XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **member_names,
-                                  int count) {
-    if (!core || !name || !member_names || count <= 0)
+XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *nominal_owner,
+                                  const char *name, char **member_names, int count) {
+    if (!core || !nominal_owner || !nominal_owner[0] || !name || !member_names || count <= 0)
         return NULL;
 
     XrEnumType *enum_type =
@@ -180,7 +185,8 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **
             enum_type->members[i].ctor->parent_type = enum_type;
     }
 
-    enum_type->layout = xr_enum_layout_from_members(enum_type->name, enum_type->members,
+    enum_type->layout = xr_enum_layout_from_members(nominal_owner, enum_type->name,
+                                                    enum_type->members,
                                                     (int) enum_type->member_count);
     if (!enum_type->layout) {
         xr_free(enum_type->members);
@@ -218,6 +224,11 @@ bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_cou
 
     if (!xr_enum_layout_set_payload_counts(enum_type->layout, payload_counts, (uint32_t) count))
         return false;
+
+    for (uint32_t i = 0; i < enum_type->member_count; i++) {
+        if (enum_type->members[i].ctor)
+            enum_type->members[i].ctor->layout_id = enum_type->layout->layout_id;
+    }
 
     if (xr_enum_type_has_payloads(enum_type))
         return xr_enum_type_ensure_adt_class(enum_type);

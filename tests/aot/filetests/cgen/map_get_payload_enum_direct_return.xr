@@ -1,0 +1,13 @@
+enum Item {
+    Missing,
+    Number(int)
+}
+
+fn lookup(values: Map<string, Item>, key: string) -> Item? {
+    return values.get(key)
+}
+
+var values: Map<string, Item> = #{}
+values.set("answer", Item.Number(42))
+var found = lookup(values, "answer")
+print(found != null)

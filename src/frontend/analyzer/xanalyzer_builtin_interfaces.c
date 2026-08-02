@@ -56,11 +56,14 @@ static XaInterfaceMethod iterable_methods[] = {
  * Equivalent xray code for Iterator<T>:
  *
  *   interface Iterator<T> {
- *       // Returns the next element, or null if exhausted
- *       next(): T?
+ *       // Returns the next element; pulling past exhaustion raises E0432.
+ *       next(): T
  *
  *       // Returns true if there are more elements
  *       hasNext(): bool
+ *
+ *       // Consumes index + 1 elements; exhaustion also raises E0432.
+ *       nth(index: int): T
  *   }
  *
  * Note: This is the iteration protocol used internally by for...in loops.

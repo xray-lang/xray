@@ -4,16 +4,34 @@ schema = 1
 
 [governance]
 vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
+export_authority = "boundary_manifest_semantic_source"
+l4_algorithm_review_task = "task-256"
+l4_algorithm_reviewed = [
+  "_probe", "base64", "csv", "datetime", "encoding", "path", "strconv",
+  "sync", "text", "toml", "url", "xml", "yaml",
+]
 error_model = "enum_value_channel"
 failure_as_data = "domain_adt"
 forbidden_prelude_symbols = ["Result"]
+regex_reassessment_triggers = [
+  "generated_stdlib_vm_fastpaths_fully_landed",
+  "freestanding_runtime_requires_regex_without_native_library",
+]
+
+[object_abi]
+version = 1
+value_layout = "include/xray_value_abi.h"
+object_header = "src/shared/xr_obj_header.h"
+entry_abi = "XrValue(XrHostedFragmentContext*,XrValue*,uint32_t;signal)"
+error_channel = "vm_pending_error"
+ownership = "borrow_args_owned_result"
+unsupported_policy = "fail_closed"
 
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
 migration_modules = [
-  "Coro", "CoroPool", "cluster", "csv", "log", "net", "toml",
-  "url", "ws", "xml", "yaml",
+  "Coro", "CoroPool", "csv", "log", "toml", "url", "xml", "yaml",
 ]
 # Exact, reviewed dynamic boundaries live in the structured entries below.
 # New entries require a source API and all ownership/domain metadata.
@@ -67,20 +85,20 @@ owner = "stdlib/log"
 review_task = "task-196"
 
 [[dynamic_allowlist]]
-symbol = "cluster.publish"
-direction = "input"
-domain = "json_wire_payload"
-reason = "Cluster publish explicitly transports an arbitrary Json message payload"
-owner = "stdlib/cluster"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
 symbol = "HttpResponse.json"
 direction = "output"
 domain = "json_wire_payload"
 reason = "Explicitly decodes an arbitrary HTTP response body as JSON"
 owner = "stdlib/http"
 review_task = "task-221"
+
+[[dynamic_allowlist]]
+symbol = "cluster.publish"
+direction = "input"
+domain = "json_wire_payload"
+reason = "Cluster publication intentionally serializes arbitrary Json values onto the wire"
+owner = "stdlib/cluster"
+review_task = "task-256"
 
 [[dynamic_allowlist]]
 symbol = "log.child"
@@ -201,7 +219,7 @@ semantic_source = "stdlib/base64/base64.xr"
 loader = "stdlib/base64/base64.c"
 public_native = []
 private_native_sources = ["stdlib/base64/base64.c"]
-private_native_reason = "WebSocket handshake data-plane helpers; no public base64 exports"
+private_native_reason = "Pure-Xray module loader only; codec semantics are source-owned"
 def_migration_complete = true
 aot_helper_forbidden = true
 perf_suite = "stdlib/base64"
@@ -375,20 +393,24 @@ perf_suite = "stdlib/_probe"
 name = "io"
 public = true
 layer = "L2"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/io/io.xr"
 loader = "stdlib/io/io.c"
-public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readFile", "readFileBytes", "readLines", "readStdin", "readStdinBytes", "remove", "removeAll", "rename", "stat", "symlink", "touch", "writeFile", "writeFileBytes", "writeStderr", "writeStdout"]
+public_native = []
+private_native_sources = ["stdlib/io/*.c"]
+private_native_reason = "Private file-descriptor and filesystem syscall primitives consumed by io.xr"
 perf_suite = "stdlib/io"
 
 [[module]]
 name = "os"
 public = true
 layer = "L2"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/os/os.xr"
 loader = "stdlib/os/os.c"
-public_native = ["ExecResult", "arch", "chdir", "clock", "cpuCount", "environ", "eol", "exec", "exit", "freeMemory", "getcwd", "getenv", "getpid", "gid", "homedir", "hostname", "kill", "loadavg", "platform", "ppid", "sep", "setenv", "sleep", "spawn", "tmpdir", "totalMemory", "uid", "unsetenv", "uptime", "username"]
+public_native = ["arch", "eol", "platform", "sep"]
+private_native_sources = ["stdlib/os/*.c"]
+private_native_reason = "Private environment, process and platform syscall primitives consumed by os.xr"
 perf_suite = "stdlib/os"
 
 [[module]]
@@ -407,12 +429,12 @@ perf_suite = "stdlib/test_yield"
 name = "net"
 public = true
 layer = "L2"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/net/net.xr"
 loader = "stdlib/net/net.c"
-public_native = ["CopyBidirectionalResult", "NetConn", "NetConn.close", "NetConn.fd", "NetConn.isClosed", "NetConn.isTLS", "NetError", "NetListener", "NetListener.close", "NetListener.fd", "NetListener.isClosed", "NetListener.port", "UdpPacket", "accept", "close", "copy", "copyBidirectional", "dial", "dialTLS", "fd", "hasTLS", "lastErrno", "lastError", "listen", "lookup", "read", "readInto", "recvFrom", "sendTo", "setAcceptDeadline", "setDeadline", "setReadDeadline", "setWriteDeadline", "shutdown", "shutdownRead", "shutdownWrite", "udpBind", "upgradeTLS", "write", "writeBytes"]
+public_native = ["NetConn", "NetConn.close", "NetConn.fd", "NetConn.isClosed", "NetConn.isTLS", "NetError", "NetListener", "NetListener.close", "NetListener.fd", "NetListener.isClosed", "NetListener.port"]
 private_native_sources = ["stdlib/net/*.c"]
-private_native_reason = "Socket, TLS, deadline, and netpoll thin runtime boundary"
+private_native_reason = "Private socket, TLS, deadline and netpoll primitives consumed by net.xr"
 perf_suite = "stdlib/net"
 
 [[module]]
@@ -424,7 +446,7 @@ semantic_source = "stdlib/http/http.xr"
 loader = "stdlib/http/http.c"
 public_native = []
 private_native_sources = ["stdlib/http/*.c"]
-private_native_reason = "HTTP/2, TLS/socket, parser-buffer and client-pool data plane"
+private_native_reason = "Private HTTP/1.x parser-buffer and package-manager client pool"
 perf_suite = "stdlib/http"
 
 [[module]]
@@ -437,8 +459,21 @@ loader = "stdlib/ws/ws_binding.c"
 loader_symbol = "ws"
 public_native = ["WsConn", "WsConnectOptions", "WsMessage", "close", "connect", "ping", "recv", "send", "serve", "stopServer"]
 private_native_sources = ["stdlib/ws/*.c"]
-private_native_reason = "Connection I/O, compression, and HTTP upgrade data plane"
+private_native_reason = "Connection I/O, compression and HTTP upgrade data plane consumed by ws.xr"
 perf_suite = "stdlib/ws"
+
+[[module]]
+name = "http2"
+public = true
+layer = "L5"
+policy = "native_library"
+semantic_source = "stdlib/defs/core.def"
+loader = "stdlib/http2/http2_binding.c"
+loader_symbol = "http2"
+public_native = ["request", "supported"]
+private_native_sources = ["stdlib/http2/*.c"]
+private_native_reason = "HTTP/2 framing, HPACK and connection data plane remain an explicit native library boundary"
+perf_suite = "stdlib/http2"
 
 [[module]]
 name = "crypto"
@@ -449,7 +484,7 @@ semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/crypto/crypto.c"
 public_native = ["decrypt", "encrypt", "hmac", "md5", "randomBytes", "sha1", "sha256", "sha512", "timingSafeEqual", "uuid"]
 private_native_sources = ["stdlib/crypto/*.c"]
-private_native_reason = "Platform CSPRNG, constant-time operations, and mature cryptographic library boundary"
+private_native_reason = "Platform CSPRNG, constant-time operations and mature cryptographic kernels"
 perf_suite = "stdlib/crypto"
 
 [[module]]
@@ -461,7 +496,7 @@ semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/compress/compress.c"
 public_native = ["adler32", "crc32", "deflate", "gunzip", "gzip", "inflate", "isGzip", "isZlib", "zlibCompress", "zlibDecompress"]
 private_native_sources = ["stdlib/compress/*.c"]
-private_native_reason = "zlib-compatible mature compression and checksum kernels"
+private_native_reason = "zlib-compatible compression and checksum kernels"
 perf_suite = "stdlib/compress"
 
 [[module]]
@@ -473,7 +508,7 @@ semantic_source = "stdlib/cluster/cluster.xr"
 loader = "stdlib/cluster/cluster.c"
 public_native = ["ClusterConfig", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsOptions", "ClusterTlsStatus", "channel", "discover", "info", "join", "monitor", "nodes", "publish", "self", "start", "stop", "subscribe"]
 private_native_sources = ["stdlib/cluster/*.c"]
-private_native_reason = "Distributed transport, discovery, channel and node lifecycle runtime data plane"
+private_native_reason = "Distributed transport, discovery, channel and node lifecycle data plane consumed by cluster.xr"
 perf_suite = "stdlib/cluster"
 
 [[module]]
@@ -524,5 +559,41 @@ def_migration_complete = true
 aot_helper_forbidden = true
 perf_suite = "stdlib/xml"
 
-# No VM-only fastpath is approved at this baseline. New entries must provide
-# reference source, benchmark, diff coverage, review date, and the global off switch.
+# Generated VM-native entries use the canonical hosted object ABI above. New
+# entries fail closed unless the generator supports their exact ABI batch and
+# they provide source, old-C oracle, direct ABI gate, workload benchmark, diff
+# coverage, and the global switch. ABI microbenchmarks deliberately do not use
+# the process-level VM/AOT benchmark runner: that runner mostly measures process
+# startup, while the ABI gate compares generated and legacy-C adapters directly.
+
+[[vm_fastpath]]
+symbol = "http.isRedirectStatus"
+module = "http"
+member = "isRedirectStatus"
+reference = "stdlib/http/http.xr::isRedirectStatus"
+native = "xr_generated_http_is_redirect_status"
+abi = "i64->bool"
+batch = "scalar"
+reason = "Pure scalar protocol predicate; first generated-native ABI batch"
+abi_gate = "test_stdlib_vm_fastpath_abi"
+workload_benchmark = "http.head.contract"
+diff_case = "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr"
+oracle = "stdlib/http/http_client.c::is_redirect_status"
+review_date = "2026-08-02"
+disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"
+
+[[vm_fastpath]]
+symbol = "ws.isValidCloseCode"
+module = "ws"
+member = "isValidCloseCode"
+reference = "stdlib/ws/ws.xr::isValidCloseCode"
+native = "xr_generated_ws_is_valid_close_code"
+abi = "i64->bool"
+batch = "scalar"
+reason = "Pure scalar protocol predicate; first generated-native ABI batch"
+abi_gate = "test_stdlib_vm_fastpath_abi"
+workload_benchmark = "ws.protocol.contract"
+diff_case = "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr"
+oracle = "tests/unit/stdlib/test_stdlib_vm_fastpath_abi.c::legacy_ws_valid_close_code"
+review_date = "2026-08-02"
+disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"

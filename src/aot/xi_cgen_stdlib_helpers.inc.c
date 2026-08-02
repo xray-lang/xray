@@ -509,10 +509,24 @@ static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFu
     if (!ctx || !out || !v || !m)
         return false;
 
-    /* Wrap in a statement-expression so the shim's forward declaration is
-     * self-contained at the call site, then convert the result to the value's
-     * required storage representation. */
     XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+
+    /* The common value-returning ABI is already declared by the layered xrt
+     * headers.  Emit it as an ordinary C expression so hosted fragments remain
+     * valid ISO C11 and compile with MSVC as well as GCC/Clang. */
+    if (m->ret_kind == CG_AOT_RET_VALUE && !cg_aot_stdlib_method_is_variadic_strings(m) &&
+        (!m->extern_decl || !m->extern_decl[0])) {
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "%s(", m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
+
+    /* Complex result adapters still require statement-local temporaries. They
+     * are rejected by the hosted-fragment residue gate until their portable
+     * statement forms are lowered explicitly. */
     fprintf(out, "({ ");
     if (m->extern_decl && m->extern_decl[0])
         fprintf(out, "%s ", m->extern_decl);

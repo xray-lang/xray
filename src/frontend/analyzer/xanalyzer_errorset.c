@@ -3450,8 +3450,12 @@ static const XaEffectContract *es_imported_function_effect_contract(ErrorSetCtx 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (!links || !links->module_name || !links->import_member_name)
         return NULL;
-    return xa_builtin_get_module_func_effect_contract(links->module_name,
-                                                      links->import_member_name);
+    /* Selectively imported public functions use the public lookup above.  A
+     * bodyless native primitive injected into a stdlib source module is an ABI
+     * symbol: it is intentionally hidden from user lookup, but its generated
+     * error contract remains authoritative for the Xray wrapper that calls it. */
+    return xa_builtin_get_module_func_abi_effect_contract(links->module_name,
+                                                           links->import_member_name);
 }
 
 static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx, AstNode *callee) {

@@ -152,6 +152,7 @@ typedef struct XaEnumVariantInfo {
 } XaEnumVariantInfo;
 
 struct XaEnumInfo {
+    const char *nominal_owner; /* owned canonical module/prelude identity */
     const char *name;
     uint32_t variant_count;
     XaEnumVariantInfo *variants;
@@ -473,7 +474,8 @@ XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, 
                                                              XrClassInfo **owner_out);
 
 // API: Enum metadata
-XR_FUNC XaEnumInfo *xa_enum_info_new(const char *name, uint32_t variant_count);
+XR_FUNC XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name,
+                                     uint32_t variant_count);
 XR_FUNC bool xa_enum_info_finalize_layout(XaEnumInfo *info);
 XR_FUNC XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src);
 XR_FUNC void xa_enum_info_free(XaEnumInfo *info);

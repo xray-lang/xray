@@ -258,16 +258,18 @@ static bool builtin_module_call_arg_is_borrowed(const XiValue *user, uint16_t ar
                !ref->member_name) {
         member = (const char *) user->aux;
     }
-    if (!member || !xa_builtin_get_module_func_signature(ref->module_path, member))
+    if (!member || !xa_builtin_get_module_func_abi_signature(ref->module_path, member))
         return false;
 
-    /* Bodyless builtin module functions use the source signature as their ABI
-     * contract.  The current manifest grammar contains only default READ
-     * parameters, so native helpers inspect arguments for the duration of the
-     * call and neither retain nor release them.  Keep this fail-closed behind
-     * the registered signature lookup: a future MOVE-capable builtin grammar
-     * must publish structured parameter modes here before it can transfer ARC
-     * ownership. */
+    /* Bodyless native primitives use the source signature as their ABI contract,
+     * including private primitives called by an Xray stdlib wrapper.  Public
+     * Xray functions are deliberately absent from this registry and obtain
+     * ownership from their verified call plan instead.  The current manifest
+     * grammar contains only default READ parameters, so native helpers inspect
+     * arguments for the duration of the call and neither retain nor release
+     * them.  Keep this fail-closed behind the registered ABI lookup: a future
+     * MOVE-capable primitive grammar must publish structured parameter modes
+     * here before it can transfer ARC ownership. */
     return true;
 }
 

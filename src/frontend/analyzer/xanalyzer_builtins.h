@@ -220,12 +220,21 @@ XR_FUNC const XaBuiltinModule *xa_builtin_get_module_at(int index);
 XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name,
                                                          const char *func_name);
 
+// Get the ABI signature of a registered native primitive, including private
+// primitives used only by an Xray stdlib implementation.
+XR_FUNC const char *xa_builtin_get_module_func_abi_signature(const char *module_name,
+                                                             const char *func_name);
+
 // Get module function doc
 XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name);
 
 // Get module function error-effect contract.
 XR_FUNC const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *module_name,
                                                                            const char *func_name);
+// Get the ABI error-effect contract of a registered native primitive,
+// including private primitives used only by an Xray stdlib implementation.
+XR_FUNC const XaEffectContract *
+xa_builtin_get_module_func_abi_effect_contract(const char *module_name, const char *func_name);
 XR_FUNC XaAllocationContractKind
 xa_builtin_get_module_func_allocation_contract(const char *module_name, const char *func_name);
 XR_FUNC XaBuiltinReturnOwnership

@@ -1,6 +1,8 @@
 # Differential and oracle protocol contract
 
-Status: re-frozen by task 257 after making subprocess capture byte-native.
+Status: re-frozen by tasks 256 and 257. Manifest, argument, and baseline
+sidecars are decoded explicitly as UTF-8 on every host; subprocess capture and
+the VM/AOT program-output comparison remain byte-native and are not normalized.
 
 1. Backend differential equivalence compares observable exit status and stdout
    byte-for-byte. Normalized stderr is compared only when the lane explicitly

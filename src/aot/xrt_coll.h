@@ -40,6 +40,7 @@
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
+XRT_COLD _Noreturn void xrt_index_oob(int64_t index, int64_t length);
 static void xrt_execution_finalize_array(XrObjHeader *hdr);
 static void xrt_execution_finalize_map(XrObjHeader *hdr);
 static void xrt_execution_finalize_boolmap(XrObjHeader *hdr);
@@ -67,7 +68,37 @@ typedef struct {
     XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrArray so
                       * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
+    /* Keep the complete VM array object size/layout.  A hosted fragment may
+     * return this object directly to the VM; the VM-only flag remains zero for
+     * AOT-owned buffers but must occupy its canonical slot. */
+    uint8_t data_on_region_heap;
+    uint8_t _vm_abi_pad[2];
 } xrt_array_t;
+
+/* Portable hosted-fragment accessors.  They deliberately take boxed values so
+ * generated MSVC C does not need GNU statement expressions for a temporary
+ * array/span pointer and index.  The optimizer still sees every operation as
+ * an inline load/store. */
+static inline XrValue xrt_array_index_get_portable(xrt_array_t *array, int64_t index,
+                                                   int checked, int owned) {
+    if (!array || (checked && (index < 0 || index >= array->length))) {
+        xrt_index_oob(index, array ? array->length : 0);
+        return XR_NULL_VAL;
+    }
+    XrValue value = xr_typed_get(array->data, (int32_t) index, array->elem_type);
+    return owned ? xrt_value_to_owned(value) : value;
+}
+
+static inline XrValue xrt_array_index_set_portable(xrt_array_t *array, int64_t index,
+                                                   XrValue value, int checked) {
+    if (!array || (checked && (index < 0 || index >= array->length))) {
+        xrt_index_oob(index, array ? array->length : 0);
+        return XR_NULL_VAL;
+    }
+    if (xr_typed_set(array->data, (int32_t) index, value, array->elem_type))
+        XR_ARRAY_MARK_MUTATED(array);
+    return XR_NULL_VAL;
+}
 
 #ifdef XRT_IMPL
 atomic_flag xrt_array_storage_promotion_lock = ATOMIC_FLAG_INIT;
@@ -594,6 +625,27 @@ _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length
 _Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
 #endif
 
+static inline XrValue xrt_span_index_get_portable(xr_span_t span, int64_t index,
+                                                  uint8_t elem_type, int checked, int owned) {
+    if (checked && (index < 0 || index >= span.length)) {
+        xrt_index_oob(index, span.length);
+        return XR_NULL_VAL;
+    }
+    XrValue value = xr_typed_get(span.data, (int32_t) index, elem_type);
+    return owned ? xrt_value_to_owned(value) : value;
+}
+
+static inline XrValue xrt_span_index_set_portable(xr_span_t span, int64_t index,
+                                                  XrValue value, uint8_t elem_type,
+                                                  int checked) {
+    if (checked && (index < 0 || index >= span.length)) {
+        xrt_index_oob(index, span.length);
+        return XR_NULL_VAL;
+    }
+    (void) xr_typed_set(span.data, (int32_t) index, value, elem_type);
+    return XR_NULL_VAL;
+}
+
 /* Box a frame-local Slice descriptor for a typed dynamic-call boundary.  Safe Xray code cannot
  * retain a Slice, so the aggregate reference is valid for the duration of the call and does not
  * allocate or transfer ownership. */
@@ -986,6 +1038,46 @@ static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
     for (int64_t i = 0; i < t->len; i++)
         t->items[i] = items ? xrt_value_to_owned(items[i]) : XR_NULL_VAL;
     return tuple;
+}
+
+XR_FUNC bool xr_aot_atomic_compare_exchange_i64(XrValue atomic_value, int64_t expected,
+                                                int64_t desired, int64_t ordering,
+                                                int64_t *out_previous);
+XR_FUNC bool xr_aot_atomic_compare_exchange_f64(XrValue atomic_value, double expected,
+                                                double desired, int64_t ordering,
+                                                double *out_previous);
+XR_FUNC bool xr_aot_atomic_compare_exchange_bool(XrValue atomic_value, bool expected,
+                                                 bool desired, int64_t ordering,
+                                                 bool *out_previous);
+
+static inline XrValue xrt_atomic_compare_exchange_i64_tuple(XrValue atomic_value,
+                                                            int64_t expected, int64_t desired,
+                                                            int64_t ordering) {
+    int64_t previous = 0;
+    bool ok = xr_aot_atomic_compare_exchange_i64(atomic_value, expected, desired, ordering,
+                                                  &previous);
+    XrValue items[2] = {XR_FROM_INT(previous), XR_FROM_BOOL(ok)};
+    return xrt_tuple_make(2, items);
+}
+
+static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value,
+                                                            double expected, double desired,
+                                                            int64_t ordering) {
+    double previous = 0.0;
+    bool ok = xr_aot_atomic_compare_exchange_f64(atomic_value, expected, desired, ordering,
+                                                  &previous);
+    XrValue items[2] = {XR_FROM_FLOAT(previous), XR_FROM_BOOL(ok)};
+    return xrt_tuple_make(2, items);
+}
+
+static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_value,
+                                                             bool expected, bool desired,
+                                                             int64_t ordering) {
+    bool previous = false;
+    bool ok = xr_aot_atomic_compare_exchange_bool(atomic_value, expected, desired, ordering,
+                                                   &previous);
+    XrValue items[2] = {XR_FROM_BOOL(previous), XR_FROM_BOOL(ok)};
+    return xrt_tuple_make(2, items);
 }
 
 static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
@@ -2483,8 +2575,8 @@ static inline XrValue xrt_path_raw_value(XrValue path) {
     if (xrt_map_backed_class_exact(path, "Path"))
         return xrt_map_get((xrt_map_t *) path.ptr, xr_box_str("raw"));
     if (path.tag == XR_TAG_PTR && path.heap_type == XR_TINSTANCE && path.ptr) {
-        XrObjHeader *hdr = XRT_ARC_HDR(path.ptr);
-        const char *name = xrt_type_display_name(hdr->type);
+        XrObjHeader *hdr = (XrObjHeader *) path.ptr;
+        const char *name = xrt_type_display_name(xrt_aot_class_type_id(hdr));
         if (name && strcmp(name, "Path") == 0)
             return ((XrValue *) path.ptr)[0];
     }
@@ -3734,7 +3826,7 @@ static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_ki
     for (int64_t i = 0; i < field_count; i++)
         j->fields[i] = XR_NULL_VAL;
     XrValue value = xr_mkptr(j, XR_TAG_PTR);
-    value.flags |= XRT_VALUE_FLAG_EMBEDDED_HEADER;
+    value.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
     return value;
 }
 
@@ -4511,8 +4603,8 @@ static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
 static inline const XrtTypeDeriveInfo *xrt_json_instance_derive_info(XrValue val) {
     if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return NULL;
-    XrObjHeader *hdr = XRT_ARC_HDR(val.ptr);
-    const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
+    XrObjHeader *hdr = (XrObjHeader *) val.ptr;
+    const XrtTypeInfo *ti = xrt_type_info(xrt_aot_class_type_id(hdr));
     return ti ? xrt_type_derive_info(ti->type_id) : NULL;
 }
 
@@ -5035,7 +5127,7 @@ static inline void xrt_coll_release(XrValue v) {
         return;
     }
     if (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-        (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0) {
+        (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0) {
         xrt_json_destroy((xrt_json_t *) v.ptr);
         xrt_execution_free_allocation(h);
         return;
@@ -5340,13 +5432,16 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
         case XR_TAG_ITERATOR:
             (void) xrt_value_set_storage_graph(((xrt_iterator_t *) value.ptr)->coll, storage_mode);
             break;
-        case XR_TAG_PTR:
-            if (value.heap_type == XR_TINSTANCE && hdr->type < xrt_type_count) {
-                XrtStoragePromoter promote = xrt_type_table[hdr->type].promote_storage;
+        case XR_TAG_PTR: {
+            uint16_t class_type_id = xrt_aot_class_type_id(hdr);
+            if (value.heap_type == XR_TINSTANCE && class_type_id != 0 &&
+                class_type_id < xrt_type_count) {
+                XrtStoragePromoter promote = xrt_type_table[class_type_id].promote_storage;
                 if (promote)
                     promote(value.ptr, storage_mode);
             }
             break;
+        }
         default:
             break;
     }

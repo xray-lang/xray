@@ -85,6 +85,7 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         func->analyzer_effect_fingerprint =
             xa_effect_summary_fingerprint(analyzer->effect_db, effect);
         func->analyzer_effect_complete = xa_effect_summary_is_complete(effect);
+        func->error_effect_nothrow = xa_effect_summary_is_nothrow(effect);
         func->contains_unsafe_op = effect->contains_unsafe_op;
         func->requires_unsafe_at_call = effect->requires_unsafe_at_call;
     }

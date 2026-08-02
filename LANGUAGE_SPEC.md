@@ -900,7 +900,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 #### 2.4.2 `Slice<T>`
 
-> Source of truth: `stdlib/prelude/prelude_types.def` (prelude registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
+> Source of truth: `stdlib/prelude/builtin_symbols.def` (prelude built-in symbol registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
 
 `Slice<T>` is a **borrowed view**: it denotes a run of contiguous element storage owned by another value. It owns no data, does not participate in reference counting, and cannot be placed in any long-lived storage. It is a prelude type (`GENERIC_1`) and may be written directly in any type annotation.
 

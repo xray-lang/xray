@@ -745,13 +745,38 @@ static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
 
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
-              "ordinary consume before a same-block phi edge consume needs one retain");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 2,
+              "each consume of an alias-uncertain call result needs its own retain");
     ASSERT_EQ(entry->values[1]->op, XI_RETAIN,
               "retain must execute immediately before the first consuming store");
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
               "same-block consume followed by phi-edge consume must verify");
+    xi_func_free(f);
+}
+
+static void test_arc_unknown_call_result_retains_before_single_consume(void) {
+    XiFunc *f = make_func("arc_unknown_call_result_single_consume", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *source = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &t_any, 1);
+    store->args[0] = source;
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "an alias-uncertain call result must retain before its sole consume");
+    ASSERT_EQ(entry->values[1]->op, XI_RETAIN,
+              "the ownership transfer retain must immediately precede the consume");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
+              "an alias-uncertain call result must never receive a death release");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "single-consume unknown call result must satisfy ARC verification");
     xi_func_free(f);
 }
 
@@ -1359,6 +1384,7 @@ int main(void) {
     test_arc_phi_move_drops_owner_on_sibling_edge();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
+    test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_builtin_iterator_results_are_fresh();
     test_arc_generator_iterator_result_is_fresh();

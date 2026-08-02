@@ -119,10 +119,42 @@ static void test_use_policy(void) {
         .nargs = 3,
         .args = net_write_args,
     };
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 1), true,
+              "public Xray net call without a lowering plan fails closed");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 2), true,
+              "public Xray net payload without a lowering plan fails closed");
+
+    XiCallArgPlan net_write_arg_plans[2] = {
+        {.param_mode = XR_PARAM_READ,
+         .access = XR_CALL_ARG_PLAIN,
+         .place = &net_conn},
+        {.param_mode = XR_PARAM_READ,
+         .access = XR_CALL_ARG_PLAIN,
+         .place = &string_value},
+    };
+    XiCallPlan net_write_plan = {
+        .args = net_write_arg_plans,
+        .nargs = 2,
+        .verified = true,
+    };
+    net_write.call_plan = &net_write_plan;
     ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 1), false,
-              "native net call borrows its connection handle");
+              "public Xray net call borrows its connection through the call plan");
     ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 2), false,
-              "native net call borrows its string payload");
+              "public Xray net call borrows its payload through the call plan");
+
+    XiImportRef net_native_write_ref = {
+        .module_path = "net",
+        .member_name = "__write",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+    };
+    net_write_callee.aux = &net_native_write_ref;
+    net_write.call_plan = NULL;
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 1), false,
+              "private native net primitive borrows its connection from ABI metadata");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&net_write, 2), false,
+              "private native net primitive borrows its payload from ABI metadata");
 
     XiImportRef net_module_ref = {
         .module_path = "net",
@@ -149,10 +181,36 @@ static void test_use_policy(void) {
     method_write->args[2] = payload_value;
     method_write->aux = (void *) "write";
 
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 1), true,
+              "shared-slot public Xray method without a lowering plan fails closed");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 2), true,
+              "shared-slot public Xray payload without a lowering plan fails closed");
+
+    XiCallArgPlan method_write_arg_plans[2] = {
+        {.param_mode = XR_PARAM_READ,
+         .access = XR_CALL_ARG_PLAIN,
+         .place = conn_value},
+        {.param_mode = XR_PARAM_READ,
+         .access = XR_CALL_ARG_PLAIN,
+         .place = payload_value},
+    };
+    XiCallPlan method_write_plan = {
+        .args = method_write_arg_plans,
+        .nargs = 2,
+        .verified = true,
+    };
+    method_write->call_plan = &method_write_plan;
     ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 1), false,
-              "shared-slot native module method borrows its connection handle");
+              "shared-slot public Xray method borrows its connection through the call plan");
     ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 2), false,
-              "shared-slot native module method borrows its string payload");
+              "shared-slot public Xray method borrows its payload through the call plan");
+
+    method_write->aux = (void *) "__write";
+    method_write->call_plan = NULL;
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 1), false,
+              "shared-slot private net primitive borrows its connection from ABI metadata");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 2), false,
+              "shared-slot private net primitive borrows its payload from ABI metadata");
     xi_func_free(method_func);
 }
 

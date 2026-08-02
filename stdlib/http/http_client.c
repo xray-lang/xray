@@ -19,7 +19,7 @@
 #include "../../src/base/xplatform.h"
 #include "http_internal.h"
 #include "../net/tls.h"
-#include "../compress/compress.h"
+#include "../../stdlib/compress/compress.h"
 #include "../../src/io/xdns.h"
 #include "../net/io.h"
 #include "http_buffer.h"

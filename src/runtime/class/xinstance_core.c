@@ -82,6 +82,21 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
     }
 }
 
+XrValue xr_instance_get_field_by_index(XrInstance *inst, int index) {
+    XR_DCHECK(inst != NULL, "Instance must not be NULL");
+    XrClass *klass = xr_instance_get_class(inst);
+    XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
+    return inst->fields[index];
+}
+
+void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) {
+    XR_DCHECK(inst != NULL, "Instance must not be NULL");
+    XrClass *klass = xr_instance_get_class(inst);
+    XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
+    xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
+    inst->fields[index] = value;
+}
+
 size_t xr_instance_size(XrClass *cls) {
     XR_DCHECK(cls != NULL, "instance_size: NULL cls");
 

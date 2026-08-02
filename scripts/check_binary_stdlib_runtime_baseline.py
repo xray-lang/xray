@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Check task-200 binary stdlib runtime/perf/size baseline coverage.
-
-This is a P0 coverage gate. It deliberately does not switch compress or crypto
-to their final public byte APIs. Instead, it keeps the existing VM/AOT output
-probes, benchmark entries, and AOT binary-size evidence wired while later
-vertical slices replace the legacy string-binary surface.
-"""
+"""Check binary stdlib runtime, performance and size coverage."""
 
 from __future__ import annotations
 

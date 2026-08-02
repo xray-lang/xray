@@ -46,6 +46,12 @@ the public target ABI, calling convention, and closure layout are unchanged.
 Task 257 changes provider probe capture from implicit C text to bounded byte
 buffers. Target triples are accepted only as strict ASCII; this changes no
 target identity, generated-C ABI, calling convention, or runtime layout.
+Task 256 replaces parallel VM/AOT value declarations with the versioned public
+`xray_value_abi.h`, introduces `hosted_fragment` as a real artifact kind, and
+generates the first scalar stdlib fragment from authoritative Xray source. The
+fragment borrows the embedding runtime and exports only manifest-declared C ABI
+entries; it cannot synthesize a program main, runtime implementation, or
+constructor lifecycle.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -112,7 +118,10 @@ emission, and native linking:
   resolves its own GNU-spelled artifact set. Runtime manifests reject an ABI or
   object-format mismatch even when the digest is valid. A true cross-target
   probe may reuse installed host headers, but it never advertises or links the
-  host runtime into the cross artifact.
+  host runtime into the cross artifact. The COFF AOT runtime archive contains
+  only VM-neutral translation units: because COFF resolves every undefined
+  symbol in a selected object before section garbage collection, VM registration
+  code may not share an archive member with an AOT-reachable core helper.
 - T4f: provider capability identity contains four independent code-shape
   states: force-inline, preserve-call, value-opacity, and compiler-fence. A
   required state participates in selection and probe-cache identity. An
@@ -123,6 +132,15 @@ emission, and native linking:
   identities and compiler-only scheduling constructs; they cannot introduce a
   pointer-to-integer ABI round trip, hosted runtime dependency, hardware fence,
   or C++ linkage change.
+- T4g: a Windows multi-module freestanding relocatable artifact is one COFF
+  object compiled from the verified amalgamated translation unit. COFF has no
+  ELF/Mach-O-style partial-link operation, so this path performs no link stage,
+  rejects external objects, system libraries, linker flags, and linker scripts,
+  and preserves an explicitly configured post-compile objcopy step. This is an
+  artifact-kind lowering, not permission to substitute an archive or DLL. A
+  hosted fragment selected for direct MSVC compilation must contain no GNU
+  statement expression and must pass a real MSVC compile probe; failure remains
+  fail-closed and does not downgrade the already selected target ABI.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -164,6 +182,12 @@ emission, and native linking:
   carries a generated storage-promoter callback beside its destructor; missing
   graph evidence is a hard contract failure, never root-only promotion. The
   generated entry owns the root arena and shuts it down on every exit path.
+- T12: `XrValue` and every object crossing VM/generated-fragment code use the
+  single versioned public value/object ABI. `XrObjHeader` is the first field,
+  carries the canonical object kind and ownership counters, and is validated by
+  compile-time size/alignment/offset assertions on both sides. A fragment may
+  borrow these objects but cannot invent a second layout, retain an unowned
+  runtime root, or bypass the declared argument/return ownership convention.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -182,14 +206,15 @@ remain separate release gates. Windows x86_64 evidence additionally includes
 native execution of all five xxHash CLI names, a 24-case byte-exact upstream CLI
 differential, the exact 49-export PE gate, an executing C ABI oracle, and complete
 31-sample alternating Xray/API throughput matrices. On the verified host, MSVC
-passes the minimal C/link probe but does not compile the canonical generated-C
-dialect (including the currently required GNU statement expression), so it is
-rejected before capability claims are made. With the explicit workspace Zig
-0.16.0 candidate, automatic selection falls back to Zig, passes compile, SDK,
-runtime-link, native-run, LTO, and all four code-shape capability probes, and
-preserves the `x86_64-windows-msvc` ABI. Without an installed/configured Zig
-candidate the same request reports unavailable; the compiler core does not
-download a provider.
+passes the minimal C/link probe and directly compiles the Task 256 scalar hosted
+fragment plus the amalgamated freestanding COFF object. General whole-program
+generated C still contains a required GNU statement expression, so MSVC is
+rejected for that broader shape before any capability claim is made. With the
+explicit workspace Zig 0.16.0 candidate, automatic selection falls back to Zig,
+passes compile, SDK, runtime-link, native-run, LTO, and all four code-shape
+capability probes, and preserves the `x86_64-windows-msvc` ABI. Without an
+installed/configured Zig candidate the same general request reports unavailable;
+the compiler core does not download a provider.
 
 ## Digest anchors
 
@@ -198,14 +223,14 @@ anchor-sha256: src/aot/xaot_prepare.c fbf0bf75c63b4836a25290a932179b01589fb4e20b
 anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c f0b7c83250c70ec40d1dbab531a78072935e2c9d15bfdc89a086ff0d18c841a5
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 99ca3436c5f8cb44b4d8c37b77895e5fc8e2947a265481ddc7c35d305f2f9617
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c e0659ff4106db1047b02d0bc70682fdb7a7ab57d02c7b68c11d317bfae41236c
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 951c5a579b9dc2af79daf371d2ef7504ea0be613652c2e8f1e80b6e4834ae1a0
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c af85125af9df00f47569471b30be62f4cb3ba2bd3a0f2285f6ac8a26ce87650e
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c acf8dfa629e0ff5436ad16196a50cd1f5fbebed35dd6da5a6dda29161b81f0f9
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c ccfbf24176c4567842a9ba2c2d9031cac0e1827ee17a93b816de88d58e52bc13
+anchor-sha256: src/aot/xi_cgen.c 11f3911b78284de1e8ce272634b128fb0d73cd7bbbd2efc8757a19d9ec64215d
 anchor-sha256: src/aot/xrt_coll.h c9c51a2850a5777bb9bd16188f1659b7d1dacd643fbc4fffbd748b5c51db43c4
-anchor-sha256: src/aot/xrt_core_freestanding.h 60b6e6631209dcb72806d62e0715635f4f4acbf03704d88a1c9f3f02f44b0b07
+anchor-sha256: src/aot/xrt_core_freestanding.h e5a6a0b9b268e31a89c7badc94586a4dca6617dbbf5ee1f51db3323442e7987c
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c d9839000fb4a06ee3472a73d34489f72d2f61afbb145c5936f7b8d190610ac0d
+anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 78ecab6e52428fcc05c9fae5bba166581feeca0cc676468133120321fbcc6ffd
 anchor-sha256: src/ir/xi.h 20734874b718c17ea93d7350d74b77690ca4f1f16fabfc15deb4bb2c6910fbb8

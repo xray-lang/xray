@@ -60,51 +60,51 @@ static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *m
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
-static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "__h2Supported", h2_supported);
-    XRS_EXPORT(module, isolate, "__h2Request", h2_request_typed);
+#ifdef XR_STDLIB_VM_BIND_MODULE_HTTP2
+static void xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "supported", h2_supported);
+    XRS_EXPORT(module, isolate, "request", h2_request_typed);
 }
-#endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP */
+#endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_IO
 static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "appendFile", io_appendFile);
-    XRS_EXPORT(module, isolate, "chmod", io_chmod);
-    XRS_EXPORT(module, isolate, "chdir", io_chdir);
-    XRS_EXPORT(module, isolate, "copyFile", io_copyFile);
+    XRS_EXPORT(module, isolate, "__appendFile", io_appendFile);
+    XRS_EXPORT(module, isolate, "__chmod", io_chmod);
+    XRS_EXPORT(module, isolate, "__chdir", io_chdir);
+    XRS_EXPORT(module, isolate, "__copyFile", io_copyFile);
     XRS_EXPORT(module, isolate, "__cwd", io_cwd);
-    XRS_EXPORT(module, isolate, "exists", io_exists);
+    XRS_EXPORT(module, isolate, "__exists", io_exists);
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
     XRS_EXPORT(module, isolate, "__fileOpen", io_fileOpen);
     XRS_EXPORT(module, isolate, "__fileRead", io_fileRead);
-    XRS_EXPORT(module, isolate, "fileSize", io_fileSize);
-    XRS_EXPORT(module, isolate, "isDir", io_isDir);
-    XRS_EXPORT(module, isolate, "isFile", io_isFile);
-    XRS_EXPORT(module, isolate, "isSymlink", io_isSymlink);
-    XRS_EXPORT(module, isolate, "mkdir", io_mkdir);
-    XRS_EXPORT(module, isolate, "mkdirp", io_mkdirp);
+    XRS_EXPORT(module, isolate, "__fileSize", io_fileSize);
+    XRS_EXPORT(module, isolate, "__isDir", io_isDir);
+    XRS_EXPORT(module, isolate, "__isFile", io_isFile);
+    XRS_EXPORT(module, isolate, "__isSymlink", io_isSymlink);
+    XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
+    XRS_EXPORT(module, isolate, "__mkdirp", io_mkdirp);
     XRS_EXPORT(module, isolate, "__readDir", io_readDir);
     XRS_EXPORT(module, isolate, "__readDirRecursive", io_readDirRecursive);
-    XRS_EXPORT_YIELDABLE(module, isolate, "readFile", io_readFile);
-    XRS_EXPORT_YIELDABLE(module, isolate, "readFileBytes", io_readFileBytes);
-    XRS_EXPORT(module, isolate, "readLines", io_readLines);
-    XRS_EXPORT(module, isolate, "readStdin", io_readStdin);
-    XRS_EXPORT(module, isolate, "readStdinBytes", io_readStdinBytes);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__readFile", io_readFile);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__readFileBytes", io_readFileBytes);
+    XRS_EXPORT(module, isolate, "__readLines", io_readLines);
+    XRS_EXPORT(module, isolate, "__readStdin", io_readStdin);
+    XRS_EXPORT(module, isolate, "__readStdinBytes", io_readStdinBytes);
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     XRS_EXPORT(module, isolate, "__realpath", io_realpath);
-    XRS_EXPORT(module, isolate, "remove", io_remove);
-    XRS_EXPORT(module, isolate, "removeAll", io_removeAll);
-    XRS_EXPORT(module, isolate, "rename", io_rename);
-    XRS_EXPORT(module, isolate, "stat", io_stat);
-    XRS_EXPORT(module, isolate, "symlink", io_symlink);
+    XRS_EXPORT(module, isolate, "__remove", io_remove);
+    XRS_EXPORT(module, isolate, "__removeAll", io_removeAll);
+    XRS_EXPORT(module, isolate, "__rename", io_rename);
+    XRS_EXPORT(module, isolate, "__stat", io_stat);
+    XRS_EXPORT(module, isolate, "__symlink", io_symlink);
     XRS_EXPORT(module, isolate, "__tempDir", io_tempDir);
     XRS_EXPORT(module, isolate, "__tempFile", io_tempFile);
-    XRS_EXPORT(module, isolate, "touch", io_touch);
-    XRS_EXPORT_YIELDABLE(module, isolate, "writeFile", io_writeFile);
-    XRS_EXPORT_YIELDABLE(module, isolate, "writeFileBytes", io_writeFileBytes);
-    XRS_EXPORT(module, isolate, "writeStderr", io_writeStderr);
-    XRS_EXPORT(module, isolate, "writeStdout", io_writeStdout);
+    XRS_EXPORT(module, isolate, "__touch", io_touch);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__writeFile", io_writeFile);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__writeFileBytes", io_writeFileBytes);
+    XRS_EXPORT(module, isolate, "__writeStderr", io_writeStderr);
+    XRS_EXPORT(module, isolate, "__writeStdout", io_writeStdout);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_IO */
 
@@ -204,67 +204,66 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_NET
 static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT_YIELDABLE(module, isolate, "dial", net_dial_yieldable);
-    XRS_EXPORT(module, isolate, "listen", net_listen_handle);
-    XRS_EXPORT_YIELDABLE(module, isolate, "accept", net_accept_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "read", net_read_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "readInto", net_read_into_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "write", net_write_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "writeBytes", net_write_bytes_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "copy", net_copy_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "copyBidirectional", net_copy_bidirectional_yieldable);
-    XRS_EXPORT(module, isolate, "shutdownRead", net_shutdown_read);
-    XRS_EXPORT(module, isolate, "shutdownWrite", net_shutdown_write);
-    XRS_EXPORT(module, isolate, "shutdown", net_shutdown_conn);
-    XRS_EXPORT(module, isolate, "close", net_close_handle);
-    XRS_EXPORT(module, isolate, "fd", net_fd_handle);
-    XRS_EXPORT(module, isolate, "setReadDeadline", net_set_read_deadline);
-    XRS_EXPORT(module, isolate, "setWriteDeadline", net_set_write_deadline);
-    XRS_EXPORT(module, isolate, "setDeadline", net_set_deadline);
-    XRS_EXPORT(module, isolate, "setAcceptDeadline", net_set_accept_deadline);
-    XRS_EXPORT(module, isolate, "lastError", net_last_error);
-    XRS_EXPORT(module, isolate, "lastErrno", net_last_errno);
-    XRS_EXPORT(module, isolate, "lookup", net_dns_lookup);
-    XRS_EXPORT(module, isolate, "hasTLS", net_has_tls);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__dial", net_dial_yieldable);
+    XRS_EXPORT(module, isolate, "__listen", net_listen_handle);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__accept", net_accept_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__read", net_read_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__readInto", net_read_into_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__write", net_write_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__copy", net_copy_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__copyBidirectional", net_copy_bidirectional_yieldable);
+    XRS_EXPORT(module, isolate, "__shutdownRead", net_shutdown_read);
+    XRS_EXPORT(module, isolate, "__shutdownWrite", net_shutdown_write);
+    XRS_EXPORT(module, isolate, "__shutdown", net_shutdown_conn);
+    XRS_EXPORT(module, isolate, "__close", net_close_handle);
+    XRS_EXPORT(module, isolate, "__fd", net_fd_handle);
+    XRS_EXPORT(module, isolate, "__setReadDeadline", net_set_read_deadline);
+    XRS_EXPORT(module, isolate, "__setWriteDeadline", net_set_write_deadline);
+    XRS_EXPORT(module, isolate, "__setDeadline", net_set_deadline);
+    XRS_EXPORT(module, isolate, "__setAcceptDeadline", net_set_accept_deadline);
+    XRS_EXPORT(module, isolate, "__lastError", net_last_error);
+    XRS_EXPORT(module, isolate, "__lastErrno", net_last_errno);
+    XRS_EXPORT(module, isolate, "__lookup", net_dns_lookup);
+    XRS_EXPORT(module, isolate, "__hasTLS", net_has_tls);
 #ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(module, isolate, "dialTLS", net_dial_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__dialTLS", net_dial_tls_yieldable);
 #endif  /* XR_ENABLE_TLS */
 #ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(module, isolate, "upgradeTLS", net_upgrade_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__upgradeTLS", net_upgrade_tls_yieldable);
 #endif  /* XR_ENABLE_TLS */
-    XRS_EXPORT(module, isolate, "udpBind", net_udp_bind_handle);
-    XRS_EXPORT_YIELDABLE(module, isolate, "sendTo", net_send_to_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "recvFrom", net_recv_from_yieldable);
+    XRS_EXPORT(module, isolate, "__udpBind", net_udp_bind_handle);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__sendTo", net_send_to_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__recvFrom", net_recv_from_yieldable);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_NET */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_OS
 static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "getenv", os_getenv);
-    XRS_EXPORT(module, isolate, "setenv", os_setenv);
-    XRS_EXPORT(module, isolate, "unsetenv", os_unsetenv);
-    XRS_EXPORT(module, isolate, "environ", os_environ);
-    XRS_EXPORT(module, isolate, "exit", os_exit);
-    XRS_EXPORT(module, isolate, "getpid", os_getpid);
-    XRS_EXPORT(module, isolate, "getcwd", os_getcwd);
-    XRS_EXPORT(module, isolate, "chdir", os_chdir);
-    XRS_EXPORT(module, isolate, "hostname", os_hostname);
-    XRS_EXPORT(module, isolate, "tmpdir", os_tmpdir);
-    XRS_EXPORT(module, isolate, "username", os_username);
-    XRS_EXPORT(module, isolate, "homedir", os_homedir);
-    XRS_EXPORT(module, isolate, "uid", os_uid);
-    XRS_EXPORT(module, isolate, "gid", os_gid);
-    XRS_EXPORT(module, isolate, "cpuCount", os_cpuCount);
-    XRS_EXPORT(module, isolate, "ppid", os_ppid);
-    XRS_EXPORT(module, isolate, "kill", os_kill);
-    XRS_EXPORT(module, isolate, "totalMemory", os_totalMemory);
-    XRS_EXPORT(module, isolate, "freeMemory", os_freeMemory);
-    XRS_EXPORT(module, isolate, "uptime", os_uptime);
-    XRS_EXPORT(module, isolate, "loadavg", os_loadavg);
-    XRS_EXPORT(module, isolate, "clock", os_clock);
-    XRS_EXPORT_YIELDABLE(module, isolate, "sleep", os_sleep);
-    XRS_EXPORT(module, isolate, "exec", os_exec);
-    XRS_EXPORT(module, isolate, "spawn", os_spawn);
+    XRS_EXPORT(module, isolate, "__getenv", os_getenv);
+    XRS_EXPORT(module, isolate, "__setenv", os_setenv);
+    XRS_EXPORT(module, isolate, "__unsetenv", os_unsetenv);
+    XRS_EXPORT(module, isolate, "__environ", os_environ);
+    XRS_EXPORT(module, isolate, "__exit", os_exit);
+    XRS_EXPORT(module, isolate, "__getpid", os_getpid);
+    XRS_EXPORT(module, isolate, "__getcwd", os_getcwd);
+    XRS_EXPORT(module, isolate, "__hostname", os_hostname);
+    XRS_EXPORT(module, isolate, "__tmpdir", os_tmpdir);
+    XRS_EXPORT(module, isolate, "__username", os_username);
+    XRS_EXPORT(module, isolate, "__homedir", os_homedir);
+    XRS_EXPORT(module, isolate, "__uid", os_uid);
+    XRS_EXPORT(module, isolate, "__gid", os_gid);
+    XRS_EXPORT(module, isolate, "__cpuCount", os_cpuCount);
+    XRS_EXPORT(module, isolate, "__ppid", os_ppid);
+    XRS_EXPORT(module, isolate, "__kill", os_kill);
+    XRS_EXPORT(module, isolate, "__totalMemory", os_totalMemory);
+    XRS_EXPORT(module, isolate, "__freeMemory", os_freeMemory);
+    XRS_EXPORT(module, isolate, "__uptime", os_uptime);
+    XRS_EXPORT(module, isolate, "__loadavg", os_loadavg);
+    XRS_EXPORT(module, isolate, "__clock", os_clock);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
+    XRS_EXPORT(module, isolate, "__exec", os_exec);
+    XRS_EXPORT(module, isolate, "__spawn", os_spawn);
     xr_module_add_export(isolate, module, "platform", xrs_string_value_c(isolate, get_platform()));
     xr_module_add_export(isolate, module, "arch", xrs_string_value_c(isolate, get_arch()));
     xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, get_sep()));

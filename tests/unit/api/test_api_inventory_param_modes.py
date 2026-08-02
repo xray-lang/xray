@@ -100,6 +100,71 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             signatures[("Process", "configure", "method")],
         )
 
+    def test_pure_stdlib_inventory_joins_multiline_member_signatures(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-multiline.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "jobs"
+            module_dir.mkdir(parents=True)
+            (module_dir / "jobs.xr").write_text(
+                "\n".join(
+                    [
+                        "export class Job {",
+                        "    constructor(name: string, retries: int,",
+                        "                run: (int) -> string) {",
+                        "        this.name = name",
+                        "    }",
+                        "    static create(name: string,",
+                        "                  run: (int) -> string) -> Job {",
+                        "        return Job(name, 0, run)",
+                        "    }",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+            signatures = {
+                (item["namespace"], item["name"], item["kind"]): item["signature"]
+                for item in items
+            }
+
+        self.assertEqual(
+            "(name: string, retries: int, run: (int) -> string): ()",
+            signatures[("Job", "constructor", "method")],
+        )
+        self.assertEqual(
+            "(name: string, run: (int) -> string): Job",
+            signatures[("Job", "create", "static-method")],
+        )
+
+    def test_pure_stdlib_inventory_joins_multiline_top_level_signatures(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-top-multiline.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "jobs"
+            module_dir.mkdir(parents=True)
+            (module_dir / "jobs.xr").write_text(
+                "\n".join(
+                    [
+                        "export fn schedule(name: string,",
+                        "                   run: (int) -> string) -> string {",
+                        "    return run(1)",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+
+        self.assertEqual(1, len(items))
+        self.assertEqual("schedule", items[0]["name"])
+        self.assertEqual(
+            "(name: string, run: (int) -> string): string", items[0]["signature"]
+        )
+
     def test_pure_stdlib_inventory_reads_aligned_structs(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xray-api-inventory-aligned-struct.") as tmp:
             root = Path(tmp)

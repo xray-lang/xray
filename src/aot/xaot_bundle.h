@@ -12,6 +12,7 @@
 #define XAOT_BUNDLE_H
 
 #include "xaot_abi.h"
+#include "xaot_artifact.h"
 #include "xaot_class_layout.h"
 #include "xaot_container.h"
 #include "xaot_entry_plan.h"
@@ -1728,7 +1729,7 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
-    bool emit_program_main; /* executable closed world vs library export roots */
+    XaotArtifactKind artifact_kind;
     uint32_t target_simd_features;
     XaotTargetCapabilityProvider target_provider;
     XrEntryPlan entry_plan;

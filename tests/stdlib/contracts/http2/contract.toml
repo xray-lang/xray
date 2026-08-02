@@ -1,0 +1,20 @@
+schema = 1
+module = "http2"
+contract_revision = 2
+legacy_commit = "1134404162e287db158ec1ce805700114b47cecb"
+legacy_oracle = "executable"
+legacy_cases_manifest = "tests/stdlib/contracts/http2/legacy_expected.jsonl"
+legacy_public_surface = ["http.HttpVersion.Http2"]
+intentional_semantic_changes = [
+  "HTTP/2 transport ownership moved from the monolithic http module to the built-in http2 standard module",
+  "supported and request expose one bare-name standard-module capability and data-plane boundary",
+]
+known_legacy_bugs = []
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/http2/diff_cases.txt"
+benchmark_suite = "stdlib/http2"
+
+[[legacy_behavior]]
+id = "http2-availability"
+classification = "required"
+new_behavior = "the HttpVersion.Http2 typed selector remains stable while capability moves to http2.supported"

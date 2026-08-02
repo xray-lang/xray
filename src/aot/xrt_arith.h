@@ -412,8 +412,8 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             }
             if (v.heap_type != XR_TINSTANCE || !v.ptr)
                 break;
-            XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
-            const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
+            XrObjHeader *hdr = (XrObjHeader *) v.ptr;
+            const XrtTypeInfo *ti = xrt_type_info(xrt_aot_class_type_id(hdr));
             const char *type_name = ti ? xrt_type_display_name(ti->type_id) : "<object>";
             const XrtTypeDeriveInfo *di = ti ? xrt_type_derive_info(ti->type_id) : NULL;
             xrt_fmt_cstr(sb, type_name ? type_name : "<object>");
@@ -617,8 +617,8 @@ static inline XrValue xrt_typename(XrValue v) {
                                                              : xr_str_lit(&xs_json);
             }
             if (v.ptr && v.heap_type == XR_TINSTANCE) {
-                XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
-                const char *name = hdr ? xrt_type_display_name(hdr->type) : NULL;
+                XrObjHeader *hdr = (XrObjHeader *) v.ptr;
+                const char *name = hdr ? xrt_type_display_name(xrt_aot_class_type_id(hdr)) : NULL;
                 return name ? xr_box_str(name) : xr_str_lit(&xs_object);
             }
             return xr_str_lit(&xs_object);

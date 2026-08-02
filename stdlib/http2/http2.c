@@ -12,8 +12,8 @@
  */
 
 #include "../../src/base/xmalloc.h"
-#include "http_internal.h"
-#include "../net/tls.h"
+#include "http2_internal.h"
+#include "../../stdlib/net/tls.h"
 #include "../../src/base/xhash.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -54,8 +54,15 @@ XR_FUNC struct XrModule *xr_load_module_test_yield(struct XrVMRuntime *isolate);
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_load_module_net(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_load_module_http(struct XrVMRuntime *isolate);
-XR_FUNC struct XrModule *xr_load_module_ws(struct XrVMRuntime *isolate);
 #endif  // ========== Crypto Module ==========
+
+#if defined(XR_HAS_WS) || !defined(XR_STDLIB_MODULAR)
+XR_FUNC struct XrModule *xr_load_module_ws(struct XrVMRuntime *isolate);
+#endif
+
+#if defined(XR_HAS_HTTP2) || !defined(XR_STDLIB_MODULAR)
+XR_FUNC struct XrModule *xr_load_module_http2(struct XrVMRuntime *isolate);
+#endif
 
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_load_module_crypto(struct XrVMRuntime *isolate);

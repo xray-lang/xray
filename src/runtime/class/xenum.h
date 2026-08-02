@@ -75,9 +75,10 @@ typedef struct XrEnumType {
 
 /* ========== Creation ========== */
 
-XR_FUNC XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_names,
-                                     int count);
-XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core, const char *name,
+XR_FUNC XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *nominal_owner, const char *name,
+                                     char **member_names, int count);
+XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core,
+                                          const char *nominal_owner, const char *name,
                                           char **member_names, int count);
 
 XR_FUNC XrEnumCtor *xr_enum_ctor_new(XrVMRuntime *X, const char *enum_name, const char *member_name,

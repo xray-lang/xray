@@ -975,7 +975,7 @@ static bool native_parse_targets(XrNativePackagePlan *plan, XrTomlValue *native)
 }
 
 static bool native_parse_exports(XrNativePackagePlan *plan, XrTomlValue *root) {
-    static const char *const keys[] = {"xray", "symbol", "visibility", "header"};
+    static const char *const keys[] = {"xray", "symbol", "visibility", "header", "abi"};
     XrTomlValue *group = xtoml_get_table(root, "export");
     XrTomlValue *array = group ? xtoml_get_array(group, "c") : NULL;
     if (!array)
@@ -997,6 +997,7 @@ static bool native_parse_exports(XrNativePackagePlan *plan, XrTomlValue *root) {
         item->xray_name = native_dup_string(table, "xray");
         item->symbol = native_dup_string(table, "symbol");
         item->visibility = native_dup_string(table, "visibility");
+        item->abi = native_dup_string(table, "abi");
         item->header = xtoml_get_bool_or(table, "header", false);
         if (!item->xray_name || !item->xray_name[0] || !native_valid_c_identifier(item->symbol))
             return native_fail(plan, "E-EXPORT-SCHEMA: %s requires xray and C identifier symbol",
@@ -1004,6 +1005,11 @@ static bool native_parse_exports(XrNativePackagePlan *plan, XrTomlValue *root) {
         if (item->visibility && strcmp(item->visibility, "default") != 0 &&
             strcmp(item->visibility, "hidden") != 0)
             return native_fail(plan, "E-EXPORT-SCHEMA: %s.visibility must be default or hidden",
+                               where);
+        if (item->abi && strcmp(item->abi, "native") != 0 &&
+            strcmp(item->abi, "hosted-vm-v1") != 0)
+            return native_fail(plan,
+                               "E-EXPORT-SCHEMA: %s.abi must be native or hosted-vm-v1",
                                where);
         for (int j = 0; j < i; j++) {
             if (strcmp(plan->exports[j].xray_name, item->xray_name) == 0 ||
@@ -1147,6 +1153,7 @@ static void native_refresh_plan_fingerprint(XrNativePackagePlan *plan) {
         fingerprint = native_hash_text(fingerprint, plan->exports[i].xray_name);
         fingerprint = native_hash_text(fingerprint, plan->exports[i].symbol);
         fingerprint = native_hash_text(fingerprint, plan->exports[i].visibility);
+        fingerprint = native_hash_text(fingerprint, plan->exports[i].abi);
         fingerprint = native_hash_bytes(fingerprint, &plan->exports[i].header,
                                         sizeof(plan->exports[i].header));
     }
@@ -1313,6 +1320,7 @@ void xr_native_package_plan_free(XrNativePackagePlan *plan) {
         xr_free(plan->exports[i].xray_name);
         xr_free(plan->exports[i].symbol);
         xr_free(plan->exports[i].visibility);
+        xr_free(plan->exports[i].abi);
     }
     xr_free(plan->exports);
     for (uint32_t i = 0; i < plan->link_symbol_count; i++) {
@@ -1757,9 +1765,10 @@ void xr_native_package_explain(const XrNativePackagePlan *plan, FILE *out) {
                 target->cpu_feature ? target->cpu_feature : "baseline");
     }
     for (uint32_t i = 0; i < plan->export_count; i++)
-        fprintf(out, "export.c %s -> %s visibility=%s header=%s\n", plan->exports[i].xray_name,
-                plan->exports[i].symbol,
+        fprintf(out, "export.c %s -> %s visibility=%s abi=%s header=%s\n",
+                plan->exports[i].xray_name, plan->exports[i].symbol,
                 plan->exports[i].visibility ? plan->exports[i].visibility : "default",
+                plan->exports[i].abi ? plan->exports[i].abi : "native",
                 plan->exports[i].header ? "yes" : "no");
     for (uint32_t i = 0; i < plan->link_symbol_count; i++)
         fprintf(out, "link.symbol %s section=%s used=%s weak=%s\n", plan->link_symbols[i].xray_name,

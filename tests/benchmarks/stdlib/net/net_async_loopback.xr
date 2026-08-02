@@ -1,0 +1,15 @@
+// Deterministic local client-I/O benchmark. The runner owns the echo peer.
+import net
+import os
+import strconv
+
+var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+var conn = net.dial("127.0.0.1", port, 5000)!
+var attempts = 64
+var completed = 0
+while (completed < attempts) {
+    net.write(conn, "ping")
+    if (net.read(conn, 4)! == "ping") { completed = completed + 1 }
+}
+net.close(conn)
+print(completed)

@@ -84,9 +84,11 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
  *
  * AOT objects carry the unified XrObjHeader (src/shared/xr_obj_header.h), the
  * same 16-byte header the VM/AOT runtime uses, so a value crossing the
- * coroutine boundary needs no re-shelling. `type` is the type-table tag for
- * destructor dispatch; `extra` carries execution/immortal storage flags and
- * XR_OBJ_HAS_DTOR; `refcount` is the 0-based RC (rc == N means N+1 live refs).
+ * coroutine boundary needs no re-shelling. `type` is always the canonical
+ * XrObjType object-kind tag; `extra` carries execution/immortal storage flags
+ * and XR_OBJ_HAS_DTOR; `refcount` is the 0-based RC (rc == N means N+1 live
+ * refs). AOT-local class identity is encoded separately in `_rsv` and must
+ * never be confused with the canonical object-kind namespace.
  * ========================================================================= */
 
 #define XRT_ARC_HDR(p) ((XrObjHeader *) ((char *) (p) - sizeof(XrObjHeader)))
@@ -118,6 +120,32 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_NET_CONN 11u
 #define XRT_ARC_KIND_NET_LISTENER 12u
 #define XRT_ARC_KIND_JSON 13u
+
+/* `_rsv` is an ABI-stable auxiliary word whose meaning is selected by the
+ * object's storage/runtime domain. Generic prefix allocations use the small
+ * XRT_ARC_KIND_* values for builtin destructor routing. Embedded AOT-native
+ * class instances use a disjoint tagged encoding for the compilation-local
+ * class table id. Keeping that id out of XrObjHeader.type is what makes the
+ * object header's type field canonical across VM and AOT. */
+#define XRT_AOT_CLASS_TYPE_TAG 0x80000000u
+#define XRT_AOT_CLASS_TYPE_TAG_MASK 0xFFFF0000u
+#define XRT_AOT_CLASS_TYPE_ID_MASK 0x0000FFFFu
+
+static inline uint16_t xrt_aot_class_type_id(const XrObjHeader *hdr) {
+    if (!hdr || hdr->type != XR_TINSTANCE ||
+        (hdr->extra & XR_OBJ_AOT_NATIVE) == 0 ||
+        (hdr->_rsv & XRT_AOT_CLASS_TYPE_TAG_MASK) != XRT_AOT_CLASS_TYPE_TAG)
+        return 0;
+    return (uint16_t) (hdr->_rsv & XRT_AOT_CLASS_TYPE_ID_MASK);
+}
+
+static inline void xrt_aot_class_type_set(XrObjHeader *hdr, uint16_t type_id) {
+    if (!hdr || type_id == 0) {
+        fprintf(stderr, "xrt_aot_class_type_set: class type id must be non-zero\n");
+        abort();
+    }
+    hdr->_rsv = XRT_AOT_CLASS_TYPE_TAG | (uint32_t) type_id;
+}
 #define XRT_ARC_KIND_STRBUF 14u
 #define XRT_ARC_KIND_ITERATOR 15u
 #define XRT_ARC_KIND_TUPLE 16u
@@ -435,7 +463,7 @@ static inline void xrt_stack_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
-    if (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)
+    if (v.tag == XR_TAG_PTR && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)
         return 1;
     if (XR_IS_ARRAY_REF(v))
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
@@ -450,10 +478,10 @@ static inline int xrt_arc_value_has_header(XrValue v) {
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
-    return v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-                   (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0
-               ? (XrObjHeader *) v.ptr
-               : XRT_ARC_HDR(v.ptr);
+    if (v.tag == XR_TAG_PTR &&
+        (v.heap_type == XR_TINSTANCE || (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0))
+        return (XrObjHeader *) v.ptr;
+    return XRT_ARC_HDR(v.ptr);
 }
 
 /* ========== --rc-guard debug codegen (task 219 P4) ==========
@@ -514,7 +542,7 @@ static inline void xrt_retain(XrValue v) {
         return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
         (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
+         (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_retain(v);
         return;
     }
@@ -576,9 +604,13 @@ static inline void xrt_array_ref_release_owned(XrValue v);
  * destructor releases child references, which may recurse back into
  * xrt_release. */
 static inline void xrt_finalize_payload(XrObjHeader *hdr) {
-    void *obj = (char *) hdr + sizeof(XrObjHeader);
+    void *obj = (hdr->extra & XR_OBJ_AOT_NATIVE) ? (void *) hdr
+                                                 : (char *) hdr + sizeof(XrObjHeader);
     if (hdr->extra & XR_OBJ_HAS_DTOR) {
-        if (hdr->_rsv != XRT_ARC_KIND_NONE)
+        uint16_t class_type_id = xrt_aot_class_type_id(hdr);
+        if (class_type_id != 0)
+            xrt_dispatch_destructor(class_type_id, obj);
+        else if (hdr->_rsv != XRT_ARC_KIND_NONE)
             xrt_dispatch_builtin_destructor(hdr->_rsv, obj);
         else
             xrt_dispatch_destructor(hdr->type, obj);
@@ -700,7 +732,7 @@ static inline void xrt_release(XrValue v) {
         return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
         (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-         (v.flags & XRT_VALUE_FLAG_EMBEDDED_HEADER) != 0)) {
+         (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_release(v);
         return;
     }

@@ -17,7 +17,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "../../../stdlib/http/http_internal.h"
+#include "../../../stdlib/http2/http2_internal.h"
 
 /* ========== Callback Harness ========== */
 

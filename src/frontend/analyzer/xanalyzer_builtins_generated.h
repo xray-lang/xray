@@ -121,9 +121,9 @@ static const XaBuiltinEnumVariant g_gen_Coro_corometric_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_Coro_enums[] = {
-    {"CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", g_gen_Coro_corostate_variants, 5, UINT32_C(2619776588)},
-    {"CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", g_gen_Coro_corogroupkey_variants, 2, UINT32_C(2968543505)},
-    {"CoroMetric", "Metric used to rank coroutine diagnostic snapshots", g_gen_Coro_corometric_variants, 2, UINT32_C(3802670327)},
+    {"CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", g_gen_Coro_corostate_variants, 5, UINT32_C(2882116571)},
+    {"CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", g_gen_Coro_corogroupkey_variants, 2, UINT32_C(2434143071)},
+    {"CoroMetric", "Metric used to rank coroutine diagnostic snapshots", g_gen_Coro_corometric_variants, 2, UINT32_C(4039818693)},
 };
 #define GEN_CORO_ENUM_COUNT 3
 
@@ -204,7 +204,7 @@ static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_cluster_enums[] = {
-    {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(3723918825)},
+    {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(2784952505)},
 };
 #define GEN_CLUSTER_ENUM_COUNT 1
 
@@ -274,15 +274,15 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 10
 
-// http module functions
-static const XaBuiltinMember g_gen_http_functions[] = {
-    {"__h2Supported", "(): bool", "Whether this backend provides the internal HTTP/2 data plane", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__h2Request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Internal typed HTTP/2 data-plane request", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+// http2 module functions
+static const XaBuiltinMember g_gen_http2_functions[] = {
+    {"supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Execute one typed HTTP/2 request", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_HTTP_FUNCTION_COUNT 2
+#define GEN_HTTP2_FUNCTION_COUNT 2
 
-// io.FileStat handle fields
-static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
+// io.__FileStat handle fields
+static const XaBuiltinHandleField g_gen_io___filestat_fields[] = {
     {"size", "int", true},
     {"mode", "int", true},
     {"mtime", "int", true},
@@ -296,48 +296,48 @@ static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_io_handles[] = {
-    {"FileStat", g_gen_io_filestat_fields, 10, NULL, 0},
+    {"__FileStat", g_gen_io___filestat_fields, 10, NULL, 0},
 };
 #define GEN_IO_HANDLE_COUNT 1
 
 // io module functions
 static const XaBuiltinMember g_gen_io_functions[] = {
-    {"appendFile", "(path: Path, data: string): bool", "Append string to file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"chmod", "(path: Path, mode: int): bool", "Change file permissions", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"chdir", "(path: Path): bool", "Change working directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"copyFile", "(src: Path, dst: Path): bool", "Copy a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__appendFile", "(path: Path, data: string): bool", "Append string to file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__chmod", "(path: Path, mode: int): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copyFile", "(src: Path, dst: Path): bool", "Copy a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"exists", "(path: Path): bool", "Check if path exists", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__exists", "(path: Path): bool", "Check if path exists", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileClose", "(handle: int): bool", "Close an owned binary file handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileOpen", "(path: Path): int", "Open a file for binary reading and return an opaque handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileRead", "(handle: int, maxBytes: int): Array<byte>?", "Read at most maxBytes from an opaque binary stream; empty means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"fileSize", "(path: Path): int", "Get file size in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"isDir", "(path: Path): bool", "Check if path is a directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"isFile", "(path: Path): bool", "Check if path is a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"mkdir", "(path: Path): bool", "Create directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"mkdirp", "(path: Path): bool", "Create directory recursively", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileSize", "(path: Path): int", "Get file size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isDir", "(path: Path): bool", "Check if path is a directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__mkdirp", "(path: Path): bool", "Create directory recursively", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readDir", "(path: Path): Array<string>", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readDirRecursive", "(path: Path): Array<string>", "List directory entries recursively (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readFile", "(path: Path): string?", "Read entire file as string", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readFileBytes", "(path: Path): Array<byte>?", "Read entire file as byte array", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readLines", "(path: Path): Array<string>", "Read file as lines", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readStdin", "(): string?", "Read all data from standard input", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readStdinBytes", "(): Array<byte>?", "Read all standard input as binary bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readFileBytes", "(path: Path): Array<byte>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readLines", "(path: Path): Array<string>", "Read file as lines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readStdinBytes", "(): Array<byte>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"remove", "(path: Path): bool", "Remove a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"removeAll", "(path: Path): bool", "Remove directory recursively", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"rename", "(old: Path, new: Path): bool", "Rename a file", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"stat", "(path: Path): FileStat?", "Get file stat info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__remove", "(path: Path): bool", "Remove a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__removeAll", "(path: Path): bool", "Remove directory recursively", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__rename", "(old: Path, new: Path): bool", "Rename a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__stat", "(path: Path): __FileStat?", "Get file stat info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__tempDir", "(): string?", "Create temporary directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__tempFile", "(): string?", "Create temporary file (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"touch", "(path: Path): bool", "Create or update file timestamp", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"writeFileBytes", "(path: Path, data: Array<byte>): bool", "Write byte array to file", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__touch", "(path: Path): bool", "Create or update file timestamp", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeFileBytes", "(path: Path, data: Array<byte>): bool", "Write byte array to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_IO_FUNCTION_COUNT 36
 
@@ -437,26 +437,26 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
 };
 #define GEN_MEM_FUNCTION_COUNT 33
 
-// net.UdpPacket handle fields
-static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
+// net.__UdpPacket handle fields
+static const XaBuiltinHandleField g_gen_net___udppacket_fields[] = {
     {"data", "string", true},
     {"host", "string", true},
     {"port", "int", true},
 };
 
 static const XaBuiltinHandle g_gen_net_handles[] = {
-    {"UdpPacket", g_gen_net_udppacket_fields, 3, NULL, 0},
+    {"__UdpPacket", g_gen_net___udppacket_fields, 3, NULL, 0},
 };
 #define GEN_NET_HANDLE_COUNT 1
 
-// net.CopyBidirectionalResult record fields
-static const XaBuiltinRecordField g_gen_net_copybidirectionalresult_record_fields[] = {
+// net.__CopyBidirectionalResult record fields
+static const XaBuiltinRecordField g_gen_net___copybidirectionalresult_record_fields[] = {
     {"aToB", "int"},
     {"bToA", "int"},
 };
 
 static const XaBuiltinRecord g_gen_net_records[] = {
-    {"CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net_copybidirectionalresult_record_fields, 2, true},
+    {"__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net___copybidirectionalresult_record_fields, 2, true},
 };
 #define GEN_NET_RECORD_COUNT 1
 
@@ -474,11 +474,11 @@ static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_net_enums[] = {
-    {"NetError", "Typed failure from native network operations", g_gen_net_neterror_variants, 10, UINT32_C(2619647518)},
+    {"NetError", "Typed failure from native network operations", g_gen_net_neterror_variants, 10, UINT32_C(2184710811)},
 };
 #define GEN_NET_ENUM_COUNT 1
 
-static const char *g_gen_net_copybidirectional_8_errors[] = {
+static const char *g_gen_net___copybidirectional_8_errors[] = {
     "NetError.Timeout",
     "NetError.Closed",
     "NetError.Reset",
@@ -493,82 +493,81 @@ static const char *g_gen_net_copybidirectional_8_errors[] = {
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
-    {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"copyBidirectional", "(a: NetConn, b: NetConn): CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, false, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net_copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"close", "(handle: NetConn | NetListener): ()", "Close a connection or listener", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"fd", "(handle: NetConn | NetListener): int", "Get fd from handle", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"setReadDeadline", "(conn: NetConn, deadline: int): bool", "Set read deadline in monotonic ms", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Set write deadline in monotonic ms", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"setDeadline", "(conn: NetConn, deadline: int): bool", "Set read and write deadlines in monotonic ms", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Set accept deadline in monotonic ms", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"lastError", "(handle: NetConn | NetListener): string?", "Return the last network error name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"lastErrno", "(handle: NetConn | NetListener): int", "Return the last system errno", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"lookup", "(hostname: string): string?", "DNS lookup", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"hasTLS", "(): bool", "Check if TLS support is available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"upgradeTLS", "(conn: NetConn, hostname: string, timeout?: int): NetConn?", "Upgrade connection to TLS", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
-    {"udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"recvFrom", "(handle: NetConn, maxlen?: int): UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fd", "(handle: NetConn | NetListener): int", "Get fd from handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setReadDeadline", "(conn: NetConn, deadline: int): bool", "Set read deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Set write deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setDeadline", "(conn: NetConn, deadline: int): bool", "Set read and write deadlines in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Set accept deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastError", "(handle: NetConn | NetListener): NetError?", "Return the last typed network error", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__lastErrno", "(handle: NetConn | NetListener): int", "Return the last system errno", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lookup", "(hostname: string): string?", "DNS lookup", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__hasTLS", "(): bool", "Check if TLS support is available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__upgradeTLS", "(conn: NetConn, hostname: string, timeout?: int): NetConn?", "Upgrade connection to TLS", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
+    {"__udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_NET_FUNCTION_COUNT 27
 
-// os.ExecResult handle fields
-static const XaBuiltinHandleField g_gen_os_execresult_fields[] = {
+// os.__ExecResult handle fields
+static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {
     {"stdout", "string", true},
     {"stderr", "string", true},
     {"exitCode", "int", true},
 };
 
 static const XaBuiltinHandle g_gen_os_handles[] = {
-    {"ExecResult", g_gen_os_execresult_fields, 3, NULL, 0},
+    {"__ExecResult", g_gen_os___execresult_fields, 3, NULL, 0},
 };
 #define GEN_OS_HANDLE_COUNT 1
 
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
-    {"getenv", "(name: string): string?", "Get environment variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"setenv", "(name: string, value: string): bool", "Set environment variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"unsetenv", "(name: string): bool", "Unset environment variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"environ", "(): Map<string, string>", "Get all environment variables", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"exit", "(code?: int): ()", "Exit process", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"getpid", "(): int", "Get process ID", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"getcwd", "(): string", "Get current working directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"chdir", "(path: Path): bool", "Change working directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"hostname", "(): string", "Get hostname", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"tmpdir", "(): string", "Get temporary directory path", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"username", "(): string?", "Get current user name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"homedir", "(): string?", "Get user home directory", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"uid", "(): int", "Get user ID", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"gid", "(): int", "Get group ID", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"cpuCount", "(): int", "Get number of CPU cores", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"ppid", "(): int", "Get parent process ID", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"kill", "(pid: int, signal?: int): bool", "Send signal to process", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"totalMemory", "(): int", "Get total system memory in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"freeMemory", "(): int", "Get available system memory in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"uptime", "(): float", "Get system uptime in seconds", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"loadavg", "(): Array<float>", "Get system load averages (1, 5, 15 min)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"clock", "(): float", "Get process CPU time in seconds", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sleep", "(ms: int): ()", "Sleep for milliseconds", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"exec", "(cmd: string): ExecResult?", "Execute shell command", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"spawn", "(program: string, args: Array<string>): ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__getenv", "(name: string): string?", "Get environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__setenv", "(name: string, value: string): bool", "Set environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unsetenv", "(name: string): bool", "Unset environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__environ", "(): Map<string, string>", "Get all environment variables", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__exit", "(code?: int): ()", "Exit process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__getpid", "(): int", "Get process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__tmpdir", "(): string", "Get temporary directory path", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__username", "(): string?", "Get current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__homedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__uid", "(): int", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__gid", "(): int", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cpuCount", "(): int", "Get number of CPU cores", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__ppid", "(): int", "Get parent process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__kill", "(pid: int, signal?: int): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__totalMemory", "(): int", "Get total system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__freeMemory", "(): int", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__uptime", "(): float", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__loadavg", "(): Array<float>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__clock", "(): float", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sleep", "(ms: int): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     // Module constants (is_method=false)
     {"platform", ": string", "Current operating system name", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"arch", ": string", "Current CPU architecture name", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"sep", ": string", "Platform path separator", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"eol", ": string", "Platform end-of-line string", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_OS_FUNCTION_COUNT 29
+#define GEN_OS_FUNCTION_COUNT 28
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
@@ -706,7 +705,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_records, GEN_CLUSTER_RECORD_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},

@@ -101,6 +101,23 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     xr_fixed_heap_cleanup(&core->fixed_heap);
 }
 
+void xr_runtime_core_destroy_managed_storage(XrRuntimeCore *core) {
+    if (!core)
+        return;
+
+    xr_runtime_core_destroy_coro_storage(core);
+
+    /* Root finalizers may release module-static values and interned strings.
+     * Both the fixed heap and global string pool therefore outlive this walk.
+     * Clearing local_heap is also the idempotence marker used by core_delete
+     * after an isolate has already performed the ordered shutdown. */
+    if (core->root_alloc.local_heap) {
+        core->root_alloc.local_heap = NULL;
+        xr_coro_heap_teardown_inplace(&core->root_heap);
+    }
+    xr_runtime_core_cleanup_fixed_heap(core);
+}
+
 struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
     return core ? core->vm_owner : NULL;
 }
@@ -158,12 +175,10 @@ bool xr_runtime_core_release_aot_native_value(XrRuntimeCore *core, XrObjHeader *
         return false;
     }
     XrValue value = xr_make_ptr_val(obj);
-    /* AOT Record/Json objects carry an embedded-at-zero header.  Reconstruct
-     * that descriptor bit when a VM-neutral Task/shared owner releases the
-     * final reference; otherwise the AOT ARC hook would look for a prepended
-     * header and free through the wrong address. */
-    if (XR_OBJ_GET_TYPE(obj) == XR_TINSTANCE)
-        value.flags |= XR_VALUE_FLAG_EMBEDDED_HEADER;
+    /* The VM-neutral owner has only the canonical object header, not the AOT
+     * nominal heap_type.  Preserve the header-at-pointer fact explicitly so
+     * the AOT release hook never guesses a prepended-header representation. */
+    value.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
     core->aot_native_value_release(value);
     return true;
 }
@@ -174,11 +189,7 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
 
     xr_runtime_core_free_tmp_strbuf(core);
 
-    xr_runtime_core_destroy_coro_storage(core);
-    /* Root heap first: its finalizers may still reach module-static objects,
-     * which the fixed heap is about to tear down. */
-    xr_runtime_core_destroy_root_storage(core);
-    xr_runtime_core_cleanup_fixed_heap(core);
+    xr_runtime_core_destroy_managed_storage(core);
 
     if (core->global_string_pool) {
         xr_global_pool_free(core->global_string_pool);

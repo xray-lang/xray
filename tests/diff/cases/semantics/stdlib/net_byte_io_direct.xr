@@ -3,10 +3,12 @@ import net
 fn echoThree(listener: move NetListener) -> int {
     var conn = net.accept(listener)!
     var buffer = Array<byte>(8)
-    var read = net.readInto(conn, buffer, 3)
+    var read = net.readInto(conn, ref buffer, 3)
     if (read > 0) {
         net.writeBytes(conn, buffer)
     }
+    var drain = Array<byte>(8)
+    while (net.readInto(conn, ref drain, 8) > 0) {}
     net.close(conn)
     net.close(listener)
     return read
@@ -19,9 +21,10 @@ var client = net.dial("127.0.0.1", port, 1000)!
 
 var payload = Array<byte>([0xff, 0x00, 0x7f, 0x41])
 print(net.writeBytes(client, payload))
+net.shutdownWrite(client)
 
 var response = Array<byte>(8)
-var read = net.readInto(client, response, 8)
+var read = net.readInto(client, ref response, 8)
 print(read)
 print(response[0])
 print(response[1])

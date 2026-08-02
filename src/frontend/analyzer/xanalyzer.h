@@ -237,6 +237,13 @@ XR_FUNC bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer);
 // member-level narrowing only applies to modules that are already allowed.
 XR_FUNC bool xa_freestanding_stdlib_module_known(const char *module_name);
 XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
+
+/* Stable nominal-type owner for a declaration file.  This is resolved from
+ * the module graph, not from the mutable module currently driving a later
+ * inference pass; imported declarations may be revisited while another
+ * module is current. */
+/* Returns an owned canonical owner string; caller frees with xr_free(). */
+XR_FUNC char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name);
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name);

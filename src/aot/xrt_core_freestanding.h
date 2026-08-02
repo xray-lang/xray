@@ -229,22 +229,7 @@ baseline:
 #define XR_FFI_ASMNAME(s) s
 #endif
 
-typedef struct XrValue {
-    union {
-        struct {
-            uint8_t tag;
-            uint8_t flags;
-            uint16_t heap_type;
-            uint32_t ext;
-        };
-        uint64_t descriptor;
-    };
-    union {
-        int64_t i;
-        double f;
-        void *ptr;
-    };
-} XrValue;
+#include "xray_value_abi.h"
 
 #define XR_TAG_NULL 0
 #define XR_TAG_BOOL 1

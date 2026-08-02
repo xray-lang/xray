@@ -269,6 +269,8 @@ XR_FUNC void xr_module_add_export(struct XrVMRuntime *isolate, XrModule *module,
                                   XrValue value);
 XR_FUNC void xr_module_add_export_sym(struct XrVMRuntime *isolate, XrModule *module, SymbolId sym,
                                       XrValue value, bool is_const);
+XR_FUNC bool xr_module_set_initializing_export(struct XrVMRuntime *isolate, XrModule *module,
+                                               const char *name, XrValue value, bool is_const);
 XR_FUNC XrValue xr_module_get_export(struct XrVMRuntime *isolate, XrModule *module,
                                      const char *name);
 XR_FUNC void xr_module_build_export_index(XrModule *module);

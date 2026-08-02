@@ -926,8 +926,9 @@ static char *test_failed_codegen_result(bool *had_error) {
 
 /* Generate C code for Xi IR into an xr_malloc-owned string.
  * Caller releases the returned string with xr_free(). */
-static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name, bool *had_error,
-                                              XiCgenCoroFrameStats *coro_stats) {
+static char *generate_c_with_status_and_stats_for_artifact(
+    XiFunc *ir, const char *module_name, bool *had_error,
+    XiCgenCoroFrameStats *coro_stats, XaotArtifactKind artifact_kind) {
     assert(ir != NULL);
 
     if (!test_prepare_backend_ir(ir)) {
@@ -956,6 +957,7 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    xi_cgen_ctx_set_artifact_kind(ctx, artifact_kind);
 
     char *buf = NULL;
     size_t bufsz = 0;
@@ -978,6 +980,13 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
     }
 
     return buf;
+}
+
+static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name,
+                                              bool *had_error,
+                                              XiCgenCoroFrameStats *coro_stats) {
+    return generate_c_with_status_and_stats_for_artifact(
+        ir, module_name, had_error, coro_stats, XAOT_ARTIFACT_EXECUTABLE);
 }
 
 static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *module_name,
@@ -6675,8 +6684,9 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "inherited class native layout should generate");
 
-    assert(contains(code, "typedef struct xrt_native_test_Shape { int64_t f0; }") &&
-           "base class should emit native scalar layout");
+    assert(contains(code,
+                    "typedef struct xrt_native_test_Shape { XrObjHeader hdr; int64_t f0; }") &&
+           "base class should embed the canonical object header at offset zero");
     assert(contains(code, "typedef struct xrt_native_test_Rect { xrt_native_test_Shape base; "
                           "int64_t f1; int64_t f2; }") &&
            "derived class should embed the base layout as a prefix");
@@ -9358,6 +9368,374 @@ TEST(cgen_coro_await_clones_tagged_result) {
     xi_func_free(ir);
 }
 
+TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
+    const char *src =
+        "fn bridge(values: Array<string>) -> Array<string> { return values }\n"
+        "bridge([\"alpha\", \"beta\"])\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted string-array fixture compiled");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted string-array bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_string_array_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted string-array C bridge generated");
+    TEST_REQUIRE(contains(code, "XrHostedFragmentArrayView _hosted_array_view_0"),
+                 "VM array is inspected through the hosted container ABI");
+    TEST_REQUIRE(contains(code, "context->ops->array_get"),
+                 "reference-bearing elements use host array access");
+    TEST_REQUIRE(contains(code, "xrt_str_from_slice"),
+                 "VM strings are copied into AOT-owned elements");
+    TEST_REQUIRE(contains(code, "context->ops->array_new"),
+                 "AOT result materializes a VM-owned array");
+    TEST_REQUIRE(contains(code, "context->ops->array_set"),
+                 "AOT string results populate through host ownership operations");
+    TEST_REQUIRE(contains(code, "xrt_release(_hosted_arg_0)"),
+                 "temporary AOT argument graph is released after the call");
+    const char *hosted_entry = strstr(code, "xr_hosted_string_array_bridge(");
+    const char *hosted_initializer = strstr(code, "bool xr_hosted_fragment_initialize(");
+    const char *runtime_scope =
+        hosted_entry ? strstr(hosted_entry, "_hosted_previous_runtime_context") : NULL;
+    TEST_REQUIRE(hosted_entry && hosted_initializer &&
+                     (!runtime_scope || runtime_scope >= hosted_initializer),
+                 "object-only hosted export keeps the zero-scope direct C fast path");
+    const char *hosted_init_context =
+        strstr(hosted_initializer, "xrt_hosted_aot_context = &_hosted_runtime_context;");
+    const char *hosted_init_call =
+        hosted_init_context ? strstr(hosted_init_context, "(NULL);\n") : NULL;
+    const char *hosted_init_check =
+        hosted_init_context ? strstr(hosted_init_context, "xrt_has_pending_error()") : NULL;
+    TEST_REQUIRE(hosted_init_call && hosted_init_check && hosted_init_call < hosted_init_check,
+                 "hosted initialization executes the module graph before exports");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_runtime_capability_installs_scoped_vm_context) {
+    const char *src =
+        "fn bridge(value: int) -> int {\n"
+        "    var cell = Atomic(value)\n"
+        "    return cell.load(Ordering.Relaxed)\n"
+        "}\n"
+        "bridge(7)\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted Atomic fixture compiled");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted Atomic bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_atomic_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted Atomic C bridge generated");
+    TEST_REQUIRE(contains(code, "if (!context->runtime_ops)"),
+                 "runtime-dependent hosted export rejects a missing VM context");
+    TEST_REQUIRE(contains(code, "_hosted_previous_runtime_context"),
+                 "runtime-dependent hosted export installs a scoped VM context");
+    TEST_REQUIRE(contains(code,
+                          "xrt_hosted_aot_context = _hosted_previous_runtime_context"),
+                 "runtime-dependent hosted export restores the previous VM context");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_coroutine_export_publishes_resumable_continuation) {
+    const char *src =
+        "fn bridge(value: int) -> int {\n"
+        "    Coro.yield()\n"
+        "    return value\n"
+        "}\n"
+        "var marker = 1\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted coroutine fixture compiled");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted coroutine bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_coroutine_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted coroutine C bridge generated");
+    TEST_REQUIRE(contains(code, "void *_hosted_continuation = context->continuation"),
+                 "hosted coroutine accepts an opaque continuation on resume");
+    TEST_REQUIRE(contains(code, "if (_hosted_continuation)"),
+                 "hosted coroutine distinguishes first entry from resume");
+    TEST_REQUIRE(contains(code, "goto _hosted_resume"),
+                 "hosted coroutine skips argument materialization when resuming");
+    TEST_REQUIRE(contains(code, "_aot_frame_new"),
+                 "hosted coroutine allocates a generated AOT frame on first entry");
+    TEST_REQUIRE(contains(code, "_aot_resume"),
+                 "hosted coroutine re-enters through the canonical resume function");
+    TEST_REQUIRE(contains(code, "context->signal->continuation = _hosted_continuation"),
+                 "blocked or yielded execution publishes the owned continuation");
+    TEST_REQUIRE(contains(code, "context->signal->suspend_kind ="),
+                 "hosted coroutine distinguishes blocked and cooperative yield");
+    TEST_REQUIRE(contains(code, "_aot_release(_hosted_continuation, NULL)"),
+                 "terminal execution releases the generated frame exactly once");
+    TEST_REQUIRE(contains(code, "bool xr_hosted_fragment_initialize("),
+                 "hosted artifact exposes an explicit dependency initializer");
+    TEST_REQUIRE(contains(code, "xrt_hosted_aot_context = &_hosted_runtime_context"),
+                 "hosted initialization installs the borrowed VM runtime context");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_class_boundary_uses_nominal_opaque_proxy) {
+    const char *src =
+        "class Box {\n"
+        "    value: int\n"
+        "    constructor(value: int) { this.value = value }\n"
+        "}\n"
+        "fn bridge(value: Box) -> Box { return value }\n"
+        "bridge(Box(7))\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted class fixture compiled");
+    TEST_REQUIRE(ir->module != NULL, "hosted class fixture has module metadata");
+    ir->module->path = "E:\\repo\\stdlib\\objects\\objects.xr";
+    ir->module->name = "objects_deadbeef";
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted class bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_class_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted class C bridge generated");
+    TEST_REQUIRE(contains(code, "XrHostedFragmentObjectView _hosted_object_0"),
+                 "VM class proxy is unwrapped through the hosted object ABI");
+    TEST_REQUIRE(contains(code, "context->ops->object_view"),
+                 "class arguments never cast a VM instance layout in generated code");
+    TEST_REQUIRE(contains(code, "strcmp(_hosted_object_0.type_name, \"Box\")"),
+                 "class argument validates nominal type identity");
+    TEST_REQUIRE(contains(code, "strcmp(_hosted_object_0.nominal_owner, \"objects\")"),
+                 "class argument uses the source module's stable logical owner");
+    TEST_REQUIRE(contains(code, "context->ops->object_new"),
+                 "AOT class results transfer into a VM proxy");
+    TEST_REQUIRE(contains(code, "context->host, \"objects\", \"Box\", _hosted_result"),
+                 "class result publishes the same stable logical owner");
+    TEST_REQUIRE(contains(code, "xrt_release(_hosted_result)"),
+                 "failed proxy construction releases the owned AOT result");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_native_field_store_uses_portable_c_statements) {
+    const char *src =
+        "class Box {\n"
+        "    text: string\n"
+        "    constructor(text: string) { this.text = text }\n"
+        "}\n"
+        "fn setText(box: Box, text: string) {\n"
+        "    var target = box\n"
+        "    target.text = text\n"
+        "}\n"
+        "setText(Box(\"before\"), \"after\")\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted native field-store fixture compiled");
+
+    XiFunc *setter = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "setText") == 0) {
+            setter = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(setter != NULL, "hosted native field-store function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "setText",
+        .symbol = "xr_hosted_set_text",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    setter->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted native field-store C generated");
+    TEST_REQUIRE(contains(code, "_hosted_native_"),
+                 "native field store is hoisted to an ordinary scoped statement");
+    TEST_REQUIRE(!contains(code, "({ xrt_native_"),
+                 "hosted field store contains no GNU statement expression");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_normal_class_result_call_is_not_a_constructor) {
+    const char *src =
+        "class Box {\n"
+        "    value: int\n"
+        "    constructor(value: int) { this.value = value }\n"
+        "}\n"
+        "fn makeBox() -> Box { return Box(7) }\n"
+        "fn forward() -> Box { return makeBox() }\n"
+        "forward()\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted normal class-result call fixture compiled");
+
+    XiFunc *forward = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "forward") == 0) {
+            forward = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(forward != NULL, "hosted forwarding function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "forward",
+        .symbol = "xr_hosted_forward_box",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    forward->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(
+        ir, "test", &had_error, NULL, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted class-result forwarding C generated");
+    TEST_REQUIRE(contains(code, "makeBox"),
+                 "normal class-returning call remains a direct function call");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
+    const char *src = "class Box {\n"
+                      "    value: int\n"
+                      "    constructor(value: int) { this.value = value }\n"
+                      "}\n"
+                      "fn worker() -> Box {\n"
+                      "    Coro.yield()\n"
+                      "    return Box(41)\n"
+                      "}\n"
+                      "fn consume() -> int {\n"
+                      "    var task = go worker()\n"
+                      "    var box = await task\n"
+                      "    return box.value + 1\n"
+                      "}\n"
+                      "var task = go consume()\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT native-class await should generate");
+
+    const char *consume = strstr(code, "test_consume_");
+    const char *resume =
+        consume ? strstr(consume, "_aot_resume(void *raw_frame, const XrAotContext *ctx) {") : NULL;
+    const char *trace = resume ? strstr(resume, "test_consume_") : NULL;
+    trace = trace ? strstr(trace, "_aot_trace(void *frame") : NULL;
+    assert(resume != NULL && trace != NULL && "consume resume function should be emitted");
+
+    const char *await_call = strstr(resume, "xr_aot_await_task(ctx,");
+    assert(await_call != NULL && await_call < trace && "native-class await call should be emitted");
+    const char *slot = strstr(await_call, "xr_slot_xvalue_ptr(&_xr_await_boundary_v");
+    assert(slot != NULL && slot < trace && "native-class await must use a tagged boundary slot");
+    unsigned slot_id = 0;
+    assert(sscanf(slot, "xr_slot_xvalue_ptr(&_xr_await_boundary_v%u)", &slot_id) == 1 &&
+           "native-class await slot id should be readable");
+    char boundary_declaration[96];
+    char typed_declaration[64];
+    char bridge[96];
+    snprintf(boundary_declaration, sizeof(boundary_declaration),
+             "XrValue _xr_await_boundary_v%u = XR_NULL_VAL;", slot_id);
+    snprintf(typed_declaration, sizeof(typed_declaration), "void * v%u = 0;", slot_id);
+    snprintf(bridge, sizeof(bridge),
+             "xr_aot_bridge_value_to_xrt(_xr_await_boundary_v%u)", slot_id);
+    assert(contains_between(resume, await_call, boundary_declaration) &&
+           "await boundary slot must have dedicated XrValue storage");
+    assert(contains_between(resume, await_call, typed_declaration) &&
+           "native-class await result must retain its typed pointer local");
+    assert(contains_between(await_call, trace, bridge) &&
+           "native-class await result should bridge from the boundary temporary exactly once");
+    char transfer_promotion[96];
+    snprintf(transfer_promotion, sizeof(transfer_promotion),
+             "xrt_value_set_storage(xrt_box_obj(_inst), %u)",
+             (unsigned) XR_OBJ_STORAGE_TRANSFER);
+    assert(contains(code, transfer_promotion) &&
+           "fresh native-class Task results must be allocated into TRANSFER storage by plan");
+    assert(contains(code, "{ XrObjHeader hdr; int64_t f0; }") &&
+           "native-class values must use the canonical header-at-value-pointer object ABI");
+
+    printf("  Generated native-class await boundary slot %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     const char *src = "fn worker() -> int {\n"
                       "    Coro.yield()\n"
@@ -10901,6 +11279,12 @@ int main(void) {
     run_cgen_noinline_attribute_preserves_native_boundary();
     run_cgen_inline_attribute_forces_native_expansion();
     run_cgen_c_export_wrapper_keeps_default_visibility();
+    run_cgen_hosted_string_array_boundary_uses_deep_value_bridge();
+    run_cgen_hosted_runtime_capability_installs_scoped_vm_context();
+    run_cgen_hosted_coroutine_export_publishes_resumable_continuation();
+    run_cgen_hosted_class_boundary_uses_nominal_opaque_proxy();
+    run_cgen_hosted_native_field_store_uses_portable_c_statements();
+    run_cgen_hosted_normal_class_result_call_is_not_a_constructor();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();
@@ -11043,6 +11427,7 @@ int main(void) {
     run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
+    run_cgen_coro_native_class_await_uses_tagged_boundary_slot();
     run_cgen_coro_scalar_await_uses_tagged_slot();
     run_cgen_coro_await_array_task_index_borrows_checked_slot();
     run_cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot();

@@ -1,6 +1,7 @@
 // 1160_os_basic.xr - OS module basic tests
 
 import os
+import io
 import path
 
 // ===== Constants =====
@@ -143,12 +144,12 @@ fn test_chdir() {
     var original = os.getcwd()
     var tmp = os.tmpdir()
 
-    os.chdir(path.from(tmp))
+    io.chdir(path.from(tmp))
     var newCwd = os.getcwd()
     // Should have changed (may differ due to symlink resolution)
     assert(len(newCwd) > 0)
 
     // Restore
-    os.chdir(path.from(original))
+    io.chdir(path.from(original))
     assert_eq(os.getcwd(), original)
 }

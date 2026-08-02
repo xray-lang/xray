@@ -16,6 +16,7 @@
 #define XMETHOD_H
 
 #include "../value/xvalue.h"
+#include "../../../include/xray_yieldable_abi.h"
 #include <stdbool.h>
 
 struct XrClosure;
@@ -23,18 +24,6 @@ struct XrClosure;
 #ifndef XR_CFUNCTION_PTR_DEFINED
 typedef XrValue (*XrCFunctionPtr)(XrVMRuntime *isolate, XrValue *args, int nargs);
 #define XR_CFUNCTION_PTR_DEFINED
-#endif
-
-#ifndef XR_CFUNC_RESULT_DEFINED
-typedef enum {
-    XR_CFUNC_DONE = 0,
-    XR_CFUNC_YIELD,
-    XR_CFUNC_BLOCKED,
-    XR_CFUNC_ERROR,
-    XR_CFUNC_CALL_CLOSURE,
-    XR_CFUNC_WOULD_BLOCK
-} XrCFuncResult;
-#define XR_CFUNC_RESULT_DEFINED
 #endif
 
 /*

@@ -216,6 +216,7 @@ typedef struct XrCExportPlan {
     char *xray_name;
     char *symbol;
     char *visibility;
+    char *abi;
     bool header;
 } XrCExportPlan;
 

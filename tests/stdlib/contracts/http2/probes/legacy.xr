@@ -1,0 +1,4 @@
+import { HttpVersion } from http
+
+print("{\"case\":\"http2-availability\",\"outcome\":\"value\",\"value\":" +
+      string(HttpVersion.Http2.name == "Http2") + ",\"error\":null,\"effects\":{}}")

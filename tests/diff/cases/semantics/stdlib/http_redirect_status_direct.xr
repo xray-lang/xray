@@ -1,0 +1,10 @@
+import http
+
+print(http.isRedirectStatus(300))
+print(http.isRedirectStatus(301))
+print(http.isRedirectStatus(302))
+print(http.isRedirectStatus(303))
+print(http.isRedirectStatus(304))
+print(http.isRedirectStatus(307))
+print(http.isRedirectStatus(308))
+print(http.isRedirectStatus(309))

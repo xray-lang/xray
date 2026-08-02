@@ -28,6 +28,7 @@
 
 // XrValue type (needed for continuation return value)
 #include "../runtime/value/xvalue.h"
+#include "../../include/xray_yieldable_abi.h"
 
 // Forward declarations
 struct XrVMRuntime;
@@ -42,18 +43,6 @@ struct XrCoroutine;
 //   - YIELD: voluntarily yield, continue from continuation next time
 //   - BLOCKED: waiting for I/O, needs netpoll to wake
 //   - ERROR: error occurred, exception set
-#ifndef XR_CFUNC_RESULT_DEFINED
-typedef enum {
-    XR_CFUNC_DONE = 0,      // Complete, result pushed
-    XR_CFUNC_YIELD,         // Voluntarily yield, continue next time
-    XR_CFUNC_BLOCKED,       // Blocked waiting for I/O
-    XR_CFUNC_ERROR,         // Error
-    XR_CFUNC_CALL_CLOSURE,  // Closure frame pushed, execute it
-    XR_CFUNC_WOULD_BLOCK    // try-mode: would block, no side effects
-} XrCFuncResult;
-#define XR_CFUNC_RESULT_DEFINED
-#endif
-
 // ========== Resume Status Enum ==========
 
 // XrResumeStatus - Resume status
@@ -98,9 +87,6 @@ typedef enum XrResumeStatus {
 // fields) keeps the protocol stateless: a continuation receives everything it
 // needs via its arguments, which is what an AOT-compiled runtime can deliver
 // without a VM coroutine object.
-typedef XrCFuncResult (*XrContinuation)(struct XrVMRuntime *X, int status, XrValue resume_value,
-                                        void *ctx, XrValue *result);
-
 // ========== Wait Event Constants ==========
 
 #define XR_WAIT_READ POLLIN              // Wait for readable
@@ -177,6 +163,12 @@ XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrVMRuntime *X, int64_t timeou
 //
 // Returns: XR_CFUNC_YIELD
 XR_FUNC XrCFuncResult xr_yield(struct XrVMRuntime *X, XrContinuation cont, void *user_data);
+
+/* Install a continuation for a runtime operation that has already parked or
+ * yielded the current coroutine.  Unlike xr_yield/xr_yield_for_io this does
+ * not change wait state; it only binds the VM C-frame resume callback. */
+XR_FUNC bool xr_yield_set_continuation(struct XrVMRuntime *X, XrContinuation cont,
+                                       void *user_data);
 
 // ========== Coroutine Helper Functions ==========
 

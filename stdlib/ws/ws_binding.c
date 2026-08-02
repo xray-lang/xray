@@ -15,7 +15,7 @@
  */
 
 #include "ws_internal.h"
-#include "../common.h"
+#include "../../stdlib/common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"

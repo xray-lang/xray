@@ -23,7 +23,7 @@
 #define xr_malloc malloc
 #define xr_free free
 #else
-#include "../common.h"
+#include "../../stdlib/common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xglobal_indices.h"
 #include "../../src/runtime/class/xenum.h"

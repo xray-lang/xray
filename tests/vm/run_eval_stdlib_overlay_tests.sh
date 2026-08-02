@@ -55,24 +55,31 @@ check_stdin_output() {
     fi
 }
 
-check_output "eval_http_whole" "fn router" \
+check_output "eval_http_whole" "<fn>" \
     "$XRAY" -e $'import http\nprint(http.router)'
-check_output "eval_http_selective" "fn router" \
+check_output "eval_http_selective" "<fn>" \
     "$XRAY" -e $'import { router } from http\nprint(router)'
-check_output "eval_cluster_whole" "true" \
-    "$XRAY" -e $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
-check_output "eval_cluster_selective" "true" \
-    "$XRAY" -e $'import { topicMatches } from cluster\nprint(topicMatches("events.*", "events.user"))'
+check_stdin_output "eval_cluster_whole" "eval" "true" \
+    $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
+check_stdin_output "eval_cluster_selective" "eval" "true" \
+    $'import { topicMatches } from cluster\nprint(topicMatches("events.*", "events.user"))'
 
 check_stdin_output "eval_stdin_cluster" "eval" "true" \
     $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
 check_stdin_output "run_stdin_cluster" "run" "true" \
     $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
 
-check_output "eval_embedded_http_empty_stdlib_path" "fn router" \
+check_output "eval_embedded_http_empty_stdlib_path" "<fn>" \
     env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" -e $'import http\nprint(http.router)'
-check_output "eval_embedded_cluster_empty_stdlib_path" "true" \
-    env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" -e \
-        $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))'
+if ! printf '%s\n' $'import cluster\nprint(cluster.topicMatches("events.*", "events.user"))' | \
+    env XRAY_STDLIB_PATH="$EMPTY_STDLIB" "$XRAY" eval - >"$WORK/eval_embedded_cluster_empty_stdlib_path.out" 2>"$WORK/eval_embedded_cluster_empty_stdlib_path.err"; then
+    echo "FAIL eval_embedded_cluster_empty_stdlib_path: command failed" >&2
+    cat "$WORK/eval_embedded_cluster_empty_stdlib_path.err" >&2
+    exit 1
+fi
+if [ "$(sed -e 's/[[:space:]]*$//' -e '/^$/d' "$WORK/eval_embedded_cluster_empty_stdlib_path.out")" != "true" ]; then
+    echo "FAIL eval_embedded_cluster_empty_stdlib_path: expected 'true'" >&2
+    exit 1
+fi
 
 echo "eval stdlib overlay tests passed"
