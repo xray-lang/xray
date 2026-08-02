@@ -232,6 +232,10 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     xr_runtime_core_destroy_coro_storage(isolate->core_rt);
     coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    /* The embedded root heap returns its Region blocks to sys_heap's L2
+     * cache, and its finalizers may still reach module-static objects. */
+    xr_runtime_core_destroy_root_storage(isolate->core_rt);
+
     stage_start_ns = xr_time_monotonic_ns();
     xr_runtime_core_cleanup_fixed_heap(isolate->core_rt);
     gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
