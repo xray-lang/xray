@@ -1,0 +1,25 @@
+// Liveness: the CORRECT blocking form makes progress on both backends —
+// this is the control case the busy-poll variants are measured against.
+fn producer(ch: Channel<int>, n: int) {
+    var i = 0
+    while (i < n) {
+        ch.send(i)
+        i = i + 1
+    }
+    ch.close()
+}
+
+fn main_sum() -> int {
+    var ch = Channel<int>(4)
+    var t = go producer(ch, 200)
+    var total = 0
+    for (v in ch) {
+        total = total + v
+    }
+    await t
+    return total
+}
+
+print("start")
+print(main_sum())
+print("done")

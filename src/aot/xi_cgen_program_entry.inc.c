@@ -1,5 +1,17 @@
 /* ========== Multi-module API ========== */
 
+/* Match the VM CLI's stdio policy (xcli.c): most libcs fully buffer stdout
+ * behind a pipe, so a program that hangs or is killed mid-run hands the
+ * parent shell nothing — exactly the configuration the liveness differential
+ * cases and every "why is it stuck" debugging session run under (task 260
+ * §8). Freestanding profiles have no hosted stdio to configure. */
+static void cg_emit_main_stdio_policy(XiCgenCtx *ctx, FILE *out) {
+    if (ctx && ctx->freestanding_profile)
+        return;
+    fprintf(out, "    setvbuf(stdout, NULL, _IONBF, 0);\n");
+    fprintf(out, "    setvbuf(stderr, NULL, _IONBF, 0);\n");
+}
+
 XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
     XR_DCHECK(ctx != NULL, "xi_cgen_emit_str_literal_defs: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_emit_str_literal_defs: NULL output");
@@ -737,6 +749,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     }
 
     fprintf(out, "int main(int argc, char **argv) {\n");
+    cg_emit_main_stdio_policy(ctx, out);
     fprintf(out, "    xrt_arc_init();\n");
     // main() has the real argv, so process.args drops argv[0] (the program
     // name); the --shared load-constructor path has no argv and passes "0"/NULL.
@@ -905,6 +918,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         }
 
         fprintf(body, "int main(int argc, char **argv) {\n");
+        cg_emit_main_stdio_policy(ctx, body);
         fprintf(body, "    xrt_arc_init();\n");
         emit_xrt_builtin_init(body, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                               "argc > 1 ? argv + 1 : NULL");
