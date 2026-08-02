@@ -58,6 +58,8 @@ def measured(command: list[str], cwd: Path) -> tuple[str, int]:
         command,
         cwd=cwd,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -115,6 +117,8 @@ def main() -> int:
             [str(xray), "build", "-o", str(native), str(source)],
             cwd=cwd,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
