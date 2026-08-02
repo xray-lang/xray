@@ -812,6 +812,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
+        .name = "CsvDiagnostic.constructor",
+        .signature = "(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
         .name = "CsvDiagnostic.kind",
         .signature = ": CsvErrorKind",
         .summary = "",
@@ -854,6 +859,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     {
         .name = "CsvParseReport",
         .signature = "CsvParseReport",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.constructor",
+        .signature = "(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()",
         .summary = "",
     },
     {
@@ -1161,6 +1171,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "ChunkedBody.constructor",
+        .signature = "(body: string, trailers: Headers, consumedBytes: int): ()",
+        .summary = "",
+    },
+    {
         .name = "ChunkedBody.consumedBytes",
         .signature = ": int",
         .summary = "",
@@ -1183,6 +1198,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "Cookie",
         .signature = "Cookie",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.constructor",
+        .signature = "(name: string, value: string, domain: string, path: string, expires: int = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
         .summary = "",
     },
     {
@@ -1461,6 +1481,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "HttpRequest.constructor",
+        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()",
+        .summary = "",
+    },
+    {
         .name = "HttpRequest.contentLength",
         .signature = ": int",
         .summary = "",
@@ -1503,6 +1528,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpResponse.body",
         .signature = ": Array<byte>",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.constructor",
+        .signature = "(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()",
         .summary = "",
     },
     {
@@ -1601,6 +1631,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RequestHead.constructor",
+        .signature = "(method: string, target: string, version: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()",
+        .summary = "",
+    },
+    {
         .name = "RequestHead.contentLength",
         .signature = ": int",
         .summary = "",
@@ -1656,6 +1691,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RequestMessage.constructor",
+        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: int): ()",
+        .summary = "",
+    },
+    {
         .name = "RequestMessage.consumedBytes",
         .signature = ": int",
         .summary = "",
@@ -1693,6 +1733,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "ResponseHead.chunked",
         .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.constructor",
+        .signature = "(version: string, status: int, reason: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
@@ -1748,6 +1793,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "ResponseMessage.body",
         .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "ResponseMessage.constructor",
+        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: int): ()",
         .summary = "",
     },
     {
@@ -1821,6 +1871,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "Server",
+        .signature = "Server",
+        .summary = "",
+    },
+    {
+        .name = "Server.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Server.listen",
+        .signature = "(port: int, running: Atomic<bool>): bool",
+        .summary = "",
+    },
+    {
+        .name = "Server.route",
+        .signature = "(method: string, path: string, value: T): bool",
+        .summary = "",
+    },
+    {
+        .name = "Server.routeHandler",
+        .signature = "(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool",
+        .summary = "",
+    },
+    {
         .name = "cookieJar",
         .signature = "(maxCookies: int = 300): CookieJar",
         .summary = "",
@@ -1843,11 +1918,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "jsonResponse",
         .signature = "(value: T, status: int = 200, headers: Headers? = null): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "listen",
-        .signature = "(port: int, running: Atomic<bool>): bool",
         .summary = "",
     },
     {
@@ -1908,16 +1978,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "responseText",
         .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
-        .summary = "",
-    },
-    {
-        .name = "route",
-        .signature = "(method: string, path: string, value: T): ()",
-        .summary = "",
-    },
-    {
-        .name = "routeHandler",
-        .signature = "(method: string, path: string, handler: (HttpRequest): HttpResponse",
         .summary = "",
     },
     {
@@ -2049,6 +2109,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "FileStat.atime",
         .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "FileStat.constructor",
+        .signature = "(size: int, mode: int, mtime: int, atime: int, ctime: int, uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool): ()",
         .summary = "",
     },
     {
@@ -2390,6 +2455,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "Logger.child",
         .signature = "(...fields: Json): Logger",
+        .summary = "",
+    },
+    {
+        .name = "Logger.constructor",
+        .signature = "(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()",
         .summary = "",
     },
     {
@@ -3128,7 +3198,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "dialEndpoint",
-        .signature = "(endpoint: Endpoint, options: DialOptions = DialOptions(): ()",
+        .signature = "(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?",
         .summary = "",
     },
     {
@@ -3173,7 +3243,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "readInto",
-        .signature = "(conn: NetConn, buffer: Array<byte>, maxlen: int = 1048576): int",
+        .signature = "(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int",
         .summary = "",
     },
     {
@@ -3444,22 +3514,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.constructor",
-        .signature = "(options: Options, init: (int): S)",
+        .signature = "(options: Options, init: (int) -> S): ()",
         .summary = "",
     },
     {
         .name = "Plan.forEach",
-        .signature = "(range: Range, body: (S, int): ())",
+        .signature = "(range: Range, body: (S, int) -> ()): ()",
         .summary = "",
     },
     {
         .name = "Plan.map",
-        .signature = "(range: Range, body: (S, int): T) -> Array<T>",
+        .signature = "(range: Range, body: (S, int) -> T): Array<T>",
         .summary = "",
     },
     {
         .name = "Plan.mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: (S, int): T)",
+        .signature = "(range: Range, output: ref Array<T>, body: (S, int) -> T): ()",
         .summary = "",
     },
     {
@@ -3469,27 +3539,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.reduce",
-        .signature = "(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A",
+        .signature = "(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A",
         .summary = "",
     },
     {
         .name = "forEach",
-        .signature = "(range: Range, body: (int): (), options: Options = Options())",
+        .signature = "(range: Range, body: (int) -> (), options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "map",
-        .signature = "(range: Range, body: (int): T, options: Options = Options()) -> Array<T>",
+        .signature = "(range: Range, body: (int) -> T, options: Options = Options()): Array<T>",
         .summary = "",
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())",
+        .signature = "(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "reduce",
-        .signature = "(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A",
+        .signature = "(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A",
         .summary = "",
     },
 };
@@ -4537,17 +4607,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Mutex.lock",
-        .signature = "(body: (T): U) -> U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
         .name = "Mutex.replace",
-        .signature = "(body: (T): T) -> T",
+        .signature = "(body: (T) -> T): T",
         .summary = "",
     },
     {
         .name = "Mutex.tryLock",
-        .signature = "(body: (T): U) -> U?",
+        .signature = "(body: (T) -> U): U?",
         .summary = "",
     },
     {
@@ -4562,7 +4632,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Once.call",
-        .signature = "(body: (): ())",
+        .signature = "(body: () -> ()): ()",
         .summary = "",
     },
     {
@@ -4582,12 +4652,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.read",
-        .signature = "(body: (T): U) -> U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
         .name = "RwLock.replace",
-        .signature = "(body: (T): T) -> T",
+        .signature = "(body: (T) -> T): T",
         .summary = "",
     },
     {
@@ -4597,7 +4667,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.write",
-        .signature = "(body: (T): U) -> U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
@@ -4754,6 +4824,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
+        .name = "ProcessOptions.constructor",
+        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null, stdout: int? = null, stderr: int? = null, detached: bool = false): ()",
+        .summary = "",
+    },
+    {
         .name = "ProcessOptions.cwd",
         .signature = ": string?",
         .summary = "",
@@ -4790,7 +4865,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "ThreadLocal.constructor",
-        .signature = "(init: (): T)",
+        .signature = "(init: () -> T): ()",
         .summary = "",
     },
     {
@@ -4810,7 +4885,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "onSignal",
-        .signature = "(signal: Signal, handler: (): ()) -> bool",
+        .signature = "(signal: Signal, handler: () -> ()): bool",
         .summary = "",
     },
     {
@@ -5411,6 +5486,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
+        .name = "URL.constructor",
+        .signature = "(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()",
+        .summary = "",
+    },
+    {
         .name = "URL.hash",
         .signature = ": string",
         .summary = "",
@@ -5539,6 +5619,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
+        .name = "ParsedFrame.constructor",
+        .signature = "(fin: bool, rsv1: bool, opcode: int, masked: bool, payload: Array<byte>, consumedBytes: int): ()",
+        .summary = "",
+    },
+    {
         .name = "ParsedFrame.consumedBytes",
         .signature = ": int",
         .summary = "",
@@ -5571,6 +5656,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "ParsedUpgradeRequest",
         .signature = "ParsedUpgradeRequest",
+        .summary = "",
+    },
+    {
+        .name = "ParsedUpgradeRequest.constructor",
+        .signature = "(target: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
         .summary = "",
     },
     {
@@ -8218,6 +8308,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
             "| `CsvDiagnostic.byteOffset` | `: int` |  |\n"
             "| `CsvDiagnostic.column` | `: int` |  |\n"
+            "| `CsvDiagnostic.constructor` | `(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int, message: string): ()` |  |\n"
             "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
             "| `CsvDiagnostic.line` | `: int` |  |\n"
             "| `CsvDiagnostic.message` | `: string` |  |\n"
@@ -8227,6 +8318,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
+            "| `CsvParseReport.constructor` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
             "| `CsvParseReport.delimiter` | `: rune` |  |\n"
             "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
             "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
@@ -8340,11 +8432,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `ChunkedBody` | `ChunkedBody` |  |\n"
             "| `ChunkedBody.body` | `: string` |  |\n"
+            "| `ChunkedBody.constructor` | `(body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
             "| `ChunkedBody.consumedBytes` | `: int` |  |\n"
             "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
             "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `ChunkedBody.trailers` | `: Headers` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
+            "| `Cookie.constructor` | `(name: string, value: string, domain: string, path: string, expires: int = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: int` |  |\n"
             "| `Cookie.hostOnly` | `: bool` |  |\n"
@@ -8400,6 +8494,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpMethod.token` | `: string` |  |\n"
             "| `HttpRequest` | `HttpRequest` |  |\n"
             "| `HttpRequest.body` | `: Array<byte>` |  |\n"
+            "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()` |  |\n"
             "| `HttpRequest.contentLength` | `: int` |  |\n"
             "| `HttpRequest.headers` | `: Headers` |  |\n"
             "| `HttpRequest.method` | `: HttpMethod` |  |\n"
@@ -8409,6 +8504,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpRequest.text` | `(): string` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: Array<byte>` |  |\n"
+            "| `HttpResponse.constructor` | `(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
             "| `HttpResponse.json` | `(): Json` |  |\n"
@@ -8428,6 +8524,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RedirectDecision.url` | `: string` |  |\n"
             "| `RequestHead` | `RequestHead` |  |\n"
             "| `RequestHead.chunked` | `: bool` |  |\n"
+            "| `RequestHead.constructor` | `(method: string, target: string, version: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `RequestHead.contentLength` | `: int` |  |\n"
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
@@ -8439,6 +8536,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.version` | `: string` |  |\n"
             "| `RequestMessage` | `RequestMessage` |  |\n"
             "| `RequestMessage.body` | `: string` |  |\n"
+            "| `RequestMessage.constructor` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
             "| `RequestMessage.consumedBytes` | `: int` |  |\n"
             "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
@@ -8447,6 +8545,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestMessage.trailers` | `: Headers` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
+            "| `ResponseHead.constructor` | `(version: string, status: int, reason: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `ResponseHead.contentLength` | `: int` |  |\n"
             "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
@@ -8458,6 +8557,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseHead.version` | `: string` |  |\n"
             "| `ResponseMessage` | `ResponseMessage` |  |\n"
             "| `ResponseMessage.body` | `: string` |  |\n"
+            "| `ResponseMessage.constructor` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
             "| `ResponseMessage.consumedBytes` | `: int` |  |\n"
             "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
@@ -8472,12 +8572,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Router.add` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
+            "| `Server` | `Server` |  |\n"
+            "| `Server.constructor` | `(): ()` |  |\n"
+            "| `Server.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
+            "| `Server.route` | `(method: string, path: string, value: T): bool` |  |\n"
+            "| `Server.routeHandler` | `(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
-            "| `http.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
@@ -8490,8 +8594,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
-            "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
-            "| `http.routeHandler` | `(method: string, path: string, handler: (HttpRequest): HttpResponse` |  |\n"
             "| `http.router` | `(): Router<T>` |  |\n"
             "| `http.textResponse` | `(body: string, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
@@ -8553,6 +8655,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `File.stdin` | `(): File` |  |\n"
             "| `FileStat` | `FileStat` |  |\n"
             "| `FileStat.atime` | `: int` |  |\n"
+            "| `FileStat.constructor` | `(size: int, mode: int, mtime: int, atime: int, ctime: int, uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
             "| `FileStat.ctime` | `: int` |  |\n"
             "| `FileStat.gid` | `: int` |  |\n"
             "| `FileStat.isDir` | `: bool` |  |\n"
@@ -8665,6 +8768,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
             "| `Logger.child` | `(...fields: Json): Logger` |  |\n"
+            "| `Logger.constructor` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
             "| `Logger.debug` | `(...args: Json): ()` |  |\n"
             "| `Logger.error` | `(...args: Json): ()` |  |\n"
             "| `Logger.fatal` | `(...args: Json): ()` |  |\n"
@@ -8897,7 +9001,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = 65536): int` |  |\n"
             "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
             "| `net.dial` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
-            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions = DialOptions(): ()` |  |\n"
+            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?` |  |\n"
             "| `net.dialTLS` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` |  |\n"
             "| `net.hasTLS` | `(): bool` |  |\n"
@@ -8906,7 +9010,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.listen` | `(port: int, backlog: int = 1024): NetListener?` |  |\n"
             "| `net.lookup` | `(hostname: string): string?` |  |\n"
             "| `net.read` | `(conn: NetConn, maxlen: int = 4096): string?` |  |\n"
-            "| `net.readInto` | `(conn: NetConn, buffer: Array<byte>, maxlen: int = 1048576): int` |  |\n"
+            "| `net.readInto` | `(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int` |  |\n"
             "| `net.recvFrom` | `(handle: NetConn, maxlen: int = 4096): UdpPacket?` |  |\n"
             "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
             "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` |  |\n"
@@ -9017,16 +9121,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Options.workers` | `: int` |  |\n"
             "| `Plan` | `Plan` |  |\n"
             "| `Plan.close` | `(): ()` |  |\n"
-            "| `Plan.constructor` | `(options: Options, init: (int): S)` |  |\n"
-            "| `Plan.forEach` | `(range: Range, body: (S, int): ())` |  |\n"
-            "| `Plan.map` | `(range: Range, body: (S, int): T) -> Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: (S, int): T)` |  |\n"
+            "| `Plan.constructor` | `(options: Options, init: (int) -> S): ()` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: (S, int) -> ()): ()` |  |\n"
+            "| `Plan.map` | `(range: Range, body: (S, int) -> T): Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: (S, int) -> T): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
-            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
-            "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
-            "| `parallel.map` | `(range: Range, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: (int) -> (), options: Options = Options()): ()` |  |\n"
+            "| `parallel.map` | `(range: Range, body: (int) -> T, options: Options = Options()): Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -9376,19 +9480,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Condvar.wait` | `(): ()` |  |\n"
             "| `Mutex` | `Mutex` |  |\n"
             "| `Mutex.constructor` | `(v: T): ()` |  |\n"
-            "| `Mutex.lock` | `(body: (T): U) -> U` |  |\n"
-            "| `Mutex.replace` | `(body: (T): T) -> T` |  |\n"
-            "| `Mutex.tryLock` | `(body: (T): U) -> U?` |  |\n"
+            "| `Mutex.lock` | `(body: (T) -> U): U` |  |\n"
+            "| `Mutex.replace` | `(body: (T) -> T): T` |  |\n"
+            "| `Mutex.tryLock` | `(body: (T) -> U): U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
-            "| `Once.call` | `(body: (): ())` |  |\n"
+            "| `Once.call` | `(body: () -> ()): ()` |  |\n"
             "| `Once.constructor` | `(): ()` |  |\n"
             "| `RwLock` | `RwLock` |  |\n"
             "| `RwLock.constructor` | `(v: T): ()` |  |\n"
-            "| `RwLock.read` | `(body: (T): U) -> U` |  |\n"
-            "| `RwLock.replace` | `(body: (T): T) -> T` |  |\n"
+            "| `RwLock.read` | `(body: (T) -> U): U` |  |\n"
+            "| `RwLock.replace` | `(body: (T) -> T): T` |  |\n"
             "| `RwLock.value` | `: T` |  |\n"
-            "| `RwLock.write` | `(body: (T): U) -> U` |  |\n"
+            "| `RwLock.write` | `(body: (T) -> U): U` |  |\n"
             "| `sync.fence` | `(order: Ordering): ()` |  |\n"
             "",
         .symbols = _symbols_sync,
@@ -9437,6 +9541,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Process.tryWait` | `(): int?` |  |\n"
             "| `Process.wait` | `(): int` |  |\n"
             "| `ProcessOptions` | `ProcessOptions` |  |\n"
+            "| `ProcessOptions.constructor` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null, stdout: int? = null, stderr: int? = null, detached: bool = false): ()` |  |\n"
             "| `ProcessOptions.cwd` | `: string?` |  |\n"
             "| `ProcessOptions.detached` | `: bool` |  |\n"
             "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
@@ -9444,11 +9549,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ProcessOptions.stdin` | `: int?` |  |\n"
             "| `ProcessOptions.stdout` | `: int?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
-            "| `ThreadLocal.constructor` | `(init: (): T)` |  |\n"
+            "| `ThreadLocal.constructor` | `(init: () -> T): ()` |  |\n"
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
-            "| `sys.onSignal` | `(signal: Signal, handler: (): ()) -> bool` |  |\n"
+            "| `sys.onSignal` | `(signal: Signal, handler: () -> ()): bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
@@ -9645,6 +9750,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
             "| `QueryParams.set` | `(name: string, value: string): ()` |  |\n"
             "| `URL` | `URL` |  |\n"
+            "| `URL.constructor` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n"
             "| `URL.hash` | `: string` |  |\n"
             "| `URL.host` | `: string` |  |\n"
             "| `URL.hostname` | `: string` |  |\n"
@@ -9688,6 +9794,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ClosePayload.constructor` | `(code: int, reason: string): ()` |  |\n"
             "| `ClosePayload.reason` | `: string` |  |\n"
             "| `ParsedFrame` | `ParsedFrame` |  |\n"
+            "| `ParsedFrame.constructor` | `(fin: bool, rsv1: bool, opcode: int, masked: bool, payload: Array<byte>, consumedBytes: int): ()` |  |\n"
             "| `ParsedFrame.consumedBytes` | `: int` |  |\n"
             "| `ParsedFrame.fin` | `: bool` |  |\n"
             "| `ParsedFrame.masked` | `: bool` |  |\n"
@@ -9695,6 +9802,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedFrame.payload` | `: Array<byte>` |  |\n"
             "| `ParsedFrame.rsv1` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
+            "| `ParsedUpgradeRequest.constructor` | `(target: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
             "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n"
             "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n"
