@@ -147,6 +147,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     uint64_t tmp_strbuf_ms = 0;
     uint64_t globals_ms = 0;
     uint64_t coro_storage_ms = 0;
+    uint64_t root_heap_ms = 0;
     uint64_t gc_cleanup_ms = 0;
     uint64_t deferred_tasks_ms = 0;
     uint64_t sys_heap_ms = 0;
@@ -241,6 +242,17 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     deferred_tasks_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
+    /* Root-heap teardown is pinned between two hard constraints. It must run
+     * AFTER xr_fixed_heap_cleanup: fixed-object destroy hooks release field
+     * references into the root heap (rc_probe lanes die under ASAN the other
+     * way around). It must run BEFORE the sys_heap free below: the region
+     * returns its blocks through a sys_heap pointer cached at init, so
+     * deferring to xr_runtime_core_delete would push blocks into an
+     * already-freed block pool. */
+    xr_runtime_core_teardown_root_heap(isolate->core_rt);
+    root_heap_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->core_rt && isolate->core_rt->sys_heap) {
         xr_sysheap_destroy(isolate->core_rt->sys_heap);
         xr_free(isolate->core_rt->sys_heap);
@@ -278,6 +290,7 @@ void xray_vm_delete(XrVMRuntime *isolate) {
                 "sys_thread_drain_ms=%llu main_coro_ms=%llu "
                 "lifecycle_cleanup_ms=%llu vm_cleanup_ms=%llu "
                 "tmp_strbuf_ms=%llu globals_ms=%llu coro_storage_ms=%llu "
+                "root_heap_ms=%llu "
                 "gc_cleanup_ms=%llu deferred_tasks_ms=%llu sys_heap_ms=%llu "
                 "string_pool_ms=%llu stdlib_cache_ms=%llu config_ms=%llu total_ms=%llu\n",
                 (unsigned long long) profiler_ms, (unsigned long long) runtime_ms,
@@ -285,9 +298,10 @@ void xray_vm_delete(XrVMRuntime *isolate) {
                 (unsigned long long) main_coro_ms, (unsigned long long) lifecycle_cleanup_ms,
                 (unsigned long long) vm_cleanup_ms, (unsigned long long) tmp_strbuf_ms,
                 (unsigned long long) globals_ms, (unsigned long long) coro_storage_ms,
-                (unsigned long long) gc_cleanup_ms, (unsigned long long) deferred_tasks_ms,
-                (unsigned long long) sys_heap_ms, (unsigned long long) string_pool_ms,
-                (unsigned long long) stdlib_cache_ms, (unsigned long long) config_ms,
+                (unsigned long long) root_heap_ms, (unsigned long long) gc_cleanup_ms,
+                (unsigned long long) deferred_tasks_ms, (unsigned long long) sys_heap_ms,
+                (unsigned long long) string_pool_ms, (unsigned long long) stdlib_cache_ms,
+                (unsigned long long) config_ms,
                 (unsigned long long) isolate_teardown_elapsed_ms(teardown_start_ns));
     }
 

@@ -833,6 +833,17 @@ static bool vm_backend_setup_yield_continuation(XrVMRuntime *X, XrCoroutine *cor
 
     XrBcCallFrame *frame = &frames[frame_count - 1];
     int16_t saved_result_slot = frame->cfunc_result_slot;
+    /* Yieldable-invoke dispatch pre-publishes replay state (pc-1 + YIELDED)
+     * before calling the native, because a polling native could make the
+     * coroutine claimable mid-call. This native chose a continuation
+     * instead: it resumes AFTER the call instruction with its result
+     * delivered through cfunc_result_slot, so undo the replay pc while the
+     * coroutine is still unpublished (the native suspends only after this
+     * setup returns). */
+    if (frame->call_status & XR_CALL_REPLAY_PRESET) {
+        frame->pc += 1;
+        frame->call_status &= ~(uint32_t) XR_CALL_REPLAY_PRESET;
+    }
     frame->u.c.continuation = continuation;
     frame->u.c.continuation_ctx = user_data;
     frame->has_cfunc_result = false;
@@ -1003,13 +1014,14 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
 }
 
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {
-    XrValue value = coro ? coro->result : XR_NULL_VAL;
-    XrValue error = coro ? coro->error : XR_NULL_VAL;
-    bool error_is_value = coro ? coro->error_is_value : false;
-
+    /* BLOCKED means the backend already published the coro to a wait queue;
+     * another worker may be running — even completing — it right now, so its
+     * fields must not be read on that path at all (the completion path writes
+     * result/task concurrently). Every other result kind leaves the coro
+     * exclusively owned by this worker, so the per-branch reads are safe. */
     switch (result) {
         case XR_VM_OK:
-            return xr_coro_run_done(value);
+            return xr_coro_run_done(coro ? coro->result : XR_NULL_VAL);
         case XR_VM_BLOCKED:
             return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
         case XR_VM_YIELD:
@@ -1023,7 +1035,9 @@ static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult r
         case XR_VM_COMPILE_ERROR:
         case XR_VM_RUNTIME_ERROR:
         default:
-            return xr_coro_run_error(error, error_is_value);
+            if (!coro)
+                return xr_coro_run_error(XR_NULL_VAL, false);
+            return xr_coro_run_error(coro->error, coro->error_is_value);
     }
 }
 
@@ -1131,6 +1145,9 @@ static XrVMResult run_cfunc_resume(XrVMRuntime *isolate, XrCoroutine *coro, XrVM
                     frame->call_status &= ~(XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED);
                     frame->u.c.continuation = NULL;
                     coro_ctx->frame_count = 0;
+                    /* Resume event consumed — don't leak a stale status
+                     * (e.g. TIMEOUT) into whatever this coroutine does next. */
+                    xr_coro_resume_store(coro, XR_RESUME_OK);
                     return XR_VM_OK;
                 case XR_CFUNC_BLOCKED:
                     return XR_VM_BLOCKED;
@@ -1509,12 +1526,12 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *
     XR_DCHECK(popped == next, "direct_switch: LIFO slot changed under owner");
 
     /* Blocked-side bookkeeping for cur — replaces what run_finalize and the
-     * worker BLOCKED result handling would have done had run() exited. If
-     * the post-check reports cur already re-readied by a concurrent waker,
-     * cur is owned elsewhere and must not be touched further. */
+     * worker BLOCKED result handling would have done had run() exited. No
+     * spawn-burst reset: cur is published on a wait queue and a concurrent
+     * wake may already own it; prepare_scheduled_coro resets the burst on
+     * the enqueuer side. */
     (void) xr_coro_finalize_blocked_suspend(cur);
-    if (!worker_process_blocked(worker, cur))
-        cur->spawn_burst_count = 0;
+    (void) worker_process_blocked(worker, cur);
 
     /* Resume-side state for next — mirrors the backend resume paths for the
      * admitted shapes. */
@@ -1539,7 +1556,7 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *
     } else {
         /* Plain ready (yielded earlier): clear the replay marker exactly
          * like the unroll path does for a bytecode top frame. */
-        tf->call_status &= ~XR_CALL_YIELDED;
+        tf->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
     }
 
     /* Worker/machine bookkeeping. */

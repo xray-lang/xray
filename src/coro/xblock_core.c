@@ -22,9 +22,31 @@ static inline XrCoroBlockResult block_result(XrCoroBlockKind kind, XrValue value
     return result;
 }
 
+/* Owner-thread park latch (see XrProc.suspend_park_pending).
+ *
+ * Publishing BLOCKED makes the coroutine claimable by wakers/cancellers on
+ * the spot, so everything the suspender still owes — deferred spawn
+ * submission included — happens in the publish helpers below, BEFORE the
+ * state transition. After publication nothing on the suspending worker may
+ * touch the coroutine again; in particular the backend's finalize must not
+ * run its RUNNING→BLOCKED CAS, which would observe a RESUMER's RUNNING and
+ * re-park an executing coroutine (a second waker could then double-run it).
+ *
+ * The one park shape that does NOT publish is the worker-local timer park
+ * (xr_coro_sleep): its wake fires on this same worker after the slice ends,
+ * so the coroutine stays RUNNING until finalize performs the transition.
+ * That path announces itself through this latch; finalize acts only when it
+ * is set and treats every other BLOCKED result as hands-off. */
+static void block_note_park_pending(void) {
+    XrWorker *worker = xr_current_worker();
+    if (worker)
+        worker->p.suspend_park_pending = true;
+}
+
 bool xr_coro_publish_wait_block(XrCoroutine *coro) {
     if (!coro)
         return false;
+    xr_coro_submit_deferred_spawns(coro);
     xr_coro_transition_to_blocked(coro);
     return true;
 }
@@ -33,6 +55,7 @@ XrCoroBlockSnapshot xr_coro_begin_reversible_block(XrCoroutine *coro) {
     XrCoroBlockSnapshot snapshot = {XR_CORO_STATE_NONE, false};
     if (!coro)
         return snapshot;
+    xr_coro_submit_deferred_spawns(coro);
     snapshot.previous_state =
         xr_flag_to_state(atomic_load_explicit(&coro->flags, memory_order_acquire));
     snapshot.active = true;
@@ -56,6 +79,23 @@ void xr_coro_rollback_reversible_block(XrCoroutine *coro, XrCoroBlockSnapshot sn
 bool xr_coro_finalize_blocked_suspend(XrCoroutine *coro) {
     if (!coro)
         return false;
+    XrWorker *worker = xr_current_worker();
+    if (!worker) {
+        /* No worker context (embedder- or test-driven resume): scheduler
+         * wakers cannot race this thread, so keep the legacy semantics of
+         * parking a frame that returned BLOCKED on its own. */
+        xr_coro_submit_deferred_spawns(coro);
+        return xr_coro_try_transition_to_blocked(coro);
+    }
+    /* Only the announced worker-local park (sleep) still owns the coroutine
+     * here. Every published suspension (wait queues, channels, netpoll,
+     * select, awaits) already submitted its deferred spawns and completed
+     * its frame state before the coroutine became claimable — it may be
+     * running on another worker by now, so: hands off, report parked. */
+    bool park_pending = worker->p.suspend_park_pending;
+    worker->p.suspend_park_pending = false;
+    if (!park_pending)
+        return true;
     xr_coro_submit_deferred_spawns(coro);
     return xr_coro_try_transition_to_blocked(coro);
 }
@@ -94,5 +134,9 @@ XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
     if (!atomic_load_explicit(&ext->timer_active, memory_order_relaxed)) {
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     }
+    /* Worker-local park: no BLOCKED published here — the timer fires on this
+     * worker after the slice ends. Announce it so the backend finalize (the
+     * only remaining owner-side step) performs the transition. */
+    block_note_park_pending();
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }

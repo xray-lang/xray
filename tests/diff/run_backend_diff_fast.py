@@ -442,7 +442,14 @@ def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
             raise FileNotFoundError(f"base case manifest not found: {base_cases_file}")
         cases = sorted(base)
     else:
-        cases = sorted(CASE_DIR.rglob("*.xr"))
+        # cases/liveness/ belongs to run_liveness_diff.sh, which enforces a
+        # wall-clock budget per backend and honors the .live sidecar
+        # (vm_only=1 etc.). This net has no per-case timeout and compares
+        # terminating output only, so a liveness case that by design never
+        # terminates on one backend (deadlock_reported) would hang the whole
+        # run. An explicit base manifest still wins if it names them.
+        liveness_dir = CASE_DIR / "liveness"
+        cases = sorted(p for p in CASE_DIR.rglob("*.xr") if liveness_dir not in p.parents)
 
     if extra_cases_file:
         extra = append_case_manifest(extra_cases_file)

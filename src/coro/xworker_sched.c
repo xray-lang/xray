@@ -825,10 +825,16 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
     (void) worker;
     if (!runtime || !atomic_load(&runtime->running))
         return false;
-    static int disabled = -1;
-    if (disabled < 0)
-        disabled = getenv("XRAY_NO_DEADLOCK_DETECT") ? 1 : 0;
-    if (disabled)
+    /* Lazily probed by whichever worker gets here first; atomic because
+     * several workers can race the first probe. Duplicate stores of the
+     * same value are fine. */
+    static _Atomic int disabled = -1;
+    int detect_off = atomic_load_explicit(&disabled, memory_order_relaxed);
+    if (detect_off < 0) {
+        detect_off = getenv("XRAY_NO_DEADLOCK_DETECT") ? 1 : 0;
+        atomic_store_explicit(&disabled, detect_off, memory_order_relaxed);
+    }
+    if (detect_off)
         return false;
     (void) self_still_active;
     /* Nobody may be mid-slice: a running coroutine can wake anything. The

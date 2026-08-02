@@ -314,12 +314,24 @@ invoke_dispatch:;
             ci->cfunc_result_slot = (int16_t) a;
             ci->has_cfunc_result = false;
             savepc();
+            /* Replay state must be published BEFORE the native: polling
+             * natives make this coroutine claimable while still inside the
+             * call, and no frame write is allowed after that. Continuation
+             * setups restore continue-from-next (XR_CALL_REPLAY_PRESET). */
+            vm_suspend_preset_replay_yielded(ci, pc);
             XrValue result = xr_null();
             XrCFuncResult status =
                 method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
+            if (status == XR_CFUNC_BLOCKED) {
+                /* Suspend state is already in the frame (replay pre-set, or
+                 * rewritten by the continuation setup); the coroutine may be
+                 * running on another worker by now — hands off, and skip the
+                 * rebind: even its frame READS would race the resumer. */
+                return XR_VM_BLOCKED;
+            }
             VM_REBIND_AFTER_NATIVE_CALL();
             if (status == XR_CFUNC_DONE) {
-                vm_suspend_clear_yielded(ci);
+                vm_suspend_finish_preset(ci, pc);
                 R(a) = result;
                 VM_BUILTIN_INVOKE_CHECK_EXC();
                 XrDispatchAction ready_action =
@@ -329,18 +341,12 @@ invoke_dispatch:;
                     return XR_VM_YIELD;
                 vmbreak;
             }
-            if (status == XR_CFUNC_BLOCKED) {
-                /* Continuation-backed natives already saved the next pc and
-                 * publish their result through cfunc_result_slot on resume.
-                 * Replay is only for polling-style natives with no continuation. */
-                XR_SCRATCH_RACE_WINDOW_DELAY();
-                if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
-                    vm_suspend_block_replay_yielded(ci, pc);
-                return XR_VM_BLOCKED;
-            }
             if (status == XR_CFUNC_YIELD) {
+                /* Same-worker requeue, no claim race. Keep the replay state
+                 * for polling natives; continuation setups already restored
+                 * their continue-from-next pc. */
                 if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
-                    vm_suspend_yield_replay_yielded(ci, pc);
+                    ci->call_status &= ~(uint32_t) XR_CALL_REPLAY_PRESET;
                 return XR_VM_YIELD;
             }
             return XR_VM_RUNTIME_ERROR;
@@ -539,12 +545,18 @@ vmcase(OP_INVOKE_DIRECT) {
         ci->cfunc_result_slot = (int16_t) a;
         ci->has_cfunc_result = false;
         savepc();
+        /* Pre-publish replay state — see the OP_INVOKE yieldable branch. */
+        vm_suspend_preset_replay_yielded(ci, pc);
         XrValue result = xr_null();
         XrCFuncResult status =
             method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
+        if (status == XR_CFUNC_BLOCKED) {
+            /* Hands off — no rebind either; see OP_INVOKE. */
+            return XR_VM_BLOCKED;
+        }
         VM_REBIND_AFTER_NATIVE_CALL();
         if (status == XR_CFUNC_DONE) {
-            vm_suspend_clear_yielded(ci);
+            vm_suspend_finish_preset(ci, pc);
             R(a) = result;
             VM_BUILTIN_INVOKE_CHECK_EXC();
             XrDispatchAction ready_action =
@@ -554,14 +566,9 @@ vmcase(OP_INVOKE_DIRECT) {
                 return XR_VM_YIELD;
             vmbreak;
         }
-        if (status == XR_CFUNC_BLOCKED) {
-            if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
-                vm_suspend_block_replay_yielded(ci, pc);
-            return XR_VM_BLOCKED;
-        }
         if (status == XR_CFUNC_YIELD) {
             if ((ci->call_status & XR_CALL_HAS_CONT) == 0)
-                vm_suspend_yield_replay_yielded(ci, pc);
+                ci->call_status &= ~(uint32_t) XR_CALL_REPLAY_PRESET;
             return XR_VM_YIELD;
         }
         return XR_VM_RUNTIME_ERROR;

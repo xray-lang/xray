@@ -4825,8 +4825,11 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(count_between(fn, slice_call, "XR_TO_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TAG_PTR") == 0 &&
            "Ptr/MutPtr locals must stay in native address representation");
-    assert(count_between(fn, fn_end, "xrt_release(") == 1 &&
-           "the owning Array<byte> must be released exactly once; raw pointers add no ARC");
+    assert(count_between(fn, fn_end, "xrt_release(") == 2 &&
+           "each owning Array<byte> (src, out) must be released exactly once; raw pointers add "
+           "no ARC");
+    assert(count_between(fn, fn_end, "xrt_retain(") == 0 &&
+           "raw pointer views must not add retain traffic on the owning arrays");
 
     printf("  Generated Array/Slice data pointer fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);

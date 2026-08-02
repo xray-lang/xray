@@ -641,9 +641,10 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         fast_dispatch_budget--;
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;
-        if (!worker_process_blocked(worker, coro)) {
-            worker_reset_spawn_burst(coro);
-        }
+        /* No spawn-burst reset here: the coro is published on a wait queue
+         * and a concurrent wake may already own it. prepare_scheduled_coro
+         * resets the burst on the enqueuer side instead. */
+        (void) worker_process_blocked(worker, coro);
 
         // Periodic lightweight housekeeping during fast dispatch
         if ((fast_dispatch_budget & 7) == 0) {
@@ -744,6 +745,11 @@ XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     XrCoroEvent event = worker_event_from_coro(coro);
     if (!coro || !coro->backend || !coro->backend->resume)
         return xr_coro_run_error(XR_NULL_VAL, false);
+    /* Park-latch hygiene: a sleep park announced in a previous slice was
+     * consumed by that slice's finalize; a stale leftover must not make this
+     * slice's finalize touch a published (claimable) coroutine. */
+    if (worker)
+        worker->p.suspend_park_pending = false;
     xr_coro_finish_backend_resume_tokens(coro, xr_coro_resume_load(coro));
     XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
     XrCoroRunResult result = coro->backend->resume(coro, &event, &run_ctx);

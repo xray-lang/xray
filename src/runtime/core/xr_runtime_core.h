@@ -57,6 +57,10 @@ typedef struct XrRuntimeCore {
      * it does inside a coroutine — before this, root allocations fell through
      * to the fixed heap and were pinned immortal (task 250). */
     XrCoroHeap root_heap;
+    /* Set once xr_runtime_core_teardown_root_heap has run, so the staged
+     * isolate teardown and xr_runtime_core_delete can both call it without
+     * tearing the heap down twice. */
+    bool root_heap_torn_down;
 
     /* Storage lifetime and task identity are deliberately orthogonal.  These
      * contexts exist even when no scheduler or coroutine object is present. */
@@ -102,6 +106,7 @@ XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
 XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_teardown_root_heap(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core);
 XR_FUNC struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core);
 XR_FUNC XrValue xr_runtime_core_builtin(const XrRuntimeCore *core, int32_t index);

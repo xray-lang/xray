@@ -68,16 +68,24 @@ XrEnumCtor *xr_enum_ctor_new_core(XrRuntimeCore *core, const char *enum_name,
     return enum_val;
 }
 
-static XrClass *xr_enum_minimal_adt_class_new(const char *name) {
-    XrClass *cls = (XrClass *) xr_calloc(1, sizeof(XrClass));
-    if (!cls)
-        return NULL;
-    cls->name = name;
-    cls->display_name = name;
+/* Configure a class as the ADT aggregate class for enum_type. Must complete
+ * before the class is published via enum_type->enum_class: constructors on
+ * other threads read the published class without synchronization. */
+static void xr_enum_adt_class_configure(XrClass *cls, XrEnumType *enum_type) {
     cls->field_count = 0;
     cls->own_field_count = 0;
     cls->builtin_kind = XR_BK_ADT_ENUM;
+    cls->builtin_data = enum_type;
+}
+
+static XrClass *xr_enum_minimal_adt_class_new(XrEnumType *enum_type) {
+    XrClass *cls = (XrClass *) xr_calloc(1, sizeof(XrClass));
+    if (!cls)
+        return NULL;
+    cls->name = enum_type->name;
+    cls->display_name = enum_type->name;
     cls->flags = XR_CLASS_BUILTIN | XR_CLASS_FINAL | XR_CLASS_INITIALIZED;
+    xr_enum_adt_class_configure(cls, enum_type);
     return cls;
 }
 
@@ -103,11 +111,17 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, char **member_nam
                                                                sizeof(XrEnumType), XR_TENUM_TYPE);
     if (!enum_type)
         return NULL;
+    enum_type->name = xr_symbol_intern(X, name);
     XrClass *enum_base = core ? core->enumClass : NULL;
     XrClass *enum_class = xr_class_new(X, name, enum_base);
+    /* ADT-configure at creation, while registration is still single-threaded.
+     * This keeps the enum_class invariant (published => fully configured) so
+     * the concurrent construct path never has to write class fields. Doing it
+     * unconditionally is safe: every runtime enum value is an ADT aggregate,
+     * and fresh classes start with zero fields anyway. */
+    if (enum_class)
+        xr_enum_adt_class_configure(enum_class, enum_type);
     enum_type->enum_class = enum_class;
-
-    enum_type->name = xr_symbol_intern(X, name);
     enum_type->member_count = count;
 
     enum_type->symbol_to_index = NULL;
@@ -198,18 +212,28 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, char **
 bool xr_enum_type_ensure_adt_class(XrEnumType *enum_type) {
     if (!enum_type)
         return false;
-    if (enum_type->enum_class) {
-        enum_type->enum_class->field_count = 0;
-        enum_type->enum_class->own_field_count = 0;
-        enum_type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
-        enum_type->enum_class->builtin_data = enum_type;
+    /* Hot path: constructors call this on every aggregate build, racing
+     * across workers. A published class is fully configured and immutable,
+     * so an acquire load is the whole fast path — no writes. */
+    if (atomic_load_explicit(&enum_type->enum_class, memory_order_acquire))
+        return true;
+    /* Slow path: only core-created enums (enum_class starts NULL) whose ADT
+     * class was not set up during registration reach this, possibly from
+     * several workers at once. Build a fully configured class, then
+     * CAS-publish it; losers discard theirs and use the winner's. */
+    XrClass *fresh = xr_enum_minimal_adt_class_new(enum_type);
+    if (!fresh)
+        return false;
+    XrClass *expected = NULL;
+    if (!atomic_compare_exchange_strong_explicit(&enum_type->enum_class, &expected, fresh,
+                                                 memory_order_acq_rel, memory_order_acquire)) {
+        xr_free(fresh);
         return true;
     }
-    enum_type->enum_class = xr_enum_minimal_adt_class_new(enum_type->name);
-    if (enum_type->enum_class)
-        enum_type->enum_class->builtin_data = enum_type;
-    enum_type->owns_enum_class = enum_type->enum_class != NULL;
-    return enum_type->enum_class != NULL;
+    /* Winner: mark ownership for the destroy hook. Runs at teardown after
+     * workers join, so a plain store is ordered by the join. */
+    enum_type->owns_enum_class = true;
+    return true;
 }
 
 bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_counts, int count) {
@@ -334,7 +358,8 @@ void xr_enum_aggregate_init_inplace(XrEnumAggregateValue *value, XrEnumType *enu
                                     uint32_t payload_count) {
     if (!value)
         return;
-    value->klass = enum_type ? enum_type->enum_class : NULL;
+    value->klass =
+        enum_type ? atomic_load_explicit(&enum_type->enum_class, memory_order_acquire) : NULL;
     value->enum_type = enum_type;
     value->member_index = member_index;
     value->payload_count = payload_count;
@@ -392,10 +417,21 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
         return NULL;
     if (xr_enum_type_payload_count(enum_type, member_index) != 0)
         return NULL;
-    XrEnumAggregateValue *value = enum_type->members[member_index].value;
+    /* Fast path: the canonical value is published once and immutable. */
+    XrEnumAggregateValue *value =
+        atomic_load_explicit(&enum_type->members[member_index].value, memory_order_acquire);
     if (value)
         return value;
+    /* First touch can race across workers. Serialize on metadata_lock: the
+     * loser must not build a duplicate, and module_alloc is not a concurrent
+     * allocator. Cold path — one contended pass per member ever. */
     XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
+    xr_amutex_lock(&core->metadata_lock);
+    value = atomic_load_explicit(&enum_type->members[member_index].value, memory_order_acquire);
+    if (value) {
+        xr_amutex_unlock(&core->metadata_lock);
+        return value;
+    }
     value = xr_enum_adt_construct_in(&core->module_alloc, enum_type, member_index, NULL, 0);
     if (value) {
         /* A unit variant carries no payload and never changes, and this one
@@ -408,8 +444,11 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
          * atomic and the thread-local fast path. */
         XR_OBJ_SET_STORAGE(&value->hdr, XR_OBJ_STORAGE_SHARED);
         atomic_store_explicit(&value->hdr.refcount, XR_RC_STICKY, memory_order_relaxed);
+        /* Publish only after the value is fully marked; concurrent fast-path
+         * readers synchronize on this release store. */
+        atomic_store_explicit(&enum_type->members[member_index].value, value, memory_order_release);
     }
-    enum_type->members[member_index].value = value;
+    xr_amutex_unlock(&core->metadata_lock);
     return value;
 }
 

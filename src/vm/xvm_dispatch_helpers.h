@@ -128,19 +128,6 @@ static inline XrCoroHeap *vm_weak_heap(XrVMContext *vm_ctx) {
     return vm_exec_local_heap();
 }
 
-/* SCRATCH diagnostics: widen the publish->frame-save window to prove the
- * yieldable-invoke suspend race. Enabled via XR_RACE_DELAY env var. */
-#include <unistd.h>
-#include <stdlib.h>
-static inline void xr_scratch_race_window_delay(void) {
-    static int enabled = -1;
-    if (enabled < 0)
-        enabled = getenv("XR_RACE_DELAY") ? 1 : 0;
-    if (enabled)
-        usleep(300);
-}
-#define XR_SCRATCH_RACE_WINDOW_DELAY() xr_scratch_race_window_delay()
-
 /* ========== VM Suspend Continuation Helpers ========== */
 
 static inline void vm_suspend_replay_current(XrBcCallFrame *frame, XrInstruction *pc) {
@@ -165,7 +152,40 @@ static inline void vm_suspend_replay_yielded(XrBcCallFrame *frame, XrInstruction
 static inline void vm_suspend_clear_yielded(XrBcCallFrame *frame) {
     if (!frame)
         return;
-    frame->call_status &= ~XR_CALL_YIELDED;
+    frame->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
+}
+
+/* Pre-publish replay suspend state BEFORE calling a yieldable native.
+ *
+ * Polling-style natives (EventCount.wait, Semaphore.acquire, CountdownLatch
+ * .wait, WorkQueue.pop, ResultGroup.recv, ...) publish BLOCKED while still
+ * inside the call, under the wait-queue lock. The moment that lock is
+ * released a waker may claim the coroutine and resume it on another worker;
+ * any frame write after that races the resumer (a missed XR_CALL_YIELDED
+ * skips the replay entirely, and a late pc rollback lands on a frame the
+ * resumed coroutine is already executing). So the replay state must be in
+ * the frame before the native runs.
+ *
+ * Continuation-backed natives (Thread.join, sleep, I/O) instead resume
+ * after the call instruction with the result delivered via
+ * cfunc_result_slot: vm_backend_setup_yield_continuation sees
+ * XR_CALL_REPLAY_PRESET, restores continue-from-next and clears it —
+ * still before the coroutine becomes claimable. A native that completes
+ * without suspending is unwound via vm_suspend_finish_preset. */
+static inline void vm_suspend_preset_replay_yielded(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc - 1;
+    frame->call_status |= XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET;
+}
+
+/* Yieldable native returned without suspending (DONE): restore the
+ * savepc() continue-from-next pc and drop the pre-set replay state. */
+static inline void vm_suspend_finish_preset(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc;
+    frame->call_status &= ~(uint32_t) (XR_CALL_YIELDED | XR_CALL_REPLAY_PRESET);
 }
 
 static inline XrDispatchAction vm_suspend_block_replay(XrBcCallFrame *frame, XrInstruction *pc) {

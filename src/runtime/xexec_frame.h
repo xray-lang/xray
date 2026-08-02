@@ -29,12 +29,16 @@
 /* ========== Call Frame ========== */
 
 // Call status flags
-#define XR_CALL_C (1 << 0)                // C function call
-#define XR_CALL_YIELDED (1 << 1)          // coroutine yielded from this frame
-#define XR_CALL_HAS_CONT (1 << 2)         // has continuation callback
-#define XR_CALL_YPCALL (1 << 3)           // protected call (pcall)
-#define XR_CALL_FRESH (1 << 4)            // fresh call (not resumed)
-#define XR_CALL_KEEP_FUNC (1 << 5)        // OP_CALL_KEEP: return value to result_offset
+#define XR_CALL_C (1 << 0)          // C function call
+#define XR_CALL_YIELDED (1 << 1)    // coroutine yielded from this frame
+#define XR_CALL_HAS_CONT (1 << 2)   // has continuation callback
+#define XR_CALL_YPCALL (1 << 3)     // protected call (pcall)
+#define XR_CALL_FRESH (1 << 4)      // fresh call (not resumed)
+#define XR_CALL_KEEP_FUNC (1 << 5)  // OP_CALL_KEEP: return value to result_offset
+// XR_CALL_REPLAY_PRESET: dispatch pre-published replay state (pc-1 + YIELDED)
+// before calling a yieldable native; a continuation setup restores
+// continue-from-next and clears it. Cleared wherever YIELDED is cleared.
+#define XR_CALL_REPLAY_PRESET (1 << 6)
 #define XR_CALL_CLOSURE_PENDING (1 << 7)  // waiting for closure called via xr_call_closure
 
 // Single activation record on call stack

@@ -102,7 +102,13 @@ XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struc
 
 /* Runtime wait queues call this after wait metadata is installed and before
  * the waiter becomes externally wakeable. The caller must own the queue by
- * lock or by single-worker ownership until linking is complete. */
+ * lock or by single-worker ownership until linking is complete.
+ *
+ * Publication is the suspender's LAST touch: pending deferred spawns are
+ * submitted here (before the transition), and the VM/AOT dispatch layers
+ * complete all frame/replay state before calling into the blocking helper.
+ * From the transition on, a waker or canceller may claim the coroutine and
+ * resume it on another worker at any moment. */
 XR_FUNC bool xr_coro_publish_wait_block(struct XrCoroutine *coro);
 
 /* Submission paths use this when a coroutine must become BLOCKED before an
@@ -112,10 +118,14 @@ XR_FUNC XrCoroBlockSnapshot xr_coro_begin_reversible_block(struct XrCoroutine *c
 XR_FUNC void xr_coro_rollback_reversible_block(struct XrCoroutine *coro,
                                                XrCoroBlockSnapshot snapshot);
 
-/* Backends call this after their continuation/frame state is quiescent and
- * before returning XR_CORO_RUN_BLOCKED to the scheduler. Channel helpers may
- * already publish BLOCKED under a channel lock; other wait helpers leave the
- * coroutine RUNNING until the backend reaches this boundary. */
+/* Backends call this before returning XR_CORO_RUN_BLOCKED to the scheduler.
+ * Every published suspension (wait queues, channels, netpoll, select,
+ * awaits) finished all owner-side work before the coroutine became
+ * claimable, so this is a no-op for them — the coroutine may already be
+ * running on another worker and must not be touched. Only the announced
+ * worker-local timer park (xr_coro_sleep, via XrProc.suspend_park_pending)
+ * still owns the coroutine here; for it this submits deferred spawns and
+ * performs the RUNNING→BLOCKED transition. */
 XR_FUNC bool xr_coro_finalize_blocked_suspend(struct XrCoroutine *coro);
 XR_FUNC void xr_coro_finish_backend_resume_tokens(struct XrCoroutine *coro, int resume_status);
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);

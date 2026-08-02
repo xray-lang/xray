@@ -86,6 +86,20 @@ void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core) {
     xr_sysheap_destroy_coro_storage(core->sys_heap);
 }
 
+/* Tear down the root execution's heap. Region teardown returns cached blocks
+ * through region.sys_heap — a pointer captured at init, not re-read from
+ * core->sys_heap — so this must run while the system heap is still alive.
+ * Idempotent: xray_vm_delete stages it explicitly (before it frees sys_heap),
+ * while xr_runtime_core_delete runs it for callers that never staged it (the
+ * AOT runtime, constructor failure paths). */
+void xr_runtime_core_teardown_root_heap(XrRuntimeCore *core) {
+    if (!core || core->root_heap_torn_down)
+        return;
+    core->root_heap_torn_down = true;
+    core->root_alloc.local_heap = NULL;
+    xr_coro_heap_teardown_inplace(&core->root_heap);
+}
+
 void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     if (!core)
         return;
@@ -168,8 +182,7 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
     xr_runtime_core_destroy_coro_storage(core);
     /* Root heap first: its finalizers may still reach module-static objects,
      * which the fixed heap is about to tear down. */
-    core->root_alloc.local_heap = NULL;
-    xr_coro_heap_teardown_inplace(&core->root_heap);
+    xr_runtime_core_teardown_root_heap(core);
     xr_runtime_core_cleanup_fixed_heap(core);
 
     if (core->global_string_pool) {
