@@ -1150,7 +1150,10 @@ add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
 set(XRAY_VM_RUNTIME_CORO_SOURCES ${CORO_SRC})
-list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_.*\\.c$")
+# Release VM native stdlib fragments execute the canonical generated AOT
+# bodies, so the standalone VM runtime owns the production coroutine adapters.
+# The test-yield hook remains test-only and must not enter the installed runtime.
+list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_test_yield\\.c$")
 
 set(XRAY_VM_RUNTIME_SOURCES
     ${BASE_SRC}
@@ -1166,6 +1169,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${XRAY_VM_RUNTIME_CORO_SOURCES}
     ${IO_SRC}
     ${VM_SRC}
+    src/aot/xrt_runtime_globals.c
     src/api/xisolate.c
     src/api/xisolate_params.c
     src/api/xisolate_runtime.c

@@ -225,11 +225,8 @@ static bool is_defer_temp(AstNode *node, AstNodeType type, const char *name, int
     return strcmp(name + prefix_len, index) == 0;
 }
 
-/* Unwrap the anonymous zero-parameter closure every `defer` form builds and
- * return the single call in its body, or NULL if the body is anything else. A
- * statement carrying a comment is rejected: the surface forms this enables are
- * one-liners with nowhere to put it. */
-static AstNode *defer_closure_call(AstNode *closure) {
+/* Unwrap the anonymous zero-parameter closure every `defer` form builds. */
+static AstNode *defer_closure_body(AstNode *closure) {
     if (!closure || closure->type != AST_FUNCTION_EXPR)
         return NULL;
     FunctionDeclNode *fn = &closure->as.function_expr;
@@ -237,7 +234,15 @@ static AstNode *defer_closure_call(AstNode *closure) {
         fn->is_generator || fn->attr_count > 0)
         return NULL;
     AstNode *body = fn->body;
-    if (!body || body->type != AST_BLOCK || body->as.block.count != 1)
+    return body && body->type == AST_BLOCK ? body : NULL;
+}
+
+/* Return the single call in a defer closure, or NULL if the body is anything
+ * else. A statement carrying a comment is rejected because the reconstructed
+ * one-line call form has nowhere to put it. */
+static AstNode *defer_closure_call(AstNode *closure) {
+    AstNode *body = defer_closure_body(closure);
+    if (!body || body->as.block.count != 1)
         return NULL;
     AstNode *stmt = body->as.block.statements[0];
     if (!stmt || stmt->type != AST_EXPR_STMT || stmt->leading_comments || stmt->trailing_comments)
@@ -247,38 +252,46 @@ static AstNode *defer_closure_call(AstNode *closure) {
 }
 
 bool xfmt_emit_defer_closure(XrFmtContext *ctx, AstNode *node) {
-    AstNode *call = defer_closure_call(node->as.defer_stmt.expr);
-    /* Only a zero-argument call may be printed back as `defer f()`. A call with
-     * arguments desugars into the eager-capture block instead, so printing
-     * `defer f(a)` for a hand-written `defer { f(a) }` would re-parse into a
-     * different tree — the block would gain the __xr_dtmp_N temporaries. */
-    if (!call || call->as.call_expr.arg_count != 0)
+    AstNode *body = defer_closure_body(node->as.defer_stmt.expr);
+    if (!body)
         return false;
 
+    AstNode *call = defer_closure_call(node->as.defer_stmt.expr);
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "defer ");
-    fmt_call(ctx, call);
+
+    /* Only a zero-argument free/static call can use the compact form without
+     * gaining eager-capture temporaries when reparsed. Member receivers and
+     * call arguments remain in the canonical block form. */
+    if (call && call->as.call_expr.arg_count == 0 && call->as.call_expr.callee &&
+        call->as.call_expr.callee->type != AST_MEMBER_ACCESS) {
+        fmt_call(ctx, call);
+    } else {
+        xfmt_emit_block(ctx, body);
+    }
     xfmt_write_newline(ctx);
     return true;
 }
 
-/* Match the block `defer f(a, b)` desugars into and hand back the call whose
- * callee and argument accesses the surface form needs:
+/* Match the block `defer receiver.f(a, b)` desugars into and hand back the
+ * call whose callee and argument accesses the surface form needs:
  *
  *     {                                  <- block, is_synthetic_defer_capture
- *         var __xr_dtmp_0 = a            <- one var decl per argument, in order
- *         var __xr_dtmp_1 = b
- *         defer { f(__xr_dtmp_0, __xr_dtmp_1) }
+ *         var __xr_dtmp_0 = receiver     <- receiver first, then arguments
+ *         var __xr_dtmp_1 = a
+ *         var __xr_dtmp_2 = b
+ *         defer { __xr_dtmp_0.f(__xr_dtmp_1, __xr_dtmp_2) }
  *     }
  *
  * Returns NULL for anything that is not exactly that shape — including a block
  * a later pass has edited, so a partial match can never be printed as a
  * `defer` that would evaluate its arguments somewhere else. */
-static CallExprNode *match_defer_capture(AstNode *node) {
+static CallExprNode *match_defer_capture(AstNode *node, bool *has_receiver) {
+    *has_receiver = false;
     if (!node || node->type != AST_BLOCK || !node->as.block.is_synthetic_defer_capture)
         return NULL;
     BlockNode *block = &node->as.block;
-    int n = block->count - 1; /* one var decl per captured argument */
+    int n = block->count - 1; /* one var decl per receiver/argument snapshot */
     if (n < 1)
         return NULL;
 
@@ -299,36 +312,60 @@ static CallExprNode *match_defer_capture(AstNode *node) {
         return NULL;
 
     CallExprNode *call = &call_node->as.call_expr;
-    if (call->arg_count != n)
+    int receiver_count = 0;
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        AstNode *object = call->callee->as.member_access.object;
+        if (!is_defer_temp(object, AST_VARIABLE, object ? object->as.variable.name : NULL, 0))
+            return NULL;
+        receiver_count = 1;
+    }
+    if (call->arg_count != n - receiver_count)
         return NULL;
-    for (int k = 0; k < n; k++) {
+    for (int k = 0; k < call->arg_count; k++) {
         AstNode *arg = call->arguments[k];
-        if (!is_defer_temp(arg, AST_VARIABLE, arg ? arg->as.variable.name : NULL, k))
+        int snapshot_index = receiver_count + k;
+        if (!is_defer_temp(arg, AST_VARIABLE, arg ? arg->as.variable.name : NULL,
+                           snapshot_index))
             return NULL;
     }
+    *has_receiver = receiver_count != 0;
     return call;
 }
 
 bool xfmt_emit_defer_capture(XrFmtContext *ctx, AstNode *node) {
-    CallExprNode *call = match_defer_capture(node);
+    bool has_receiver = false;
+    CallExprNode *call = match_defer_capture(node, &has_receiver);
     if (!call)
         return false;
 
-    /* The arguments the user wrote are the temporaries' initializers; the
-     * callee and the per-argument `ref`/`move` modes come from the rewritten
-     * call inside the closure. */
+    /* Restore the receiver and arguments from the temporaries' initializers;
+     * generic arguments and per-argument `ref`/`move` modes stay on the
+     * rewritten call inside the closure. */
     BlockNode *block = &node->as.block;
-    int n = block->count - 1;
-    AstNode **arguments = (AstNode **) xr_malloc(sizeof(AstNode *) * (size_t) n);
-    if (!arguments)
-        return false;
-    for (int k = 0; k < n; k++)
-        arguments[k] = block->statements[k]->as.var_decl.initializer;
+    int receiver_count = has_receiver ? 1 : 0;
+    int argument_count = block->count - 1 - receiver_count;
+    AstNode **arguments = NULL;
+    if (argument_count > 0) {
+        arguments =
+            (AstNode **) xr_malloc(sizeof(AstNode *) * (size_t) argument_count);
+        if (!arguments)
+            return false;
+        for (int k = 0; k < argument_count; k++)
+            arguments[k] = block->statements[receiver_count + k]->as.var_decl.initializer;
+    }
+
+    AstNode surface_callee;
+    AstNode *callee = call->callee;
+    if (has_receiver) {
+        surface_callee = *call->callee;
+        surface_callee.as.member_access.object = block->statements[0]->as.var_decl.initializer;
+        callee = &surface_callee;
+    }
 
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "defer ");
-    fmt_call_like(ctx, call->callee, call->type_args, call->type_arg_count, arguments,
-                  call->arg_accesses, n);
+    fmt_call_like(ctx, callee, call->type_args, call->type_arg_count, arguments,
+                  call->arg_accesses, argument_count);
     xfmt_write_newline(ctx);
 
     xr_free(arguments);
