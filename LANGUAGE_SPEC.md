@@ -1593,8 +1593,6 @@ Three loan forms share one loan record, one non-lexical liveness rule, and one s
 | `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
 | **Closure capture** | the closure binding | that binding's last use |
 
-A `ref` argument is the fourth and shortest-lived loan: an exclusive place loan that begins when the call is entered and ends when it returns. Because it never outlives the call, it needs no loan record — its only conflict surface is the call site itself, checked as same-call overlap (§5.2.4).
-
 An ordinary synchronous closure captures an outer binding **by reference**, so a capture is a loan and not a copy:
 
 ```xray
@@ -2917,8 +2915,6 @@ submit(makeJob())
 | none (READ) | Read-only capability; the callee cannot mutate the caller's mutable graph |
 | `ref` | Exclusive writable place loan; the call site must write `ref place` |
 | `move` | Transfer of the unique owner; an existing lvalue requires `move value`, while a fresh value or `copy(value)` can be passed directly |
-
-**Exclusivity is enforced at the call site.** Within one call, a `ref` place may not overlap any other argument's access to the same ownership root — not under the same name (`f(ref a, a)`), not under an alias (`var b = a; f(ref a, b)`), and not with the receiver of a method call (`obj.m(ref obj)`); overlap is judged on places, so `f(ref h.left, h.right)` is fine (E0353 family). A nested argument such as `f(ref a, g(a))` stays legal: arguments are evaluated before the call begins, so the inner read completes before the exclusive loan activates. A `ref` to a strict sub-place of the receiver (`this.m(ref this.field)`) is likewise outside this first, zero-false-positive cut.
 
 Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output locations use
 `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
@@ -5129,7 +5125,7 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Dimension | Choice |
 |--|--|
 | Scheduling model | M:N (user-space coroutines on multiple OS threads) |
-| Scheduling policy | Cooperative (back edges, channels, `await`, `Coro.yield()`, and similar scheduling/suspension points) + work stealing |
+| Scheduling policy | Cooperative + work stealing. Scheduling points are: every suspension point (channels, `await`, `Coro.yield()`, timers, and similar), and **loop back edges inside suspendable functions** — on the VM every function is interpreted and preempted on reductions, and AOT inserts reduction-throttled safepoints on the back edges of every coroutine-ABI function, so a CPU loop in a suspendable function yields and observes cancellation on both backends. A **non-suspendable (plain-ABI) function body contains no scheduling points by design**: that is the other face of the "code that does not use coroutines pays no coroutine tax" promise (§10.12) — a provably `no_suspend` function is exactly as free of safepoints as it is of frames. A long-running pure-CPU loop that must stay preemptible therefore belongs in a suspendable function; one that must stay tax-free belongs in a sync function and is expected to return. |
 | Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
 | Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
 | Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
@@ -6483,21 +6479,10 @@ When a value crosses an execution boundary (captured into `go`, sent through a c
 
 - Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
 - **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and bulk release of the coroutine heap bounds whatever remains (L2). The development-mode detector reports cycles; it never collects them.
-- **Coroutine-heap boundary (L2)**: every coroutine owns its heap, and that heap is released as a whole when the coroutine ends. So **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the coroutine that built it**. Process-lifetime leaks are only possible from the `MODULE_STATIC` / `SYNC_SHARED` ownership domains, and from the main execution's own lifetime.
-- **`CONST_SHARED` is constructively acyclic** and drops off that list: an immutable graph can only contain a cycle if a back edge existed while it was being built, and Xray gives no way to build one — there are no forward references, publication into `const` storage requires an explicit `move`/`copy` of a graph that was unique until that point, and there is no implicit freeze that could capture a still-mutable (and thus possibly cyclic) graph. A published const graph is therefore a DAG.
-- **A `SYNC_SHARED` cycle is a program defect, and the language says so rather than hiding it**: `weak` is forbidden on shared-domain objects (W4), and no coroutine-heap teardown bounds the domain, so nothing reclaims such a cycle. What the toolchain provides is observation: the development-mode detector scans the shared domain at main-execution exit (naming the objects and the closing edges; the fix is restructuring the back reference or breaking it explicitly), and `runtime.sharedBytes()` is the cheap production signal — a monotonic rise that survives channel teardown is a shared leak. Current banding discipline additionally fail-closes the known source-level constructions (a value whose graph captures its own channel cannot be sent without an explicit transfer plan), so hitting this in practice requires going out of one's way.
+- **Coroutine-heap boundary (L2)**: every coroutine owns its heap, and that heap is released as a whole when the coroutine ends. So **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the coroutine that built it**. Process-lifetime leaks are only possible from the `MODULE_STATIC` / `CONST_SHARED` / `SYNC_SHARED` ownership domains, and from the main execution's own lifetime.
 - **This property is unusual among pure reference-counted languages**: an Rc/RefCell cycle in Rust, or a strong-reference cycle in Swift, leaks until the process exits — both allocate refcounted objects on a process-wide heap, with no boundary smaller than the process that can be dropped wholesale. Xray's coroutine heap is that boundary, so forgetting a `weak` costs a **bounded** leak rather than a permanent one. This is capping, not collecting.
 - Xray has no concurrent tracing GC and no cycle collector; no GC hooks remain at function calls or backward branches.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current; `runtime.sharedBytes()` / `runtime.staticBytes()` report the two domains no coroutine teardown ever bounds (`import runtime`; the `mem` module carries raw-memory capabilities only).
-
-#### 16.3.0 Leak engineering
-
-Four rules cover the leak surface a pure-RC model leaves open; each pairs a domain with its observation:
-
-1. **Long-running programs put each request / session / phase in a coroutine and keep the main coroutine to orchestration.** L2 then bounds every cycle to the unit of work that built it — the leak dies with the coroutine. A cycle built directly on a long-lived main coroutine has no bound except process exit; the idiom, not a collector, is what removes that case.
-2. **`xray test` runs the development detector by default**, scanning each coroutine heap at teardown and the root and shared domains before exit; a reported cycle fails the run with the closing edges named.
-3. **In production, watch `runtime.sharedBytes()`** — the only domain where a cycle is a process-lifetime leak is also the one this counter meters; **`runtime.staticBytes()`** answers the neighbouring question ("is a module cache growing without bound", which is reachability, not a cycle).
-4. **Breaking an edge is an ownership decision with three idioms**: a `weak` field (an EXEC_LOCAL field cycle), `defer holder.field = null` (a closure-capture edge, which `weak` cannot reach), restructuring the back reference into an id resolved by an external table (the shared domain, where `weak` is forbidden).
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 #### 16.3.1 The two reference-count bands
 
