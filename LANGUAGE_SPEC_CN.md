@@ -2651,7 +2651,7 @@ throw AppError.NotFound                      // 值返回错误通道
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 ```
 
 ```xray
@@ -2668,9 +2668,20 @@ fn process() {
     }
     do_work()
 }
+
+fn snapshot_vs_reference() {
+    var n = 1
+    defer print("call", n)            // 注册时保存 1
+    defer { print("block", n) }       // 退出时读取 2
+    n = 2
+}                                      // 输出 block 2，再输出 call 1
 ```
 
 **语义**：
+- `defer` 只有两种正文：调用表达式或块；赋值、成员赋值、裸值和其他非调用表达式都是语法错误。任意清理逻辑写成 `defer { ... }`。
+- 调用形式在注册时按从左到右顺序立即求值并保存调用目标的接收者及全部实参，退出时只执行已保存的调用。动态可调用目标若无法静态证明为稳定调用，按 `E0392` 拒绝。
+- 块形式不做值快照；块体在退出时执行，并按引用观察届时的局部绑定值。因此 `defer conn.close()` 保存当时的 `conn`，而 `defer { conn.close() }` 读取退出时的 `conn`。
+- 调用快照或块捕获引用的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许，并由上述快照与引用语义决定 defer 最终观察到哪个值。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
@@ -4225,7 +4236,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
+go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
 ```
 
 #### 正确姿势
@@ -4443,14 +4454,14 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 enum WorkerErr { Failed(string) }
 const err_ch = Channel<string>(1)
 
-go {
+go fn() {
     try {
         riskyWork()
         err_ch.send("ok")
     } catch (e) {
         err_ch.send("error")
     }
-}
+}()
 
 var result = match (err_ch.recv()) {
     Recv.Value(v) -> v
@@ -4459,7 +4470,9 @@ var result = match (err_ch.recv()) {
 if (result != "ok") { log("worker failed") }
 ```
 
-2. **结构化并发 `linked scope`**（推荐，见 §10.5）：子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+
+3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
 
 ### 8.2 Panic 通道
 
@@ -4566,6 +4579,8 @@ main()
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
+
+调用形式在注册时快照接收者与实参；块形式在退出时按引用读取捕获绑定。两种形式持有的可移动 owner 在块退出前都不得被 `move` 或返回，否则报 `E0382`。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -5106,7 +5121,7 @@ print(typeName(c))             // "Container<int>" when type names are enabled
 
 > 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
 
-xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：写 `go { ... }` 就和写普通函数一样简单，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
+xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
 
 ### 10.1 协程模型
 
@@ -5123,26 +5138,26 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 ### 10.2 `go` — 启动协程
 
 ```ebnf
-GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` 是**表达式**，返回 `Task<T>` 句柄。三种形式都合法：
+`go` 是**表达式**，返回 `Task<T>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
 ```xray
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
+// 内联逻辑：lambda 也必须形成完整调用，并显式传参
 var t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
 
-// 形式 3：块形式（隐式包装为零参 lambda）
-var t3 = go {
+// 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
+var t3 = go fn() -> int {
     return compute()
-}
+}()
 
 // 可选调试名称
 var named = go(name: "worker-1") worker(1, channel)
@@ -5157,7 +5172,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。它不得捕获任何外层 `var`，即使只读也不允许；已发布的 `const` 值和受验证同步句柄可以按能力捕获。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，并在参数位置显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -5172,8 +5187,9 @@ var task = go fn(x: int) -> int {
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
-- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
+- `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
+- `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
 
 ### 10.3 `await` — 等待结果
 
@@ -6979,9 +6995,13 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
-           |  'go' (Block | PostfixExpr)
+           |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
@@ -7111,7 +7131,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
@@ -7423,7 +7443,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **enum** | 枚举类型（见 §5.6） |
 | **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
 | **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
-| **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
+| **goroutine** | xray 中称作协程 (coroutine)，由 `go CallExpr` 启动；内联逻辑写作被立即调用的 lambda |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
 | **interface** | 接口（见 §5.5） |

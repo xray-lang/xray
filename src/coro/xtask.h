@@ -16,7 +16,7 @@
  * WHY THIS DESIGN:
  *   - Decouples user handle (runtime-managed, ~128B) from executor
  *     (pool-managed VM/AOT execution context)
- *   - Parent-child hierarchy enables linked/monitored go and scope blocks
+ *   - Parent-child hierarchy enables linked go and scope blocks
  *   - CompletionNode allows multiple listeners (monitor channels, callbacks)
  *   - 6-state machine tracks Completing/Cancelling transitions for children
  *
@@ -36,7 +36,7 @@
  *                    XrScopeContext (orthogonal scope policy)
  *   - xblock.c: await helpers read task->state/result
  *   - xworker_exec.c: executor completion writes task->result, recycles executor
- *   - linked go / monitored go syntax
+ *   - linked go syntax
  */
 
 #ifndef XTASK_H
@@ -86,9 +86,8 @@ typedef enum {
 /* ========== Link Mode (go prefix modifier) ========== */
 
 typedef enum {
-    XR_LINK_NONE = 0,       // go fn()          — independent (default)
-    XR_LINK_LINKED = 1,     // linked go fn()   — bidirectional error propagation
-    XR_LINK_MONITORED = 2,  // monitored go fn() — one-way completion notification
+    XR_LINK_NONE = 0,    // go fn()        — independent (default)
+    XR_LINK_LINKED = 1,  // linked go fn() — bidirectional error propagation
 } XrLinkMode;
 
 typedef enum {
@@ -171,7 +170,7 @@ typedef struct XrTask {
     // State machine + flags
     _Atomic uint8_t state;  //  1B
     uint8_t flags;          //  1B
-    uint8_t link_mode;      //  1B: XR_LINK_NONE/LINKED/MONITORED
+    uint8_t link_mode;      //  1B: XR_LINK_NONE/LINKED
     /* Set (release) by the completing worker after its last access to this
      * task; one-shot destroy requires it (acquire) so the task is never
      * freed under the completer's feet. */

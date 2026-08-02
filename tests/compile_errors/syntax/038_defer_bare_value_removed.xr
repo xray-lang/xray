@@ -1,0 +1,7 @@
+fn cleanup() {}
+
+fn main_logic() {
+    defer cleanup
+}
+
+main_logic()

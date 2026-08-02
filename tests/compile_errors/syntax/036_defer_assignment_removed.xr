@@ -1,0 +1,7 @@
+fn main_logic() {
+    var x = 1
+    defer x = 99
+    print(x)
+}
+
+main_logic()

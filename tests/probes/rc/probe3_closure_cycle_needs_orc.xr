@@ -178,7 +178,7 @@ fn make_closure_cycle_broken_by_defer() {
     w.slot.handler = fn() -> int {
         return w.render()
     }
-    defer w.slot.handler = fn() -> int { return 0 }
+    defer { w.slot.handler = fn() -> int { return 0 } }
 }
 
 @test

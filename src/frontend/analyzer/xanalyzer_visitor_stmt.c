@@ -8780,6 +8780,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_loan(ctx, sym, var->initializer, var_type);
     xa_register_pending_capture_loans(ctx, sym, var->initializer);
+    if (ctx->current_block_node && ctx->current_block_node->type == AST_BLOCK &&
+        ctx->current_block_node->as.block.is_synthetic_defer_capture && var->initializer)
+        xa_register_defer_snapshot_expr_loans(ctx, var->initializer, node);
     xa_record_pointer_provenance(ctx, sym, var->initializer, var_type);
 
     /* Synchronization handles derive their interior-mutable/shareable

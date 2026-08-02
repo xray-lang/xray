@@ -134,7 +134,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ 编译错误：不能捕获可变局部变量
+go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
 ```
 
 #### 正确姿势
@@ -326,7 +326,7 @@ Consequently, a local `const` containing only inline values may cross directly. 
 
 ```xray
 var local = 0
-go { local += 1 }                        // ❌ compile error: cannot capture mutable local
+go fn() { local += 1 }()                 // ❌ compile error: cannot capture mutable local
 ```
 
 #### Recommended patterns

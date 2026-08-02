@@ -675,9 +675,9 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
                 continue;
             const char *field = cycle_edge_field(&edges, e);
             if (field)
-                fprintf(stderr, "        defer <持有者>.%s = null\n", field);
+                fprintf(stderr, "        defer { <持有者>.%s = null }\n", field);
             else
-                fprintf(stderr, "        defer <%s 持有该闭包的字段> = null\n",
+                fprintf(stderr, "        defer { <%s 持有该闭包的字段> = null }\n",
                         cycle_obj_name(members[e->from]->obj));
         }
     }

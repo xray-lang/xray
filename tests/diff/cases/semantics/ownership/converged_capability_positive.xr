@@ -18,7 +18,7 @@ print(ch.recv())
 ch.close()
 
 const captured = [8, 9]
-var task = go {
+var task = go fn() {
     return len(captured)
-}
+}()
 print(await task)

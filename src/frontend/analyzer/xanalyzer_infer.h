@@ -41,6 +41,7 @@ typedef struct XaActiveLoan {
     struct XaSymbol *borrower_symbol;
     struct XaScope *borrower_scope;
     int loop_depth_at_creation;
+    uint32_t site_line;
     struct XaActiveLoan *next;
 } XaActiveLoan;
 

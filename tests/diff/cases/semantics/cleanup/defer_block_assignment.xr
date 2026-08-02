@@ -1,0 +1,8 @@
+// anchor: defer-block-assignment-task-255
+fn deferred_assignment() {
+    var value = 1
+    defer { value = 99; print("cleanup", value) }
+    print("body", value)
+}
+
+deferred_assignment()

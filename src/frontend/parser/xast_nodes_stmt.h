@@ -218,7 +218,6 @@ typedef struct PatternTypeNode {
  *   go fn()                       - start coroutine
  *   go(name: "xxx") fn()          - coroutine with name
  *   linked go fn()                - bidirectional error propagation
- *   monitored go fn()             - one-way completion notification
  */
 typedef enum SpawnExprKind {
     XR_SPAWN_COROUTINE = 0,
@@ -228,7 +227,7 @@ typedef enum SpawnExprKind {
 typedef struct GoExprNode {
     AstNode *expr;       // Expression to execute (function call or closure)
     const char *name;    // Coroutine name (optional, for debugging)
-    uint8_t link_mode;   // XR_LINK_NONE / XR_LINK_LINKED / XR_LINK_MONITORED
+    uint8_t link_mode;   // XR_LINK_NONE / XR_LINK_LINKED
     uint8_t spawn_kind;  // SpawnExprKind; sys.Thread.spawn reuses go capture rules
 } GoExprNode;
 

@@ -2287,8 +2287,8 @@ AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **
 /* ========== Coroutine AST Node Creation ========== */
 
 // Create go expression node
-// go fn() or go { block } or go(name: "xxx") fn()
-// linked go fn() or monitored go fn()
+// go call() or go(name: "xxx") call()
+// linked go call()
 AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *name,
                         uint8_t link_mode, int line) {
     AstNode *node = alloc_node(session, AST_GO_EXPR, line);

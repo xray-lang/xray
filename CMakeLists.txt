@@ -3225,6 +3225,21 @@ if(BUILD_TESTS)
         TIMEOUT 300
     )
 
+    # Task 255 — converge go/defer on one grammar and keep every owner used by
+    # a registered defer alive until the surrounding user block exits.
+    add_test(
+        NAME regression_task255_go_defer_forms
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/probes/rc/check_task255_go_defer.py
+                --xray $<TARGET_FILE:xray>
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_task255_go_defer_forms PROPERTIES
+        LABELS "regression;frontend;ownership;rc;vm;task-255"
+        TIMEOUT 120
+    )
+
     # Task 249 — RC reclamation gates. probe0 asserts that a local class
     # instance is reclaimed by plain RC (it was not: every `var x = Class(...)`
     # leaked); probe4 asserts runtime.liveBytes() is live bytes rather than

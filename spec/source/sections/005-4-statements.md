@@ -280,7 +280,7 @@ throw AppError.NotFound                      // 值返回错误通道
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 ```
 
 ```xray @id=stmt-defer
@@ -297,9 +297,20 @@ fn process() {
     }
     do_work()
 }
+
+fn snapshot_vs_reference() {
+    var n = 1
+    defer print("call", n)            // 注册时保存 1
+    defer { print("block", n) }       // 退出时读取 2
+    n = 2
+}                                      // 输出 block 2，再输出 call 1
 ```
 
 **语义**：
+- `defer` 只有两种正文：调用表达式或块；赋值、成员赋值、裸值和其他非调用表达式都是语法错误。任意清理逻辑写成 `defer { ... }`。
+- 调用形式在注册时按从左到右顺序立即求值并保存调用目标的接收者及全部实参，退出时只执行已保存的调用。动态可调用目标若无法静态证明为稳定调用，按 `E0392` 拒绝。
+- 块形式不做值快照；块体在退出时执行，并按引用观察届时的局部绑定值。因此 `defer conn.close()` 保存当时的 `conn`，而 `defer { conn.close() }` 读取退出时的 `conn`。
+- 调用快照或块捕获引用的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许，并由上述快照与引用语义决定 defer 最终观察到哪个值。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
@@ -636,7 +647,7 @@ throw AppError.NotFound                      // value-return error channel
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (Expression | Block)
+DeferStmt ::= 'defer' (CallExpr | Block)
 ```
 
 ```xray @id=stmt-defer
@@ -653,9 +664,20 @@ fn process() {
     }
     do_work()
 }
+
+fn snapshot_vs_reference() {
+    var n = 1
+    defer print("call", n)            // saves 1 at registration
+    defer { print("block", n) }       // reads 2 at exit
+    n = 2
+}                                      // prints block 2, then call 1
 ```
 
 **Semantics**:
+- A `defer` body has exactly two forms: a call expression or a block. Assignments, member assignments, bare values, and every other non-call expression are syntax errors; write arbitrary cleanup as `defer { ... }`.
+- The call form immediately evaluates and saves the callee receiver and every argument from left to right. Block exit only invokes that saved call. A dynamic callable that cannot be proven stable statically is rejected with `E0392`.
+- The block form does not snapshot values. Its body runs at block exit and observes captured local bindings by reference at that time. Thus `defer conn.close()` saves the current `conn`, while `defer { conn.close() }` reads `conn` at exit.
+- A movable owner referenced by a call snapshot or block capture is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`. Ordinary rebinding/mutation remains legal; the snapshot-versus-reference rule above determines which value the defer observes.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.

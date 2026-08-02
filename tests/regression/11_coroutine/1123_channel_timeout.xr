@@ -64,7 +64,7 @@ fn test_channel_timeout() {
     const ch5: Channel<int> = Channel(2)
 
     // 生产者
-    var producer = go {
+    var producer = go fn() {
         for (i in 1..4) {
             match (ch5.sendTimeout(i, 500)) {
                 SendResult.Sent -> {}
@@ -74,7 +74,7 @@ fn test_channel_timeout() {
             }
         }
         ch5.close()
-    }
+    }()
 
     // 消费者（慢）
     var consumer = go fn() -> int {

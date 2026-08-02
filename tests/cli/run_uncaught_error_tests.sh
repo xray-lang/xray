@@ -94,7 +94,7 @@ fn run() {
     throw TopErr.Failed("top-level")
 }
 
-go { }
+go fn() { }()
 print("before")
 run()
 EOF
@@ -117,7 +117,7 @@ cat > "$WORK/in_go.xr" <<'EOF'
 enum GoErr { Failed(reason: string) }
 
 print("before")
-go { throw GoErr.Failed("in-go") }
+go fn() { throw GoErr.Failed("in-go") }()
 EOF
 GO_ERR='[Uncaught Error in go coroutine] GoErr.Failed("in-go")'
 

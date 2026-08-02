@@ -80,6 +80,8 @@ typedef enum XaLoanKind {
     XA_LOAN_RAW_READ,
     XA_LOAN_RAW_WRITE,
     XA_LOAN_CAPTURE,
+    XA_LOAN_DEFER_CAPTURE,
+    XA_LOAN_DEFER_SNAPSHOT,
 } XaLoanKind;
 
 #define XA_LOAN_KIND_IS_RAW(kind) ((kind) == XA_LOAN_RAW_READ || (kind) == XA_LOAN_RAW_WRITE)

@@ -1,0 +1,9 @@
+fn consume(value: move Array<int>) { print(len(value)) }
+
+fn main_logic() {
+    var buf = [1, 2, 3]
+    defer print("snapshot", len(buf))
+    consume(move buf)
+}
+
+main_logic()

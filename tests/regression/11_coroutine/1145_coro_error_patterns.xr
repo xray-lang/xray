@@ -49,9 +49,9 @@ fn test_basic_error() {
     })
 }
 fn test_failed_await_result() {
-    var t = go {
+    var t = go fn() {
         throw CoroErr.Msg("something went wrong")
-    }
+    }()
     var r = t.awaitResult()
     match (r) {
         TaskResult.Failed(e) -> print("observed await error:", e)
@@ -107,10 +107,10 @@ fn test_await_any() {
     print("First result:", r)
 }
 fn test_monitor_error() {
-    var t = go(name: "err-worker") {
+    var t = go(name: "err-worker") fn() {
         time.sleep(10)
         throw CoroErr.Msg("worker crashed")
-    }
+    }()
 
     const ch = Coro.monitor("err-worker")
     var reason = match (ch.recv()) {

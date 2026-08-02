@@ -201,7 +201,7 @@ typedef enum {
     AST_TYPE_ALIAS,  // type User = { name: string, age: int }
 
     // Coroutine nodes
-    AST_GO_EXPR,         // go fn() or go { block }
+    AST_GO_EXPR,         // go CallExpr
     AST_AWAIT_EXPR,      // await / await all / await any (flags distinguish)
     AST_CHANNEL_NEW,     // Channel() or Channel(10)
     AST_CHAN_SEND,       // ch.send(value)

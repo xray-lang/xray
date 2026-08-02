@@ -24,7 +24,7 @@ order: 025
 | **enum** | 枚举类型（见 §5.6） |
 | **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
 | **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
-| **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
+| **goroutine** | xray 中称作协程 (coroutine)，由 `go CallExpr` 启动；内联逻辑写作被立即调用的 lambda |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
 | **interface** | 接口（见 §5.5） |
@@ -70,7 +70,7 @@ order: 025
 | **enum** | Enumeration type (see §5.6) |
 | **GC** | Generic term for garbage collection; Xray has no tracing GC or cycle collector. Object death is driven only by reference counting, which makes its point exact; a cycle is not collected but ruled out statically, broken with a `weak` field, or bounded by its execution-local reclamation domain and disposed with the residual graph when the physical coroutine ends (§16.8) |
 | **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |
-| **goroutine** | Equivalent of xray coroutine; launched via `go {...}` |
+| **goroutine** | Equivalent of an xray coroutine; launched by `go CallExpr`, with inline logic written as an immediately invoked lambda |
 | **hoisting** | Implicit declaration of a name before its first use |
 | **IC** | Inline Cache: optimization of property/method dispatch |
 | **interface** | Interface type (see §5.5) |

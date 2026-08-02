@@ -1,0 +1,2 @@
+defer takes a call or a block
+defer { ... }
