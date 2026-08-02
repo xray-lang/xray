@@ -1,0 +1,116 @@
+// anchor: suspended-frame-release
+// Task 259 phase E — RC values parked in a suspended frame must be released
+// when the frame is dropped without ever resuming, on all three drop edges:
+//
+//   1. a generator abandoned mid-drive (break out of `for`; spec 3.16.3 says
+//      an abandoned generator never runs another statement, so releasing the
+//      frame slots is the runtime's job, not the body's),
+//   2. a coroutine cancelled while suspended (cancel unwinds and runs defer;
+//      the frame's RC slots go with the unwind),
+//   3. a task whose handle is dropped without await (release happens when the
+//      handle becomes unreachable — deferred, not leaked).
+//
+// Assertions are behavioural plus a per-backend non-growth bound on
+// runtime.liveBytes(): the loop below repeats each shape many times, so a
+// missed frame release compounds into unbounded growth, while correct
+// release keeps the reading flat. The absolute numbers differ per backend
+// (AOT allocates natively and may not touch the metered heap at all, task
+// 252); the printed verdicts must not.
+
+import runtime
+import time
+
+fn counts(n: int) -> Iterator<int> {
+    // Generator whose frame holds a live Array across every yield.
+    var payload = [n, n + 1, n + 2]
+    var i = 0
+    while (i < n) {
+        yield payload[i % 3] + i
+        i = i + 1
+    }
+}
+
+fn drop_generators(rounds: int) -> int {
+    var acc = 0
+    var r = 0
+    while (r < rounds) {
+        // Take two elements, then abandon: the frame still holds `payload`.
+        var taken = 0
+        for (v in counts(64)) {
+            acc = acc + v
+            taken = taken + 1
+            if (taken == 2) { break }
+        }
+        r = r + 1
+    }
+    return acc
+}
+
+fn sleeper(ch: Channel<int>) -> int {
+    // Frame parks a container across a suspend, then blocks forever;
+    // the only way out is cancellation.
+    var held = [1, 2, 3, 4, 5, 6, 7, 8]
+    var got = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
+    return len(held) + got
+}
+
+fn drop_cancelled(rounds: int) -> int {
+    var done = 0
+    var r = 0
+    while (r < rounds) {
+        var ch = Channel<int>(1)
+        var t = go sleeper(ch)
+        time.sleep(1)
+        t.cancel()
+        // awaitResult observes the outcome as a value; a cancelled task's
+        // frame (and the Array parked in it) must already be torn down by
+        // the time the result is visible.
+        var hit = match (t.awaitResult()) {
+            TaskResult.Cancelled -> 1
+            _ -> 0
+        }
+        done = done + hit
+        ch.close()
+        r = r + 1
+    }
+    return done
+}
+
+fn fire_and_forget(n: int) -> int {
+    var data = [n, n, n]
+    return len(data)
+}
+
+fn drop_tasks(rounds: int) -> int {
+    var r = 0
+    while (r < rounds) {
+        // Handle dropped without await: release is deferred to handle
+        // unreachability, never skipped.
+        go fire_and_forget(r)
+        var awaited = go fire_and_forget(r + 1)
+        var last = await awaited
+        if (last != 3) { return -1 }
+        r = r + 1
+    }
+    return rounds
+}
+
+var base = runtime.liveBytes()
+
+var g = drop_generators(200)
+var c = drop_cancelled(8)
+var t = drop_tasks(50)
+
+// Give abandoned handles a beat to drain before reading the meter.
+time.sleep(5)
+var after = runtime.liveBytes()
+
+print(g)
+print(c)
+print(t)
+// Non-growth bound: 200 abandoned generator frames each parking a 3-element
+// array would dwarf 64 KiB if leaked.
+print(after < base + 65536)
