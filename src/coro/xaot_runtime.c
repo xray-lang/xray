@@ -723,6 +723,20 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
         return NULL;
     }
 
+    /* Task 250: an execution that runs language code owns an exec heap from
+     * birth, so its EXEC_LOCAL allocation context never falls through to
+     * storage that outlives the execution. The VM wires this inside
+     * xr_coro_init_shell_owner behind need_storage, which requires a backend
+     * prepare_execution_state hook the AOT backend does not have — so the
+     * runtime-empty shell arrives heapless and the wiring happens here.
+     * Generated code does reach this context: channel Recv/SendResult ADT
+     * wrappers and friends allocate through coro->alloc_ctx. */
+    if (!xr_coro_ensure_heap(coro)) {
+        xr_coro_discard_runtime_empty(scheduler, coro);
+        aot_release_frame(desc, frame, NULL);
+        return NULL;
+    }
+
     if (coro->backend && coro->backend != &aot_runtime_backend_vtable) {
         if (coro->backend->destroy) {
             coro->backend->destroy(coro);
