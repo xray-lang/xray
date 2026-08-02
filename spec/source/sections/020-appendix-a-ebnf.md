@@ -124,8 +124,8 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
-         |  BareLambda
-         |  ArrowFunction
+         |  ArrowLambda
+         |  FnExpression
          |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
@@ -139,11 +139,12 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
-BareLambda ::= Identifier '->' (Expression | Block)
-ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
-ArrowParams ::= ArrowParam (',' ArrowParam)*
-ArrowParam  ::= Identifier ':' Type
-// Note: arrow closures cannot declare an explicit return type;
+ArrowLambda ::= Identifier '->' (Expression | Block)
+              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
@@ -459,8 +460,8 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
-         |  BareLambda
-         |  ArrowFunction
+         |  ArrowLambda
+         |  FnExpression
          |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
@@ -474,11 +475,12 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
-BareLambda ::= Identifier '->' (Expression | Block)
-ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
-ArrowParams ::= ArrowParam (',' ArrowParam)*
-ArrowParam  ::= Identifier ':' Type
-// Note: arrow closures cannot declare an explicit return type;
+ArrowLambda ::= Identifier '->' (Expression | Block)
+              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)

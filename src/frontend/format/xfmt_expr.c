@@ -159,7 +159,11 @@ static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAcc
 static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_args,
                           int type_arg_count, AstNode **arguments, XrCallArgAccess *arg_accesses,
                           int arg_count) {
+    bool saved_force_fn_expr = ctx->force_fn_expr;
     xfmt_emit_expression(ctx, callee);
+    /* A grammar constraint from the surrounding expression applies to the
+     * callable spine, not to lambdas passed as ordinary arguments. */
+    ctx->force_fn_expr = false;
     xfmt_emit_generic_args(ctx, type_args, type_arg_count);
 
     bool wrap = ctx->config && ctx->config->wrap_long_lines && arg_count > 0;
@@ -176,8 +180,10 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
     }
     xfmt_write_char(ctx, ')');
 
-    if (!wrap || xfmt_fits_on_line(ctx, &snap))
+    if (!wrap || xfmt_fits_on_line(ctx, &snap)) {
+        ctx->force_fn_expr = saved_force_fn_expr;
         return;
+    }
 
     // Multi-line:
     //   foo(
@@ -198,6 +204,7 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
     ctx->indent_level--;
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, ')');
+    ctx->force_fn_expr = saved_force_fn_expr;
 }
 
 static void fmt_call(XrFmtContext *ctx, AstNode *node) {
@@ -971,11 +978,11 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
 
         // Function expression — emit arrow syntax when possible:
-        //   x -> expr            (bare lambda: 1 untyped param, expression body)
+        //   x -> expr            (unparenthesized: 1 untyped param, expression body)
         //   (x) -> expr          (1 untyped param, expression body)
-        //   (x: int) -> expr     (typed param, expression body)
-        //   (x) -> { ... }       (untyped, block body)
-        //   fn(x: int) -> T { }  (return type or generic params present)
+        //   (x: int) -> expr     (typed parameter, inferred return type)
+        //   (x: ref T) -> { ... } (parameter mode, block body)
+        //   fn(x: int) -> T { }  (explicit return type or generic params)
         case AST_FUNCTION_EXPR: {
             FunctionDeclNode *fn = &node->as.function_expr;
 
@@ -992,18 +999,19 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 }
             }
 
-            bool has_typed_param = false;
+            bool has_param_metadata = false;
             for (int i = 0; i < fn->param_count; i++) {
-                if (fn->params[i] && fn->params[i]->type) {
-                    has_typed_param = true;
-                    break;
-                }
+                if (!fn->params[i])
+                    continue;
+                if (fn->params[i]->type || fn->params[i]->passing_mode != XR_PARAM_READ)
+                    has_param_metadata = true;
             }
 
-            /* Use fn(...) form when return type or generic params are present,
-             * or when body is a multi-statement block (not single-expression). */
-            bool use_fn_form = fn->return_type || fn->type_param_count > 0 ||
-                               (!is_expr_body && (has_typed_param || fn->param_count == 0));
+            /* Return annotations and generics are fn-only. Otherwise arrow is
+             * the canonical inferred-return form, including typed/mode params
+             * and multi-statement blocks. */
+            bool use_fn_form =
+                ctx->force_fn_expr || fn->return_type || fn->type_param_count > 0;
 
             if (use_fn_form) {
                 xfmt_write_str(ctx, "fn");
@@ -1012,9 +1020,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 for (int i = 0; i < fn->param_count; i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
-                    xfmt_write_str(ctx, fn->params[i]->name);
-                    xfmt_emit_param_annotation(ctx, fn->params[i]->passing_mode,
-                                               fn->params[i]->type);
+                    xfmt_emit_param(ctx, fn->params[i]);
                 }
                 xfmt_write_char(ctx, ')');
                 if (fn->return_type) {
@@ -1025,7 +1031,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_block(ctx, fn->body);
             } else {
                 /* Arrow form: emit params then -> body. */
-                bool bare = (fn->param_count == 1 && !has_typed_param);
+                bool bare = fn->param_count == 1 && !has_param_metadata;
                 if (bare) {
                     xfmt_write_str(ctx, fn->params[0]->name);
                 } else {
@@ -1033,9 +1039,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     for (int i = 0; i < fn->param_count; i++) {
                         if (i > 0)
                             xfmt_write_str(ctx, ", ");
-                        xfmt_write_str(ctx, fn->params[i]->name);
-                        xfmt_emit_param_annotation(ctx, fn->params[i]->passing_mode,
-                                                   fn->params[i]->type);
+                        xfmt_emit_param(ctx, fn->params[i]);
                     }
                     xfmt_write_char(ctx, ')');
                 }
@@ -1086,7 +1090,13 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             } else {
                 xfmt_write_space(ctx);
             }
+            bool saved_force_fn_expr = ctx->force_fn_expr;
+            /* `go (` starts the coroutine-option grammar. A parenthesized
+             * arrow head in this exact position would therefore reparse as
+             * options rather than as the spawned callable. */
+            ctx->force_fn_expr = true;
             xfmt_emit_expression(ctx, go->expr);
+            ctx->force_fn_expr = saved_force_fn_expr;
             break;
         }
 

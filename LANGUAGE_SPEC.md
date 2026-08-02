@@ -1317,7 +1317,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
+var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -2232,29 +2232,29 @@ var view: Slice<int> = arr[1:4]
 
 ### 3.12 Anonymous Functions and Lambdas
 
-Xray has three anonymous-function forms, all compiled to the same `AST_FUNCTION_EXPR` node with fully equivalent semantics; they differ only in conciseness and applicable position.
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
 
 ```ebnf
-AnonFunction ::= BareLambda | ArrowLambda | FnExpression
-BareLambda   ::= Identifier '->' (Expression | Block)
-ArrowLambda  ::= '(' ArrowParams? ')' '->' (Expression | Block)
-ArrowParams  ::= ArrowParam (',' ArrowParam)*
-ArrowParam   ::= Identifier (':' Type)?      // type optional, inferred from context
-FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
+AnonFunction  ::= ArrowLambda | FnExpression
+ArrowLambda   ::= Identifier '->' ArrowBody
+                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowBody     ::= Expression | Block
+ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam    ::= Identifier (':' ParamMode? Type)?
+ParamMode     ::= 'ref' | 'move'
+FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```
 
 ```xray
-// ── Bare lambda: unparenthesized single parameter, usable in any expression position ──
+// ── Arrow lambda: each parameter may be annotated or inferred independently ──
 arr.map(x -> x * 2)
-arr.filter(x -> x % 2 == 0)
-var double: (int) -> int = x -> x * 2
+var add = (x: int, y) -> x + y
 
-// ── Arrow lambda: supports multiple parameters and parameter type annotations ──
-var sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
-var typedDouble = (x: int) -> x * 2              // typed
-var add = (a: int, b: int) -> a + b              // multi-param
+// Expression bodies return implicitly; ref only grants a writable loan
+var calculate = (x: ref int) -> x * 2
+var doubleInPlace = (x: ref int) -> { x = x * 2 }
 
-// ── fn expression: multi-statement body, return-type annotation, generics ──
+// ── fn lambda: explicit return type, generics, or a full parameter contract ──
 var inc = fn(x: int) -> int {
     var y = x + 1
     return y
@@ -2262,20 +2262,20 @@ var inc = fn(x: int) -> int {
 var identity = fn<T>(x: T) -> T { return x }     // generic
 ```
 
-**Choosing among the three**:
+**Selection rule**:
 
-| Form | Syntax | Suitable for |
-|------|------|----------|
-| Bare lambda | `x -> expr` | untyped single-parameter functions in any position |
-| Arrow lambda | `(x, y) -> expr` | multiple parameters or parameter type annotations |
-| fn expression | `fn(x: T) -> R { ... }` | multi-statement body, return-type annotation, generics |
+| Concept | Syntax | Capability and selection rule |
+|---------|--------|-------------------------------|
+| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- **Bare lambda** (`x -> expr`): usable in any expression position, with exactly one untyped, unparenthesized parameter. Its type is inferred from context such as the assignment target, return type, callee signature, or container element type.
-- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `var f: (T) -> R = (x) -> ...`.
-- **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
-- Single-expression form `-> expr` implicitly `return`s.
-- Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
+- Arrow parameter annotations are independent, so `(x: int, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref int) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref int) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
 
 ### 3.13 `match` Expression
@@ -7034,8 +7034,8 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
-         |  BareLambda
-         |  ArrowFunction
+         |  ArrowLambda
+         |  FnExpression
          |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
@@ -7049,11 +7049,12 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
-BareLambda ::= Identifier '->' (Expression | Block)
-ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
-ArrowParams ::= ArrowParam (',' ArrowParam)*
-ArrowParam  ::= Identifier ':' Type
-// Note: arrow closures cannot declare an explicit return type;
+ArrowLambda ::= Identifier '->' (Expression | Block)
+              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)

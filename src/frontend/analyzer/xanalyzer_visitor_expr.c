@@ -4225,6 +4225,7 @@ static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node
     if (!ctx || !node || !class_info || !sl)
         return;
     const char *label = type_name ? type_name : "?";
+    int matched_fields = 0;
 
     for (int i = 0; i < sl->field_count; i++) {
         const char *name = sl->field_names[i];
@@ -4239,7 +4240,19 @@ static void xa_check_aggregate_literal_fields(XaInferContext *ctx, AstNode *node
             snprintf(msg, sizeof(msg), "'%s.%s' is a method and cannot be set by a literal", label,
                      name);
             xa_report_aggregate_literal_error(ctx, node, XR_ERR_ANALYZE_UNKNOWN_FIELD, msg);
+        } else {
+            matched_fields++;
         }
+    }
+
+    if (sl->field_count > 0 && matched_fields == 0) {
+        char hint[256];
+        snprintf(hint, sizeof(hint),
+                 "if you meant a return-type annotation: arrow lambdas have none; use "
+                 "`fn(...) -> %s { ... }`",
+                 label);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_HINT, 0, hint, &loc);
     }
 
     /* A union's fields overlay one another, so "set every field" is not a
@@ -4946,10 +4959,13 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 if (p && p->name && !p->is_rest) {
                     XrLocation loc = {.file = ctx->file_path, .line = p->line, .column = p->column};
                     char msg[256];
-                    snprintf(msg, sizeof(msg),
-                             "Parameter '%s' of anonymous function cannot be inferred, add "
-                             "explicit type annotation",
-                             p->name);
+                    snprintf(
+                        msg, sizeof(msg),
+                        "Parameter '%s' of anonymous function cannot be inferred; annotate this "
+                        "lambda parameter (`x: T`), annotate the binding (`var f: (T) -> R = "
+                        "x -> ...`), rely on the call-site signature, or use `fn(x: T) -> R "
+                        "{ ... }`",
+                        p->name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
                 }
@@ -5156,8 +5172,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
-            "Anonymous function returns a value but return type cannot be inferred, "
-            "add explicit type annotation",
+            "Anonymous function returns a value but its type cannot be inferred; annotate lambda "
+            "parameters that determine the result, annotate the binding, rely on the call-site "
+            "signature, or use `fn(x: T) -> R { ... }`",
             &loc);
     }
 
@@ -5170,6 +5187,32 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             if (fn->params[i])
                 xr_type_function_set_param_mode(
                     result, i, param_modes ? param_modes[i] : fn->params[i]->passing_mode);
+        }
+
+        for (int i = 0; i < fn->param_count; i++) {
+            XrParamNode *param = fn->params ? fn->params[i] : NULL;
+            if (!param || param->passing_mode != XR_PARAM_REF)
+                continue;
+            bool expected_requires_ref =
+                expected_fn && i < expected_fn->function.param_count &&
+                xr_type_function_param_mode(expected_fn, i) == XR_PARAM_REF;
+            if (expected_requires_ref)
+                continue;
+
+            bool effect_complete = false;
+            bool mutates = xa_function_expr_param_mutates(ctx, result, fn->params, fn->param_count,
+                                                          fn->body, i, &effect_complete);
+            if (!effect_complete || mutates)
+                continue;
+
+            char message[256];
+            snprintf(message, sizeof(message),
+                     "ref parameter '%s' is never mutated; use a read parameter unless an "
+                     "expected callable contract requires ref",
+                     param->name ? param->name : "?");
+            XrLocation loc = {
+                .file = ctx->file_path, .line = param->line, .column = param->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_HINT, 0, message, &loc);
         }
     }
     xa_set_function_type_params_from_ast(ctx, result, fn->type_params, fn->type_param_count);

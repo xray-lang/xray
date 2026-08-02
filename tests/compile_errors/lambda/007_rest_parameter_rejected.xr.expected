@@ -1,0 +1,2 @@
+arrow lambda parameters cannot be rest parameters
+use a named function declaration

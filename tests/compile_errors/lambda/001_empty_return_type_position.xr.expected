@@ -1,0 +1,3 @@
+arrow lambda has no return-type position
+annotate the binding
+rely on the call-site signature

@@ -26,6 +26,10 @@
 
 /* ========== Helpers ========== */
 
+static const char *XR_ARROW_RETURN_TYPE_DIAGNOSTIC =
+    "arrow lambda has no return-type position; use `fn(x: T) -> R { ... }`, "
+    "annotate the binding (`var f: (T) -> R = x -> ...`), or rely on the call-site signature";
+
 // Strip underscore separators from numeric literal into dst buffer.
 // Returns number of characters written (not counting NUL).
 static int strip_underscores(const char *src, int src_len, char *dst, int dst_size) {
@@ -36,6 +40,110 @@ static int strip_underscores(const char *src, int src_len, char *dst, int dst_si
     }
     dst[n] = '\0';
     return n;
+}
+
+typedef struct XrArrowHeadLookahead {
+    bool is_arrow_head;
+    bool has_return_type_position;
+    bool has_return_type_after_arrow;
+} XrArrowHeadLookahead;
+
+static bool xr_arrow_reserved_type_token(XrTokenType type) {
+    return type >= TK_STRING && type <= TK_USIZE;
+}
+
+/* Recognise the unambiguous subset of a removed arrow return annotation. A
+ * user type followed by `{` remains a legal struct-literal expression body,
+ * so only reserved scalar types and function types ending in a reserved scalar
+ * are diagnosed here. */
+static bool xr_arrow_removed_return_type_before_block(Parser *parser) {
+    XrParserStreamState saved = xr_parser_stream_save(parser);
+    bool recognised = false;
+
+    if (xr_arrow_reserved_type_token(parser->current.type)) {
+        xr_parser_advance(parser);
+        while (xr_parser_match(parser, TK_QUESTION)) {
+        }
+        recognised = xr_parser_check(parser, TK_LBRACE);
+    } else if (xr_parser_match(parser, TK_LPAREN)) {
+        int depth = 1;
+        while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+            if (xr_parser_check(parser, TK_LPAREN)) {
+                depth++;
+            } else if (xr_parser_check(parser, TK_RPAREN)) {
+                depth--;
+            }
+            xr_parser_advance(parser);
+        }
+        if (depth == 0 && xr_parser_check(parser, TK_LBRACE)) {
+            /* Unit and tuple return types are unambiguous here: a grouped
+             * expression cannot be followed directly by a block. */
+            recognised = true;
+        } else if (depth == 0 && xr_parser_match(parser, TK_ARROW) &&
+                   xr_arrow_reserved_type_token(parser->current.type)) {
+            xr_parser_advance(parser);
+            while (xr_parser_match(parser, TK_QUESTION)) {
+            }
+            recognised = xr_parser_check(parser, TK_LBRACE);
+        }
+    }
+
+    xr_parser_stream_restore(parser, &saved);
+    return recognised;
+}
+
+/* Inspect the contents of an already-open `(` without committing the token
+ * stream. Parameter syntax is parsed later by the shared parameter parser; the
+ * lookahead only disambiguates grouping from an arrow head and recognises the
+ * two removed return-annotation positions. */
+static XrArrowHeadLookahead xr_scan_arrow_head(Parser *parser) {
+    XrArrowHeadLookahead result = {0};
+    XrParserStreamState saved = xr_parser_stream_save(parser);
+    int depth = 1;
+
+    while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+        XrTokenType type = parser->current.type;
+        if (type == TK_LPAREN) {
+            depth++;
+        } else if (type == TK_RPAREN) {
+            depth--;
+            if (depth == 0)
+                break;
+        }
+        xr_parser_advance(parser);
+    }
+
+    if (xr_parser_check(parser, TK_RPAREN))
+        xr_parser_advance(parser);
+
+    if (xr_parser_check(parser, TK_COLON)) {
+        int nested = 0;
+        xr_parser_advance(parser);
+        while (!xr_parser_check(parser, TK_EOF)) {
+            XrTokenType type = parser->current.type;
+            if (type == TK_ARROW && nested == 0) {
+                result.has_return_type_position = true;
+                break;
+            }
+            if (nested == 0 && (type == TK_SEMICOLON || type == TK_RBRACE))
+                break;
+            if (type == TK_LPAREN || type == TK_LBRACKET)
+                nested++;
+            else if ((type == TK_RPAREN || type == TK_RBRACKET) && nested > 0)
+                nested--;
+            xr_parser_advance(parser);
+        }
+    } else {
+        result.is_arrow_head = xr_parser_check(parser, TK_ARROW);
+        if (result.is_arrow_head) {
+            xr_parser_advance(parser);
+            result.has_return_type_after_arrow =
+                xr_arrow_removed_return_type_before_block(parser);
+        }
+    }
+
+    xr_parser_stream_restore(parser, &saved);
+    return result;
 }
 
 /* ========== Prefix Parsing ========== */
@@ -748,16 +856,18 @@ AstNode *xr_parse_grouping(Parser *parser) {
     int line = parser->previous.line;
 
     // Case 1: `() -> expr` no-param arrow function, or `()` unit literal.
-    // Arrow closures cannot declare an explicit return type — use
-    // `fn() -> T { ... }` or annotate the binding (`var f: () -> T = ...`).
+    // Arrow lambdas never have a return-type position.
     if (xr_parser_check(parser, TK_RPAREN)) {
         xr_parser_advance(parser);
         if (xr_parser_check(parser, TK_COLON)) {
-            xr_parser_error(parser, "arrow closures cannot declare an explicit return type; "
-                                    "use `fn() -> T { ... }` or annotate the binding");
+            xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
             return NULL;
         }
         if (xr_parser_match(parser, TK_ARROW)) {
+            if (xr_arrow_removed_return_type_before_block(parser)) {
+                xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
+                return NULL;
+            }
             return xr_parse_arrow_function_body(parser, NULL, 0, line);
         }
         /* `()` is the unit literal — the unique value of the unit type
@@ -767,65 +877,74 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
     // Case 2: arrow-function head — `(...) -> body`.
     //
-    // To disambiguate from a tuple / grouping expression without committing
-    // to a single parse, scan ahead through balanced parens for the matching
-    // `)` and peek at the next token. `->` immediately after the closing
-    // `)` is unambiguously an arrow head (no other expression-context syntax
-    // produces `-> ...` there), so we only enter the arrow path on a positive
-    // match. Anything else falls through to the general expression-list parse
-    // below. Arrow closures cannot declare an explicit return type.
-    bool is_arrow_head = false;
-    {
-        XrParserStreamState saved = xr_parser_stream_save(parser);
-        int depth = 1;
-        while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
-            if (xr_parser_check(parser, TK_LPAREN)) {
-                depth++;
-                xr_parser_advance(parser);
-            } else if (xr_parser_check(parser, TK_RPAREN)) {
-                depth--;
-                if (depth == 0)
-                    break;
-                xr_parser_advance(parser);
-            } else {
-                xr_parser_advance(parser);
-            }
-        }
-        if (xr_parser_check(parser, TK_RPAREN))
-            xr_parser_advance(parser);
-        is_arrow_head = xr_parser_check(parser, TK_ARROW);
-        xr_parser_stream_restore(parser, &saved);
+    // The lookahead also recognises the two removed annotation positions so
+    // they cannot fall through to unrelated grouping/type-cast diagnostics.
+    XrArrowHeadLookahead arrow = xr_scan_arrow_head(parser);
+    if (arrow.has_return_type_position) {
+        xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
+        return NULL;
     }
-
-    if (is_arrow_head && xr_parser_check(parser, TK_NAME)) {
+    if (arrow.has_return_type_after_arrow) {
+        xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
+        return NULL;
+    }
+    if (arrow.is_arrow_head) {
         // Collect params as XrParamNode. The array lives in the parse
         // arena because it is shallow-copied into the function_expr node.
         XrParamNode **params = NULL;
         int param_count = 0;
         int param_capacity = 0;
 
+        if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            xr_parser_error(parser,
+                            "arrow lambda parameters cannot be rest parameters; use a named "
+                            "function declaration");
+            return NULL;
+        }
         XrParamNode *first_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
         XR_PARSE_PUSH(parser, params, param_count, param_capacity, first_param);
+        if (xr_parser_check(parser, TK_ASSIGN)) {
+            xr_parser_error(parser,
+                            "arrow lambda parameters cannot have default values; use a named "
+                            "function declaration or supply the argument explicitly");
+            return NULL;
+        }
 
         while (xr_parser_match(parser, TK_COMMA)) {
             if (xr_parser_check(parser, TK_RPAREN))
                 break;
+            if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+                xr_parser_error(parser,
+                                "arrow lambda parameters cannot be rest parameters; use a named "
+                                "function declaration");
+                return NULL;
+            }
             XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
+            if (xr_parser_check(parser, TK_ASSIGN)) {
+                xr_parser_error(parser,
+                                "arrow lambda parameters cannot have default values; use a named "
+                                "function declaration or supply the argument explicitly");
+                return NULL;
+            }
         }
 
         if (!xr_parser_match(parser, TK_RPAREN)) {
-            xr_parser_error(parser, "expected ')' or '->'");
+            xr_parser_error(parser, "expected ')' after arrow lambda parameters");
             return NULL;
         }
 
         if (xr_parser_check(parser, TK_COLON)) {
-            xr_parser_error(parser, "arrow closures cannot declare an explicit return type; "
-                                    "use `fn(p: T) -> R { ... }` or annotate the binding");
+            xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
             return NULL;
         }
         if (!xr_parser_match(parser, TK_ARROW)) {
-            xr_parser_error(parser, "expected '->' after parameter list");
+            xr_parser_error(parser, "expected '->' after arrow lambda parameters");
+            return NULL;
+        }
+
+        if (xr_arrow_removed_return_type_before_block(parser)) {
+            xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
             return NULL;
         }
         return xr_parse_arrow_function_body(parser, params, param_count, line);
@@ -894,7 +1013,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
 AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter) {
     if (!parameter || parameter->type != AST_VARIABLE) {
         xr_parser_error_at_previous(
-            parser, "bare lambda parameter must be one identifier; use `(params) -> body`");
+            parser,
+            "unparenthesized arrow lambda parameter must be one identifier; use `(params) -> body`");
         return NULL;
     }
 
@@ -902,6 +1022,10 @@ AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter) {
         (XrParamNode **) ast_alloc_array(parser->compiler_session, sizeof(XrParamNode *), 1);
     params[0] = xr_param_node_new(parser->compiler_session, parameter->as.variable.name,
                                   parameter->line, parameter->column);
+    if (xr_arrow_removed_return_type_before_block(parser)) {
+        xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
+        return NULL;
+    }
     return xr_parse_arrow_function_body(parser, params, 1, parameter->line);
 }
 

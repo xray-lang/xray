@@ -729,7 +729,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: int) -> x   // f: (int) -> int —— 箭头参数必须标注
+var f = (x: int) -> x   // f: (int) -> int —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1851,7 +1851,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
+var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion

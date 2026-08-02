@@ -1,0 +1,6 @@
+struct Point {
+    x: int
+    y: int
+}
+
+var make: (int) -> Point = value -> Point{result: value}

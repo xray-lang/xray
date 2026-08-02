@@ -63,6 +63,9 @@ XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, As
 XR_FUNC void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
                                                           XaSymbolLinks *links);
+XR_FUNC bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
+                                            XrParamNode **params, int param_count, AstNode *body,
+                                            int param_slot, bool *out_complete);
 XR_FUNC XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **tp_names,
                                             int tp_count);
 XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
