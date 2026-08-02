@@ -97,6 +97,8 @@ static inline bool xr_waitq_is_empty(XrWaitQueue *q) {
 
 XR_FUNC void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q);
+/* Deadlock-detector census: coroutines currently parked on any channel waitq. */
+XR_FUNC int64_t xr_channel_waiters_total(void);
 
 struct XrChannel;
 // Remove coro from the channel's wait queue under ch->lock.

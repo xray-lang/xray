@@ -176,12 +176,25 @@ static void thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
     }
 }
 
+/* Process-wide live count beside the per-isolate one: the deadlock detector
+ * runs in the isolate-neutral scheduler and must not touch VM internals
+ * (task 260 §4). VM spawn paths all pass through enter/leave; the AOT thread
+ * path does not, which is one of the reasons the detector only activates on
+ * cores with a vm_owner. */
+static _Atomic int64_t g_sys_thread_live;
+
+int64_t xr_sys_thread_live_total(void) {
+    return atomic_load_explicit(&g_sys_thread_live, memory_order_acquire);
+}
+
 static void thread_runtime_enter(XrVMRuntime *isolate) {
+    atomic_fetch_add_explicit(&g_sys_thread_live, 1, memory_order_acq_rel);
     if (isolate)
         atomic_fetch_add_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
 }
 
 static void thread_runtime_leave(XrVMRuntime *isolate) {
+    atomic_fetch_sub_explicit(&g_sys_thread_live, 1, memory_order_acq_rel);
     if (isolate)
         atomic_fetch_sub_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
 }

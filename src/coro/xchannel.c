@@ -561,6 +561,19 @@ uint64_t xr_channel_get_close_count(XrRuntimeCore *core) {
 
 // ========== Wait Queue Implementation ==========
 
+/* Process-wide census of coroutines parked on ANY channel waitq. The deadlock
+ * detector (task 260 §4) needs "someone is provably stuck": head counts drift
+ * (fast-path completions skip completed_count), worker-side records only see
+ * timer/select waits, so the census lives on the four functions below — the
+ * only places a channel waitq is ever linked or unlinked. Process scope keeps
+ * it isolate-neutral; a second isolate's waiters can only suppress a report,
+ * never fabricate one. */
+static _Atomic int64_t g_chan_waiters;
+
+int64_t xr_channel_waiters_total(void) {
+    return atomic_load_explicit(&g_chan_waiters, memory_order_acquire);
+}
+
 // Uses coroutine's channel wait links. Worker blocked buckets use a separate
 // link pair, so timeout and remote-wake bookkeeping cannot corrupt channel FIFO
 // ordering.
@@ -580,6 +593,7 @@ void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro) {
         q->first = coro;
     }
     q->last = coro;
+    atomic_fetch_add_explicit(&g_chan_waiters, 1, memory_order_release);
 }
 
 static void waitq_enqueue_front(XrWaitQueue *q, XrCoroutine *coro) {
@@ -598,6 +612,7 @@ static void waitq_enqueue_front(XrWaitQueue *q, XrCoroutine *coro) {
     if (!q->last) {
         q->last = coro;
     }
+    atomic_fetch_add_explicit(&g_chan_waiters, 1, memory_order_release);
 }
 
 XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q) {
@@ -613,6 +628,7 @@ XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q) {
         coro->ext->chan_wait_next = NULL;
         coro->ext->chan_wait_prev = NULL;
         coro->ext->chan_wait_queue = NULL;
+        atomic_fetch_sub_explicit(&g_chan_waiters, 1, memory_order_release);
     }
     return coro;
 }
@@ -637,6 +653,7 @@ static bool xr_waitq_remove(XrWaitQueue *q, XrCoroutine *coro) {
     coro->ext->chan_wait_next = NULL;
     coro->ext->chan_wait_prev = NULL;
     coro->ext->chan_wait_queue = NULL;
+    atomic_fetch_sub_explicit(&g_chan_waiters, 1, memory_order_release);
     return true;
 }
 

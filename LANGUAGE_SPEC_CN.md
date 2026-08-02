@@ -6499,6 +6499,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - M:N 调度（M OS 线程 × N 协程）。
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
+- **死锁检测**：当运行时能证明全局静止——无就绪工作、无待决定时器、无 I/O 等待者、无在途 async 任务、无存活 `sys.Thread`——而仍有协程停靠在 channel 等待队列上时，打印 `fatal error: all coroutines are blocked - deadlock` 与等待者普查，并以退出码 **71** 结束。判定刻意单边（任何无法证明的唤醒源都会使其放弃）：v1 只在有 VM owner 的运行时激活；只有 await/latch 等待者的停摆不判。`XRAY_NO_DEADLOCK_DETECT=1` 供外部线程经 `CFn` 回调再入的嵌入场景关闭。
 - **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
 - **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
 

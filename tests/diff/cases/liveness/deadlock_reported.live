@@ -1,0 +1,5 @@
+timeout=10
+exit=71
+contains=before recv
+contains=all coroutines are blocked - deadlock
+vm_only=1

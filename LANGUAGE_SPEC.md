@@ -6513,6 +6513,7 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 - M:N scheduling (M OS threads × N coroutines).
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
+- **Deadlock detection**: when the runtime can prove global quiescence — no ready work, no pending timers, no I/O waiters, no in-flight async jobs, no live `sys.Thread` — while coroutines are still parked on channel wait queues, it prints `fatal error: all coroutines are blocked - deadlock` with the waiter census and exits with code **71**. The judgement is deliberately one-sided (any unprovable wake source disables it): v1 activates on VM-owned runtimes; a stall with only await/latch waiters is not judged. `XRAY_NO_DEADLOCK_DETECT=1` disables it for embeddings whose foreign threads re-enter through `CFn` callbacks.
 - **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
 - **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
 
