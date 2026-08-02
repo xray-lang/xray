@@ -21,16 +21,26 @@ For every RC-managed value, including registered identity aliases:
   runtime. What a cycle costs is bounded rather than reclaimed: every coroutine
   owns its heap and that heap is released whole when the coroutine ends, so an
   unreclaimed cycle leaks no further than the lifetime of the coroutine that
-  built it. Only the MODULE_STATIC, CONST_SHARED, and SYNC_SHARED ownership
-  domains, plus the main execution's own lifetime, can leak for the life of the
-  process. Cycles are prevented statically (L0 type graph), broken explicitly
-  with a `weak` field (L1), and capped by this boundary (L2); the development
-  detector reports them and never reclaims. See LANGUAGE_SPEC 16.3.
+  built it. Only the MODULE_STATIC and SYNC_SHARED ownership domains, plus the
+  main execution's own lifetime, can leak for the life of the process
+  (CONST_SHARED is constructively acyclic: no forward references, publication
+  requires an explicit move/copy of a until-then-unique graph, and there is no
+  implicit freeze — see LANGUAGE_SPEC 16.3). Cycles are prevented statically
+  (L0 type graph), broken explicitly with a `weak` field (L1), and capped by
+  this boundary (L2); the development detector reports them — coroutine heaps
+  per teardown, the shared domain at main-execution exit — and never reclaims.
 
 The independent verifier must not reuse ARC closure/alias implementation logic.
 It runs after ARC insertion in every build and reports violations as ICEs with
 the contract identifier and counterexample path. Per-pass deep verification may
 be enabled explicitly; it does not replace the mandatory post-ARC run.
+
+Trust premise. C1-C5 verify the path balance of the ARC INSERTION RESULT: the
+verifier consumes the same owned/borrow classification the inserter consumed,
+so a systematic upstream misclassification in xi_own (an owned use read as a
+borrow) would satisfy the contract and still be wrong. That layer is guarded by
+different assets — the VM/AOT differential suite and the ASan corpus — not by
+this one. A contract names what it proves; this line names what it does not.
 
 ## Digest anchors
 
