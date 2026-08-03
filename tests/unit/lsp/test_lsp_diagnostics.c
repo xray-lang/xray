@@ -211,7 +211,7 @@ TEST(diagnostics_multiple_documents) {
     xlsp_server_free(server);
 }
 
-/* Task 247 A.6: the closure-cycle check lives in the analyzer's escape pass
+/* The closure-cycle check lives in the analyzer's escape pass
  * SPECIFICALLY so it reaches the editor. The Xi IR could decide the same thing
  * more precisely -- SSA identity instead of variable names -- but the LSP never
  * runs the IR pipeline, so an IR-side diagnostic would be invisible where it

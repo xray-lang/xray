@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ========== Domain mode (task 259 §3) ==========
+/* ========== Domain mode ==========
  *
  * One pipeline serves two graphs. The per-heap scan walks the coro-local band;
  * the shared scan walks the atomic band, where the extra edge kinds live
@@ -114,11 +114,10 @@ static void detector_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor,
 
 /* ========== Whole-heap object enumeration ==========
  *
- * The collector finds its starting points in a candidate-root buffer, kept up
- * to date by add_root/remove_root on the RC hot path. The detector does not:
- * it walks the heap directly, which is what lets task 247 phase E delete that
- * buffer, the _rsv root-index invariant, and the per-object candidate bit
- * along with it.
+ * The removed collector found its starting points in a candidate-root buffer
+ * maintained on the RC hot path. The detector walks the heap directly, so the
+ * buffer, the _rsv root-index invariant, and the per-object candidate bit are
+ * unnecessary.
  *
  * Two sources, and BOTH are needed. Region blocks hold small objects; large
  * ones (> XR_LARGE_OBJECT_THRESHOLD) are malloc'd or mmap'd outside any block
@@ -231,9 +230,8 @@ bool xr_cycle_detector_count_live(XrCoroHeap *heap, uint32_t *out_count) {
 
 /* ========== Candidate filtering ==========
  *
- * Class-level, from XrClass.flags — no per-object bit is consulted, which is
- * what lets phase E delete XR_OBJ_CYCLE_CANDIDATE and the store that sets it
- * on every allocation. */
+ * Class-level, from XrClass.flags. No per-object bit is consulted, so
+ * XR_OBJ_CYCLE_CANDIDATE and its per-allocation store are unnecessary. */
 static bool detector_object_is_candidate(const XrObjHeader *obj) {
     if (!detector_child_eligible(obj))
         return false;
@@ -256,8 +254,8 @@ static bool detector_object_is_candidate(const XrObjHeader *obj) {
 /* ========== Trial deletion, reporting variant ==========
  *
  * Bacon-Rajan's decision procedure, with the destruction removed and the
- * colours kept in a side table rather than in the object header (which is what
- * lets phase E reclaim extra bits 8-9).
+ * colours kept in a side table rather than in the object header, leaving extra
+ * bits 8-9 available.
  *
  *   A. reachable set R from every live candidate
  *   B. trial-decrement R's internal edges
@@ -467,7 +465,7 @@ static const char *detector_edge_kind(const XrObjHeader *from) {
     }
 }
 
-/* ========== Sidecar report (phase H) ==========
+/* ========== Sidecar report ==========
  *
  * The cycle happens in the process that ran the program; the fix happens in an
  * editor attached to a different one. The stderr report is for a human reading
@@ -535,12 +533,12 @@ static void detector_sidecar_flush(void) {
     const char *path = detector_sidecar_path();
     FILE *f = fopen(path, "wb");
     if (!f) {
-        fprintf(stderr, "[cycle-detector] 无法写出边车报告 %s\n", path);
+        fprintf(stderr, "[cycle-detector] unable to write sidecar report %s\n", path);
         return;
     }
     fprintf(f, "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[%s]}\n", g_sidecar_buf);
     fclose(f);
-    fprintf(stderr, "[cycle-detector] 边车报告已写出: %s\n", path);
+    fprintf(stderr, "[cycle-detector] sidecar report written: %s\n", path);
 }
 
 typedef struct {
@@ -555,7 +553,7 @@ typedef struct {
  * walk around a cycle: consecutive entries need not reference each other, and
  * a component with several interlocking cycles has no single path through it.
  * Assuming otherwise silently drops real candidate edges and invents ones that
- * do not exist — and 247 H.5 demands the candidate list be complete.
+ * do not exist — missing a candidate would hide a valid ownership repair.
  *
  * So enumerate: for every member, every child that lands back inside the
  * component is one edge. Components are small; the linear membership test is
@@ -679,7 +677,7 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     CycleEdgeCtx edges;
     detector_collect_edges(&edges, members, count);
 
-    fprintf(stderr, "\n%s引用环 (%u 个对象, %llu 字节)\n", g_scan_shared_domain ? "共享域" : "",
+    fprintf(stderr, "\n%sreference cycle (%u objects, %llu bytes)\n", g_scan_shared_domain ? "shared domain " : "",
             count, (unsigned long long) bytes);
     for (uint32_t i = 0; i < count; i++)
         fprintf(stderr, "  %-16s @ %p\n", cycle_obj_name(members[i]->obj),
@@ -694,7 +692,7 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
                 cycle_obj_name(members[e->to]->obj));
     }
 
-    /* Machine-readable alongside, for the LSP code actions in phase H. */
+    /* Machine-readable alongside, for the LSP code actions. */
     fprintf(stderr, "  #cycle objects=%u bytes=%llu members=", count, (unsigned long long) bytes);
     for (uint32_t i = 0; i < count; i++)
         fprintf(stderr, "%s%s@%p", i ? "," : "", detector_type_name(members[i]->obj),
@@ -736,18 +734,18 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     }
     detector_sidecar_put("\n  ]}");
 
-    fprintf(stderr, "  修复建议:\n");
+    fprintf(stderr, "  Suggested fixes:\n");
 
     /* W4 forbids `weak` on a shared-domain object, so the coro-local advice
      * would be a lie here. What actually breaks a shared cycle is changing the
      * structure or clearing the reference explicitly before release. */
     if (g_scan_shared_domain) {
-        fprintf(stderr, "    · 共享域对象禁用 weak（W4）。可行的修复：\n");
-        fprintf(stderr, "        - 重构结构：把回指字段改成 id/索引，由外部表解析\n");
-        fprintf(stderr, "        - 显式断开：send 完成后把持有通道的字段置 null，"
-                        "或 close 后 drain 缓冲\n");
+        fprintf(stderr, "    - Shared-domain objects forbid weak fields (W4). Valid fixes:\n");
+        fprintf(stderr, "        - Replace the back-reference with an ID resolved by an external table.\n");
+        fprintf(stderr, "        - Clear the channel-holding field after send completes, "
+                        "or drain the buffer after close.\n");
         if (edges.overflow)
-            fprintf(stderr, "    (内存不足，候选边列表不完整)\n");
+            fprintf(stderr, "    (out of memory; candidate edge list is incomplete)\n");
         xr_free(edges.edges);
         return;
     }
@@ -764,37 +762,37 @@ static void detector_emit_cycle(EmitCtx *emit, DetectorNode **members, uint32_t 
     }
 
     if (has_annotatable_edge) {
-        /* Every candidate is listed and none is recommended: which edge to
-         * break is an ownership decision, and the language does not guess
-         * (247 section 2.5 — picking wrong turns a leak into a premature null). */
-        fprintf(stderr, "    · 将下列任一引用标注为 weak（选哪条是所有权决定）:\n");
+        /* Every candidate is listed and none is recommended. Choosing which
+         * edge to break is an ownership decision, and guessing incorrectly can
+         * turn a leak into a premature null. */
+        fprintf(stderr, "    - Mark one of these references weak; ownership determines which one:\n");
         for (uint32_t i = 0; i < edges.edge_count; i++) {
             const CycleEdge *e = &edges.edges[i];
             const char *field = cycle_edge_field(&edges, e);
             if (!field || cycle_edge_is_capture(&edges, e) || cycle_edge_is_duplicate(&edges, i))
                 continue;
-            fprintf(stderr, "        weak %s.%s  (改成 weak 表示 %s 不拥有 %s)\n",
+            fprintf(stderr, "        weak %s.%s  (weak means %s does not own %s)\n",
                     cycle_obj_name(members[e->from]->obj), field,
                     cycle_obj_name(members[e->from]->obj), cycle_obj_name(members[e->to]->obj));
         }
     }
     if (has_capture_edge) {
-        fprintf(stderr, "    · 环上有闭包捕获边，weak 管不到它。"
-                        "在作用域末尾用 defer 清空持有该闭包的字段:\n");
+        fprintf(stderr, "    - The cycle contains a closure-capture edge that weak cannot break. "
+                        "Use defer to clear the field holding that closure at scope exit:\n");
         for (uint32_t i = 0; i < edges.edge_count; i++) {
             const CycleEdge *e = &edges.edges[i];
             if (!cycle_edge_is_capture(&edges, e) || cycle_edge_is_duplicate(&edges, i))
                 continue;
             const char *field = cycle_edge_field(&edges, e);
             if (field)
-                fprintf(stderr, "        defer { <持有者>.%s = null }\n", field);
+                fprintf(stderr, "        defer { <owner>.%s = null }\n", field);
             else
-                fprintf(stderr, "        defer { <%s 持有该闭包的字段> = null }\n",
+                fprintf(stderr, "        defer { <%s field holding the closure> = null }\n",
                         cycle_obj_name(members[e->from]->obj));
         }
     }
     if (edges.overflow)
-        fprintf(stderr, "    (内存不足，候选边列表不完整)\n");
+        fprintf(stderr, "    (out of memory; candidate edge list is incomplete)\n");
     xr_free(edges.edges);
 }
 
@@ -1010,8 +1008,8 @@ static bool detector_run_passes(DetectorSet *set, XrCycleReport *report) {
     xr_free(set->nodes);
 
     if (report->cycle_count > 0) {
-        fprintf(stderr, "\n[cycle-detector] %s%u 个引用环, %u 个对象, %llu 字节未回收\n",
-                g_scan_shared_domain ? "共享域 " : "", report->cycle_count, report->object_count,
+        fprintf(stderr, "\n[cycle-detector] %s%u reference cycles, %u objects, %llu unreclaimed bytes\n",
+                g_scan_shared_domain ? "shared domain " : "", report->cycle_count, report->object_count,
                 (unsigned long long) report->byte_count);
     }
     xr_cycle_detector_accumulate(report);
@@ -1037,7 +1035,7 @@ bool xr_cycle_detector_scan(XrCoroHeap *heap, XrCycleReport *out) {
     return detector_run_passes(&set, report);
 }
 
-/* ========== Shared-domain registry and scan (task 259 §3) ==========
+/* ========== Shared-domain registry and scan ==========
  *
  * The system heap has no walkable block structure, so the allocator registers
  * every live shared object here. Registration is mutex-protected: shared

@@ -78,7 +78,7 @@ static inline XrCoroHeap *set_accounting_heap(XrSet *set) {
 static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
     if (!XR_IS_STRING(value))
         return value;
-    /* The heap names its runtime core directly (task 250). Interning only ever
+    /* The heap names its runtime core directly. Interning only ever
      * needed the core; routing through the VM owner meant a core without one —
      * a standalone AOT runtime, or a unit test that builds a bare core — gave
      * up on canonicalization and silently kept duplicate string keys. */

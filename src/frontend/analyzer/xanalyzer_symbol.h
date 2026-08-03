@@ -325,7 +325,7 @@ struct XaSymbol {
      * the symbol, not the type: `weak` describes the STORAGE, so two fields of
      * the same type can differ. The L0 cycle graph reads it to suppress the
      * edge, which is how annotating a field takes its class out of the
-     * candidate set (task 247 phase C). */
+     * candidate set. */
     bool is_weak;
     bool is_rebindable;         // binding name may be assigned again
     bool is_readonly_binding;   // binding exposes deep-readonly semantics

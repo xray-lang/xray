@@ -3546,7 +3546,7 @@ static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
     return es_apply_effect_contract(ctx, contract);
 }
 
-/* ========== Coroutine Boundaries (task 248) ========== */
+/* ========== Coroutine Boundaries ========== */
 
 /* An error keeps its channel when it crosses an execution boundary, so it also
  * keeps its place in the error set: whoever re-raises a coroutine's failure --

@@ -29,7 +29,7 @@ static XrRep xi_coro_rep(const XiValue *v) {
  * "conservative" for this analysis means assuming a suspension may exist
  * (the caller compiles a resumable frame it may not need), never assuming
  * its absence (a suspendable function emitted with a plain sync ABI is a
- * miscompile). Task 260 §7 flipped the direction; the old text claimed
+ * miscompile). The depth bound therefore treats unknown callees as suspendable; the old text claimed
  * non-suspendable was the conservative answer, which is fail-open. */
 #define XI_CORO_RESOLVE_DEPTH_MAX 8
 

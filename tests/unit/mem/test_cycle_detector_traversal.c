@@ -7,7 +7,7 @@
  *
  * test_cycle_detector_traversal.c - Whole-heap traversal self-check.
  *
- * Task 247 phase D asks for this BEFORE any functional case, and the reason is
+ * This self-check runs before any functional case because
  * that the traversal is new code with no precedent in the tree (the existing
  * `for (b = h->full_blocks; ...)` loops walk the block CHAIN, not the objects
  * inside a block) and its failure mode is silent: a desync does not crash, it
@@ -119,7 +119,7 @@ static void test_traversal_matches_object_count(void) {
 /* Dead objects stay walkable: the freelist link is written into the payload's
  * first word, past the 16-byte header, so objsize survives the object. If it
  * did not, the walk would desync at the first dead object — the exact reason
- * task 247 section 6.2.2 lists that as its load-bearing seventh premise. */
+ * the whole-heap traversal contract lists that as its load-bearing seventh premise. */
 static void test_traversal_steps_over_dead_objects(void) {
     XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     CHECK(heap != NULL, "heap create");

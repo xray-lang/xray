@@ -134,7 +134,7 @@ jobs:
         echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
         echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
 
-    # Ninja is the project's one build generator on every platform (AGENTS.md).
+    # Ninja is the project's one build generator on every platform.
     # On Windows that means cl.exe must be on PATH, which this action provides;
     # Ninja is preinstalled on all GitHub runner images.
     - name: Set up MSVC environment (Windows)

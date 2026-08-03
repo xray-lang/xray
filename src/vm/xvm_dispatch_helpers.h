@@ -105,7 +105,7 @@ static inline XrCoroutine *vm_get_coro(XrVMContext *vm_ctx) {
 /* The exec-local heap that owns what this VM frame allocates.
  *
  * With a coroutine it is that coroutine's heap. An elided root has no
- * coroutine but does have an exec heap on its allocation context (task 250);
+ * coroutine but does have an exec heap on its allocation context;
  * passing NULL there marked objects dead without running destructors or
  * reclaiming memory, so every drop in top-level code was discarded.
  *

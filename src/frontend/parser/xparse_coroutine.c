@@ -95,7 +95,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         }
     }
 
-    /* Task 255 removed the block-only spawn surface. A lambda call is the one
+    /* The block-only spawn surface was removed. A lambda call is the one
      * inline form: it exposes the function boundary and keeps `go`'s AST
      * contract honest that the operand is always a CallExpr. */
     if (xr_parser_check(parser, TK_LBRACE)) {

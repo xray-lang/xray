@@ -98,9 +98,9 @@ static void push_enum_variants_action(XrJsonValue *actions, const char *uri, con
     xjson_array_push(actions, action);
 }
 
-/* ---------- Reference cycles (task 247 phase H) ----------
+/* ---------- Reference cycles ----------
  *
- * Two rules from 247 section 2.5 shape what is offered here, and both are
+ * Two ownership rules shape what is offered here, and both are
  * absences rather than features:
  *
  *   - no "fix all". Breaking a cycle at the wrong edge does not leak, it

@@ -921,7 +921,7 @@ XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db, const XaEffe
 
     if (diff.added_escaping)
         /* A newly escaping typed error widens every downstream catch-all's
-         * projected union (202 §4.1), so an exhaustive `match (e)` there stops
+         * projected union, so an exhaustive `match (e)` there stops
          * compiling (E0371) with the source signature unchanged.  This is the
          * most severe kind and dominates plain behavioral breaks below. */
         diff.kind = XA_EFFECT_DIFF_SOURCE_BREAKING;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run_tsan_focused.sh - Task 260 §8 F.2: focused ThreadSanitizer lane.
+# run_tsan_focused.sh - Focused ThreadSanitizer lane.
 #
 # The work-stealing scheduler and the two-band reference counter are exactly
 # the code TSan exists for, and until this lane nothing ran them under it.

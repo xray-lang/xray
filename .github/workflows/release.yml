@@ -65,7 +65,7 @@ jobs:
       with:
         version: 0.16.0
 
-    # Ninja is the project's one generator (AGENTS.md); Windows needs cl.exe on
+    # Ninja is the project's one generator; Windows needs cl.exe on
     # PATH for it.
     - name: Set up MSVC environment (Windows)
       if: runner.os == 'Windows'

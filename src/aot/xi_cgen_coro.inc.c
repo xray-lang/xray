@@ -493,7 +493,7 @@ static uint16_t cg_coro_param_count(const XiFunc *f) {
     return f ? (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0)) : 0;
 }
 
-/* An error crossing a coroutine boundary keeps its channel (task 248): a value
+/* An error crossing a coroutine boundary keeps its channel: a value
  * error lands in the pending-error slot for the following ERR_CHECK to route to
  * `catch (e)` or propagate by value, a panic keeps unwinding out of the frame.
  * Shared by every re-raising boundary in a generated coroutine. */
@@ -4838,7 +4838,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
          * for a coroutine that means a value-channel XR_AOT_RUN_ERROR, which
          * the worker records on the task and the awaiter re-raises by value.
          * Generating nothing for the unit form is how a value error raised
-         * across a coroutine boundary used to vanish (task 248). */
+         * across a coroutine boundary used to vanish. */
         if (cg_value_type_is_bool(v)) {
             if (cg_coro_value_has_storage(f, v)) {
                 fprintf(out, "    ");

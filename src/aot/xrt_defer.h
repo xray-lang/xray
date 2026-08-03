@@ -114,11 +114,11 @@ static inline int xrt_defer_mark(XrtDeferScope *s) {
  * The in-flight error is parked across the call so the callee starts from a
  * clean slot and any pending error afterwards is unambiguously the defer's own.
  *
- * The closure itself is not released here: AOT heap objects currently leak to
- * process exit (see known_bugs "AOT 集合现状 leak", task 108), and a defer
- * closure can capture upvalues that were borrowed (not retained) at capture, so
- * running its destructor would over-release them. Deterministic reclamation of
- * defer closures comes with the broader AOT memory model work (108). */
+ * The closure itself is not released here because it can capture upvalues that
+ * were borrowed, rather than retained, at capture time. Running its destructor
+ * would over-release them. AOT heap objects currently remain live until process
+ * exit, so deterministic defer-closure reclamation needs an ownership model
+ * that distinguishes borrowed captures. */
 static inline void xrt_defer_invoke_one(XrValue closure) {
     XrValue saved_error = xrt_pending_error;
     int had_error = xrt_has_pending_error();

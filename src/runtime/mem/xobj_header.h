@@ -80,7 +80,7 @@ typedef struct XrClass XrClass;
 #define XR_OBJ_ATOMIC 0x0004 /* extra bit 2 */
 /* XR_OBJ_HAS_DTOR (bit 3) is defined in src/shared/xr_obj_header.h */
 /* At least one weak field points at this object, so its destroy path must
- * clear the shared handle (task 247 phase C, rule W5). The common object pays
+ * clear the shared handle. The common object pays
  * one bit test on the way out and nothing else. */
 #define XR_OBJ_HAS_WEAK 0x0010 /* extra bit 4 */
 #define XR_OBJ_DEAD                                                                                \
@@ -98,7 +98,7 @@ typedef struct XrClass XrClass;
 /* extra bit 7 and bits 8-9 are FREE.
  *
  * They held XR_OBJ_CYCLE_CANDIDATE and the trial-deletion color while the
- * Bacon-Rajan collector existed. Task 247 removed it: cycles are prevented
+ * Bacon-Rajan collector existed. It was removed: cycles are prevented
  * statically, broken with `weak`, and bounded by the coroutine heap, so no
  * per-object cycle state is carried on the hot path any more. The development
  * detector works off the class-level XR_CLASS_CYCLE_CANDIDATE plus its own
@@ -186,8 +186,8 @@ static inline bool xr_rc_is_sticky(int32_t rc) {
  * reject rather than paper over.
  *
  * Named rather than open-coded because "MANAGED and sticky" is a physical
- * tell, not the question being asked. Task 250 gives the VM's root execution
- * a real EXEC_LOCAL heap, so objects created at top level stop being immortal
+ * tell, not the question being asked. The VM's root execution now has a real
+ * EXEC_LOCAL heap, so objects created at top level stop being immortal
  * — call sites that spelled out the bit test would silently change meaning,
  * while this one keeps asking the same question and starts answering "no". */
 static inline bool xr_obj_is_publishable_across_executions(const XrObjHeader *o) {

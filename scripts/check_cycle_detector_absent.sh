@@ -1,5 +1,5 @@
 #!/bin/bash
-# Task 247 phase D: the cycle detector must leave NO trace in a default build.
+# The cycle detector must leave NO trace in a default build.
 #
 # It is a compile-time switch, not a runtime flag — section 6.1 requires the
 # production binary to contain none of it, and section 0.3 forbids a no-op

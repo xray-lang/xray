@@ -190,7 +190,7 @@ jobs:
           echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
           echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
 
-      # Ninja on every platform (AGENTS.md); on Windows that needs cl.exe on PATH.
+      # Ninja on every platform; on Windows that needs cl.exe on PATH.
       - name: Set up MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:

@@ -225,7 +225,7 @@ struct XrClass {
     // The head is atomic: the list only grows and nodes are immutable once
     // published (release-store). They share the isolate-lifetime class arena,
     // so readers traverse lock-free via an acquire-load while writers serialize
-    // on core->metadata_lock (P1-3).
+    // on core->metadata_lock.
     _Atomic(struct XrClassTransition *) transitions;  // Linked list of transitions
     struct XrClass *transition_parent;                // Parent class in transition chain
     int transition_symbol;                            // Symbol that caused transition from parent
@@ -413,7 +413,7 @@ static inline bool xr_class_is_field_private(const XrClass *cls, int index) {
     return false;
 }
 
-/* Is instance field `index` declared weak (task 247 phase C)? Its slot holds
+/* Is instance field `index` declared weak? Its slot holds
  * an XrWeakHandle rather than the target, so reads and writes must take the
  * weak path. Only reached for classes carrying XR_CLASS_HAS_WEAK_FIELDS. */
 static inline bool xr_class_is_field_weak(const XrClass *cls, int index) {

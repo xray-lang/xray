@@ -94,7 +94,7 @@ if [[ "${XR_ASAN_SKIP_BUILD:-0}" != "1" ]]; then
     if [[ -f "${ASAN_CACHE}" ]]; then
         echo "== [asan_focused] reusing existing configuration in ${ASAN_BUILD}"
     else
-        # Ninja is the project's one build generator (see AGENTS.md). No Makefiles
+        # Ninja is the project's one build generator. No Makefiles
         # fallback — fail with a clear install hint rather than silently building
         # something the rest of the toolchain does not expect.
         if ! command -v ninja >/dev/null 2>&1; then

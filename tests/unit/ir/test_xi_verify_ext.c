@@ -1762,7 +1762,7 @@ TEST(backend_accepts_range_op) {
     xi_func_free(f);
 }
 
-/* ========== Coroutine suspendability depth bound (task 260 §7) ========== */
+/* ========== Coroutine suspendability depth bound ========== */
 
 /* Resolver for a synthetic linear chain f0 -> f1 -> ... -> fN. Prepared
  * suspendability is deliberately UNKNOWN (-1) for every function, forcing

@@ -2298,7 +2298,7 @@ static XrValue aot_task_result_from_block(const XrAotContext *ctx, XrTask *task,
 }
 
 /* Re-raise an awaited task's terminal failure on the channel the child raised
- * it on (task 248).  A cancellation is always a panic: nobody in this frame
+ * it on.  A cancellation is always a panic: nobody in this frame
  * threw it as a value. */
 static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task) {
     uint8_t state =

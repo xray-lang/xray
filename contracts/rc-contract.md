@@ -67,4 +67,4 @@ this one. A contract names what it proves; this line names what it does not.
 
 ## Digest anchors
 
-anchor-sha256: src/ir/xi_arc_verify.c b3ea18ee26e32a7f176cd843aa52d67c7321929812f1d10ac43c89f5e900d9e0
+anchor-sha256: src/ir/xi_arc_verify.c d7468f7a17991d8fe650384a62ef6c86b0ba1c07c7b54e2b0d361f8c2ff9bcb5

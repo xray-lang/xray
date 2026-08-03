@@ -679,9 +679,7 @@ void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes) {
     }
 }
 
-// xa_incremental_update() used to live here. It carried a
-// permanent "TODO: Implement true incremental parsing" comment, had no
-// caller in src/, and was just a poorly-named wrapper that delegated to
-// xa_analyzer_update(). The plan rule "无调用面的'备用 API' / 标注为
-// deprecated 但保留" forbids that. Use xa_analyzer_refresh_file() (the
-// renamed full-file rebuild) or xa_analyzer_invalidate_range() instead.
+// xa_incremental_update() used to live here. It had no production caller and
+// merely delegated to xa_analyzer_update() under a misleading name. Callers
+// should use xa_analyzer_refresh_file() for a full-file rebuild or
+// xa_analyzer_invalidate_range() for targeted invalidation.

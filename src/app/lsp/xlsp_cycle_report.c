@@ -254,7 +254,7 @@ static void emit_field_diagnostic(XrJsonValue *diagnostics, AstNode *field_node,
 
     char message[512];
     /* Say what breaks and what it costs, then what the choice MEANS. Which edge
-     * to break is an ownership decision (247 section 2.5) and the message has
+     * to break is an ownership decision and the message has
      * to give the reader enough to make it before clicking anything. */
     snprintf(message, sizeof(message),
              XLSP_CYCLE_DIAG_PREFIX
@@ -439,7 +439,7 @@ static void emit_contract_diagnostic(XrJsonValue *diagnostics, AstNode *field_no
     char message[512];
     /* The wording matters: the compiler cannot PROVE acyclicity, which is a
      * different claim from having detected a cycle, and only the first is true
-     * at this level (247 section 9.3). The trailing clause is shared with the
+     * at this level. The trailing clause is shared with the
      * runtime-report diagnostic so one code action serves both. */
     snprintf(message, sizeof(message),
              XLSP_CONTRACT_CYCLE_DIAG_PREFIX
@@ -474,7 +474,7 @@ static void walk_for_contract_classes(AstNode *node, XrLspServer *server, XaAnal
             if (!workspace_demands_acyclicity(server, cls))
                 break;
             /* Every field that can close the cycle is a candidate, and none is
-             * recommended (247 H.3): which reference is the owning one is not
+             * recommended: which reference is the owning one is not
              * something the type graph knows. */
             for (int i = 0; i < node->as.class_decl.field_count; i++) {
                 AstNode *f = node->as.class_decl.fields[i];

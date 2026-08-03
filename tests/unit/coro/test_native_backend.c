@@ -663,7 +663,7 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     /* The control plane resolves its heap from the root descriptor. Outside a
      * begin/end pair there is no heap, so introspection reads zero; inside one
      * it reports the descriptor's heap. This used to be probed through the
-     * cycle-collection toggles, which task 247 removed along with the
+     * cycle-collection toggles, which the reference-cycle model removed along with the
      * collector — live_bytes/live_objects say the same thing about heap
      * binding without asserting anything about reclamation policy. */
     ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&ctx), 0);

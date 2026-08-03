@@ -10,10 +10,10 @@
  * KEY CONCEPT:
  *   Reclamation is per-coroutine reference counting and nothing else — there
  *   is no collection event to observe or control, which is why this module
- *   has no collect/enable/disable entry point (task 247 deleted them along
- *   with the collector rather than leaving no-op stubs). This module exposes
- *   the runtime introspection surface (task 154 moved it out of `mem`, which
- *   now only carries raw-memory capabilities):
+ *   has no collect/enable/disable entry point; those controls were deleted with
+ *   the collector rather than retained as no-op stubs. This module exposes the
+ *   runtime introspection surface, while `mem` only carries raw-memory
+ *   capabilities:
  *   - runtime.liveBytes()                - live memory bytes
  *   - runtime.liveObjects()              - live object count
  *   - runtime.info()                     - typed RuntimeInfo snapshot
@@ -68,7 +68,7 @@ static XrValue runtime_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc)
 // Live bytes held by SYNC_SHARED system-heap objects. liveBytes() reads the
 // current coroutine heap; this reads the one domain a coroutine's teardown
 // never bounds — a monotonic rise here is the cheap production signal of a
-// shared-domain cycle leak (task 259 §3).
+// shared-domain cycle leak.
 static XrValue runtime_shared_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) argc;

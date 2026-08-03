@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_cycle_detector_shared.c - Shared-domain cycle scan (task 259 §3).
+ * test_cycle_detector_shared.c - Shared-domain cycle scan.
  *
  * The scan is exercised at the C level because current banding discipline
  * blocks every source-level construction we tried: sending a closure that

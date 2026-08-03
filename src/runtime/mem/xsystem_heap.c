@@ -32,7 +32,7 @@
 // Large object threshold: use mmap for objects >= 64KB
 #define XR_SHARED_MMAP_THRESHOLD (64 * 1024)
 
-/* ========== Per-domain live-byte metering (task 259 §3) ==========
+/* ========== Per-domain live-byte metering ==========
  *
  * Shared objects are freed from destroy paths that carry no heap handle, so
  * the counters are process globals rather than XrSysHeapStats members. The

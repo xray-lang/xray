@@ -53,8 +53,8 @@ typedef struct XiCgenStats {
     uint32_t xi_unbox_ops;
 } XiCgenStats;
 
-/* Per-function abstraction-cost residue categories (task 217 §3.3 R1–R6,
- * task 259 §4 R7).
+/* Per-function abstraction-cost residue categories (residue model R1–R6,
+ * RC traffic residue accounting R7).
  * These are the shapes external residue contracts can forbid in generated AOT code; the
  * enum order is the stable dump/diagnostic order and doubles as the allow-mask
  * bit index (1u << category).  New categories append only — reordering would

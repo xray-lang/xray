@@ -55,7 +55,7 @@ typedef struct XrRuntimeCore {
      * must never be recycled into the coroutine-heap struct pool. Its presence
      * is what makes XR_STORAGE_EXEC_LOCAL mean the same thing at top level as
      * it does inside a coroutine — before this, root allocations fell through
-     * to the fixed heap and were pinned immortal (task 250). */
+     * to the fixed heap and were pinned immortal. */
     XrCoroHeap root_heap;
     /* Set once xr_runtime_core_teardown_root_heap has run, so the staged
      * isolate teardown and xr_runtime_core_delete can both call it without

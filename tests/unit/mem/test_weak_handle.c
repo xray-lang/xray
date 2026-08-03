@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_weak_handle.c - Weak field storage (task 247 phase C).
+ * test_weak_handle.c - Weak field storage.
  *
  * The runtime half of `weak`, tested before any language surface exists for
  * it. What must hold:

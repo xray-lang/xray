@@ -57,7 +57,7 @@ typedef struct {
 } EaScope;
 
 /* Outer names a function-expression body referenced, for the closure-cycle
- * check (task 247 A.6). in_fn_closure alone cannot say WHICH closure captured
+ * check. in_fn_closure alone cannot say WHICH closure captured
  * a name — nested closures would blend into one set — so the collection is a
  * stack, pushed and popped alongside the closure walk. */
 #define EA_CAPTURE_STACK_MAX 16

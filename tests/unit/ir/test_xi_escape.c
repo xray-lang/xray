@@ -396,7 +396,7 @@ static void test_arc_no_escape_still_released_without_stack_rewrite(void) {
      * runs — and it is also what promotes an allocation it CANNOT stack
      * allocate back to ESC_ARG — so those values were left on the heap with
      * nothing to release them. 2M non-escaping closures cost 143 MB max RSS;
-     * 2M non-escaping array literals cost 301 MB. See task 249.
+     * 2M non-escaping array literals cost 301 MB. The regression pins this failure mode.
      *
      * The stack-allocated counterpart is asserted by
      * test_arc_stack_alloc_not_released below. */

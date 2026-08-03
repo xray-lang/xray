@@ -161,7 +161,7 @@ typedef enum {
     XR_TENUM_SCALAR_LAYOUT, /* Static unit-enum layout used by compact AOT scalar boxes. */
     XR_TWEAK_HANDLE,        /* Shared indirection cell for `weak` fields; holds a
                              * non-owning target pointer that is cleared when the
-                             * target's last strong reference goes (task 247 C). */
+                             * target's last strong reference goes. */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

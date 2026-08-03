@@ -33,15 +33,15 @@ vmcase(OP_DUP) {
 vmcase(OP_DROP) {
     /* drop(R[A]): release an owning reference via the unified RC release
      * primitive. On the last reference the object is destroyed. A release that
-     * leaves RC > 0 does nothing further — cycles are not reclaimed at runtime
-     * (task 247). Region/managed objects are a no-op. This is the SAME
+     * leaves RC > 0 does nothing further; cycles are not reclaimed at runtime.
+     * Region and managed objects are a no-op. This is the same
      * primitive the container runtime uses, so the compiler-inserted drop and
      * the C runtime cannot drift apart. */
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {
-        /* An elided root has no coroutine, but it does have an exec-local heap
-         * (task 250). Passing NULL there marked the object dead without running
+        /* An elided root has no coroutine, but it does have an exec-local heap.
+         * Passing NULL there marked the object dead without running
          * its destructor or reclaiming its memory, so every drop the compiler
          * placed in top-level code was silently discarded. */
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;

@@ -139,7 +139,7 @@ XrCoroHeap *xr_coro_heap_create(struct XrRuntimeCore *core) {
  *
  * Split out of xr_coro_heap_create so a heap can live somewhere other than the
  * struct pool — specifically, embedded in XrRuntimeCore as the root execution's
- * heap (task 250). An embedded heap must never be recycled into the L1/L2 pool,
+ * heap. An embedded heap must never be recycled into the L1/L2 pool,
  * so it pairs with xr_coro_heap_teardown_inplace rather than with
  * xr_coro_heap_destroy. */
 void xr_coro_heap_init_inplace(XrCoroHeap *heap, struct XrRuntimeCore *core) {
@@ -337,7 +337,7 @@ void xr_coro_heap_teardown_inplace(XrCoroHeap *heap) {
      * Placed on the in-place teardown rather than on xr_coro_heap_destroy
      * because that is the one point BOTH paths share: a pooled coroutine heap
      * reaches it through destroy, and the runtime core's embedded root heap
-     * (task 250) reaches it directly. Scanning only in destroy left the entire
+     * reaches it directly. Scanning only in destroy left the entire
      * main execution invisible to the detector. */
     if (!heap->is_tearing_down) {
         XrCycleReport report;

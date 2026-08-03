@@ -209,9 +209,9 @@ static void isolate_cleanup_full(XrVMRuntime *isolate) {
         isolate->core_rt->root_heap.is_tearing_down = 1;
 
         /* The shared domain has no coroutine-heap teardown to bound it and no
-         * `weak` to break it (W4) — a cycle here is a process-lifetime leak.
-         * Workers are stopped by now, which is the quiescence the scan needs
-         * (task 259 §3). */
+         * `weak` to break it (W4), so a cycle here is a process-lifetime leak.
+         * Workers are stopped by now, which gives the scan the quiescence it
+         * requires. */
         XrCycleReport shared_report;
         (void) xr_cycle_detector_scan_shared(&shared_report);
     }

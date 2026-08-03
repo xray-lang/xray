@@ -9433,7 +9433,7 @@ static uint32_t cg_scan_r1_runtime_calls(const char *text) {
             cg_name_matches(p, len, "xrt_str_concat") || cg_name_matches(p, len, "xrt_gc_alloc") ||
             cg_name_matches(p, len, "xrt_alloc"))
             continue;
-        /* Reference-count traffic belongs to R7, not R1 (task 259 §4). */
+        /* Reference-count traffic belongs to R7, not R1. */
         if (cg_name_matches(p, len, "xrt_retain") || cg_name_matches(p, len, "xrt_release"))
             continue;
         if (!cg_r1_call_is_whitelisted(p, len))
@@ -9488,7 +9488,7 @@ static void cg_scan_function_residue(XiCgenCtx *ctx, const XiFunc *f, const char
     /* R7 reference-count traffic.  Only literal retain/release tokens count
      * here; RC embedded in a composite helper is that helper's R1 token, so
      * the two categories together close over both forms.  Weak-promote
-     * helpers join this needle set when AOT weak lowering lands (task 254). */
+     * helpers join this needle set when AOT weak lowering lands. */
     uint32_t r7 = cg_scan_count(body, "xrt_retain(") + cg_scan_count(body, "xrt_release(");
     cg_residue_add(r, XI_RESIDUE_R7_RC_TRAFFIC, r7, line,
                    "rc traffic not elided (borrow signature or last-use evidence incomplete)");

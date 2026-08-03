@@ -48,7 +48,7 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
         goto fail;
 
     /* The root execution gets a real exec heap, so EXEC_LOCAL means the same
-     * thing here as it does inside a coroutine (task 250). */
+     * thing here as it does inside a coroutine. */
     xr_coro_heap_init_inplace(&core->root_heap, core);
 
     xr_alloc_context_init(&core->root_alloc, core, XR_STORAGE_EXEC_LOCAL);

@@ -30,7 +30,7 @@
  *     C2  a RELEASE executes while delta is already < 0 (double release).
  *   Both are unconditionally wrong regardless of how many references exist,
  *   because they are measured relative to each reference's own definition.
- *   The C3 borrow-closure and C4 dominance checks (P2) cover the released-owner
+ *   The C3 borrow-closure and C4 dominance checks cover the released-owner
  *   / live-view and non-dominating-join cases.
  *
  * Plus two structural C5 checks that need no dataflow:

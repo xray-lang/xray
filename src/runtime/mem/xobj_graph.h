@@ -9,10 +9,10 @@
  *                the coroutine-local reference graph.
  *
  * The type-specific "what are this object's children" knowledge lives here
- * rather than inside any one consumer: the cycle collector and the
- * development-mode cycle detector must agree on it exactly, or one of them
- * reports edges the other cannot see. Task 247 phase E removes the collector;
- * this file is what stays.
+ * rather than inside any one consumer. The development-mode cycle detector and
+ * every ownership walker must agree on it exactly, or one consumer reports
+ * edges another cannot see. The trial-deletion collector is absent; this file
+ * remains the shared source of graph-edge knowledge.
  */
 
 #ifndef XR_OBJ_GRAPH_H

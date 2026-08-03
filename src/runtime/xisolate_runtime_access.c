@@ -29,7 +29,7 @@ struct XrSystemHeap *xr_isolate_get_sys_heap(XrVMRuntime *X) {
 }
 
 /* Live sys.Thread entries still executing against this isolate. The deadlock
- * detector reads it as one of its external-waker sources (task 260 §4). */
+ * detector reads it as one of its external-waker sources. */
 size_t xr_isolate_sys_thread_count(XrVMRuntime *X) {
     return X ? atomic_load_explicit(&X->sys_thread_count, memory_order_acquire) : 0;
 }

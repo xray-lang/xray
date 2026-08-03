@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xweak_handle.h - Weak field storage (task 247 phase C).
+ * xweak_handle.h - Weak field storage.
  *
  * `weak parent: Node?` does not keep its target alive. It is the ONLY way to
  * break a reference cycle: spec 16.8 says cycles are not reclaimed, and a

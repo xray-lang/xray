@@ -218,7 +218,7 @@ TEST(cell_destroy_and_replace_release_values) {
 
 TEST(closure_cell_cycle_is_not_reclaimed_and_not_freed_early) {
     /* A closure holding a cell that holds the closure is a reference cycle.
-     * Task 247 removed the trial-deletion collector: cycles are no longer
+     * The trial-deletion collector is absent, so cycles are no longer
      * reclaimed at runtime. What must still hold is that dropping the outside
      * references leaves both objects ALIVE — reaching RC 0 on each side while
      * the other still points at it must not free either one, or the cycle

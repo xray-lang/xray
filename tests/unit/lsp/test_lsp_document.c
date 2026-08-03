@@ -1190,7 +1190,7 @@ TEST(code_action_go_capture_has_no_keyword_rewrite) {
 // ============================================================================
 
 // ============================================================================
-// Reference-cycle code actions (task 247 phase H)
+// Reference-cycle code actions
 // ============================================================================
 
 // Point the server's workspace at a temp dir and drop a sidecar report in it,
@@ -1254,7 +1254,7 @@ TEST(cycle_report_diagnoses_every_candidate_field) {
     xlsp_cycle_report_diagnostics(doc, diagnostics);
 
     // Both reported edges get a diagnostic; the field that is not on a cycle
-    // gets none. Completeness is the point (247 H.5) -- a missing candidate is
+    // gets none. Completeness is the point -- a missing candidate is
     // an edge the user cannot choose.
     ASSERT_EQ(xjson_array_len(diagnostics), 2);
     bool saw_peer = false, saw_owner = false, saw_tag = false;
@@ -1337,7 +1337,7 @@ TEST(code_action_cycle_offers_weak_without_default_or_batch) {
     ASSERT(action != NULL);
 
     // The title states the ownership claim, so the choice can be made before
-    // clicking (247 H.3).
+    // clicking.
     ASSERT(strstr(xjson_get_string(action, "title"), "does not own"));
 
     // The edit inserts the modifier ahead of the field name.
@@ -1352,7 +1352,7 @@ TEST(code_action_cycle_offers_weak_without_default_or_batch) {
     // An insertion, not a replacement: nothing existing is overwritten.
     ASSERT_EQ(xjson_get_int(xjson_get_object(er, "end"), "character"), 4);
 
-    // 247 H.3, asserted rather than described: no action may be preferred, and
+    // The ownership rule is asserted rather than described: no action may be preferred, and
     // none may claim to fix more than the one edge it names. Choosing the wrong
     // edge does not leak -- it nulls a field that was still being read.
     for (int i = 0; i < xjson_array_len(actions); i++) {
@@ -1448,7 +1448,7 @@ TEST(contract_cycle_diagnoses_candidates_only_under_contract) {
 
     // Guarded is recursive AND under contract -> every edge that can close the
     // cycle is a candidate. Unguarded is just as recursive but nobody asked for
-    // a proof, and a recursive type is legal (247 section 9.3) -- reporting it
+    // a proof, and a recursive type is legal -- reporting it
     // would be a false positive on ordinary code.
     const char *uri = "file:///contract_cycle.xr";
     const char *content = "class Guarded {\n"

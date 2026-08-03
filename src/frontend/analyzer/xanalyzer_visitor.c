@@ -2878,7 +2878,7 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         }
     }
 
-    // Phase 0.5: pre-register const initializers so signatures and field types
+    // Pre-register const initializers so signatures and field types
     // can use [T; N] where N is a source-level const.
     for (int i = 0; i < count; i++) {
         AstNode *stmt = stmts[i];
@@ -2889,7 +2889,7 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         }
     }
 
-    // Phase 0.75: predeclare aggregate/class/enum names before function
+    // Predeclare aggregate, class, and enum names before function
     // signatures are resolved. This keeps legitimate same-module forward type
     // references out of the generic "undefined type" path.
     for (int i = 0; i < count; i++) {
@@ -2905,7 +2905,7 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         }
     }
 
-    // Phase 0.8: predeclare all type alias names before resolving alias RHS or
+    // Predeclare all type alias names before resolving alias RHS or
     // signatures. Alias expansion still requires a real symbol and never falls
     // back to an unknown class-name placeholder.
     for (int i = 0; i < count; i++) {

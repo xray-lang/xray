@@ -7,7 +7,7 @@
  *
  * xlsp_cycle_report.h - runtime cycle findings, surfaced in the editor
  *
- * The development-build cycle detector (task 247 phase D) runs inside the
+ * The development-build cycle detector runs inside the
  * process that leaked and writes what it found to a sidecar file. The editor
  * runs somewhere else entirely, so that file is the handoff: it names the
  * class and field on each candidate edge, which is exactly what a code action

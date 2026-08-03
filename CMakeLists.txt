@@ -466,7 +466,7 @@ endif()
 option(ENABLE_LLVM_BACKEND "Enable LLVM backend" OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
-# Task 247 phase D. Development-mode reference-cycle detector: reports cycles,
+# Development-mode reference-cycle detector: reports cycles,
 # reclaims nothing. OFF by default and compiled out entirely — the production
 # binary contains none of its symbols, which a test asserts with `nm`.
 option(XR_ENABLE_CYCLE_DETECTOR "Build the development-mode reference-cycle detector" OFF)
@@ -513,7 +513,7 @@ endif()
 
 # Multi-core and NaN Tagging are now the only implementation, no conditional compilation needed
 
-# Task 247 phase D: the cycle detector is a compile-time switch, not a runtime
+# The cycle detector is a compile-time switch, not a runtime
 # flag. Off by default, so a production binary contains none of its code.
 if(XR_ENABLE_CYCLE_DETECTOR)
     message(STATUS "Reference-cycle detector enabled (development build)")
@@ -2448,7 +2448,7 @@ if(BUILD_TESTS)
             COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
-        # Task 260 §8 F.2: the work-stealing scheduler and two-band RC under
+        # The focused TSan lane exercises the work-stealing scheduler and two-band RC under
         # ThreadSanitizer, on the CURRENT canonical concurrency assets (the
         # legacy hand-run directories are documented pre-clean-slate drafts).
         add_test(
@@ -3259,12 +3259,12 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # Task 250 — the VM's root execution shares one memory model with a
+    # The VM's root execution shares one memory model with a
     # coroutine: weak fields resolve, and top-level allocation is not immortal.
     # Asserted semantically on purpose; the memory magnitudes are guarded by the
     # out-of-process RSS probes, because liveObjects/liveBytes report 0 under
     # this defect and `import runtime` would materialize main_coro and bypass
-    # the root heap entirely (see task 250 §1.3).
+    # the root heap entirely.
     add_test(
         NAME regression_root_exec_heap_parity
         COMMAND $<TARGET_FILE:xray> run
@@ -3276,7 +3276,7 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
-    # Task 252 — compare a small and large number of cycle-leaking physical
+    # Compare a small and large number of cycle-leaking physical
     # coroutines by process max RSS.  A hosted provider runs the same source as
     # AOT; provider-less hosts still keep the AOT arena implementation covered
     # by test_xrt_execution_arena.
@@ -3293,7 +3293,7 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # Task 249/253 — direct and cross-callee construction-result ownership.
+    # Direct and cross-callee construction-result ownership.
     add_test(
         NAME regression_construction_result_ownership
         COMMAND $<TARGET_FILE:xray> test
@@ -3351,7 +3351,7 @@ if(BUILD_TESTS)
         TIMEOUT 300
     )
 
-    # Task 255 — converge go/defer on one grammar and keep every owner used by
+    # Go and defer converge on one grammar and keep every owner used by
     # a registered defer alive until the surrounding user block exits.
     add_test(
         NAME regression_task255_go_defer_forms
@@ -3366,7 +3366,7 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # Task 249 — RC reclamation gates. probe0 asserts that a local class
+    # RC reclamation gates. probe0 asserts that a local class
     # instance is reclaimed by plain RC (it was not: every `var x = Class(...)`
     # leaked); probe4 asserts runtime.liveBytes() is live bytes rather than
     # cumulative allocation. Both are resident gates, not diagnostics: without
@@ -3374,7 +3374,7 @@ if(BUILD_TESTS)
     #
     # The remaining probes in tests/probes/rc/ are diagnostic assets driven by
     # run_probes.sh and are deliberately NOT registered — probe1 stays red
-    # until task 247 phase A fixes the Map-field marking gap it measures.
+    # because it measures a remaining Map-field candidate-marking gap.
     add_test(
         NAME rc_probe_gate_baseline
         COMMAND $<TARGET_FILE:xray> test
@@ -3494,7 +3494,7 @@ if(BUILD_TESTS)
         TIMEOUT 300
     )
 
-    # Task 257: subprocess pipes remain byte streams unless a caller names a
+    # Subprocess pipes remain byte streams unless a caller names a
     # stable ASCII/UTF-8 protocol and selects strict decoding explicitly.
     add_test(
         NAME subprocess_text_boundaries

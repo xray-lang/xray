@@ -207,14 +207,14 @@ XR_FUNC bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary);
 XR_FUNC uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db,
                                                const XaEffectSummary *summary);
 
-/* Public effect API-diff (task 205 §11.2).  Compares two summaries of the same
+/* Public effect API-diff. Compares two summaries of the same
  * exported entity by stable error keys and completeness.  SOURCE_BREAKING
  * dominates BREAKING dominates IMPROVEMENT dominates COMPATIBLE so release gates
  * can reject regressions.
  *
- * SOURCE_BREAKING is reserved for a newly escaping typed error (task 205 §1.3,
- * 202 §12.8): because a catch-all binding projects the callee's reachable error
- * set (202 §4.1), widening that set makes a downstream exhaustive `match (e)`
+ * SOURCE_BREAKING is reserved for a newly escaping typed error because a
+ * catch-all binding projects the callee's reachable error set. Widening that
+ * set makes a downstream exhaustive `match (e)`
  * stop compiling (E0371) even though the source signature is unchanged.  A typed
  * `catch (e: T)` is immune, but the gate classifies by worst case.  Behavioral
  * breaks that a catch-all cannot observe -- became-incomplete, a new semantic

@@ -744,7 +744,7 @@ static bool runtime_has_work(XrRuntime *runtime) {
     return false;
 }
 
-/* ========== Global deadlock detection (task 260 §4) ==========
+/* ========== Global deadlock detection ==========
  *
  * A whole-program stall used to be silent: every worker parks, every
  * coroutine is waiting on something no one will ever provide, and the
@@ -759,7 +759,7 @@ static bool runtime_has_work(XrRuntime *runtime) {
  * entries. The thread count currently lives on the VM isolate, so the
  * check activates only when the core has a vm_owner — an AOT-standalone
  * core (owner NULL) skips detection until a backend-neutral thread
- * liveness source exists (recorded as a task-260 deviation). Foreign FFI
+ * liveness source exists (recorded as a known backend limitation). Foreign FFI
  * threads that re-enter through CFn callbacks are outside any counter;
  * XRAY_NO_DEADLOCK_DETECT=1 is the escape hatch for such embeddings. */
 
@@ -809,7 +809,7 @@ static uint64_t runtime_report_blocked_waiters(XrRuntime *runtime, bool print) {
 
 /* Coroutines observably parked right now: the channel-waitq census plus the
  * bucket-visible timer/select waiters. Shutdown's orphan warning reads this
- * after the workers stop (task 260 §5); the deadlock judgement above uses the
+ * after the workers stop; the deadlock judgement above uses the
  * same sources. */
 int64_t xr_runtime_parked_waiters_total(XrRuntime *runtime) {
     int64_t n = xr_channel_waiters_total();
@@ -1560,9 +1560,9 @@ void *worker_loop(void *arg) {
                 /* Same anti-starvation logic for the timer wheel: housekeeping
                  * only runs when the local queue is EMPTY, so a worker whose
                  * queue always holds a runnable coroutine (a poll loop yielding
-                 * on reductions) would otherwise never fire its due timers —
-                 * a sleeper parked on this wheel would starve forever (task
-                 * 260 §3). bump_due_timers self-guards on "anything due", so
+                 * on reductions) would otherwise never fire its due timers, so
+                 * a sleeper parked on this wheel would starve forever.
+                 * bump_due_timers self-guards on "anything due", so
                  * the sampled hot-path cost is one clock read and a compare. */
                 if (worker->p.timer_wheel) {
                     worker_bump_due_timers(worker, xr_runtime_now_ticks(runtime), false);

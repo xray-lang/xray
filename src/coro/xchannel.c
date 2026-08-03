@@ -562,7 +562,7 @@ uint64_t xr_channel_get_close_count(XrRuntimeCore *core) {
 // ========== Wait Queue Implementation ==========
 
 /* Process-wide census of coroutines parked on ANY channel waitq. The deadlock
- * detector (task 260 §4) needs "someone is provably stuck": head counts drift
+ * detector needs "someone is provably stuck": head counts drift
  * (fast-path completions skip completed_count), worker-side records only see
  * timer/select waits, so the census lives on the four functions below — the
  * only places a channel waitq is ever linked or unlinked. Process scope keeps

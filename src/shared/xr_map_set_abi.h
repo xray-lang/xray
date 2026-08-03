@@ -73,7 +73,7 @@ typedef struct XrMapCore {
     XR_MAP_ABI_FIELDS;
 } XrMapCore;
 
-/* Bits are repacked with no holes after WeakMap's removal (task 247 phase B).
+/* Bits are repacked with no holes after WeakMap's removal.
  * Nothing persists these across a build, and Xray keeps no compatibility
  * surface, so a hole reserved for a deleted feature would be pure debt. */
 #define XR_MAP_FLAG_DUMMY 0x01           /* Empty map: no ctrl/indices/entries allocation */

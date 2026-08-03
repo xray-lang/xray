@@ -20,8 +20,8 @@
  * -DXR_ENABLE_CYCLE_DETECTOR=ON; `xray run --detect-cycles` and `xray test`
  * drive it from there.
  *
- * AOT deliberately has no equivalent. After task 247 phase E both backends are
- * plain RC with trivially equivalent semantics (enforced by the differential
+ * AOT deliberately has no equivalent. Without the trial-deletion collector,
+ * both backends use plain RC with equivalent semantics enforced by the differential
  * suite), so a cycle found on the VM is a cycle on AOT. AOT also never
  * maintains objsize (xrt_static_header_init zeroes it), which whole-heap
  * traversal depends on.
@@ -65,7 +65,7 @@ bool xr_cycle_detector_scan(struct XrCoroHeap *heap, XrCycleReport *out);
  * Returns false if a self-check tripped during the walk. */
 bool xr_cycle_detector_count_live(struct XrCoroHeap *heap, uint32_t *out_count);
 
-/* ========== Shared-domain scan (task 259 §3) ==========
+/* ========== Shared-domain scan ==========
  *
  * SYNC_SHARED objects live in the system heap: `weak` is forbidden on them
  * (W4), no coroutine-heap teardown bounds them, and the per-heap scan above

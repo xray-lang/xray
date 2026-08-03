@@ -5,9 +5,9 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_arc_verify.h - Independent RC / ownership contract verifier (task 219)
+ * xi_arc_verify.h - Independent RC / ownership contract verifier
  *
- * Machine-checks the written RC contract (C1-C5, see docs/rules/architecture.md)
+ * Machine-checks the written C1-C5 RC contract on ARC-inserted Xi IR.
  * on ARC-inserted Xi IR. This is an N-VERSION checker: it shares NO closure or
  * alias code with xi_arc.c / xi_own.c and re-derives ownership facts from first
  * principles, depending only on xi_analysis (dominators / CFG) and the single
@@ -18,7 +18,7 @@
  *   C1  no use after release        (use-after-free / early release)
  *   C2  path balance                (no double release)
  *   C3  borrow-closure completeness (owner live at every borrow-view use)
- *   C4  dominance boundary          (release dominated by owner; join归属)
+ *   C4  dominance boundary          (release dominated by owner; join ownership)
  *   C5  metadata / SSA completeness (declared ownership; no stale users)
  *
  * The core (xi_arc_verify / xi_arc_verify_tree) is a PURE check: it never

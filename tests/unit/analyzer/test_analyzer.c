@@ -1025,10 +1025,10 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
-/* ========== L0 cycle-candidate marking (task 247 phase A) ========== */
+/* ========== L0 cycle-candidate marking ========== */
 
 /* is_cycle_candidate is the ONLY truth about L0 marking. Runtime residue is a
- * downstream proxy that stops working once task 247 phase E removes the cycle
+ * downstream proxy that stops working once removal of the trial-deletion collector removes the cycle
  * collector, so these assert the flag directly. */
 static bool analyzer_class_is_cycle_candidate(XaAnalyzer *analyzer, const char *class_name) {
     XaSymbol *sym = xa_analyzer_lookup(analyzer, class_name);
@@ -2534,10 +2534,10 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     setup_pool();
 }
 
-/* Task 247 phase A: the six field shapes that reach a class. Every one of
+/* These six field shapes all reach a class. Every one of
  * these was a MISSED mark before — an unmarked class never becomes a cycle
- * candidate, so nothing downstream (collector today, detector after phase E)
- * can see its cycles. */
+ * candidate, so neither the collector nor the development detector can
+ * see its cycles. */
 TEST(cycle_candidate_marks_every_field_shape) {
     XaAnalyzer *a = analyzer_run_source("cycle_field_shapes.xr",
                                         /* direct: was already marked */
@@ -2582,7 +2582,7 @@ TEST(cycle_candidate_marks_every_field_shape) {
     setup_pool();
 }
 
-/* Task 247 phase C: `weak` is the L0/L1 interface. A weak field does not keep
+/* `weak` is the L0/L1 interface. A weak field does not keep
  * its target alive, so it cannot close a cycle and must produce no edge —
  * annotating one is exactly how a user takes their class out of the candidate
  * set. The unannotated twin alongside is what makes this a real assertion. */
@@ -2650,7 +2650,7 @@ TEST(cycle_candidate_follows_inherited_fields) {
  * self-loop, and it must still be marked. L0 is a type-level approximation; it
  * cannot tell a downward edge from an upward one, and any heuristic that tried
  * would start missing real cycles. This is also what bounds the
- * no_reference_cycles contract (247 section 9.3): a recursive type does not
+ * no_reference_cycles contract: a recursive type does not
  * pass, and the diagnostic says "cannot prove", not "cycle detected". */
 TEST(cycle_candidate_marks_recursive_tree_types) {
     XaAnalyzer *a = analyzer_run_source("cycle_recursive_tree.xr",
@@ -6241,7 +6241,7 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
     setup_pool();
 }
 
-/* Task 247 phase B removed WeakMap / WeakSet. The names must now be unknown
+/* WeakMap and WeakSet were removed. The names must now be unknown
  * types, not silently-accepted ones — a deleted surface that still parses is
  * worse than one that never existed. */
 TEST(analyzer_weak_containers_are_unknown_types) {

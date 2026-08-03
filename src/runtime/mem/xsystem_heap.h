@@ -192,7 +192,7 @@ XR_FUNC bool xr_sysheap_block_pool_push(XrSystemHeap *heap, void *block);
 XR_FUNC void xr_sysheap_get_stats(XrSystemHeap *heap, XrSysHeapStats *stats);
 XR_FUNC void xr_sysheap_print_stats(XrSystemHeap *heap);
 
-/* ========== Per-domain live-byte metering (task 259 §3) ==========
+/* ========== Per-domain live-byte metering ==========
  *
  * Process-wide, deliberately: a shared object's last release runs on whatever
  * worker drops the final reference, deep inside destroy paths that carry no

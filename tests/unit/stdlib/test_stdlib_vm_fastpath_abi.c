@@ -1,4 +1,4 @@
-/* generated-native VM ABI parity and fixed-cost gate (task 256 W1). */
+/* generated-native VM ABI parity and fixed-cost gate. */
 
 #include "../../../src/os/os_time.h"
 #include "../../../src/module/xmodule.h"

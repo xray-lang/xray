@@ -2,9 +2,9 @@
 
 /* Match the VM CLI's stdio policy (xcli.c): most libcs fully buffer stdout
  * behind a pipe, so a program that hangs or is killed mid-run hands the
- * parent shell nothing — exactly the configuration the liveness differential
- * cases and every "why is it stuck" debugging session run under (task 260
- * §8). Freestanding profiles have no hosted stdio to configure. */
+ * parent shell nothing. Liveness tests and every stuck-program debugging
+ * session run under exactly that configuration. Freestanding profiles have no
+ * hosted stdio to configure. */
 static void cg_emit_main_stdio_policy(XiCgenCtx *ctx, FILE *out) {
     if (ctx && ctx->freestanding_profile)
         return;

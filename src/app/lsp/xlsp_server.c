@@ -1045,7 +1045,7 @@ void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
 
     /* Findings from a run of the program, not from this parse: the detector
-     * writes them out, the editor reads them back (task 247 phase H). */
+     * writes them out, the editor reads them back. */
     xlsp_cycle_report_refresh(server);
     xlsp_cycle_report_diagnostics(doc, diagnostics);
     xlsp_contract_cycles_diagnostics(doc, diagnostics);

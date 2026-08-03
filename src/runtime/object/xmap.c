@@ -130,7 +130,7 @@ static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroHeap *h
 static XrValue map_canonicalize_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
     if (!XR_IS_STRING(key))
         return key;
-    /* The heap names its runtime core directly (task 250). Interning only ever
+    /* The heap names its runtime core directly. Interning only ever
      * needed the core; routing through the VM owner meant a core without one —
      * a standalone AOT runtime, or a unit test that builds a bare core — gave
      * up on canonicalization and silently kept duplicate string keys. */

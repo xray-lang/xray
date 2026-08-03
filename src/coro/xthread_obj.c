@@ -177,8 +177,8 @@ static void thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
 }
 
 /* Process-wide live count beside the per-isolate one: the deadlock detector
- * runs in the isolate-neutral scheduler and must not touch VM internals
- * (task 260 §4). VM spawn paths all pass through enter/leave; the AOT thread
+ * runs in the isolate-neutral scheduler and must not touch VM internals. VM
+ * spawn paths all pass through enter/leave; the AOT thread
  * path does not, which is one of the reasons the detector only activates on
  * cores with a vm_owner. */
 static _Atomic int64_t g_sys_thread_live;

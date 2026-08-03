@@ -32,8 +32,8 @@ void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t
         return ctx->shared_heap ? xr_sysheap_alloc_transfer(ctx->shared_heap, size, type) : NULL;
     if (ctx->domain == XR_STORAGE_SYNC_SHARED || ctx->domain == XR_STORAGE_CONST_SHARED)
         return ctx->shared_heap ? xr_sysheap_alloc_shared(ctx->shared_heap, size, type) : NULL;
-    /* Execution-local storage always has an exec heap — the root execution
-     * included, since task 250 embeds one in the runtime core. Falling through
+    /* Execution-local storage always has an exec heap, including the root
+     * execution because the runtime core embeds one. Falling through
      * to the fixed heap here is what used to pin every top-level object
      * immortal: the domain said "dies with its execution", the allocator said
      * "lives until teardown", and nothing reported the contradiction. */
@@ -44,15 +44,14 @@ void *xr_alloc_context_new_object(XrAllocationContext *ctx, size_t size, uint8_t
      *
      * An EXEC_LOCAL context arriving here is a different matter: the domain
      * says "dies with its execution" while the allocator says "lives until
-     * teardown", and nothing else reports that contradiction. Task 250 gives
-     * the VM's root execution a real heap, so the VM no longer lands here.
+     * teardown", and nothing else reports that contradiction. The VM's root
+     * execution now has a real heap, so the VM no longer lands here.
      *
-     * Neither does standalone AOT, despite what this comment claimed until
-     * task 252 measured it: AOT does not route through this allocator at all.
+     * Standalone AOT does not route through this allocator either.
      * It has its own object model (native structs, stack-allocated when they
      * do not escape, xrt_arc_alloc otherwise) and never sees a storage domain.
-     * Its gap is a different one — no execution-scoped bulk release, so 247's
-     * L2 bound does not hold there — and that is 252, not this fallback.
+     * Its separate execution arena supplies the execution-scoped bulk release
+     * that bounds residual cycles.
      *
      * The assert therefore guards a path with no known caller. Keep both: an
      * EXEC_LOCAL allocation reaching a heap that outlives the execution is a

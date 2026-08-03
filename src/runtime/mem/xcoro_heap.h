@@ -146,7 +146,7 @@ typedef struct XrCoroHeap {
      * none of that needs task identity. Only two things were ever read off
      * the old owner pointer — core, and core->sys_heap — so the heap now
      * names the core directly and a heap can exist without a coroutine.
-     * That is what lets the VM's root execution own one (task 250). */
+     * That is what lets the VM's root execution own one. */
     struct XrRuntimeCore *core;
 
     // Objects that need teardown finalization if they outlive local RC.
@@ -155,7 +155,7 @@ typedef struct XrCoroHeap {
     // reclamation O(live objects) and teardown O(n^2).
     XrHeapPtrSet finalize_set;
 
-    /* Task 247 phase C: target -> shared weak handle. Coroutine-local, so no
+    /* weak-field storage: target -> shared weak handle. Coroutine-local, so no
      * locking; only objects flagged XR_OBJ_HAS_WEAK ever look here. Declared
      * as an opaque struct so this header does not depend on xweak_handle.h. */
     struct XrWeakTable {
@@ -252,10 +252,10 @@ XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *heap);
  * retention of long-lived coroutines under shifting size-class loads, where a
  * per-size-class RC freelist alone never lets size B reuse size A's memory.
  *
- * Not on the alloc/free hot path. Its only trigger used to be the cycle
- * collector, which task 247 removed; it currently has no caller and wants one
- * (a size-class-pressure heuristic, or coroutine yield). Kept because the
- * reclaim itself is orthogonal to cycles and still worth having. */
+ * Not on the alloc/free hot path. Its only trigger used to be the removed cycle
+ * collector; it currently has no caller and needs a size-class-pressure or
+ * coroutine-yield trigger. The reclaim itself is orthogonal to cycles and
+ * remains useful. */
 XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap);
 
 /* ========== Unified Compile-Time RC Primitives ==========
@@ -269,8 +269,7 @@ XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap);
  * reference goes. A release that leaves RC > 0 does nothing further — there is
  * no collector to notify, no candidate set to join. Reference cycles are not
  * reclaimed at runtime; they are prevented statically (L0), broken explicitly
- * with `weak` (L1), and bounded by the coroutine heap (L2). See spec 16.8 and
- * task 247.
+ * with `weak` (L1), and bounded by the coroutine heap (L2).
  */
 
 static inline void xr_rc_retain(XrObjHeader *o) {
