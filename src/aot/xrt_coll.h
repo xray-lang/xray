@@ -79,8 +79,8 @@ typedef struct {
  * generated MSVC C does not need GNU statement expressions for a temporary
  * array/span pointer and index.  The optimizer still sees every operation as
  * an inline load/store. */
-static inline XrValue xrt_array_index_get_portable(xrt_array_t *array, int64_t index,
-                                                   int checked, int owned) {
+static inline XrValue xrt_array_index_get_portable(xrt_array_t *array, int64_t index, int checked,
+                                                   int owned) {
     if (!array || (checked && (index < 0 || index >= array->length))) {
         xrt_index_oob(index, array ? array->length : 0);
         return XR_NULL_VAL;
@@ -89,8 +89,8 @@ static inline XrValue xrt_array_index_get_portable(xrt_array_t *array, int64_t i
     return owned ? xrt_value_to_owned(value) : value;
 }
 
-static inline XrValue xrt_array_index_set_portable(xrt_array_t *array, int64_t index,
-                                                   XrValue value, int checked) {
+static inline XrValue xrt_array_index_set_portable(xrt_array_t *array, int64_t index, XrValue value,
+                                                   int checked) {
     if (!array || (checked && (index < 0 || index >= array->length))) {
         xrt_index_oob(index, array ? array->length : 0);
         return XR_NULL_VAL;
@@ -258,8 +258,8 @@ static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, in
         abort();
     }
     size_t total = sizeof(xrt_array_t) + data_bytes + pad;
-    xrt_array_t *a = (xrt_array_t *)
-        xrt_execution_alloc_embedded(total, xrt_execution_finalize_array);
+    xrt_array_t *a =
+        (xrt_array_t *) xrt_execution_alloc_embedded(total, xrt_execution_finalize_array);
     if (XR_UNLIKELY(!a)) {
         fprintf(stderr, "%s: out of memory\n", where);
         abort();
@@ -625,8 +625,8 @@ _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length
 _Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
 #endif
 
-static inline XrValue xrt_span_index_get_portable(xr_span_t span, int64_t index,
-                                                  uint8_t elem_type, int checked, int owned) {
+static inline XrValue xrt_span_index_get_portable(xr_span_t span, int64_t index, uint8_t elem_type,
+                                                  int checked, int owned) {
     if (checked && (index < 0 || index >= span.length)) {
         xrt_index_oob(index, span.length);
         return XR_NULL_VAL;
@@ -635,9 +635,8 @@ static inline XrValue xrt_span_index_get_portable(xr_span_t span, int64_t index,
     return owned ? xrt_value_to_owned(value) : value;
 }
 
-static inline XrValue xrt_span_index_set_portable(xr_span_t span, int64_t index,
-                                                  XrValue value, uint8_t elem_type,
-                                                  int checked) {
+static inline XrValue xrt_span_index_set_portable(xr_span_t span, int64_t index, XrValue value,
+                                                  uint8_t elem_type, int checked) {
     if (checked && (index < 0 || index >= span.length)) {
         xrt_index_oob(index, span.length);
         return XR_NULL_VAL;
@@ -868,8 +867,8 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
      * the slice survives a later source grow (may move src->data). */
     xrt_array_ensure_storage(src);
 
-    xrt_array_t *slice = (xrt_array_t *)
-        xrt_execution_alloc_embedded(sizeof(xrt_array_t), xrt_execution_finalize_array);
+    xrt_array_t *slice = (xrt_array_t *) xrt_execution_alloc_embedded(sizeof(xrt_array_t),
+                                                                      xrt_execution_finalize_array);
     if (XR_UNLIKELY(!slice)) {
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
         abort();
@@ -1046,36 +1045,32 @@ XR_FUNC bool xr_aot_atomic_compare_exchange_i64(XrValue atomic_value, int64_t ex
 XR_FUNC bool xr_aot_atomic_compare_exchange_f64(XrValue atomic_value, double expected,
                                                 double desired, int64_t ordering,
                                                 double *out_previous);
-XR_FUNC bool xr_aot_atomic_compare_exchange_bool(XrValue atomic_value, bool expected,
-                                                 bool desired, int64_t ordering,
-                                                 bool *out_previous);
+XR_FUNC bool xr_aot_atomic_compare_exchange_bool(XrValue atomic_value, bool expected, bool desired,
+                                                 int64_t ordering, bool *out_previous);
 
-static inline XrValue xrt_atomic_compare_exchange_i64_tuple(XrValue atomic_value,
-                                                            int64_t expected, int64_t desired,
-                                                            int64_t ordering) {
+static inline XrValue xrt_atomic_compare_exchange_i64_tuple(XrValue atomic_value, int64_t expected,
+                                                            int64_t desired, int64_t ordering) {
     int64_t previous = 0;
-    bool ok = xr_aot_atomic_compare_exchange_i64(atomic_value, expected, desired, ordering,
-                                                  &previous);
+    bool ok =
+        xr_aot_atomic_compare_exchange_i64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_INT(previous), XR_FROM_BOOL(ok)};
     return xrt_tuple_make(2, items);
 }
 
-static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value,
-                                                            double expected, double desired,
-                                                            int64_t ordering) {
+static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value, double expected,
+                                                            double desired, int64_t ordering) {
     double previous = 0.0;
-    bool ok = xr_aot_atomic_compare_exchange_f64(atomic_value, expected, desired, ordering,
-                                                  &previous);
+    bool ok =
+        xr_aot_atomic_compare_exchange_f64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_FLOAT(previous), XR_FROM_BOOL(ok)};
     return xrt_tuple_make(2, items);
 }
 
-static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_value,
-                                                             bool expected, bool desired,
-                                                             int64_t ordering) {
+static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_value, bool expected,
+                                                             bool desired, int64_t ordering) {
     bool previous = false;
-    bool ok = xr_aot_atomic_compare_exchange_bool(atomic_value, expected, desired, ordering,
-                                                   &previous);
+    bool ok =
+        xr_aot_atomic_compare_exchange_bool(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_BOOL(previous), XR_FROM_BOOL(ok)};
     return xrt_tuple_make(2, items);
 }
@@ -1391,143 +1386,9 @@ static inline void xrt_strbuf_destroy_builtin(void *obj) {
     sb->cap = 0;
 }
 
-typedef struct {
-    const char *a;
-    const char *b;
-    size_t alen;
-    size_t blen;
-    char scratch[64];
-    uint8_t kind;
-} xrt_strpart_t;
-
-#define XRT_STRPART_SINGLE 0u
-#define XRT_STRPART_ENUM 1u
-
-static inline size_t xrt_format_uint64(char *buf, size_t cap, uint64_t value) {
-    int n = snprintf(buf, cap, "%llu", (unsigned long long) value);
-    if (n < 0)
-        return 0;
-    if ((size_t) n >= cap)
-        return cap ? cap - 1u : 0u;
-    return (size_t) n;
-}
-
-static inline XrValue xrt_uint64_to_string(uint64_t value) {
-    char scratch[32];
-    size_t len = xrt_format_uint64(scratch, sizeof(scratch), value);
-    XrValue out = xrt_str_alloc(len);
-    memcpy(xr_str_buf(out), scratch, len);
-    return out;
-}
-
-static inline void xrt_strpart_init_u64(xrt_strpart_t *part, uint64_t value) {
-    part->a = "";
-    part->b = NULL;
-    part->alen = 0;
-    part->blen = 0;
-    part->kind = XRT_STRPART_SINGLE;
-    part->alen = xrt_format_uint64(part->scratch, sizeof(part->scratch), value);
-    part->a = part->scratch;
-}
-
-static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
-    part->a = "";
-    part->b = NULL;
-    part->alen = 0;
-    part->blen = 0;
-    part->kind = XRT_STRPART_SINGLE;
-
-    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
-        part->a = xr_str_data(val);
-        part->alen = (size_t) xr_str_len(val);
-    } else if (val.tag == XR_TAG_I64) {
-        int n = snprintf(part->scratch, sizeof(part->scratch), "%lld", (long long) val.i);
-        part->a = part->scratch;
-        part->alen = (size_t) (n < 0 ? 0 : n);
-    } else if (val.tag == XR_TAG_F64) {
-        int n = xr_format_float(part->scratch, sizeof(part->scratch), val.f);
-        part->a = part->scratch;
-        part->alen = (size_t) (n < 0 ? 0 : n);
-    } else if (val.tag == XR_TAG_BOOL) {
-        part->a = val.i ? "true" : "false";
-        part->alen = val.i ? 4u : 5u;
-    } else if (val.tag == XR_TAG_RUNE) {
-        uint32_t cp = XR_TO_RUNE(val);
-        int n = 0;
-        if (cp <= 0x7Fu) {
-            part->scratch[n++] = (char) cp;
-        } else if (cp <= 0x7FFu) {
-            part->scratch[n++] = (char) (0xC0u | (cp >> 6));
-            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
-        } else if (cp <= 0xFFFFu && !(cp >= 0xD800u && cp <= 0xDFFFu)) {
-            part->scratch[n++] = (char) (0xE0u | (cp >> 12));
-            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
-            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
-        } else if (cp <= 0x10FFFFu) {
-            part->scratch[n++] = (char) (0xF0u | (cp >> 18));
-            part->scratch[n++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
-            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
-            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
-        }
-        part->a = part->scratch;
-        part->alen = (size_t) n;
-    } else if (val.tag == XR_TAG_NULL) {
-        part->a = "null";
-        part->alen = 4u;
-    } else if (val.tag == XR_TAG_ENUM) {
-        const char *enum_name = NULL;
-        const char *member_name = NULL;
-        if (xrt_enum_key_parts(val, &enum_name, &member_name, NULL, NULL) && enum_name &&
-            member_name) {
-            part->a = enum_name;
-            part->b = member_name;
-            part->alen = strlen(enum_name);
-            part->blen = strlen(member_name);
-            part->kind = XRT_STRPART_ENUM;
-        } else {
-            int n = snprintf(part->scratch, sizeof(part->scratch), "<enum@%p>", val.ptr);
-            part->a = part->scratch;
-            part->alen = (size_t) (n < 0 ? 0 : n);
-        }
-    } else {
-        const char *s = xr_to_cstr(val, part->scratch, sizeof(part->scratch));
-        part->a = s;
-        part->alen = strlen(s);
-    }
-}
-
-static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
-    return part->kind == XRT_STRPART_ENUM ? part->alen + 1u + part->blen : part->alen;
-}
-
-static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
-    memcpy(dst, part->a, part->alen);
-    dst += part->alen;
-    if (part->kind == XRT_STRPART_ENUM) {
-        *dst++ = '.';
-        memcpy(dst, part->b, part->blen);
-        dst += part->blen;
-    }
-    return dst;
-}
-
-static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
-    size_t total = 0;
-    for (size_t i = 0; i < count; i++) {
-        size_t len = xrt_strpart_len(&parts[i]);
-        if (XR_UNLIKELY(len > SIZE_MAX - total)) {
-            fprintf(stderr, "xrt_str_concat_parts: string length overflow\n");
-            abort();
-        }
-        total += len;
-    }
-    XrValue out = xrt_str_alloc(total);
-    char *dst = xr_str_buf(out);
-    for (size_t i = 0; i < count; i++)
-        dst = xrt_strpart_copy(dst, &parts[i]);
-    *dst = 0;
-    return out;
-}
+/* String concatenation parts (xrt_strpart_t and friends) live in xrt_arith.h:
+ * a payload-bearing enum part renders through the shared value formatter
+ * (xrt_format_value), which is defined there. */
 
 static inline XrValue xrt_enum_box_new(uint32_t layout_id, const char *enum_name,
                                        const char *member_name, uint32_t member_index) {
@@ -2039,8 +1900,8 @@ static inline void xrt_map_alloc_slots(xrt_map_t *m, int64_t slots) {
 }
 
 static inline XrValue xrt_map_new(int64_t cap) {
-    xrt_map_t *m = (xrt_map_t *)
-        xrt_execution_alloc_embedded(sizeof(xrt_map_t), xrt_execution_finalize_map);
+    xrt_map_t *m =
+        (xrt_map_t *) xrt_execution_alloc_embedded(sizeof(xrt_map_t), xrt_execution_finalize_map);
     if (XR_UNLIKELY(!m)) {
         fprintf(stderr, "xrt_map_new: out of memory\n");
         abort();
@@ -2880,8 +2741,8 @@ static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
 static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
     if (elem_type >= XR_ELEM_COUNT)
         elem_type = XR_ELEM_ANY;
-    xrt_set_t *s = (xrt_set_t *)
-        xrt_execution_alloc_embedded(sizeof(xrt_set_t), xrt_execution_finalize_set);
+    xrt_set_t *s =
+        (xrt_set_t *) xrt_execution_alloc_embedded(sizeof(xrt_set_t), xrt_execution_finalize_set);
     if (XR_UNLIKELY(!s)) {
         fprintf(stderr, "xrt_set_new: out of memory\n");
         abort();
@@ -3810,8 +3671,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val);
 
 static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_kind) {
     size_t object_bytes = sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue);
-    xrt_json_t *j = (xrt_json_t *)
-        xrt_execution_alloc_embedded(object_bytes, xrt_execution_finalize_json);
+    xrt_json_t *j =
+        (xrt_json_t *) xrt_execution_alloc_embedded(object_bytes, xrt_execution_finalize_json);
     if (XR_UNLIKELY(!j)) {
         fprintf(stderr, "xrt_object_new: out of memory\n");
         abort();
@@ -5105,8 +4966,7 @@ static void xrt_execution_finalize_json(XrObjHeader *hdr) {
 
 static inline void xrt_coll_retain(XrValue v) {
     XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h ||
-        (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
+    if (!h || (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return;
     if (XR_OBJ_IS_SHARED(h))
         atomic_fetch_sub_explicit(&h->refcount, 1, memory_order_relaxed);
@@ -5116,8 +4976,7 @@ static inline void xrt_coll_retain(XrValue v) {
 
 static inline void xrt_coll_release(XrValue v) {
     XrObjHeader *h = (XrObjHeader *) v.ptr;
-    if (!h ||
-        (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
+    if (!h || (h->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return;
     if (XR_OBJ_IS_SHARED(h)) {
         int32_t old = atomic_fetch_add_explicit(&h->refcount, 1, memory_order_acq_rel);
@@ -5126,8 +4985,7 @@ static inline void xrt_coll_release(XrValue v) {
     } else if (!xrt_rc_claim_release_last(h)) {
         return;
     }
-    if (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-        (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0) {
+    if (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0) {
         xrt_json_destroy((xrt_json_t *) v.ptr);
         xrt_execution_free_allocation(h);
         return;
@@ -5345,8 +5203,7 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
 static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode) {
     bool embedded = XR_IS_ARRAY(value) || XR_IS_MAP(value) || XR_IS_SET(value) ||
                     xrt_is_json_object_value(value);
-    if (storage_mode == XR_OBJ_STORAGE_NORMAL ||
-        (!embedded && !xrt_arc_value_has_header(value)))
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL || (!embedded && !xrt_arc_value_has_header(value)))
         return value;
 
     XrObjHeader *hdr = NULL;
@@ -5401,8 +5258,8 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
         for (int64_t i = 0; i < object->field_count; i++)
             (void) xrt_value_set_storage_graph(object->fields[i], storage_mode);
         if (object->dynamic_fields)
-            (void) xrt_value_set_storage_graph(
-                xr_mkptr(object->dynamic_fields, XR_TAG_MAP), storage_mode);
+            (void) xrt_value_set_storage_graph(xr_mkptr(object->dynamic_fields, XR_TAG_MAP),
+                                               storage_mode);
         return value;
     }
     if (XR_IS_ARRAY_REF(value) && XR_ARRAY_REF_ELEM_TYPE(value) == XR_NATIVE_VALUE) {

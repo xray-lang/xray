@@ -1,0 +1,55 @@
+// anchor: adt-enum-payload-tostring
+//
+// Explicit stringification of a payload-carrying enum variant must render
+// the payload list exactly like print() does: "Enum.Member(p1, p2, ...)",
+// with nested strings quoted. VM and AOT previously diverged here — the AOT
+// explicit-toString and concat paths formatted only "Enum.Member" (name-only
+// scratch-buffer formatting), while print() went through the shared
+// payload-aware formatter. Every stringification surface below must agree
+// byte-for-byte across backends.
+
+enum E { A(int), B }
+enum P { Pair(int, string), Solo }
+enum W { Wrap(E), Empty }
+
+var e = E.A(7)
+
+// The reported divergence: explicit toString() concatenated into a string.
+print("x=" + e.toString())
+
+// string() conversion takes the same runtime path as toString().
+print(string(e))
+
+// Interpolation and bare concatenation lower to the parts-based concat,
+// which formats enum operands itself rather than via toString().
+print("i=${e}")
+print("c=" + e)
+
+// A zero-payload variant of a payload-carrying enum keeps the bare
+// "Enum.Member" form (no parentheses) on both backends.
+print(E.B.toString())
+print("b=" + E.B)
+
+// Multiple payloads: nested string payloads render quoted, matching print.
+var p = P.Pair(3, "hi")
+print(p.toString())
+print("p=" + p)
+
+// Enum payload nested inside another enum renders recursively.
+var w = W.Wrap(E.A(9))
+print(w.toString())
+print("w=${w}")
+
+// Generic (erased) receiver dispatches toString dynamically and must make
+// the same payload-aware rendering decision.
+fn describe<T>(v: T) -> string {
+    return "g=" + v.toString()
+}
+print(describe(e))
+print(describe(p))
+
+// Payload text has no fixed-size bound: a string payload far longer than
+// any formatting scratch buffer must survive untruncated.
+var long = P.Pair(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+print("L=" + long.toString())
+print("M=" + long)
