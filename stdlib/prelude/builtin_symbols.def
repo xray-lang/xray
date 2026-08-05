@@ -49,7 +49,8 @@
  *                 XR_BUILTIN_ENUM_VARIANT(name, payload) with payload one of:
  *                   NONE          no payload
  *                   TYPE_PARAM_0  payload typed as the enum's first type parameter
- *                   UNKNOWN       payload with no static type
+ *                   ERROR         payload typed as the Error interface, i.e. the
+ *                                 raised enum error value
  *       An enum is an ADT exactly when some variant carries a payload.
  *
  *   XR_BUILTIN_IFACE(name, arity)
@@ -168,7 +169,7 @@ XR_BUILTIN_ENUM("SendResult", 0, SEND_RESULT,
 
 XR_BUILTIN_ENUM("TaskResult", 1, TASK_RESULT,
                 XR_BUILTIN_ENUM_VARIANT("Success", TYPE_PARAM_0)
-                XR_BUILTIN_ENUM_VARIANT("Failed", UNKNOWN)
+                XR_BUILTIN_ENUM_VARIANT("Failed", ERROR)
                 XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE)
                 XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
                 XR_BUILTIN_ENUM_VARIANT("Pending", NONE))
@@ -187,6 +188,10 @@ XR_BUILTIN_IFACE("Callable",   1)
 XR_BUILTIN_IFACE("Closeable",  0)
 XR_BUILTIN_IFACE("Comparable", 0)
 XR_BUILTIN_IFACE("Equatable",  0)
+/* Every enum value satisfies Error, and nothing else does: `throw` already
+ * requires an enum error value (E0370), so this is the type of "the error a
+ * body raised" -- what `catch (e)` binds and what TaskResult.Failed carries. */
+XR_BUILTIN_IFACE("Error",      0)
 XR_BUILTIN_IFACE("Hashable",   0)
 XR_BUILTIN_IFACE("Indexable",  2)
 XR_BUILTIN_IFACE("Iterable",   1)

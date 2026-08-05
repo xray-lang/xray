@@ -84,15 +84,19 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         )
         self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
 
-    def test_current_inventory_has_only_task_failed_unknown_boundary(self) -> None:
+    def test_no_source_type_surface_remains(self) -> None:
+        """Nothing in the tree still names the removed source type.
+
+        TaskResult.Failed was the last one; it carries Error now. The assertion
+        is emptiness rather than a known survivor, so a new occurrence fails
+        here instead of quietly taking the old one's place.
+        """
         inventory = build_inventory(ROOT)
         hits = inventory["SOURCE_UNKNOWN_TYPE_SURFACE"]
-        self.assertEqual(1, len(hits))
-        self.assertEqual("stdlib/types/coroutine.xr", hits[0].path)
-        self.assertEqual("Failed(" "unknown)", hits[0].text)
+        self.assertEqual([], [f"{h.path}: {h.text}" for h in hits])
 
     def test_task_payload_registration_matches_typed_native_defs(self) -> None:
-        """`TaskResult.Failed` carries an untyped payload, not a `PanicInfo`.
+        """`TaskResult.Failed` carries the raised error value, not a `PanicInfo`.
 
         The payload shapes live in `stdlib/prelude/builtin_symbols.def`, so the
         invariant is asserted against the registry rather than against a source
@@ -101,14 +105,14 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Failed(" "unknown)", native_defs)
+        self.assertIn("Failed(Error)", native_defs)
 
         registry = builtin_symbols.load(ROOT)
         task_result = "Task" "Result"
         enums = {symbol.name: symbol for symbol in registry.by_category("enum")}
         self.assertIn(task_result, enums)
         payloads = dict(enums[task_result].variants)
-        self.assertEqual("UNKNOWN", payloads["Failed"])
+        self.assertEqual("ERROR", payloads["Failed"])
         self.assertEqual("TYPE_PARAM_0", payloads["Success"])
         for unit_variant in ("Cancelled", "Timeout", "Pending"):
             self.assertEqual("NONE", payloads[unit_variant])

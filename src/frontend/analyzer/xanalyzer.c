@@ -292,12 +292,12 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
 }
 
 /* Prelude enum registry, generated from builtin_symbols.def. A variant payload
- * is either absent, typed as the enum's first type parameter, or statically
- * unknown; those three shapes cover every prelude enum. */
+ * is either absent, typed as the enum's first type parameter, or an error
+ * value; those three shapes cover every prelude enum. */
 typedef enum {
     XA_PRELUDE_PAYLOAD_NONE,
     XA_PRELUDE_PAYLOAD_TYPE_PARAM_0,
-    XA_PRELUDE_PAYLOAD_UNKNOWN,
+    XA_PRELUDE_PAYLOAD_ERROR,
 } XaPreludePayloadKind;
 
 typedef struct {
@@ -360,8 +360,16 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                 case XA_PRELUDE_PAYLOAD_TYPE_PARAM_0:
                     payload_slots[v] = xr_type_new_type_param(analyzer->isolate, "T", 0);
                     break;
-                case XA_PRELUDE_PAYLOAD_UNKNOWN:
-                    payload_slots[v] = xr_type_new_unknown(analyzer->isolate);
+                case XA_PRELUDE_PAYLOAD_ERROR:
+                    /* Reuse the canonical interface type that
+                     * xa_register_builtin_interfaces already put in the global
+                     * scope. Minting a second one with the same name here left
+                     * two `Error` types in play and the source spelling stopped
+                     * resolving at all. */
+                    payload_slots[v] =
+                        (XrType *) xa_scope_resolve_type_alias(analyzer->global_scope, "Error");
+                    XR_DCHECK(payload_slots[v] != NULL,
+                              "prelude ERROR payload before the Error interface is registered");
                     break;
                 case XA_PRELUDE_PAYLOAD_NONE:
                 default:

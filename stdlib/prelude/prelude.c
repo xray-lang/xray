@@ -161,7 +161,7 @@ static const XrPreludeEnumVariantRow g_prelude_enum_variants[] = {
 #define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
 #define XR_PRELUDE_PAYLOAD_IS_SET_NONE false
 #define XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0 true
-#define XR_PRELUDE_PAYLOAD_IS_SET_UNKNOWN true
+#define XR_PRELUDE_PAYLOAD_IS_SET_ERROR true
 #include "builtin_symbols.def"
 };
 
@@ -180,7 +180,7 @@ static const XrPreludeEnumRow g_prelude_enum_rows[] = {
 
 #undef XR_PRELUDE_PAYLOAD_IS_SET_NONE
 #undef XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0
-#undef XR_PRELUDE_PAYLOAD_IS_SET_UNKNOWN
+#undef XR_PRELUDE_PAYLOAD_IS_SET_ERROR
 
 static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (!X)

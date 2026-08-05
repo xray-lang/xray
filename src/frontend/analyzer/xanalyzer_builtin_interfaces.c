@@ -364,6 +364,11 @@ static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_LENGTHABLE] = {"Lengthable", lengthable_methods, 1},
     [XA_IFACE_CALLABLE] = {"Callable", callable_methods, 1},
     [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1},
+    /* A marker, deliberately without methods. What an error value must support
+     * is already covered elsewhere -- every enum is Stringable and Equatable,
+     * and `throw` accepts nothing but an enum error value. Error exists to give
+     * that set a name a signature can use, not to add a contract. */
+    [XA_IFACE_ERROR] = {"Error", NULL, 0},
 };
 
 /* The table above binds each interface to its method signatures; the language

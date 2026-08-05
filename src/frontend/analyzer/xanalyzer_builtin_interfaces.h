@@ -44,6 +44,7 @@ typedef enum {
     XA_IFACE_LENGTHABLE,  // operator len() protocol
     XA_IFACE_CALLABLE,    // () invocation
     XA_IFACE_CLOSEABLE,   // resource management (close)
+    XA_IFACE_ERROR,       // a raised error value (every enum, and only enums)
     XA_IFACE_COUNT        // total count
 } XaBuiltinInterface;
 

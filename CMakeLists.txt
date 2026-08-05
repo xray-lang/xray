@@ -2569,9 +2569,12 @@ if(BUILD_TESTS)
         NAME source_unknown_task_erased_result_readiness
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --max-category SOURCE_UNKNOWN_TYPE_SURFACE=1
-                --max-category TASK_ERASED_RESULT_RESIDUE=2
-                --max-category STDLIB_DYNAMIC_UNKNOWN_API=1
+                # All three reached zero when TaskResult.Failed stopped carrying
+                # `unknown`. A ratchet that keeps its old ceiling after the count
+                # drops stops holding anything, so these come down with it.
+                --max-category SOURCE_UNKNOWN_TYPE_SURFACE=0
+                --max-category TASK_ERASED_RESULT_RESIDUE=0
+                --max-category STDLIB_DYNAMIC_UNKNOWN_API=0
                 # Native enum namespace constants use one internal tagged
                 # metaobject carrier; this is not a source-level unknown API.
                 --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=326

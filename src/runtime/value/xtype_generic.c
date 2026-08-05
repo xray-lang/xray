@@ -472,6 +472,13 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 return true;  // All types are Stringable
             } else if (strcmp(iface_name, "Equatable") == 0) {
                 return true;  // All types support == and !=
+            } else if (strcmp(iface_name, "Error") == 0) {
+                // An error value is an enum value and nothing else: `throw`
+                // accepts only enum error values (E0370). Being narrower than
+                // Stringable is the whole point -- it is what lets `catch (e)`
+                // and TaskResult.Failed name their payload without naming a
+                // type that admits every value.
+                return type->kind == XR_KIND_ENUM;
             } else if (strcmp(iface_name, "Iterator") == 0) {
                 // No built-in type directly implements Iterator
                 // Fall through to user-class check
