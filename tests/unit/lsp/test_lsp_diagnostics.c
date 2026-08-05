@@ -179,7 +179,7 @@ TEST(diagnostics_debounce_dedup) {
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
-    // Schedule multiple times â€?should not duplicate in pending queue
+    // Schedule multiple times -- should not duplicate in pending queue
     xlsp_schedule_diagnostics(server, doc);
     int count_after_first = server->pending_diag_count;
     xlsp_schedule_diagnostics(server, doc);
