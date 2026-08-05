@@ -38,6 +38,41 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 static int tests_skipped = 0;
 
+/* Set by CHECK/REQUIRE when the running test violates an expectation;
+ * cleared before each test by the TEST macro. */
+static bool g_test_failed = false;
+
+/* Release builds define NDEBUG, which turns assert() into a no-op.  Every
+ * expectation in this file must therefore be checked explicitly: an
+ * assert-guarded NULL proto is not a guard at all in Release, and the
+ * comparison helpers below go on to dereference it and die on a signal
+ * instead of reporting which snippet failed to compile.
+ *
+ * CHECK records the failure and keeps going, so one snippet can report
+ * every way it diverged.  REQUIRE also returns, for expectations whose
+ * failure makes the rest of the test meaningless (typically a NULL proto);
+ * callers must release anything they own before it can fire. */
+#define CHECK(cond, ...)                                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: ");                                                           \
+            fprintf(stderr, __VA_ARGS__);                                                          \
+            fprintf(stderr, "\n");                                                                 \
+            g_test_failed = true;                                                                  \
+        }                                                                                          \
+    } while (0)
+
+#define REQUIRE(cond, ...)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: ");                                                           \
+            fprintf(stderr, __VA_ARGS__);                                                          \
+            fprintf(stderr, "\n");                                                                 \
+            g_test_failed = true;                                                                  \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
+
 /* Protos passed to xr_execute create GC-managed closures that reference
  * the proto.  Freeing the proto while closures remain on the GC heap is
  * a use-after-free.  Defer proto frees until after isolate teardown. */
@@ -81,6 +116,12 @@ static XrProto *compile_legacy(const char *source) {
     XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx)
         return NULL;
+    /* xr_compile passes ctx->source_file to the analyzer as the file being
+     * analyzed, and file identity selects the nominal owner that declaration
+     * analysis records for enums.  Leaving it NULL makes the legacy path
+     * analyze an unnamed file while the Xi path below names it, so the two
+     * paths disagree about enum ownership.  Name both the same. */
+    ctx->source_file = "compare.xr";
     /* Mirror the production compile path: bind the session module graph so
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -175,20 +216,48 @@ static XrProto *compile_xi(const char *source) {
 #endif
 
 /* Execute proto and capture stdout into a heap buffer.
- * Uses xr_coro_reset_for_call (like xcmd_test.c) instead of
- * xr_execute, which doesn't fully reset coro state between
- * sequential runs on the same isolate. */
-static char *execute_and_capture(XrProto *proto) {
+ *
+ * This must go through xr_execute -- the same entry point xray_vm_dostring
+ * uses -- rather than driving the coroutine by hand.  Hand-rolling
+ * "closure_new + reset_for_call + main_thread_run" skips four preconditions
+ * that xr_execute establishes, and every one of them is silent when missed:
+ *
+ *   - xr_vm_bind_proto_shared_slots: module-level `var`s live in shared
+ *     slots, so SETSHARED/GETSHARED read garbage without it.
+ *   - the entry plan: a root with XR_ROOT_ELIDED runs on the native stack
+ *     via xr_vm_interpret_proto_isolate and never touches a coroutine.
+ *     Snippets this small are exactly the elided case, so pushing them
+ *     through the scheduler path ran nothing at all.
+ *   - xray_vm_multicore_init: xr_main_thread_run needs isolate->vm.scheduler,
+ *     which xray_vm_new_full leaves NULL.
+ *   - the main coroutine: xray_vm_new_full also leaves isolate->main_coro
+ *     NULL (it is created on demand), so xr_isolate_get_main_coro returns
+ *     NULL on a fresh isolate.
+ *
+ * That last one made execute_and_capture bail out before running anything,
+ * which is why every comparison logged "capture failed" while the test
+ * still reported PASS.  Bootstrapping the coroutine alone is not enough:
+ * it only moves the silent failure from "captured nothing" to "captured an
+ * empty string from a VM that never ran".  Delegating to xr_execute keeps
+ * all four in step with the production path.
+ *
+ * *out_rc receives the xr_execute return code (0 = success) so callers can
+ * assert that both pipelines agree on success, not merely on output text. */
+static char *execute_and_capture(XrProto *proto, int *out_rc) {
+    if (out_rc)
+        *out_rc = -1;
     if (!proto || !g_iso)
         return NULL;
 
-    XrCoroutine *main_coro = xr_isolate_get_main_coro(g_iso);
-    if (!main_coro)
+    /* xr_compile leaves entry_plan zeroed; only xr_compile_source_with_path
+     * derives it afterwards, and neither compile helper here goes through
+     * that wrapper.  Without this, xr_execute rejects every proto with
+     * "bytecode has no verified entry plan" before running a single
+     * instruction.  Deriving per path is also the honest comparison: the
+     * plan is scanned out of the emitted opcodes, so legacy and Xi each get
+     * the plan their own bytecode earns. */
+    if (!xr_vm_entry_plan_derive(proto))
         return NULL;
-    XrClosure *closure = xr_closure_new(g_iso, proto, main_coro);
-    if (!closure)
-        return NULL;
-    xr_coro_reset_for_call(main_coro, g_iso, closure);
 
     fflush(stdout);
 
@@ -208,7 +277,9 @@ static char *execute_and_capture(XrProto *proto) {
         return NULL;
     }
 
-    xr_main_thread_run(g_iso, main_coro);
+    int rc = xr_execute(g_iso, proto);
+    if (out_rc)
+        *out_rc = rc;
     fflush(stdout);
 
     /* Restore stdout before reading -- so any error path below can
@@ -306,9 +377,15 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verb
          * split makes accumulated cross-snippet state unsafe to share). */                        \
         teardown();                                                                                \
         setup();                                                                                   \
+        g_test_failed = false;                                                                     \
         test_##name();                                                                             \
-        printf("  PASS\n");                                                                        \
-        tests_passed++;                                                                            \
+        if (g_test_failed) {                                                                       \
+            printf("  FAIL\n");                                                                    \
+            tests_failed++;                                                                        \
+        } else {                                                                                   \
+            printf("  PASS\n");                                                                    \
+            tests_passed++;                                                                        \
+        }                                                                                          \
     }                                                                                              \
     static void test_##name(void)
 
@@ -330,7 +407,7 @@ typedef struct {
 
 static void run_compare(CompareSpec spec) {
     XrProto *p_legacy = compile_legacy(spec.source);
-    assert(p_legacy != NULL && "legacy codegen must succeed");
+    REQUIRE(p_legacy != NULL, "legacy codegen returned NULL for '%s'", spec.label);
 
     XrProto *p_xi = compile_xi(spec.source);
 
@@ -341,8 +418,9 @@ static void run_compare(CompareSpec spec) {
             xr_vm_proto_free(p_legacy);
             return;
         }
-    } else {
-        assert(p_xi != NULL && "Xi pipeline must succeed");
+    } else if (p_xi == NULL) {
+        xr_vm_proto_free(p_legacy);
+        REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
     }
 
     /* Both succeeded — compare */
@@ -356,8 +434,8 @@ static void run_compare(CompareSpec spec) {
     /* Both must produce at least one instruction and contain a RETURN */
     int lc = PROTO_CODE_COUNT(p_legacy);
     int xc = PROTO_CODE_COUNT(p_xi);
-    assert(lc > 0 && "legacy must produce instructions");
-    assert(xc > 0 && "xi must produce instructions");
+    CHECK(lc > 0, "legacy produced no instructions for '%s'", spec.label);
+    CHECK(xc > 0, "xi produced no instructions for '%s'", spec.label);
 
     bool legacy_has_ret = false, xi_has_ret = false;
     for (int i = 0; i < lc; i++) {
@@ -370,23 +448,35 @@ static void run_compare(CompareSpec spec) {
         if (op == OP_RETURN || op == OP_RETURN0 || op == OP_RETURN1)
             xi_has_ret = true;
     }
-    assert(legacy_has_ret && "legacy must contain RETURN");
-    assert(xi_has_ret && "xi must contain RETURN");
+    CHECK(legacy_has_ret, "legacy contains no RETURN for '%s'", spec.label);
+    CHECK(xi_has_ret, "xi contains no RETURN for '%s'", spec.label);
 
     /* Execution output comparison */
     if (spec.check_exec) {
-        char *out_l = execute_and_capture(p_legacy);
-        char *out_x = execute_and_capture(p_xi);
+        int rc_l = -1, rc_x = -1;
+        char *out_l = execute_and_capture(p_legacy, &rc_l);
+        char *out_x = execute_and_capture(p_xi, &rc_x);
+
+        /* A failed capture used to log "skipped" and fall through to PASS,
+         * which is how this comparison stayed dead for so long.  Treat it as
+         * the failure it is. */
+        CHECK(out_l && out_x, "execution capture failed for '%s' (legacy=%s xi=%s)", spec.label,
+              out_l ? "ok" : "fail", out_x ? "ok" : "fail");
 
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n", out_l, out_x,
+            fprintf(stderr, "  exec: rc=%d/%d legacy=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
                     match ? "MATCH" : "MISMATCH");
-            assert(match && "execution output must match between legacy and Xi");
-        } else {
-            fprintf(stderr, "  exec: skipped (capture failed: legacy=%s xi=%s)\n",
-                    out_l ? "ok" : "fail", out_x ? "ok" : "fail");
+            CHECK(match, "execution output differs for '%s': legacy=[%s] xi=[%s]", spec.label,
+                  out_l, out_x);
         }
+
+        /* Equal output is only meaningful if the code actually ran: two
+         * failed runs both produce "".  Require success from both paths, so
+         * a regression that stops execution entirely cannot masquerade as a
+         * match. */
+        CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
+        CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
 
         if (out_l)
             xr_free(out_l);
@@ -449,24 +539,34 @@ typedef struct {
 
 static void run_fusion(FusionSpec spec) {
     XrProto *p_legacy = compile_legacy(spec.source);
-    assert(p_legacy != NULL && "legacy codegen must succeed");
+    REQUIRE(p_legacy != NULL, "legacy codegen returned NULL for '%s'", spec.label);
 
     XrProto *p_xi = compile_xi(spec.source);
-    assert(p_xi != NULL && "Xi pipeline must succeed");
+    if (p_xi == NULL) {
+        xr_vm_proto_free(p_legacy);
+        REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
+    }
 
     bool has_op = proto_has_opcode(p_xi, spec.expect_op);
     fprintf(stderr, "  xi has %s: %s\n", xr_opcode_name(spec.expect_op), has_op ? "yes" : "NO");
-    assert(has_op && "expected fused opcode not found in Xi output");
+    CHECK(has_op, "expected fused opcode %s not found in Xi output for '%s'",
+          xr_opcode_name(spec.expect_op), spec.label);
 
     if (spec.check_exec) {
-        char *out_l = execute_and_capture(p_legacy);
-        char *out_x = execute_and_capture(p_xi);
+        int rc_l = -1, rc_x = -1;
+        char *out_l = execute_and_capture(p_legacy, &rc_l);
+        char *out_x = execute_and_capture(p_xi, &rc_x);
+        CHECK(out_l && out_x, "execution capture failed for '%s' (legacy=%s xi=%s)", spec.label,
+              out_l ? "ok" : "fail", out_x ? "ok" : "fail");
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n", out_l, out_x,
+            fprintf(stderr, "  exec: rc=%d/%d legacy=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
                     match ? "MATCH" : "MISMATCH");
-            assert(match && "execution output must match");
+            CHECK(match, "execution output differs for '%s': legacy=[%s] xi=[%s]", spec.label,
+                  out_l, out_x);
         }
+        CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
+        CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
         if (out_l)
             xr_free(out_l);
         if (out_x)
@@ -1132,9 +1232,14 @@ TEST(cmp_while_multi_cond) {
 
 /* --- Map Literal --- */
 
+/* A Map literal needs the '#' prefix (LANGUAGE_SPEC.md §2.4.7); a bare
+ * '{...}' is a sealed Record, which does not support ['key'] indexing and
+ * panics with E0402 at runtime.  This snippet used the bare form and so
+ * tested a Record, not a Map -- invisible for as long as the execution
+ * comparison never ran. */
 TEST(cmp_map_literal) {
     run_compare((CompareSpec) {
-        .source = "var m = {\"a\": 1, \"b\": 2}\n"
+        .source = "var m = #{\"a\": 1, \"b\": 2}\n"
                   "print(m[\"a\"])\nprint(m[\"b\"])",
         .label = "map literal and key access",
         .expect_xi_success = true,
@@ -1691,11 +1796,16 @@ TEST(cmp_class_method) {
 
 /* --- Struct literal --- */
 
+/* A bare object literal is a sealed Record, whose fields are reached with
+ * '.' -- ['name'] indexing panics with E0402 (LANGUAGE_SPEC.md §2.4.7).
+ * Keep this case on the Record path and use field access; the Json path,
+ * where ['name'] is the equivalent spelling, is covered by
+ * cmp_object_literal below. */
 TEST(cmp_struct_literal) {
     run_compare((CompareSpec) {
         .source = "var obj = { name: \"Alice\", age: 30 }\n"
-                  "print(obj[\"name\"])\n"
-                  "print(obj[\"age\"])",
+                  "print(obj.name)\n"
+                  "print(obj.age)",
         .label = "object literal with fields",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1899,15 +2009,20 @@ TEST(cmp_set_literal) {
     });
 }
 
+/* Bracket access is the Json spelling of field access (LANGUAGE_SPEC.md
+ * §2.4.7: `data["name"]` is equivalent to `data.name` for Json).  The
+ * annotation is what opts this literal out of the sealed Record default;
+ * without it the bracket form panics with E0402, which the never-executed
+ * comparison could not catch. */
 TEST(cmp_object_literal) {
     run_compare((CompareSpec) {
-        .source = "var obj = { name: \"alice\", age: 30 }\n"
+        .source = "var obj: Json = { name: \"alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
         .label = "object literal bracket access",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = true, /* Xi uses NEWMAP, legacy uses NEWJSON — bracket access works on both */
+        .check_exec = true,
     });
 }
 
@@ -2010,13 +2125,15 @@ TEST(cmp_chan_recv_match_uses_raw_opcode) {
                       "print(nil == null)\n";
 
     XrProto *p_xi = compile_xi(src);
-    assert(p_xi != NULL && "Xi pipeline must compile raw recv match");
+    REQUIRE(p_xi != NULL, "Xi pipeline returned NULL for raw recv match");
 
     int raw_recv_count = proto_opcode_count(p_xi, OP_CHAN_RECV);
     int invoke_count = proto_opcode_count(p_xi, OP_INVOKE);
     fprintf(stderr, "  raw recv opcodes=%d invoke opcodes=%d\n", raw_recv_count, invoke_count);
-    assert(raw_recv_count == 2 && "recv+match should lower to raw OP_CHAN_RECV");
-    assert(invoke_count == 0 && "recv+match must not fall back to method dispatch");
+    CHECK(raw_recv_count == 2, "recv+match should lower to 2 raw OP_CHAN_RECV, got %d",
+          raw_recv_count);
+    CHECK(invoke_count == 0, "recv+match must not fall back to method dispatch, got %d OP_INVOKE",
+          invoke_count);
 
     xr_vm_proto_free(p_xi);
 }

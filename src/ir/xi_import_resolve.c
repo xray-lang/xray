@@ -32,6 +32,7 @@
 typedef struct XiResolvedExport {
     int mod_index;
     int shared_slot;
+    XiFunc *function; /* exported function, NULL for value/class exports */
 } XiResolvedExport;
 
 #ifdef _WIN32
@@ -131,6 +132,7 @@ static bool resolve_export_target(const XrModuleGraph *graph, XiModule **modules
         if (exp->name && strcmp(exp->name, member_name) == 0) {
             out->mod_index = mod_index;
             out->shared_slot = (int) exp->shared_slot;
+            out->function = exp->function;
             visiting[mod_index] = 0;
             return true;
         }
@@ -193,8 +195,14 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
             XiImportRef *ref = (XiImportRef *) v->aux;
             if (!ref || !ref->module_path)
                 continue;
-            if (ref->resolved_mod_index >= 0)
-                continue; /* already resolved */
+            /* An early (pre-ARC) pass runs while the driver's module array is
+             * still filling, so a ref can carry a resolved index from that
+             * pass while its module/function pointers are still missing.
+             * Re-walk such a ref instead of skipping it, so a later pass can
+             * complete the pointers without disturbing the index it already
+             * published. */
+            if (ref->resolved_mod_index >= 0 && ref->resolved_module)
+                continue; /* fully resolved */
 
             int target_spec_idx = -1;
             if (ref->module_path[0] == '.') {
@@ -223,16 +231,28 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
                 continue;
 
             if (!ref->member_name) {
+                /* Whole-module (namespace) import. The module pointer is what
+                 * lets ARC resolve `mod.f(x)` to f's borrow signature; it stays
+                 * NULL until that module has been compiled. */
                 ref->resolved_mod_index = target_topo;
+                ref->resolved_module = modules[target_topo];
                 continue;
             }
 
             uint8_t *visiting = (uint8_t *) xr_calloc((size_t) nmodules, sizeof(uint8_t));
-            XiResolvedExport resolved = {-1, -1};
+            XiResolvedExport resolved = {-1, -1, NULL};
             if (visiting && resolve_export_target(graph, modules, nmodules, target_topo,
                                                   ref->member_name, visiting, &resolved)) {
                 ref->resolved_mod_index = resolved.mod_index;
                 ref->resolved_shared_slot = resolved.shared_slot;
+                ref->resolved_module = modules[resolved.mod_index];
+                ref->resolved_func = resolved.function;
+                if (!ref->resolved_func) {
+                    XiModule *owner = modules[resolved.mod_index];
+                    if (owner && owner->slot_funcs && resolved.shared_slot >= 0 &&
+                        resolved.shared_slot < (int) owner->nslots)
+                        ref->resolved_func = owner->slot_funcs[resolved.shared_slot];
+                }
             }
             xr_free(visiting);
         }

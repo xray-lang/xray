@@ -1,0 +1,25 @@
+// A timed unbuffered send whose receiver arrives before the deadline must
+// complete as Sent (the channel wake cancels the timer), and a later timed
+// send on the same channel with nobody left must still time out — the
+// cancelled timer must not poison the next timed wait. Only the main
+// coroutine prints: Sent already proves the rendezvous handed the value over.
+import time
+
+const ch = Channel<int>(0)
+go fn() {
+    time.sleep(5)
+    var got = ch.recv()
+}()
+var first = ch.sendTimeout(7, 2000)
+print(match (first) {
+    SendResult.Sent -> "sent"
+    SendResult.Timeout -> "first-timeout"
+    _ -> "first-closed"
+})
+var second = ch.sendTimeout(8, 10)
+print(match (second) {
+    SendResult.Sent -> "second-sent"
+    SendResult.Timeout -> "second-timeout"
+    _ -> "second-closed"
+})
+ch.close()

@@ -1514,8 +1514,8 @@ static bool xaot_c90_build_options_supported(const XaotBuildOptions *options) {
     if (!options || options->c_dialect != XI_CGEN_C_DIALECT_C90)
         return true;
     return options->profile == XAOT_BUILD_PROFILE_FREESTANDING &&
-           options->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
-           target && target->pointer_bits == 64 && target->os &&
+           options->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY && target &&
+           target->pointer_bits == 64 && target->os &&
            (strcmp(target->os, "linux") == 0 || strcmp(target->os, "darwin") == 0) &&
            target->simd_mode == XAOT_SIMD_SCALAR && target->simd_features == 0;
 }
@@ -1568,8 +1568,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     emit_plan_dump = options->emit_plan_dump;
     artifact_kind = options->artifact_kind;
-    if (artifact_kind < XAOT_ARTIFACT_EXECUTABLE ||
-        artifact_kind > XAOT_ARTIFACT_HOSTED_FRAGMENT ||
+    if (artifact_kind < XAOT_ARTIFACT_EXECUTABLE || artifact_kind > XAOT_ARTIFACT_HOSTED_FRAGMENT ||
         (artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT &&
          options->profile != XAOT_BUILD_PROFILE_HOSTED)) {
         fprintf(stderr, "Error: invalid AOT artifact/profile combination\n");
@@ -1969,6 +1968,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         /* Compile using the shared analyzer (has cross-module type info) */
         cfg.source_file = spec->source_path;
         cfg.global_evidence_module_id = (uint32_t) (ti + 1);
+        /* Topological order means modules[0..ti-1] (every dependency) are
+         * already compiled, so the pipeline can resolve this module's import
+         * refs before ARC and read cross-module callee borrow signatures. */
+        cfg.module_graph = graph;
+        cfg.graph_modules = modules;
+        cfg.graph_module_count = nmodules;
         pres_arr[ti] = xi_pipeline_compile_program((AstNode *) spec->ast, shared_analyzer, X, &cfg);
         if (pres_arr[ti].status != XI_PIPE_OK) {
             fprintf(stderr, "Error: Xi pipeline failed for '%s' at %s: %s\n", paths[ti],
@@ -2228,8 +2233,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     features_apply_link_dependency_plans(&features, &aot_bundle);
     features_apply_extern_decls(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
-                             profile == XAOT_BUILD_PROFILE_FREESTANDING,
-                             artifact_kind,
+                             profile == XAOT_BUILD_PROFILE_FREESTANDING, artifact_kind,
                              options->capability_provider, &aot_bundle.entry_plan)) {
         fprintf(stderr, "Error: failed to build AOT link manifest\n");
         goto fail_free_ir;

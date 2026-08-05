@@ -1,0 +1,42 @@
+// A sleep park wakes through the timer with no resume-status consumer of its
+// own, so a leftover timeout status reaches the next channel operation. That
+// leftover must be discarded there: it must not fake a completed send, a
+// Timeout result while buffer space is free, or a Timeout recv while data is
+// queued. A genuine channel-wait timeout after a sleep must still surface.
+import time
+
+const ch = Channel<int>(1)
+
+// Leftover sleep timeout vs untimed send/recv.
+time.sleep(5)
+ch.send(11)
+print(ch.recv())
+
+// Leftover sleep timeout vs timed send with buffer space free.
+time.sleep(5)
+var sent = ch.sendTimeout(22, 50)
+print(match (sent) {
+    SendResult.Sent -> "sent"
+    SendResult.Timeout -> "send-timeout"
+    _ -> "send-closed"
+})
+
+// Leftover sleep timeout vs timed recv with data queued.
+time.sleep(5)
+var got = ch.recvTimeout(50)
+print(match (got) {
+    Recv.Timeout -> "recv-timeout"
+    Recv.Closed -> "recv-closed"
+    _ -> "recv-value"
+})
+
+// Genuine timeout right after a sleep: the empty channel has no sender, so
+// the timed recv must still report Timeout.
+time.sleep(5)
+var empty = ch.recvTimeout(10)
+print(match (empty) {
+    Recv.Timeout -> "empty-timeout"
+    Recv.Closed -> "empty-closed"
+    _ -> "empty-value"
+})
+ch.close()

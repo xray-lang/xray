@@ -546,11 +546,20 @@ getprop_instance:;
     // XrJson shares XrInstance layout; direct cast works.
     XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
 
+    /* Every path below resolves the property through the instance class: the
+     * dynamic-layout probe, the getter dispatch, and the inline caches all
+     * dereference it. A classless instance therefore has no property surface at
+     * all, and answering that as a runtime error is what keeps it from becoming
+     * a null dereference inside those paths. */
+    if (!inst->klass) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "property access on an object with no class");
+    }
+
     /* A weak slot stores an XrWeakHandle, not the target, so it cannot go
      * through the ordinary field paths (nor be inline-cached as one — the
      * cache records an index and reads the slot raw). Decided by one class-
      * level bit, so a class with no weak field keeps every fast path. */
-    if (inst->klass && (inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {
+    if (inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS) {
         int weak_idx = xr_class_lookup_field(inst->klass, prop_symbol);
         if (weak_idx >= 0 && xr_weak_instance_field_load(inst, weak_idx, &R(a)))
             vmbreak;

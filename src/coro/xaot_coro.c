@@ -26,6 +26,7 @@
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
+#include "../runtime/core/xr_exec_context.h"
 #include "../runtime/mem/xheap.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
@@ -806,8 +807,7 @@ static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int 
     if (member_count <= 0)
         return NULL;
 
-    XrEnumType *type =
-        xr_enum_type_new_core(core, "prelude", name, members, member_count);
+    XrEnumType *type = xr_enum_type_new_core(core, "prelude", name, members, member_count);
     if (!type)
         return NULL;
     if (payload_counts && !xr_enum_type_set_adt_payloads(type, payload_counts, member_count))
@@ -1451,6 +1451,17 @@ static XrCoroutine *aot_context_coro(const XrAotContext *ctx, XrAotVmHost vm_hos
                             : NULL;
     if (coro)
         return coro;
+    /* Plain (non-suspending) functions reach runtime ops through the shared
+     * global context, which carries no coroutine. The scheduler publishes the
+     * running coroutine's execution context around every resume slice
+     * (xr_coro_run_on_worker), so the thread-local context is authoritative
+     * when the passed context cannot answer. Without this, every such call
+     * from a pooled coroutine resolved to no coroutine at all and collapsed
+     * onto one shared owner key, aliasing coroutine-local state across
+     * concurrently running coroutines. */
+    XrExecutionContext *exec = xr_exec_context_current();
+    if (exec && exec->task)
+        return exec->task;
     return task ? xr_task_executor_peek(task) : NULL;
 }
 
@@ -1614,15 +1625,37 @@ static void aot_runtime_locals_unlock(XrAotRuntime *runtime) {
     atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_release);
 }
 
-static XrValue aot_runtime_owner_locals(XrAotVmHost vm_host, XrCoroutine *current, bool ensure) {
-    XrAotRuntime *runtime = vm_host.runtime;
-    const XrAotValueOps *ops = vm_host.value_ops;
-    if (!runtime || !ops || !ops->map_new || !ops->map_get || !ops->map_set)
-        return XR_NULL_VAL;
+/* Enter the runtime-lifetime arena that backs the coro_locals maps, creating
+ * it on first use. Caller holds the runtime locals lock. Returns false when
+ * no arena can be provided; the caller must then leave coro_locals untouched.
+ *
+ * The maps live as long as the runtime, so their nodes must never come from
+ * the ambient execution arena: that one belongs to whichever coroutine is
+ * running the call and is bulk-freed when the coroutine's shell is recycled,
+ * after which every later map operation is a use-after-free that can scribble
+ * over unrelated live allocations. */
+static bool aot_runtime_locals_arena_enter(XrAotRuntime *runtime, const XrAotValueOps *ops,
+                                           void **out_previous) {
+    if (!ops->execution_arena_new || !ops->execution_arena_enter || !ops->execution_arena_restore)
+        return false;
+    if (!runtime->coro_locals_arena)
+        runtime->coro_locals_arena = ops->execution_arena_new();
+    if (!runtime->coro_locals_arena)
+        return false;
+    *out_previous = ops->execution_arena_enter(runtime->coro_locals_arena);
+    return true;
+}
 
+/* Resolve (or create) the per-owner locals map. Caller holds the runtime
+ * locals lock and has entered the locals arena; the returned map may only be
+ * touched under both. Distinct owners never share a map, but the
+ * no-coroutine owner key 0 is one map shared by every thread that runs
+ * outside a coroutine, so the inner map gets no concurrency guarantee of its
+ * own and must stay inside the same critical section as the lookup. */
+static XrValue aot_runtime_owner_locals_locked(XrAotRuntime *runtime, const XrAotValueOps *ops,
+                                               XrCoroutine *current, bool ensure) {
     XrValue locals = XR_NULL_VAL;
     XrValue owner_key = xr_int(current ? (int64_t) current->id + 1 : 0);
-    aot_runtime_locals_lock(runtime);
     if (XR_IS_NULL(runtime->coro_locals) && ensure)
         runtime->coro_locals = ops->map_new(0);
     if (!XR_IS_NULL(runtime->coro_locals)) {
@@ -1634,35 +1667,56 @@ static XrValue aot_runtime_owner_locals(XrAotVmHost vm_host, XrCoroutine *curren
                 ops->map_set(runtime->coro_locals, owner_key, locals);
         }
     }
-    aot_runtime_locals_unlock(runtime);
     return locals;
 }
 
 static void aot_runtime_local_set(XrAotVmHost vm_host, XrCoroutine *current, XrValue key,
                                   XrValue value) {
+    XrAotRuntime *runtime = vm_host.runtime;
     const XrAotValueOps *ops = vm_host.value_ops;
-    XrValue locals = aot_runtime_owner_locals(vm_host, current, true);
-    if (XR_IS_NULL(locals) || !ops || !ops->map_set)
+    if (!runtime || !ops || !ops->map_new || !ops->map_get || !ops->map_set)
         return;
-    if (ops->retain) {
-        ops->retain(key);
-        ops->retain(value);
+    aot_runtime_locals_lock(runtime);
+    void *previous_arena = NULL;
+    if (!aot_runtime_locals_arena_enter(runtime, ops, &previous_arena)) {
+        aot_runtime_locals_unlock(runtime);
+        return;
     }
-    ops->map_set(locals, key, value);
+    XrValue locals = aot_runtime_owner_locals_locked(runtime, ops, current, true);
+    if (!XR_IS_NULL(locals)) {
+        if (ops->retain) {
+            ops->retain(key);
+            ops->retain(value);
+        }
+        ops->map_set(locals, key, value);
+    }
+    ops->execution_arena_restore(previous_arena);
+    aot_runtime_locals_unlock(runtime);
 }
 
 static XrValue aot_runtime_local_get(XrAotVmHost vm_host, XrCoroutine *current, XrValue key) {
+    XrAotRuntime *runtime = vm_host.runtime;
     const XrAotValueOps *ops = vm_host.value_ops;
-    XrValue locals = aot_runtime_owner_locals(vm_host, current, false);
-    if (XR_IS_NULL(locals) || !ops || !ops->map_get)
+    if (!runtime || !ops || !ops->map_new || !ops->map_get || !ops->map_set)
         return XR_NULL_VAL;
+    aot_runtime_locals_lock(runtime);
+    void *previous_arena = NULL;
+    if (!aot_runtime_locals_arena_enter(runtime, ops, &previous_arena)) {
+        aot_runtime_locals_unlock(runtime);
+        return XR_NULL_VAL;
+    }
+    XrValue locals = aot_runtime_owner_locals_locked(runtime, ops, current, false);
     bool found = false;
-    XrValue result = ops->map_get(locals, key, &found);
-    if (!found)
-        return XR_NULL_VAL;
-    if (ops->retain)
+    XrValue result = XR_NULL_VAL;
+    if (!XR_IS_NULL(locals))
+        result = ops->map_get(locals, key, &found);
+    /* Retain before the lock drops: a concurrent set on the same slot may
+     * release the stored value the instant the section opens. */
+    if (found && ops->retain)
         ops->retain(result);
-    return result;
+    ops->execution_arena_restore(previous_arena);
+    aot_runtime_locals_unlock(runtime);
+    return found ? result : XR_NULL_VAL;
 }
 
 static void aot_value_array_push(XrAotVmHost vm_host, XrValue array, XrValue value) {

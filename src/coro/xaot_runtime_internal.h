@@ -25,6 +25,13 @@ struct XrAotRuntime {
     struct XrCoroutine *root_coro;
     const XrAotValueOps *value_ops;
     XrValue coro_locals;
+    /* Backing arena for the coro_locals maps. The maps live as long as the
+     * runtime, so their storage must not come from whichever coroutine's
+     * execution arena happens to be current at first touch — that arena is
+     * bulk-freed when the coroutine's shell is recycled, leaving coro_locals
+     * dangling. Created lazily under coro_locals_lock; destroyed with the
+     * runtime. */
+    void *coro_locals_arena;
     atomic_flag coro_locals_lock;
     XrValue builtins[XR_USER_GLOBALS_START];
 };

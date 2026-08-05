@@ -1649,6 +1649,7 @@ send_locked:
                                         xr_channel_logical_kind_snapshot(ch), true);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
+    coro->ext->chan_timeout_fired = false;
     coro->ext->send_value = value;  // Save value to send
     xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
@@ -1754,6 +1755,7 @@ recv_locked:
     coro->ext->recv_slot_ref = recv_slot;
     coro->ext->chan_ok_slot_ref = deliver ? ok_slot : xr_slot_none();
     coro->ext->chan_resume_delivered = false;
+    coro->ext->chan_timeout_fired = false;
     coro->ext->wait_send = false;
     xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);

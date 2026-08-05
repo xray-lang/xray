@@ -1,0 +1,16 @@
+[package]
+name = "freestanding-qemu-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_qemu_io.xr"
+
+[[link.symbol]]
+xray = "MULTIBOOT"
+section = "__DATA,.xray_multiboot"
+used = true
+
+[[freestanding.entry]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+kind = "start"
+section = "__TEXT,.xray_boot"

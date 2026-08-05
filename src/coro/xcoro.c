@@ -277,6 +277,7 @@ static void coro_channel_wait_links_reset(XrRuntimeCore *core, XrCoroExt *ext) {
     ext->wait_bucket = NULL;
     ext->wait_bucket_owner = -1;
     ext->wait_send = false;
+    ext->chan_timeout_fired = false;
     /* Safety net for cancel/kill while blocked on send: a still-parked
      * value never reached a receiver, so release the channel-side
      * reference instead of orphaning the transit graph. */

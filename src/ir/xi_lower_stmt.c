@@ -3739,10 +3739,9 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         XiImportRef *ref =
             (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
         XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
-        ref->member_name = NULL;
+        memset(ref, 0, sizeof(*ref));
         ref->resolved_mod_index = -1;
         ref->resolved_shared_slot = -1;
-        ref->module_path = NULL;
         if (imp->module_name) {
             uint32_t ml = (uint32_t) strlen(imp->module_name);
             char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);
@@ -3806,9 +3805,8 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         XiImportRef *ref =
             (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
         XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
+        memset(ref, 0, sizeof(*ref));
         /* Copy strings into arena so they survive AST destruction */
-        ref->module_path = NULL;
-        ref->member_name = NULL;
         if (imp->module_name) {
             uint32_t ml = (uint32_t) strlen(imp->module_name);
             char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);

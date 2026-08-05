@@ -5055,8 +5055,7 @@ static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
              (receiver && receiver->kind == XR_KIND_ENUM) ||
              (receiver && receiver->kind == XR_KIND_INSTANCE && receiver->instance.class_ref &&
               receiver->instance.class_ref->struct_layout));
-        XaSymbolLinks *links =
-            closed_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
+        XaSymbolLinks *links = closed_dispatch ? xa_analyzer_get_links(l->analyzer, target) : NULL;
         if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
             fn_type = links->type;
     }
@@ -5093,16 +5092,14 @@ static XaSymbolLinks *lower_call_return_ownership_links(XiLower *l, CallExprNode
 }
 
 static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *call) {
-    if (!l || !l->analyzer || !call || !call->callee ||
-        call->callee->type != AST_MEMBER_ACCESS)
+    if (!l || !l->analyzer || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return NULL;
     AstNode *object = call->callee->as.member_access.object;
     if (!object || object->type != AST_VARIABLE)
         return NULL;
     VariableNode *var = &object->as.variable;
-    XaSymbol *symbol = var->symbol_id
-                           ? xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id)
-                           : NULL;
+    XaSymbol *symbol =
+        var->symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id) : NULL;
     if (!symbol && var->name)
         symbol = xa_analyzer_lookup_deep(l->analyzer, var->name);
     if (!symbol || symbol->kind != XA_SYM_MODULE)
@@ -5113,9 +5110,8 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
 
 static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *call,
                                                      XiValue *callee_value) {
-    XiReturnOwnership result = {.kind = XI_RETURN_OWNERSHIP_UNKNOWN,
-                                .param_index = -1,
-                                .complete = false};
+    XiReturnOwnership result = {
+        .kind = XI_RETURN_OWNERSHIP_UNKNOWN, .param_index = -1, .complete = false};
     XaSymbolLinks *links = lower_call_return_ownership_links(l, call);
     if (links && links->return_ownership.complete) {
         switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
@@ -5149,8 +5145,8 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
         member_name = call->callee->as.member_access.name;
     if (!member_name)
         return result;
-    XaBuiltinReturnOwnership native_ownership = xa_builtin_get_module_func_return_ownership(
-        module_path, member_name);
+    XaBuiltinReturnOwnership native_ownership =
+        xa_builtin_get_module_func_return_ownership(module_path, member_name);
     if (native_ownership == XA_BUILTIN_RETURN_FRESH) {
         result.kind = XI_RETURN_OWNERSHIP_OWNED;
         result.complete = true;
@@ -6250,9 +6246,9 @@ static bool lower_method_stores_argument(const XrType *receiver_type, const char
     if (!receiver_type || !method_name || slot < 0)
         return false;
     if (XR_TYPE_IS_ARRAY(receiver_type))
-        return slot == 0 && (strcmp(method_name, "push") == 0 ||
-                             strcmp(method_name, "unshift") == 0 ||
-                             strcmp(method_name, "fill") == 0);
+        return slot == 0 &&
+               (strcmp(method_name, "push") == 0 || strcmp(method_name, "unshift") == 0 ||
+                strcmp(method_name, "fill") == 0);
     if (XR_TYPE_IS_MAP(receiver_type))
         return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
     if (receiver_type->kind == XR_KIND_SET)
@@ -6335,7 +6331,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 XiValue *arg_vals[2] = {0};
                 for (int i = 0; i < call->arg_count; i++) {
                     AstNode *arg_node = call->arguments[i];
-                    bool elided_full_slice = false;
+                    /* A full-range slice argument (`bytes[:]`) is elided to
+                     * the array itself; the callee reads it either way and
+                     * takes no ownership (ARC classifies the argument as
+                     * borrowed, so the caller keeps the reference and drops
+                     * it at its death point — no compensating retain here). */
                     if (is_utf8_static && i == 0 && arg_node && arg_node->type == AST_SLICE_EXPR &&
                         !arg_node->as.slice_expr.start && !arg_node->as.slice_expr.end) {
                         XiSequenceEvidenceIds ignored_slice_ids;
@@ -6345,21 +6345,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                         xi_lower_take_sequence_evidence_ids(l, (uint32_t) arg_node->line,
                                                             slice_kinds, &ignored_slice_ids);
                         arg_node = arg_node->as.slice_expr.source;
-                        elided_full_slice = true;
                     }
                     XiValue *arg = xi_lower_expr(l, arg_node);
                     if (!arg)
                         return NULL;
                     arg_vals[i] = arg;
-                    if (elided_full_slice) {
-                        XiValue *retain =
-                            xi_value_new(l->func, l->cur_block, XI_RETAIN, l->type_unit, 1);
-                        if (!retain)
-                            return NULL;
-                        retain->args[0] = arg;
-                        retain->flags |= XI_FLAG_SIDE_EFFECT;
-                        retain->line = (uint32_t) node->line;
-                    }
                 }
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type,
                                           (uint16_t) (call->arg_count + 1));

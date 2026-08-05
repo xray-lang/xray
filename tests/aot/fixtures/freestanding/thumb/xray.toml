@@ -1,0 +1,11 @@
+[package]
+name = "freestanding-thumb-qemu-smoke"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_thumb_uart.xr"
+
+[[freestanding.entry]]
+xray = "kernel_entry"
+symbol = "xray_kernel_entry"
+kind = "start"
+section = ".text.xray"

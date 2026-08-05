@@ -1,0 +1,25 @@
+// Coro.Local isolation across pooled-shell reuse.
+//
+// The sequential submit/await pairs force the second task onto the executor
+// shell recycled from the first one (single worker, first task fully drained
+// before the second submit). The second task must start with an empty local
+// slot even though the physical shell, its heap, and its arena were all
+// reused, and the runtime-level locals storage must survive the recycle of
+// whichever coroutine first touched it.
+var local = Coro.Local<string>()
+
+var first = CoroPool.submit(fn() -> string {
+    local.set("one")
+    return local.get() ?? "missing"
+})
+print(await first)
+
+var second = CoroPool.submit(fn() -> string {
+    var before = local.get()
+    local.set("two")
+    var after = local.get() ?? "missing"
+    return (before == null ? "clean" : "dirty") + "|" + after
+})
+print(await second)
+
+print(local.get() == null)

@@ -120,8 +120,7 @@ XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
         info.live_kb = (double) info.live_bytes / 1024.0;
         info.live_objects = ops->execution_arena_live_objects(state->execution_arena);
         if (ops->execution_arena_finalizer_count)
-            info.finalizer_count =
-                ops->execution_arena_finalizer_count(state->execution_arena);
+            info.finalizer_count = ops->execution_arena_finalizer_count(state->execution_arena);
         return info;
     }
     XrCoroHeap *heap = aot_runtime_control_heap(ctx);
@@ -145,10 +144,21 @@ static void aot_drop_coro_locals(XrCoroutine *coro, XrAotRuntime *runtime) {
         !runtime->value_ops->map_delete) {
         return;
     }
+    const XrAotValueOps *ops = runtime->value_ops;
     XrValue owner_key = xr_int((int64_t) coro->id + 1);
     while (atomic_flag_test_and_set_explicit(&runtime->coro_locals_lock, memory_order_acquire))
         ;
-    runtime->value_ops->map_delete(runtime->coro_locals, owner_key);
+    /* The coro_locals maps live in the runtime's own arena; the delete frees
+     * map nodes and releases the owner's inner map, so it must run inside
+     * that arena, not whichever coroutine arena is current on this thread. */
+    void *previous_arena = NULL;
+    bool entered =
+        runtime->coro_locals_arena && ops->execution_arena_enter && ops->execution_arena_restore;
+    if (entered)
+        previous_arena = ops->execution_arena_enter(runtime->coro_locals_arena);
+    ops->map_delete(runtime->coro_locals, owner_key);
+    if (entered)
+        ops->execution_arena_restore(previous_arena);
     atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_release);
 }
 
@@ -727,8 +737,21 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         runtime->root_scope = NULL;
     }
     if (!XR_IS_NULL(runtime->coro_locals) && runtime->value_ops && runtime->value_ops->release) {
-        runtime->value_ops->release(runtime->coro_locals);
+        const XrAotValueOps *ops = runtime->value_ops;
+        void *previous_arena = NULL;
+        bool entered = runtime->coro_locals_arena && ops->execution_arena_enter &&
+                       ops->execution_arena_restore;
+        if (entered)
+            previous_arena = ops->execution_arena_enter(runtime->coro_locals_arena);
+        ops->release(runtime->coro_locals);
         runtime->coro_locals = XR_NULL_VAL;
+        if (entered)
+            ops->execution_arena_restore(previous_arena);
+    }
+    if (runtime->coro_locals_arena && runtime->value_ops &&
+        runtime->value_ops->execution_arena_destroy) {
+        runtime->value_ops->execution_arena_destroy(runtime->coro_locals_arena);
+        runtime->coro_locals_arena = NULL;
     }
     if (runtime->core) {
         xr_runtime_core_delete(runtime->core);

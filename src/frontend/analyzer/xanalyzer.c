@@ -1659,7 +1659,10 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
             links->declared_type = links->type;
             links->is_definitely_assigned = true;
             links->file_path = file;
-            links->module_name = module_name;
+            /* module->name, not the local buffer: the link outlives this frame
+             * and readers such as sync_runtime_import_class_name compare it
+             * long after the stack slot is gone (R-OWN-1). */
+            links->module_name = module->name;
             links->import_member_name = record->name;
         }
     }
@@ -1683,7 +1686,7 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
             links->declared_type = links->type;
             links->is_definitely_assigned = true;
             links->file_path = file;
-            links->module_name = module_name;
+            links->module_name = module->name;
             links->import_member_name = enum_decl->name;
         }
     }

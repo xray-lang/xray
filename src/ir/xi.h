@@ -53,6 +53,8 @@ struct AstNode;
 struct XaAnalyzer;
 struct XiCoroPlan;
 struct XiEvidenceSet;
+struct XiFunc;
+struct XiModule;
 struct XrCExportPlan;
 struct XrLinkSymbolPlan;
 struct XrFreestandingEntryPlan;
@@ -348,15 +350,15 @@ typedef enum {
     XI_WIDEN_F32, /* (double)(float) roundtrip — explicit precision gate */
 
     /* Memory / field access */
-    XI_LOAD_FIELD,      /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
-    XI_STORE_FIELD,     /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
-    XI_WEAK_LOAD_FIELD, /* weak field load with owned promotion */
+    XI_LOAD_FIELD,       /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
+    XI_STORE_FIELD,      /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
+    XI_WEAK_LOAD_FIELD,  /* weak field load with owned promotion */
     XI_WEAK_STORE_FIELD, /* weak field store; does not consume the stored value */
-    XI_INDEX_GET,       /* obj[key]: args[0]=obj, args[1]=key */
-    XI_INDEX_SET,       /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
-    XI_ENUM_VARIANT_AT, /* checked EnumVariants<E>[index] -> EnumVariant<E> */
-    XI_ENUM_PAYLOAD_AT, /* checked EnumPayloads<E>[index] -> EnumPayloadField<E> */
-    XI_ENUM_META_GET,   /* cold descriptor field: args[0]=enum namespace, args[1]=descriptor */
+    XI_INDEX_GET,        /* obj[key]: args[0]=obj, args[1]=key */
+    XI_INDEX_SET,        /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
+    XI_ENUM_VARIANT_AT,  /* checked EnumVariants<E>[index] -> EnumVariant<E> */
+    XI_ENUM_PAYLOAD_AT,  /* checked EnumPayloads<E>[index] -> EnumPayloadField<E> */
+    XI_ENUM_META_GET,    /* cold descriptor field: args[0]=enum namespace, args[1]=descriptor */
 
     /* U8 memory primitives: all offsets/counts are integer values.
      * LOAD args: args[0]=bytes, args[1]=offset, args[2]=Endian.
@@ -714,14 +716,21 @@ static inline bool xi_vec_shape_is_scalable(int64_t shape) {
 }
 
 /* Import reference metadata for XI_IMPORT_REF.
- * Stored in XiValue.aux, resolved by the AOT driver after all modules
- * are lowered.  The resolved_mod_index + resolved_shared_slot fields
- * are filled in by the driver's cross-module resolution pass. */
+ * Stored in XiValue.aux, resolved against the module graph by
+ * xi_resolve_imports.  Multi-module drivers compile in topological order and
+ * resolve each module's imports before running ARC on it, so the pointer
+ * fields below let ARC read the (already final) borrow signature of a
+ * cross-module callee.  A second resolution pass after all modules compile
+ * fills anything the early pass could not see; refs that never resolve keep
+ * NULL/-1 and callers fall back to the conservative moved-argument
+ * convention (which can leak but never double-frees). */
 typedef struct XiImportRef {
-    const char *module_path;  /* import source (e.g. "./math_lib") */
-    const char *member_name;  /* exported name (e.g. "square") */
-    int resolved_mod_index;   /* index into the driver's module array, -1 = unresolved */
-    int resolved_shared_slot; /* shared slot in the target module, -1 = unresolved */
+    const char *module_path;          /* import source (e.g. "./math_lib") */
+    const char *member_name;          /* exported name (e.g. "square") */
+    int resolved_mod_index;           /* index into the driver's module array, -1 = unresolved */
+    int resolved_shared_slot;         /* shared slot in the target module, -1 = unresolved */
+    struct XiFunc *resolved_func;     /* exported function this member ref binds to, or NULL */
+    struct XiModule *resolved_module; /* target module (namespace refs included), or NULL */
 } XiImportRef;
 
 /* Re-export entry for "export { a } from './file'" and "export * from './file'".
@@ -942,9 +951,9 @@ typedef enum XiReturnOwnershipKind {
 } XiReturnOwnershipKind;
 
 typedef struct XiReturnOwnership {
-    uint8_t kind;       /* XiReturnOwnershipKind */
+    uint8_t kind;        /* XiReturnOwnershipKind */
     int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
-    bool complete;      /* every reachable return has the same provenance */
+    bool complete;       /* every reachable return has the same provenance */
 } XiReturnOwnership;
 
 /* Compiler-only proof attached to a Slice-producing Xi value.  Function
@@ -1013,13 +1022,13 @@ typedef struct XiValue {
     /* Instantiated result provenance for calls whose body is outside this Xi
      * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
     XiReturnOwnership call_return_ownership;
-    struct XiValue **args;          /* operand values (SSA uses) */
-    uint16_t nargs;                 /* number of args */
-    int16_t uses;                   /* use count (for DCE; -1 = not computed) */
-    uint32_t line;                  /* source line number (0 = unknown) */
-    uint32_t xg_callsite_id;        /* stable XgCallsiteId for evidence-backed calls (0 = none) */
-    uint32_t xa_intrinsic_id;       /* stable XaIntrinsicId for canonical semantic operations */
-    uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    struct XiValue **args;    /* operand values (SSA uses) */
+    uint16_t nargs;           /* number of args */
+    int16_t uses;             /* use count (for DCE; -1 = not computed) */
+    uint32_t line;            /* source line number (0 = unknown) */
+    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
+    uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */

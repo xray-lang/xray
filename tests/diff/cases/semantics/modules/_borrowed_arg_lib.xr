@@ -1,0 +1,19 @@
+// Helper module for cross_module_borrowed_arg_release: exported functions
+// whose parameters are read-only, so ARC proves them BORROWED and the caller
+// keeps ownership of every argument.
+
+export fn sumLengths(xs: Array<string>) -> int {
+    var n = 0
+    for (var i = 0; i < len(xs); i++) {
+        n = n + len(xs[i])
+    }
+    return n
+}
+
+export fn sumBytes(data: Array<byte>) -> int {
+    var n = 0
+    for (var i = 0; i < len(data); i++) {
+        n = n + int(data[i])
+    }
+    return n
+}

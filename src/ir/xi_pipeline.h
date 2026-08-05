@@ -31,6 +31,7 @@
 struct AstNode;
 struct XaAnalyzer;
 struct XgGlobalEvidence;
+struct XrModuleGraph;
 struct XrVMRuntime;
 struct XrProto;
 
@@ -127,6 +128,17 @@ typedef struct XiPipelineConfig {
     bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
     const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
     uint32_t global_evidence_module_id;             /* 1-based module id in global evidence */
+    /* Multi-module import resolution context. When a driver compiles a module
+     * graph in topological order it can expose the graph plus the (partially
+     * filled, dependency-complete) module array here; the pipeline then
+     * resolves this module's XI_IMPORT_REF values BEFORE ARC insertion, so
+     * ARC can read the final borrow signature of a cross-module callee and
+     * keep caller-side ownership of arguments the callee only borrows.
+     * All-NULL/0 (the default) skips early resolution; unresolved refs fall
+     * back to the moved-argument convention (leak-safe, never a double free). */
+    const struct XrModuleGraph *module_graph; /* module graph, or NULL */
+    struct XiModule **graph_modules;          /* topo-indexed modules (NULL tail allowed) */
+    int graph_module_count;                   /* entries in graph_modules */
 } XiPipelineConfig;
 
 /* ========== Pipeline Result ========== */

@@ -239,7 +239,34 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
         return arg_idx == 0;
     }
 
+    /* Array<T>(src) copy/convert construction reads the source array and
+     * copies its elements into a fresh container; neither backend releases
+     * the source. Keeping the source with the caller lets ARC drop it at its
+     * death point instead of moving it into a call that never frees it. */
+    if (strcmp(name, "array_copy_new") == 0)
+        return arg_idx == 0;
+
     return false;
+}
+
+/* String's static constructors that read a byte source or string parts
+ * (string.fromUtf8 / fromUtf8Lossy / join) inspect their arguments for the
+ * duration of the call and build a fresh string; the native implementations
+ * on both backends neither retain nor release them. The fromUtf8 lowering
+ * also elides a full-range slice argument (`bytes[:]` becomes the array
+ * itself), turning the non-RC view into an RC array in the same borrowed
+ * position. Classify these arguments as borrowed so the caller keeps
+ * ownership and releases at the argument's death point. */
+static bool builtin_string_static_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if ((user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || arg_idx < 1 ||
+        arg_idx >= user->nargs || !user->args[0] || !user->aux)
+        return false;
+    const XiValue *recv = user->args[0];
+    if (recv->op != XI_GET_BUILTIN || !recv->aux || strcmp((const char *) recv->aux, "String") != 0)
+        return false;
+    const char *method = (const char *) user->aux;
+    return strcmp(method, "fromUtf8") == 0 || strcmp(method, "fromUtf8Lossy") == 0 ||
+           strcmp(method, "join") == 0;
 }
 
 static bool builtin_module_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
@@ -331,6 +358,8 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
     if (low_level_byte_method_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_call_arg_is_borrowed(user, arg_idx))
+        return false;
+    if (builtin_string_static_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_module_call_arg_is_borrowed(user, arg_idx))
         return false;

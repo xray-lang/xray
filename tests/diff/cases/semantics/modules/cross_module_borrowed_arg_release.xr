@@ -1,0 +1,34 @@
+// Owned temporaries whose last use is a BORROWED-position call argument must
+// be released by the caller at the argument's death point. Regression case
+// for the shapes where that drop was historically missing: cross-module
+// named-import calls, cross-module namespace-member calls, Array<byte>(...)
+// constructor temporaries, and the full-range-slice string.fromUtf8 form.
+// Behavior is checked here; the AOT binary of this case must also be
+// leak-free under `leaks --atExit`.
+
+import "./_borrowed_arg_lib" as blib
+import { sumLengths, sumBytes } from "./_borrowed_arg_lib"
+
+// Named-import call: owned array temporary in a borrowed parameter slot.
+print(sumLengths(["alpha", "beta"]))
+
+// Namespace-member call: same convention through the module object.
+print(blib.sumLengths(["gamma", "delta", "epsilon"]))
+
+// Array<byte>(literal) builds a fresh converted array; the literal is only
+// read by the constructor and the conversion is only read by the callee.
+print(sumBytes(Array<byte>([1, 2, 3, 4, 5])))
+print(blib.sumBytes(Array<byte>([10, 20, 30])))
+
+fn decode(vals: Array<byte>) -> string {
+    var out = Array<byte>(len(vals))
+    for (var i = 0; i < len(vals); i++) {
+        out[i] = vals[i]
+    }
+    // Full-range slice is elided to the array itself; fromUtf8 reads it and
+    // returns a fresh string, so `out` still dies (and drops) in this frame.
+    return string.fromUtf8(out[:])!
+}
+print(decode(Array<byte>([72, 105])))
+
+print(string.join(["a", "b", "c"], "-"))

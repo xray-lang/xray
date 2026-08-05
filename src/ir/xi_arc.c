@@ -37,6 +37,7 @@
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
+#include "xi_module.h"
 #include "xi_value_query.h"
 #include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
@@ -698,6 +699,14 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
         xr_type_is_builtin_named_class(v->type, "StringBuilder"))
         return true;
+    /* Container-building intrinsics allocate a new array on both backends;
+     * the result aliases no argument, so it is a fresh +1 the caller owns
+     * (and must drop at its death point when never consumed). */
+    if (v->op == XI_CALL_BUILTIN && v->aux &&
+        (strcmp((const char *) v->aux, "array_copy_new") == 0 ||
+         strcmp((const char *) v->aux, "array_filled_new") == 0 ||
+         strcmp((const char *) v->aux, "array_with_capacity") == 0))
+        return true;
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;
     if (arc_builtin_iterator_method_returns_fresh(v))
@@ -771,11 +780,21 @@ static bool tracks_rc(const XiValue *v) {
  *
  * Caller and callee read the SAME conservative signature (BORROWED only when
  * proven), computed once per function on its pre-ARC IR and cached on the
- * XiFunc, so the two sides always agree (callee does not drop, caller does). */
+ * XiFunc, so the two sides always agree (callee does not drop, caller does).
+ *
+ * The agreement holds across module boundaries too: multi-module drivers
+ * compile in topological order and resolve import refs before running ARC on
+ * a module, so a cross-module callee is always fully compiled and its cached
+ * signature frozen by the time any caller reads it. A callee that stays
+ * unresolved (dynamic call, uncompiled module) keeps the moved-argument
+ * convention, whose failure direction is a leak, never a double free. */
 
 /* Resolve a call's callee value to its XiFunc, or NULL when not statically
  * known. Covers the cases ARC can use: a direct closure (XiFunc* in aux), a
- * top-level function loaded from a shared slot, and identity COPY chains. */
+ * top-level function loaded from a shared slot, identity COPY chains, and a
+ * member imported from another module whose ref was resolved before ARC ran
+ * (multi-module drivers resolve imports in topological order, so the callee
+ * module is fully compiled and its borrow signature is frozen). */
 static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
     if (!cv)
         return NULL;
@@ -790,15 +809,41 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
                 fn->shared_slot_funcs[slot])
                 return fn->shared_slot_funcs[slot];
         }
-        return NULL;
-    }
-    if (xi_copy_is_identity_alias(cv) && cv->nargs >= 1)
+        /* Not a module-local function slot: the slot may hold a member
+         * imported from another module — fall through to the import-ref
+         * lookup below. */
+    } else if (xi_copy_is_identity_alias(cv) && cv->nargs >= 1) {
         return arc_resolve_callee(caller, cv->args[0]);
+    }
+    const XiImportRef *ref = xi_value_import_ref(caller, cv);
+    return ref ? ref->resolved_func : NULL;
+}
+
+/* Resolve the callee of a namespace-member call: a CALL_METHOD whose receiver
+ * is a whole-module import (`mod.f(...)`). The receiver is dropped at
+ * emission on every backend (the target is a free function), so call argument
+ * i binds callee parameter i-1 exactly like a plain call. Returns NULL when
+ * the receiver is not a resolved namespace import or the member is not an
+ * exported function — the arguments then keep the conservative moved-in
+ * classification (leak-safe, never a double free). */
+static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user) {
+    if ((user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || user->nargs < 1 ||
+        !user->aux)
+        return NULL;
+    const XiImportRef *ref = xi_value_import_ref(caller, user->args[0]);
+    if (!ref || ref->member_name || !ref->resolved_module)
+        return NULL;
+    const char *member = (const char *) user->aux;
+    const XiModule *mod = ref->resolved_module;
+    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+        const XiModuleExport *exp = &mod->exports[ei];
+        if (exp->function && exp->name && strcmp(exp->name, member) == 0)
+            return exp->function;
+    }
     return NULL;
 }
 
-static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index,
-                                              bool complete) {
+static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index, bool complete) {
     XiReturnOwnership result;
     result.kind = kind;
     result.param_index = param_index;
@@ -870,8 +915,7 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
             uint16_t actual = (uint16_t) (summary.param_index + 1);
             if (summary.param_index < 0 || actual >= value->nargs)
                 return arc_return_unknown();
-            return arc_return_value_ownership(f, value->args[actual],
-                                              (uint8_t) (depth + 1));
+            return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
         }
         if (value->op != XI_CALL || value->nargs < 1)
             return arc_return_unknown();
@@ -915,8 +959,7 @@ static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
             return arc_return_unknown();
         }
     }
-    return seen ? result
-                : arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    return seen ? result : arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
 }
 
 /* Return fn's cached borrow signature, computing it (on the pre-ARC IR) on
@@ -951,6 +994,23 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
     return sig && sig->valid && pidx < sig->nparams && sig->param_own[pidx] == XI_OWN_BORROWED;
 }
 
+/* Is call argument `a` of `user` bound to a parameter its statically known
+ * callee only borrows? A borrowed argument is not consumed: the caller keeps
+ * ownership and drops it at the argument's death point, because the callee
+ * never releases a borrowed parameter. args[0] is the callee (plain call) or
+ * the namespace receiver (module-member call); either way argument `a` maps
+ * to callee parameter `a - 1`. */
+static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint16_t a) {
+    if (a < 1)
+        return false;
+    XiFunc *callee = NULL;
+    if (user->op == XI_CALL)
+        callee = arc_resolve_callee(f, user->args[0]);
+    else if (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
+        callee = arc_resolve_namespace_method_callee(f, user);
+    return callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1));
+}
+
 /* Collect consuming uses of `target` across the function, in program order.
  * The list grows dynamically; silently dropping a late consume would be a
  * memory-safety bug because ARC would miss a required retain. */
@@ -974,13 +1034,9 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                     continue;
                 /* A call argument the callee only borrows is not consumed: the
                  * caller keeps ownership and drops it at its death point (the
-                 * callee never releases a borrowed parameter). args[0] is the
-                 * callee, so user arg `a` maps to callee parameter `a - 1`. */
-                if (user->op == XI_CALL && a >= 1) {
-                    XiFunc *callee = arc_resolve_callee(f, user->args[0]);
-                    if (callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1)))
-                        continue;
-                }
+                 * callee never releases a borrowed parameter). */
+                if (arc_call_arg_is_callee_borrowed(f, user, a))
+                    continue;
                 if (!consume_site_vec_push(sites, blk, user, (blk->rpo << 16) | (i & 0xFFFF)))
                     return false;
                 break; /* one consume record per user is enough */
@@ -1767,11 +1823,8 @@ static bool param_has_consuming_use(XiFunc *f, XiValue *p) {
                 if (u->op == XI_STACK_ALLOC &&
                     stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, u))
                     continue;
-                if (u->op == XI_CALL && a >= 1) {
-                    XiFunc *callee = arc_resolve_callee(f, u->args[0]);
-                    if (callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1)))
-                        continue; /* callee borrows this arg → not a consume */
-                }
+                if (arc_call_arg_is_callee_borrowed(f, u, a))
+                    continue; /* callee borrows this arg → not a consume */
                 return true;
             }
         }
@@ -1858,10 +1911,9 @@ static void arc_precompute_sigs(XiFunc *f) {
      * the SCC to UNKNOWN; a non-converging equation set is reset fail-closed. */
     for (uint32_t i = 0; i < vec.count; i++) {
         XiFunc *fn = vec.items[i];
-        fn->arc_return_ownership =
-            xi_own_type_is_rc(fn->return_type)
-                ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
-                : arc_return_unknown();
+        fn->arc_return_ownership = xi_own_type_is_rc(fn->return_type)
+                                       ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
+                                       : arc_return_unknown();
     }
     changed = true;
     uint32_t rounds = 0;
@@ -2036,6 +2088,109 @@ static void arc_withdraw_tail_flag_before_releases(XiFunc *f) {
     }
 }
 
+/* ========== Release-before-redefinition ordering ==========
+ *
+ * The VM emitter coalesces every SSA value of one source variable onto a
+ * single register. Two values of the same variable are distinct in SSA, so
+ * their relative order is free here, but after coalescing a later definition
+ * overwrites the register an earlier definition's pending RELEASE still reads:
+ *
+ *     v46 = RETAIN v17           ; dup the incoming value
+ *     v23 = OWNER_FORWARD v17    ; MOVE cur_reg, v17_reg   <- overwrites
+ *     v45 = RELEASE v12          ; DROP cur_reg            <- drops the NEW value
+ *
+ * The drop then releases the object just stored instead of the one being
+ * replaced, so `cur = cur.field` inside a loop frees the field it just read.
+ * AOT is unaffected: it gives every SSA value its own C variable.
+ *
+ * Normalizing the order here rather than in the emitter keeps one rule for
+ * both backends. The release moves ahead of the first definition that shares
+ * its coalescing variable, but never ahead of a retain: retain-before-release
+ * is what makes self-assignment safe, and the phi-edge dup relies on it. */
+static void arc_order_release_before_var_redef(XiFunc *f) {
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            arc_order_release_before_var_redef(f->children[i]);
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *rel = blk->values[vi];
+            if (!rel || rel->op != XI_RELEASE || rel->nargs < 1)
+                continue;
+            XiValue *target = rel->args[0];
+            if (!target || !xi_var_id_is_valid(target->var_id))
+                continue;
+            /* Only the loop-carried shape is reordered: a phi holds the
+             * variable's incoming value and an ownership transfer in the same
+             * block rebinds it. Widening this to every same-variable
+             * definition also reorders releases the borrow and ref-parameter
+             * paths depend on, which is a different question from the register
+             * hazard being fixed here. */
+            if (target->op != XI_PHI)
+                continue;
+
+            /* A release may never precede the definition of what it releases,
+             * so a block-local target fixes the earliest legal position. A
+             * target defined elsewhere (a phi, or an earlier block) is already
+             * live on entry and constrains nothing here. */
+            uint32_t lower = 0;
+            for (uint32_t j = 0; j < vi; j++) {
+                if (blk->values[j] == target) {
+                    lower = j + 1;
+                    break;
+                }
+            }
+
+            /* First same-variable redefinition ahead of this release. */
+            uint32_t redef = vi;
+            for (uint32_t j = lower; j < vi; j++) {
+                XiValue *d = blk->values[j];
+                if (!d || d == target)
+                    continue;
+                if (d->op != XI_OWNER_FORWARD && d->op != XI_SOURCE_MOVE)
+                    continue;
+                if (d->var_id == target->var_id) {
+                    redef = j;
+                    break;
+                }
+            }
+            if (redef == vi)
+                continue;
+
+            /* The release may not move ahead of a reader of the same value, and
+             * may not move ahead of a retain: retain-before-release is what
+             * makes self-assignment and the phi-edge dup safe. Both push the
+             * destination back; if either pushes it past the redefinition the
+             * hazard cannot be fixed by ordering alone, so leave it in place. */
+            uint32_t dest = redef;
+            for (uint32_t j = redef; j < vi; j++) {
+                XiValue *d = blk->values[j];
+                if (!d)
+                    continue;
+                if (d->op == XI_RETAIN) {
+                    dest = j + 1;
+                    continue;
+                }
+                for (uint16_t a = 0; a < d->nargs; a++) {
+                    if (d->args[a] == target) {
+                        dest = j + 1;
+                        break;
+                    }
+                }
+            }
+            if (dest > redef || dest >= vi)
+                continue;
+
+            memmove(&blk->values[dest + 1], &blk->values[dest],
+                    (size_t) (vi - dest) * sizeof(XiValue *));
+            blk->values[dest] = rel;
+        }
+    }
+}
+
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
     /* Promote escaping borrow-copies to moves BEFORE computing borrow
@@ -2046,6 +2201,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * is mutated, then insert dup/drop bottom-up. */
     arc_precompute_sigs(f);
     arc_insert_rec(f);
+    arc_order_release_before_var_redef(f);
     arc_withdraw_tail_flag_before_releases(f);
 }
 

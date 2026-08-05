@@ -23,6 +23,7 @@
 #include "xi_own.h"
 #include "xi_arc.h"
 #include "xi_arc_verify.h"
+#include "xi_import_resolve.h"
 #include "xi_source_move_verify.h"
 #include "xi_stage.h"
 #include "../frontend/canonical/xcanon.h"
@@ -371,6 +372,18 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * those ops. Gated on run_arc (independent of run_backend_lower) so the
      * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
+        /* Multi-module drivers compile in topological order, so every
+         * dependency of this module is already fully compiled and its borrow
+         * signatures are frozen. Resolving imports now (instead of after all
+         * modules compile) lets ARC read a cross-module callee's signature:
+         * the caller then keeps ownership of arguments the callee only
+         * borrows and releases them at their death point. The callee never
+         * releases a borrowed parameter, so skipping this resolution would
+         * move the argument in and leak it. */
+        if (cfg->module_graph && cfg->graph_modules && cfg->graph_module_count > 0) {
+            xi_resolve_imports(ir, cfg->module_graph, cfg->source_file, cfg->graph_modules,
+                               cfg->graph_module_count);
+        }
         xi_arc_insert(ir);
         if (getenv("XRAY_XI_ARC_DUMP")) {
             fprintf(stderr, "=== Xi IR after xi_arc_insert ===\n");
