@@ -166,13 +166,18 @@ static void test_decode_nested_record_field(void) {
                 "nested field should become a Record");
     ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_nested, 0)) == 7,
                 "nested int field should be copied");
-    destroy_object(decoded_nested);
+    /* decoded_nested is a borrowed field of `decoded` -- xrt_json_get_field
+     * hands back the slot without retaining -- so releasing it here and again
+     * through the parent's destructor freed it twice. Only the roots this
+     * function owns get released. */
     destroy_object(decoded);
 
     xrt_json_set_field(nested, 0, xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 2, envelope_fields)),
                 "nested Record validation should reject wrong nested primitive");
-    destroy_object(nested);
+    /* `nested` was transferred into `source` by xrt_json_set_field, which
+     * stores without retaining, so `source` owns it and its destructor
+     * releases it. */
     destroy_object(source);
 }
 
@@ -214,15 +219,13 @@ static void test_decode_deep_nested_record_field(void) {
     ASSERT_TRUE(XR_IS_BOOL(xrt_json_get_field(decoded_geo, 1)) &&
                     XR_TO_BOOL(xrt_json_get_field(decoded_geo, 1)),
                 "deep nested bool field should be copied");
-    destroy_object(decoded_geo);
-    destroy_object(decoded_address);
+    /* Both are borrowed field slots inside `decoded`. */
     destroy_object(decoded);
 
     xrt_json_set_field(geo, 1, xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 2, profile_fields)),
                 "deep nested validation should reject wrong leaf type");
-    destroy_object(geo);
-    destroy_object(address);
+    /* geo and address were transferred into their parents by set_field. */
     destroy_object(source);
 }
 
@@ -283,17 +286,20 @@ static void test_decode_mixed_nested_record_and_array_json_fields(void) {
     ASSERT_TRUE(!XR_IS_NULL(decoded_address), "nested address should be materialized");
     ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_address, 1)) == 310000,
                 "nested int field should survive mixed decode");
-    destroy_object(decoded_address);
+    /* decoded_address is a borrowed slot inside `decoded`. */
     destroy_object(decoded);
 
     xrt_json_set_field(address, 1, xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 4, fields)),
                 "mixed decode should reject wrong nested primitive");
     xrt_json_set_field(address, 1, XR_FROM_INT(310000));
+    /* Overwriting a slot does not release what was there -- set_field stores
+     * raw -- so the displaced array is dropped by hand. */
+    xrt_release(xrt_json_get_field(source, 1));
     xrt_json_set_field(source, 1, xr_box_str("not-array"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 4, fields)),
                 "mixed decode should reject non-array Array<Json> field");
-    destroy_object(address);
+    /* `address` was transferred into `source`, which owns it now. */
     destroy_object(source);
 }
 

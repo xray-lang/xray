@@ -3859,39 +3859,46 @@ static inline XrValue xrt_json_decode_record(XrValue data, int64_t field_count,
         fprintf(stderr, "xrt_json_decode_record: out of memory\n");
         abort();
     }
+    /* Every value that lands in decoded_values carries one owning reference by
+     * the time the loop stores it, because the record built below takes each
+     * slot without retaining and its destructor releases all of them. A
+     * mid-loop rejection therefore has to give back what it has taken so far. */
+#define XRT_JSON_DECODE_ABORT()                                                                    \
+    do {                                                                                           \
+        for (int64_t _u = 0; _u < i; _u++)                                                         \
+            xrt_release(decoded_values[_u]);                                                       \
+        XRT_FREE(decoded_values);                                                                  \
+        XRT_FREE(field_names);                                                                     \
+        return XR_NULL_VAL;                                                                        \
+    } while (0)
     for (int64_t i = 0; i < field_count; i++) {
         const XrJsonDecodeFieldSpec *field = &fields[i];
         const char *name = field->name;
         field_names[i] = name ? name : "?";
-        if (!name || !xrt_json_has_name(data, name)) {
-            XRT_FREE(decoded_values);
-            XRT_FREE(field_names);
-            return XR_NULL_VAL;
-        }
+        if (!name || !xrt_json_has_name(data, name))
+            XRT_JSON_DECODE_ABORT();
         XrValue field_value = xrt_json_get_name(data, name);
-        if (!xrt_json_value_matches_kind(field_value, field->value_kind)) {
-            XRT_FREE(decoded_values);
-            XRT_FREE(field_names);
-            return XR_NULL_VAL;
-        }
+        if (!xrt_json_value_matches_kind(field_value, field->value_kind))
+            XRT_JSON_DECODE_ABORT();
         if (xr_json_value_kind_base(field->value_kind) == XR_JSON_VALUE_RECORD &&
             !XR_IS_NULL(field_value)) {
-            if (!field->nested_fields || field->nested_field_count == 0) {
-                XRT_FREE(decoded_values);
-                XRT_FREE(field_names);
-                return XR_NULL_VAL;
-            }
+            if (!field->nested_fields || field->nested_field_count == 0)
+                XRT_JSON_DECODE_ABORT();
             XrValue nested = xrt_json_decode_record(field_value, field->nested_field_count,
                                                     field->nested_fields);
-            if (XR_IS_NULL(nested)) {
-                XRT_FREE(decoded_values);
-                XRT_FREE(field_names);
-                return XR_NULL_VAL;
-            }
+            if (XR_IS_NULL(nested))
+                XRT_JSON_DECODE_ABORT();
+            /* Freshly built: already one owning reference. */
             field_value = nested;
+        } else {
+            /* Borrowed straight out of `data`. Forwarding the slot as-is left
+             * the source and the decoded record both believing they owned it,
+             * so the second destructor to run freed it twice. */
+            xrt_retain(field_value);
         }
         decoded_values[i] = field_value;
     }
+#undef XRT_JSON_DECODE_ABORT
     XrValue dstv = xrt_record_new_named(field_count, field_names);
     XRT_FREE(field_names);
     for (int64_t i = 0; i < field_count; i++)
