@@ -2838,6 +2838,18 @@ if(BUILD_TESTS)
         TIMEOUT 20
     )
 
+    add_test(
+        NAME object_static_access_equivalence
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/check_object_static_access_equivalence.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(object_static_access_equivalence PROPERTIES
+        LABELS "aot;cgen;object;zero-cost"
+        TIMEOUT 60
+    )
+
     # This runner builds ELF/Mach-O fixture libraries and asserts GNU/Apple
     # linker spellings (-lm, -nostdlib, DYLD_LIBRARY_PATH).  Windows has the
     # separate COFF freestanding gate below, including multi-module object

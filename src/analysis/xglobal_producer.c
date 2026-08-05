@@ -6471,7 +6471,7 @@ static int body_record_shape_static_field_index(XgBodyCollect *bc, XgRecordShape
     return -1;
 }
 
-static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+static void body_add_record_field_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const ObjectLiteralNode *literal = NULL;
     XgRecordShapeId shape_id;
     const char *name;
@@ -6485,6 +6485,12 @@ static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node
     } else if (node->type == AST_MEMBER_SET) {
         name = node->as.member_set.member;
         shape_id = body_lookup_record_shape(bc, node->as.member_set.object, &literal);
+    } else if (node->type == AST_INDEX_GET) {
+        name = body_static_string_key(node->as.index_get.index);
+        shape_id = body_lookup_record_shape(bc, node->as.index_get.array, &literal);
+    } else if (node->type == AST_INDEX_SET) {
+        name = body_static_string_key(node->as.index_set.index);
+        shape_id = body_lookup_record_shape(bc, node->as.index_set.array, &literal);
     } else {
         return;
     }
@@ -9635,14 +9641,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                              node->as.member_access.name);
             }
             body_add_json_member_access(bc, node, false);
-            body_add_record_member_access(bc, node, false);
+            body_add_record_field_access(bc, node, false);
             body_add_enum_metadata_use(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }
         case AST_MEMBER_SET:
             body_add_json_member_access(bc, node, true);
-            body_add_record_member_access(bc, node, true);
+            body_add_record_field_access(bc, node, true);
             walk_body_for_calls(bc, node->as.member_set.object);
             walk_body_for_calls(bc, node->as.member_set.value);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
@@ -9651,6 +9657,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_INDEX_GET:
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             body_add_json_index_access(bc, node, false);
+            body_add_record_field_access(bc, node, false);
             body_add_map_index_key_access(bc, node, false);
             body_add_sequence_index_access(bc, node, false);
             walk_body_for_calls(bc, node->as.index_get.array);
@@ -9658,6 +9665,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_INDEX_SET:
             body_add_json_index_access(bc, node, true);
+            body_add_record_field_access(bc, node, true);
             body_add_map_index_key_access(bc, node, true);
             body_add_sequence_index_access(bc, node, true);
             walk_body_for_calls(bc, node->as.index_set.array);

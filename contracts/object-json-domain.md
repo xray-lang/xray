@@ -47,7 +47,7 @@ Status: frozen before the object-surface convergence.
 
 anchor-sha256: src/runtime/value/xtype.h 1f0e1b8129b20d80d527cccc341bb22fffd34b1e1fd83eb252da7d23e2669317
 anchor-sha256: src/runtime/value/xtype.c cdcb51dcfa1814b89517fb0a57dad9ee84391ae502fcf1e24865224116d80a21
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c 873ed13ed2fbe80fa63c94c8777f3da9e795fdf51ace60a1a76ae51a6467337a
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c e8dca206b2b56e2b8884573452a1d5eb7ac08895b00ded4d43073a3cd1d24c02
 anchor-sha256: src/analysis/xglobal_summary.h 2230be70b30a147c5b885e2e5ab8a1db80354b8cc0f0cf7d78f97d0a61a67d3d
 anchor-sha256: src/ir/xi.h 54e3d1e1fc1331504e00fff388dc8cbd04d7b1b5610a0add79449824d5f6cc91
 anchor-sha256: xisa/xi/ops.def edac98373bbcbca5c894aabf853c96b12abc977c5ef12d172c853f389d06c132

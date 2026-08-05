@@ -2075,6 +2075,25 @@ static void xa_record_property_write(XaInferContext *ctx, AstNode *node, XrType 
     xa_selection_table_set(st, node, &sel);
 }
 
+static void xa_record_object_field_write(XaInferContext *ctx, AstNode *node, XrType *receiver,
+                                         int32_t field_index, XrType *value_type) {
+    if (!ctx || !ctx->analyzer || !node || field_index < 0)
+        return;
+    XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
+    if (!st)
+        return;
+    XaSelection sel = {
+        .kind = XA_SEL_FIELD,
+        .receiver_type = receiver,
+        .target_symbol = NULL,
+        .field_index = field_index,
+        .result_type = value_type,
+        .is_indirect = false,
+        .is_optional = false,
+    };
+    xa_selection_table_set(st, node, &sel);
+}
+
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links) {
     if (out_links)
@@ -6549,6 +6568,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_add_index_type_error(ctx, node, index_type, key_expected);
             }
             XrType *value_expected = NULL;
+            int object_field_index = -1;
+            const char *object_field_name = NULL;
             if (array_type) {
                 if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||
                      XR_TYPE_IS_SLICE(array_type)) &&
@@ -6564,8 +6585,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         is->index->type == AST_LITERAL_STRING) {
                         const char *key = is->index->as.literal.raw_value.string_val;
                         int field_idx = object_shape_field_index_local(array_type, key);
-                        if (field_idx >= 0 && array_type->object.field_types)
+                        if (field_idx >= 0 && array_type->object.field_types) {
+                            object_field_index = field_idx;
+                            object_field_name = key;
                             value_expected = array_type->object.field_types[field_idx];
+                        }
                     }
                     if (!value_expected && XR_TYPE_IS_JSON(array_type))
                         value_expected = xr_type_new_json(ctx->analyzer->isolate);
@@ -6587,6 +6611,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     ctx->expected_type = value_expected;
                 value_type = xa_visit_infer_expr(ctx, is->value);
                 ctx->expected_type = saved_expected;
+            }
+            if (object_field_index >= 0) {
+                xa_analyzer_set_node_type(ctx->analyzer, node,
+                                          value_expected ? value_expected : value_type);
+                xa_record_object_field_write(ctx, node, array_type, object_field_index,
+                                             value_expected ? value_expected : value_type);
+                xa_assign_check_type(ctx, node, value_expected, value_type, object_field_name,
+                                     "member");
             }
             xa_check_span_value_escape(ctx, node, value_type,
                                        "store Slice view into an index target");
@@ -6719,8 +6751,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                           "sealed Record index assignment requires a string "
-                                           "literal key",
+                                           "structural object index requires a string literal "
+                                           "field name",
                                            &loc);
             } else if (array_type &&
                        (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||

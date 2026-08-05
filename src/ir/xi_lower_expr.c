@@ -1442,6 +1442,28 @@ static const char *lower_static_string_key(AstNode *node) {
     return node->as.literal.raw_value.string_val;
 }
 
+static int lower_resolved_object_field_ordinal(XiLower *l, AstNode *node, XrType *receiver_type,
+                                               const char *name) {
+    if (!l || !node || !XR_TYPE_HAS_OBJECT_SHAPE(receiver_type) || !name)
+        return -1;
+    int layout_index = json_field_index(receiver_type, name);
+    const XaSelection *selection =
+        l->analyzer && l->analyzer->selection_table
+            ? xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table, node)
+            : NULL;
+    if (!selection || selection->kind != XA_SEL_FIELD)
+        return layout_index;
+    if (selection->field_index < 0 || layout_index < 0 || selection->field_index != layout_index) {
+        fprintf(stderr,
+                "[LOWER] object field selection/layout mismatch for '%s' at line %u "
+                "(selection=%d layout=%d)\n",
+                name, (uint32_t) node->line, selection->field_index, layout_index);
+        l->had_error = true;
+        return -1;
+    }
+    return selection->field_index;
+}
+
 static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
     while (v &&
            (v->op == XI_COPY || xi_op_is_identity_forward(v->op) || v->op == XI_BOX ||
@@ -2905,6 +2927,40 @@ static XiValue *lower_unsafe_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
+    XiValue *obj = xi_lower_expr(l, ig->array);
+    if (!obj)
+        return NULL;
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    const char *static_key = lower_static_string_key(ig->index);
+    int field_index = lower_resolved_object_field_ordinal(l, node, obj->type, static_key);
+    if (field_index < 0 && !l->had_error && obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        uint16_t evidence_field_index = UINT16_MAX;
+        if (static_key &&
+            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_INDEX_GET,
+                                                    &evidence_field_index))
+            field_index = (int) evidence_field_index;
+    }
+    if (field_index >= 0 &&
+        (!obj->type || !XR_TYPE_IS_JSON(obj->type) ||
+         !xi_lower_json_access_requires_dynamic_lookup(
+             l, static_key, (uint32_t) node->line, (uint16_t) field_index,
+             XG_JSON_ACCESS_INDEX_GET))) {
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);
+        if (!v)
+            return NULL;
+        v->args[0] = obj;
+        v->aux_int = field_index;
+        v->line = (uint32_t) node->line;
+        xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line,
+                                     (uint16_t) field_index, XG_JSON_ACCESS_INDEX_GET);
+        xi_lower_bind_record_access_id(l, v, static_key, (uint32_t) node->line,
+                                       (uint16_t) field_index, XG_RECORD_ACCESS_FIELD_GET);
+        return v;
+    }
+    if (l->had_error)
+        return NULL;
+
     XiSequenceEvidenceIds sequence_ids;
     uint8_t sequence_access_kind =
         lower_type_has_sequence_evidence(xi_lower_node_type(l, ig->array)) ? XG_SEQ_ACCESS_INDEX_GET
@@ -2915,14 +2971,12 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
     uint32_t key_access_ordinal =
         xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_INDEX_GET);
-    XiValue *obj = xi_lower_expr(l, ig->array);
     XiValue *idx = xi_lower_expr(l, ig->index);
-    if (!obj || !idx)
+    if (!idx)
         return NULL;
 
     if (xr_type_is_enum_metadata_named(obj->type, XR_ENUM_VARIANTS_TYPE_NAME) ||
         xr_type_is_enum_metadata_named(obj->type, XR_ENUM_PAYLOADS_TYPE_NAME)) {
-        struct XrType *result_type = xi_lower_node_type(l, node);
         XiValue *v =
             xi_value_new(l->func, l->cur_block,
                          xr_type_is_enum_metadata_named(obj->type, XR_ENUM_VARIANTS_TYPE_NAME)
@@ -2962,24 +3016,6 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
         return v;
     }
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        const char *static_key = lower_static_string_key(ig->index);
-        uint16_t evidence_fidx = UINT16_MAX;
-        if (static_key &&
-            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
-                                                    XG_JSON_ACCESS_INDEX_GET, &evidence_fidx)) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = obj;
-            v->aux_int = evidence_fidx;
-            v->line = (uint32_t) node->line;
-            xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, evidence_fidx,
-                                         XG_JSON_ACCESS_INDEX_GET);
-            return v;
-        }
-    }
     if (obj->type && XR_TYPE_IS_MAP(obj->type))
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
     struct XrType *elem_type = xi_get_container_elem_type(obj->type);
@@ -2993,7 +3029,6 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        const char *static_key = lower_static_string_key(ig->index);
         xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
                                      XG_JSON_ACCESS_INDEX_GET);
     }
@@ -3018,6 +3053,49 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
 
 static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     IndexSetNode *is_node = &node->as.index_set;
+    XiValue *obj = xi_lower_expr(l, is_node->array);
+    if (!obj)
+        return NULL;
+    const char *static_key = lower_static_string_key(is_node->index);
+    int field_index = lower_resolved_object_field_ordinal(l, node, obj->type, static_key);
+    if (field_index < 0 && !l->had_error && obj->type && XR_TYPE_IS_JSON(obj->type)) {
+        uint16_t evidence_field_index = UINT16_MAX;
+        if (static_key &&
+            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
+                                                    XG_JSON_ACCESS_INDEX_SET,
+                                                    &evidence_field_index))
+            field_index = (int) evidence_field_index;
+    }
+    if (field_index >= 0 &&
+        (!obj->type || !XR_TYPE_IS_JSON(obj->type) ||
+         !xi_lower_json_access_requires_dynamic_lookup(
+             l, static_key, (uint32_t) node->line, (uint16_t) field_index,
+             XG_JSON_ACCESS_INDEX_SET))) {
+        XiValue *val = xi_lower_expr(l, is_node->value);
+        if (!val)
+            return NULL;
+        obj = lower_member_set_target(obj);
+        XrType *write_type = xi_lower_node_type(l, node);
+        val = lower_enum_descriptor_box_for_boundary(l, val, write_type, (uint32_t) node->line);
+        if (!val)
+            return NULL;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, val->type, 2);
+        if (!v)
+            return NULL;
+        v->args[0] = obj;
+        v->args[1] = val;
+        v->aux_int = field_index;
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+        xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line,
+                                     (uint16_t) field_index, XG_JSON_ACCESS_INDEX_SET);
+        xi_lower_bind_record_access_id(l, v, static_key, (uint32_t) node->line,
+                                       (uint16_t) field_index, XG_RECORD_ACCESS_FIELD_SET);
+        return v;
+    }
+    if (l->had_error)
+        return NULL;
+
     XiSequenceEvidenceIds sequence_ids;
     uint8_t sequence_access_kind =
         lower_type_has_sequence_evidence(xi_lower_node_type(l, is_node->array))
@@ -3029,10 +3107,9 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds, &sequence_ids);
     uint32_t key_access_ordinal =
         xi_lower_next_key_access_ordinal(l, (uint32_t) node->line, XG_KEY_ACCESS_SET);
-    XiValue *obj = xi_lower_expr(l, is_node->array);
     XiValue *idx = xi_lower_expr(l, is_node->index);
     XiValue *val = xi_lower_expr(l, is_node->value);
-    if (!obj || !idx || !val)
+    if (!idx || !val)
         return NULL;
 
     /* FFI raw pointer store p[i] = v => XI_PTR_STORE(p + i*sizeof(T), v). */
@@ -3053,26 +3130,6 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         v->line = (uint32_t) node->line;
         return v;
-    }
-
-    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        const char *static_key = lower_static_string_key(is_node->index);
-        uint16_t evidence_fidx = UINT16_MAX;
-        if (static_key &&
-            xi_lower_find_json_direct_field_ordinal(l, static_key, (uint32_t) node->line,
-                                                    XG_JSON_ACCESS_INDEX_SET, &evidence_fidx)) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, val->type, 2);
-            if (!v)
-                return NULL;
-            v->args[0] = obj;
-            v->args[1] = val;
-            v->aux_int = evidence_fidx;
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, evidence_fidx,
-                                         XG_JSON_ACCESS_INDEX_SET);
-            return v;
-        }
     }
 
     if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
@@ -3103,7 +3160,6 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        const char *static_key = lower_static_string_key(is_node->index);
         xi_lower_bind_json_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
                                      XG_JSON_ACCESS_INDEX_SET);
     }

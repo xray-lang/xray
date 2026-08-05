@@ -2845,8 +2845,13 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                 if (container->object.field_names[i] &&
                     strcmp(container->object.field_names[i], key) == 0) {
                     XrType *ft = container->object.field_types[i];
-                    if (ft)
-                        return xr_type_make_nullable(ctx->analyzer->isolate, ft);
+                    if (ft) {
+                        XrType *result = xr_type_make_nullable(ctx->analyzer->isolate, ft);
+                        result = xa_const_projection_type(ctx, container, result);
+                        record_selection(ctx, node, XA_SEL_FIELD, container, NULL, i, result,
+                                         false);
+                        return result;
+                    }
                 }
             }
             if (container->object.is_sealed) {
@@ -2870,10 +2875,15 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             container->object.field_types) {
             const char *key = ig->index->as.literal.raw_value.string_val;
             int field_idx = object_shape_field_index(container, key);
-            if (field_idx >= 0)
-                return container->object.field_types[field_idx]
-                           ? container->object.field_types[field_idx]
-                           : xr_type_new_unknown(NULL);
+            if (field_idx >= 0) {
+                XrType *result = container->object.field_types[field_idx]
+                                     ? container->object.field_types[field_idx]
+                                     : xr_type_new_unknown(NULL);
+                result = xa_const_projection_type(ctx, container, result);
+                record_selection(ctx, node, XA_SEL_FIELD, container, NULL, field_idx, result,
+                                 false);
+                return result;
+            }
             if (container->object.is_sealed) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -2890,7 +2900,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                "sealed Record index access requires a string literal key", &loc);
+                "structural object index requires a string literal field name", &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_unknown(NULL);

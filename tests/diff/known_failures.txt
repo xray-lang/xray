@@ -20,14 +20,6 @@
 #
 # One case path per line. Comments and blank lines ignored.
 
-# --- Structural-object static bracket lowering -----------------------------
-# The analyzer accepts a literal-key structural-object access, but lowering
-# emits generic index operations. AOT's generic helper accepts the object while
-# the VM correctly rejects that generic opcode for a non-Json value. The fix is
-# to lower dot and literal-key bracket syntax to one fixed-field operation, not
-# to widen generic indexing in either runtime.
-tests/diff/cases/semantics/object/object_static_index_get_set.xr
-
 # --- Group 1: xr_aot_scope_exit arity ---------------------------------------
 # Cleared 2026-07-31. The emitter had been updated to call
 # xr_aot_scope_exit(ctx, mode) while the helper still declared a third

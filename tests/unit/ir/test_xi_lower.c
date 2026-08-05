@@ -1647,6 +1647,95 @@ TEST(record_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_RECORD_EVIDENCE
 }
 
+TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
+#define REQUIRE_OBJECT_FIELD_EQUIVALENCE(cond, msg)                                                \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr,                                                                        \
+                    "structural_object_dot_and_static_index_share_fixed_field_lowering: %s\n",    \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *root = lower_source_with_global_evidence(
+        "fn dotAccess() -> string {\n"
+        "    var user = { name: \"Ada\", age: 37 }\n"
+        "    user.name = \"Grace\"\n"
+        "    return user.name\n"
+        "}\n"
+        "fn bracketAccess() -> string {\n"
+        "    var user = { name: \"Ada\", age: 37 }\n"
+        "    user[\"name\"] = \"Grace\"\n"
+        "    return user[\"name\"]\n"
+        "}\n",
+        &ev);
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(root != NULL, "source should lower");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(ev.nrecord_accesses == 4,
+                                     "producer should record both get/set syntax pairs");
+
+    XiFunc *dot = func_tree_find_func_name(root, "dotAccess");
+    XiFunc *bracket = func_tree_find_func_name(root, "bracketAccess");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(dot != NULL && bracket != NULL,
+                                     "both target functions should be present");
+
+    XiFunc *funcs[2] = {dot, bracket};
+    uint16_t field_ops[2][2] = {{0}};
+    int64_t field_ordinals[2][2] = {{0}};
+    uint32_t field_counts[2] = {0};
+    uint32_t generic_counts[2] = {0};
+    uint32_t string_constant_counts[2] = {0};
+    uint32_t bound_record_counts[2] = {0};
+    for (uint32_t f = 0; f < 2; f++) {
+        for (uint32_t b = 0; b < funcs[f]->nblocks; b++) {
+            XiBlock *block = funcs[f]->blocks[b];
+            if (!block)
+                continue;
+            for (uint32_t i = 0; i < block->nvalues; i++) {
+                XiValue *value = block->values[i];
+                if (!value)
+                    continue;
+                if (value->op == XI_INDEX_GET || value->op == XI_INDEX_SET)
+                    generic_counts[f]++;
+                if (value->op == XI_CONST && value->type && XR_TYPE_IS_STRING(value->type))
+                    string_constant_counts[f]++;
+                if (value->op != XI_JSON_GET_F && value->op != XI_JSON_SET_F)
+                    continue;
+                REQUIRE_OBJECT_FIELD_EQUIVALENCE(field_counts[f] < 2,
+                                                 "fixture should contain one get and one set");
+                field_ops[f][field_counts[f]] = value->op;
+                field_ordinals[f][field_counts[f]] = value->aux_int;
+                field_counts[f]++;
+                if (value->xg_record_access_id != 0)
+                    bound_record_counts[f]++;
+            }
+        }
+    }
+
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(field_counts[0] == 2 && field_counts[1] == 2,
+                                     "both syntaxes should emit exactly two fixed-field ops");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(generic_counts[0] == 0 && generic_counts[1] == 0,
+                                     "static object fields must not use generic index ops");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(bound_record_counts[0] == 2 && bound_record_counts[1] == 2,
+                                     "all fixed-field ops should bind structural evidence");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(field_ops[0][0] == field_ops[1][0] &&
+                                         field_ops[0][1] == field_ops[1][1],
+                                     "dot and bracket should emit the same fixed-field op sequence");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(field_ordinals[0][0] == field_ordinals[1][0] &&
+                                         field_ordinals[0][1] == field_ordinals[1][1] &&
+                                         field_ordinals[0][0] == 0 && field_ordinals[0][1] == 0,
+                                     "dot and bracket should resolve the same field ordinal");
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(string_constant_counts[0] == string_constant_counts[1],
+                                     "static bracket keys must not materialize runtime strings");
+
+    xi_func_free(root);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_OBJECT_FIELD_EQUIVALENCE
+}
+
 static const char *json_codec_same_line_source(void) {
     return "type User = { name: string, age: int }\n"
            "fn codecs() -> string {\n"
@@ -3118,6 +3207,7 @@ int main(void) {
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
     run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();
+    run_structural_object_dot_and_static_index_share_fixed_field_lowering();
     run_json_codec_calls_bind_exact_source_node_evidence_ids();
     run_json_codec_binding_does_not_fallback_to_source_span();
     run_map_key_access_lowers_with_global_evidence_id();

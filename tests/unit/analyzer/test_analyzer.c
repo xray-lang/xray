@@ -1065,6 +1065,51 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
+static int analyzer_diag_message_count(XaAnalyzer *analyzer, const char *message) {
+    int ignored = 0;
+    int matches = 0;
+    XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &ignored);
+    for (; diag; diag = diag->next) {
+        if (diag->message && strcmp(diag->message, message) == 0)
+            matches++;
+    }
+    return matches;
+}
+
+TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "type User = { const name: string, age: int }\n"
+        "fn probe(key: string) {\n"
+        "    var user: User = { name: \"Ada\", age: 37 }\n"
+        "    print(user.missing)\n"
+        "    print(user[\"missing\"])\n"
+        "    user.name = \"Grace\"\n"
+        "    user[\"name\"] = \"Grace\"\n"
+        "    user.age = \"old\"\n"
+        "    user[\"age\"] = \"old\"\n"
+        "    print(user[key])\n"
+        "    user[key] = 1\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "object_field_diagnostics.xr", program);
+
+    ASSERT(analyzer_diag_message_count(a, "type 'User' has no field 'missing'") == 2);
+    ASSERT(analyzer_diag_message_count(
+               a, "cannot assign to read-only field 'User.name' (declared const)") == 2);
+    ASSERT(analyzer_diag_message_count(
+               a, "Type 'string' is not assignable to member 'age' (type 'int')") == 2);
+    ASSERT(analyzer_diag_message_count(
+               a, "structural object index requires a string literal field name") == 2);
+    ASSERT(!analyzer_diag_contains(a, "Record"));
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 static const XaEffectSummary *analyzer_function_effect_summary(XaAnalyzer *analyzer,
                                                                const char *name) {
     XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
@@ -6563,6 +6608,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match);
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
