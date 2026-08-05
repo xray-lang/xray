@@ -453,7 +453,8 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
          *    actual initializer runs after the closure is created. */
         bool forward_ref =
             (parent_val && parent_val->op == XI_CONST && parent_val->type == parent->type_null);
-        l->func->captures[idx].needs_cell = parent->vars[var_id].hoisted || forward_ref;
+        l->func->captures[idx].needs_cell =
+            parent->vars[var_id].hoisted || forward_ref || parent->vars[var_id].mutated_by_child;
         l->func->ncaptures++;
         if (out_type)
             *out_type = capture_type;

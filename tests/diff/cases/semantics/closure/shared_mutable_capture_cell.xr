@@ -1,0 +1,50 @@
+// Two closures over one mutable local must share the same cell. A reader that
+// kept the raw value answered with whatever it was when its closure was built
+// -- it printed 0 here forever, identically on both backends, so the
+// differential net could not see it either.
+fn makePair() -> (() -> int, () -> int) {
+    var n = 0
+    var inc = fn() -> int { n = n + 1; return n }
+    var get = fn() -> int { return n }
+    return (inc, get)
+}
+
+// Declaration order must not matter: the reader is built before the writer
+// here, so the cell fact has to reach a capture that was already made.
+fn makePairReaderFirst() -> (() -> int, () -> int) {
+    var n = 100
+    var get = fn() -> int { return n }
+    var inc = fn() -> int { n = n + 1; return n }
+    return (inc, get)
+}
+
+// Three closures, two of them writers, so the shared cell carries more than one
+// mutation path.
+fn makeTriple() -> (() -> int, () -> int, () -> int) {
+    var n = 10
+    var a = fn() -> int { n = n + 1; return n }
+    var b = fn() -> int { return n }
+    var c = fn() -> int { n = n * 2; return n }
+    return (a, b, c)
+}
+
+var p = makePair()
+var inc = p.0
+var get = p.1
+print(inc())
+print(inc())
+print(get())
+
+var q = makePairReaderFirst()
+var inc2 = q.0
+var get2 = q.1
+print(inc2())
+print(get2())
+
+var t = makeTriple()
+var ta = t.0
+var tb = t.1
+var tc = t.2
+print(ta())
+print(tc())
+print(tb())

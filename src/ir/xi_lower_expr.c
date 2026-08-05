@@ -800,8 +800,29 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
         /* Mark the defining scope's variable so definitions survive DCE
          * until xi_pass_close inserts CELL_SET. */
         int parent_var = xi_lower_var_find(l->parent, 0, cap->name);
-        if (parent_var >= 0 && parent_var < l->parent->var_count)
+        if (parent_var >= 0 && parent_var < l->parent->var_count) {
             l->parent->vars[parent_var].captured_by_child = true;
+            /* The cell belongs to the variable, so every sibling closure that
+             * captured it directly needs one too -- a reader that kept the raw
+             * value would answer with whatever it was when that closure was
+             * built, never seeing this write. Siblings created later inherit
+             * the flag at capture time. */
+            l->parent->vars[parent_var].mutated_by_child = true;
+            for (uint16_t si = 0; si < l->parent->func->nchildren; si++) {
+                XiFunc *sibling = l->parent->func->children[si];
+                if (!sibling || sibling == l->func)
+                    continue;
+                for (uint16_t sc = 0; sc < sibling->ncaptures; sc++) {
+                    XiCapture *scap = &sibling->captures[sc];
+                    if (scap->source != XI_CAPTURE_SRC_REG || scap->needs_cell)
+                        continue;
+                    if (!scap->name || !cap->name || strcmp(scap->name, cap->name) != 0)
+                        continue;
+                    scap->needs_cell = true;
+                    scap->is_mutable = true;
+                }
+            }
+        }
     }
 
     /* Propagate downward: child closures that already captured this

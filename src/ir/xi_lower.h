@@ -68,6 +68,14 @@ typedef struct XiVarEntry {
                              * hoisting reorders the closure before the actual
                              * initializer, and the upvalue/cell must see the
                              * real value rather than the braun-read null. */
+    bool mutated_by_child;  /* true once any closure writes this variable. Cell
+                             * indirection is a property of the VARIABLE, not of
+                             * one capture: if one closure mutates it and another
+                             * captures it by value, the reader is frozen at the
+                             * value it saw when its closure was built. Every
+                             * capture of this variable — the ones already made
+                             * and the ones still to come — must go through the
+                             * same cell. */
     XiValue *call_place;    /* non-NULL for ref formals, implicit read receivers, and stable
                              * mutable aggregate locals */
     XrParamMode place_mode;
