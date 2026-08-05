@@ -1543,10 +1543,19 @@ static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t 
 char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer)
         return NULL;
+    /* A source with no file is still one module and still owns the nominal
+     * types it declares: `xray eval`, xray_vm_dostring() and `xray run -` all
+     * compile with source_file == NULL. Returning NULL here made
+     * xa_enum_info_new() refuse to build any metadata for such a source, so
+     * every enum declared in it came out with zero variants and every member
+     * access failed with E0354 -- silently wrong rather than fail-closed, and
+     * only on the embedded path, which is why the file-based tests never saw
+     * it. "<script>" is the identity the diagnostics and proto naming already
+     * give the same source. */
     if (!file || !file[0])
         return analyzer->current_module_canonical && analyzer->current_module_canonical[0]
                    ? xr_strdup(analyzer->current_module_canonical)
-                   : NULL;
+                   : xr_strdup("<script>");
 
     /* Built-in stdlib module identity is its import name, never the absolute
      * checkout path used by a stage compiler.  Resolve this before the graph:
