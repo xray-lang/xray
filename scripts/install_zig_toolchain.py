@@ -120,8 +120,11 @@ def main(argv: List[str]) -> int:
         shim.unlink()
     shim.symlink_to(zig)
 
+    # `zig version` prints one ASCII version line; decode it strictly so a
+    # surprise in that output fails here rather than downstream.
     reported = subprocess.run([str(shim), "version"], stdout=subprocess.PIPE,
-                              text=True).stdout.strip()
+                              text=True, encoding="utf-8",
+                              errors="strict").stdout.strip()
     print("Installed Zig:")
     print(f"  version: {reported}")
     print(f"  binary:  {shim}")

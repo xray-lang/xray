@@ -76,7 +76,7 @@ class ToolchainProbeTest(unittest.TestCase):
         tmp = tempfile.mkdtemp(prefix="xt_stub.")
         try:
             stub = Path(tmp) / "python3"
-            stub.write_text("#!/bin/sh\nexit 1\n")
+            stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
             stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
             os.environ["XRAY_TEST_PYTHON"] = str(stub)
             toolchain.reset_probe_cache()

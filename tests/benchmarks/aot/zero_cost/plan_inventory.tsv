@@ -89,7 +89,7 @@ map_set_closure_capture_key_access|covered|mapSetClosureCapturePlan|tests/aot/fi
 map_shape_hash_eq|covered|hash-eq-plan|tests/aot/filetests/link|Map/Set shape and Hash/Eq plans are dumped from global evidence.
 backend_contract_dispatch|covered|XAOT_BACKEND_DISPATCH_SUPPORT_ITABLE|tests/unit/aot|Backend contract accepts verified itable plans only with complete target cases and ABI evidence.
 evidence_cache_manifest|covered|xg-cache-manifest v1|tests/aot/filetests/link|Global evidence cache manifest is dumped through the official evidence entry.
-evidence_cache_payload_sidecar|covered|xg-cache-payload v2|tests/aot/run_aot_incremental_cache.sh|Evidence cache writes phase payload sidecars and requires payload validation for hits.
+evidence_cache_payload_sidecar|covered|xg-cache-payload v2|tests/aot/run_aot_incremental_cache.py|Evidence cache writes phase payload sidecars and requires payload validation for hits.
 runtime_hot_loop_benchmarks|covered|run_benchmark.sh|tests/benchmarks/aot/zero_cost|AOT zero-cost runtime hot-loop benchmarks are executable.
 value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen|Value-level noescape stack allocation is emitted as a verified allocation plan.
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
@@ -158,8 +158,8 @@ summary_package_payload_producer_skip|covered|global_evidence_build_skips_import
 summary_package_payload_driver_row_import|covered|dump_contains_imported_package_link_dep|tests/unit/aot|AOT driver imports validated package payload rows into consumer global evidence after package module producer skip.
 stable_source_identity|covered|global_evidence_source_identity_survives_body_only_change|tests/unit/analysis|Evidence source_node_id is derived from stable source anchors instead of parser allocation order.
 summary_payload_module_identity|covered|materialized\.nmodules|tests/unit/analysis|Evidence payload carries module identity rows needed for package id remap.
-summary_payload_preproducer_probe|covered|evidence cache preproducer summary|tests/aot/run_aot_incremental_cache.sh|AOT computes request keys before the producer and validates all four materializable payload phases by request.
-summary_payload_global_producer_skip|covered|global_evidence_summary|tests/aot/run_aot_incremental_cache.sh|Exact-source global payload hits skip the pre-monomorphization and final global evidence producers.
+summary_payload_preproducer_probe|covered|evidence cache preproducer summary|tests/aot/run_aot_incremental_cache.py|AOT computes request keys before the producer and validates all four materializable payload phases by request.
+summary_payload_global_producer_skip|covered|global_evidence_summary|tests/aot/run_aot_incremental_cache.py|Exact-source global payload hits skip the pre-monomorphization and final global evidence producers.
 summary_package_payload_hit_rate_benchmark|covered|package_import_warm|tests/benchmarks/compiler/global_evidence_cache|Package evidence benchmark validates auto-discovered package payloads feed consumer request hits and skip global evidence producers on warm builds.
 cross_package_summary_reuse|covered|xg_global_evidence_import_package_payload|src/analysis|Immutable package evidence reuse has an explicit global-payload import API with module identity validation and row-family id remap.
 storage_provenance|covered|storage-plan|tests/unit/analysis|Module slots carry verified owner, mutability, address identity, recursive safety flags, and materialization action.

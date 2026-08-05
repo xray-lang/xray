@@ -59,7 +59,7 @@ class Recorder:
                 print(f"      {line}")
 
     def expect_contains(self, path: Path, needle: str, name: str) -> None:
-        text = path.read_text(encoding="utf-8", errors="replace") \
+        text = path.read_text(encoding="utf-8") \
             if path.is_file() else None
         if text is not None and needle in text:
             self.ok(name)

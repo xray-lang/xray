@@ -113,8 +113,8 @@ def print_diff(expected: Path, actual: Path, limit: int = 20) -> None:
     import difflib
 
     lines = list(difflib.unified_diff(
-        expected.read_text(encoding="utf-8", errors="replace").splitlines(True),
-        actual.read_text(encoding="utf-8", errors="replace").splitlines(True),
+        expected.read_text(encoding="utf-8").splitlines(True),
+        actual.read_text(encoding="utf-8").splitlines(True),
         fromfile=str(expected), tofile=str(actual)))
     for line in lines[:limit]:
         print(f"  {line.rstrip()}")
@@ -344,8 +344,7 @@ def run_one(args: argparse.Namespace, xr_file: Path, work: Path,
         c_median=c_median, aot_median=aot_median, ratio=ratio,
         min_ratio=min_ratio, audit_pass=audit_pass, c_size=c_size,
         aot_size=aot_size, rust_median=rust_median, rust_ratio=rust_ratio,
-        checksum=c_out_ref.read_text(encoding="utf-8",
-                                     errors="replace").replace("\n", "|")))
+        checksum=c_out_ref.read_text(encoding="utf-8").replace("\n", "|")))
     return status
 
 

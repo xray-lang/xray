@@ -137,7 +137,7 @@ def manifest_value(expect_file: Optional[Path], key: str) -> str:
     """`key = value` from the expectation file, comments stripped."""
     if expect_file is None or not expect_file.is_file():
         return ""
-    for line in expect_file.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in expect_file.read_text(encoding="utf-8").splitlines():
         if line.lstrip().startswith("#") or "=" not in line:
             continue
         name, _, value = line.partition("=")
@@ -233,7 +233,7 @@ def main(argv: List[str]) -> int:
         sys.stderr.write(f"Missing expectation file: {args.expect}\n")
         return 2
 
-    sources = [path.read_text(encoding="utf-8", errors="replace").splitlines()
+    sources = [path.read_text(encoding="utf-8").splitlines()
                for path in args.files]
 
     hot_function = manifest_value(args.expect, "hot_function")
@@ -309,8 +309,7 @@ def main(argv: List[str]) -> int:
               f"expected_match={region_start}")
 
     if args.expect is not None:
-        for raw in args.expect.read_text(encoding="utf-8",
-                                         errors="replace").splitlines():
+        for raw in args.expect.read_text(encoding="utf-8").splitlines():
             line = raw.split("#")[0].replace("\r", "").strip()
             if not line or "=" not in line:
                 continue

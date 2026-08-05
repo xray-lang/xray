@@ -117,7 +117,7 @@ def check_include_rule(lint: Lint, rule: IncludeRule) -> None:
     for path in sources(REPO_ROOT / SRC_DIR / rule.directory, (".c", ".h")):
         relative = path.relative_to(REPO_ROOT)
         for number, line in enumerate(
-                path.read_text(encoding="utf-8", errors="replace").splitlines(),
+                path.read_text(encoding="utf-8").splitlines(),
                 start=1):
             if pattern.search(line):
                 hits.append(f"{relative}:{number}:{line}")
@@ -138,7 +138,7 @@ def check_ast_fields(lint: Lint) -> None:
     hits: List[str] = []
     if header.is_file():
         for number, line in enumerate(
-                header.read_text(encoding="utf-8", errors="replace").splitlines(),
+                header.read_text(encoding="utf-8").splitlines(),
                 start=1):
             if AST_FIELD.search(line):
                 hits.append(f"{number}:{line}")
@@ -156,7 +156,7 @@ def check_size_caps(lint: Lint) -> None:
     oversize: List[str] = []
     for path in sources(REPO_ROOT / FRONTEND, (".c",)):
         relative = str(path.relative_to(REPO_ROOT))
-        count = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+        count = len(path.read_text(encoding="utf-8").splitlines())
         if count <= C_CAP:
             continue
         ceiling = OVERSIZE_CAPS.get(relative)
@@ -177,7 +177,7 @@ def check_size_caps(lint: Lint) -> None:
     print(f"--- R10: frontend .h file size cap (≤ {H_CAP} lines) ---")
     oversize = []
     for path in sources(REPO_ROOT / FRONTEND, (".h",)):
-        count = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+        count = len(path.read_text(encoding="utf-8").splitlines())
         if count > H_CAP:
             oversize.append(f"{count} {path.relative_to(REPO_ROOT)}")
     if oversize:

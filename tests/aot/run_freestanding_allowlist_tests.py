@@ -83,7 +83,7 @@ def parse_allowlist(path: Path) -> Tuple[List[Tuple[str, str]], List[str]]:
 
 
 def analyzer_allowed_modules() -> List[str]:
-    text = ANALYZER_SOURCE.read_text(encoding="utf-8", errors="replace")
+    text = ANALYZER_SOURCE.read_text(encoding="utf-8")
     match = _ANALYZER_FUNC_RE.search(text)
     if not match:
         return []

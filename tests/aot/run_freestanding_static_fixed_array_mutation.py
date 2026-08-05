@@ -75,7 +75,7 @@ def main(argv: List[str]) -> int:
             sys.stderr.write(result.combined_text()[:8000])
             return 1
 
-        text = generated.read_text(encoding="utf-8", errors="replace")
+        text = generated.read_text(encoding="utf-8")
         for needle in REQUIRED_SHAPES:
             if needle not in text:
                 sys.stderr.write(f"FAIL: generated C missing expected storage shape: {needle}\n")

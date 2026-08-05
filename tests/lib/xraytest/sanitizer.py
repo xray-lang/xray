@@ -66,7 +66,7 @@ def configured_generator(build_dir: Path) -> Optional[str]:
     cache = cache_file(build_dir)
     if not cache.is_file():
         return None
-    for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in cache.read_text(encoding="utf-8").splitlines():
         if line.startswith("CMAKE_GENERATOR:INTERNAL="):
             return line.split("=", 1)[1].strip()
     return None
@@ -82,7 +82,7 @@ def verify_configured(build_dir: Path, required_flag: str) -> Optional[str]:
     cache = cache_file(build_dir)
     if not cache.is_file():
         return None
-    text = cache.read_text(encoding="utf-8", errors="replace")
+    text = cache.read_text(encoding="utf-8")
 
     # Two shapes. `ENABLE_ASAN=ON` is a CMake option and appears as a BOOL
     # entry; a lane that instruments via raw flags instead passes a substring

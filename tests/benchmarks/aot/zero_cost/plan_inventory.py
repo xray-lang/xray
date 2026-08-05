@@ -55,7 +55,7 @@ def search_pattern(pattern: str, scope: str) -> bool:
 
 def _file_matches(path: Path, regex) -> bool:
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return False
     return bool(regex.search(text))

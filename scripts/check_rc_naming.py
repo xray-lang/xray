@@ -57,7 +57,7 @@ def scan() -> List[str]:
             if not path.is_file() or path.suffix not in SUFFIXES:
                 continue
             try:
-                text = path.read_text(encoding="utf-8", errors="replace")
+                text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
             relative = path.relative_to(PROJECT_ROOT)

@@ -348,7 +348,7 @@ unit = "fixture"
             kept = [ln[len("Kept C source: "):].strip()
                     for ln in log.splitlines() if ln.startswith("Kept C source: ")]
             if kept and Path(kept[-1]).is_file():
-                generated = Path(kept[-1]).read_text(encoding="utf-8", errors="replace")
+                generated = Path(kept[-1]).read_text(encoding="utf-8")
                 rec.contains(generated, 'XRT_ATTR_SECTION("__TEXT,.xray_boot")',
                              "link.symbol section plan reaches generated C")
                 rec.contains(generated, "XRT_ATTR_WEAK",

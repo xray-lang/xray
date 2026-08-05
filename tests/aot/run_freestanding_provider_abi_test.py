@@ -93,7 +93,7 @@ def main(argv: List[str]) -> int:
             sys.stderr.write(result.combined_text()[:8000])
             return 1
 
-        generated = provider_c.read_text(encoding="utf-8", errors="replace")
+        generated = provider_c.read_text(encoding="utf-8")
         if HOSTED_BRIDGE_RE.search(generated):
             sys.stderr.write("freestanding provider object emitted the hosted value-ops bridge\n")
             return 1

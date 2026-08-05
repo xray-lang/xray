@@ -309,7 +309,7 @@ def run_one_case(config: Config, mode: str, xr_file: Path, ws: workspace.Workspa
         dump_text = (result.stdout + result.stderr).decode("utf-8", "replace")
         c_text = ""
         if mode == "link" and out_c.is_file():
-            c_text = expectlib.normalize_link_c(out_c.read_text(encoding="utf-8", errors="replace"))
+            c_text = expectlib.normalize_link_c(out_c.read_text(encoding="utf-8"))
         outcome = expectlib.check(exp, dump_text, c_text)
         return _verdict_from_outcome(name, mode, outcome, dump_text)
 

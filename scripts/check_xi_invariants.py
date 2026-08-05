@@ -113,7 +113,7 @@ def sources(root: Path, suffixes: Sequence[str] = (".c", ".h")) -> List[Path]:
 
 
 def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace")
+    return path.read_text(encoding="utf-8")
 
 
 def grep(roots: Sequence[Path], pattern: re.Pattern,

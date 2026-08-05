@@ -193,7 +193,7 @@ def expect_sidecars(rec: Recorder, config: Config, cache: Path, label: str) -> N
         payloads = sorted(directory.glob("*.xgpayload"))
         good = len(manifests) == 1 and len(payloads) == 1
         if good:
-            text = payloads[0].read_text(encoding="utf-8", errors="replace")
+            text = payloads[0].read_text(encoding="utf-8")
             good = ("xg-cache-payload v2 " in text and "xg-cache-request v1 " in text)
         if good:
             rec.ok(f"{label}: {phase} manifest+payload sidecars")

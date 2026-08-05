@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
 
         reports = []
         for path in sorted(ws.root.glob("tsan.*")):
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = path.read_text(encoding="utf-8")
             if TSAN_WARNING in text:
                 reports.append(text)
 

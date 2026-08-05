@@ -46,7 +46,7 @@ class WorkspaceTest(unittest.TestCase):
     def test_write_and_read_back(self):
         with workspace.Workspace("t") as ws:
             p = ws.write("a/b.txt", "content")
-            self.assertEqual(p.read_text(), "content")
+            self.assertEqual(p.read_text(encoding="utf-8"), "content")
             self.assertTrue(str(p).endswith("b.txt"))
 
     def test_use_outside_context_raises(self):

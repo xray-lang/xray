@@ -37,7 +37,7 @@ def read_test_costs(build_dir: Path) -> list[tuple[str, float]]:
     if not path.is_file():
         return []
     rows: list[tuple[str, float]] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         parts = line.split()
         if len(parts) != 3:
             continue  # the file ends with a non-cost section
@@ -61,7 +61,7 @@ def read_build_edges(build_dir: Path) -> list[tuple[str, float]]:
     if not path.is_file():
         return []
     latest: dict[str, float] = {}
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("#"):
             continue
         parts = line.split("\t")

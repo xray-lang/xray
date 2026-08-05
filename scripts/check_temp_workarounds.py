@@ -129,7 +129,7 @@ def main(argv: List[str]) -> int:
     tag_refs: Set[str] = set()
     for path in files:
         tag_refs.update(TRACKING_REF.findall(
-            path.read_text(encoding="utf-8", errors="replace")))
+            path.read_text(encoding="utf-8")))
 
     section("tag collection")
     if not tag_refs:
@@ -138,7 +138,7 @@ def main(argv: List[str]) -> int:
     section("tag block shape")
     malformed: List[str] = []
     for path in files:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
             if not TAG_HEADER.search(line):
                 continue

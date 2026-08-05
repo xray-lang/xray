@@ -70,18 +70,18 @@ class CaseKeyTest(unittest.TestCase):
     def test_expected_oracle_is_part_of_the_key(self):
         # The load-bearing invariant: change .xr.expected, the key must change,
         # or a cached binary would be diffed against a new oracle and pass.
-        (self.dir / "c.xr").write_text("print(1)\n")
-        (self.dir / "c.xr.expected").write_text("1\n")
+        (self.dir / "c.xr").write_text("print(1)\n", encoding="utf-8")
+        (self.dir / "c.xr.expected").write_text("1\n", encoding="utf-8")
         before = self._case_dir_key()
-        (self.dir / "c.xr.expected").write_text("2\n")
+        (self.dir / "c.xr.expected").write_text("2\n", encoding="utf-8")
         after = self._case_dir_key()
         self.assertNotEqual(before, after)
 
     def test_args_sidecar_is_part_of_the_key(self):
-        (self.dir / "c.xr").write_text("print(1)\n")
-        (self.dir / "c.args").write_text("--foo\n")
+        (self.dir / "c.xr").write_text("print(1)\n", encoding="utf-8")
+        (self.dir / "c.args").write_text("--foo\n", encoding="utf-8")
         before = self._case_dir_key()
-        (self.dir / "c.args").write_text("--bar\n")
+        (self.dir / "c.args").write_text("--bar\n", encoding="utf-8")
         self.assertNotEqual(before, self._case_dir_key())
 
     def test_cache_name_is_bounded_and_readable(self):
@@ -97,7 +97,7 @@ class SidecarTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="xt_bd_sc.")
         self.dir = Path(self.tmp)
         self.case = self.dir / "c.xr"
-        self.case.write_text("// anchor: my-anchor\n// diff-backends: vm,aot\nprint(1)\n")
+        self.case.write_text("// anchor: my-anchor\n// diff-backends: vm,aot\nprint(1)\n", encoding="utf-8")
 
     def tearDown(self):
         import shutil
@@ -113,7 +113,7 @@ class SidecarTest(unittest.TestCase):
         )
 
     def test_args_first_line_split(self):
-        (self.dir / "c.args").write_text("--a --b c\n")
+        (self.dir / "c.args").write_text("--a --b c\n", encoding="utf-8")
         self.assertEqual(rbd.read_args(self.case), ["--a", "--b", "c"])
 
     def test_missing_stdin_is_empty_bytes(self):
