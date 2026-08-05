@@ -137,8 +137,13 @@ CONTRACT_SPECS = (
     ContractSpec(
         "object-json-domain.md",
         (
+            "src/shared/xobject_row.h",
             "src/runtime/value/xtype.h",
             "src/runtime/value/xtype.c",
+            "src/frontend/parser/xtype_ref.h",
+            "src/frontend/parser/xtype_ref.c",
+            "src/frontend/analyzer/xanalyzer_capability.h",
+            "src/frontend/analyzer/xanalyzer_capability.c",
             "src/frontend/analyzer/xanalyzer_visitor_expr.c",
             "src/analysis/xglobal_summary.h",
             "src/ir/xi.h",

@@ -585,7 +585,7 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
         h = fold_u64(h, 0);
     }
     h = fold_u64(h, t->fixed_length);
-    h = fold_u64(h, t->extensible ? 1 : 0);
+    h = fold_u64(h, (uint64_t) t->object_row_mode);
     if (t->name)
         h = fold_bytes(h, t->name, strlen(t->name));
     for (uint8_t i = 0; i < t->nchildren; i++)

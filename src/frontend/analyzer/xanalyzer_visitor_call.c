@@ -6003,8 +6003,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            // Validate: target must be a sealed Record type with known fields.
-            if (!target_type || !XR_TYPE_IS_RECORD(target_type) || !target_type->object.is_sealed ||
+            // Validate: target must be an exact structural type with known fields.
+            if (!target_type || !xr_type_object_row_is_exact(target_type) ||
                 target_type->object.field_count == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};

@@ -503,7 +503,7 @@ static void sig_type_ref(SigBuf *s, const XrTypeRef *ref) {
         sig_add(s, "/s%u", (unsigned) ref->scalar_rep);
     if (ref->builtin_spelling)
         sig_add(s, "/b%u", (unsigned) ref->builtin_spelling);
-    if (ref->extensible)
+    if (ref->object_row_mode == XR_OBJECT_ROW_OPEN)
         sig_add(s, "/ext");
     if (ref->requires_nothrow)
         sig_add(s, "/nothrow");

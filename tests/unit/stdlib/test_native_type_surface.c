@@ -64,7 +64,7 @@ TEST(native_module_record_and_enum_metadata) {
     XrType *record_type = xa_builtin_record_decl_type(iso, record);
     ASSERT_NOT_NULL(record_type);
     ASSERT_EQ_INT(record_type->kind, XR_KIND_RECORD);
-    ASSERT_TRUE(record_type->object.is_sealed);
+    ASSERT_EQ_INT(record_type->object.row_mode, XR_OBJECT_ROW_EXACT);
     ASSERT_EQ_INT(record_type->object.field_count, 2);
 
     const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");

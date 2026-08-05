@@ -247,11 +247,11 @@ XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **
 
 XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names_src,
                                   XrTypeRef **field_types, const bool *field_readonly, int count,
-                                  bool extensible) {
+                                  XrObjectRowMode row_mode) {
     XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_OBJECT;
     t->nchildren = (uint8_t) count;
-    t->extensible = extensible;
+    t->object_row_mode = row_mode;
     if (count > 0) {
         t->children = tref_copy_children(session, field_types, count);
         t->field_names =
@@ -441,7 +441,7 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
                 tref_append(buf, pos, cap, ": ");
                 tref_to_str_impl(t->children[i], buf, pos, cap);
             }
-            if (t->extensible)
+            if (t->object_row_mode == XR_OBJECT_ROW_OPEN)
                 tref_append(buf, pos, cap, ", ...");
             tref_append(buf, pos, cap, " }");
             break;

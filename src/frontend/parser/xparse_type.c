@@ -272,7 +272,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             for (int i = 0; i < count; i++)
                 fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
             XrTypeRef *obj = xr_tref_object(parser->compiler_session, src->field_names, fields,
-                                            src->field_readonly, count, src->extensible);
+                                            src->field_readonly, count, src->object_row_mode);
             if (src->name)
                 obj->name = ast_strdup(parser->compiler_session, src->name);
             return obj;
@@ -668,7 +668,8 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
         XrTypeRef *result = xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly,
-                                           field_count, allow_extension);
+                                           field_count, allow_extension ? XR_OBJECT_ROW_OPEN
+                                                                        : XR_OBJECT_ROW_EXACT);
         for (int i = 0; i < field_count; i++)
             xr_free((void *) fnames[i]);
         xr_free(fnames);

@@ -6467,7 +6467,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0 &&
             call->type_arg_count == 1 && call->arg_count == 1) {
             struct XrType *result_type = xi_lower_node_type(l, node);
-            if (result_type && XR_TYPE_IS_RECORD(result_type) && result_type->object.is_sealed &&
+            if (result_type && xr_type_object_row_is_exact(result_type) &&
                 result_type->object.field_count > 0) {
                 int fc = result_type->object.field_count;
                 XiValue *data_val = xi_lower_expr(l, call->arguments[0]);
@@ -10031,7 +10031,7 @@ static XiValue *lower_record_shape_narrow(XiLower *l, XiValue *val, struct XrTyp
 /* True when `type` is a Record whose full field set is known at compile time,
  * i.e. the only form a runtime shape check can be built from. */
 static bool xi_type_is_checkable_record(struct XrType *type) {
-    return type && XR_TYPE_IS_RECORD(type) && type->object.is_sealed &&
+    return xr_type_object_row_is_exact(type) &&
            type->object.field_count > 0 && type->object.field_names != NULL;
 }
 

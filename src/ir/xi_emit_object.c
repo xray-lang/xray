@@ -642,8 +642,9 @@ static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType 
         xr_free(value_kinds);
         return NULL;
     }
-    XrClass *cls = xr_class_build_record_chain(ctx->isolate, type->object.field_names, value_kinds,
-                                               field_count, nested_classes, type->object.is_sealed);
+    XrClass *cls = xr_class_build_record_chain(
+        ctx->isolate, type->object.field_names, value_kinds, field_count, nested_classes,
+        xr_type_object_row_is_exact(type));
     xr_free(nested_classes);
     xr_free(value_kinds);
     return cls;
@@ -668,7 +669,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * field storage machinery but use separate roots and builtin kinds. */
     int n = field_count > 0 ? field_count : 0;
     bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
-    bool sealed = is_record ? v->type->object.is_sealed : false;
+    bool sealed = is_record ? xr_type_object_row_is_exact(v->type) : false;
     XrClass *cls =
         is_record ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, NULL, sealed)
                   : xr_class_build_json_chain(ctx->isolate, field_names, n, false);

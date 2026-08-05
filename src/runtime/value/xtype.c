@@ -22,6 +22,30 @@
 
 #include "xtype_internal.h"
 
+bool xr_type_is_json_value(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_NULL:
+        case XR_KIND_BOOL:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_JSON:
+            return true;
+        case XR_KIND_UNION:
+            if (type->union_type.member_count <= 0 || !type->union_type.members)
+                return false;
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (!xr_type_is_json_value(type->union_type.members[i]))
+                    return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
 uint8_t xr_type_json_value_kind(const XrType *type) {
     uint8_t kind;
     if (!type)
@@ -65,8 +89,9 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
         return false;
     uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
     if (base == XR_JSON_VALUE_RECORD) {
-        if (!XR_TYPE_IS_RECORD(type) || !type->object.is_sealed || type->object.field_count <= 0 ||
-            !type->object.field_names || !type->object.field_types)
+        if (!XR_TYPE_IS_RECORD(type) || !xr_type_object_row_is_exact(type) ||
+            type->object.field_count <= 0 || !type->object.field_names ||
+            !type->object.field_types)
             return false;
         for (int i = 0; i < type->object.field_count; i++) {
             if (!xr_type_is_json_decode_field_supported_depth(type->object.field_types[i],
@@ -134,6 +159,7 @@ static void xr_type_global_init_once(void) {
     // returning nothing and as the unique value of the empty tuple literal.
     init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, XR_SCALAR_REP_NONE);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, XR_SCALAR_REP_NONE);
+    g_type_json.object.allows_runtime_extension = true;
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, XR_NATIVE_I64);
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, XR_NATIVE_F64);
@@ -351,7 +377,8 @@ XrType *xr_type_new_json(XrVMRuntime *X) {
 }
 
 static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const char **names,
-                                        XrType **types, int count, bool is_sealed) {
+                                        XrType **types, int count, XrObjectRowMode row_mode,
+                                        bool allows_runtime_extension) {
     if (count < 0)
         return NULL;
     if (count > 0 && (!names || !types))
@@ -377,18 +404,20 @@ static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const c
             type->object.field_types[i] = types[i];
         }
     }
-    type->object.is_sealed = is_sealed;
+    type->object.row_mode = row_mode;
+    type->object.allows_runtime_extension = allows_runtime_extension;
     return type;
 }
 
 XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                       int count, bool is_sealed) {
-    return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, is_sealed);
+                                       int count, XrObjectRowMode row_mode) {
+    return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, row_mode, false);
 }
 
 XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
-                                     bool is_sealed) {
-    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, is_sealed);
+                                     bool allows_runtime_extension) {
+    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, XR_OBJECT_ROW_EXACT,
+                                    allows_runtime_extension);
 }
 
 XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
@@ -1311,7 +1340,8 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                            field_readonly_size);
                 }
             }
-            copy->object.is_sealed = type->object.is_sealed;
+            copy->object.row_mode = type->object.row_mode;
+            copy->object.allows_runtime_extension = type->object.allows_runtime_extension;
             break;
         case XR_KIND_TYPE_PARAM:
             copy->type_param.name =
@@ -1635,7 +1665,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
     // Json value-domain compatibility. External heap/container values do not
     // implicitly cross into Json; literal contexts must type them as Json.
-    if (XR_TYPE_IS_JSON(target) && !target->object.is_sealed) {
+    if (XR_TYPE_IS_JSON(target) && target->object.allows_runtime_extension) {
         switch (source->kind) {
             case XR_KIND_JSON:
             case XR_KIND_NULL:
@@ -1658,6 +1688,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             return true;
         if (XR_TYPE_IS_JSON(source) && source->object.field_count == 0)
             return true;
+        if (XR_TYPE_IS_RECORD(target) && target->object.row_mode == XR_OBJECT_ROW_EXACT &&
+            source->object.row_mode == XR_OBJECT_ROW_OPEN)
+            return false;
 
         // Check structural compatibility (source has all target fields)
         for (int i = 0; i < target->object.field_count; i++) {
@@ -1673,43 +1706,44 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     strcmp(target->object.field_names[i], source->object.field_names[j]) == 0) {
                     if (target_field_type && source->object.field_types) {
                         XrType *source_field_type = source->object.field_types[j];
-                        /* A nullable Record field is optional when absent, but an
-                         * explicitly present `null` value must also be checked
-                         * against the nullable target itself. Stripping `?` here
-                         * made a contextually typed literal reject its own shape. */
+                        /* A nullable object field is optional when absent, but an
+                         * explicitly present null value must still be checked
+                         * against the nullable target itself. */
                         if (!xr_type_assignable(target_field_type, source_field_type)) {
                             return false;
                         }
-                        /* Object shapes are reference values with mutable
-                         * fields, so a field accepted only in the widening
-                         * direction is unsound: the wider view can store a
-                         * value the narrower view still promises to hold at its
-                         * own type.  Fields are therefore invariant, matching
-                         * Array, Map, Slice and fixed-length arrays.  A literal
-                         * `null` stays acceptable for a nullable field because
-                         * it denotes the absent value rather than a narrower
-                         * field type that could later be read back.
-                         *
-                         * A nullable target field is optional, not a variance
-                         * position: writing `int` into `int?` is how every
-                         * options record is spelled (`{url, timeoutMs}` against
-                         * `{url, method: string?, timeoutMs: int?}`), so the
-                         * reverse direction is not required there. */
+                        /* Object fields are invariant because an open-row view
+                         * may write a declared field through an alias. A literal
+                         * null is the sole value-level exception: it initializes
+                         * an absent nullable slot and does not create a narrower
+                         * mutable field contract. Contextual object literals use
+                         * the declared field type for every other initialized
+                         * slot. */
                         if (!XR_TYPE_IS_NULL(source_field_type) &&
-                            !target_field_type->is_nullable &&
                             !xr_type_assignable(source_field_type, target_field_type)) {
                             return false;
                         }
+                        bool target_readonly = target->object.field_readonly
+                                                   ? target->object.field_readonly[i]
+                                                   : false;
+                        bool source_readonly = source->object.field_readonly
+                                                   ? source->object.field_readonly[j]
+                                                   : false;
+                        /* A mutable object may be viewed through a readonly
+                         * field capability, but a readonly source must never be
+                         * widened to a mutable target. */
+                        if (!target_readonly && source_readonly)
+                            return false;
                     }
                     found = true;
                     break;
                 }
             }
-            if (!found && !is_optional && target->object.is_sealed) {
+            if (!found && !is_optional) {
                 return false;
             }
         }
-        if (target->object.is_sealed) {
+        if (!xr_type_object_accepts_extra_fields(target)) {
             for (int j = 0; j < source->object.field_count; j++) {
                 if (!source->object.field_names || !source->object.field_names[j])
                     continue;
@@ -2013,8 +2047,8 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
         target->kind != source->kind)
         return false;
 
-    /* 1. Extra field the sealed target does not declare. */
-    if (target->object.is_sealed && source->object.field_names) {
+    /* 1. Extra field an exact target does not declare. */
+    if (!xr_type_object_accepts_extra_fields(target) && source->object.field_names) {
         for (int j = 0; j < source->object.field_count; j++) {
             const char *sf = source->object.field_names[j];
             if (sf && object_shape_field_index_by_name(target, sf) < 0) {
@@ -2230,7 +2264,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(a)) {
         if (a->object.field_count != b->object.field_count)
             return false;
-        if (a->object.is_sealed != b->object.is_sealed)
+        if (a->object.row_mode != b->object.row_mode ||
+            a->object.allows_runtime_extension != b->object.allows_runtime_extension)
             return false;
         for (int i = 0; i < a->object.field_count; i++) {
             if (!a->object.field_names || !b->object.field_names)

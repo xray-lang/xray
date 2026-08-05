@@ -1014,7 +1014,9 @@ XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *recor
         names[i] = record->fields[i].name;
         types[i] = xa_builtin_parse_type_string(X, record->fields[i].type_str);
     }
-    XrType *type = xr_type_new_record_with_fields(X, names, types, count, record->is_sealed);
+    XrType *type = xr_type_new_record_with_fields(
+        X, names, types, count,
+        record->is_sealed ? XR_OBJECT_ROW_EXACT : XR_OBJECT_ROW_OPEN);
     xr_free(names);
     xr_free(types);
     return type ? type : xr_type_new_error(X);

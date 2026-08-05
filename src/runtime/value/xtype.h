@@ -28,6 +28,7 @@
 #include "../../shared/xr_json_type.h"
 #include "../../shared/xr_scalar_type.h"
 #include "../../shared/xr_conversion.h"
+#include "../../shared/xobject_row.h"
 
 /* ========== XrRep - Machine Representation ========== */
 /*
@@ -169,15 +170,16 @@ typedef enum XrViewReturnSourceKind {
     XR_VIEW_RETURN_UNKNOWN,
 } XrViewReturnSourceKind;
 
-// ObjectShape metadata shared by Record and Json object values.
-// is_sealed=true means fixed fields (no runtime extension).
+// Object-shape metadata shared by structural and Json object types. Row
+// compatibility and runtime Json extension are deliberately orthogonal.
 typedef struct XrObjectType {
     const char **field_names;  // Field names array
     XrType **field_types;      // Field types array (parallel to names)
     bool *field_readonly;      // Per-field readonly flags (optional)
     int field_count;           // Number of fields
     const char *type_name;     // NULL for anonymous, name for type alias
-    bool is_sealed;            // true = fixed fields, false = extensible at runtime
+    XrObjectRowMode row_mode;       // structural assignment relation
+    bool allows_runtime_extension;  // Json-only dynamic field transition
 } XrObjectType;
 
 // Type structure
@@ -755,10 +757,13 @@ XR_FUNC XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type);
 
 // API: Object types
 XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
+/* Whether every value represented by this static type is already a member of
+ * the Json value domain. This is deliberately narrower than encodability. */
+XR_FUNC bool xr_type_is_json_value(const XrType *type);
 XR_FUNC XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                               int count, bool is_sealed);
+                                               int count, XrObjectRowMode row_mode);
 XR_FUNC XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                             int count, bool is_sealed);
+                                             int count, bool allows_runtime_extension);
 XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
                                                int count);
 XR_FUNC void xr_type_set_object_type_name(XrVMRuntime *X, XrType *type, const char *name);
@@ -853,6 +858,24 @@ static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
     return t && t->kind == XR_KIND_JSON;
 }
 
+static inline bool xr_type_object_row_is_exact(const XrType *type) {
+    return type && XR_TYPE_IS_RECORD(type) && type->object.row_mode == XR_OBJECT_ROW_EXACT;
+}
+
+static inline bool xr_type_object_fields_are_closed(const XrType *type) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
+        return false;
+    return XR_TYPE_IS_RECORD(type) || !type->object.allows_runtime_extension;
+}
+
+static inline bool xr_type_object_accepts_extra_fields(const XrType *type) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
+        return false;
+    if (XR_TYPE_IS_RECORD(type))
+        return type->object.row_mode == XR_OBJECT_ROW_OPEN;
+    return type->object.allows_runtime_extension;
+}
+
 // Json is a closed data-exchange value domain. External Xray heap values do
 // not flow into it implicitly; use Json.encode at that boundary. Json literal
 // contexts are handled by the analyzer by typing nested array/object literals
@@ -861,7 +884,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
 
-    if (target->kind == XR_KIND_JSON && !target->object.is_sealed) {
+    if (target->kind == XR_KIND_JSON && target->object.allows_runtime_extension) {
         switch (source->kind) {
             case XR_KIND_JSON:
             case XR_KIND_UNKNOWN:
@@ -880,7 +903,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
         return false;
     if (xr_kind_is_primitive(target->kind))
         return true;
-    if (target->kind == XR_KIND_JSON && !target->object.is_sealed)
+    if (target->kind == XR_KIND_JSON && target->object.allows_runtime_extension)
         return true;
     // Union of Json-compatible types.
     if (target->kind == XR_KIND_UNION) {

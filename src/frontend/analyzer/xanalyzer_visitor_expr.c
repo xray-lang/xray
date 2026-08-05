@@ -2699,7 +2699,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             record_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, field_idx, result_ft, false);
             return result_ft;
         }
-        if (obj_type->object.is_sealed) {
+        if (xr_type_object_fields_are_closed(obj_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             snprintf(msg, sizeof(msg), "type '%s' has no field '%s'",
@@ -2854,7 +2854,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                     }
                 }
             }
-            if (container->object.is_sealed) {
+            if (xr_type_object_fields_are_closed(container)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
@@ -2884,7 +2884,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                                  false);
                 return result;
             }
-            if (container->object.is_sealed) {
+            if (xr_type_object_fields_are_closed(container)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
@@ -2894,16 +2894,13 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
-            return xr_type_new_unknown(NULL);
-        }
-        if (container->object.is_sealed) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                "structural object index requires a string literal field name", &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
         }
-        return xr_type_new_unknown(NULL);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "structural object index requires a string literal field name", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     /* User-defined subscript operators are ordinary instance members at runtime, but indexed
@@ -3509,16 +3506,18 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
 
 // Add (name, type) to the unified field list, overriding the type if `name`
 // is already present (later object-literal entries / spread parts win).
-static void object_union_add(const char **names, XrType **types, int *n, const char *name,
-                             XrType *type) {
+static void object_union_add(const char **names, XrType **types, bool *readonly, int *n,
+                             const char *name, XrType *type, bool is_readonly) {
     for (int k = 0; k < *n; k++) {
         if (names[k] && name && strcmp(names[k], name) == 0) {
             types[k] = type;
+            readonly[k] = is_readonly;
             return;
         }
     }
     names[*n] = name;
     types[*n] = type;
+    readonly[*n] = is_readonly;
     (*n)++;
 }
 
@@ -3545,16 +3544,16 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                 "empty object literal '{}' requires an explicit Record or Json context", &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
         }
-        return xr_type_new_record_with_fields(ctx->analyzer->isolate, NULL, NULL, 0,
-                                              expected->object.is_sealed);
     }
 
     // Pass 1: infer each entry's contributing type exactly once (a spread
     // contributes its source object, a normal entry contributes its value),
     // and bound the unified field set. The result field set is the union of
     // every statically-known source field plus each literal key.
-    XrType **entry_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) obj->count);
-    int cap = 0;
+    XrType **entry_types = obj->count > 0
+                               ? (XrType **) xr_malloc(sizeof(XrType *) * (size_t) obj->count)
+                               : NULL;
+    int cap = record_context ? expected->object.field_count : 0;
     for (int i = 0; i < obj->count; i++) {
         AstNode *val = obj->values[i];
         if (val && val->type == AST_SPREAD_EXPR) {
@@ -3583,7 +3582,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                                   .column = obj->keys[i] ? obj->keys[i]->column : node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                           "sealed Record literal requires static field names; "
+                                           "structural object literal requires static field names; "
                                            "use an explicit Json context for computed keys",
                                            &loc);
             }
@@ -3642,6 +3641,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     // Pass 2: build the unified field set in first-appearance order.
     const char **field_names = (const char **) xr_malloc(sizeof(char *) * (size_t) cap);
     XrType **field_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) cap);
+    bool *field_readonly = (bool *) xr_calloc((size_t) cap, sizeof(bool));
     int n = 0;
     for (int i = 0; i < obj->count; i++) {
         AstNode *val = obj->values[i];
@@ -3655,7 +3655,11 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                     if (!fname)
                         continue;
                     XrType *ftype = src->object.field_types ? src->object.field_types[j] : NULL;
-                    object_union_add(field_names, field_types, &n, fname, ftype);
+                    bool readonly = src->object.field_readonly
+                                        ? src->object.field_readonly[j]
+                                        : false;
+                    object_union_add(field_names, field_types, field_readonly, &n, fname, ftype,
+                                     readonly);
                 }
             }
             // Dynamic Json source: fields unknown at compile time; they are merged
@@ -3669,8 +3673,49 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                 else if (obj->keys[i]->type == AST_LITERAL_STRING)
                     fname = obj->keys[i]->as.literal.raw_value.string_val;
             }
-            if (fname)
-                object_union_add(field_names, field_types, &n, fname, entry_types[i]);
+            if (fname) {
+                XrType *field_type = entry_types[i];
+                bool readonly = false;
+                if (record_context && expected->object.field_names &&
+                    expected->object.field_types) {
+                    int expected_idx = object_shape_field_index(expected, fname);
+                    if (expected_idx >= 0 &&
+                        xa_typecheck_assignable(expected->object.field_types[expected_idx],
+                                                field_type)) {
+                        field_type = expected->object.field_types[expected_idx];
+                        readonly = expected->object.field_readonly
+                                       ? expected->object.field_readonly[expected_idx]
+                                       : false;
+                    }
+                }
+                object_union_add(field_names, field_types, field_readonly, &n, fname, field_type,
+                                 readonly);
+            }
+        }
+    }
+
+    /* An omitted optional field still owns a concrete null slot. This keeps
+     * the allocation descriptor exact while preserving the source evaluation
+     * order of fields that do have initializers. */
+    if (record_context && expected->object.field_names && expected->object.field_types) {
+        for (int i = 0; i < expected->object.field_count; i++) {
+            XrType *field_type = expected->object.field_types[i];
+            if (!field_type || !field_type->is_nullable)
+                continue;
+            const char *name = expected->object.field_names[i];
+            bool readonly = expected->object.field_readonly
+                                ? expected->object.field_readonly[i]
+                                : false;
+            bool found = false;
+            for (int j = 0; j < n; j++) {
+                if (field_names[j] && name && strcmp(field_names[j], name) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                object_union_add(field_names, field_types, field_readonly, &n, name, field_type,
+                                 readonly);
         }
     }
 
@@ -3679,20 +3724,24 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         type = xr_type_new_json(ctx->analyzer->isolate);
     else if (result_is_json)
         type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
-                                            false);
+                                            true);
     else
         type = xr_type_new_record_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
-                                              record_context ? expected->object.is_sealed : true);
+                                              XR_OBJECT_ROW_EXACT);
+    if (type && n > 0)
+        xr_type_set_object_field_readonly(ctx->analyzer->isolate, type, field_readonly, n);
     xr_free(entry_types);
     xr_free(field_names);
     xr_free(field_types);
+    xr_free(field_readonly);
 
     /* Once a contextual Record literal has been structurally validated, keep
      * the declared shape on the expression. Lowering then allocates omitted
      * optional fields as null slots instead of compacting later fields into
      * the wrong ordinal. Invalid literals retain their inferred shape so the
      * caller still reports the normal assignment mismatch. */
-    if (record_context && xa_typecheck_assignable(expected, type))
+    if (record_context && xr_type_object_row_is_exact(expected) &&
+        xa_typecheck_assignable(expected, type))
         return expected;
 
     return type;
@@ -4625,7 +4674,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                     return xa_optional_nullable_result(ctx, node, base_type->object.field_types[i]);
                 }
             }
-            if (base_type->object.is_sealed) {
+            if (xr_type_object_fields_are_closed(base_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];

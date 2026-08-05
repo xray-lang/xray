@@ -45,9 +45,14 @@ Status: frozen before the object-surface convergence.
 
 ## Digest anchors
 
-anchor-sha256: src/runtime/value/xtype.h 1f0e1b8129b20d80d527cccc341bb22fffd34b1e1fd83eb252da7d23e2669317
-anchor-sha256: src/runtime/value/xtype.c cdcb51dcfa1814b89517fb0a57dad9ee84391ae502fcf1e24865224116d80a21
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c e8dca206b2b56e2b8884573452a1d5eb7ac08895b00ded4d43073a3cd1d24c02
+anchor-sha256: src/shared/xobject_row.h 5057c952ae0f809e3aaec6e4c48f64ece296af550a7cd2f23ac36185b2c0f170
+anchor-sha256: src/runtime/value/xtype.h 1707a847fdc694f97880c5940306d5bd981027c36ac6053e7036b5a23fe5582a
+anchor-sha256: src/runtime/value/xtype.c 319d714a614b1240530b41574618ebf56bfcc28948b5ae05cc8944fbb82523e0
+anchor-sha256: src/frontend/parser/xtype_ref.h 13f55898123e2f92fc61233dbfa4f844981307a86df90a4495cd7796e72370ca
+anchor-sha256: src/frontend/parser/xtype_ref.c 2c4531e3451f4c277077de6d778897e33fb5bbb3cee7e531efc94b60af68aa03
+anchor-sha256: src/frontend/analyzer/xanalyzer_capability.h 94c7b2c2f02b92c6bd324e7719dba1afadb52faf0b0f03bf6dd4ac4164d96123
+anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c 8ed8173e90f05be19b9d103b346639e592dc2e356cf607800a5f34338ab43c35
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c d5c3bfd1956f53272f3fcd4ab3adb8dae4b9883e3bfd8a2a689c23471edbe329
 anchor-sha256: src/analysis/xglobal_summary.h 2230be70b30a147c5b885e2e5ab8a1db80354b8cc0f0cf7d78f97d0a61a67d3d
 anchor-sha256: src/ir/xi.h 54e3d1e1fc1331504e00fff388dc8cbd04d7b1b5610a0add79449824d5f6cc91
 anchor-sha256: xisa/xi/ops.def edac98373bbcbca5c894aabf853c96b12abc977c5ef12d172c853f389d06c132

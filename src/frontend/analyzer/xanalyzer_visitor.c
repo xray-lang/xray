@@ -5685,7 +5685,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (obj_type->object.is_sealed) {
+                } else if (xr_type_object_fields_are_closed(obj_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(obj_type), ms->member);
@@ -6738,15 +6738,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (array_type->object.is_sealed) {
+                } else if (xr_type_object_fields_are_closed(array_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(array_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type && XR_TYPE_IS_RECORD(array_type) &&
-                       array_type->object.is_sealed) {
+            } else if (array_type && XR_TYPE_IS_RECORD(array_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

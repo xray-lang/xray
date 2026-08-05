@@ -219,7 +219,10 @@ const char *xr_type_to_string(XrType *type) {
                     remaining -= n;
                     printed++;
                 }
-                if (has_computed && remaining > 5) {
+                if ((has_computed ||
+                     (XR_TYPE_IS_RECORD(type) &&
+                      type->object.row_mode == XR_OBJECT_ROW_OPEN)) &&
+                    remaining > 5) {
                     n = snprintf(ptr, remaining, ",...");
                     ptr += n;
                     remaining -= n;
