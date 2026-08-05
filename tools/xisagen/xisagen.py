@@ -20,6 +20,8 @@ Usage:
   python3 xisagen.py test
 """
 
+from __future__ import annotations
+
 import sys
 import re
 import os
@@ -135,7 +137,7 @@ class SList(SExpr):
             return v.str_value
         return default
 
-    def get_kw_list(self, keyword: str) -> 'SList' | None:
+    def get_kw_list(self, keyword: str) -> SList | None:
         v = self.get_kw(keyword)
         if isinstance(v, SList):
             return v
