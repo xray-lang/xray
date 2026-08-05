@@ -1,0 +1,31 @@
+// Every parallel API with its optional `options` argument omitted. The default
+// comes from the library's own `options: Options = Options()`, and for the
+// generic APIs monomorphization materializes it into the call, so the AOT
+// fastpath sees an Options argument that no caller wrote. It used to reject
+// exactly those and refuse to build -- forEach stayed green only because it is
+// not generic and so never had the default filled in.
+import parallel
+// The second import is load-bearing, not decoration: a library default
+// argument is currently resolved in the CALLER's scope, so the stdlib's own
+// `options: Options = Options()` fails to type-check at any call site that has
+// not itself imported Options. Removing this line does not tidy the case, it
+// makes every call below stop compiling. See xray-docs/known_bugs.md.
+import { Options } from parallel
+
+const seen = Atomic<int>(0)
+parallel.forEach(0..5, (i) -> {
+    seen.add(i, Ordering.Relaxed)
+})
+print(seen.load(Ordering.Relaxed))
+
+var squares = parallel.map(0..4, (i) -> i * i)
+print(len(squares))
+print(squares[3])
+
+var out: Array<int> = [0, 0, 0]
+parallel.mapInto(1..4, ref out, (i) -> i + 10)
+print(len(out))
+print(out[2])
+
+var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b)
+print(total)

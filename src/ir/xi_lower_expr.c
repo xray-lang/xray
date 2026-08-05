@@ -1491,32 +1491,6 @@ static bool lower_call_object_is_module(XiLower *l, AstNode *object, const char 
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
-static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee,
-                                                     const char *module_name) {
-    if (!l || !l->analyzer || !callee || callee->type != AST_VARIABLE || !module_name)
-        return NULL;
-
-    VariableNode *var = &callee->as.variable;
-    XaSymbol *sym = NULL;
-    if (var->symbol_id)
-        sym = xa_scope_lookup_by_id(l->analyzer->global_scope, var->symbol_id);
-    if (!sym && var->name)
-        sym = xa_analyzer_lookup(l->analyzer, var->name);
-    if (!sym && var->name)
-        sym = xa_analyzer_lookup_in_scope(l->analyzer, var->name, l->analyzer->global_scope);
-    if (!sym && var->name)
-        sym = xa_analyzer_lookup_deep(l->analyzer, var->name);
-    if (!sym)
-        return NULL;
-
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    if (!links || !links->module_name || strcmp(links->module_name, module_name) != 0)
-        return NULL;
-
-    return links->import_member_name ? links->import_member_name
-                                     : (sym->name ? sym->name : var->name);
-}
-
 static const XaParallelCallPlan *lower_analyzer_parallel_call_plan(XiLower *l, AstNode *call_node) {
     if (!l || !l->analyzer || !call_node)
         return NULL;
@@ -7449,20 +7423,23 @@ static bool parallel_call_int_literal_value(AstNode *node, int64_t *out) {
     return false;
 }
 
-static bool parallel_call_options_ctor_is_parallel(XiLower *l, AstNode *callee) {
-    callee = parallel_call_unwrap_grouping(callee);
-    if (!callee)
+/* What makes an argument parallel.Options is the identity of the value it
+ * constructs, not how the call was spelled. Matching the callee text instead
+ * only recognised an Options the CALLER wrote, because both spellings it
+ * accepted -- a bare name imported from `parallel`, or `parallel.Options` --
+ * are facts about the caller's import list. The default argument that fills an
+ * omitted `options: Options = Options()` comes from the library's own
+ * declaration, where `Options` is simply in scope and carries no import
+ * provenance, so every defaulted call was rejected and fell off the fastpath.
+ * The semantic type id is the same identity the Plan methods already key on,
+ * and it does not change with the caller's imports or with whether the stdlib
+ * was read from disk or from the embedded copy. */
+static bool parallel_call_options_is_parallel(XiLower *l, AstNode *options_call) {
+    if (!l || !l->analyzer || !options_call)
         return false;
-    if (callee->type == AST_VARIABLE) {
-        const char *member = lower_call_callee_imported_member(l, callee, "parallel");
-        return member && strcmp(member, "Options") == 0;
-    }
-    if (callee->type == AST_MEMBER_ACCESS) {
-        MemberAccessNode *ma = &callee->as.member_access;
-        return ma->name && strcmp(ma->name, "Options") == 0 &&
-               lower_call_object_is_module(l, ma->object, "parallel");
-    }
-    return false;
+    struct XrType *type = xa_analyzer_get_node_type(l->analyzer, options_call);
+    return type && XR_TYPE_IS_INSTANCE(type) &&
+           type->semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_OPTIONS;
 }
 
 static AstNode *parallel_call_options_workers_ast(XiLower *l, AstNode *options_arg,
@@ -7473,7 +7450,7 @@ static AstNode *parallel_call_options_workers_ast(XiLower *l, AstNode *options_a
     if (!options_arg || options_arg->type != AST_CALL_EXPR)
         return NULL;
     CallExprNode *ctor = &options_arg->as.call_expr;
-    if (!parallel_call_options_ctor_is_parallel(l, ctor->callee))
+    if (!parallel_call_options_is_parallel(l, options_arg))
         return NULL;
     if (ctor->arg_count == 0) {
         if (out_supported)
