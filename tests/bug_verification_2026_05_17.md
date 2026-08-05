@@ -63,8 +63,8 @@ captured.
 
 | ID | Script | Perturbation | Expected | Observed |
 |---|---|---|---|---|
-| C.4.1 | `scripts/check_temp_workarounds.sh` | Delete the `sweep-flush` row from `tests/known_temp_workarounds.md` | tag without matching row | exit=1, "source tags without a matching row: sweep-flush" |
-| C.4.2 | `scripts/check_temp_workarounds.sh` | Rename `"throw-heap-type"` to `"throw-heap-type-XX"` in `src/jit/xm_jit_runtime.c` | mismatch reported in both directions | exit=1, "source tags without a matching row: throw-heap-type-XX" + "table rows without a matching source tag: throw-heap-type" |
+| C.4.1 | `scripts/check_temp_workarounds.py` | Delete the `sweep-flush` row from `tests/known_temp_workarounds.md` | tag without matching row | exit=1, "source tags without a matching row: sweep-flush" |
+| C.4.2 | `scripts/check_temp_workarounds.py` | Rename `"throw-heap-type"` to `"throw-heap-type-XX"` in `src/jit/xm_jit_runtime.c` | mismatch reported in both directions | exit=1, "source tags without a matching row: throw-heap-type-XX" + "table rows without a matching source tag: throw-heap-type" |
 | E.5.1 | `scripts/check_codegen_invariants.sh` (E.1) | Append a `switch / default: break;` block to `src/jit/xm_jit_runtime.c` | new silent fallback rejected | exit=1, "FAIL: new silent fallback(s) introduced outside baseline" |
 | E.5.2 | `scripts/check_codegen_invariants.sh` (E.2) | Append `void deprecated_call(void) {}` to `src/jit/xm_jit_runtime.c` | legacy/banned name rejected | exit=1, "FAIL: legacy wrapper / compat shim found: src/jit/xm_jit_runtime.c:1690:void deprecated_call(void) {}" |
 

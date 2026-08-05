@@ -4,12 +4,12 @@
 #
 # WHY THIS FILE EXISTS
 #
-# scripts/run_regression_tests.sh has zero CMakeLists references and no ctest
+# scripts/run_regression_tests.py has zero CMakeLists references and no ctest
 # entry: 457 regression cases had no gate at all, and 48 of them had rotted
 # unnoticed. Wiring the corpus straight in as a hard gate would have made every
 # tier red on arrival and taught everyone to ignore it.
 #
-# So the corpus is gated from today forward: scripts/t.sh fails on any failure
+# So the corpus is gated from today forward: scripts/t.py fails on any failure
 # NOT listed here, and also fails when a listed case starts passing without
 # being removed. The list can only shrink.
 #
@@ -20,14 +20,11 @@
 #
 # One test path per line. Comments and blanks ignored.
 # ----------------------------------------------------------------------------
-0661_json_object_field_boundary.xr
 0731_string_byte_rune_surface.xr
 0835_this_in_closure.xr
 0895_struct_basic.xr
 0900_struct_operators.xr
 0903_struct_equality.xr
-0914_hashable_contract.xr
-0915_shared_for_go.xr
 0954_panic_info_inheritance.xr
 0955_panic_info_stack_array.xr
 1144_coro_monitor.xr
@@ -36,8 +33,6 @@
 1162_overlapping_await_any_waiters.xr
 1172_enum_descriptor_erased_transfer.xr
 1172_module_readonly_capture.xr
-1306_toml_basic.xr
-1307_toml_advanced.xr
 1370_tuple_generic_args.xr
 1411_url_parse.xr
 1438_ws_self_connect.xr

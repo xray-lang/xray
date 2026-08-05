@@ -8,7 +8,7 @@ reported by `xray build --native --verbose`.
 Run:
 
 ```sh
-tests/benchmarks/compiler/global_evidence_cache/run_benchmark.sh build/xray
+tests/benchmarks/compiler/global_evidence_cache/run_benchmark.py build/xray
 ```
 
 Useful environment:

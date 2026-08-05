@@ -7,7 +7,7 @@
 > contract, peer to `tests/known_failures.txt` and
 > `tests/baseline_silent_fallback.txt`.
 >
-> **Hard rules** (enforced by `scripts/check_temp_workarounds.sh` in CI):
+> **Hard rules** (enforced by `scripts/check_temp_workarounds.py` in CI):
 > - Every `DEFENSIVE-TEMP[NNN]` tag in source code MUST have a row here.
 > - Every row here MUST have at least one matching tag in source code.
 > - When a tag is removed, its row MUST be removed in the same commit.
@@ -39,7 +39,7 @@ When you introduce a new `DEFENSIVE-TEMP[NNN]` tag:
    identifier does not appear in any source file fail the check, and
    tags whose identifier does not appear here also fail.
 
-3. Run `scripts/check_temp_workarounds.sh` locally before pushing.
+3. Run `scripts/check_temp_workarounds.py` locally before pushing.
 
 ## Removing an entry
 

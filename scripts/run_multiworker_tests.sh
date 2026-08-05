@@ -42,7 +42,7 @@ for W in 1 2 4; do
     echo ""
     echo -e "${BLUE}========== XRAY_WORKERS=$W ==========${NC}"
     if XRAY_WORKERS=$W XRAY_BUILD_DIR="${BUILD_DIR}" XRAY_SKIP_BUILD=1 \
-        "${SCRIPT_DIR}/run_regression_tests.sh"; then
+        "${XRAY_PYTHON:-python3}" "${SCRIPT_DIR}/run_regression_tests.py"; then
         echo -e "${GREEN}W=$W: PASS${NC}"
         TOTAL_PASS=$((TOTAL_PASS + 1))
     else

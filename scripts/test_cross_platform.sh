@@ -216,10 +216,9 @@ run_docker_test() {
             cd ..
 
             echo ">>> regression tests (quick)..."
-            if [ -f ./scripts/run_regression_tests.sh ]; then
-                chmod +x ./scripts/run_regression_tests.sh
+            if [ -f ./scripts/run_regression_tests.py ]; then
                 XRAY_SKIP_BUILD=1 XRAY_PATH=./build/xray \
-                    timeout 300 ./scripts/run_regression_tests.sh 2>&1 | tail -30
+                    timeout 300 python3 ./scripts/run_regression_tests.py 2>&1 | tail -30
             fi
 
             exit $CTEST_RC
@@ -383,7 +382,7 @@ run_macos_x64_test() {
 
     echo "  Running regression tests via Rosetta 2..."
     if XRAY_SKIP_BUILD=1 XRAY_PATH="${BUILD_DIR}/xray" \
-        "${PROJECT_ROOT}/scripts/run_regression_tests.sh" 2>&1 | tail -10; then
+        python3 "${PROJECT_ROOT}/scripts/run_regression_tests.py" 2>&1 | tail -10; then
         log_pass "macOS x64: regression passed (Rosetta 2)"
     else
         log_fail "macOS x64: regression failed"
@@ -414,7 +413,7 @@ run_native_test() {
 
     echo "  Running regression tests..."
     if XRAY_SKIP_BUILD=1 XRAY_PATH="${BUILD_DIR}/xray" \
-        "${PROJECT_ROOT}/scripts/run_regression_tests.sh" 2>&1 | tail -10; then
+        python3 "${PROJECT_ROOT}/scripts/run_regression_tests.py" 2>&1 | tail -10; then
         log_pass "macOS ARM64: regression passed"
     else
         log_fail "macOS ARM64: regression failed"

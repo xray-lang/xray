@@ -211,7 +211,7 @@ def run_diff(root: Path, contract: dict[str, Any], xray: Path) -> int:
     if os.name == "nt":
         env.setdefault("PYTHONUTF8", "1")
     return subprocess.run(
-        [sys.executable, str(root / "tests/diff/run_backend_diff_fast.py"), str(xray)],
+        [sys.executable, str(root / "tests/diff/run_backend_diff.py"), str(xray)],
         cwd=root,
         env=env,
     ).returncode

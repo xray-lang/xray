@@ -795,13 +795,13 @@ set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
 # ============================================================================
 add_test(
     NAME check_xi_invariants
-    COMMAND ${XRAY_TEST_BASH} ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.sh
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 add_test(
     NAME check_rc_naming
-    COMMAND ${XRAY_TEST_BASH} ${CMAKE_SOURCE_DIR}/scripts/check_rc_naming.sh
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_rc_naming.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 set_tests_properties(check_rc_naming PROPERTIES

@@ -4,7 +4,7 @@
 # forgotten. The net still gates all 471 other cases.
 #
 # Rules
-#   - The list may only shrink. run_backend_diff_fast.py fails the run when a
+#   - The list may only shrink. run_backend_diff.py fails the run when a
 #     case outside this list fails AND when a listed case starts passing, so a
 #     fix must delete its line in the same change.
 #   - Adding a line requires a written reason under one of the groups below.

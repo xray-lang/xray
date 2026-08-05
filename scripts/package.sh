@@ -77,7 +77,7 @@ find_zig_for_bundle() {
     fi
 
     echo "未找到 Zig，尝试安装固定 Zig 工具链..." >&2
-    "${PROJECT_DIR}/scripts/install_zig_toolchain.sh" >/dev/null
+    "${XRAY_PYTHON:-python3}" "${PROJECT_DIR}/scripts/install_zig_toolchain.py" >/dev/null
     if command -v zig >/dev/null 2>&1; then
         command -v zig
         return 0

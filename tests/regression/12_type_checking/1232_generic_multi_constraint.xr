@@ -26,7 +26,7 @@
 // stresses the second-isolate path — the regression is only fully
 // covered when at least one earlier file has populated the cache
 // in the process (true for the entire regression suite under
-// `scripts/run_regression_tests.sh`).
+// `scripts/run_regression_tests.py`).
 
 // ===== Single constraint (regression) =====
 @test

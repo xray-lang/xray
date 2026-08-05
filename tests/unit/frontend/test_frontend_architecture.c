@@ -12,7 +12,7 @@
  *   every #include directive, and asserts each one matches the
  *   directional dependency rules established by Phase 1 / 2 / 3 of the
  *   frontend refactor. This is the same set of rules enforced by
- *   scripts/check_frontend_arch.sh -- the in-tree version means the
+ *   scripts/check_frontend_arch.py -- the in-tree version means the
  *   acceptance signal lives next to the rest of the unit suite and
  *   gets exercised by ctest, regardless of whether CI runs the script.
  *

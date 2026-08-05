@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run all Erlang benchmarks
-# Usage: bash tests/coro_benchmark/run_erlang_benchmarks.sh
+# Usage: bash tests/benchmarks/coro/run_erlang_benchmarks.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"

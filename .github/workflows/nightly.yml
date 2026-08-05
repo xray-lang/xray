@@ -24,7 +24,7 @@ env:
 
 jobs:
   # ===========================================================================
-  # Full tiered suite (scripts/t.sh t3)
+  # Full tiered suite (scripts/t.py t3)
   #
   # PR CI runs a bounded subset; t3 is the only lane that runs everything,
   # including the six toolchain-spawning tests that dominate the runtime
@@ -56,14 +56,14 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y ccache ninja-build
         ccache --max-size=5G
-        ./scripts/install_zig_toolchain.sh
+        python3 ./scripts/install_zig_toolchain.py
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: Configure
       run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
     - name: Run tier t3
-      run: ./scripts/t.sh t3
+      run: python3 ./scripts/t.py t3
 
     - name: ccache statistics
       if: always()
@@ -118,13 +118,12 @@ jobs:
       - name: Run memory-heavy regression tests 10 times
         env:
           XRAY_BIN: ./build/xray
-        # run_mem_stress.sh selects the memory-heavy regression set (1205 /
+        # run_mem_stress.py selects the memory-heavy regression set (1205 /
         # 1206 / 1207). Failure tails for any crashed iteration land in
         # tests/tmp/mem_stress_failures.log which the artifact upload
         # below would pick up if added in a follow-up.
         run: |
-          chmod +x ./scripts/run_mem_stress.sh
-          bash ./scripts/run_mem_stress.sh 10
+          python3 ./scripts/run_mem_stress.py 10
 
   # ---------------------------------------------------------------------------
   # 2. Linux MSan
@@ -166,8 +165,7 @@ jobs:
 
       - name: Run regression tests under MSan
         run: |
-          chmod +x ./scripts/run_regression_tests.sh
-          ./scripts/run_regression_tests.sh
+          python3 ./scripts/run_regression_tests.py
         env:
           XRAY_PATH: ./build/xray
           XRAY_BUILD_DIR: ./build
@@ -210,9 +208,9 @@ jobs:
         shell: bash
         env:
           XRAY_BIN: ./build/xray.exe
-        # repro_win11_coro_burn.sh pins the same four cases that
+        # repro_win11_coro_burn.py pins the same four cases that
         # exposed STATUS_HEAP_CORRUPTION in May 2026 (1115 cancel,
         # 1109 await_any, 1127 priority, 1128 yield) and writes
         # failure tails to tests/tmp/win11_coro_failures.log.
         run: |
-          bash ./scripts/repro_win11_coro_burn.sh 5
+          python3 ./scripts/repro_win11_coro_burn.py 5

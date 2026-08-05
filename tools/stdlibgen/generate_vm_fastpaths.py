@@ -14,7 +14,6 @@ import importlib.util
 import json
 import re
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +71,24 @@ def native_ident(module: str, member: str) -> str:
 def harness_type(module: str, kind: str) -> str:
     del module
     return kind
+
+
+def load_manifest_toml(root: Path, path: Path) -> dict[str, Any]:
+    """Parse a repository TOML manifest through the shared governance loader.
+
+    Python 3.9 build hosts ship no tomllib, so scripts/stdlib_manifest.py owns
+    the single dependency-free parser for the manifest subset. Routing every
+    manifest read through it keeps one parser behind the boundary manifest
+    instead of letting a generator diverge from the governance gates.
+    """
+    loader_path = root / "scripts" / "stdlib_manifest.py"
+    spec = importlib.util.spec_from_file_location("xray_stdlib_manifest", loader_path)
+    if not spec or not spec.loader:
+        fail(f"cannot load manifest parser from {loader_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.load_toml(path)
 
 
 def load_source_inventory(root: Path) -> list[dict[str, Any]]:
@@ -606,7 +623,7 @@ def load_entries(
 ]:
     manifest_path = root / "stdlib" / "stdlib_boundary.toml"
     raw_bytes = manifest_path.read_bytes()
-    manifest = tomllib.loads(raw_bytes.decode("utf-8"))
+    manifest = load_manifest_toml(root, manifest_path)
     object_abi = manifest.get("object_abi", {})
     version = int(object_abi.get("version", 0))
     if version <= 0:
@@ -1097,7 +1114,10 @@ def write_if_changed(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return
-    path.write_text(content, encoding="utf-8", newline="\n")
+    # Path.write_text gained a newline parameter in 3.10; open() has always
+    # taken one, and generated sources must keep LF endings on every host.
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
 
 
 def main() -> int:
@@ -1147,7 +1167,9 @@ def main() -> int:
             f"object ABI v{version})"
         )
         return 0
-    except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+    # TOMLDecodeError derives from ValueError; the dependency-free fallback
+    # parser reports malformed manifests as RuntimeError.
+    except (OSError, ValueError, RuntimeError) as exc:
         print(f"generate_vm_fastpaths: {exc}", file=sys.stderr)
         return 1
 

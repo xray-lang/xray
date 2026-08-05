@@ -1,5 +1,5 @@
 // Rust reference for scalar_i64_loop.xr (statement-level isomorphic, safe std-only).
-// Built by run_aot_c90_benchmarks.sh: rustc -C opt-level=3 -C lto=fat -C panic=abort
+// Built by run_aot_c90_benchmarks.py: rustc -C opt-level=3 -C lto=fat -C panic=abort
 
 fn run(n: i64) -> i64 {
     var mut acc: i64 = 0;

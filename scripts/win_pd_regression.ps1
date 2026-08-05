@@ -1,5 +1,5 @@
 # Windows regression runner intended to be invoked from win_pd_test.sh
-# via prlctl exec. Mirrors the discipline of scripts/run_regression_tests.sh:
+# via prlctl exec. Mirrors the discipline of scripts/run_regression_tests.py:
 # iterate every regression .xr, apply a per-test timeout, skip helper
 # files (_*), and emit a single-line summary the host watchdog can parse.
 
@@ -20,7 +20,7 @@ if (-not (Test-Path $TestRoot)) {
     exit 2
 }
 
-# Mirror scripts/run_regression_tests.sh: skip helper files (_*) and
+# Mirror scripts/run_regression_tests.py: skip helper files (_*) and
 # fixture directories that exist only as imports for other tests.
 $Files = Get-ChildItem -Path $TestRoot -Filter '*.xr' -Recurse |
     Where-Object {

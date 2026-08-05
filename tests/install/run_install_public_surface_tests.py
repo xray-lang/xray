@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Windows public-install surface and installed-tree AOT gate."""
+"""What the installed product exposes, and what it must not.
+
+`xray_core` is the compiler's internal development aggregate. If it reached an
+install prefix, an installed AOT build could link against it and pick up
+whatever the compiler happens to contain -- so this asserts its absence
+directly, and also that no emitted link command mentions it or the source tree.
+Installed AOT builds must use the precise runtime archives the link manifest
+chooses; bytecode embedders use the dedicated VM runtime archive.
+
+Two prefixes are installed: the XrayCore component alone (what a plain user
+gets -- no SDK headers, no AOT archive) and the full install. Checking only the
+full one would not catch the component leaking SDK content.
+
+The native build at the end runs with XRAY_INCLUDE/XRAY_LIB/XRAY_STDLIB_PATH
+cleared and the config/cache dirs redirected: anything pointing back at the
+source tree would let a broken install pass by borrowing headers and archives
+it does not actually ship.
+"""
 
 from __future__ import annotations
 
@@ -43,6 +60,17 @@ def run(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | No
     )
 
 
+def is_executable(path: Path) -> bool:
+    """Installed, and actually runnable.
+
+    A plain is_file() would pass an xray whose execute bit did not survive the
+    install, which is the one thing every later smoke check depends on. On
+    Windows os.access(X_OK) is effectively an existence test, so this is no
+    weaker there than the file check it replaces.
+    """
+    return path.is_file() and os.access(path, os.X_OK)
+
+
 def install(build: Path, prefix: Path, config: str, component: str | None = None) -> subprocess.CompletedProcess[str]:
     command = ["cmake", "--install", str(build), "--config", config, "--prefix", str(prefix)]
     if component:
@@ -84,7 +112,7 @@ def main() -> int:
         core_install = install(build, core, config, "XrayCore")
         gate.record(core_install.returncode == 0, "Core component install", core_install.stdout[-4000:])
         core_xray = core / "bin" / executable_name
-        gate.record(core_xray.is_file(), "Core installed xray executable")
+        gate.record(is_executable(core_xray), "Core installed xray executable")
         gate.record(
             (core / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm_runtime{static_suffix}").is_file(),
             "Core installed VM runtime",
@@ -126,8 +154,8 @@ def main() -> int:
         full_install = install(build, full, config)
         gate.record(full_install.returncode == 0, "cmake install", full_install.stdout[-4000:])
         full_xray = full / "bin" / executable_name
+        gate.record(is_executable(full_xray), "installed xray executable")
         expected = [
-            (full_xray, "installed xray executable"),
             (full / f"lib/xray/aot/{host_target}/{static_prefix}xray_aot_core{static_suffix}", "installed xray_aot_core archive"),
             (full / f"lib/xray/aot/{host_target}/{static_prefix}xray_rt_coro{static_suffix}", "installed xray_rt_coro archive"),
             (full / f"lib/xray/aot/{host_target}/manifest.json", "installed runtime manifest"),

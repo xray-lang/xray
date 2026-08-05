@@ -57,9 +57,14 @@ BACKEND_DIFF_ANCHORS = (
 )
 
 AOT_FILETEST_ANCHORS = (
-    'ALL_MODES="rep layout abi boundary container link cgen"',
-    "c_contains=",
-    "c_not_contains)",
+    'ALL_MODES = ["rep", "layout", "abi", "boundary", "container", "link", "cgen"]',
+)
+
+# The .expect directive language lives in its own module so it can be unit
+# tested; the generated-C assertion keys are the surface this baseline pins.
+AOT_FILETEST_DSL_ANCHORS = (
+    '"c_contains"',
+    '"c_not_contains"',
 )
 
 LINK_EXPECTS: dict[str, tuple[str, ...]] = {
@@ -163,8 +168,9 @@ def build_results(root: Path) -> list[CheckResult]:
     results.append(
         check_text_file(root, "STDLIB_BENCH_OUTPUT_SIZE", "tests/benchmarks/stdlib/run.py", RUNNER_ANCHORS)
     )
-    results.append(check_text_file(root, "VM_AOT_OUTPUT_DIFF", "tests/diff/run_backend_diff.sh", BACKEND_DIFF_ANCHORS))
-    results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", "tests/aot/run_aot_filetests.sh", AOT_FILETEST_ANCHORS))
+    results.append(check_text_file(root, "VM_AOT_OUTPUT_DIFF", "tests/diff/run_backend_diff.py", BACKEND_DIFF_ANCHORS))
+    results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", "tests/aot/run_aot_filetests.py", AOT_FILETEST_ANCHORS))
+    results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", "tests/aot/filetest_expect.py", AOT_FILETEST_DSL_ANCHORS))
     for path, anchors in LINK_EXPECTS.items():
         results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", path, anchors))
     return results

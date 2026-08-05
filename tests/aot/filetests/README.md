@@ -1,15 +1,15 @@
 # AOT Filetests
 
 This directory is a minimal scaffold for 098 M8 AOT plan/file tests. It is
-separate from `tests/aot/run_aot_tests.sh`, which remains the VM-vs-AOT runtime
+separate from `tests/aot/run_aot_tests.py`, which remains the VM-vs-AOT runtime
 diff suite.
 
 Run:
 
 ```sh
-tests/aot/run_aot_filetests.sh
-tests/aot/run_aot_filetests.sh --mode rep
-tests/aot/run_aot_filetests.sh --mode all ./build/xray
+tests/aot/run_aot_filetests.py
+tests/aot/run_aot_filetests.py --mode rep
+tests/aot/run_aot_filetests.py --mode all ./build/xray
 ```
 
 Modes:

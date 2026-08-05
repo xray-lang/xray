@@ -8,9 +8,9 @@
 
 | 脚本 | 用途 | 输入 | 退出码语义 | 期望耗时 |
 |---|---|---|---|---|
-| `scripts/run_mem_stress.sh` | memory 重测试 1205/1206/1207 burn-in | `[rounds]`；env: `XRAY_BIN`, `MEM_STRESS_ROUNDS` | 全过=0；任一失败=1；参数错=2 | rounds × ~30s |
-| `scripts/repro_win11_coro_burn.sh` | Win11 协程 4 用例 burn-in（1115/1109/1127/1128） | `[N]`；env: `XRAY_BIN` | 全过=0；任一失败=1；参数错=2 | N × 4 × ~5s |
-| `scripts/check_temp_workarounds.sh` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
+| `scripts/run_mem_stress.py` | memory 重测试 1205/1206/1207 burn-in | `[rounds]`；env: `XRAY_BIN`, `MEM_STRESS_ROUNDS` | 全过=0；任一失败=1；参数错=2 | rounds × ~30s |
+| `scripts/repro_win11_coro_burn.py` | Win11 协程 4 用例 burn-in（1115/1109/1127/1128） | `[N]`；env: `XRAY_BIN` | 全过=0；任一失败=1；参数错=2 | N × 4 × ~5s |
+| `scripts/check_temp_workarounds.py` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
 | `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
 | `scripts/check_binary_stdlib_surface.py` | 200：binary stdlib 的 string-binary 签名、旧别名、null sentinel、Array-owner 输入与消费者分类 inventory | `--root <repo>`；可选 `--json`、`--fail-on-public-residue` | 默认只输出 inventory=0，为 P0 固定基线；最终 public residue 可切换为失败 | < 2s |
 | `scripts/check_binary_stdlib_kat_baseline.py` | 200：base64/compress/crypto KAT、AOT link-command 与现有 stdlib bench 入口覆盖检查 | `--root <repo>`；可选 `--json` | 关键 fixture 或 anchor 缺失=1 | < 1s |
@@ -19,8 +19,8 @@
 | `scripts/check_query_surface_residue.py` | 192：`len` / container membership / `typeOf` / `typeName` 查询表面 residue 分类 inventory，区分 public alias 与内部 lowering/runtime 名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认输出 inventory；CTest `query_surface_residue` 阻止 public query alias 回流 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
 | `scripts/check_byte_width_predicates.py` | 204：高层 analyzer/IR/AOT 不得重新用 `native_width == XR_NATIVE_U8` 或 `elem_name == "XR_ELEM_U8"` 选择 byte 语义 | `--root <repo>`；可选 `--json` | 未登记的直接 U8 width/string predicate=1；CTest `byte_width_predicate_audit` 固定共享 helper 边界 | < 2s |
-| `scripts/run_byte_u8_canonical_audit.sh` | 204/239：`byte`/`u8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_u8_canonical_audit` 固定可复跑组合证据 | < 120s |
-| `scripts/run_byte_receiver_effect_audit.sh` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
+| `scripts/run_byte_u8_canonical_audit.py` | 204/239：`byte`/`u8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_u8_canonical_audit` 固定可复跑组合证据 | < 120s |
+| `scripts/run_byte_receiver_effect_audit.py` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
@@ -29,24 +29,24 @@
 | `scripts/check_numeric_type_spelling_residue.py` | 239：shipping Xray token 与 spec/knowledge/LSP/MCP/API metadata 的旧长拼写 fail-closed gate | `--root <repo> --fail-on-public` | live public residue 非零时失败；内部 C ABI 和 `aot_const` payload 不误报 | < 5s |
 | `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | CTest `meta_ownership_inventory` 对三类均固定 `--max-category NAME=0`，发现回流即失败；standalone inventory 仍可用于审计 | < 2s |
 | `scripts/check_contract_freeze.py` | 220：八份语义契约的 anchor digest 与 `CONTRACT-CHANGE` trailer 门禁 | `--root <repo>`；注入验证用 `--self-test` | digest 漂移、契约锚点缺失或干净提交缺 trailer=1；dirty tree 只检查 digest，trailer 延迟到 post-commit/CI | < 2s |
-| `scripts/run_asan_focused.sh` / `scripts/run_asan_focused_windows.ps1` | 218 防线 2：Unix 执行 ASan+UBSan，Windows 执行 MSVC ASan；两者均覆盖聚焦 C 单测、快速 backend-diff 子集、xxhash 与 bili-analysis-server 的全量 AOT C 发射。provider 子进程测试保留公开的 5s version-probe 边界。Windows 默认使用 `RelWithDebInfo`，兼顾 ASan 符号与可由 Zig 的 MSVC ABI 后端链接的非调试 CRT；源码工作区在未显式配置 Zig 且 PATH 无 Zig 时会发现同级 `.tools` 中与构建锁一致的 Zig，实际 provider 仍按能力先探测 MSVC、再回退 Zig。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_BUILD_DIR`、`XR_ASAN_CONFIGURATION`（Windows）、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_DIFF_CASES_FILE`（Windows）/`XR_ASAN_DIFF_REGEX`（Unix）、`XR_ASAN_PYTHON`（Windows）、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD`、`XRAY_ZIG`；Unix 另支持 `XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_CTEST_SERIAL_REGEX` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过；普通非 sanitizer 构建的 CTest 在所有宿主常驻 `asan_focused` | 增量测试面 <10min（全量 ASan 自举另计） |
-| `scripts/run_lsan_strict.sh` | 218 防线 4：严格 LeakSanitizer lane——ASan+LSan（`detect_leaks=1`）跑单测面，配 `scripts/lsan.supp`。LSan 仅 Linux 支持，macOS 上明确跳过 | env: `XR_LSAN_JOBS`、`XR_LSAN_BUILD_DIR`、`XR_LSAN_CTEST_REGEX` | 非 Linux=0（跳过）；Linux 有泄漏=非0；普通非 sanitizer 构建的 CTest 常驻 `lsan_strict` | Linux CI 数分钟 |
+| `scripts/run_asan_focused.py` | 218 防线 2：ASan+UBSan 聚焦面——全部 C 单测、快速 backend-diff 子集、xxhash 与 bili-analysis-server 的全量 AOT C 发射。**一份实现覆盖所有平台**（原 `.sh`/`.ps1`/`_windows.ps1` 三轨已删除：`.ps1` 无任何引用者，且只跑 bili、漏掉 xxhash 与 diff 子集）。显式关闭 stdlib fastpath 生成——该步骤与本门禁无关。`detect_leaks=0`（泄漏归 lsan_strict）；跳过构建时若源码新于二进制则硬失败，拒绝为陈旧二进制背书 | env: `XR_ASAN_JOBS`、`XR_ASAN_BUILD_DIR`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_CTEST_SERIAL_REGEX`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过 | 增量测试面 <10min（全量 ASan 自举另计） |
+| `scripts/run_lsan_strict.py` | 218 防线 4：严格 LeakSanitizer lane——ASan+LSan（`detect_leaks=1`）跑单测面，配 `scripts/lsan.supp`。LSan 仅 Linux 支持，macOS 上明确跳过 | env: `XR_LSAN_JOBS`、`XR_LSAN_BUILD_DIR`、`XR_LSAN_CTEST_REGEX` | 非 Linux=0（跳过）；Linux 有泄漏=非0；普通非 sanitizer 构建的 CTest 常驻 `lsan_strict` | Linux CI 数分钟 |
 | `scripts/bench_cgen_verifier.py` | 218 防线 3：在真实 xxhash AOT C 发射中统计常开 W1–W4 verifier 的 CPU 时间占端到端编译 wall time 比例 | `--xray`、`--main`、`--samples`、`--max-percent` | 中位开销 `<1%` 为 0；达到或超过预算为 1；计时环境变量只观测、不能关闭 verifier | 默认 5 次，约 1min |
 ## 详细说明
 
-### `run_mem_stress.sh`
+### `run_mem_stress.py`
 
 按 `082` 文档 D 表的 `<mode>` 设计，但 Xray 当前是 RC + cycle collection，不暴露用户可选 collector 模式。务实落地是把 `<mode>` 折成 `[rounds]`：每轮顺序跑全部 memory 重测试（1205/1206/1207），失败时把每次失败的尾 30 行写入 `tests/tmp/mem_stress_failures.log`。
 
 放大机制：rounds × ASan/MSan + `MALLOC_PERTURB_=205` + MallocScribble = 当前 CI 暴露 May 2026 Bug #8/#11 的实际配方。继续按 rounds 投资就够了，无需新加 CLI 开关。
 
-### `repro_win11_coro_burn.sh`
+### `repro_win11_coro_burn.py`
 
 May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 cancel / 1109 await_any / 1128 yield。每场景跑 N 次（默认 5，匹配 `nightly.yml`），在 `tests/tmp/win11_coro/failures.log` 收集失败 tail。
 
 可在非 Windows 平台运行——相关 race 是堆破坏而非真正 Windows-only 行为，Linux / macOS 在 ASan/MSan 下也可能暴露相同根因。
 
-### `check_temp_workarounds.sh`
+### `check_temp_workarounds.py`
 
 接入 PR 门禁（参考 `.github/workflows/ci.yml` 的 `reverse-invariants` job）。本表只做完整性收录，不再展开规则。
 
@@ -126,7 +126,7 @@ canonical `mem.ptr/mutPtr/addr/load/store`、允许保留的 compile-error 负�
 等共享 helper 或 receiver registry；脚本只允许数值宽度 lattice、bulk memset byte-pattern type-key
 和 class-field schema verifier 这类低层验证/编码点继续直写 U8。
 
-### `run_byte_u8_canonical_audit.sh`
+### `run_byte_u8_canonical_audit.py`
 
 串联 204/239 完成定义中 `byte` / `u8` canonical U8 identity 的三类证据：
 
@@ -136,7 +136,7 @@ canonical `mem.ptr/mutPtr/addr/load/store`、允许保留的 compile-error 负�
 
 CTest `byte_u8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 final audit 退回到手工命令列表。
 
-### `run_byte_receiver_effect_audit.sh`
+### `run_byte_receiver_effect_audit.py`
 
 串联 204 完成定义中 receiver effect 与 203 storage/provenance 对齐的正反例：
 
@@ -221,15 +221,15 @@ tooling 或 VM/AOT fallback 中；显式替代路径是 `Slice<T>`、`s.runes().
 
 ## 与 nightly.yml 的关系
 
-`nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.sh`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.sh`：
+`nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.py`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.py`：
 
 ```yaml
 - name: Run Memory stress
-  run: bash scripts/run_mem_stress.sh 10
+  run: bash scripts/run_mem_stress.py 10
 
 - name: Run Win11 coroutine burn-in
   shell: bash
-  run: bash scripts/repro_win11_coro_burn.sh 5
+  run: bash scripts/repro_win11_coro_burn.py 5
 
 - name: stdlib public surface uniqueness
   run: python3 scripts/check_stdlib_surface_uniqueness.py --root .

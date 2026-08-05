@@ -35,7 +35,7 @@
 //                     historical reproducer under JIT-force).
 //
 // Triggering combination: 1206 alone gives partial coverage;
-// `scripts/run_mem_stress.sh 10` exercises 1205/1206/1207 in
+// `scripts/run_mem_stress.py 10` exercises 1205/1206/1207 in
 // rotation, which is the exact sequence that surfaced all three
 // bugs during the May 2026 burn-in.
 

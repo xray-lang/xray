@@ -138,7 +138,7 @@ LAYOUT_GATE_REQUIRED_FILES = {
     Path("tests/fixtures/native_output/main.xr"),
     Path("tests/fixtures/native_output/native_output.h"),
     Path("tests/fixtures/native_output/xray.toml"),
-    Path("tests/aot/run_native_output_boundary_tests.sh"),
+    Path("tests/aot/run_native_output_boundary_tests.py"),
 }
 
 LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {

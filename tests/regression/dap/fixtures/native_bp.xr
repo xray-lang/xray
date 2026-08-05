@@ -1,4 +1,16 @@
-// DAP native debug fixture: breakpoint inside main at line 10.
+// DAP native debug fixture: a source-level breakpoint on the marked line.
+//
+// `y` is not written as a literal. With two literals the optimizer folds
+// `compute(10, 32)` to `42` at compile time and the call site emits no code at
+// all -- lldb then slides the breakpoint to the next line that does have code,
+// and the test fails on a line mismatch that is not a debug-info bug. An
+// operand the optimizer cannot see through keeps a real instruction on the
+// line. XRAY_DAP_FIXTURE_Y is never set by the runner, so `y` is always 32.
+//
+// The runner locates the breakpoint by the BREAKPOINT marker below rather than
+// by a hard-coded number, so editing this file cannot silently retarget it.
+import os
+
 fn compute(a: int, b: int) -> int {
     var s = a + b
     return s
@@ -7,7 +19,10 @@ fn compute(a: int, b: int) -> int {
 fn main() {
     var x = 10
     var y = 32
-    var z = compute(x, y)
+    if (os.getenv("XRAY_DAP_FIXTURE_Y") != null) {
+        y = 33
+    }
+    var z = compute(x, y)  // BREAKPOINT
     print(z)
 }
 

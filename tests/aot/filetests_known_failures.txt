@@ -5,7 +5,7 @@
 # verdict so that a red baseline cannot hide a fresh regression.
 #
 # Rules
-#   - The list may only shrink.  `run_aot_filetests.sh` fails the run when a
+#   - The list may only shrink.  `run_aot_filetests.py` fails the run when a
 #     case outside this list fails AND when a listed case starts passing, so a
 #     fix must delete its line in the same change.
 #   - Adding a line requires a written reason under one of the groups below.
@@ -13,7 +13,7 @@
 #
 # Established 2026-07-30, when the suite was moved out of the CI exclusion list
 # (it had been excluded from all three workflows and treated as a known-failing
-# "AOT boundary" suite by scripts/run_release_09_gate.sh).  Triage of the 40
+# "AOT boundary" suite by scripts/run_release_09_gate.py).  Triage of the 40
 # entries below is recorded per group.
 
 # Group A is empty: all four entries were real compiler defects and were fixed

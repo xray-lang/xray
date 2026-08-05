@@ -1703,18 +1703,12 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 if(BUILD_TESTS)
     enable_testing()
 
-    # CTest does not honor a script's shebang on Windows and may hand `.sh`
-    # files to WSL instead of the Git-for-Windows shell used by this workspace.
-    # Resolve one explicit Bash executable so cross-platform gates have the
-    # same invocation contract on Windows, macOS, and Linux.
-    find_program(XRAY_TEST_BASH
-        NAMES bash bash.exe
-        HINTS
-            "C:/Program Files/Git/bin"
-            "C:/Program Files/Git/usr/bin")
-    if(NOT XRAY_TEST_BASH)
-        message(FATAL_ERROR "BUILD_TESTS requires Bash for the shell-based test gates")
-    endif()
+    # No Bash is required to run the test suite: every registered gate is a
+    # Python entry point invoked through XRAY_PYTHON. That removes the Windows
+    # hazard this project used to work around -- CTest does not honor a
+    # script's shebang there and could hand `.sh` files to WSL rather than the
+    # Git-for-Windows shell -- along with the whole class of behaviour that
+    # differed between the two.
 
     include(ProcessorCount)
     ProcessorCount(XRAY_HOST_PROCESSOR_COUNT)
@@ -1839,7 +1833,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME bytecode_embed_symbol_gate
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_embed_symbol_tests.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_embed_symbol_tests.py
                 $<TARGET_FILE:bytecode_embed_runner>
                 $<TARGET_FILE:xray_vm_runtime>
                 ${XRAY_BYTECODE_EMBED_SMOKE_XRC}
@@ -1854,8 +1848,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME extern_layout_bytecode_cli_roundtrip
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.py
                 $<TARGET_FILE:xray>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr
@@ -1869,8 +1863,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME sys_thread_vm
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_sys_thread_vm_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_sys_thread_vm_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -1882,8 +1876,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME eval_stdlib_overlay
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_eval_stdlib_overlay_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_eval_stdlib_overlay_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -1895,8 +1889,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME stdlib_embedded_layout
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_stdlib_embedded_layout_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_stdlib_embedded_layout_tests.py
                 $<TARGET_FILE:xray>
                 ${XRAY_PYTHON}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1910,8 +1904,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME parallel_plan_vm_scaling_gate
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -1924,8 +1918,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME http_static_route_full_parse
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_http_static_route_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_http_static_route_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2237,7 +2231,7 @@ if(BUILD_TESTS)
     # VM/AOT divergence risk rather than a documentation gap.
     add_test(
         NAME narrowing_rules_reconciliation
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_narrowing_rules.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_narrowing_rules.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(narrowing_rules_reconciliation PROPERTIES
@@ -2317,7 +2311,7 @@ if(BUILD_TESTS)
                     XRAY_BIN=$<TARGET_FILE:xray>
                     XRAY_TEST_LSP_DOCUMENT=$<TARGET_FILE:test_lsp_document>
                     XRAY_TEST_XGLOBAL_SUMMARY=$<TARGET_FILE:test_xglobal_summary>
-                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_u8_canonical_audit.sh
+                    ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_u8_canonical_audit.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(byte_u8_canonical_audit PROPERTIES
@@ -2332,7 +2326,7 @@ if(BUILD_TESTS)
             NAME byte_receiver_effect_audit
             COMMAND ${CMAKE_COMMAND} -E env
                     XRAY_BIN=$<TARGET_FILE:xray>
-                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_receiver_effect_audit.sh
+                    ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_receiver_effect_audit.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(byte_receiver_effect_audit PROPERTIES
@@ -2428,24 +2422,16 @@ if(BUILD_TESTS)
     # surface.  Do not register nested sanitizer drivers inside an already
     # sanitized build: CI runs those configurations directly and recursive
     # sanitizer builds would only duplicate the same work.
-    if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+    # One registration for every host. The ASan lane used to fork here into a
+    # PowerShell script on Windows and a shell script elsewhere; those two had
+    # drifted apart, and the Windows branch registered ONLY asan_focused, so
+    # tsan/lsan/aot_ubsan were absent there entirely. A single Python lane makes
+    # the platform split unnecessary and gives Windows the other three.
+    if(NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
        NOT ENABLE_MSAN)
         add_test(
             NAME asan_focused
-            COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
-                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused_windows.ps1
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-        set_tests_properties(asan_focused PROPERTIES
-            LABELS "sanitizer;asan;task-218;windows"
-            RUN_SERIAL TRUE
-            TIMEOUT 3600
-        )
-    elseif(NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
-           NOT ENABLE_MSAN)
-        add_test(
-            NAME asan_focused
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         # The focused TSan lane exercises the work-stealing scheduler and two-band RC under
@@ -2453,7 +2439,7 @@ if(BUILD_TESTS)
         # legacy hand-run directories are documented pre-clean-slate drafts).
         add_test(
             NAME tsan_focused
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tsan_focused.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tsan_focused.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(tsan_focused PROPERTIES
@@ -2479,7 +2465,7 @@ if(BUILD_TESTS)
         # xr_process_shutdown() for process-global registry release.
         add_test(
             NAME lsan_strict
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lsan_strict.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lsan_strict.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(lsan_strict PROPERTIES
@@ -2496,7 +2482,7 @@ if(BUILD_TESTS)
         # the host has no READY AOT toolchain.
         add_test(
             NAME aot_ubsan
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(aot_ubsan PROPERTIES
@@ -2605,8 +2591,8 @@ if(BUILD_TESTS)
         NAME aot_filetests
         COMMAND ${CMAKE_COMMAND} -E env
                 ${AOT_FILETEST_ENV}
-                ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.py
                 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2623,8 +2609,8 @@ if(BUILD_TESTS)
        NOT ENABLE_MSAN AND NOT ENABLE_SANITIZERS)
         add_test(
             NAME raw_scalar_assembly_shape
-        COMMAND ${XRAY_TEST_BASH}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/check_raw_scalar_assembly.sh
+        COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/check_raw_scalar_assembly.py
                     $<TARGET_FILE:xray>
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -2638,7 +2624,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_cross_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_cross_smoke.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_cross_smoke.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2651,7 +2637,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_bundled_zig_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_bundled_zig_smoke.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_bundled_zig_smoke.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2664,7 +2650,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_native_debug_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_debug_smoke.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_debug_smoke.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2679,7 +2665,7 @@ if(BUILD_TESTS)
             NAME dap_native_smoke
             COMMAND ${CMAKE_COMMAND} -E env
                     XRAY_BUILD_DIR=$<TARGET_FILE_DIR:xray>
-                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_dap_native_tests.sh
+                    ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_dap_native_tests.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(dap_native_smoke PROPERTIES
@@ -2695,7 +2681,8 @@ if(BUILD_TESTS)
         NAME aot_incremental_cache
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_AOT_INCREMENTAL_JOBS=${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_incremental_cache.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_incremental_cache.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2713,7 +2700,7 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_GLOBAL_EVIDENCE_BENCH_CASES=package
                 XRAY_PACKAGE_PAYLOAD_FIXTURE=$<TARGET_FILE:xray_package_payload_fixture>
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/compiler/global_evidence_cache/run_benchmark.sh
+                ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/compiler/global_evidence_cache/run_benchmark.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2744,7 +2731,7 @@ if(BUILD_TESTS)
         NAME byte_array_aot_c90_hotpath
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_BIN=$<TARGET_FILE:xray>
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_c90_benchmarks.sh
+                ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_c90_benchmarks.py
                 ${BYTE_ARRAY_C90_ARGS}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2759,7 +2746,7 @@ if(BUILD_TESTS)
     # current plan/filetest pattern or an explicit gap row.
     add_test(
         NAME zero_cost_plan_inventory
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/aot/zero_cost/plan_inventory.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/aot/zero_cost/plan_inventory.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(zero_cost_plan_inventory PROPERTIES
@@ -2769,7 +2756,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME zero_cost_contract_inventory
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/aot/zero_cost/contracts_inventory.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/aot/zero_cost/contracts_inventory.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(zero_cost_contract_inventory PROPERTIES
@@ -2796,8 +2783,8 @@ if(BUILD_TESTS)
         add_test(
             NAME aot_link_command_manifest
             COMMAND ${CMAKE_COMMAND} -E env ${AOT_LINK_MANIFEST_ENV}
-                    ${XRAY_TEST_BASH}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
+                    ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.py
                     $<TARGET_FILE:xray>
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -2820,7 +2807,7 @@ if(BUILD_TESTS)
        NOT ENABLE_MSAN AND NOT ENABLE_SANITIZERS)
         add_test(
             NAME aot_freestanding_allowlist
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.py
                     $<TARGET_FILE:xray>
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -2833,7 +2820,7 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_provider_abi
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_provider_abi_test.sh
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_provider_abi_test.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2845,8 +2832,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_static_fixed_array_mutation
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_static_fixed_array_mutation.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_static_fixed_array_mutation.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2858,8 +2845,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_numeric_core_compile
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_numeric_core_compile.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_numeric_core_compile.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2872,8 +2859,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_qemu_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_qemu_smoke.sh
-                $<TARGET_FILE:xray>
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_qemu_smoke.py
+                --target x86_64 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_freestanding_qemu_smoke PROPERTIES
@@ -2885,8 +2872,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_riscv_qemu_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_riscv_qemu_smoke.sh
-                $<TARGET_FILE:xray>
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_qemu_smoke.py
+                --target riscv32 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_freestanding_riscv_qemu_smoke PROPERTIES
@@ -2898,8 +2885,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME aot_freestanding_thumb_qemu_smoke
-        COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_thumb_qemu_smoke.sh
-                $<TARGET_FILE:xray>
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_qemu_smoke.py
+                --target thumb --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_freestanding_thumb_qemu_smoke PROPERTIES
@@ -2938,7 +2925,8 @@ if(BUILD_TESTS)
         NAME aot_isolate_symbol_gate
         COMMAND ${CMAKE_COMMAND} -E env
                 ${AOT_ISOLATE_ENV}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2951,25 +2939,16 @@ if(BUILD_TESTS)
 
     # Public install surface: xray_core is an internal development aggregate,
     # not a library users or installed AOT builds should link against.
-    if(WIN32)
-        add_test(
-            NAME install_public_surface
-            COMMAND ${XRAY_PYTHON}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.py
-                    --project-root ${CMAKE_CURRENT_SOURCE_DIR}
-                    --build-dir ${CMAKE_BINARY_DIR}
-                    --binary $<TARGET_FILE:xray>
-                    --config $<CONFIG>
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-    else()
-        add_test(
-            NAME install_public_surface
-            COMMAND ${XRAY_TEST_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.sh
-                    ${CMAKE_BINARY_DIR}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-    endif()
+    add_test(
+        NAME install_public_surface
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.py
+                --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+                --build-dir ${CMAKE_BINARY_DIR}
+                --binary $<TARGET_FILE:xray>
+                --config $<CONFIG>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
     set_tests_properties(install_public_surface PROPERTIES
         LABELS "install;aot;link;smoke"
         PROCESSORS 2
@@ -2980,8 +2959,8 @@ if(BUILD_TESTS)
     # with stable, user-facing messages instead of cascading or opaque errors.
     add_test(
         NAME ffi_diagnostics
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_diagnostics.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_diagnostics.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -2995,8 +2974,8 @@ if(BUILD_TESTS)
     # host C compiler for sizeof, alignof, and offsetof.
     add_test(
         NAME ffi_extern_layout_probe
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_extern_layout_probe.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_extern_layout_probe.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3010,8 +2989,8 @@ if(BUILD_TESTS)
     # and headerless repr(C) structs through VM/AOT; normal builds skip.
     add_test(
         NAME ffi_asan_smoke
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_asan_smoke.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_asan_smoke.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3025,8 +3004,8 @@ if(BUILD_TESTS)
     # from an external C translation unit and callable with scalar values.
     add_test(
         NAME ffi_c_export_smoke
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_c_export_smoke.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_c_export_smoke.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3038,8 +3017,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME native_output_boundary
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_output_boundary_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_output_boundary_tests.py
                 $<TARGET_FILE:xray>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/native_output
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -3056,8 +3035,8 @@ if(BUILD_TESTS)
         NAME compile_error_tests
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY=$<TARGET_FILE:xray>
-                bash
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/run_compile_error_tests.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/run_compile_error_tests.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     math(EXPR COMPILE_ERROR_TESTS_TIMEOUT "60 * ${XR_TEST_TIMEOUT_SCALE}")
@@ -3069,8 +3048,8 @@ if(BUILD_TESTS)
 
     add_test(
         NAME verify_contract_cli
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_verify_contract_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_verify_contract_tests.py
                 $<TARGET_FILE:xray>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/verify_contract
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -3085,8 +3064,8 @@ if(BUILD_TESTS)
     # agrees even when one of them prints nothing.
     add_test(
         NAME uncaught_error_diagnostics
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_uncaught_error_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_uncaught_error_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3102,8 +3081,8 @@ if(BUILD_TESTS)
     # catch a wording regression that hits both backends.
     add_test(
         NAME panic_report_diagnostics
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_panic_report_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_panic_report_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3117,8 +3096,8 @@ if(BUILD_TESTS)
     # retain/release budget available for RC-overhead regression work.
     add_test(
         NAME xi_rc_count_smoke
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_rc_count_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_rc_count_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3131,8 +3110,8 @@ if(BUILD_TESTS)
     # through OP_TO_SHARED in the VM instead of COPY + SETSHARED.
     add_test(
         NAME xi_shared_copy_smoke
-        COMMAND ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_shared_copy_tests.sh
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_shared_copy_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3150,8 +3129,8 @@ if(BUILD_TESTS)
                 XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
                 XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
                 XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
-                ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3177,8 +3156,8 @@ if(BUILD_TESTS)
                     XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${_task190_diff_manifest}
                     XRAY_DIFF_EXTRA_CASES_FILE=
                     XRAY_DIFF_MAX_AUTO_JOBS=4
-                    ${XRAY_TEST_BASH}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                    ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
                     $<TARGET_FILE:xray>
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -3200,8 +3179,8 @@ if(BUILD_TESTS)
                 XRAY_DIFF_EXTRA_CASES_FILE=
                 XRAY_AOT_TEST_OPT=2
                 XRAY_DIFF_MAX_AUTO_JOBS=4
-                ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3218,8 +3197,8 @@ if(BUILD_TESTS)
         NAME concurrency_litmus
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_LITMUS_OPT=2
-                ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency_litmus/run_litmus.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency_litmus/run_litmus.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3237,8 +3216,8 @@ if(BUILD_TESTS)
                 XRAY_TEST_CACHE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/.cache/xray-test/deterministic
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/deterministic_cases.txt
                 XRAY_DIFF_JOBS=${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
-                ${XRAY_TEST_BASH}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3419,7 +3398,7 @@ if(BUILD_TESTS)
     if(NOT XR_ENABLE_CYCLE_DETECTOR)
         add_test(
             NAME cycle_detector_absent_by_default
-            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.sh
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_cycle_detector_absent.py
                     $<TARGET_FILE:xray>
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -3446,7 +3425,8 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_AOT_TOMBSTONE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/TOMBSTONES.tsv
                 XRAY_AOT_TOMBSTONE_MAX=10
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_tests.sh
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_tests.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )

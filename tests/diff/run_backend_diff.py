@@ -1,0 +1,621 @@
+#!/usr/bin/env python3
+"""VM/AOT differential runner: the same .xr through both backends, byte for byte.
+
+This is the strongest correctness asset in the repo. A divergence between VM and
+AOT output is a bug in one of the two backends, so the net gates every case
+except a written baseline of known divergences.
+
+Observable contract = stdout + exit code, compared byte for byte (normalized
+stderr only when a lane enables that channel). Backend build logs are not
+program output and never enter the comparison. This is the contract frozen in
+contracts/differential-protocol.md.
+
+Infrastructure -- subprocess handling, cache keys, directory locks, parallelism,
+the ratchet -- comes from the shared xraytest runtime, so this file holds only
+what is specific to backend differencing: how a case is run on each backend, how
+their outputs are compared, and the per-case sidecars (.args, .stdin,
+.xr.expected, `// diff-backends:`, `// anchor:`) that shape a case.
+
+Replaces run_backend_diff.sh and the earlier run_backend_diff_fast.py. There is
+no shell runner: Python is a hard build requirement, so a second implementation
+would be dead weight.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+
+def _bootstrap() -> None:
+    """Put tests/lib on sys.path so `import xraytest` works without an install."""
+    lib = Path(__file__).resolve().parents[1] / "lib"
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+
+
+_bootstrap()
+from xraytest import cache, platform, proc, progress, ratchet, scheduler  # noqa: E402
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = SCRIPT_DIR.parent.parent
+CASE_DIR = SCRIPT_DIR / "cases"
+
+# A case directory's identity includes the .xr.expected oracle: a changed
+# expected file must change the key, or a stale AOT binary would be diffed
+# against the new oracle and pass by accident.
+CASE_DIR_GLOBS = ("*.xr", "*.args", "*.xr.expected", "*.toml")
+
+# stdout/stderr previews in a failure line: enough to see the divergence.
+_PREVIEW_LINES = 6
+_HEAD_LINES = 3
+
+
+def is_uint(value: str) -> bool:
+    return value.isdigit()
+
+
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    return int(raw) if is_uint(raw) and int(raw) > 0 else default
+
+
+def configure_jobs(requested: str) -> Tuple[int, bool]:
+    """Worker count and whether it was auto-derived (auto is capped, hot-shrunk)."""
+    if requested in ("", "auto"):
+        jobs = min(cache_cpu_count(), env_int("XRAY_DIFF_MAX_AUTO_JOBS", 16))
+        return max(1, jobs), True
+    if is_uint(requested) and int(requested) > 0:
+        return int(requested), False
+    return 1, False
+
+
+def cache_cpu_count() -> int:
+    return os.cpu_count() or 1
+
+
+def rel_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(PROJECT_DIR))
+    except ValueError:
+        return str(path)
+
+
+def safe_name(rel: str) -> str:
+    stem = rel[:-3] if rel.endswith(".xr") else rel
+    return "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in stem)
+
+
+def case_cache_name(rel: str, case_key: str) -> str:
+    """Readable, bounded cache component for one differential case."""
+    import hashlib
+
+    stem = safe_name(Path(rel).stem)[:32] or "case"
+    digest = hashlib.sha256(f"{rel}\0{case_key}".encode()).hexdigest()[:24]
+    return f"{stem}-{digest}"
+
+
+# --- sidecar readers --------------------------------------------------------
+
+
+def read_first_directive(path: Path, prefix: str, max_lines: int) -> str:
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for idx, line in enumerate(fh, start=1):
+                if idx > max_lines:
+                    break
+                if line.startswith(prefix):
+                    return line[len(prefix):].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def read_args(path: Path) -> List[str]:
+    argfile = path.with_suffix(".args")
+    if not argfile.is_file():
+        return []
+    try:
+        first = argfile.read_text(encoding="utf-8").splitlines()[0]
+    except (OSError, IndexError):
+        return []
+    return first.split()
+
+
+def read_stdin(path: Path) -> bytes:
+    """Bytes fed to both backends' stdin. Absent sidecar means empty, closed
+    stdin so a stdin-reading case gets EOF instead of hanging on the harness's."""
+    sidecar = path.with_suffix(".stdin")
+    if not sidecar.is_file():
+        return b""
+    try:
+        return sidecar.read_bytes()
+    except OSError:
+        return b""
+
+
+def read_expected_stdout(path: Path) -> Optional[bytes]:
+    """Optional exact stdout oracle stored as <case>.xr.expected."""
+    sidecar = Path(str(path) + ".expected")
+    if not sidecar.is_file():
+        return None
+    try:
+        return sidecar.read_bytes()
+    except OSError:
+        return None
+
+
+def head_text(data: bytes, lines: int = _HEAD_LINES) -> str:
+    return "|".join(data.decode("utf-8", "replace").splitlines()[:lines])
+
+
+# --- backend execution ------------------------------------------------------
+
+
+@dataclass
+class BackendResult:
+    rc: int
+    stdout: bytes
+    stderr: bytes
+    buildlog: bytes = b""
+
+
+@dataclass
+class CaseResult:
+    order: int
+    status: str  # "pass" | "fail" | "skip"
+    output: str
+    name: str = ""
+
+
+@dataclass
+class RunnerConfig:
+    xray: Path
+    backends: List[str]
+    jobs: int
+    aot_opt: str
+    aot_cache: Path
+    aot_bin_cache: Path
+    diff_stderr: bool
+    # Per-subprocess wall-clock ceiling. The shell net had none, so one
+    # deadlocked case hung the whole lane until the outer 900s ctest timeout.
+    # A generous default turns that into a single red case; the whole child
+    # tree is killed on expiry (proc.run uses killpg on POSIX). Tunable via
+    # XRAY_TEST_CASE_TIMEOUT; 0 disables (the historical behavior).
+    case_timeout: Optional[float]
+
+
+def build_aot_binary(
+    config: RunnerConfig, case: Path, rel: str, case_key: str
+) -> Tuple[Optional[Path], bytes]:
+    """Build (or reuse) the native binary for one case, under a directory lock.
+
+    The lock is the shared DirLock: exactly one racer builds while the rest wait,
+    then everyone reuses the finished binary. The tmp-then-rename keeps a partial
+    build from ever being seen as a cache hit.
+    """
+    bin_dir = config.aot_bin_cache / case_cache_name(rel, case_key)
+    binary = bin_dir / "aot"
+    if binary.is_file() and os.access(binary, os.X_OK):
+        return binary, f"cached: {binary}\n".encode()
+
+    import threading
+
+    tmp = bin_dir / f"aot.{os.getpid()}.{threading.get_ident()}"
+    lock = cache.DirLock(bin_dir.with_name(bin_dir.name + ".lock"))
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    if not lock.acquire():
+        return None, f"cannot lock binary cache: {lock}\n".encode()
+    try:
+        if binary.is_file() and os.access(binary, os.X_OK):
+            return binary, f"cached: {binary}\n".encode()
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        env = os.environ.copy()
+        env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
+        result = proc.run(
+            [
+                config.xray, "build", "--native", "-O", config.aot_opt,
+                "--cache-dir", config.aot_cache, case, "-o", tmp,
+            ],
+            env=env,
+            timeout=config.case_timeout,
+        )
+        # build stdout+stderr merged into one log, matching the shell runner's
+        # STDOUT=STDERR capture used for failure excerpts.
+        buildlog = result.stdout + result.stderr
+        if result.timed_out:
+            buildlog += f"\n[timed out after {config.case_timeout}s]\n".encode()
+        if not result.ok:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            return None, buildlog
+        tmp.replace(binary)
+        return binary, buildlog
+    finally:
+        lock.release()
+
+
+def run_backend(
+    config: RunnerConfig, kind: str, case: Path, args: List[str], stdin_bytes: bytes
+) -> BackendResult:
+    if kind == "vm":
+        cmd = [config.xray, "run", case]
+        if args:
+            cmd.extend(["--", *args])
+        r = proc.run(cmd, stdin=stdin_bytes, timeout=config.case_timeout)
+        # A timed-out backend gets a sentinel exit so the diff reports a
+        # mismatch instead of comparing truncated output as if it were real.
+        rc = 124 if r.timed_out else r.returncode
+        return BackendResult(rc, r.stdout, r.stderr)
+
+    if kind == "aot":
+        rel = rel_path(case)
+        key = cache.dir_key(case.parent, CASE_DIR_GLOBS)
+        binary, buildlog = build_aot_binary(config, case, rel, key)
+        if binary is None:
+            return BackendResult(200, b"BUILDFAIL\n", b"", buildlog)
+        r = proc.run([binary, *args], stdin=stdin_bytes, timeout=config.case_timeout)
+        rc = 124 if r.timed_out else r.returncode
+        return BackendResult(rc, r.stdout, r.stderr, buildlog)
+
+    return BackendResult(201, b"BADBACKEND\n", f"unknown backend: {kind}".encode())
+
+
+def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
+    name = rel_path(case)
+    anchor = read_first_directive(case, "// anchor: ", 1)
+    case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
+    case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
+
+    enabled: List[str] = []
+    excluded: List[str] = []
+    for backend in ("vm", "aot"):
+        if backend not in config.backends:
+            continue
+        if case_backends and backend not in case_backends:
+            excluded.append(backend)
+            continue
+        enabled.append(backend)
+
+    prefix = f"  {name:<84}"
+    if len(enabled) < 2:
+        return CaseResult(
+            order, "skip",
+            prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} "
+            f"global={','.join(config.backends)})", name,
+        )
+
+    args = read_args(case)
+    stdin_bytes = read_stdin(case)
+    results: Dict[str, BackendResult] = {}
+    for backend in enabled:
+        results[backend] = run_backend(config, backend, case, args, stdin_bytes)
+
+    ref = enabled[0]
+    ref_result = results[ref]
+    mismatch = ""
+    other = ""
+    for backend in enabled[1:]:
+        cur = results[backend]
+        if cur.rc != ref_result.rc:
+            mismatch = f"exit code ({ref}={ref_result.rc} {backend}={cur.rc})"
+            other = backend
+            break
+        if cur.stdout != ref_result.stdout:
+            mismatch = f"stdout ({ref} vs {backend})"
+            other = backend
+            break
+        if config.diff_stderr and cur.stderr != ref_result.stderr:
+            mismatch = f"stderr ({ref} vs {backend})"
+            other = backend
+            break
+
+    expected_stdout = read_expected_stdout(case)
+    if not mismatch and expected_stdout is not None:
+        if ref_result.rc != 0:
+            mismatch = f"exit code ({ref}={ref_result.rc} expected=0)"
+        elif ref_result.stdout != expected_stdout:
+            mismatch = f"stdout ({ref} vs expected)"
+            other = "expected"
+
+    if not mismatch:
+        suffix = f"PASS (excl:{' '.join(excluded)})" if excluded else "PASS"
+        return CaseResult(order, "pass", prefix + suffix, name)
+
+    lines = [prefix + f"FAIL ({mismatch})" + (f"  [anchor: {anchor}]" if anchor else "")]
+    for backend in enabled:
+        res = results[backend]
+        lines.append(f"      {backend}: rc={res.rc}  stdout: {head_text(res.stdout)}")
+        if res.rc == 200 and res.buildlog:
+            lines.extend(
+                "      " + line
+                for line in res.buildlog.decode("utf-8", "replace").splitlines()[:20]
+            )
+    if other == "expected":
+        lines.append(f"      {ref}: {head_text(ref_result.stdout, _PREVIEW_LINES)}")
+        lines.append(f"      expected: {head_text(expected_stdout or b'', _PREVIEW_LINES)}")
+    elif other:
+        lhs = ref_result.stdout if mismatch.startswith("stdout") else ref_result.stderr
+        rhs = results[other].stdout if mismatch.startswith("stdout") else results[other].stderr
+        lines.append(f"      {ref}: {head_text(lhs, _PREVIEW_LINES)}")
+        lines.append(f"      {other}: {head_text(rhs, _PREVIEW_LINES)}")
+    return CaseResult(order, "fail", "\n".join(lines), name)
+
+
+# --- case collection --------------------------------------------------------
+
+
+def append_case_manifest(manifest: str) -> Optional[List[Path]]:
+    if not manifest:
+        return []
+    manifest_path = Path(manifest)
+    if not manifest_path.is_absolute():
+        manifest_path = PROJECT_DIR / manifest
+    if not manifest_path.is_file():
+        return None
+    cases: List[Path] = []
+    for raw in manifest_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        path = Path(line)
+        if not path.is_absolute():
+            path = PROJECT_DIR / line
+        cases.append(path)
+    return cases
+
+
+def collect_cases(base_cases_file: str, extra_cases_file: str) -> List[Path]:
+    if base_cases_file:
+        base = append_case_manifest(base_cases_file)
+        if base is None:
+            raise FileNotFoundError(f"base case manifest not found: {base_cases_file}")
+        cases = sorted(base)
+    else:
+        # cases/liveness/ is run_liveness_diff.sh's, which enforces a wall-clock
+        # budget and honors .live sidecars. This net has no per-case timeout and
+        # compares terminating output, so a by-design non-terminating liveness
+        # case would hang it. An explicit base manifest still wins if it names them.
+        liveness_dir = CASE_DIR / "liveness"
+        cases = sorted(p for p in CASE_DIR.rglob("*.xr") if liveness_dir not in p.parents)
+
+    if extra_cases_file:
+        extra = append_case_manifest(extra_cases_file)
+        if extra:
+            cases.extend(extra)
+    return cases
+
+
+def aot_binary_cache_hot(config: RunnerConfig, selected: List[Tuple[int, Path]]) -> bool:
+    if "aot" not in config.backends:
+        return True
+    for _order, case in selected:
+        case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
+        case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
+        if case_backends and "aot" not in case_backends:
+            continue
+        rel = rel_path(case)
+        key = cache.dir_key(case.parent, CASE_DIR_GLOBS)
+        binary = config.aot_bin_cache / case_cache_name(rel, key) / "aot"
+        if not (binary.is_file() and os.access(binary, os.X_OK)):
+            return False
+    return True
+
+
+def validate_shard(total: str, index: str) -> Tuple[int, int]:
+    if not is_uint(total) or not is_uint(index):
+        raise ValueError(f"shard config must be numeric: total={total} index={index}")
+    total_i, index_i = int(total), int(index)
+    if total_i < 1:
+        raise ValueError("XRAY_DIFF_SHARD_TOTAL must be >= 1")
+    if index_i >= total_i:
+        raise ValueError(
+            f"XRAY_DIFF_SHARD_INDEX must be in [0,total): index={index_i} total={total_i}"
+        )
+    return total_i, index_i
+
+
+# --- driver -----------------------------------------------------------------
+
+
+def diff_stable_cache_dir(suite: str, xray: Path) -> Path:
+    return cache.stable_cache_dir(PROJECT_DIR, suite, xray)
+
+
+def main(argv: List[str]) -> int:
+    xray_raw = argv[1] if len(argv) > 1 else os.environ.get("XRAY_BIN", "")
+    if not xray_raw:
+        build_dir = os.environ.get("XRAY_BUILD_DIR")
+        xray_raw = str(Path(build_dir) / "xray") if build_dir else str(PROJECT_DIR / "build" / "xray")
+    xray = Path(xray_raw)
+
+    backends = [b.strip() for b in os.environ.get("XRAY_DIFF_BACKENDS", "vm,aot").split(",") if b.strip()]
+    requested_jobs = os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto"))
+    jobs, auto_jobs = configure_jobs(requested_jobs)
+    aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
+    aot_cache = Path(
+        os.environ.get("XRAY_DIFF_CACHE_DIR", str(diff_stable_cache_dir("aot-objects", xray) / f"O{aot_opt}"))
+    )
+    aot_bin_cache = Path(
+        os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(diff_stable_cache_dir("backend-diff-bin", xray) / f"O{aot_opt}"))
+    )
+    diff_stderr = os.environ.get("XRAY_DIFF_STDERR", "0") == "1"
+    shard_total_raw = os.environ.get("XRAY_DIFF_SHARD_TOTAL", "1")
+    shard_index_raw = os.environ.get("XRAY_DIFF_SHARD_INDEX", "0")
+    single_case = os.environ.get("XRAY_DIFF_SINGLE_CASE", "")
+    single_id_raw = os.environ.get("XRAY_DIFF_SINGLE_ID", "0")
+
+    try:
+        shard_total, shard_index = validate_shard(shard_total_raw, shard_index_raw)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # 180s per subprocess: generous enough for a cold AOT build of the heaviest
+    # case, tight enough that a deadlock becomes one red case, not a hung lane.
+    # XRAY_TEST_CASE_TIMEOUT=0 restores the historical no-timeout behavior.
+    case_timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 180)
+
+    config = RunnerConfig(
+        xray=xray, backends=backends, jobs=jobs, aot_opt=aot_opt,
+        aot_cache=aot_cache, aot_bin_cache=aot_bin_cache, diff_stderr=diff_stderr,
+        case_timeout=case_timeout,
+    )
+
+    if single_case:
+        result = run_case(config, int(single_id_raw) if is_uint(single_id_raw) else 0, Path(single_case))
+        print(result.output)
+        return 0 if result.status != "fail" else 1
+
+    if not (xray.is_file() and os.access(xray, os.X_OK)):
+        import shutil
+
+        if shutil.which(str(xray)) is None:
+            print(f"SKIP: xray binary not found: {xray_raw}")
+            print("=== Results: 0 passed, 0 failed, 0 skipped ===")
+            return 0
+    if not CASE_DIR.is_dir():
+        print(f"SKIP: no case dir {CASE_DIR}")
+        print("=== Results: 0 passed, 0 failed, 0 skipped ===")
+        return 0
+
+    base_cases_file = os.environ.get("XRAY_DIFF_CASES_FILE", "")
+    if "XRAY_DIFF_EXTRA_CASES_FILE" in os.environ:
+        extra_cases_file = os.environ["XRAY_DIFF_EXTRA_CASES_FILE"]
+    elif base_cases_file:
+        extra_cases_file = ""
+    else:
+        extra_cases_file = str(SCRIPT_DIR / "coro_regression_cases.txt")
+
+    try:
+        all_cases = collect_cases(base_cases_file, extra_cases_file)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    selected: List[Tuple[int, Path]] = []
+    case_index = 0
+    for case in all_cases:
+        if not case.is_file() or case.name.startswith("_"):
+            continue
+        if case_index % shard_total == shard_index:
+            selected.append((case_index, case))
+        case_index += 1
+
+    cache_state = "hot" if aot_binary_cache_hot(config, selected) else "cold"
+    if auto_jobs and cache_state == "hot":
+        jobs = max(1, min(jobs, env_int("XRAY_DIFF_HOT_MAX_AUTO_JOBS", 8)))
+        config.jobs = jobs
+
+    print("=== Backend Differential (VM / AOT) ===")
+    print(f"Binary:   {xray_raw}")
+    print(f"Backends: {','.join(backends)}")
+    print(f"Jobs:     {jobs}")
+    print(f"CacheState: {cache_state}")
+    print(f"AOT opt:  -O{aot_opt}")
+    print(f"Cache:    {aot_cache}")
+    print(f"BinCache: {aot_bin_cache}")
+    print("RunCache: disabled")
+    if shard_total > 1:
+        print(f"Shard:    {shard_index} / {shard_total}")
+    print("")
+    if shard_total > 1:
+        print(f"Cases:    {len(selected)} / {case_index}")
+        print("")
+
+    # Case-level parallelism. Each case mixes an AOT build and both backends'
+    # runs, so it is one CPU-tagged unit; the scheduler caps concurrency at the
+    # configured job count.
+    results: List[CaseResult] = []
+    reporter = progress.ProgressReporter(len(selected))
+    if jobs <= 1:
+        for order, case in selected:
+            result = run_case(config, order, case)
+            results.append(result)
+            reporter.tick(result.name)
+    else:
+        sched = scheduler.Scheduler({scheduler.CPU: jobs})
+        tasks = [
+            scheduler.Task(
+                key=str(order),
+                fn=(lambda o=order, c=case: run_case(config, o, c)),
+                tag=scheduler.CPU,
+            )
+            for order, case in selected
+        ]
+        by_key = sched.run(
+            tasks,
+            on_done=lambda k, r: reporter.tick(getattr(r, "name", "")),
+        )
+        for value in by_key.values():
+            # run_case is written not to raise; a raised exception is a runner
+            # bug, so surface it rather than mis-counting it as a case verdict.
+            if isinstance(value, BaseException):
+                raise value
+            results.append(value)
+    reporter.finish()
+
+    passed = failed = skipped = 0
+    for result in sorted(results, key=lambda item: item.order):
+        print(result.output)
+        if result.status == "pass":
+            passed += 1
+        elif result.status == "skip":
+            skipped += 1
+        else:
+            failed += 1
+
+    print("")
+    print(f"=== Results: {passed} passed, {failed} failed, {skipped} skipped ===")
+
+    # Ratchet. New-failure detection is always valid. The stale-entry check is
+    # only valid on a full run: a case-subset run never executes most baselined
+    # cases, so their absence from the failure set proves nothing.
+    baseline_path = Path(os.environ.get("XRAY_DIFF_BASELINE", str(SCRIPT_DIR / "known_failures.txt")))
+    baseline = ratchet.read_baseline(baseline_path)
+    failed_names = {r.name for r in results if r.status == "fail" and r.name}
+    skipped_names = {r.name for r in results if r.status == "skip" and r.name}
+
+    full_run = not os.environ.get("XRAY_DIFF_CASES_FILE") and shard_total <= 1
+    verdict = ratchet.evaluate(
+        failed=failed_names,
+        baseline=baseline,
+        # On a partial run, suppress the now-passing check by treating every
+        # unseen baseline entry as skipped -- it did not run, so it cannot be
+        # declared fixed.
+        skipped=skipped_names if full_run else (baseline - failed_names),
+    )
+
+    status = 0
+    if verdict.new_failures:
+        print("")
+        print(f"=== New differential failures (not in {rel_path(baseline_path)}) ===")
+        for name in verdict.new_failures:
+            print(f"  {name}")
+        print("A VM/AOT divergence is a correctness bug in one of the two backends.")
+        print("Fix it, or -- only with a written reason -- add it to the baseline.")
+        status = 1
+
+    if full_run:
+        if verdict.now_passing:
+            print("")
+            print("=== Baselined cases now pass; delete these entries ===")
+            for name in verdict.now_passing:
+                print(f"  {name}")
+            print(f"The baseline may only shrink. Remove the lines above from {rel_path(baseline_path)}.")
+            status = 1
+        print(f"Ratchet: {len(failed_names)} failing, {len(baseline)} baselined.")
+
+    return status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

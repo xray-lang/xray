@@ -5,7 +5,7 @@
 # real semantic difference: if outputs differ for any other reason, fix the
 # backend, do not add a rule here. See tasks/107.
 #
-# Used by run_backend_diff.sh on stderr (and optionally stdout) of each backend.
+# Used by run_backend_diff.py on stderr (and optionally stdout) of each backend.
 
 # Hex pointer addresses: 0xdeadbeef -> 0xPTR
 s/0x[0-9a-fA-F][0-9a-fA-F]*/0xPTR/g

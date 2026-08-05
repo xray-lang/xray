@@ -22,6 +22,14 @@ from stdlib_manifest import (
     registry_modules,
 )
 
+# The hosted-fragment ABI surface, as the generator emits it. Kept here rather
+# than inline so a new batch or ownership mode is one edit and shows up in a
+# grep, instead of a set literal buried in a loop.
+HOSTED_ABI_BATCHES = {"scalar", "string_rc", "mutable_rc", "object_rc"}
+HOSTED_ABI_OWNERSHIP = {"owned", "immediate", "owned-or-null", "immediate-or-null"}
+# Results the VM passes by value; anything else is a heap handle.
+HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "int", "float"}
+
 
 def check_manifest(root: Path) -> list[str]:
     manifest = load_manifest(root)
@@ -464,22 +472,51 @@ def check_fastpaths(root: Path) -> list[str]:
             generator_module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = generator_module
             spec.loader.exec_module(generator_module)
-            _version, generated_entries, _fingerprint = generator_module.load_entries(root)
+            # load_entries returns five values; unpacking fewer raised inside the
+            # fail-closed handler below, which reported the drift as "cannot derive
+            # source-backed VM fragment entries" and then, with an empty entry list,
+            # as a bogus benchmark-baseline mismatch. Keep every field named so the
+            # next signature change is a syntax-visible edit rather than a runtime one.
+            (_version, generated_entries, _deferred, _unsupported,
+             _fingerprint) = generator_module.load_entries(root)
             if len(generated_entries) < 48:
                 errors.append("source-derived hosted fragment batches must contain at least 48 exports")
+            # These assert the shape of the ABI, not the generator's type
+            # classification. Re-deriving "which results are heap values" here
+            # is what went stale: the gate only knew string and Array<byte>,
+            # so every class-instance and enum result read as a violation once
+            # object_rc arrived. Owning the invariants, and only the
+            # invariants, keeps the gate honest without a second copy of the
+            # type rules that has to be updated in lockstep.
             for generated in generated_entries:
                 symbol = str(generated.get("symbol", ""))
-                if generated.get("batch") not in {"scalar", "string_rc", "mutable_rc"}:
+                if generated.get("batch") not in HOSTED_ABI_BATCHES:
                     errors.append(f"generated fragment {symbol}: unsupported hosted ABI batch")
                 if generated.get("effect") != "compiler-verified":
                     errors.append(f"generated fragment {symbol}: missing compiler effect provenance")
-                expected_ownership = (
-                    "owned"
-                    if generated.get("result") in {"string", "Array<byte>"}
-                    else "immediate"
-                )
-                if generated.get("ownership") != expected_ownership:
-                    errors.append(f"generated fragment {symbol}: ownership disagrees with result ABI")
+
+                result = str(generated.get("result", ""))
+                ownership = str(generated.get("ownership", ""))
+                if ownership not in HOSTED_ABI_OWNERSHIP:
+                    errors.append(f"generated fragment {symbol}: unknown result ownership")
+                    continue
+                # A nullable result must say so, and a non-nullable one must not:
+                # the suffix is what tells the VM whether null is a legal value.
+                if result.endswith("?") != ownership.endswith("-or-null"):
+                    errors.append(
+                        f"generated fragment {symbol}: ownership nullability "
+                        "disagrees with result type")
+                base = ownership.split("-or-null")[0]
+                bare = result[:-1] if result.endswith("?") else result
+                # The original ABI rule, still the one that matters: a result
+                # the callee allocates must be handed over as owned, or the VM
+                # leaks it or double-frees it.
+                if (bare == "string" or bare.startswith("Array<")) and base != "owned":
+                    errors.append(
+                        f"generated fragment {symbol}: heap result must be owned")
+                if bare in HOSTED_ABI_SCALAR_RESULTS and base != "immediate":
+                    errors.append(
+                        f"generated fragment {symbol}: scalar result must be immediate")
             harness, _project = generator_module.render_harness(generated_entries, _fingerprint)
             if "import http" not in harness or "return http.isRedirectStatus(" not in harness:
                 errors.append("generated fragment harness must call authoritative imported .xr exports")

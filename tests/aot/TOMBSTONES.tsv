@@ -1,4 +1,4 @@
-# Task 220 P1 — Independent AOT suite tombstones (tests/aot/run_aot_tests.sh)
+# Task 220 P1 — Independent AOT suite tombstones (tests/aot/run_aot_tests.py)
 # The standalone suite is adopted into CTest as `aot_standalone_suite`, which runs
 # every case and treats EXACTLY the cases below as expected failures. Any other
 # failure fails the gate (fail-closed).

@@ -41,7 +41,7 @@ CONTRACT_SPECS = (
             "src/ir/xi.h",
             "src/ir/xi_lower.c",
             "src/runtime/value/xtype.h",
-            "tests/cli/run_verify_contract_tests.sh",
+            "tests/cli/run_verify_contract_tests.py",
             "tests/unit/analyzer/test_analyzer.c",
             "tests/unit/analyzer/test_effect_db.c",
             "tests/unit/ir/test_xi_lower.c",
@@ -69,8 +69,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "differential-protocol.md",
         (
-            "tests/diff/run_backend_diff.sh",
-            "tests/diff/run_backend_diff_fast.py",
+            "tests/diff/run_backend_diff.py",
             "tests/aot/TOMBSTONES.tsv",
         ),
     ),

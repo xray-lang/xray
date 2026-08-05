@@ -1,7 +1,7 @@
 // detector_weak_broken.xr — 加上 `weak` 之后，环真的没了（任务 247 阶段 H 验收）
 //
 // 这是 LSP 代码操作那条链路的运行期终点。合同那一侧已经证明了「加 weak 后
-// `no_reference_cycles` 从失败转通过」（tests/cli/run_verify_contract_tests.sh），
+// `no_reference_cycles` 从失败转通过」（tests/cli/run_verify_contract_tests.py），
 // 但那是编译期的类型图判定。检测器看的是运行期的真实对象图，两者是独立的
 // 观察量 —— 编译期证明不了不代表运行期真的泄漏，反过来也一样。
 //

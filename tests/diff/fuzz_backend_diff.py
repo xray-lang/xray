@@ -4,12 +4,12 @@
 Generates random, type-correct .xr programs and runs each through the VM
 (`xray run`) and AOT (`xray build --native` + execute), asserting their
 observable result (stdout + exit code) is byte-identical. This is the
-randomized companion to run_backend_diff.sh: it explores the numeric /
+randomized companion to run_backend_diff.py: it explores the numeric /
 formatting / control-flow surface where the two backends are most prone to
 silently diverge.
 
 stderr is intentionally NOT compared (it carries backend-specific build and
-diagnostic noise), matching run_backend_diff.sh's observable contract.
+diagnostic noise), matching run_backend_diff.py's observable contract.
 
 Usage:
   tests/diff/fuzz_backend_diff.py [--count N] [--seed S] [--xray PATH]
