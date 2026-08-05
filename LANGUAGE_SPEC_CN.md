@@ -646,6 +646,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumPayloads<T>` | 解析器内建 |
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
+| `Iterator<T>` | prelude |
 | `Json` | prelude |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
@@ -693,7 +694,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |
-| `Iterator<T>` |
 | `Lengthable` |
 | `Stringable` |
 

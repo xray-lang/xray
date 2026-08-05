@@ -7,4 +7,11 @@ class Iterator<T> {
     next() -> T
     // @lowered
     nth(index: int) -> T
+    // An iterator is its own iterable, so this answers the receiver itself
+    // rather than a fresh handle. Result and receiver are ONE object: without
+    // the annotation the ARC verifier tracks them as two references and a dead
+    // receiver frees the live result.
+    // @returns_receiver
+    iterator() -> Iterator<T>
+    toString() -> string
 }

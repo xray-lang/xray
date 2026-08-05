@@ -589,6 +589,8 @@ static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
             return core->bigintClass;
         case XR_TID_STRINGBUILDER:
             return core->stringBuilderClass;
+        case XR_TID_ITERATOR:
+            return core->iteratorClass;
         case XR_TID_REGEX:
             return core->regexClass;
         case XR_TID_PANIC_INFO:

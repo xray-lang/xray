@@ -645,6 +645,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumPayloads<T>` | resolver built-in |
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
+| `Iterator<T>` | prelude |
 | `Json` | prelude |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
@@ -692,7 +693,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |
-| `Iterator<T>` |
 | `Lengthable` |
 | `Stringable` |
 

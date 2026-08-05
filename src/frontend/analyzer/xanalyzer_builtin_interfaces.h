@@ -36,7 +36,6 @@
 // Built-in interface identifiers
 typedef enum {
     XA_IFACE_ITERABLE,    // for...in support
-    XA_IFACE_ITERATOR,    // iteration protocol
     XA_IFACE_COMPARABLE,  // <, >, <=, >= operators
     XA_IFACE_HASHABLE,    // Map key, Set element
     XA_IFACE_STRINGABLE,  // toString() support

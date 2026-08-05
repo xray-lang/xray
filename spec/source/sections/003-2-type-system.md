@@ -63,6 +63,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumPayloads<T>` | 解析器内建 |
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
+| `Iterator<T>` | prelude |
 | `Json` | prelude |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
@@ -110,7 +111,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |
-| `Iterator<T>` |
 | `Lengthable` |
 | `Stringable` |
 
@@ -1179,6 +1179,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumPayloads<T>` | resolver built-in |
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
+| `Iterator<T>` | prelude |
 | `Json` | prelude |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
@@ -1226,7 +1227,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |
-| `Iterator<T>` |
 | `Lengthable` |
 | `Stringable` |
 

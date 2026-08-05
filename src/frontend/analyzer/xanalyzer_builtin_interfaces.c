@@ -52,29 +52,11 @@ static XaInterfaceMethod iterable_methods[] = {
     {"iterator", NULL, NULL, 0}  // return type set during init
 };
 
-/*
- * Equivalent xray code for Iterator<T>:
- *
- *   interface Iterator<T> {
- *       // Returns the next element; pulling past exhaustion raises E0432.
- *       next(): T
- *
- *       // Returns true if there are more elements
- *       hasNext(): bool
- *
- *       // Consumes index + 1 elements; exhaustion also raises E0432.
- *       nth(index: int): T
- *   }
- *
- * Note: This is the iteration protocol used internally by for...in loops.
- * Users typically don't implement Iterator directly, but implement Iterable
- * and return a built-in iterator type.
- */
-static XaInterfaceMethod iterator_methods[] = {
-    {"next", NULL, NULL, 0},     // return type: T? (nullable element type)
-    {"hasNext", NULL, NULL, 0},  // return type: bool
-    {"nth", NULL, NULL, 1}       // return type: T, param: index: int
-};
+/* Iterator<T> is deliberately absent from this registry. It is a sealed native
+ * class with a real runtime representation, declared in stdlib/types/iterator.xr
+ * and mapped to XR_TID_ITERATOR, so `Iterator<int>` must resolve to that class.
+ * Registering the name here as well shadowed the class with an argument-less
+ * interface alias, which made every `Iterator<T>` annotation unusable. */
 
 /*
  * Equivalent xray code for Comparable:
@@ -374,7 +356,6 @@ static XaInterfaceMethod closeable_methods[] = {
 
 static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1},
-    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 3},
     [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1},
     [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 2},
     [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1},
@@ -400,13 +381,9 @@ static const char *const g_builtin_iface_surface[] = {
 static xr_once_t builtin_interface_methods_once = XR_ONCE_INITIALIZER;
 
 static void init_builtin_interface_methods(void) {
-    static XrType *nth_params[1];
     comparable_methods[0].return_type = xr_type_new_int(NULL);
     hashable_methods[0].return_type = xr_type_new_int(NULL);
     stringable_methods[0].return_type = xr_type_new_string(NULL);
-    iterator_methods[1].return_type = xr_type_new_bool(NULL);
-    nth_params[0] = xr_type_new_int(NULL);
-    iterator_methods[2].param_types = nth_params;
 
     XR_STATIC_ASSERT(XA_IFACE_SURFACE_COUNT == (size_t) XA_IFACE_COUNT,
                      "builtin_symbols.def and builtin_interfaces[] disagree on interface count");
@@ -522,10 +499,6 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             // Iterable: Array, View, Slice, Map, Set, string
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
                    is_map_type(type) || is_set_type(type) || is_string_type(type);
-
-        case XA_IFACE_ITERATOR:
-            // Iterator: internal use only, no built-in types directly implement
-            return false;
 
         case XA_IFACE_COMPARABLE:
             // Comparable: int, float, string, BigInt

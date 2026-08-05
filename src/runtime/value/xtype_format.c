@@ -234,7 +234,12 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_TYPE_PARAM) {
         return type->type_param.name ? type->type_param.name : "T";
     }
-    if (type->kind == XR_KIND_INTERFACE) {
+    /* A parameterized interface (Iterable<int>, Indexable<K, V>) keeps its
+     * arguments in the shared instance member, so only the bare form answers
+     * here and the instance renderer below prints the argument list. Dropping
+     * the arguments made a mismatch read as "Iterable is not Iterable". */
+    if (type->kind == XR_KIND_INTERFACE &&
+        (type->instance.type_arg_count <= 0 || !type->instance.type_args)) {
         return type->instance.class_name ? type->instance.class_name : "Interface";
     }
     if (xr_type_is_named_class(type, "Regex"))
@@ -271,7 +276,7 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
-    if (XR_TYPE_IS_INSTANCE(type) || XR_TYPE_IS_CLASS(type)) {
+    if (XR_TYPE_IS_INSTANCE(type) || XR_TYPE_IS_CLASS(type) || type->kind == XR_KIND_INTERFACE) {
         if (!type->instance.class_name)
             return "Object";
 
