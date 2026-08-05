@@ -368,8 +368,8 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
                 int64_t emitted = 0;
                 int64_t total = 0;
                 xrt_fmt_char(sb, '{');
-                for (int64_t i = 0; i < j->field_count; i++) {
-                    const char *name = j->field_names ? j->field_names[i] : NULL;
+                for (int64_t i = 0; i < xrt_object_field_count(j); i++) {
+                    const char *name = xrt_object_field_name(j, i);
                     if (!name)
                         continue;
                     total++;
@@ -679,7 +679,7 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
-                return obj->object_kind == XRT_OBJECT_RECORD ? 41 : 18;
+                return xrt_object_domain(obj) == XRT_OBJECT_RECORD ? 41 : 18;
             }
             return 17; /* XR_TID_INSTANCE */
         case XR_TAG_CLOSURE:
@@ -780,8 +780,8 @@ static inline XrValue xrt_typename(XrValue v) {
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
-                return obj->object_kind == XRT_OBJECT_RECORD ? xr_str_lit(&xs_record)
-                                                             : xr_str_lit(&xs_json);
+                return xrt_object_domain(obj) == XRT_OBJECT_RECORD ? xr_str_lit(&xs_record)
+                                                                  : xr_str_lit(&xs_json);
             }
             if (v.ptr && v.heap_type == XR_TINSTANCE) {
                 XrObjHeader *hdr = (XrObjHeader *) v.ptr;

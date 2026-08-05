@@ -25,6 +25,7 @@
 #include "../../base/xhashmap.h"
 #include "../../shared/xr_derive_flags.h"
 #include "../../shared/xr_json_type.h"
+#include "../../shared/xobject_shape.h"
 #include "../mem/xobj_header.h"
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -74,9 +75,11 @@ typedef enum XrFieldAccessKind {
 typedef struct XrFieldDescriptor {
     const char *name;
     const char *type_name;  // Declared type name (NULL = untyped), for type metadata
+    uint64_t stable_type_key;
     int symbol;
     uint16_t offset;  // Byte offset in instance
     uint16_t flags;
+    uint8_t shape_flags;
     int16_t static_slot;      // Pre-computed static slot index (-1 if not static)
     uint8_t json_value_kind;  // XrJsonValueKind plus XR_JSON_VALUE_NULLABLE
     struct XrClass *json_record_class;
@@ -104,7 +107,9 @@ typedef struct XrFieldDescriptor {
 // class `to`". Transitions form a singly-linked list per class.
 typedef struct XrClassTransition {
     int symbol;               // Field symbol that triggers this transition
+    uint64_t stable_type_key;
     uint8_t json_value_kind;  // Typed Record identity; ANY for dynamic Json fields
+    uint8_t shape_flags;
     struct XrClass *json_record_class;
     struct XrClass *target;          // Resulting child class after adding the field
     struct XrClassTransition *next;  // Next transition in the linked list
@@ -230,6 +235,8 @@ struct XrClass {
     struct XrClass *transition_parent;                // Parent class in transition chain
     int transition_symbol;                            // Symbol that caused transition from parent
     uint16_t in_object_capacity;                      // Max inline field slots (default 8)
+    uint64_t stable_shape_key;                        // Content key; never pointer identity
+    uint8_t object_domain;                            // XR_OBJECT_DOMAIN_* for dynamic layouts
 
     /* === Struct Layout (VALUE_TYPE only) === */
     struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
@@ -276,6 +283,15 @@ struct XrClass {
  * SETPROP so a class without weak fields — every class today — keeps its
  * inline-cache fast paths untouched. */
 #define XR_CLASS_HAS_WEAK_FIELDS (1 << 18)
+
+static inline uint64_t xr_class_stable_shape_key(const XrClass *cls) {
+    return cls && (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) ? cls->stable_shape_key : 0;
+}
+
+static inline uint8_t xr_class_object_domain(const XrClass *cls) {
+    return cls && (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) ? cls->object_domain
+                                                         : XR_OBJECT_DOMAIN_JSON;
+}
 
 static inline uint32_t xr_class_flags_from_derive(uint32_t derive_flags) {
     uint32_t flags = 0;

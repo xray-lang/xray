@@ -158,10 +158,13 @@ XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrVMRuntime *X,
 // as XR_CLASS_DYNAMIC_SEALED so further transitions are rejected.
 // Returns the leaf class (or NULL on OOM).
 XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrVMRuntime *X, const char *const *names,
-                                                  int count, bool sealed);
+                                                  int count, const uint64_t *stable_type_keys,
+                                                  const uint8_t *shape_field_flags, bool sealed);
 XR_FUNC struct XrClass *xr_class_build_record_chain(struct XrVMRuntime *X, const char *const *names,
                                                     const uint8_t *json_value_kinds, int count,
                                                     struct XrClass *const *json_record_classes,
+                                                    const uint64_t *stable_type_keys,
+                                                    const uint8_t *shape_field_flags,
                                                     bool sealed);
 
 #endif  // XINSTANCE_H

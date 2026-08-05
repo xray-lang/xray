@@ -67,6 +67,9 @@ def main(argv: list[str]) -> int:
         return 1
 
     for name, text in generated.items():
+        object_body = re.sub(
+            r"static XrValue xrt_runtime_record_new\([^}]+\}\n", "", text, flags=re.S
+        )
         if "xrt_index_get" in text or "xrt_index_set" in text:
             print(
                 f"object static access equivalence: FAIL\n{name} emitted generic index access",
@@ -77,6 +80,34 @@ def main(argv: list[str]) -> int:
             print(
                 f"object static access equivalence: FAIL\n"
                 f"{name} expected two fixed-field reads, got {text.count('xrt_json_get_field')}",
+                file=sys.stderr,
+            )
+            return 1
+        if text.count("static const XrtObjectShapeField _xobj_shape_fields_") != 1 or text.count(
+            "static const XrtObjectShape _xobj_shape_"
+        ) != 1:
+            print(
+                f"object static access equivalence: FAIL\n"
+                f"{name} did not emit exactly one file-static shape descriptor",
+                file=sys.stderr,
+            )
+            return 1
+        if text.count("xrt_object_new_shape(&_xobj_shape_") != 1:
+            print(
+                f"object static access equivalence: FAIL\n"
+                f"{name} did not construct the exact object from its static descriptor",
+                file=sys.stderr,
+            )
+            return 1
+        if (
+            "xrt_record_new_named" in object_body
+            or "xrt_json_new_named" in object_body
+            or "(const char*[]){" in object_body
+            or "(const char *const[]){" in object_body
+        ):
+            print(
+                f"object static access equivalence: FAIL\n"
+                f"{name} retained a per-instance or block-scope shape table",
                 file=sys.stderr,
             )
             return 1

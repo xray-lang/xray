@@ -33,6 +33,7 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
@@ -624,6 +625,18 @@ typedef struct CgStrLit {
     struct CgStrLit *next; /* hash bucket chain */
 } CgStrLit;
 
+/* Translation-unit-local descriptor registry. Names and type metadata are
+ * borrowed from the Xi/type arenas and remain live until the unit is emitted;
+ * only the growable registry storage is owned by XiCgenCtx. */
+typedef struct CgObjectShape {
+    uint64_t stable_key;
+    int64_t field_count;
+    const char *const *field_names; /* owned: Xi value/type arena; TU-scoped borrow */
+    const XrType *type;             /* owned: type pool; TU-scoped borrow */
+    uint8_t object_domain;
+    int id;
+} CgObjectShape;
+
 #define CG_STRLIT_BUCKETS 1024
 
 typedef struct CgFuncReachMemo {
@@ -756,6 +769,9 @@ struct XiCgenCtx {
     CgStrLit **strlit_list; /* ordered by id for definition emission */
     int nstrlit;
     int strlit_cap;
+    CgObjectShape *object_shapes;
+    int nobject_shapes;
+    int object_shapes_cap;
     CgFuncReachMemo *func_reach_memo;
     int nfunc_reach_memo;
     int func_reach_memo_cap;
@@ -1044,6 +1060,102 @@ static void cg_reset_str_lits(XiCgenCtx *ctx) {
         ctx->strlit_buckets[b] = NULL;
     }
     ctx->nstrlit = 0;
+}
+
+static uint8_t cg_object_shape_field_flags(const XrType *type, int64_t ordinal) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || ordinal < 0 ||
+        ordinal >= type->object.field_count)
+        return 0;
+    return type->object.field_readonly && type->object.field_readonly[ordinal]
+               ? XR_OBJECT_SHAPE_FIELD_READONLY
+               : 0;
+}
+
+static uint64_t cg_object_shape_field_type_key(const XrType *type, int64_t ordinal) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_types || ordinal < 0 ||
+        ordinal >= type->object.field_count)
+        return 0;
+    return xr_type_stable_key(type->object.field_types[ordinal]);
+}
+
+static void cg_reset_object_shapes(XiCgenCtx *ctx) {
+    if (ctx)
+        ctx->nobject_shapes = 0;
+}
+
+static bool cg_reserve_object_shapes(XiCgenCtx *ctx, int need) {
+    if (!ctx || need <= ctx->object_shapes_cap)
+        return ctx != NULL;
+    int cap = ctx->object_shapes_cap ? ctx->object_shapes_cap * 2 : 16;
+    while (cap < need)
+        cap *= 2;
+    CgObjectShape *shapes =
+        (CgObjectShape *) xr_realloc(ctx->object_shapes, (size_t) cap * sizeof(*shapes));
+    if (!shapes) {
+        ctx->error = true;
+        return false;
+    }
+    ctx->object_shapes = shapes;
+    ctx->object_shapes_cap = cap;
+    return true;
+}
+
+static bool cg_object_shape_matches(const CgObjectShape *shape, uint64_t stable_key,
+                                    int64_t field_count, const char *const *field_names,
+                                    const XrType *type, uint8_t object_domain) {
+    if (!shape || shape->stable_key != stable_key || shape->field_count != field_count ||
+        shape->object_domain != object_domain)
+        return false;
+    for (int64_t i = 0; i < field_count; i++) {
+        const char *left = shape->field_names && shape->field_names[i] ? shape->field_names[i] : "?";
+        const char *right = field_names && field_names[i] ? field_names[i] : "?";
+        if (strcmp(left, right) != 0 ||
+            cg_object_shape_field_type_key(shape->type, i) !=
+                cg_object_shape_field_type_key(type, i) ||
+            cg_object_shape_field_flags(shape->type, i) !=
+                cg_object_shape_field_flags(type, i))
+            return false;
+    }
+    return true;
+}
+
+static int cg_intern_object_shape_parts(XiCgenCtx *ctx, int64_t field_count,
+                                        const char *const *field_names, const XrType *type,
+                                        uint8_t object_domain) {
+    if (!ctx || field_count <= 0 || field_count > UINT16_MAX || !field_names) {
+        if (ctx && field_count > UINT16_MAX)
+            ctx->error = true;
+        return -1;
+    }
+    uint64_t stable_key = xr_object_shape_key_begin(object_domain, field_count);
+    for (int64_t i = 0; i < field_count; i++) {
+        stable_key = xr_object_shape_key_add_field(
+            stable_key, field_names[i], cg_object_shape_field_type_key(type, i),
+            cg_object_shape_field_flags(type, i));
+    }
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        if (cg_object_shape_matches(&ctx->object_shapes[i], stable_key, field_count, field_names,
+                                    type, object_domain))
+            return ctx->object_shapes[i].id;
+    }
+    if (!cg_reserve_object_shapes(ctx, ctx->nobject_shapes + 1))
+        return -1;
+    int id = ctx->nobject_shapes;
+    CgObjectShape *shape = &ctx->object_shapes[ctx->nobject_shapes++];
+    shape->stable_key = stable_key;
+    shape->field_count = field_count;
+    shape->field_names = field_names;
+    shape->type = type;
+    shape->object_domain = object_domain;
+    shape->id = id;
+    return id;
+}
+
+static int cg_intern_object_shape(XiCgenCtx *ctx, const XiValue *value) {
+    const XrType *type = value ? value->type : NULL;
+    return cg_intern_object_shape_parts(
+        ctx, xi_json_field_count(value), value ? (const char *const *) value->aux : NULL, type,
+        type && type->kind == XR_KIND_RECORD ? XR_OBJECT_DOMAIN_STRUCT : XR_OBJECT_DOMAIN_JSON);
 }
 
 /* Storage-class prefix for emitted top-level objects: external linkage in

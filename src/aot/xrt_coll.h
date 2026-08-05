@@ -32,6 +32,7 @@
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_json_type.h"
+#include "../shared/xobject_shape.h"
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
@@ -3314,18 +3315,42 @@ static inline XrValue xrt_set_value_at_owned(xrt_set_t *s, int64_t index) {
  * ========================================================================= */
 
 enum {
-    XRT_OBJECT_JSON = 0,
-    XRT_OBJECT_RECORD = 1,
+    XRT_OBJECT_JSON = XR_OBJECT_DOMAIN_JSON,
+    XRT_OBJECT_RECORD = XR_OBJECT_DOMAIN_STRUCT,
 };
 
 typedef struct {
     XrObjHeader hdr;
-    int64_t field_count;
-    uint8_t object_kind;
-    const char **field_names;
+    const XrtObjectShape *shape;
     xrt_map_t *dynamic_fields;
     XrValue fields[]; /* flexible array of field values */
 } xrt_json_t;
+
+static const XrtObjectShape xrt_empty_json_shape = {
+    UINT64_C(0x9ed83e7338f1f348), 0, NULL, XRT_OBJECT_JSON, XR_OBJECT_SHAPE_STATIC, 0, 0};
+static const XrtObjectShape xrt_empty_record_shape = {
+    UINT64_C(0x9ed8ff3338f1dc1a), 0, NULL, XRT_OBJECT_RECORD, XR_OBJECT_SHAPE_STATIC, 0, 0};
+
+static inline int64_t xrt_object_field_count(const xrt_json_t *object) {
+    return object && object->shape ? object->shape->field_count : 0;
+}
+
+static inline uint8_t xrt_object_domain(const xrt_json_t *object) {
+    return object && object->shape ? object->shape->object_domain : XRT_OBJECT_JSON;
+}
+
+static inline const XrtObjectShapeField *xrt_object_shape_field(const xrt_json_t *object,
+                                                                int64_t ordinal) {
+    if (!object || !object->shape || !object->shape->fields || ordinal < 0 ||
+        ordinal >= object->shape->field_count)
+        return NULL;
+    return &object->shape->fields[ordinal];
+}
+
+static inline const char *xrt_object_field_name(const xrt_json_t *object, int64_t ordinal) {
+    const XrtObjectShapeField *field = xrt_object_shape_field(object, ordinal);
+    return field ? field->name : NULL;
+}
 
 /* =========================================================================
  * Iterator runtime — backs the iterator protocol over Array / Map / Set / Json / string.
@@ -3443,7 +3468,7 @@ static inline int64_t xrt_json_dynamic_len(const xrt_json_t *j) {
 }
 
 static inline int64_t xrt_json_iter_count(const xrt_json_t *j) {
-    return j ? j->field_count + xrt_json_dynamic_len(j) : 0;
+    return xrt_object_field_count(j) + xrt_json_dynamic_len(j);
 }
 
 static inline int xrt_json_dynamic_iter_has_next(xrt_map_t *m, int64_t *cursor) {
@@ -3459,8 +3484,9 @@ static inline int xrt_json_dynamic_iter_has_next(xrt_map_t *m, int64_t *cursor) 
 
 static inline int xrt_json_iterator_has_next(xrt_iterator_t *it) {
     xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
-    while (it->cursor < j->field_count) {
-        if (!j->field_names || !j->field_names[it->cursor]) {
+    int64_t field_count = xrt_object_field_count(j);
+    while (it->cursor < field_count) {
+        if (!xrt_object_field_name(j, it->cursor)) {
             it->cursor++;
             continue;
         }
@@ -3468,18 +3494,20 @@ static inline int xrt_json_iterator_has_next(xrt_iterator_t *it) {
     }
     if (!j->dynamic_fields)
         return 0;
-    int64_t dyn_cursor = it->cursor - j->field_count;
+    int64_t dyn_cursor = it->cursor - field_count;
     if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
         return 0;
-    it->cursor = j->field_count + dyn_cursor;
+    it->cursor = field_count + dyn_cursor;
     return 1;
 }
 
 static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
     xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
-    if (it->cursor < j->field_count) {
+    int64_t field_count = xrt_object_field_count(j);
+    if (it->cursor < field_count) {
         int64_t idx = it->cursor++;
-        XrValue key = xr_box_str(j->field_names && j->field_names[idx] ? j->field_names[idx] : "");
+        const char *field_name = xrt_object_field_name(j, idx);
+        XrValue key = xr_box_str(field_name ? field_name : "");
         XrValue value = j->fields[idx];
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {key, value};
@@ -3491,11 +3519,11 @@ static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
     }
     if (!j->dynamic_fields)
         return XR_NULL_VAL;
-    int64_t dyn_cursor = it->cursor - j->field_count;
+    int64_t dyn_cursor = it->cursor - field_count;
     if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
         return XR_NULL_VAL;
     int64_t slot = dyn_cursor;
-    it->cursor = j->field_count + dyn_cursor + 1;
+    it->cursor = field_count + dyn_cursor + 1;
     XrValue key = xrt_map_slot_key(j->dynamic_fields, slot);
     XrValue value = xrt_map_slot_value(j->dynamic_fields, slot);
     if (it->kind == XRT_ITER_PAIRS) {
@@ -3669,8 +3697,65 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 
-static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_kind) {
-    size_t object_bytes = sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue);
+static inline XrtObjectShape *xrt_object_shape_new_owned(int64_t field_count,
+                                                        const char *const *field_names,
+                                                        uint8_t object_domain) {
+    if (field_count < 0 || field_count > UINT16_MAX) {
+        fprintf(stderr, "xrt_object_shape_new_owned: invalid field count\n");
+        abort();
+    }
+    size_t bytes = sizeof(XrtObjectShape) +
+                   (size_t) field_count * sizeof(XrtObjectShapeField);
+    XrtObjectShape *shape = (XrtObjectShape *) XRT_MALLOC(bytes);
+    if (XR_UNLIKELY(!shape)) {
+        fprintf(stderr, "xrt_object_shape_new_owned: out of memory\n");
+        abort();
+    }
+    XrtObjectShapeField *fields =
+        field_count > 0 ? (XrtObjectShapeField *) (shape + 1) : NULL;
+    for (int64_t i = 0; i < field_count; i++) {
+        const char *name = field_names && field_names[i] ? field_names[i] : "?";
+        fields[i].name = name;
+        fields[i].stable_type_key = 0;
+        fields[i].symbol_hash = xr_hash_bytes(name, strlen(name));
+        fields[i].ordinal = (uint16_t) i;
+        fields[i].flags = 0;
+        fields[i].reserved = 0;
+    }
+    shape->stable_key = xr_object_shape_stable_key(object_domain, fields, field_count);
+    shape->field_count = field_count;
+    shape->fields = fields;
+    shape->object_domain = object_domain;
+    shape->storage = XR_OBJECT_SHAPE_OWNED;
+    shape->reserved16 = 0;
+    shape->reserved32 = 0;
+    return shape;
+}
+
+static inline XrtObjectShape *xrt_object_shape_clone_owned(const XrtObjectShape *source,
+                                                           uint8_t object_domain) {
+    if (!source)
+        return xrt_object_shape_new_owned(0, NULL, object_domain);
+    XrtObjectShape *shape =
+        xrt_object_shape_new_owned(source->field_count, NULL, object_domain);
+    XrtObjectShapeField *fields = (XrtObjectShapeField *) shape->fields;
+    for (int64_t i = 0; i < source->field_count; i++) {
+        fields[i] = source->fields[i];
+        fields[i].ordinal = (uint16_t) i;
+        fields[i].reserved = 0;
+    }
+    shape->stable_key =
+        xr_object_shape_stable_key(object_domain, shape->fields, shape->field_count);
+    return shape;
+}
+
+static inline XrValue xrt_object_new_shape(const XrtObjectShape *shape) {
+    if (!shape || shape->field_count < 0 || shape->field_count > UINT16_MAX) {
+        fprintf(stderr, "xrt_object_new_shape: invalid shape descriptor\n");
+        abort();
+    }
+    size_t object_bytes =
+        sizeof(xrt_json_t) + (size_t) shape->field_count * sizeof(XrValue);
     xrt_json_t *j =
         (xrt_json_t *) xrt_execution_alloc_embedded(object_bytes, xrt_execution_finalize_json);
     if (XR_UNLIKELY(!j)) {
@@ -3680,15 +3765,30 @@ static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_ki
     xrt_heap_header_init(&j->hdr, XR_TINSTANCE);
     j->hdr.extra |= XR_OBJ_HAS_DTOR;
     j->hdr._rsv = XRT_ARC_KIND_JSON;
-    j->field_count = field_count;
-    j->object_kind = object_kind;
-    j->field_names = NULL;
+    j->shape = shape;
     j->dynamic_fields = NULL;
-    for (int64_t i = 0; i < field_count; i++)
+    for (int64_t i = 0; i < shape->field_count; i++)
         j->fields[i] = XR_NULL_VAL;
     XrValue value = xr_mkptr(j, XR_TAG_PTR);
     value.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
     return value;
+}
+
+static inline XrValue xrt_object_new_like(const xrt_json_t *source, uint8_t object_domain) {
+    if (!source || !source->shape)
+        return xrt_object_new_shape(object_domain == XRT_OBJECT_RECORD ? &xrt_empty_record_shape
+                                                                       : &xrt_empty_json_shape);
+    if (source->shape->storage == XR_OBJECT_SHAPE_STATIC &&
+        source->shape->object_domain == object_domain)
+        return xrt_object_new_shape(source->shape);
+    return xrt_object_new_shape(xrt_object_shape_clone_owned(source->shape, object_domain));
+}
+
+static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_kind) {
+    if (field_count == 0)
+        return xrt_object_new_shape(object_kind == XRT_OBJECT_RECORD ? &xrt_empty_record_shape
+                                                                     : &xrt_empty_json_shape);
+    return xrt_object_new_shape(xrt_object_shape_new_owned(field_count, NULL, object_kind));
 }
 
 static inline XrValue xrt_json_set_storage(XrValue value, uint8_t storage_mode) {
@@ -3701,18 +3801,10 @@ static inline XrValue xrt_value_set_storage(XrValue value, uint8_t storage_mode)
 
 static inline XrValue xrt_object_new_named_kind(int64_t field_count, const char *const *field_names,
                                                 uint8_t object_kind) {
-    XrValue obj = xrt_object_new_kind(field_count, object_kind);
-    xrt_json_t *j = (xrt_json_t *) obj.ptr;
-    if (field_count <= 0 || !field_names)
-        return obj;
-    j->field_names = (const char **) XRT_MALLOC((size_t) field_count * sizeof(const char *));
-    if (XR_UNLIKELY(!j->field_names)) {
-        fprintf(stderr, "xrt_json_new_named: out of memory\n");
-        abort();
-    }
-    for (int64_t i = 0; i < field_count; i++)
-        j->field_names[i] = field_names[i] ? field_names[i] : "?";
-    return obj;
+    if (field_count == 0)
+        return xrt_object_new_kind(0, object_kind);
+    return xrt_object_new_shape(
+        xrt_object_shape_new_owned(field_count, field_names, object_kind));
 }
 
 static inline XrValue xrt_json_new(int64_t field_count) {
@@ -3732,10 +3824,12 @@ static inline XrValue xrt_record_new_named(int64_t field_count, const char *cons
 }
 
 static inline int64_t xrt_json_find_field(xrt_json_t *j, const char *name) {
-    if (!j || !name || !j->field_names)
+    if (!j || !name || !j->shape || !j->shape->fields)
         return -1;
-    for (int64_t i = 0; i < j->field_count; i++) {
-        if (j->field_names[i] && strcmp(j->field_names[i], name) == 0)
+    uint32_t symbol_hash = xr_hash_bytes(name, strlen(name));
+    for (int64_t i = 0; i < j->shape->field_count; i++) {
+        const XrtObjectShapeField *field = &j->shape->fields[i];
+        if (field->symbol_hash == symbol_hash && field->name && strcmp(field->name, name) == 0)
             return i;
     }
     return -1;
@@ -3743,14 +3837,14 @@ static inline int64_t xrt_json_find_field(xrt_json_t *j, const char *name) {
 
 static inline XrValue xrt_json_get_field(XrValue obj, int field_idx) {
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
-    if (field_idx >= 0 && field_idx < j->field_count)
+    if (field_idx >= 0 && field_idx < xrt_object_field_count(j))
         return j->fields[field_idx];
     return XR_NULL_VAL;
 }
 
 static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
-    if (field_idx >= 0 && field_idx < j->field_count)
+    if (field_idx >= 0 && field_idx < xrt_object_field_count(j))
         j->fields[field_idx] = val;
 }
 
@@ -3772,11 +3866,12 @@ static inline int xrt_json_shape_guard_matches(XrValue obj, int field_idx, const
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name || field_idx < 0)
         return 0;
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
-    if (j->object_kind != XRT_OBJECT_JSON && j->object_kind != XRT_OBJECT_RECORD)
+    if (xrt_object_domain(j) != XRT_OBJECT_JSON && xrt_object_domain(j) != XRT_OBJECT_RECORD)
         return 0;
-    if (field_idx >= j->field_count || !j->field_names || !j->field_names[field_idx])
+    const char *field_name = xrt_object_field_name(j, field_idx);
+    if (!field_name)
         return 0;
-    return strcmp(j->field_names[field_idx], name) == 0;
+    return strcmp(field_name, name) == 0;
 }
 
 static inline XrValue xrt_json_get_shape_guard_owned(XrValue obj, int field_idx, const char *name) {
@@ -3791,8 +3886,9 @@ static inline XrValue xrt_json_get_computed_key_guard_owned(XrValue obj, XrValue
     const char *name = xr_str_data(key);
     if (obj.tag == XR_TAG_PTR && obj.ptr) {
         xrt_json_t *j = (xrt_json_t *) obj.ptr;
-        if ((j->object_kind == XRT_OBJECT_JSON || j->object_kind == XRT_OBJECT_RECORD) &&
-            j->field_names) {
+        if ((xrt_object_domain(j) == XRT_OBJECT_JSON ||
+             xrt_object_domain(j) == XRT_OBJECT_RECORD) &&
+            j->shape && j->shape->fields) {
             int64_t idx = xrt_json_find_field(j, name);
             if (idx >= 0)
                 return xrt_value_to_owned(xrt_json_get_field(obj, (int) idx));
@@ -3851,49 +3947,53 @@ static inline XrValue xrt_json_decode_record(XrValue data, int64_t field_count,
     if (data.tag != XR_TAG_PTR || !data.ptr || data.heap_type != 0)
         return XR_NULL_VAL;
     xrt_json_t *src = (xrt_json_t *) data.ptr;
-    if (src->object_kind != XRT_OBJECT_JSON && src->object_kind != XRT_OBJECT_RECORD)
+    if (xrt_object_domain(src) != XRT_OBJECT_JSON &&
+        xrt_object_domain(src) != XRT_OBJECT_RECORD)
         return XR_NULL_VAL;
     XrValue *decoded_values = (XrValue *) XRT_MALLOC((size_t) field_count * sizeof(XrValue));
-    const char **field_names = (const char **) XRT_MALLOC((size_t) field_count * sizeof(char *));
-    if (XR_UNLIKELY(!decoded_values || !field_names)) {
+    if (XR_UNLIKELY(!decoded_values)) {
         fprintf(stderr, "xrt_json_decode_record: out of memory\n");
         abort();
     }
     for (int64_t i = 0; i < field_count; i++) {
         const XrJsonDecodeFieldSpec *field = &fields[i];
         const char *name = field->name;
-        field_names[i] = name ? name : "?";
         if (!name || !xrt_json_has_name(data, name)) {
             XRT_FREE(decoded_values);
-            XRT_FREE(field_names);
             return XR_NULL_VAL;
         }
         XrValue field_value = xrt_json_get_name(data, name);
         if (!xrt_json_value_matches_kind(field_value, field->value_kind)) {
             XRT_FREE(decoded_values);
-            XRT_FREE(field_names);
             return XR_NULL_VAL;
         }
         if (xr_json_value_kind_base(field->value_kind) == XR_JSON_VALUE_RECORD &&
             !XR_IS_NULL(field_value)) {
             if (!field->nested_fields || field->nested_field_count == 0) {
                 XRT_FREE(decoded_values);
-                XRT_FREE(field_names);
                 return XR_NULL_VAL;
             }
             XrValue nested = xrt_json_decode_record(field_value, field->nested_field_count,
                                                     field->nested_fields);
             if (XR_IS_NULL(nested)) {
                 XRT_FREE(decoded_values);
-                XRT_FREE(field_names);
                 return XR_NULL_VAL;
             }
             field_value = nested;
         }
         decoded_values[i] = field_value;
     }
-    XrValue dstv = xrt_record_new_named(field_count, field_names);
-    XRT_FREE(field_names);
+    XrtObjectShape *shape =
+        xrt_object_shape_new_owned(field_count, NULL, XRT_OBJECT_RECORD);
+    XrtObjectShapeField *shape_fields = (XrtObjectShapeField *) shape->fields;
+    for (int64_t i = 0; i < field_count; i++) {
+        const char *name = fields[i].name ? fields[i].name : "?";
+        shape_fields[i].name = name;
+        shape_fields[i].symbol_hash = xr_hash_bytes(name, strlen(name));
+    }
+    shape->stable_key =
+        xr_object_shape_stable_key(XRT_OBJECT_RECORD, shape->fields, field_count);
+    XrValue dstv = xrt_object_new_shape(shape);
     for (int64_t i = 0; i < field_count; i++)
         xrt_json_set_field(dstv, (int) i, decoded_values[i]);
     XRT_FREE(decoded_values);
@@ -4309,6 +4409,8 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
         j->fields[idx] = val;
         return val;
     }
+    if (xrt_object_domain(j) == XRT_OBJECT_RECORD)
+        xrt_type_no_index("structural object has no such field");
     if (!j->dynamic_fields) {
         XrValue dyn = xrt_map_new(8);
         j->dynamic_fields = (xrt_map_t *) dyn.ptr;
@@ -4332,8 +4434,9 @@ static inline XrValue xrt_json_set_computed_key_guard(XrValue obj, XrValue key, 
     const char *name = xr_str_data(key);
     if (obj.tag == XR_TAG_PTR && obj.ptr) {
         xrt_json_t *j = (xrt_json_t *) obj.ptr;
-        if ((j->object_kind == XRT_OBJECT_JSON || j->object_kind == XRT_OBJECT_RECORD) &&
-            j->field_names) {
+        if ((xrt_object_domain(j) == XRT_OBJECT_JSON ||
+             xrt_object_domain(j) == XRT_OBJECT_RECORD) &&
+            j->shape && j->shape->fields) {
             int64_t idx = xrt_json_find_field(j, name);
             if (idx >= 0) {
                 xrt_json_set_field(obj, (int) idx, val);
@@ -4364,6 +4467,8 @@ static inline void xrt_json_put_string_key(XrValue obj, XrValue key, XrValue val
         j->fields[idx] = val;
         return;
     }
+    if (xrt_object_domain(j) == XRT_OBJECT_RECORD)
+        xrt_json_encode_abort("cannot extend structural object", key);
     if (!j->dynamic_fields) {
         XrValue dyn = xrt_map_new(8);
         j->dynamic_fields = (xrt_map_t *) dyn.ptr;
@@ -4397,9 +4502,9 @@ static inline XrValue xrt_json_encode_array_value(xrt_array_t *src, int depth) {
 static inline XrValue xrt_json_encode_object_value(xrt_json_t *src, int depth) {
     if (!src)
         return xrt_json_new(0);
-    XrValue dstv = xrt_json_new_named(src->field_count, src->field_names);
+    XrValue dstv = xrt_object_new_like(src, XRT_OBJECT_JSON);
     xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
-    for (int64_t i = 0; i < src->field_count; i++)
+    for (int64_t i = 0; i < xrt_object_field_count(src); i++)
         dst->fields[i] = xrt_json_encode_value(src->fields[i], depth + 1);
     if (src->dynamic_fields) {
         xrt_map_t *m = src->dynamic_fields;
@@ -4657,10 +4762,12 @@ static void xrt_json_stringify_object_fields(xrt_strbuf_t *sb, xrt_json_t *j, in
     xrt_json_sb_char(sb, '{');
     int64_t emitted = 0;
     if (j) {
-        for (int64_t i = 0; i < j->field_count; i++) {
+        for (int64_t i = 0; i < xrt_object_field_count(j); i++) {
             if (emitted > 0)
                 xrt_json_sb_char(sb, ',');
-            const char *name = (j->field_names && j->field_names[i]) ? j->field_names[i] : "";
+            const char *name = xrt_object_field_name(j, i);
+            if (!name)
+                name = "";
             xrt_json_stringify_string(sb, name, strlen(name));
             xrt_json_sb_char(sb, ':');
             xrt_json_stringify_value(sb, j->fields[i], depth + 1);
@@ -4842,9 +4949,9 @@ static inline XrValue xrt_json_clone_for_coro(XrValue val) {
     if (val.tag != XR_TAG_PTR || !val.ptr)
         return val;
     xrt_json_t *src = (xrt_json_t *) val.ptr;
-    XrValue dstv = xrt_object_new_named_kind(src->field_count, src->field_names, src->object_kind);
+    XrValue dstv = xrt_object_new_like(src, xrt_object_domain(src));
     xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
-    for (int64_t i = 0; i < src->field_count; i++)
+    for (int64_t i = 0; i < xrt_object_field_count(src); i++)
         dst->fields[i] = xrt_value_clone_for_coro(src->fields[i]);
     if (src->dynamic_fields) {
         XrValue dyn = xrt_map_new(xrt_map_len(src->dynamic_fields));
@@ -4872,8 +4979,8 @@ static inline void xrt_json_merge(XrValue dst_val, XrValue src_val) {
     if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
         return;
     xrt_json_t *src = (xrt_json_t *) src_val.ptr;
-    for (int64_t i = 0; i < src->field_count; i++) {
-        const char *name = src->field_names ? src->field_names[i] : NULL;
+    for (int64_t i = 0; i < xrt_object_field_count(src); i++) {
+        const char *name = xrt_object_field_name(src, i);
         if (name)
             xrt_json_set_name(dst_val, name, src->fields[i]);
     }
@@ -4900,10 +5007,10 @@ static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
         return;
     xrt_json_t *dst = (xrt_json_t *) dst_val.ptr;
     xrt_json_t *src = (xrt_json_t *) src_val.ptr;
-    if (dst->object_kind != XRT_OBJECT_RECORD)
+    if (xrt_object_domain(dst) != XRT_OBJECT_RECORD)
         return;
-    for (int64_t i = 0; i < src->field_count; i++) {
-        const char *name = src->field_names ? src->field_names[i] : NULL;
+    for (int64_t i = 0; i < xrt_object_field_count(src); i++) {
+        const char *name = xrt_object_field_name(src, i);
         int64_t dst_idx = name ? xrt_json_find_field(dst, name) : -1;
         if (dst_idx >= 0)
             dst->fields[dst_idx] = src->fields[i];
@@ -4921,12 +5028,14 @@ static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
         return;
     xrt_json_t *dst = (xrt_json_t *) dst_val.ptr;
     xrt_json_t *src = (xrt_json_t *) src_val.ptr;
-    if (dst->object_kind != XRT_OBJECT_RECORD || src->object_kind != XRT_OBJECT_RECORD)
+    if (xrt_object_domain(dst) != XRT_OBJECT_RECORD ||
+        xrt_object_domain(src) != XRT_OBJECT_RECORD)
         return;
     for (int64_t i = 0; i < copy_pair_count; i++) {
         uint16_t dst_idx = dst_src_ordinals[i * 2];
         uint16_t src_idx = dst_src_ordinals[i * 2 + 1];
-        if ((int64_t) dst_idx < dst->field_count && (int64_t) src_idx < src->field_count)
+        if ((int64_t) dst_idx < xrt_object_field_count(dst) &&
+            (int64_t) src_idx < xrt_object_field_count(src))
             dst->fields[dst_idx] = src->fields[src_idx];
     }
 }
@@ -4934,12 +5043,13 @@ static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
 static inline void xrt_json_destroy(xrt_json_t *j) {
     if (!j)
         return;
-    for (int64_t i = 0; i < j->field_count; i++)
+    for (int64_t i = 0; i < xrt_object_field_count(j); i++)
         xrt_release(j->fields[i]);
     if (j->dynamic_fields)
         xrt_release(xr_mkptr(j->dynamic_fields, XR_TAG_MAP));
-    XRT_FREE(j->field_names);
-    j->field_names = NULL;
+    if (j->shape && j->shape->storage == XR_OBJECT_SHAPE_OWNED)
+        XRT_FREE((void *) j->shape);
+    j->shape = NULL;
     j->dynamic_fields = NULL;
 }
 
@@ -5255,7 +5365,7 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
     }
     if (xrt_is_json_object_value(value)) {
         xrt_json_t *object = (xrt_json_t *) value.ptr;
-        for (int64_t i = 0; i < object->field_count; i++)
+        for (int64_t i = 0; i < xrt_object_field_count(object); i++)
             (void) xrt_value_set_storage_graph(object->fields[i], storage_mode);
         if (object->dynamic_fields)
             (void) xrt_value_set_storage_graph(xr_mkptr(object->dynamic_fields, XR_TAG_MAP),

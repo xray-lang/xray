@@ -7,15 +7,33 @@
 
 static int g_passed;
 static int g_failed;
+static size_t g_allocations;
+static size_t g_frees;
+
+static void *test_malloc(size_t size) {
+    g_allocations++;
+    return malloc(size);
+}
+
+static void *test_calloc(size_t count, size_t size) {
+    g_allocations++;
+    return calloc(count, size);
+}
+
+static void test_free(void *ptr) {
+    if (ptr)
+        g_frees++;
+    free(ptr);
+}
 
 static void *test_alloc_aligned(size_t size) {
     return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
-#define XRT_MALLOC(sz) malloc(sz)
-#define XRT_CALLOC(n, sz) calloc((n), (sz))
+#define XRT_MALLOC(sz) test_malloc(sz)
+#define XRT_CALLOC(n, sz) test_calloc((n), (sz))
 #define XRT_REALLOC(p, sz) realloc((p), (sz))
-#define XRT_FREE(p) free(p)
+#define XRT_FREE(p) test_free(p)
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
 #define XRT_FREE_ALIGNED(p) xr_test_free_aligned(p)
 
@@ -61,6 +79,53 @@ static XrValue user_json(void) {
     return value;
 }
 
+static void test_static_shape_is_zero_copy_and_header_shrinks(void) {
+    static const XrtObjectShapeField fields[] = {
+        {"x", UINT64_C(0x1), UINT32_C(0xfd0c5087), 0, 0, 0},
+    };
+    static const XrtObjectShape shape = {
+        UINT64_C(0x1), 1, fields, XRT_OBJECT_RECORD, XR_OBJECT_SHAPE_STATIC, 0, 0};
+    size_t allocations_before = g_allocations;
+    size_t frees_before = g_frees;
+    XrValue object = xrt_object_new_shape(&shape);
+    xrt_json_t *raw = (xrt_json_t *) object.ptr;
+
+    ASSERT_TRUE(sizeof(xrt_json_t) <= 40, "descriptor object header should shrink to at most 40B");
+    ASSERT_TRUE(g_allocations == allocations_before + 1,
+                "static shape construction should allocate only the object body");
+    ASSERT_TRUE(raw->shape == &shape, "object should borrow the file-static descriptor");
+    ASSERT_TRUE(raw->dynamic_fields == NULL,
+                "structural object construction should not allocate an extension map");
+    ASSERT_TRUE(xrt_json_find_field(raw, "x") == 0, "descriptor name should map to ordinal zero");
+    destroy_object(object);
+    ASSERT_TRUE(g_frees == frees_before + 1,
+                "destruction should free the object allocation but not the static descriptor");
+}
+
+static void test_clone_and_storage_keep_static_shape(void) {
+    static const XrtObjectShapeField fields[] = {
+        {"value", UINT64_C(0x2), UINT32_C(0x425ed3ca), 0, 0, 0},
+    };
+    static const XrtObjectShape shape = {
+        UINT64_C(0x2), 1, fields, XRT_OBJECT_RECORD, XR_OBJECT_SHAPE_STATIC, 0, 0};
+    XrValue source = xrt_object_new_shape(&shape);
+    xrt_json_set_field(source, 0, XR_FROM_INT(42));
+    size_t allocations_before = g_allocations;
+    XrValue clone = xrt_json_clone_for_coro(source);
+
+    ASSERT_TRUE(g_allocations == allocations_before + 1,
+                "cloning a static-shape object should allocate only the clone body");
+    ASSERT_TRUE(((xrt_json_t *) clone.ptr)->shape == &shape,
+                "clone should share the process-lifetime descriptor");
+    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(clone, 0)) == 42,
+                "clone should preserve the fixed field value");
+    (void) xrt_json_set_storage(clone, XR_OBJ_STORAGE_NORMAL);
+    ASSERT_TRUE(((xrt_json_t *) clone.ptr)->shape == &shape,
+                "storage promotion should not replace or own the descriptor");
+    destroy_object(clone);
+    destroy_object(source);
+}
+
 static XrValue decode_with_kinds(XrValue data, int64_t field_count, const char *const *names,
                                  const uint8_t *kinds) {
     XrJsonDecodeFieldSpec *fields =
@@ -83,7 +148,7 @@ static void test_decode_validates_each_primitive_field(void) {
     XrValue source = user_json();
     XrValue decoded = decode_with_kinds(source, 4, names, kinds);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "valid typed Json should decode");
-    ASSERT_TRUE(((xrt_json_t *) decoded.ptr)->object_kind == XRT_OBJECT_RECORD,
+    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded.ptr) == XRT_OBJECT_RECORD,
                 "decode should construct a Record");
     destroy_object(decoded);
 
@@ -162,7 +227,7 @@ static void test_decode_nested_record_field(void) {
     XrValue decoded_nested = xrt_json_get_field(decoded, 0);
     ASSERT_TRUE(decoded_nested.tag == XR_TAG_PTR && decoded_nested.ptr,
                 "nested Record decode should materialize a nested object");
-    ASSERT_TRUE(((xrt_json_t *) decoded_nested.ptr)->object_kind == XRT_OBJECT_RECORD,
+    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_nested.ptr) == XRT_OBJECT_RECORD,
                 "nested field should become a Record");
     ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_nested, 0)) == 7,
                 "nested int field should be copied");
@@ -207,9 +272,9 @@ static void test_decode_deep_nested_record_field(void) {
     ASSERT_TRUE(!XR_IS_NULL(decoded), "deep nested Record field should decode");
     XrValue decoded_address = xrt_json_get_field(decoded, 1);
     XrValue decoded_geo = xrt_json_get_field(decoded_address, 1);
-    ASSERT_TRUE(((xrt_json_t *) decoded_address.ptr)->object_kind == XRT_OBJECT_RECORD,
+    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_address.ptr) == XRT_OBJECT_RECORD,
                 "second-level nested object should become a Record");
-    ASSERT_TRUE(((xrt_json_t *) decoded_geo.ptr)->object_kind == XRT_OBJECT_RECORD,
+    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_geo.ptr) == XRT_OBJECT_RECORD,
                 "third-level nested object should become a Record");
     ASSERT_TRUE(XR_IS_BOOL(xrt_json_get_field(decoded_geo, 1)) &&
                     XR_TO_BOOL(xrt_json_get_field(decoded_geo, 1)),
@@ -298,6 +363,8 @@ static void test_decode_mixed_nested_record_and_array_json_fields(void) {
 }
 
 int main(void) {
+    test_static_shape_is_zero_copy_and_header_shrinks();
+    test_clone_and_storage_keep_static_shape();
     test_decode_validates_each_primitive_field();
     test_decode_distinguishes_nullable_and_missing();
     test_decode_json_field_accepts_null();

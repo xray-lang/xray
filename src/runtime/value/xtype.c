@@ -13,6 +13,7 @@
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhash.h"
 #include "../../os/os_thread.h"
 #include "xtype_names.h"
 #include <stdint.h>
@@ -412,6 +413,15 @@ static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const c
 XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                        int count, XrObjectRowMode row_mode) {
     return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, row_mode, false);
+}
+
+uint64_t xr_type_stable_key(const XrType *type) {
+    if (!type)
+        return 0;
+    const char *canonical = xr_type_to_string((XrType *) type);
+    uint64_t key = xr_hash_bytes64(canonical ? canonical : "<error>",
+                                   canonical ? strlen(canonical) : sizeof("<error>") - 1);
+    return key ? key : 1;
 }
 
 XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,

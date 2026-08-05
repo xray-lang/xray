@@ -45,7 +45,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 24        // v24: canonical owner-backed enum nominal identity
+#define XR_BC_VERSION 25        // v25: stable object-shape type keys and field flags
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)

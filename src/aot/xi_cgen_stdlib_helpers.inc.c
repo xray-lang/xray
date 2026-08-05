@@ -216,14 +216,17 @@ static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *ou
     return false;
 }
 
+static const char *const cg_runtime_info_object_fields[] = {
+    "liveBytes", "liveKB", "liveObjects", "finalizerCount", "blocks", "freeBlocks", "fullBlocks"};
+
 static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *aot_ctx) {
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
-    if (layout && layout->field_count == 9 && plan && cg_value_rep_is_struct_aggregate(plan->rep) &&
+    if (layout && layout->field_count == 7 && plan && cg_value_rep_is_struct_aggregate(plan->rep) &&
         plan->rep.c_type) {
-        char fields[9][128];
-        for (uint16_t i = 0; i < 9; i++)
+        char fields[7][128];
+        for (uint16_t i = 0; i < 7; i++)
             cg_struct_field_c_name(layout, i, fields[i], sizeof(fields[i]));
         fprintf(out,
                 "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
@@ -231,7 +234,7 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
                 ".%s = _ri.live_objects, .%s = _ri.finalizer_count, "
                 ".%s = _ri.blocks, .%s = _ri.free_blocks, .%s = _ri.full_blocks }; })",
                 aot_ctx, plan->rep.c_type, fields[0], fields[1], fields[2], fields[3], fields[4],
-                fields[5], fields[6], fields[7], fields[8]);
+                fields[5], fields[6]);
         return;
     }
 
@@ -241,12 +244,20 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_codegen_abort_expr(out);
         return;
     }
+    const XrType *shape_type = v && XR_TYPE_HAS_OBJECT_SHAPE(v->type) &&
+                                       v->type->object.field_count == 7
+                                   ? v->type
+                                   : NULL;
+    int shape_id = cg_intern_object_shape_parts(ctx, 7, cg_runtime_info_object_fields, shape_type,
+                                                XR_OBJECT_DOMAIN_STRUCT);
+    if (shape_id < 0) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
     fprintf(out,
-            "({ static const char *const _rif[] = {\"liveBytes\", \"liveKB\", "
-            "\"liveObjects\", \"cycleCollectionEnabled\", \"cycleCollections\", "
-            "\"finalizerCount\", \"blocks\", \"freeBlocks\", \"fullBlocks\"}; "
-            "XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
-            "XrValue _riv = xrt_record_new_named(7, _rif); "
+            "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
+            "XrValue _riv = xrt_object_new_shape(&_xobj_shape_%d); "
             "xrt_json_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
             "xrt_json_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
             "xrt_json_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
@@ -255,7 +266,7 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
             "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
             "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
             "_riv; })",
-            aot_ctx);
+            aot_ctx, shape_id);
 }
 
 static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -493,18 +504,23 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
         return true;
     }
 
-    fprintf(out, "XrValue _arr%u = xrt_record_new_named(2, (const char *const[]){", id);
-    const char *name0 =
-        layout && layout->field_names ? layout->field_names[0] : record_type->object.field_names[0];
-    const char *name1 =
-        layout && layout->field_names ? layout->field_names[1] : record_type->object.field_names[1];
-    emit_c_string_literal(out, name0 ? name0 : "?");
-    fprintf(out, ", ");
-    emit_c_string_literal(out, name1 ? name1 : "?");
+    fprintf(out, "XrValue _arr%u = ", id);
+    const char *const *shape_names =
+        record_ok ? (const char *const *) record_type->object.field_names
+                  : (const char *const *) layout->field_names;
+    int shape_id = cg_intern_object_shape_parts(ctx, 2, shape_names,
+                                                record_ok ? record_type : NULL,
+                                                XR_OBJECT_DOMAIN_STRUCT);
+    if (shape_id < 0) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return true;
+    }
     fprintf(out,
-            "}); xrt_json_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
+            "xrt_object_new_shape(&_xobj_shape_%d); "
+            "xrt_json_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
             "xrt_json_set_field(_arr%u, 1, XR_FROM_INT(_arp%u.second)); _arr%u; })",
-            id, id, id, id, id);
+            shape_id, id, id, id, id, id);
     return true;
 }
 

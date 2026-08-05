@@ -55,7 +55,8 @@ static XrClass *stdlib_record_class_build(XrVMRuntime *isolate,
     for (uint32_t i = 0; i < count; i++)
         names[i] = decl->fields[i].name;
     XrClass *cls =
-        xr_class_build_record_chain(isolate, names, NULL, (int) count, NULL, decl->sealed);
+        xr_class_build_record_chain(isolate, names, NULL, (int) count, NULL, NULL, NULL,
+                                    decl->sealed);
     xr_free(names);
     return cls;
 }

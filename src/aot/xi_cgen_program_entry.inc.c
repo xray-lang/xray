@@ -915,6 +915,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         return;
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
+    cg_reset_object_shapes(ctx);
 
     /* Build every section off-output.  The final unit is assembled in fixed
      * phase order and copied to the caller only after every buffer closes and
@@ -1040,6 +1041,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
+    cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
     close_failed = (xr_close_memstream(forwards, &forwardbuf, &forwardsz) != 0) || close_failed;
@@ -1181,6 +1183,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     }
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
+    cg_reset_object_shapes(ctx);
 
     char *staticbuf = NULL;
     size_t staticsz = 0;
@@ -1230,6 +1233,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
+    cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;
     close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;

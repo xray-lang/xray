@@ -953,7 +953,7 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
         return cache->io_stat_class;
 
     XrClass *cls = xr_class_build_json_chain(X, XR_IO_CORE_STAT_FIELD_NAMES,
-                                             XR_IO_CORE_STAT_FIELD_COUNT, false);
+                                             XR_IO_CORE_STAT_FIELD_COUNT, NULL, NULL, false);
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;

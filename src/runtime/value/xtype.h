@@ -1132,6 +1132,7 @@ XR_FUNC bool xr_type_is_iterable(XrType *type, XrType **out_element_type);
  * not that validation may be skipped. Supported structural leaves include nested
  * Record descriptors and Array<Json> containers. */
 XR_FUNC uint8_t xr_type_json_value_kind(const XrType *type);
+XR_FUNC uint64_t xr_type_stable_key(const XrType *type);
 XR_FUNC bool xr_type_is_json_decode_field_supported(const XrType *type);
 
 #endif  // XTYPE_H

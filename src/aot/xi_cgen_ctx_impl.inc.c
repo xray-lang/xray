@@ -69,6 +69,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
         xr_free(ctx->strlit_list[i]);
     }
     xr_free(ctx->strlit_list);
+    xr_free(ctx->object_shapes);
     xr_free(ctx->shared_funcs);
     xr_free(ctx->shared_class);
     xr_free(ctx->shared_enum);

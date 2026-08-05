@@ -6241,6 +6241,33 @@ static void xicgen_emit_c_string_literal(FILE *out, const char *s) {
     fputc('"', out);
 }
 
+static void cg_emit_object_shape_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out)
+        return;
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        const CgObjectShape *shape = &ctx->object_shapes[i];
+        fprintf(out, "static const XrtObjectShapeField _xobj_shape_fields_%d[] = {\n", shape->id);
+        for (int64_t ordinal = 0; ordinal < shape->field_count; ordinal++) {
+            const char *name = shape->field_names && shape->field_names[ordinal]
+                                   ? shape->field_names[ordinal]
+                                   : "?";
+            uint64_t stable_type_key = cg_object_shape_field_type_key(shape->type, ordinal);
+            uint32_t symbol_hash = xr_hash_bytes(name, strlen(name));
+            fprintf(out, "    {");
+            xicgen_emit_c_string_literal(out, name);
+            fprintf(out, ", UINT64_C(0x%016" PRIx64 "), %" PRIu32 "u, %u, %u, 0},\n",
+                    stable_type_key, symbol_hash, (unsigned) ordinal,
+                    (unsigned) cg_object_shape_field_flags(shape->type, ordinal));
+        }
+        fprintf(out,
+                "};\nstatic const XrtObjectShape _xobj_shape_%d = "
+                "{UINT64_C(0x%016" PRIx64 "), %" PRId64
+                ", _xobj_shape_fields_%d, %u, XR_OBJECT_SHAPE_STATIC, 0, 0};\n\n",
+                shape->id, shape->stable_key, shape->field_count, shape->id,
+                (unsigned) shape->object_domain);
+    }
+}
+
 static const char *xicgen_static_string_const(const XiValue *v) {
     if (!v || v->op != XI_CONST || !v->type || v->type->kind != XR_KIND_STRING)
         return NULL;
@@ -6295,13 +6322,12 @@ static void xicgen_emit_json_computed_key_guard_set(XiCgenCtx *ctx, FILE *out,
     fprintf(out, ")");
 }
 
-static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
+static void xicgen_emit_json_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     int64_t field_count = xi_json_field_count(v);
     uint8_t storage_mode = xi_json_storage_mode(v);
     const char **field_names = (const char **) v->aux;
     const bool is_record = v && v->type && v->type->kind == XR_KIND_RECORD;
     const char *ctor = is_record ? "xrt_record_new" : "xrt_json_new";
-    const char *ctor_named = is_record ? "xrt_record_new_named" : "xrt_json_new_named";
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, "xrt_json_set_storage(");
     if (field_count <= 0 || !field_names) {
@@ -6310,13 +6336,13 @@ static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
             fprintf(out, ", %u)", (unsigned) storage_mode);
         return;
     }
-    fprintf(out, "%s(%" PRId64 ", (const char*[]){", ctor_named, field_count);
-    for (int64_t i = 0; i < field_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
+    int shape_id = cg_intern_object_shape(ctx, v);
+    if (shape_id < 0) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
     }
-    fprintf(out, "})");
+    fprintf(out, "xrt_object_new_shape(&_xobj_shape_%d)", shape_id);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
 }
@@ -7317,7 +7343,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "set_new") == 0) {
         xicgen_set_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "json_new") == 0) {
-        xicgen_emit_json_new_expr(out, v);
+        xicgen_emit_json_new_expr(ctx, out, v);
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
         xicgen_emit_json_set_field_expr(ctx, out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
@@ -11193,7 +11219,7 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     (void) ctx;
     (void) f;
     (void) prefix;
-    xicgen_emit_json_new_expr(out, v);
+    xicgen_emit_json_new_expr(ctx, out, v);
 }
 
 static bool xicgen_emit_json_decode_field_specs(FILE *out, const XrType *record_type,

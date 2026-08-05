@@ -595,6 +595,32 @@ static uint8_t *xi_json_record_value_kinds(const XrType *type, int field_count) 
     return kinds;
 }
 
+static uint64_t *xi_object_shape_stable_type_keys(const XrType *type, int field_count) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || field_count <= 0 ||
+        !type->object.field_types || type->object.field_count != field_count)
+        return NULL;
+    uint64_t *keys = (uint64_t *) xr_malloc((size_t) field_count * sizeof(uint64_t));
+    if (!keys)
+        return NULL;
+    for (int i = 0; i < field_count; i++)
+        keys[i] = xr_type_stable_key(type->object.field_types[i]);
+    return keys;
+}
+
+static uint8_t *xi_object_shape_field_flags(const XrType *type, int field_count) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || field_count <= 0 ||
+        type->object.field_count != field_count)
+        return NULL;
+    uint8_t *flags = (uint8_t *) xr_calloc((size_t) field_count, sizeof(uint8_t));
+    if (!flags)
+        return NULL;
+    for (int i = 0; i < field_count; i++) {
+        if (type->object.field_readonly && type->object.field_readonly[i])
+            flags[i] |= XR_OBJECT_SHAPE_FIELD_READONLY;
+    }
+    return flags;
+}
+
 static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth);
 
 static bool xi_json_record_nested_classes(EmitCtx *ctx, const XrType *type, int field_count,
@@ -642,9 +668,20 @@ static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType 
         xr_free(value_kinds);
         return NULL;
     }
+    uint64_t *stable_type_keys = xi_object_shape_stable_type_keys(type, field_count);
+    uint8_t *shape_field_flags = xi_object_shape_field_flags(type, field_count);
+    if (!stable_type_keys || !shape_field_flags) {
+        xr_free(shape_field_flags);
+        xr_free(stable_type_keys);
+        xr_free(nested_classes);
+        xr_free(value_kinds);
+        return NULL;
+    }
     XrClass *cls = xr_class_build_record_chain(
         ctx->isolate, type->object.field_names, value_kinds, field_count, nested_classes,
-        xr_type_object_row_is_exact(type));
+        stable_type_keys, shape_field_flags, xr_type_object_row_is_exact(type));
+    xr_free(shape_field_flags);
+    xr_free(stable_type_keys);
     xr_free(nested_classes);
     xr_free(value_kinds);
     return cls;
@@ -670,9 +707,15 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int n = field_count > 0 ? field_count : 0;
     bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
     bool sealed = is_record ? xr_type_object_row_is_exact(v->type) : false;
-    XrClass *cls =
-        is_record ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, NULL, sealed)
-                  : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    uint64_t *stable_type_keys = xi_object_shape_stable_type_keys(v->type, n);
+    uint8_t *shape_field_flags = xi_object_shape_field_flags(v->type, n);
+    XrClass *cls = is_record
+                       ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, NULL,
+                                                     stable_type_keys, shape_field_flags, sealed)
+                       : xr_class_build_json_chain(ctx->isolate, field_names, n, stable_type_keys,
+                                                   shape_field_flags, false);
+    xr_free(shape_field_flags);
+    xr_free(stable_type_keys);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
