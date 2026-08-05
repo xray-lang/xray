@@ -37,6 +37,7 @@
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
+#include "xi_coro_analyze.h"
 #include "xi_value_query.h"
 #include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
@@ -797,8 +798,7 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
     return NULL;
 }
 
-static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index,
-                                              bool complete) {
+static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index, bool complete) {
     XiReturnOwnership result;
     result.kind = kind;
     result.param_index = param_index;
@@ -870,8 +870,7 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
             uint16_t actual = (uint16_t) (summary.param_index + 1);
             if (summary.param_index < 0 || actual >= value->nargs)
                 return arc_return_unknown();
-            return arc_return_value_ownership(f, value->args[actual],
-                                              (uint8_t) (depth + 1));
+            return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
         }
         if (value->op != XI_CALL || value->nargs < 1)
             return arc_return_unknown();
@@ -915,8 +914,7 @@ static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
             return arc_return_unknown();
         }
     }
-    return seen ? result
-                : arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    return seen ? result : arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
 }
 
 /* Return fn's cached borrow signature, computing it (on the pre-ARC IR) on
@@ -1597,6 +1595,45 @@ typedef enum {
     OWN_CALL_RESULT,
 } XiArcOwnMode;
 
+/* ========== Coroutine-frame pinning ==========
+ *
+ * A value that occupies a persistent coroutine frame slot must keep its
+ * owning reference in that slot until an explicit RELEASE gives it up: the
+ * AOT backend releases every listed slot when the frame is torn down — at
+ * normal completion, recycle, and cancellation alike — and its lowering of
+ * an explicit frame-slot RELEASE also nulls the slot. A consuming MOVE out
+ * of such a slot would leave a stale owner behind that the frame teardown
+ * releases a second time (double free of e.g. a closure capture cell that
+ * two spawned closures share). Forcing every value-level consume of a
+ * frame-pinned value to dup preserves the slot's reference; the death-drop
+ * pass then places the explicit RELEASE at the value's death point. Return
+ * consumes are exempt: the coroutine done-value path retains the returned
+ * value separately to compensate for the slot release.
+ *
+ * The suspend-point scan runs without a resolver, which keeps every
+ * MAY_SUSPEND-flagged call a suspend point. That over-approximates the
+ * backend plan — its resolver can only refine suspend points away — so
+ * every value the backend actually places in a frame slot is pinned here;
+ * an over-approximated value merely carries one extra dup/drop pair. */
+static XiLiveness *arc_coro_frame_pin_liveness(XiFunc *f) {
+    bool suspends = false;
+    for (uint32_t b = 0; b < f->nblocks && !suspends; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
+            if (xi_coro_is_suspend_point(f, blk->values[i], NULL)) {
+                suspends = true;
+                break;
+            }
+        }
+    }
+    return suspends ? xi_compute_liveness(f) : NULL;
+}
+
+static bool arc_value_is_coro_frame_pinned(const XiFunc *f, const XiLiveness *coro_live,
+                                           const XiValue *target) {
+    return coro_live && xi_coro_value_is_logical_member(f, target, coro_live, NULL);
+}
+
 static void insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
     if (!site->user || site->user->op == XI_PHI) {
         XiValue *last = phi_dup_anchor(site->blk);
@@ -1615,7 +1652,8 @@ static void process_call_result_consumes(XiFunc *f, XiValue *target, const Consu
         insert_dup_at_consume_site(f, target, &sites->items[i]);
 }
 
-static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
+static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
+                             const XiLiveness *coro_live) {
     ConsumeSiteVec sites = {0};
     if (!collect_consume_sites(f, target, &sites)) {
         xr_free(sites.items);
@@ -1658,12 +1696,19 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
      * leaking that reference whenever that arm ran. Paths that reach the
      * value's death WITHOUT consuming it (a branch arm that only borrows it)
      * get a death-drop, so the owner is released exactly once on every path. */
+    bool frame_pinned = arc_value_is_coro_frame_pinned(f, coro_live, target);
+
     ArcLive *live = NULL;
     uint32_t *pos_by_id = NULL;
     if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
         /* OOM: safe count-raising fallback — dup all but the last consume in
-         * program order, no death-drops. Never a wrong move or double free. */
-        for (uint32_t i = 0; i + 1 < sites.count; i++) {
+         * program order, no death-drops. Never a wrong move or double free.
+         * A frame-pinned value dups at the last value consume too: no
+         * death-drop exists here, so its slot reference is the one the frame
+         * teardown release list gives up. */
+        for (uint32_t i = 0; i < sites.count; i++) {
+            if (!frame_pinned && i + 1 == sites.count)
+                break;
             if (sites.items[i].user == NULL)
                 continue;
             if (sites.items[i].user->op == XI_PHI) {
@@ -1690,7 +1735,8 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         return false;
     }
     for (uint32_t i = 0; i < sites.count; i++) {
-        moves[i] = !consume_is_live_after(&sites.items[i], live, pos_by_id);
+        moves[i] = !consume_is_live_after(&sites.items[i], live, pos_by_id) &&
+                   !(frame_pinned && sites.items[i].user != NULL);
         if (moves[i] && sites.items[i].blk && pos_by_id[sites.items[i].blk->id]) {
             ArcLive *site_live = &live[pos_by_id[sites.items[i].blk->id] - 1];
             if (sites.items[i].user && sites.items[i].user->op == XI_PHI)
@@ -1858,10 +1904,9 @@ static void arc_precompute_sigs(XiFunc *f) {
      * the SCC to UNKNOWN; a non-converging equation set is reset fail-closed. */
     for (uint32_t i = 0; i < vec.count; i++) {
         XiFunc *fn = vec.items[i];
-        fn->arc_return_ownership =
-            xi_own_type_is_rc(fn->return_type)
-                ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
-                : arc_return_unknown();
+        fn->arc_return_ownership = xi_own_type_is_rc(fn->return_type)
+                                       ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
+                                       : arc_return_unknown();
     }
     changed = true;
     uint32_t rounds = 0;
@@ -1984,12 +2029,26 @@ static void arc_insert_rec(XiFunc *f) {
      * leaves operands live in the caller's registers). */
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
 
+    /* Whole-function liveness for coroutine-frame pinning. NULL when the
+     * function has no suspend point, which disables pinning entirely. Drop
+     * placement can split CFG edges, so recompute after any target that
+     * changed the CFG — the cached bitsets are sized and indexed for the
+     * block set they were computed on. */
+    XiLiveness *coro_live = arc_coro_frame_pin_liveness(f);
+
     bool cfg_changed = false;
     for (uint32_t i = 0; i < targets.count; i++) {
         XiArcOwnMode mode = arc_target_own_mode(f, targets.items[i], own_sig, borrowed_recv);
-        cfg_changed |= process_value_ex(f, targets.items[i], mode);
+        bool changed = process_value_ex(f, targets.items[i], mode, coro_live);
+        cfg_changed |= changed;
+        if (changed && coro_live) {
+            xi_liveness_free(coro_live);
+            coro_live = xi_compute_liveness(f);
+        }
     }
     xr_free(targets.items);
+    if (coro_live)
+        xi_liveness_free(coro_live);
 
     if (cfg_changed)
         xi_cfg_invalidate(f);
@@ -2316,7 +2375,7 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
  *     receives ownership via the last-use move rule. Remove the retain.
  *
  * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
-static int elim_block(XiBlock *blk, const XiFunc *f) {
+static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live) {
     int eliminated = 0;
     bool changed = true;
 
@@ -2379,12 +2438,19 @@ static int elim_block(XiBlock *blk, const XiFunc *f) {
 
         int real_uses = count_real_uses(f, target);
         if (real_uses <= 1 && value_has_consuming_use(f, target) &&
-            arc_elim_can_remove_single_consumer_retain(f, target)) {
+            arc_elim_can_remove_single_consumer_retain(f, target) &&
+            !arc_value_is_coro_frame_pinned(f, coro_live, target)) {
             /* The value flows to at most one real consumer; the retain is
              * dead weight only when that use consumes ownership. A sole
              * borrowing use can intentionally sit between RETAIN and RELEASE
              * to create an independent owned alias; removing that retain
-             * turns the alias into a dangling reference. */
+             * turns the alias into a dangling reference.
+             *
+             * A coroutine frame member is excluded for the same reason in a
+             * different shape: its retain is not a forwarding copy but the
+             * reference the consumer keeps while the frame slot holds its
+             * own, which the slot's own release gives up. Removing it
+             * re-creates the stale moved-out slot the pinning prevents. */
             arc_remove_value(blk, i);
             eliminated++;
             i--; /* re-examine the slot */
@@ -2406,13 +2472,21 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
             total += xi_arc_elim(f->children[i]);
     }
 
+    /* Same pinning view as insertion: single-consumer retains of coroutine
+     * frame members must survive elimination. Insertion may have split CFG
+     * edges, so re-establish RPO before computing liveness. */
+    xi_ensure_rpo(f);
+    XiLiveness *coro_live = arc_coro_frame_pin_liveness(f);
+
     /* Eliminate within each block. */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->nvalues == 0)
             continue;
-        total += elim_block(blk, f);
+        total += elim_block(blk, f, coro_live);
     }
 
+    if (coro_live)
+        xi_liveness_free(coro_live);
     return total;
 }

@@ -95,6 +95,7 @@ static void coro_finish_resume(XrCoroutine *coro) {
         // into a later wait (the ref points into this resume's VM frame).
         coro->ext->chan_ok_slot_ref = xr_slot_none();
         coro->ext->chan_resume_delivered = false;
+        coro->ext->chan_timeout_fired = false;
     }
 }
 
@@ -129,11 +130,12 @@ XrCoroBlockResult xr_coro_chan_send_resume(XrCoroutine *coro, XrSlotRef result_s
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
     if (resume_status == XR_RESUME_TIMEOUT) {
-        if (!coro->ext ||
-            atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire) == NULL) {
-            /* Stale TIMEOUT from an earlier wait (e.g. a sleep park) — no
-             * channel wait is armed, so it cannot be ours. Consume it and
-             * treat this as a fresh send. */
+        if (!coro->ext || !coro->ext->chan_timeout_fired) {
+            /* Stale TIMEOUT from an earlier wait (e.g. a sleep park) — the
+             * timer callback marks channel-wait timeouts, so an unmarked
+             * one cannot be ours. Consume it and treat this as a fresh
+             * send. (wait_channel is no marker: the callback must clear it
+             * before republishing the coroutine.) */
             coro_finish_resume(coro);
             return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
         }
@@ -167,10 +169,9 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrCoroutine *coro, XrSlotRef value_sl
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
     if (resume_status == XR_RESUME_TIMEOUT) {
-        if (!coro->ext ||
-            atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire) == NULL) {
-            /* Stale TIMEOUT with no armed channel wait — not ours; consume
-             * and treat as a fresh receive. */
+        if (!coro->ext || !coro->ext->chan_timeout_fired) {
+            /* Stale TIMEOUT without the timer callback's channel-wait mark
+             * — not ours; consume and treat as a fresh receive. */
             coro_finish_resume(coro);
             return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
         }

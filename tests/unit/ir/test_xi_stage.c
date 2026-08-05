@@ -9,6 +9,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_effect.h"

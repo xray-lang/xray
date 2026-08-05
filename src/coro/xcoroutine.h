@@ -129,6 +129,14 @@ typedef struct XrCoroExt {
     XrChannelWaitToken chan_wait_token;
     _Atomic(void *) wait_channel;
     bool wait_send;
+    /* Set by the timer callback when it wins the wake race for a timed
+     * channel wait (the same step clears wait_channel, so wait_channel
+     * cannot serve as the marker). The chan send/recv resume paths read it
+     * to distinguish a genuine channel-wait timeout from a leftover
+     * XR_RESUME_TIMEOUT (e.g. an unconsumed sleep park), and clear it on
+     * consumption. Plain bool: the waker->resumer inbox handoff orders it,
+     * exactly like wait_send and send_value. */
+    bool chan_timeout_fired;
     XrValue send_value;
     struct XrCoroutine *pending_spawn;
     struct XrCoroutine **deferred_spawns;

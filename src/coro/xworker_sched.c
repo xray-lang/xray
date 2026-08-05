@@ -609,6 +609,15 @@ static void worker_sleep_timeout_callback(void *arg) {
             (void) xr_channel_remove_waiter(ch, coro);
             xr_channel_wait_token_timeout(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+            // wait_channel must be cleared before the coroutine is republished
+            // (a READY coro with a wait_channel dangles into cancel/teardown
+            // scans), so the resume site cannot use it to tell a genuine
+            // channel-wait timeout from a leftover sleep TIMEOUT. This flag
+            // carries that one bit: only the claim winner that delivered a
+            // channel-wait timeout sets it, and the chan resume path consumes
+            // it. Publication ordering comes from the inbox handoff below,
+            // same as resume_status.
+            coro->ext->chan_timeout_fired = true;
         }
         // Remove from blocked queue (unified via xr_worker_unblock)
         xr_worker_unblock(worker, coro);
