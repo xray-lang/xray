@@ -1,0 +1,4 @@
+var user = { name: "Bob", age: 25 }
+print(user["name"])
+user["name"] = "Ada"
+print(user.name)

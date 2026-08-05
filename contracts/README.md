@@ -34,3 +34,4 @@ Initial frozen contracts:
 - `meta-ownership.md`
 - `differential-protocol.md`
 - `target-abi.md`
+- `object-json-domain.md`
