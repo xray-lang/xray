@@ -5124,8 +5124,10 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
             case XA_RETURN_OWNERSHIP_BORROWED_STATIC:
                 result.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
                 break;
+            /* No default: the enum is covered exhaustively, so a new
+             * ownership kind has to fail the -Wswitch build rather than be
+             * silently folded into UNKNOWN here. */
             case XA_RETURN_OWNERSHIP_UNKNOWN:
-            default:
                 break;
         }
         result.param_index = links->return_ownership.param_index;

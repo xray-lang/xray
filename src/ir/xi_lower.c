@@ -124,8 +124,10 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
             case XA_RETURN_OWNERSHIP_BORROWED_STATIC:
                 func->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
                 break;
+            /* No default: the enum is covered exhaustively, so a new
+             * ownership kind has to fail the -Wswitch build rather than be
+             * silently folded into UNKNOWN here. */
             case XA_RETURN_OWNERSHIP_UNKNOWN:
-            default:
                 break;
         }
         func->arc_return_ownership.param_index = links->return_ownership.param_index;
