@@ -77,7 +77,10 @@ Xray 命令行内置 stdio MCP 服务。在 VS Code 项目中创建 `.vscode/mcp
 
 ### 从源码构建
 
-直接构建仓库需要 C11 编译器和 CMake 3.12 或更高版本：
+构建需要 C11 编译器、CMake 3.21 或更高版本，以及 Python 3.11 或更高版本。
+Python 是构建期依赖而不只是测试依赖：Xi 算子表、内嵌标准库和 VM fastpath 都在
+构建过程中生成。CMake 会报告选中的解释器，若系统上没有满足下限的版本则直接以
+明确的信息中止。
 
 ```bash
 git clone https://github.com/xray-lang/xray.git

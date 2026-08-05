@@ -77,7 +77,11 @@ Run **MCP: List Servers** from the Command Palette and start `xray`. The AI clie
 
 ### Build from Source
 
-To build the repository directly, use a C11 compiler and CMake 3.12 or newer:
+Building needs a C11 compiler, CMake 3.21 or newer, and Python 3.11 or newer.
+Python is a build dependency, not only a test one: the Xi opcode tables, the
+embedded standard library and the VM fastpaths are generated during the build.
+CMake reports the interpreter it selected and stops with a clear message if
+none on the system meets the minimum.
 
 ```bash
 git clone https://github.com/xray-lang/xray.git

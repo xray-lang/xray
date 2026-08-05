@@ -162,19 +162,80 @@ else()
     set(XRAY_RELEASE_TARGET "${_XRAY_RELEASE_OS}-${_XRAY_RELEASE_ARCH}")
 endif()
 
-find_program(XRAY_PYTHON NAMES python3 python py)
-if(NOT XRAY_PYTHON)
-    message(FATAL_ERROR "Python 3 interpreter is required to configure and build Xray")
+# Python is a BUILD dependency, not only a test one: the Xi opcode tables, the
+# embedded stdlib bytecode and the VM fastpaths are all generated while the
+# project builds. The floor is asserted here, at configure time, so an
+# unsupported interpreter is named with its version -- rather than surfacing
+# later as a ModuleNotFoundError from inside a generator, which reads like a
+# broken checkout.
+set(XRAY_PYTHON_MIN_VERSION "3.11" CACHE STRING
+    "Minimum Python version required to configure and build Xray")
+
+function(_xray_probe_python exe out_version out_result)
+    execute_process(
+        COMMAND ${exe} -c "import sys; print('%d.%d' % sys.version_info[:2])"
+        OUTPUT_VARIABLE _version
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _result
+        ERROR_QUIET)
+    set(${out_version} "${_version}" PARENT_SCOPE)
+    set(${out_result} "${_result}" PARENT_SCOPE)
+endfunction()
+
+if(XRAY_PYTHON)
+    # An explicit choice is honoured or rejected, never silently replaced.
+    _xray_probe_python("${XRAY_PYTHON}" _xray_python_version _xray_python_probe)
+    if(NOT _xray_python_probe EQUAL 0)
+        message(FATAL_ERROR
+            "XRAY_PYTHON=${XRAY_PYTHON} is not a usable Python interpreter.")
+    endif()
+    if(_xray_python_version VERSION_LESS XRAY_PYTHON_MIN_VERSION)
+        message(FATAL_ERROR
+            "XRAY_PYTHON=${XRAY_PYTHON} is Python ${_xray_python_version}, "
+            "but Xray requires ${XRAY_PYTHON_MIN_VERSION} or newer.")
+    endif()
+else()
+    # Versioned names first, so a host whose bare `python3` is older still
+    # builds when a qualifying interpreter is installed beside it.
+    set(_xray_python_candidates
+        python3.14 python3.13 python3.12 python3.11 python3 python)
+    set(_xray_python_seen "")
+    foreach(_xray_candidate IN LISTS _xray_python_candidates)
+        find_program(_xray_python_exe NAMES ${_xray_candidate})
+        if(_xray_python_exe)
+            _xray_probe_python("${_xray_python_exe}" _xray_candidate_version
+                               _xray_candidate_probe)
+            if(_xray_candidate_probe EQUAL 0)
+                string(APPEND _xray_python_seen
+                       "  ${_xray_python_exe} (Python ${_xray_candidate_version})\n")
+                if(NOT _xray_candidate_version VERSION_LESS XRAY_PYTHON_MIN_VERSION)
+                    set(XRAY_PYTHON "${_xray_python_exe}" CACHE FILEPATH
+                        "Python interpreter for build-time generators and gates")
+                    set(_xray_python_version "${_xray_candidate_version}")
+                    unset(_xray_python_exe CACHE)
+                    break()
+                endif()
+            endif()
+            unset(_xray_python_exe CACHE)
+        endif()
+    endforeach()
+
+    if(NOT XRAY_PYTHON)
+        if(_xray_python_seen)
+            set(_xray_python_detail "Interpreters found:\n${_xray_python_seen}")
+        else()
+            set(_xray_python_detail "No Python interpreter was found on PATH.\n")
+        endif()
+        message(FATAL_ERROR
+            "Xray requires Python ${XRAY_PYTHON_MIN_VERSION} or newer to build.\n"
+            "Python runs the build-time generators for the Xi opcode tables, the "
+            "embedded stdlib and the VM fastpaths.\n"
+            "${_xray_python_detail}"
+            "Install a newer Python, or point CMake at one:\n"
+            "  cmake -DXRAY_PYTHON=/path/to/python3 ...")
+    endif()
 endif()
-execute_process(
-    COMMAND ${XRAY_PYTHON} -c "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)"
-    RESULT_VARIABLE XRAY_PYTHON_VERSION_RESULT
-    OUTPUT_QUIET
-    ERROR_QUIET
-)
-if(NOT XRAY_PYTHON_VERSION_RESULT EQUAL 0)
-    message(FATAL_ERROR "Python 3 interpreter is required, but ${XRAY_PYTHON} is not Python 3")
-endif()
+message(STATUS "Python: ${XRAY_PYTHON} (${_xray_python_version})")
 
 # Generate xray_version.h from template (single source of truth)
 configure_file(

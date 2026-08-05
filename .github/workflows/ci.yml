@@ -61,22 +61,32 @@ jobs:
 
   # ===========================================================================
   # Shared test-runtime unit tests on the Python floor.
-  #   tests/lib/xraytest is the one implementation the migrated suites build on;
-  #   3.9 is a supported build host, so an API newer than 3.9 (tomllib,
-  #   Path.write_text(newline=), match, X | Y at runtime) must fail here rather
-  #   than surface as a broken build on a real 3.9 machine. This lane runs the
-  #   package's own unit tests under a pinned 3.9 interpreter.
+  #   tests/lib/xraytest is the one implementation the migrated suites build on.
+  #   Pinning the exact floor here is what keeps the floor honest: a runner with
+  #   a newer interpreter would happily accept code the declared minimum cannot
+  #   run, and the breakage would surface on a contributor's machine instead.
+  #   The version is read from XRAY_PYTHON_MIN_VERSION in CMakeLists.txt rather
+  #   than written twice: a floor declared in two places is a floor that will
+  #   eventually disagree with itself.
   # ===========================================================================
-  xraytest-py39:
+  xraytest-floor:
     runs-on: ubuntu-latest
-    name: Shared Test Runtime (Python 3.9)
+    name: Shared Test Runtime (Python floor)
     steps:
     - uses: actions/checkout@v4
 
-    - name: Pin Python 3.9 (the supported build-host floor)
+    - name: Read the declared floor
+      id: floor
+      run: |
+        version=$(sed -n 's/^set(XRAY_PYTHON_MIN_VERSION "\([0-9.]*\)".*/\1/p' CMakeLists.txt)
+        test -n "$version" || { echo "XRAY_PYTHON_MIN_VERSION not found in CMakeLists.txt" >&2; exit 1; }
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Declared Python floor: $version"
+
+    - name: Pin the supported build-host floor
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: ${{ steps.floor.outputs.version }}
 
     - name: xraytest unit tests
       run: |
